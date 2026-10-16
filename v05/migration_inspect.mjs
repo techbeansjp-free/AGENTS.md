@@ -70,8 +70,10 @@ export function inspectMigration(directory) {
   }
   for (const name of expectedIndex.keys()) if (!indexed.has(name)) dirty.push(name);
   const untracked=git('ls-files' ,'--others','--exclude-standard','-z').toString().split('\0').filter(Boolean);
-  const policy=JSON.parse(read(policyPath).toString());
-  const schema=policy?.schemaVersion;
+  let policy=null,policyMissing=false;
+  try { policy=JSON.parse(read(policyPath).toString()); }
+  catch(error) { if(error.code!=='ENOENT')throw error;policyMissing=true; }
+  const schema=policy?.schemaVersion??null;
   const flat=['agent-skill-chain/project-policy/v0.3.0','agent-skill-chain/project-policy/v0.3.1'].includes(schema)&&policy.policy===undefined;
   const manifest=schema==='agent-skill-chain/project-policy-manifest/v1';
   const policyReferences=[],invalidPolicyReferences=[];
@@ -92,9 +94,9 @@ export function inspectMigration(directory) {
   const runtimePresent=runtimePaths.filter(p=>fs.existsSync(path.join(root,p)));
   if (git('rev-parse','HEAD').toString().trim()!==head) throw Error('HEAD changed during inventory');
   return {schema:'asc-v05-migration-inspection/v1',head,policySchema:schema,
-    policyFormat:flat?'flat-policy':manifest?'manifest':'unsupported',embeddedPolicySchema:manifest?policy.policy?.schemaVersion??null:null,
+    policyFormat:policyMissing?'missing-policy':flat?'flat-policy':manifest?'manifest':'unsupported',embeddedPolicySchema:manifest?policy.policy?.schemaVersion??null:null,
     mode:'read-only',readyToMigrate:false,inventory,configurationInventory,policyReferences,invalidPolicyReferences,dirty:[...new Set(dirty)],untracked,unsupported,runtimePresent,
-    blockers:[...(!flat&&!manifest?['unsupported-policy']:[]),...(manifest?['manifest-policy-cutover-required']:[]),...(invalidPolicyReferences.length?['unresolved-policy-references']:[]),...(dirty.length||untracked.length?['worktree-changes']:[]),
+    blockers:[...(policyMissing?['missing-project-policy']:!flat&&!manifest?['unsupported-policy']:[]),...(manifest?['manifest-policy-cutover-required']:[]),...(invalidPolicyReferences.length?['unresolved-policy-references']:[]),...(dirty.length||untracked.length?['worktree-changes']:[]),
       ...(unsupported.length?['unsupported-files']:[]),...(runtimePresent.length?['owner-must-resolve-runtime-state']:[]),
       'migration-execution-not-performed'],
     limitations:['Read-only inventory, not authorization or atomic snapshot',

@@ -92,9 +92,11 @@
     "package.json": "be57dea383943f61d7dbddc5fe269261a773e4534799b457bd846b1d79684458",
     "scripts/pack-candidate.mjs": "b1bd5ceff93b660bd72128761af977d5e8bac12dcade96494f7442498ab69a07",
     "test_package.mjs": "abf027b7b680fbf5e21d09a7850246b2b53a9ed7e3ab1248d88a17555bfa7658",
-    "MIGRATION_PLAN.md": "91f5f34e04f978bf4f0cfe4143184602f0297c15c5ef47c4ce5383c8d6196ccd",
+    "MIGRATION_PLAN.md": "9844175893a5e4136f6ed8015d04417d4f590cb69be8813452099dbcab2632ab",
     "RELEASE_READINESS.json": "a79b5d52c53659422444ee4570b1d29f12a158e709a1a5d419827d38d300241b",
-    "src/migration.mjs": "ffa1cb0640e37ef161a8ddfdd9064ed9a83f14679de11d69d509cbcf1617f151"
+    "src/migration.mjs": "ffa1cb0640e37ef161a8ddfdd9064ed9a83f14679de11d69d509cbcf1617f151",
+    "migration_inspect.mjs": "b96314404f1a532dfff1337b2a532567ef62fd173e21e8ee3b713f971f12ad0d",
+    "test_migration_inspect.mjs": "08e68f7f4df7559c1b0e3b5bc4bc89ccffd91191e9e575fcdc7211665d241d47"
   },
   "integrationAdditions": {
     "src/agent-lifecycle.mjs": "eb7b118c8d4903a658ee4d3c4a26fc5f56d757c996cba1d8a5963bea92c97db3",

@@ -83,3 +83,16 @@ test('canonical legacy skills and hooks require explicit cutover decisions witho
  const staged=stageMigration(root,destination,plan);for(const name of names)assert.equal(fs.readFileSync(path.join(staged.candidate,name),'utf8'),fs.readFileSync(path.join(root,name),'utf8'));
  assert.equal(git('rev-parse','HEAD').toString().trim(),before);
 });
+
+test('unconfigured legacy install retains its inventory and requires owner policy',async t=>{
+ const {root,git}=fixture(t);git('rm','.agent-skill-chain/project-policy.json');git('commit','-qm','legacy installed before project setup');
+ const entry='.agents/skills/asc-step/SKILL.md';fs.mkdirSync(path.dirname(path.join(root,entry)),{recursive:true});fs.writeFileSync(path.join(root,entry),'Legacy entry, not authority\n');git('add','.');git('commit','-qm','installed entry');
+ const before=git('status','--porcelain').toString(),head=git('rev-parse','HEAD').toString();
+ const result=inspectMigration(root);
+ assert.equal(result.policyFormat,'missing-policy');assert.equal(result.policySchema,null);
+ assert(result.blockers.includes('missing-project-policy'));assert.equal(result.readyToMigrate,false);
+ assert(result.configurationInventory.some(x=>x.path===entry));
+ const {prepareMigration}=await import('./src/migration.mjs');const holder=fs.mkdtempSync(path.join(os.tmpdir(),'asc-missing-policy-'));t.after(()=>fs.rmSync(holder,{recursive:true,force:true}));const destination=path.join(holder,'transition');
+ assert.throws(()=>prepareMigration(root,destination),/inspection blockers/);
+ assert.equal(fs.existsSync(destination),false);assert.equal(git('status','--porcelain').toString(),before);assert.equal(git('rev-parse','HEAD').toString(),head);
+});

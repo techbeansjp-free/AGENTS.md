@@ -60,6 +60,8 @@ Python prototypeを正式なNode配布物の代替として導入しない。v0.
 
 ## 設定形式と切替対象の棚卸し
 
+実旧版のinstall直後でproject設定がまだ作成されていない場合、検査は`missing-project-policy`を返し、既存CLI・Skill等の棚卸しを保持する。policyの既定値を推測せず、prepare/stageは停止する。ownerがプロジェクト契約を確定するまでは移行可能と扱わない。
+
 移行検査は最外層のschemaで形式を判定する。未知wrapperの内側に既知policy版が書かれていても受理しない。現行の`project-policy-manifest/v1`は参照先と設定hashを棚卸しできる。自動の意味変換は行わず、`manifest-policy-cutover-required`でmigration-prepareを止める。ownerが全設定のretain/replaceを指定したmigration-stageは、この形式にも対応する。参照規約を新ContractのpolicyRefsへ対応させ、実コマンドによる検証と新しい独立レビューを行う。既知schemaやretain指定だけでは正式移行可とはしない。
 
 `configurationInventory`はCLI依存file、Agent入口、CI、project policyのGit上のhashと、ownerによる切替確認が必要なことを返す。秘密や設定内容を出力せず、コマンド・Skill・CIを実行しない。参照はGit管理されたproject配下のJSONだけを候補とし、未解決参照を別に報告する。これは詳細schema検証や新しい権限の生成ではない。
@@ -207,7 +209,7 @@ compile/buildせず、隔離コピー内に20万件の入力イベントを生�
 
 PR #1578のbase `2d64b8d50b173f29914a8f231c0c5efa9a7e0af5` は、v0.4のscript文字列・qualityContractVersion・保護fileのhashを検査する。この検査は新版の標準入口への置換を拒否する。candidate内のvalidatorを変更しても、baseから実行する検査の結果は変わらない。新版のLinux CI成功と、このbase検査の失敗は別々に報告する。
 
-切替レビューでは、旧Step専用コマンドと旧qualityContractVersionを新版に復活させて通過させない。必要な保証は、検査の自己緩和を独立して確認すること、権限を持つ実行で候補codeを動かさないこと、新版の実テスト・隔離試験を実行すること、提出commitを固定することである。旧Cucumber全件実行そのものは新版の受入条件にしない。
+切替レビューでは、旧Step専用コマンドを新版に復活させて通過させない。リポジトリのCI設定変更を事前承認する世代番号は、製品のStep実行とは別の契約として扱う。必要な保証は、検査の自己緩和を独立して確認すること、権限を持つ実行で候補codeを動かさないこと、新版の実テスト・隔離試験を実行すること、提出commitを固定することである。旧Cucumber全件実行そのものは新版の受入条件にしない。
 
 実施順は、(1) repository ownerが新版CIの保護対象・必須checkと移行差分をレビュー、(2) base側の検査契約を先に更新、(3) 同じ候補HEADでbase検査とLinux CIを再実行、(4) 実結果に基づいてrelease readinessを更新、とする。既存の保護変更承認はbaseへの事前登録を要求するため、candidateだけの登録を承認成立と扱わない。baseへのmerge・branch保護の変更・失敗checkの免除は本実装作業では実行しない。必要なowner操作が未実施の間、全CI成功・正式release可能とは報告しない。
 
