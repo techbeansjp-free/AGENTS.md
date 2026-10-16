@@ -1255,9 +1255,157 @@
     ]
   },
   "currentLinuxCi": {
-    "head": "4111a806",
-    "run": 38851574928,
+    "head": "96683f54716d0f203ceb4b72d273aaef18a28f50",
+    "run": 38852206683,
     "status": "SUCCESS",
-    "scope": "Linux product workflow; legacy base validator still fails pending migration. Not all checks passed."
+    "scope": "Product quality workflow only; trusted project contract run 38852204354 failed. Not all checks passed."
+  },
+  "historicalComplexAcceptance": {
+    "status": "historical-local-observations-not-current-release-acceptance",
+    "provenance": "Selected aggregate fields from retained historical evaluation records; raw SHA256 checked locally. Raw private artifacts are not published; hashes do not make them publicly reproducible.",
+    "replanning": {
+      "status": "PASS_LOCAL_REPLANNING_INTEGRATION_NO_DELIVERY",
+      "productHead": "da0692768b4a2756f82ef3a840ee680f1ca19f79",
+      "rawSha256": "b98c6ee86ac08a5f8367a52e18bbe71091ff04982b51423586eeffa578ff2e88",
+      "wallSeconds": 382.870637319,
+      "agentCalls": 10,
+      "observedProcessedTokens": 633389,
+      "observedFreshTokens": 159405,
+      "allAgentTotalTokens": null,
+      "delivery": "Deliberately denied; no PR/CI",
+      "limitations": [
+        "Real historical failed adaptive fixture, new owner-delegated restart budget; not automatic budget renewal",
+        "Same original owner intent, criteria, verification assets and commands; planner may only change decomposition",
+        "Sequential local provider; no external Draft/CI, not matched performance comparison",
+        "Historical failure/operator gap excluded from this restart interval; prior failure retained",
+        "Observed Controller calls only; provider-wide total unknown",
+        "Two CommonJS/ESM repairs; prompt correction c1eeb2c was not active in this process",
+        "Old candidate invalidated because replanned unit contract differed; no reuse-speed claim",
+        "One historical synthetic fixture, not broad self-directed production acceptance"
+      ],
+      "originalFailureSeconds": 152.018749112,
+      "target": {
+        "head": "59d23dcb9c465cb0fd46dff4f586cea2390bb594",
+        "base": "2b3e87dd2d4bff504b017ae6082690604467e34a",
+        "contract": "733a28f40226352d9834c87c3442cbd9fde631c02eb6e8e7e243c8b3e3fa4c2b",
+        "diff": "eff396e5913487d5d8d658aea7ede5588849e499570c3dc25bb37d6e3db69884",
+        "empty": false
+      }
+    },
+    "advisoryPlan": {
+      "status": "PASS_LOCAL_REPLANNING_INTEGRATION_NO_DELIVERY",
+      "productHead": "f7082c8291659fa9038f3458d7ca63b0e36cd306",
+      "rawSha256": "eacb9921e801a86f4de39eab93f85e3b55d187ee7bdd9051c35e2f6debf8540b",
+      "wallSeconds": 257.179807832,
+      "agentCalls": 7,
+      "observedProcessedTokens": 459742,
+      "observedFreshTokens": 114910,
+      "allAgentTotalTokens": null,
+      "delivery": "Deliberately denied; no PR/CI",
+      "limitations": [
+        "One sequential local trial per revision; not statistical or causal speedup evidence",
+        "Both advisory-plan hint and earlier runtime-convention prompt differ from prior trial",
+        "Planner preserved inventory contract but may change other decomposition details",
+        "257.18 seconds excludes original 152.02-second failure, operator gap and external Delivery",
+        "No PR/CI; provider deliberately rejects Delivery. All-Agent total remains unknown"
+      ],
+      "target": {
+        "head": "03c6a439cb47e742642b32d31b9cefd7bd60fd1e",
+        "base": "2b3e87dd2d4bff504b017ae6082690604467e34a",
+        "contract": "dc2a7a07b8a12f3b33ee4e196b037aba55997ff4665c8a0db594162a5fc004a9",
+        "diff": "7dd999623ca8953421738d17a7a757d44e2acae8aa5a34f45eaff5f9d31314b9",
+        "empty": false
+      }
+    },
+    "multidomainAdaptive": {
+      "status": "PASS_LOCAL_DELEGATED_DECOMPOSITION_NOT_RELEASE",
+      "productHead": "5eabdbadd86761f035b2ff7a0c25fcda711ff7f3",
+      "rawSha256": "697ab6ae10b92a88fef9a187de8c860dcb0d01e945b07586ca4286e507a615ea",
+      "wallSeconds": 811.551784676,
+      "agentCalls": 10,
+      "observedUsage": {
+        "input": 1105826,
+        "output": 36236,
+        "cacheRead": 869632,
+        "cacheWrite": 0,
+        "reasoning": 19160,
+        "processed": 1142062,
+        "fresh": 272430
+      },
+      "allAgentTotalTokens": null,
+      "delivery": "Explicitly denied by evaluation provider; no PR or CI",
+      "limitations": [
+        "Synthetic fixed owner requirements/design; grouping and dependencies delegated to a fresh planner, not autonomous requirement or architecture discovery",
+        "Sequential live dispatch, not parallel model execution or multi-Issue acceptance",
+        "SQLite transaction boundaries, not distributed cross-service transactions or production payment/auth",
+        "No external PR/CI; no comparative performance claim; concurrent host work may affect timing",
+        "Unit tests and integrated oracle do not establish full enterprise-scale acceptance",
+        "Single observation, not matched performance acceptance. Fixed owner design remains; no autonomous architecture discovery.",
+        "Compared with fixed decomposition, test-authoring obligations were moved into parent criteria and compileall was added to unit checks. Contracts/check counts are not identical.",
+        "Declared-call coverage does not prove provider-wide all-Agent total."
+      ],
+      "bindings": [
+        {
+          "id": "idempotent-billing",
+          "target": {
+            "head": "74830ee4f7c355435a1fcca74d28388c345324c6",
+            "base": "bd6e96f4e59815f01a011cb1888f77fe27a9d90a",
+            "contract": "bd052bad4dae5a87d2743172e77adc30457e8aaba1ee55004055da028f954512",
+            "diff": "ced2a87465b9a60fc300f7e4bbbe84bdbb1d7b808d5691585c2ab0849a7ccd72",
+            "empty": false
+          },
+          "checks": 3,
+          "repairs": 0
+        },
+        {
+          "id": "inventory-reservation",
+          "target": {
+            "head": "b1067d017435722ad1d195a128496501decdb1ec",
+            "base": "95e2a3785ca2143fc4607bf3fa28d7607f377ff0",
+            "contract": "1fc3aafaafca60685147a10429cbd0730f120e9b66ba4a579031b691f4f03d39",
+            "diff": "645add3bd931580bb63f833a47e7846cc66b3c529cb0320bc253bb24dfb46d53",
+            "empty": false
+          },
+          "checks": 3,
+          "repairs": 0
+        },
+        {
+          "id": "atomic-order-acceptance",
+          "target": {
+            "head": "07e035d0ee4ab7a0d8d8b07a8f0cd3f85b6fc229",
+            "base": "006b2cdd398e11490781bf5bf76e795c8b08749c",
+            "contract": "b876df44847c3250cca460fcd48ce6ce8b0122daa3d28e5cca54aab750020cee",
+            "diff": "c596bf63aed50286ed86dc37693e58598b64a03c19499153e96c3ca9016c65d9",
+            "empty": false
+          },
+          "checks": 3,
+          "repairs": 0
+        },
+        {
+          "id": "durable-order-reporting",
+          "target": {
+            "head": "cc69b115ab7fab6bed5f80f99a8e3ab6ddcb7f09",
+            "base": "692c6db7256d0773ccaecacc2d8d14e72de84146",
+            "contract": "b39ef95c4642f2c5fedc1bcfb79e707806353c17da04134d07a792d3f39f7c86",
+            "diff": "495e1c11dfca5e11eac793e3de9ea1095e7b178b9561ceeb4bb2908acbd6da26",
+            "empty": false
+          },
+          "checks": 3,
+          "repairs": 0
+        },
+        {
+          "id": "whole-goal",
+          "target": {
+            "head": "32d308fc195776dd3f61524e04314b2c82ffbe3b",
+            "base": "bd6e96f4e59815f01a011cb1888f77fe27a9d90a",
+            "contract": "8851ca87d5a0e6d5f462a44388f9fc8a9424353fb217b6c8669b3cb62a8ce605",
+            "diff": "5ce1410c43345f6c26b4e412959fb0cdc68c9ad6b213383ad48cd5787c8425fa",
+            "empty": false
+          },
+          "checks": 11,
+          "repairs": 0
+        }
+      ]
+    }
   }
 }

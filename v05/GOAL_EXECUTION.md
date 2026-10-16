@@ -24,6 +24,12 @@ Tests with Agent/provider doubles establish execution ordering and gate behavior
 
 ## Real model evidence
 
+Historical `NODE_*_EVIDENCE.json` names below identify private evaluation records,
+not files shipped in this repository. They are not publicly reproducible evidence.
+The selected complex/replanning summaries in `RELEASE_READINESS.json` explicitly
+retain their historical product HEADs and limits; they do not certify this HEAD.
+
+
 A matched local screen/API/SQLite comparison used direct/adaptive/adaptive/direct order, two trials per mode, with identical owner input, pinned oracle and executable product source. Direct execution averaged 198.68 seconds and 258,776.5 observed processed tokens; delegated decomposition averaged 233.46 seconds and 342,933 tokens. Both modes passed verification and independent review without repair; adaptive selected one cohesive unit and added one proposal call. Keep ordinary `run` available for an already scoped single change; do not require decomposition merely to execute it. This small sample ends before external Delivery and does not establish general speedup, all-Agent cost, or equivalence to v0.4. Raw bindings and conditions are in `NODE_VERTICAL_SLICE_EVIDENCE.json` under `matchedScreenExecutionComparison`.
 
 `NODE_GOAL_EVIDENCE.json` records a three-unit synthetic checkout: pricing and inventory execute in parallel, checkout depends on both, then a new whole-Goal reviewer inspects the integration. The successful run reached Draft PR66 and CI in 307.152 seconds with seven fresh contexts. A preceding 105.483-second attempt failed on GitHub connectivity; its completed pricing work was not integrated. Both observations remain recorded. The seven declared successful calls total 647,538 observed processed tokens; provider-wide completeness is not asserted. This is not a matched speed comparison or proof of deployed multi-service quality.
@@ -332,7 +338,7 @@ requirements or cross-Issue integration. Initial control tests use Agent/provide
 doubles. The live local result below covers one semantic replanning case; external
 Delivery acceptance remains pending.
 
-`NODE_REPLANNING_EVIDENCE.json` records restart of the actual earlier adaptive
+`RELEASE_READINESS.json` → `historicalComplexAcceptance.replanning` records restart of the actual earlier adaptive
 checkout failure. The fresh planner proposed pricing, inventory and integrated
 checkout under the original contract. All three units and the final integration
 passed current checks and independent review in 382.871 seconds, with ten distinct
@@ -351,7 +357,8 @@ contract rewording and candidate invalidation. It carries no approval, executabl
 settings or verification receipt. Existing candidate import and fresh-review checks
 are unchanged. The follow-up local trial below measures reuse, elapsed time and tokens.
 
-The `advisoryPlanTrial` at `f7082c8` completed local verification/review in
+The `historicalComplexAcceptance.advisoryPlan` record in
+`RELEASE_READINESS.json`, at `f7082c8`, completed local verification/review in
 257.180 seconds with seven distinct contexts and 459,742 observed processed tokens.
 Inventory reused its existing candidate with current verification and fresh review;
 pricing and checkout needed one implementation each and no repairs. Four final
@@ -379,8 +386,9 @@ repairs, 1,142,062 observed processed tokens and 272,430 fresh tokens. Each Unit
 passed three checks; integration passed eleven. Verification, review and assessment
 targets matched, with final HEAD `32d308fc195776dd3f61524e04314b2c82ffbe3b`.
 The evaluation provider deliberately refused external Delivery; PR/CI did not run.
-Raw Evidence and bindings are indexed by `multidomainAdaptiveTrial` in
-`NODE_GOAL_EVIDENCE.json`. Independent read-only audit confirmed the metrics,
+Selected aggregates and target bindings are available in
+`RELEASE_READINESS.json` → `historicalComplexAcceptance.multidomainAdaptive`.
+Raw artifacts remain private; their locally checked hashes are not public reproduction evidence. Independent read-only audit confirmed the metrics,
 Context separation, target bindings and retained owner scope; no confirmed issue
 was found within that audit scope.
 
