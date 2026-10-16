@@ -14,6 +14,9 @@ test('read-only proposal binds source and cannot mutate Git or use exhausted bud
  const agent=async options=>{calls++;assert.equal(options.writable,false);assert(!fs.existsSync(path.join(options.workspace,'.git')));return {answer:JSON.stringify(proposal()),context:'planner',seconds:0,usage:[]};};
  const result=await proposeGoal(request,{agent});t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(result.binding.head,head);assert.equal(result.calls[0].usage,null);assert.match(result.authority,/advisory/);assert.equal(git('rev-parse','HEAD'),head);assert.equal(git('status','--porcelain'),'');
  await assert.rejects(proposeGoal({...request,budget:{maxAgentCalls:0}},{agent}),/budget/);assert.equal(calls,1);
+ for(const invalid of [{verificationResourceProfile:'unknown'},{verificationAssets:{runtime:{source:root,digest:'a'.repeat(64),entries:1},dependencies:[]}}]){
+  await assert.rejects(proposeGoal({...request,contract:{...contract,...invalid}},{agent}),/Unknown verification resource profile|Invalid asset pin/);assert.equal(calls,1,'invalid verification inputs must not start the planner');
+ }
  await assert.rejects(proposeGoal(request,{agent:async options=>{fs.writeFileSync(path.join(options.workspace,'search.js'),'tampered');return {answer:JSON.stringify(proposal()),context:'bad'};}}),/modified/);
 });
 
