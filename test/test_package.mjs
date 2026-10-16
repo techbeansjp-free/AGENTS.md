@@ -55,6 +55,12 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  assert.equal(explicit.status,1);assert.match(explicit.stderr,/Host-pinned Codex|Execution isolation unsupported/);
  const work=path.join(root,'work');git('worktree','add','-b','task',work);
  fs.writeFileSync(owner,JSON.stringify({repo:work}));
+ const assetWork=path.join(root,'asset-work');git('worktree','add','-b','assets',assetWork);
+ const assetPreview=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.equal(assetPreview.applied,false);assert(assetPreview.changes.length>50);
+ const assetApply=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--apply'],{encoding:'utf8'}));assert.equal(assetApply.applied,true);
+ assert.equal(fs.readFileSync(path.join(assetWork,'.agent-skill-chain/templates/specs/01_要求定義.md'),'utf8'),fs.readFileSync(path.join(templates,'01_要求定義.md'),'utf8'));
+ const projectSkill=fs.readFileSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8');assert(projectSkill.includes(cli));assert.doesNotMatch(projectSkill,/\.\.\/\.\.\//);
+ const assetAgain=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.deepEqual(assetAgain.changes,[]);assert.equal(assetAgain.recordChanged,false);
  const linked=spawnSync(process.execPath,[cli,'run-goal',owner],{encoding:'utf8'});
  assert.equal(linked.status,1);assert.doesNotMatch(linked.stderr,/dedicated Git worktree/);
  const reviewRefused=spawnSync(process.execPath,[cli,'review',owner],{encoding:'utf8'});assert.equal(reviewRefused.status,1);assert.match(reviewRefused.stderr,/Host-pinned Codex|Execution isolation unsupported/);

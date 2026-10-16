@@ -225,4 +225,30 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 詳細雛形はAPI・データ・セキュリティ・運用などの記入項目が必要な場合だけ選ぶ。選んだ雛形を利用者の仕様書としてコピーした後は、その文書は利用者の成果物であり、ASCのパッケージ更新で上書き・再生成しない。雛形の更新と、作成済み仕様書の更新は別の作業である。
 
-同一prefixでのnpm更新は配布パッケージの交換であり、利用者側の固有ルール・Skill登録・旧Hook・CI設定を自動移行する機能ではない。既存の`.agent-skill-chain/`を丸ごと新しい配布物で置換してはならない。設定移行には[移行手順](MIGRATION_PLAN.md)を使用する。利用者側へ配置するASC管理資産の導入・差分更新を一括して行う経路は未完成であり、パッケージ更新試験だけをその保証として扱わない。
+同一prefixでのnpm更新は配布パッケージの交換であり、利用者側の固有ルール・Skill登録・旧Hook・CI設定を自動移行する機能ではない。既存の`.agent-skill-chain/`を丸ごと新しい配布物で置換してはならない。設定移行には[移行手順](MIGRATION_PLAN.md)を使用する。利用者側の案内・Skill・雛形は、以下の`project-assets`で配置・更新する。HostへのSkill登録、既存Hook・CI・権限設定の変換はこの操作に含まれない。
+
+
+### プロジェクト内の配布資産を導入・更新する
+
+インストール済みの固定CLIを使い、専用worktreeで実施する。
+
+```text
+<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <worktree>
+<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <worktree> --apply
+```
+
+最初のコマンドは読取りのみで、作成・更新予定と競合をJSON表示する。`--apply`を指定すると、現在の配布パッケージから次の資産を配置する。
+
+```text
+.agent-skill-chain/
+├── 00_利用案内.md
+├── distribution.json      配布済み内容のhash（Git管理する）
+├── skills/asc/SKILL.md     固定インストール先を参照
+└── templates/specs/       基本雛形と任意の詳細雛形
+```
+
+前回配布時の内容から変わっていない資産だけを更新する。既存の異なるファイル、利用者が編集・削除した配布資産があれば、競合を表示して一切適用しない（終了コード2）。強制上書きオプションはない。競合は利用者の編集内容を確認して解決し、再度差分を確認する。旧v0.4の同名ファイルも自動的にASC所有とみなさない。
+
+`project/`、利用者作成の仕様書、カスタム雛形、アプリコード、他worktree、Git indexは変更しない。新しい配布版からなくなった資産も自動削除せず`retained`に表示する。不要ならGit差分を確認して別途削除する。適用はcommit・pushを行わないため、通常のGitレビューで確認し、必要ならその変更だけを戻せる。
+
+HostのSkill登録・AGENTS.md・Hook・権限設定は変更しない。Skillはインストール先の絶対パスを参照するため、別Hostや別prefixへ移した場合はそのHostのCLIで再生成する。実行中のAgentと並行して設定更新しない。中断・I/Oエラー時はworktreeを確認し、再度previewする。途中状態を成功と扱わず、競合がある場合は自動復旧やresetを行わない。正常な別worktreeの変更だけで更新を拒否することはない。
