@@ -5,6 +5,7 @@ import {safeName} from './controller.mjs';
 const contains=(a,b)=>{const r=path.relative(a,b);return !r||(!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
 function demand(ok,message){if(!ok)throw Error(message);}
 export function stageHostVerificationAssets(assets,{workspace,runtime,authorityRoots}){
+ workspace=fs.realpathSync(workspace);runtime=fs.realpathSync(runtime);authorityRoots=authorityRoots.map(r=>fs.realpathSync(r));
  if(assets===undefined)return {readOnlyRoots:[],runtimeRoot:null};
  demand(assets&&Object.keys(assets).sort().join(',')==='dependencies,runtime'&&Array.isArray(assets.dependencies),'Invalid verification assets');
  const readOnlyRoots=[],targets=[];

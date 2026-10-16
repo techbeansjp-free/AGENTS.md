@@ -25,7 +25,7 @@ else{
  if(p.contract?.verificationResourceProfile||p.contract?.verificationGit||Object.keys(p.contract?.verificationLimits??{}).some(k=>k!=='timeoutMilliseconds'))throw Error('Selected Host does not support requested asset, resource or Git contract');
  if(!Array.isArray(p.argv)||!p.argv.length||p.argv.some(v=>typeof v!=='string')||(p.timeout!==null&&(!Number.isSafeInteger(p.timeout)||p.timeout<=0||p.timeout>2147483647)))throw Error('Invalid verification request');
  const diagnostic=await probeNativeSandbox(config.executable);if(!diagnostic.passed)throw Error('Codex sandbox capability check failed');
- const runtime=fs.mkdtempSync(path.join(os.tmpdir(),'asc-host-verify-'));
+ const runtime=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-host-verify-')));
  try{
   const assets=stageHostVerificationAssets(p.contract?.verificationAssets,{workspace,runtime,authorityRoots:q.authorityRoots});
   const c=configuration({workspace,runtime,executable:config.executable,writable:true,purpose:'verification',readOnlyRoots:assets.readOnlyRoots});

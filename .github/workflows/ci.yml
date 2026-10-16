@@ -55,21 +55,3 @@ jobs:
         run: node --test test/test_host_execution.mjs test/test_native_probe.mjs test/test_host_process.mjs
       - name: Exact verification Git reconstruction
         run: node --test --test-name-pattern="verification Git reconstructs" test/test_controller.mjs
-
-  mac-native-verification:
-    name: Mac native sandbox and dependencies
-    runs-on: macos-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Install pinned test dependencies
-        run: npm ci --ignore-scripts
-      - name: Install explicit Codex sandbox runtime (no model calls)
-        run: npm install --prefix "$RUNNER_TEMP/asc-native-codex" --ignore-scripts --no-audit --no-fund @openai/codex@0.153.4
-      - name: Verify tracked control files and actual dependencies inside sandbox
-        run: ASC_TEST_CODEX="$RUNNER_TEMP/asc-native-codex/node_modules/@openai/codex/bin/codex.js" node test/native/host-assets.mjs

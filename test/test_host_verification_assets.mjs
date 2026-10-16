@@ -32,3 +32,10 @@ test('Host preserves internal dependency links without exposing original asset t
  assert.equal(fs.readFileSync(path.join(f.workspace,'frontend/node_modules/.bin/fixture'),'utf8'),'module.exports=42');
  assert.ok(fs.realpathSync(path.join(f.workspace,'frontend/node_modules/.bin/fixture')).startsWith(f.workspace+path.sep));
 });
+
+test('Host canonicalizes temporary-directory aliases before declaring asset roots',t=>{
+ const f=fixture(t),alias=path.join(f.root,'alias');fs.symlinkSync(f.root,alias,'junction');
+ const result=stageHostVerificationAssets(f.assets,{...f.options,workspace:path.join(alias,'workspace'),runtime:path.join(alias,'runtime')});
+ for(const dir of result.readOnlyRoots)assert.equal(dir,fs.realpathSync(dir));
+ assert.equal(result.runtimeRoot,path.join(fs.realpathSync(f.runtime),'verification-runtime'));
+});
