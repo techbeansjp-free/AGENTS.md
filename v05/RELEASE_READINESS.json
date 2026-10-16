@@ -1263,8 +1263,8 @@
     ]
   },
   "currentLinuxCi": {
-    "head": "0d9e198f42fdc1b8e206b0644a2ff985cb4b0d55",
-    "run": 38863579279,
+    "head": "fe5f59d6c439fde297122dc1324af4bcc4695767",
+    "run": 38864609171,
     "status": "SUCCESS",
     "passed": 224,
     "failed": 0,
@@ -1705,5 +1705,48 @@
       "durationMs": 116525.106198,
       "scope": "Linux isolation, product quality and standard unpublished package. Legacy trusted-base validator remains failed; not all PR checks passed."
     }
+  },
+  "publicScreenRecoveryLatest": {
+    "status": "draft-ci-passed",
+    "runtimeImplementationHead": "57799207",
+    "repositoryHeadAtExecution": "fe5f59d6c439fde297122dc1324af4bcc4695767",
+    "candidateHead": "f1f5b28f6e2f09b58f2aaccf5d7b4c3a6d2b53fe",
+    "base": "c21cf78609316689a4724327733755a1b5a36ba8",
+    "diffDigest": "54f3ef2907b7f2ed34d6770fe63791efbadb8a6301c51046384d92bc9c220c9c",
+    "contractDigest": "ee714522020b75bf35800f2445a6601b46b636722dd254b4915b18b96f8d9059",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/20",
+    "ciRun": 38865345294,
+    "remoteTests": {
+      "passed": 11,
+      "failed": 0,
+      "scope": "Python app and greeting suite plus independent greeting oracle; browser checks local only"
+    },
+    "wallSeconds": 208.697460137,
+    "agentCalls": 1,
+    "observedProcessedTokens": 214512,
+    "observedFreshTokens": 78832,
+    "allAgentTotalTokens": null,
+    "stages": [
+      {
+        "work": "verify",
+        "seconds": 20.718969838000003
+      },
+      {
+        "work": "independent-review",
+        "seconds": 162.90428062499998
+      },
+      {
+        "work": "delivery",
+        "seconds": 23.241835810999987
+      }
+    ],
+    "rawEvidenceSha256": "36e79ffd32448758187a2f267bb2747b490209015e5004102becc511f03bcbe6",
+    "publicBoundary": "Copied only four inspected synthetic file blobs onto existing public baseline in a new linked worktree. No private history, logs or local settings copied. Existing owner policy and baseline app bytes match.",
+    "verification": "Both calibrated body-receipt and pre-handler reload oracles plus Python app tests passed in Linux isolation; fresh independent review bound to new public HEAD passed. Controller observed Draft/unmerged PR and PR-bound CI.",
+    "limitations": [
+      "Existing repaired candidate; not initial Goal-to-Delivery timing",
+      "Prior failed and recovery trial costs remain separate; no speedup claim",
+      "No general complex-system acceptance or provider-internal total usage claim"
+    ]
   }
 }
