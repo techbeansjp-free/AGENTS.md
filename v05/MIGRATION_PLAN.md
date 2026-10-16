@@ -193,7 +193,7 @@ compile/buildせず、隔離コピー内に20万件の入力イベントを生�
 
 ## 配布とプロジェクト切替の境界
 
-配布する対象は本体repositoryの`v05/`から生成した`agent-skill-chain`のtarballであり、repository rootのv0.4 packageをversion変更する方式ではない。`agent-skill-chain`と`asc-v05`は同じv0.5 CLIを指す。旧CLIのStep command互換は提供しない。現在のtarballは未承認候補で、生成・offline install・動作成功だけでは公開可能にならない。
+本体repository rootの標準packageはv0.5へ切り替え済みで、通常の`npm pack`も`v05/`にある新実装だけを`agent-skill-chain`として配布対象にする。旧実装のversion番号だけを変更する方式ではない。`agent-skill-chain`と`asc-v05`は同じv0.5 CLIを指す。旧CLIのStep command互換は提供しない。現在のtarballは未承認候補で、生成・offline install・動作成功だけでは公開可能にならない。
 
 導入先は候補repositoryの外にある専用prefixとし、実行時はその固定CLIの絶対pathを用いる。global PATHや既存のv0.4インストールを上書きしない。project側は専用worktreeで、新しいowner requestに要求・許可範囲・規約参照・検証方法・Delivery先を明示する。旧Step用SkillやHookが残っていることを、新Controllerがそれらを実行・承認した根拠にはしない。
 
@@ -202,3 +202,11 @@ compile/buildせず、隔離コピー内に20万件の入力イベントを生�
 切戻しは旧版の固定CLIを再選択することと、必要ならレビュー済みの設定差分をGitで戻すことを分ける。`migration-rollback`は保存先の選択記録を戻すだけで、source・設定commit・利用者の作業をresetしない。設定差分のrevertはownerが対象と影響を確認し、旧版で必要な再検証を行う。候補の成果はbranchに保持する。
 
 この境界は導入手順の定義であり、任意の既存projectでの全面切替を実証した宣言ではない。Linuxの配布CLI実走、設定候補、通常開発、利用者成果保持、選択rollbackの証拠と、未検証の本番設定切戻しを区別する。正式な公開・tag・releaseは別の承認操作として残す。
+
+## 本体CI契約の切替（未完了）
+
+PR #1578のbase `2d64b8d50b173f29914a8f231c0c5efa9a7e0af5` は、v0.4のscript文字列・qualityContractVersion・保護fileのhashを検査する。この検査は新版の標準入口への置換を拒否する。candidate内のvalidatorを変更しても、baseから実行する検査の結果は変わらない。新版のLinux CI成功と、このbase検査の失敗は別々に報告する。
+
+切替レビューでは、旧Step専用コマンドと旧qualityContractVersionを新版に復活させて通過させない。必要な保証は、検査の自己緩和を独立して確認すること、権限を持つ実行で候補codeを動かさないこと、新版の実テスト・隔離試験を実行すること、提出commitを固定することである。旧Cucumber全件実行そのものは新版の受入条件にしない。
+
+実施順は、(1) repository ownerが新版CIの保護対象・必須checkと移行差分をレビュー、(2) base側の検査契約を先に更新、(3) 同じ候補HEADでbase検査とLinux CIを再実行、(4) 実結果に基づいてrelease readinessを更新、とする。既存の保護変更承認はbaseへの事前登録を要求するため、candidateだけの登録を承認成立と扱わない。baseへのmerge・branch保護の変更・失敗checkの免除は本実装作業では実行しない。必要なowner操作が未実施の間、全CI成功・正式release可能とは報告しない。

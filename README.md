@@ -26,7 +26,7 @@ v0.4の`workflow advance`等とは非互換です。旧設定や利用者の成�
 
 ## 開発と検証
 
-`npm test`と`npm run test:v05`は新ハーネスのテストです。`npm run quality`は新実装のLintとテストを実行します。`test:legacy`等に残る旧系テストは移行検討用であり、標準実行やv0.5の受入件数には含めません。旧base品質契約とrelease手順の移行は進行中です。
+`npm test`と`npm run test:v05`は新ハーネスのテストです。`npm run quality`は新実装のLintとテストを実行します。`test:legacy`等に残る旧系テストは移行検討用であり、標準実行やv0.5の受入件数には含めません。`lint`も新版のみを対象にします。旧Step専用の`workflow:check`、`test:unit`、`test:integration`、`test:e2e`等は標準コマンドから削除しています。旧系の調査用入口は`test:legacy`・`build:legacy`だけに分離し、新版の配布や実行から呼びません。旧base品質契約とrelease手順の移行は進行中です。
 
 詳細な構成・保証境界は[v0.5利用案内](v05/README.md)を参照してください。
 

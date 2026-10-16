@@ -91,8 +91,8 @@
     "USAGE.md": "c2e92cb1e4c69b21e845d74b1d6837cfc8304c6575dedae0064210bb409f7ec3",
     "package.json": "be57dea383943f61d7dbddc5fe269261a773e4534799b457bd846b1d79684458",
     "scripts/pack-candidate.mjs": "b1bd5ceff93b660bd72128761af977d5e8bac12dcade96494f7442498ab69a07",
-    "test_package.mjs": "7fa72c6cb9aa0b4c732886d7968142611287ac83cf1e92ded82f91a49e368ce8",
-    "MIGRATION_PLAN.md": "03715ffac4f1a44476b10f64de94ed3366518fe1da5ae998f3d39fc05eaaafde",
+    "test_package.mjs": "ec5cea56018e47a227d8679c404a8e348ee4583be42303baef427140a69899bc",
+    "MIGRATION_PLAN.md": "b2864b7b93fa057058f0066bd737441f6bd51f075ce9720f19ef145929a2a8be",
     "RELEASE_READINESS.json": "587cfbed0c3f62e519159a335e2355bc98b1ba0b80bcdbcb868dbde0f1f1f50b"
   },
   "integrationAdditions": {

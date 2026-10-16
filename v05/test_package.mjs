@@ -105,6 +105,13 @@ test('repository root package installs only the v0.5 runtime through the canonic
  const installed=path.join(consumer,'node_modules/agent-skill-chain');const pkg=JSON.parse(fs.readFileSync(path.join(installed,'package.json')));
  assert.equal(pkg.version,JSON.parse(fs.readFileSync(path.join(installed,'v05/package.json'))).version);
  assert.equal(Object.hasOwn(pkg,'agentSkillChain'),false,'legacy quality-contract metadata must not claim v0.5 compatibility');
+ // Public development commands must not silently execute the retired Step runtime.
+ for(const [name,command] of Object.entries(pkg.scripts)){
+  if(name.endsWith(':legacy'))continue;
+  assert.doesNotMatch(command,/scripts\/|cucumber|compile|workflow:|audit:/,name);
+ }
+ for(const name of ['workflow:check','test:unit','test:integration','test:e2e','quality:legacy'])assert.equal(Object.hasOwn(pkg.scripts,name),false,name);
+ assert.equal(pkg.scripts.lint,'eslint v05');
  const project=path.join(root,'legacy-project');fs.mkdirSync(project);
  const git=(...args)=>execFileSync('git',args,{cwd:project,stdio:'pipe'});git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');fs.writeFileSync(path.join(project,'README.md'),'Synthetic migration inspection fixture\n');fs.mkdirSync(path.join(project,'.agent-skill-chain'));fs.writeFileSync(path.join(project,'.agent-skill-chain/project-policy.json'),JSON.stringify({schemaVersion:'agent-skill-chain/project-policy/v0.3.1'}));git('add','README.md','.agent-skill-chain/project-policy.json');git('commit','-qm','baseline');
  const migration=JSON.parse(execFileSync(process.execPath,[path.join(installed,pkg.bin['agent-skill-chain']),'migration-inspect',project],{encoding:'utf8'}));assert.equal(migration.readyToMigrate,false);assert.deepEqual(migration.dirty,[]);assert.deepEqual(migration.blockers,['migration-execution-not-performed']);

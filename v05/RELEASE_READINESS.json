@@ -605,13 +605,13 @@
     ]
   },
   "canonicalCutoverValidation": {
-    "head": "fce222e448f53478589ad27c1aed26012dcaec6e",
+    "head": "0b891aec5052813a640357c1e523a7a6c57f6044",
     "linuxCI": {
-      "run": 38837304656,
+      "run": 38838152418,
       "result": "success"
     },
     "trustedBaseCI": {
-      "run": 38837301766,
+      "run": 38838149215,
       "result": "failure",
       "reason": "legacy qualityContractVersion required; contract transition incomplete"
     },
@@ -644,5 +644,21 @@
       "causalE2ESpeedupClaim": false
     },
     "boundary": "Ignored subtrees remain on host and are not read/transferred; overlap with allowed write paths is rejected. This is not a recursive safety inspection of ignored contents."
+  },
+  "canonicalScriptCleanup": {
+    "scope": "standard development scripts now target v0.5; old commands retained only as explicit test:legacy/build:legacy diagnostics",
+    "packageTests": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 7.879824072
+    },
+    "lint": "passed",
+    "independentReview": {
+      "reviewer": "integration_review",
+      "result": "no confirmed blocker",
+      "scope": "uncommitted script/package-test/migration-document delta; read-only, tests not independently rerun"
+    },
+    "releaseReady": false
   }
 }
