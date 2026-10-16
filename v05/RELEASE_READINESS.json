@@ -978,5 +978,60 @@
       "resultSha256": "fb9f46f130edd17701a6d8eb3a480962611000261a66a97903271e5bbede7f03",
       "independentReview": "Read-only integration_review confirmed trace and fixed-candidate source alignment; did not rerun the probe."
     }
+  },
+  "adaptiveScreenHistoryRecovery": {
+    "status": "FAIL",
+    "productHead": "9957ddb017f8c7fbc9605d46e4af3420712ec856",
+    "wallSeconds": 251.36307892600001,
+    "agentCalls": 2,
+    "observedProcessedTokens": 479857,
+    "observedFreshTokens": 95857,
+    "allAgentTotalTokens": null,
+    "candidateHead": "ac3096382fc6bd069bbaa8afe3d85d150dbbd4a7",
+    "verificationAttempts": 3,
+    "deliveryAttempted": false,
+    "sourceUnchanged": true,
+    "finding": "Both repairs still replay obsolete pending intent after history traversal followed by reload. Verification rejected all candidates before independent review.",
+    "nextAction": "Diagnostic output must state the complete observed history+reload schedule; previous assertion name only said history traversal. Preserve the same assertion and owner contract.",
+    "evidenceSha256": "a867b9401e7ea05f92f81d273d6ddaea1ccc0e093112250278e6f81b5a12201b"
+  },
+  "currentScreenClarificationBoundary": {
+    "status": "PASS_FOR_PLANNING_BOUNDARY_ONLY",
+    "productHead": "9957ddb017f8c7fbc9605d46e4af3420712ec856",
+    "baseHead": "2f86988d532c18aaa7b2aa0d2b584ad74ad12470",
+    "clarificationSeconds": 15.872400657999998,
+    "proposalSeconds": 46.869372557000005,
+    "agentCalls": 2,
+    "observedProcessedTokens": 107746,
+    "observedFreshTokens": 32098,
+    "allAgentTotalTokens": null,
+    "questions": [
+      "Should overview counts cover all tasks or only pending tasks?",
+      "Should the overview be read-only, or may it provide bulk actions that change task completion?"
+    ],
+    "oldProposalRejected": true,
+    "sourceUnchanged": true,
+    "selectedUnits": [
+      {
+        "id": "accurate-summary-journey",
+        "intent": "Let a user move through list, summary, and detail views, toggle one task only from detail, and revisit a freshly fetched summary that accurately reflects the persisted SQLite state.",
+        "writePaths": [
+          "app.py",
+          "screen.html",
+          "test_core.py",
+          "design.md"
+        ]
+      }
+    ],
+    "limitations": [
+      "Two separate bounded read-only invocations, not cumulative budget enforcement",
+      "Owner clarification uses already authorized synthetic fixture choices; not production approval",
+      "No implementation, independent semantic design approval, PR/CI or overall Screen-First acceptance established"
+    ],
+    "artifactSha256": {
+      "evidence.json": "82b75344268cdc78cc98b485a3b023819eff234e6fb506fae7b7c8c5c7b7f183",
+      "owner-decision.json": "fc846db3302a7871b31952efa77358634ce8bdef8f79640a9b2afb3104f26f6f",
+      "proposal-result.json": "dd9cff1d215de91f994be6a434314e278271177731a497a3130cef05ac7c2dbc"
+    }
   }
 }

@@ -1,6 +1,6 @@
 # v0.5 本体統合レビュー
 
-このディレクトリは別リポジトリで開発したGoal・Contract・Evidence駆動ハーネスを、本体でレビューするための移植です。元の標準CLI・v0.4の配布・PR #1577は変更しません。正式切替とリリースは未完了です。
+このディレクトリはGoal・Contract・Evidence駆動のv0.5実装です。本体の標準CLIと配布対象はv0.5へ切り替え済みで、v0.4を呼び出すfallbackはありません。旧実装は移行・回帰確認用にリポジトリへ残っていますが、標準配布・標準テストの実行対象ではありません。PR #1577は凍結を維持します。リポジトリの必須CI契約移行と正式リリース判定は未完了です。
 
 読む順序は README.md、src/controller.mjs、src/workflow.mjs、Goal/Issue関連実装、対応するtest_*.mjs、MIGRATION_PLAN.md です。固定Step列を再現せず、必要な作業と独立レビューを選択します。
 
@@ -23,7 +23,7 @@ Node 20以上。Linuxの隔離テストはbubblewrap等を必要とします。m
 
 ## 未達
 
-本体の既存品質チェックとの統合、正式配布入口の切替、Linux最終配布物のwhole-Agent隔離、最終PR/CI性能比較、レビュー品質受入は別途確認します（外部製品比較はowner承認で将来課題へ変更）。Draftのまま検分し、merge/releaseしないでください。
+旧品質チェックからLinux版の必須CI契約への移行、複雑ケースの完走・競合後の復旧、最終版の同条件性能受入が残っています。標準配布物の小規模Draft PR/CI完走とLinux隔離には実測がありますが、複雑ケース全体の合格には拡張しません。外部レビュー製品との比較はowner承認で将来課題へ変更しています。各試験の対象HEAD・成功・失敗・限定はRELEASE_READINESS.jsonを参照してください。Draftを維持し、merge/releaseしないでください。
 
 ## レビュー品質の評価用fixture
 
@@ -31,7 +31,7 @@ Node 20以上。Linuxの隔離テストはbubblewrap等を必要とします。m
 
 これは評価器の正しさの確認であり、AI ReviewerのPrecision/RecallやCodeRabbit等との同等性の証明ではありません。比較時は同じ候補・Intent・oracleを使用し、oracleと期待ラベルをReviewerへ渡さず、指摘を独立に裁定してください。環境失敗を欠陥の正検出に数えず、欠測をゼロにしません。通常の製品配布にこの評価用ディレクトリは含めません。
 
-## 現行統合の実測（aa64d9e3）
+## 過去の統合実測（aa64d9e3）
 
 Ubuntu24 CIは207成功・失敗0・skip0。新規公開合成fixtureのDraft PR/CIまで83.48秒・2 Agentで完走しました。setupは時間から除外し、旧private fixtureとの速度比較には使用しません。公開対象は新規合成5ファイルのみでprivate履歴・生ログは含めません。
 
