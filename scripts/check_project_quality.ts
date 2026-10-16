@@ -732,13 +732,13 @@ const V05_CUTOVER_CONFIGURATION: Readonly<Record<string, string>> = {
   "eslint.config.mjs":
     "6466cbe9cc2b060e19842a2ed0ec1746e64185456bc0561a11a27b4e3ab7b77b",
   "package.json":
-    "581732f382bf91f7a704a6137377527d7aa16f73f8c83430b0fdefcab575ac04",
+    "30124caa46864c28fa26df7146ea4a79a253b98cdcd98e583c1b440e857cdaee",
   "package-lock.json":
     "f4d9b7dacbc6bf0ad5d2a534119068e4bf8270ccd6701c7f3e96e68c77fa880a",
   "scripts/check_source_quality.ts":
     "08e7676f45b33fd1173701b0f9092465bd8056ffff093509fefd4412ce45135b",
   "scripts/quality-support/domain/conformance.ts":
-    "b49bd9add80c45ff100ac530adaaf9b230d0524b54a7954bc0ad1f463bed8c6c",
+    "5bbe6b3806b4d9c055b856fb159b126acb267744044c8e5e7885da787dda87fc",
   "scripts/quality-support/domain/enforcement.ts":
     "dc2fa3b719229ece859e0625b60e20523febf7518ef96cde3997457db0f77acf",
   "scripts/quality-support/domain/policy.ts":
