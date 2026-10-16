@@ -227,3 +227,23 @@ ${mode==='stage'?'stageMigration':'prepareMigration'}(${JSON.stringify(f.source)
   assert.equal(f.git('rev-parse','HEAD'),before.head);assert.equal(f.git('status','--porcelain'),before.status);assert.equal(fs.readFileSync(path.join(f.source,'AGENTS.md'),'utf8'),before.owner);
  }
 });
+
+test('linked worktree migration cannot write into shared Git administration',async t=>{
+ const {stageMigration,cloneSource}=await import('./src/migration.mjs');
+ const {inspectMigration}=await import('./migration_inspect.mjs');
+ const f=fixture(t),linked=path.join(f.root,'linked');f.git('worktree','add','-b','linked',linked);
+ const common=path.join(f.source,'.git');
+ const metadata=execFileSync('git',['rev-parse','--absolute-git-dir'],{cwd:linked,encoding:'utf8'}).trim();
+ const alias=path.join(f.root,'metadata-alias');fs.symlinkSync(common,alias,'dir');
+ const inspection=inspectMigration(linked),plan={schema:'asc-v05-cutover/v1',sourceHead:inspection.head,files:inspection.configurationInventory.map(e=>({path:e.path,beforeSha256:e.sha256,action:'retain'}))};
+ const before=f.git('worktree','list','--porcelain');
+ for(const [label,invoke] of [['prepare',d=>prepareMigration(linked,d)],['stage',d=>stageMigration(linked,d,plan)],['clone',d=>cloneSource(linked,d,inspection.head)]]){
+  for(const parent of [common,metadata,alias]){
+   const destination=path.join(parent,`forbidden-${label}`);
+   assert.throws(()=>invoke(destination),/Git metadata/,`${label}: ${parent}`);
+   assert.equal(fs.existsSync(destination),false,'reject before creating any destination');
+  }
+ }
+ assert.equal(f.git('worktree','list','--porcelain'),before);
+ assert.equal(f.git('status','--porcelain'),'');
+});

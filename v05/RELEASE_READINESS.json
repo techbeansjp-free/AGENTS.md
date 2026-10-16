@@ -605,13 +605,13 @@
     ]
   },
   "canonicalCutoverValidation": {
-    "head": "0b891aec5052813a640357c1e523a7a6c57f6044",
+    "head": "f669a826c53bcdba7a7eb414cd09421140d175db",
     "linuxCI": {
-      "run": 38838152418,
+      "run": 38838727378,
       "result": "success"
     },
     "trustedBaseCI": {
-      "run": 38838149215,
+      "run": 38838725411,
       "result": "failure",
       "reason": "legacy qualityContractVersion required; contract transition incomplete"
     },
@@ -660,5 +660,106 @@
       "scope": "uncommitted script/package-test/migration-document delta; read-only, tests not independently rerun"
     },
     "releaseReady": false
+  },
+  "standardRootDistributionTrial": {
+    "sourceHead": "f669a826c53bcdba7a7eb414cd09421140d175db",
+    "packageSha256": "88a99ce6e69311ccebd2448995689a9aa0dc7af2cda35c749bcd6a3d2adac36b",
+    "pack": "npm pack (normal root lifecycle)",
+    "install": "offline npm install (normal lifecycle)",
+    "status": "draft-ci-passed",
+    "wallSeconds": 78.951773527,
+    "setupIncluded": false,
+    "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+    "model": "gpt-5.6-sol",
+    "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/19",
+    "submittedHead": "e1317064bc60587bfa8f1af14ed5d5b64a0a7222",
+    "draft": true,
+    "ciRun": 38838979493,
+    "ciResult": "success",
+    "metrics": {
+      "status": "draft-ci-passed",
+      "wallSeconds": 78.880054575,
+      "adapterAttempts": 2,
+      "completedAdapterCalls": 2,
+      "usageCoverage": {
+        "declaredCalls": 2,
+        "completeCalls": 2,
+        "observedTurns": 2,
+        "state": "complete",
+        "enumeration": "controller-dispatched calls only"
+      },
+      "observed": {
+        "input": 110365,
+        "output": 1408,
+        "cacheRead": 96768,
+        "cacheWrite": 0,
+        "reasoning": 503,
+        "processed": 111773,
+        "fresh": 15005
+      },
+      "allDeclaredCallProcessedTokens": 111773,
+      "allAgentTotalTokens": null,
+      "roles": {
+        "implementation": {
+          "attempts": 1,
+          "completeUsageCalls": 1,
+          "observedProcessedTokens": 53044
+        },
+        "review": {
+          "attempts": 1,
+          "completeUsageCalls": 1,
+          "observedProcessedTokens": 58729
+        }
+      },
+      "stages": [
+        {
+          "work": "implementation",
+          "seconds": 23.611171547
+        },
+        {
+          "work": "verify",
+          "seconds": 0.5846176679999999
+        },
+        {
+          "work": "independent-review",
+          "seconds": 31.029798071000005
+        },
+        {
+          "work": "delivery",
+          "seconds": 23.229711761999987
+        }
+      ],
+      "contextHighWaterMark": null,
+      "limitations": [
+        "Input includes cache read/write; output includes reasoning; subsets are not added twice",
+        "Declared-call coverage does not certify provider-internal or external Agent enumeration",
+        "Stage intervals include observation and waiting; they are not pure model computation",
+        "No pricing or causal performance claim"
+      ]
+    },
+    "comparisonClaim": null,
+    "limitations": [
+      "Single synthetic small-change trial; not a matched v0.4 comparison",
+      "Does not verify later migration metadata changes",
+      "No merge or release"
+    ]
+  },
+  "migrationMetadataBoundary": {
+    "sourceParent": "f669a826c53bcdba7a7eb414cd09421140d175db",
+    "migrationSourceSha256": "ffa1cb0640e37ef161a8ddfdd9064ed9a83f14679de11d69d509cbcf1617f151",
+    "counterexample": "Before fix, prepareMigration accepted destination inside linked worktree shared .git; disposable fixture only",
+    "fix": "prepare/stage/clone reject canonical destination overlap with common and per-worktree Git metadata before writes",
+    "coverage": "3 entrypoints x shared metadata, per-worktree metadata and parent symlink alias; source/worktree registrations preserved",
+    "fullLinuxQuality": {
+      "passed": 218,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 106.317218072,
+      "cgroupEnabled": true,
+      "lint": "passed"
+    },
+    "independentReview": "integration_review read-only; no confirmed blocker",
+    "failedTestAttempt": "Direct node test invocation from integration root had wrong cwd and failed; preserved locally, not counted as success. Standard npm run quality from root uses v05 cwd and passed.",
+    "remaining": "Owner configuration add/remove and full setting rollback acceptance remain distinct from selection rollback"
   }
 }

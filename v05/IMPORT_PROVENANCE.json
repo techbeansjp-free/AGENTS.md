@@ -83,7 +83,7 @@
     "test_controller.mjs": "b09b43549998bc281111f0d50aa9b2e330788698c6e1a611da283e286e9facc6",
     "test_goal_run.mjs": "70544e80c74ebd29a418f9eaed8f47966c1631b5033eb1ef0401cfe9fc0d0013",
     "test_issue_run.mjs": "d4a5fdb24580bf0c2cb8a1af17238b4b79252125a23be027250885afd4aada3f",
-    "test_migration.mjs": "1b9cc65fbf2285fdccf5ccad8929a9c7a93f7ab8c4fa32d889b8d146492613cb",
+    "test_migration.mjs": "6c53639d086a2252980aeaca0feec5b57c2b8fa2feea78fe930070f3af210688",
     "test_restricted_agent_node.mjs": "8ab1ad1266bee3aed2f0cd3783a71a819ad594bcb1740c1e4cd22a2e45b15636",
     "test_verification_assets.mjs": "bd016fd0a04aae343ef71106cfc2d5c0e6d18c9afef391749492ed05620ee19e",
     "test_workflow.mjs": "8a43a8755d2d77b50295b2309c6f76393d1aa44ffab7988545df31109a015107",
@@ -93,7 +93,8 @@
     "scripts/pack-candidate.mjs": "b1bd5ceff93b660bd72128761af977d5e8bac12dcade96494f7442498ab69a07",
     "test_package.mjs": "ec5cea56018e47a227d8679c404a8e348ee4583be42303baef427140a69899bc",
     "MIGRATION_PLAN.md": "b2864b7b93fa057058f0066bd737441f6bd51f075ce9720f19ef145929a2a8be",
-    "RELEASE_READINESS.json": "587cfbed0c3f62e519159a335e2355bc98b1ba0b80bcdbcb868dbde0f1f1f50b"
+    "RELEASE_READINESS.json": "94de8698390e9810d4b606233627d7bb3b047fe547bbfaf588b32289095a945e",
+    "src/migration.mjs": "ffa1cb0640e37ef161a8ddfdd9064ed9a83f14679de11d69d509cbcf1617f151"
   },
   "integrationAdditions": {
     "src/agent-lifecycle.mjs": "eb7b118c8d4903a658ee4d3c4a26fc5f56d757c996cba1d8a5963bea92c97db3",

@@ -12,6 +12,14 @@ function git(root,...args){
  {cwd:root,env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:nul,GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'},timeout:120000,maxBuffer:16*1024*1024});
  demand(!p.error&&p.status===0,'Migration Git operation failed');return p.stdout;
 }
+// Linked worktrees keep administration outside their source directory. Resolve
+// both metadata roots before any destination write, including parent aliases.
+function assertOutsideGitMetadata(origin,destination){
+ for(const flag of ['--absolute-git-dir','--git-common-dir']){
+  const metadata=fs.realpathSync.native(git(origin,'rev-parse','--path-format=absolute',flag).toString().trim());
+  demand(!contains(metadata,destination)&&!contains(destination,metadata),'Migration destination overlaps Git metadata');
+ }
+}
 function writeManifest(root,data){
  const content=JSON.stringify(data,null,2)+'\n';
  demand(Buffer.byteLength(content)<manifestByteLimit,'Transition metadata size limit');
@@ -32,6 +40,7 @@ export function prepareMigration(source,destination){
  const origin=fs.realpathSync(source),parent=fs.realpathSync(path.dirname(path.resolve(destination)));
  const root=path.join(parent,path.basename(destination));
  demand(!contains(origin,root)&&!contains(root,origin),'Transition must be outside legacy project');
+ assertOutsideGitMetadata(origin,root);
  if(fs.existsSync(root)){
   demand(fs.lstatSync(root).isDirectory()&&!fs.lstatSync(root).isSymbolicLink(),'Unsafe transition directory');
   const previous=readManifest(root);
@@ -85,7 +94,10 @@ export function rollbackMigration(destination){
 /** Fresh non-shared source clone; no legacy migration state or approvals imported. */
 export function cloneSource(source,destination,head,sourceHead=head){
  const origin=fs.realpathSync(source),parent=fs.realpathSync(path.dirname(destination));
- demand(path.isAbsolute(destination)&&!fs.existsSync(destination)&&!contains(origin,destination)&&!contains(destination,origin),'Unsafe clone destination');
+ demand(path.isAbsolute(destination),'Absolute clone destination required');
+ destination=path.join(parent,path.basename(destination));
+ demand(!fs.existsSync(destination)&&!contains(origin,destination)&&!contains(destination,origin),'Unsafe clone destination');
+ assertOutsideGitMetadata(origin,destination);
  git(parent,'clone','--no-local','--no-hardlinks','--no-checkout','--single-branch','--',origin,destination);
  demand(git(destination,'rev-parse','HEAD').toString().trim()===sourceHead,'Source changed during clone');
  if(head!==sourceHead){git(destination,'merge-base','--is-ancestor',head,sourceHead);git(destination,'update-ref','HEAD',head,sourceHead);}
@@ -121,6 +133,7 @@ export function stageMigration(source,destination,plan){
  demand(plan.files.length===inventory.size,'Every configuration entry requires an owner decision');
  const parent=fs.realpathSync(path.dirname(path.resolve(destination))),root=path.join(parent,path.basename(destination));
  demand(!contains(origin,root)&&!contains(root,origin)&&!fs.existsSync(root),'Cutover requires a new location outside source');
+ assertOutsideGitMetadata(origin,root);
  fs.mkdirSync(root,{mode:0o700});
  const initial={schema:'asc-v05-transition/v1',state:'preparing',source:origin,sourceHead:inspection.head,
   selection:'legacy',legacyEvidenceImported:false,releaseReady:false,cutoverPlanDigest:hash(JSON.stringify(plan))};
