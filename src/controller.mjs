@@ -1,7 +1,7 @@
 import {performance} from 'node:perf_hooks';
 /** Node evaluation engine. Host owns this object and all adapters; Agents never do. */
 import {createVerificationGit} from './verification-git.mjs';
-import {SOURCE_FILE_BYTES,SOURCE_TOTAL_BYTES,SOURCE_BATCH_BYTES} from './source-limits.mjs';
+import {SOURCE_BATCH_BYTES} from './source-limits.mjs';
 import {runBoundedVerification,verificationMemoryLimit} from './verification-resources.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -41,13 +41,19 @@ export class Controller {
   }
   get events() {return structuredClone(this.#events);}
   git(...args) {return this.gitInput(undefined,...args);}
-  gitInput(input,...args) {
+  gitInput(input,...args) {return this.gitOutput(input,args);}
+  gitOutput(input,args,output='pipe') {
     const env={PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',
       GIT_CONFIG_GLOBAL:process.platform==='win32'?'NUL':'/dev/null',GIT_NO_REPLACE_OBJECTS:'1',
       GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0'};
     const p=spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${process.platform==='win32'?'NUL':'/dev/null'}`,
-      '-c','protocol.allow=never',...args],{cwd:this.repo,env,input,timeout:20000,maxBuffer:16*1024*1024});
+      '-c','protocol.allow=never',...args],{cwd:this.repo,env,input,stdio:['pipe',output,'pipe'],timeout:20000,maxBuffer:16*1024*1024});
     demand(!p.error && p.status===0,'Git observation failed');return p.stdout;
+  }
+  gitLarge(...args) {
+    const dir=fs.mkdtempSync(path.join(os.tmpdir(),'asc-git-output-')),file=path.join(dir,'output');
+    try{const fd=fs.openSync(file,'wx');try{this.gitOutput(undefined,args,fd);}finally{fs.closeSync(fd);}return fs.readFileSync(file);}
+    finally{fs.rmSync(dir,{recursive:true,force:true});}
   }
   binding() {return {contract:digest(this.contract),base:this.base,scope:this.scope};}
   needsDesign() {return this.contract.requiresDesign || this.contract.risks?.length>0;}
@@ -87,15 +93,14 @@ export class Controller {
   }
   blobs(head) {
     const entries=this.git('ls-tree','-rlz','--full-tree',head).toString('utf8').split('\0').filter(Boolean);
-    demand(entries.length<=10000,'Inventory limit exceeded');
-    const blobs=new Map(),portableNames=new Set(),objects=[];let total=0;
+    const blobs=new Map(),portableNames=new Set(),objects=[];
     for(const entry of entries){
       const tab=entry.indexOf('\t'),name=entry.slice(tab+1);
       const fields=entry.slice(0,tab).trim().split(/ +/),[mode,kind,oid,sizeText]=fields;
       safeName(name);demand(!portableNames.has(name.toLowerCase()),'Case-aliased source');portableNames.add(name.toLowerCase());
       demand(fields.length===4&&kind==='blob'&&['100644','100755'].includes(mode)&&/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid),'Unsupported source type');
-      const size=Number(sizeText);total+=size;
-      demand(/^\d+$/.test(sizeText)&&Number.isSafeInteger(size)&&size>=0&&size<=SOURCE_FILE_BYTES&&total<=SOURCE_TOTAL_BYTES,'Source byte limit exceeded');
+      const size=Number(sizeText);
+      demand(/^\d+$/.test(sizeText)&&Number.isSafeInteger(size)&&size>=0,'Invalid source byte size');
       objects.push({name,mode,oid,size});
     }
     if(!objects.length)return blobs;
@@ -103,6 +108,12 @@ export class Controller {
     // never filenames or source text, form the batch protocol input.
     const batches=[];let batch=[],batchBytes=0;
     for(const object of objects){
+      if(object.size>SOURCE_BATCH_BYTES){
+        const dir=fs.mkdtempSync(path.join(os.tmpdir(),'asc-blob-')),file=path.join(dir,'blob');
+        try{const fd=fs.openSync(file,'wx');try{this.gitOutput(undefined,['cat-file','blob',object.oid],fd);}finally{fs.closeSync(fd);}
+          demand(fs.statSync(file).size===object.size,'Truncated blob');blobs.set(object.name,{mode:object.mode,oid:object.oid,bytes:fs.readFileSync(file)});
+        }finally{fs.rmSync(dir,{recursive:true,force:true});}continue;
+      }
       if(batch.length&&batchBytes+object.size>SOURCE_BATCH_BYTES){batches.push(batch);batch=[];batchBytes=0;}
       batch.push(object);batchBytes+=object.size;
     }
@@ -184,7 +195,7 @@ export class Controller {
     this.git('merge-base','--is-ancestor',this.base,head);
     const changed=this.git('diff','--no-ext-diff','--no-textconv','--name-only','-z',this.base,head).toString().split('\0').filter(Boolean);
     demand((allowEmpty || changed.length>0) && changed.every(p=>this.contract.allowedPaths.includes(p)),'Empty or unauthorized change');
-    const diff=this.git('diff','--no-ext-diff','--no-textconv','--binary',this.base,head);
+    const diff=this.gitLarge('diff','--no-ext-diff','--no-textconv','--binary',this.base,head);
     demand(this.git('rev-parse','HEAD').toString().trim()===head,'HEAD changed during observation');
     return {head,base:this.base,contract:digest(this.contract),diff:hash(diff),empty:changed.length===0};
   }

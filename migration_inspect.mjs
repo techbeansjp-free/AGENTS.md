@@ -1,21 +1,14 @@
 /** Read-only v0.4 migration inventory. Never imports legacy approvals. */
-import {SOURCE_FILE_BYTES} from './src/source-limits.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
-import {safeName} from './src/controller.mjs';
+import {safeName,Controller} from './src/controller.mjs';
 
 export function inspectMigration(directory) {
   const root = fs.realpathSync(directory);
-  const env = {PATH:process.env.PATH, HOME:root, GIT_CONFIG_NOSYSTEM:'1',
-    GIT_CONFIG_GLOBAL:process.platform === 'win32' ? 'NUL' : '/dev/null',
-    GIT_NO_REPLACE_OBJECTS:'1', GIT_NO_LAZY_FETCH:'1', GIT_ALLOW_PROTOCOL:'',
-    GIT_TERMINAL_PROMPT:'0'};
-  const git = (...args) => execFileSync('git', ['-c','core.fsmonitor=false','-c',
-    'core.hooksPath=' + (process.platform === 'win32' ? 'NUL' : '/dev/null'),
-    '-c','protocol.allow=never',...args], {cwd:root,env,timeout:20000,maxBuffer:16*1024*1024});
+  const observer=Object.assign(Object.create(Controller.prototype),{repo:root});
+  const git=(...args)=>observer.gitLarge(...args);
   const head = git('rev-parse','--verify','HEAD^{commit}').toString().trim();
   const policyPath = '.agent-skill-chain/project-policy.json';
   const read = relative => {
@@ -30,13 +23,12 @@ export function inspectMigration(directory) {
     const fd=fs.openSync(current,fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
     try {
       const stat=fs.fstatSync(fd);
-      if (!stat.isFile() || stat.nlink!==1 || stat.size>SOURCE_FILE_BYTES) throw Error('Unsupported inventory file');
+      if (!stat.isFile() || stat.nlink!==1) throw Error('Unsupported inventory file');
       return fs.readFileSync(fd);
     } finally { fs.closeSync(fd); }
   };
   const inventory=[]; const configurationInventory=[]; const dirty=[]; const unsupported=[];
   const entries=git('ls-tree','-rz','--full-tree',head).toString('utf8').split('\0').filter(Boolean);
-  if (entries.length>10000) throw Error('Inventory limit exceeded');
   const expectedIndex=new Map();
   for (const entry of entries) {
     const tab=entry.indexOf('\t');
@@ -45,7 +37,7 @@ export function inspectMigration(directory) {
     try { safeName(name); } catch { unsupported.push(name);continue; }
     if (kind!=='blob' || !['100644','100755'].includes(mode)) {unsupported.push(name);continue;}
     const size=Number(git('cat-file','-s',oid).toString());
-    if (!Number.isSafeInteger(size) || size>SOURCE_FILE_BYTES) {unsupported.push(name);continue;}
+    if (!Number.isSafeInteger(size) || size<0) {unsupported.push(name);continue;}
     const expected=git('cat-file','blob',oid);
     try {
       if (!read(name).equals(expected)) dirty.push(name);

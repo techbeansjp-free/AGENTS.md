@@ -102,9 +102,9 @@ test('manifest cutover needs explicit decisions and never executes replacement s
 
 test('cutover failed after clone creation preserves partial data and refuses rollback success',async t=>{
  const {stageMigration}=await import('../src/migration.mjs');const {inspectMigration}=await import('../migration_inspect.mjs');const f=fixture(t);
- for(let i=0;i<6;i++)fs.writeFileSync(path.join(f.source,`file-${i}`),Buffer.alloc(11000000));f.git('add','.');f.git('commit','-qm','above total source byte limit');
+ const {Controller}=await import('../src/controller.mjs');const original=Controller.prototype.blobs;Controller.prototype.blobs=function(){throw Error('Injected observation failure');};t.after(()=>{Controller.prototype.blobs=original;});
  const inspection=inspectMigration(f.source),plan={schema:'asc-v05-cutover/v1',sourceHead:inspection.head,files:inspection.configurationInventory.map(e=>({path:e.path,beforeSha256:e.sha256,action:'retain'}))};
- assert.throws(()=>stageMigration(f.source,f.destination,plan),/Source byte limit/);
+ assert.throws(()=>stageMigration(f.source,f.destination,plan),/Injected observation failure/);
  assert.equal(JSON.parse(fs.readFileSync(path.join(f.destination,'transition.json'))).state,'preparing');
  assert.equal(fs.existsSync(path.join(f.destination,'project','.git')),true);
  assert.throws(()=>rollbackMigration(f.destination),/incomplete/);
@@ -246,4 +246,13 @@ test('linked worktree migration cannot write into shared Git administration',asy
  }
  assert.equal(f.git('worktree','list','--porcelain'),before);
  assert.equal(f.git('status','--porcelain'),'');
+});
+
+test('worktree creation streams tracked assets above the former aggregate source quota',t=>{
+ const f=fixture(t),data=Buffer.alloc(10_000_000,7);
+ for(let i=0;i<7;i++)fs.writeFileSync(path.join(f.source,`asset-${i}.bin`),data);
+ f.git('add','.');f.git('commit','-qm','synthetic assets');
+ const created=createWorktree(f.source,{issue:1584,slug:'large-assets'});
+ for(let i=0;i<7;i++)assert.equal(fs.statSync(path.join(created.repo,`asset-${i}.bin`)).size,data.length);
+ assert.equal(f.git('rev-parse','HEAD'),created.base);
 });

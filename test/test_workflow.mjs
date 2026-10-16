@@ -355,3 +355,13 @@ test('inherited findings survive repeated failure before a fresh review', {skip:
  }
  assert.equal(calls,1);assert.equal(f.creates(),0);
 });
+
+test('large text change reaches independent review without stdout quota',{skip:!enabled},async t=>{
+ const f=fixture(t);f.request.contract.testArgv=['/bin/sh','-c','test "$(wc -c < code.txt)" -eq 18000000'];let reviewed=false;
+ const agent=async({workspace,writable})=>{
+  if(writable)fs.writeFileSync(path.join(workspace,'code.txt'),'x'.repeat(18_000_000));
+  else{assert(fs.statSync(path.join(workspace,'.asc-review.diff')).size>18_000_000);reviewed=true;}
+  return {context:writable?'large-worker':'large-reviewer',seconds:0,usage:[],answer:writable?'':JSON.stringify({verdict:'pass',findings:[]})};
+ };
+ const result=await runWorkflow(f.request,{agent,provider:f.provider});t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert(reviewed);assert.equal(result.status,'draft-ci-passed');
+});

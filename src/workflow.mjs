@@ -1,7 +1,6 @@
 import {hostExecution} from './host-execution.mjs';
 import {performance} from 'node:perf_hooks';
 import {importUnitCandidate} from './unit-candidate.mjs';
-import {SOURCE_TOTAL_BYTES} from './source-limits.mjs';
 import {reviewSchema,parseReview,reviewDiagnostics,reviewDiagnosticContext} from './review-result.mjs';
 import {createExecutionBudget} from './execution-budget.mjs';
 import {authorityCommandValidator} from './authority-command.mjs';
@@ -21,14 +20,14 @@ export function exportSource(controller,head,root){
  return exported;
 }
 export function checkOutput(root,original,allowed){
- const seen=new Set();let total=0;
+ const seen=new Set();
  const walk=(dir,prefix='')=>{for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
   const name=prefix+entry.name,file=path.join(dir,entry.name);
   if(!prefix&&['.git','.codex','.agents'].includes(name)&&entry.isDirectory()&&fs.readdirSync(file).length===0)continue;
   demand(!entry.isSymbolicLink(),'Aliased Agent output');
   if(entry.isDirectory()){walk(file,name+'/');continue;}
   demand(entry.isFile()&&(original.has(name)||allowed.includes(name)),'Unauthorized output path');seen.add(name);
-  const data=readSnapshotFile(root,name);total+=data.length;demand(total<=SOURCE_TOTAL_BYTES&&seen.size<=10000,'Agent output source limit exceeded');
+  const data=readSnapshotFile(root,name);
   if(!allowed.includes(name))demand(data.equals(original.get(name).bytes),'Read-only context was modified');
  }};walk(root);
  for(const name of original.keys())demand(seen.has(name)||allowed.includes(name),'Read-only context was deleted');
@@ -149,7 +148,7 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
      const ownerManagedControls=reviewOnly?Object.fromEntries([...c.blobs(target.head)].filter(([name])=>c.contract.allowedPaths.includes(name)&&['.codex','.agents'].includes(name.split('/')[0].toLowerCase())).map(([name,blob])=>[name,blob.bytes.toString('utf8')])):undefined;
      const diffRef='.asc-review.diff';
      demand(!fs.existsSync(path.join(space,diffRef)),'Reserved review diff path exists');
-     fs.writeFileSync(path.join(space,diffRef),c.git('diff','--no-ext-diff','--no-textconv',c.base,target.head),{flag:'wx'});
+     fs.writeFileSync(path.join(space,diffRef),c.gitLarge('diff','--no-ext-diff','--no-textconv',c.base,target.head),{flag:'wx'});
      fs.writeFileSync(path.join(space,metadata),JSON.stringify({priorReviewsRef,unitAssignment,ownerManagedControls,intent:await remote.intent(),contract:c.contract,target,diffRef,verification:c.events.filter(e=>e.operation==='verify').slice(-1)}));
 
      const r=await dispatch('review',{workspace:space,logs,executable:request.codexExecutable,model:request.model,writable:false,schema:reviewSchema,

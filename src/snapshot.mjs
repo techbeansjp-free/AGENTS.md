@@ -1,5 +1,4 @@
 /** Descriptor-based reads without mutable symlink parents (Linux adapter). */
-import {SOURCE_FILE_BYTES} from './source-limits.mjs';
 import fs from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';
 import {safeName} from './controller.mjs';
 function withFile(root,name,maxBytes,read){
@@ -17,15 +16,15 @@ function withFile(root,name,maxBytes,read){
   finally{fs.closeSync(fd);}
  }finally{fs.closeSync(dir);}
 }
-export function readSnapshotFile(root,name,maxBytes=SOURCE_FILE_BYTES) {
- if(!Number.isSafeInteger(maxBytes)||maxBytes<0||maxBytes>SOURCE_FILE_BYTES)throw Error('Invalid source bound');
+export function readSnapshotFile(root,name,maxBytes=Number.MAX_SAFE_INTEGER) {
+ if(!Number.isSafeInteger(maxBytes)||maxBytes<0||maxBytes>Number.MAX_SAFE_INTEGER)throw Error('Invalid source bound');
  return withFile(root,name,maxBytes,(fd,stat)=>{
   const data=Buffer.alloc(stat.size+1);let size=0,n;
   while(size<data.length && (n=fs.readSync(fd,data,size,data.length-size,null))>0)size+=n;
   if(size!==stat.size)throw Error('Snapshot changed during observation');return data.subarray(0,size);
  });
 }
-/** Larger host-pinned runtimes use a bounded stream; Agent output stays bounded by SOURCE_FILE_BYTES. */
+/** Host-pinned runtimes use a bounded stream under the separate asset contract. */
 export function pinAssetFile(root,name,destination){
  return withFile(root,name,536870912,(fd,stat)=>{
   const output=destination?fs.openSync(destination,'wx',stat.mode&0o777):undefined;

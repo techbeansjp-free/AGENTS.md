@@ -15,3 +15,9 @@ test('native diagnostics require positive controls, denied operations and unchan
 test('native diagnostic accepts no shell command or inferred executable',async()=>{
  await assert.rejects(probeNativeSandbox('codex --unsafe'),/Absolute/);
 });
+
+test('Mac Node runtime grants only system OpenSSL read dependency',async()=>{
+ const {nodeRuntimeRoots}=await import('../src/codex-runtime.mjs');
+ assert.deepEqual(nodeRuntimeRoots('darwin'),['/System/Library/OpenSSL']);
+ assert.deepEqual(nodeRuntimeRoots('linux'),[]);assert.deepEqual(nodeRuntimeRoots('win32'),[]);
+});

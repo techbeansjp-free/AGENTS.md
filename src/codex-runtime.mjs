@@ -11,3 +11,6 @@ export function codexRuntimeRoots(executable){
  }
  return [...new Set(roots)];
 }
+
+/** Node's system OpenSSL configuration is runtime data, never user configuration. */
+export function nodeRuntimeRoots(platform=process.platform){return platform==='darwin'?['/System/Library/OpenSSL']:[];}

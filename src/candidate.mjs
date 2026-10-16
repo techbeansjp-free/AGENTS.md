@@ -1,6 +1,5 @@
 /** Materialize bounded Agent output in an exclusively Controller-owned worktree. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';
-import {SOURCE_TOTAL_BYTES} from './source-limits.mjs';
 import {readSnapshotFile} from './snapshot.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 export function commitCandidate(controller,workspace,{name='ASC evaluation',email='controller@example.invalid'}={}) {
@@ -16,8 +15,7 @@ export function commitCandidate(controller,workspace,{name='ASC evaluation',emai
   demand(!p.error&&p.status===0,'Candidate Git operation failed');return p.stdout.toString().trim();
  };
  try{
-  const updates=new Map(),allowed=new Set(controller.contract.allowedPaths);let total=0,count=0;
-  for(const [name,value] of original)if(!allowed.has(name)){total+=value.bytes.length;count++;}
+  const updates=new Map(),allowed=new Set(controller.contract.allowedPaths);
   for(const name of allowed){
    let bytes;
    try{bytes=readSnapshotFile(workspace,name);}catch(e){if(e.code!=='ENOENT')throw e;}
@@ -25,8 +23,6 @@ export function commitCandidate(controller,workspace,{name='ASC evaluation',emai
     if(original.has(name)){updates.set(name,null);}continue;
    }
    const mode=original.get(name)?.mode??'100644';
-   total+=bytes.length;count++;
-   demand(total<=SOURCE_TOTAL_BYTES&&count<=10000,'Candidate source limit exceeded');
    if(original.get(name)?.bytes.equals(bytes))continue;
    updates.set(name,{bytes,mode});
   }

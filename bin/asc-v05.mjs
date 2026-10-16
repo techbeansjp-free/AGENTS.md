@@ -53,7 +53,7 @@ try {
 
 owner入力は作業repoの外に置きます。通常実行は専用worktreeを使用します。
 必要環境・入力例・承認・検証資産の準備: ${new URL('../v05/USAGE.md',import.meta.url).pathname}
-Linux限定のリリース候補です。実行時の隔離検査は必須です。公開・merge・releaseの承認は別途必要です。`);
+Alpha版です。明示Host経路はOS名で拒否しません。実行時の隔離検査は必須です。公開・merge・releaseの承認は別途必要です。`);
   } else if(command==='probe-native'&&args.length===1){
     const result=await probeNativeSandbox(args[0]);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
   } else if(command==='project-assets'&&args.length>=1&&args.length<=3&&args.slice(1).every(a=>['--apply','--register-skill'].includes(a))&&new Set(args.slice(1)).size===args.length-1){
