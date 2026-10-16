@@ -193,5 +193,34 @@
       "skipped": 0,
       "durationMs": 9536.624586
     }
+  },
+  "ciFixtureCorrection": {
+    "implementationHead": "251493051c8cbed2c7cf88f6d067b5f4e94d88de",
+    "registrationHead": "6d7e3bc8cdb93795acd40f1bf6943f8bd26e4c42",
+    "changes": [
+      "Legacy bridge reexports its canonical entrypoint instead of duplicating its implementation",
+      "Synthetic quality-contract fixtures include all three protected helpers"
+    ],
+    "targetedScenarios": {
+      "passed": 7,
+      "failed": 0,
+      "steps": 63
+    },
+    "registrationTargetedScenarios": {
+      "passed": 3,
+      "failed": 0,
+      "steps": 27
+    },
+    "adversarialCasesPassed": 26,
+    "currentRegistrationToTransition": {
+      "valid": true,
+      "exit": 0
+    },
+    "githubPriorRun": {
+      "run": 38861770367,
+      "status": "failure",
+      "baseUsed": "d280cdfcdd75084f0d1b312608e4d3aced5c4bb7",
+      "limitation": "Historical event snapshot predates helper registration; retained as failure. Current local connection success is not GitHub CI success."
+    }
   }
 }
