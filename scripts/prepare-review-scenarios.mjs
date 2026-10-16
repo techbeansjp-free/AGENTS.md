@@ -9,13 +9,14 @@ const rows=[...authorization.cases.map(c=>({request:authorization.impactIntent,b
 const inputs=rows.map((r,i)=>({caseId:'case-'+(i+1),request:r.request,before:r.before,after:r.after}));
 // Labels and executable oracle sources must never be sent to the reviewer.
 const answers=rows.map((r,i)=>({caseId:'case-'+(i+1),defects:r.defects}));
+const inputBytes=JSON.stringify(inputs,null,2)+'\n';
 const baseline=fs.readFileSync(baselineSkill),candidate=fs.readFileSync(candidateSkill);
 fs.mkdirSync(destination);
 for(const [name,skill] of [['baseline',baseline],['candidate',candidate]]){
  const directory=path.join(destination,name);fs.mkdirSync(directory);
- fs.writeFileSync(path.join(directory,'SKILL.md'),skill);fs.writeFileSync(path.join(directory,'cases.json'),JSON.stringify(inputs,null,2)+'\n');
+ fs.writeFileSync(path.join(directory,'SKILL.md'),skill);fs.writeFileSync(path.join(directory,'cases.json'),inputBytes);
 }
 fs.mkdirSync(path.join(destination,'evaluator'));
 fs.writeFileSync(path.join(destination,'evaluator/answers.json'),JSON.stringify(answers,null,2)+'\n');
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
-console.log(JSON.stringify({cases:inputs.length,baselineSkillSha256:hash(baseline),candidateSkillSha256:hash(candidate),inputSha256:hash(JSON.stringify(inputs)),note:'Give each fresh reviewer only its arm directory; no answers, previous verdicts or evaluator source.'},null,2));
+console.log(JSON.stringify({cases:inputs.length,baselineSkillSha256:hash(baseline),candidateSkillSha256:hash(candidate),inputSha256:hash(inputBytes),note:'Give each fresh reviewer only its arm directory; no answers, previous verdicts or evaluator source.'},null,2));
