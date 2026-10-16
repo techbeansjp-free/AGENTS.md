@@ -1033,5 +1033,24 @@
       "owner-decision.json": "fc846db3302a7871b31952efa77358634ce8bdef8f79640a9b2afb3104f26f6f",
       "proposal-result.json": "dd9cff1d215de91f994be6a434314e278271177731a497a3130cef05ac7c2dbc"
     }
+  },
+  "nativeHistoryCounterexample": {
+    "status": "FIX_OBSERVED_FOR_NATIVE_LINK_PATH",
+    "baselineHead": "935778cb3fea2e88c292f7d67061c76dcd2d624d",
+    "candidateHead": "15a5e959bf1c15dbacf6448a680b3eff1bdeb0c4",
+    "baselineExit": 1,
+    "candidateExit": 0,
+    "newAgentCalls": 0,
+    "scenario": "Click native summary link while toggle is held; release; navigate summary-list-detail through native anchors; commit opposite toggle; traverse list-summary-original-detail history; reload. Baseline replays obsolete true; candidate preserves false without PATCH.",
+    "limitations": [
+      "Separate diagnostic, not replacement of original acceptance oracle",
+      "Programmatic hash traversal is a different input path; this pass does not prove that path safe",
+      "Not a completed independent review or Delivery"
+    ],
+    "artifactSha256": {
+      "check.mjs": "7948d98325f9f5abadf9d5f1831d31a6ff4420ff1378104dcabc1cfb5455036a",
+      "result.json": "b950bded8b4c64ec1092ebd622681d6fb53ac11c507bfc0ade9f32f6ea02ec0d",
+      "baseline-result.json": "ef2bcd896301256c5f25aba307b86804da8dd5a5d81b9f4661e0d62f74912134"
+    }
   }
 }
