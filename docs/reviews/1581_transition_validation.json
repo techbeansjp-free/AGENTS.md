@@ -13,5 +13,20 @@
     "Registration is not merged into main",
     "Formal audit review evidence and owner activation remain outstanding",
     "No ruleset change, merge or release performed"
-  ]
+  ],
+  "currentRootLayoutCompatibility": {
+    "status": "FAIL",
+    "candidateHead": "4bcec485bf0271521d6bdd9fc38d2ae945d50d0e",
+    "transitionHead": "4860fc581b63ffec89aed95c760da7b67d82e2dd",
+    "command": "node --import tsx scripts/check_project_quality.ts --root=<v05-integration> --trusted-root=<ci-contract-transition>",
+    "exit": 1,
+    "mismatchCount": 14,
+    "causes": [
+      "Cutover inventory still requires retired src/*.ts, Cucumber configuration and runner, and nested v05/package.json",
+      "Root manifest, lockfile, source validator, release workflow and proposal registry differ from the originally reviewed sidecar configuration",
+      "Candidate quality checker relocation differs from the base checker; current proposal cannot be activated unchanged"
+    ],
+    "nextAction": "Revise the explicit root-layout cutover proposal and adversarial tests before requesting base activation; do not restore retired runtime or waive the validator. Prior local success applies only to its recorded historical heads.",
+    "authority": "Read-only compatibility result, not permission to change or activate base protections"
+  }
 }
