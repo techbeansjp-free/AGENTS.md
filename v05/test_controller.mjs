@@ -277,3 +277,19 @@ test('primary intent edits across Delivery never become success or duplicate sub
   });
  }
 });
+
+
+test('ignored host build products stay outside snapshots without blocking clean source', {skip:!linux},t=>{
+ const {c,root,git,change}=fixture(t);
+ fs.writeFileSync(path.join(root,'.gitignore'),'__pycache__/\nlocal-output.txt\n');git('add','.gitignore');git('commit','-qm','ignore generated artifacts');
+ // The policy change is outside this task; start the task from that new baseline.
+ const contract=c.contract;const controller=new Controller({repo:root,base:git('rev-parse','HEAD'),contract,implementer:'implementation'});
+ change();fs.mkdirSync(path.join(root,'__pycache__'));fs.writeFileSync(path.join(root,'__pycache__','cache'),'host-only');fs.writeFileSync(path.join(root,'local-output.txt'),'preserve');
+ const target=controller.target();
+ assert.equal(controller.sandbox(target,['/bin/sh','-c','test ! -e /work/__pycache__ && test ! -e /work/local-output.txt && test "$(cat code.txt)" = after']).exit,0);
+ assert.equal(fs.readFileSync(path.join(root,'local-output.txt'),'utf8'),'preserve');
+ assert.equal(fs.readFileSync(path.join(root,'__pycache__','cache'),'utf8'),'host-only');
+ const collision=new Controller({repo:root,base:controller.base,contract:{...contract,allowedPaths:['code.txt','__pycache__/cache']},implementer:'implementation'});
+ assert.throws(()=>collision.target(),/overlaps allowed write scope/);
+ fs.writeFileSync(path.join(root,'untracked.txt'),'human work');assert.throws(()=>controller.target(),/Untracked or special/);
+});

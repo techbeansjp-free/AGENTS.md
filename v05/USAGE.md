@@ -12,7 +12,7 @@
 
 移行や隔離実験の独立cloneを使う場合だけ、外部owner入力へ`"workspaceMode": "isolated-clone"`を明記する。未指定はworktree、未知値とrepo配下のサブディレクトリは拒否する。これはGit上の作業場所の確認であり、同時編集者がいないことの証明ではない。cloneの独立した準備はowner責務で、共有object storageの有無まではこの検査で判定しない。従来のclean状態・差分検査は継続する。内部APIを直接使うhost integrationは専用作業場所を自ら用意する。
 
-利用者が編集中の作業場所を直接渡さない。専用のclean worktreeまたは移行用独立cloneを使う。候補の検分はtracked file全体とindexを確認するため、node_modules、ログ、owner入力、署名鍵を候補内へ置かない。未追跡fileは無視して進めず停止する。配布物も候補外へ配置する。
+利用者が編集中の作業場所を直接渡さない。専用のclean worktreeまたは移行用独立cloneを使う。候補の検分はtracked file全体とindexを確認する。owner入力・署名鍵・配布物は候補外へ配置する。通常の未追跡fileは停止対象だが、Gitの無視対象の生成物は変更範囲と重ならない場合にHostへ保持する（末尾の「Hostに残る生成物」を参照）。
 
 `asc-v05 migration-inspect <旧project>` で非互換を確認できる。`migration-prepare <旧project> <新しい保存先>` は旧repoを変更せず、新しい保存先のprojectへ独立cloneを作る。旧承認は引き継がない。既存の保存先を削除・上書きしない。
 
@@ -190,3 +190,7 @@ memoryBytesは検証unitごとの上限であり、Goal全体の合計上限で�
 An owner may explicitly set `contract.verificationGit: "shallow-head"` when existing verification commands require `git ls-files`, `git show HEAD:...` or the exact target commit. The default exports source files without Git metadata. The selected mode is bound into the contract and must match across Goal units.
 
 This option reconstructs only the target commit, its trees/blobs and an index in a disposable directory. It does not copy the source Git directory, remotes, local/global configuration, hooks, credentials, branches or tags. The generated `.git` is read-only in verification. Exact commit identity preserves the commit's own author, message and signature metadata; those are not redacted. Parent history is unavailable (shallow, detached HEAD). Commands requiring historical comparisons, branch identity or index writes need a different explicit verification contract; this is not a full repository clone. Existing network/filesystem/process restrictions remain active.
+
+### Hostに残る生成物
+
+Gitの無視対象である未追跡の生成物はHostに保持し、Agent・検証snapshotには転送しません。snapshotはcommitのblobから生成します。除外したディレクトリ内部は読み取り検査しないため、内部のsymlinkや特殊ファイルを個別に拒否したという保証ではありません。対象と許可された変更範囲が一致・親子関係にある場合は上書きを防ぐため停止します。通常の未追跡ファイル、tracked内容やindexの変更は引き続き停止対象です。

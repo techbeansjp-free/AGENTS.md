@@ -134,11 +134,20 @@ export class Controller {
       indexed.add(name);
     }
     demand(indexed.size===expected.size,'Missing index entry');
+    // Ignored build products remain on the host; snapshots only use Git blobs.
+    // Never ignore an existing path the Agent is allowed to create/replace.
+    const ignored=new Set(this.git('ls-files','--others','--ignored','--exclude-standard','--directory','-z').toString().split('\0').filter(Boolean));
     const walk=(dir,prefix='')=>{
       for(const entry of fs.readdirSync(dir,{withFileTypes:true})) {
         if(!prefix && entry.name==='.git') continue;
         const name=prefix+entry.name;safeName(name);const file=path.join(dir,entry.name);
         demand(!entry.isSymbolicLink(),'Symlink source');
+        if(!expected.has(name)&&(ignored.has(name)||ignored.has(name+'/'))){
+          demand(![...expected.keys()].some(p=>p.startsWith(name+'/')),'Ignored path contains tracked source');
+          demand(!this.contract.allowedPaths.some(p=>p===name||p.startsWith(name+'/')||name.startsWith(p+'/')),'Ignored source overlaps allowed write scope');
+          demand(entry.isFile()||entry.isDirectory(),'Special ignored source');
+          continue;
+        }
         if(entry.isDirectory()){walk(file,name+'/');continue;}
         demand(entry.isFile() && expected.has(name),'Untracked or special source');
         const fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0));
