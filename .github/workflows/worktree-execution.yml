@@ -1,0 +1,21 @@
+name: Current Host worktree execution
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  worktree:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify real worktree with existing dependencies and commit binding
+        run: node --test test/test_worktree_execution.mjs

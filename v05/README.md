@@ -2,7 +2,7 @@
 
 ASCは、目的と受入条件、許可された変更範囲、既存規約を入力として、必要な実装・検証・独立レビューを選択します。固定Step列や工程ごとのAgent起動は要求しません。小規模変更は実装と独立Reviewerを基本とし、複雑なGoalでは依存関係に従ってWork Unitを実行・統合します。
 
-**Linux限定のリリース候補です。公開・merge・releaseは未実施です。** [受入状態](RELEASE_READINESS.json)の`finalAcceptanceAudit`に対象commit、受入根拠、制限を記録しています。`capabilities.releaseReady`は製品のLinux受入を表し、現在のHostの隔離成立や公開承認ではありません。`host.releaseReady: false`はOS識別だけで個別環境の隔離を認定しないことを表し、各runのpreflightは引き続き必須です。
+**Alphaとして提供中です。標準は利用中のAI Hostによる専用worktreeでの開発です。** [受入状態](RELEASE_READINESS.json)の`finalAcceptanceAudit`に対象commit、受入根拠、制限を記録しています。`capabilities.releaseReady`は製品のLinux受入を表し、現在のHostの隔離成立や公開承認ではありません。`host.releaseReady: false`はOS識別だけで個別環境の隔離を認定しないことを表し、snapshot経路のpreflightは引き続き必須です。
 
 ## 導入と入口
 
@@ -18,7 +18,7 @@ npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/ag
 
 正式名の候補には`agent-skill-chain`と`asc-v05`の両入口があります。評価用`asc-v05-evaluation`パッケージには`asc-v05`入口があります。同じv0.5 CLIの操作に使えますが、v0.4の`workflow advance`などのコマンドは引き継ぎません。未対応コマンドで旧版へfallbackしません。候補の生成・非互換・rollbackは[移行手順](MIGRATION_PLAN.md)を参照してください。
 
-開発対象には専用のcleanなlinked worktreeを使います。owner入力、実行ツール、認証情報、検証用依存物は対象worktreeの外へ配置します。移行用の独立cloneは明示指定で利用できます。複数Issueの状態は分離し、別worktreeの失敗を理由に全作業を拒否しません。
+開発対象には専用のcleanなlinked worktreeを使います。標準経路はそのworktreeの既存node_modules・pnpm workspaceと通常のビルド／テストを使用します。依存物のコピーやハッシュ指定は不要です。snapshot経路のowner入力・認証情報・検証用依存資産には別の配置契約があります。移行用の独立cloneは明示指定で利用できます。複数Issueの状態は分離し、別worktreeの失敗を理由に全作業を拒否しません。
 
 修正時は、その実行内の過去の失敗レビューを参照し、直前の指摘を直して以前の欠陥を再導入することを避けます。参照は診断情報であり、現在の承認や確定した欠陥ではありません。新しいReviewerが現在の契約・差分で再評価します。正常完走では履歴ファイルを追加せず、修正回数・権限・予算も拡張しません。
 
@@ -30,12 +30,14 @@ npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/ag
 
 | 目的 | 入口 |
 |---|---|
-| 小規模変更の実装・検証・独立レビュー・Draft PR/CI | `run` |
-| ownerが作成した候補の検証・独立レビュー（実装・修復・提出なし） | `review` |
-| Goal分解案の生成、明示したUnit計画の実行 | `goal-propose` / `run-goal` |
-| owner境界内の分解・実行 | `run-adaptive` |
-| 保存された候補から新しい検証で再開 | `restart-goal` |
-| 独立したIssueと依存関係の管理 | `run-issues` |
+| 標準：現在のAIで実装・実テスト・別Contextレビュー・Draft PR/CI | `start <worktree>`で確認しSkillに従って作業 |
+| 標準経路での検証記録（任意） | `worktree-verify <worktree> <base> <owner-contract>` |
+| 明示選択のsnapshot実行 | `run --snapshot` |
+| ownerが作成した候補の検証・独立レビュー（実装・修復・提出なし） | `review --snapshot` |
+| Goal分解案の生成、明示したUnit計画の実行 | `goal-propose --snapshot` / `run-goal --snapshot` |
+| owner境界内の分解・実行 | `run-adaptive --snapshot` |
+| 保存された候補から新しい検証で再開 | `restart-goal --snapshot` |
+| 独立したIssueと依存関係の管理 | `run-issues --snapshot` |
 | 旧構成の棚卸し・別cloneへの設定候補作成・旧環境選択 | `migration-inspect` / `migration-stage` / `migration-rollback` |
 
 入力例・worktree命名・停止条件は[実行手順](USAGE.md)、Goal・共有契約・統合は[Goal実行](GOAL_EXECUTION.md)、必要なowner承認は[承認契約](OWNER_APPROVAL.md)を参照してください。コマンド名の存在やAgentの完了だけで、Goal達成とは判定しません。
@@ -48,7 +50,7 @@ npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/ag
 - テスト・規約・文書はプロジェクトの契約に応じて適用します。全変更に専用DDD層、Gherkin、設計書、ADRを生成させません。仕様変更に必要な文書更新はレビュー対象です。
 - 再開時に旧Evidenceを承認として読み戻しません。候補の内容を保持し、新しい条件で検証・レビューします。再開は無料の処理ではなく、再検証コストが発生します。
 
-実Agentと検証の隔離は現在Linuxで評価しています。Git、GitHub CLI、host固定のCodex CLI、bubblewrap、prlimit等が必要です。Agentの実行寿命管理にもsystemd user serviceとcgroup v2環境が必要です。追加の資源制限profileの有無とは別の実行条件です。対応条件の詳細は[実行手順](USAGE.md)に従ってください。OS名だけで安全性を認定せず、実行時preflightを行います。WSL2・macOS等のAgent全体の隔離は別途受入中で、未成立の環境では停止します。
+以下はLinux snapshot backendの条件です。標準経路は現在のHostの権限・承認に従い、ASC独自sandboxやcgroupの保証を追加しません。実Agentと検証の隔離は現在Linuxで評価しています。Git、GitHub CLI、host固定のCodex CLI、bubblewrap、prlimit等が必要です。Agentの実行寿命管理にもsystemd user serviceとcgroup v2環境が必要です。追加の資源制限profileの有無とは別の実行条件です。対応条件の詳細は[実行手順](USAGE.md)に従ってください。OS名だけで安全性を認定せず、実行時preflightを行います。WSL2・macOS等のAgent全体の隔離は別途受入中で、未成立の環境では停止します。
 
 ## 受入範囲と制限
 
@@ -62,4 +64,4 @@ npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/ag
 
 ## Linux限定の初回受入
 
-初回リリース判定はnative Linuxを対象とします。macOS・Windows・WSL2は未対応として停止し、別途受入するまでサポートを主張しません。これらのOSは初回Linux版の判定条件に含めません。Linuxでも実行時のファイル・通信・子プロセスの隔離成立を確認し、失敗時に権限を緩めません。Ubuntu 24.04のCI構成を維持して互換性を検証します。
+初回リリース判定はnative Linuxを対象とします。これはLinux snapshot backendの受入範囲です。標準worktree経路はOS名で拒否せず、利用中のHostとプロジェクトの対応範囲に従います。これらのOSは初回Linux版の判定条件に含めません。Linuxでも実行時のファイル・通信・子プロセスの隔離成立を確認し、失敗時に権限を緩めません。Ubuntu 24.04のCI構成を維持して互換性を検証します。

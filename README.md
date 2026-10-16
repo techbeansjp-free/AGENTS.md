@@ -2,7 +2,7 @@
 
 ASCは、Goal・要求・リスク・プロジェクト契約・検証Evidenceから必要な開発作業を選ぶAI開発ハーネスです。固定Step 0〜11を実行する旧runtimeは、新版の標準CLIと配布物には含めません。
 
-現在は正式リリース前の候補です。Linux限定の受入範囲を記録しており、既存Releaseのlatestがv0.5であることを意味しません。merge・公開・releaseはまだ行っていません。
+v0.5 Alphaを明示導入用プレリリースとして提供しています。v0.4のLatestを自動置換するものではありません。
 
 ## 利用入口
 
@@ -11,10 +11,12 @@ ASCは、Goal・要求・リスク・プロジェクト契約・検証Evidence�
 ```sh
 agent-skill-chain --version
 agent-skill-chain capabilities
-agent-skill-chain run /absolute/path/to/owner-request.json
+agent-skill-chain start /absolute/path/to/worktree
 ```
 
-実行には専用worktreeと、候補リポジトリ外のowner入力が必要です。Node.js 20以上に加え、実Agent実行にはLinuxの隔離・資源管理環境、固定したCodex CLI等が必要です。単にインストールできることは、隔離成立や開発完了の証明ではありません。
+標準は専用worktreeで、現在のClaude Code／Codexが既存の開発環境・依存関係を使って実装・検証し、別Contextの独立レビューを経てDraft PR/CIへ進む経路です。ASC本体は直接実行できる配布物で、利用者にASCのビルドや依存資産のコピー・ハッシュ登録を要求しません。`start`は作業場所と責務の案内で、開発完了やレビューの証明ではありません。
+
+snapshot Controllerは明示選択の別経路です。利用する場合だけ `run --snapshot <external-owner-request.json>` 等を指定します。そこで必要となる隔離・依存コピーの制約は、標準経路の前提ではありません。
 
 入力・前提条件は[実行手順](v05/USAGE.md)、権限は[承認契約](v05/OWNER_APPROVAL.md)、分解と統合は[Goal実行](v05/GOAL_EXECUTION.md)を参照してください。[ASC Skill](skills/asc/SKILL.md)は同じ配布物内のCLIを利用します。
 

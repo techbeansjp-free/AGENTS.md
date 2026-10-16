@@ -1,3 +1,15 @@
+# v0.5評価CLIの実行手順
+
+## 標準: 現在のAIとworktreeの開発環境
+
+`asc-v05 start <worktree>` で専用worktreeを確認し、現在のAIがその場所で通常の実装・ビルド・テストを行う。pnpmの既存workspace・store・symlinkをそのまま使い、ASC向けの依存コピーやhash登録は行わない。依存が未導入ならプロジェクトのlockfileと現在のHost権限に従って導入する。worktree間の共有依存を無断で変更しない。
+
+検証の機械記録が必要なら `worktree-verify <worktree> <base> <owner-contract.json>` を使用できる。ownerファイルはworktree外に置き、`{"intent":"目的","allowedPaths":["src/file.ts"],"commands":[["pnpm","test"],["pnpm","build"]]}` のように指定する。変更をcommitしてから実行する。テストは現在のHost権限・環境変数で実際のworktree内に実行される（ASC独自sandboxではない）。現在のHostで許可されたコマンドだけ指定する。Windowsで.cmdを介する場合はHostが通常使うNodeとCLI scriptのargvなど、shellを必要としない実行入口を指定する。
+
+この結果は要求・対象commit・コマンド・結果の対応であり、独立レビューやDeliveryの承認ではない。テストがtracked source・HEAD・非ignore出力を変えたら無効として停止する。ignoreされたbuild出力や依存資産は保持し、全量走査しない。依存・設定環境の変更後は必要な再検証を行う。元要求・実Git差分とプロジェクト契約を別Contextでレビューし、提出commit一致とPR/CIを確認する。
+
+snapshot方式の `run` / `review` / `goal-propose` / `run-adaptive` / `run-goal` / `restart-goal` / `run-issues` は `--snapshot` の明示選択が必要。以下のController入力・依存資産制約は、この選択経路だけに適用する。既存スクリプトも明示選択を追加する。
+
 ## 利用中のAIと実行経路
 
 対話型開発は利用中のHostで実施する。Claude Code利用者にCodexを必須にしない。配布Skill `skills/asc/SKILL.md` は、専用worktree・既存依存関係・実テスト・別コンテキストの独立レビュー・Draft PR/CIを現在のHostで行う入口である。
@@ -6,7 +18,6 @@
 
 CI観測は既定では時間上限を持たず、対象PR・commitに拘束されたCIの完了まで待つ。ownerが待機期限を必要とする場合だけ `delivery.ciTimeoutMilliseconds` に非負の整数（ミリ秒）を指定する。`null` または省略は無期限、`0` は一度だけ観測する。期限到達はCI失敗や合格とは別の観測終了である。OS・プロセス自体の終了や通信障害は別途起こり得る。
 
-# v0.5評価CLIの実行手順
 
 正式リリース前の評価用。現在、要求からDraft PR/CIまで実証した実行環境はLinux。同梱のLinux Codex自動実行アダプターにはNode.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。これは全Host共通の必要条件ではない。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
 
@@ -14,7 +25,7 @@ CI観測は既定では時間上限を持たず、対象PR・commitに拘束さ�
 
 ## 作業場所
 
-通常入口の`run`/`run-goal`はlinked worktreeを要求する。新規作成時の標準命名はv0.4と同じく、directoryを`.worktrees/<YYYYMMDD_HHMMSS>-<Issue番号>-<slug>`、作業branchを`<type>/<Issue番号>-<slug>`とする。時刻は作成環境のlocal time、slugは小文字英数字とハイフン、標準typeは`feature`・`fix`・`refactor`・`test`・`docs`・`chore`。Issue番号とslugはdirectoryとbranchで揃える。プロジェクトが明示した命名規約を優先する。同じIssueを並列分担する場合はslugへ担当名を含める（例: `account-api` / `account-ui`）。
+標準の`start`とsnapshot入口の`run`/`run-goal`はlinked worktreeを要求する。新規作成時の標準命名はv0.4と同じく、directoryを`.worktrees/<YYYYMMDD_HHMMSS>-<Issue番号>-<slug>`、作業branchを`<type>/<Issue番号>-<slug>`とする。時刻は作成環境のlocal time、slugは小文字英数字とハイフン、標準typeは`feature`・`fix`・`refactor`・`test`・`docs`・`chore`。Issue番号とslugはdirectoryとbranchで揃える。プロジェクトが明示した命名規約を優先する。同じIssueを並列分担する場合はslugへ担当名を含める（例: `account-api` / `account-ui`）。
 
 例: `git worktree add -b fix/123-login-message .worktrees/20261015_143000-123-login-message <base>`。専用作業先の絶対pathを`repo`に指定する。名前が衝突したら別slugを選び、既存branchの強制reset・worktree上書きを行わない。必要に応じてownerがmerge/rebaseでbase変更を取り込み、更新した要求で検証・reviewを再実行する。ASCは自動fetch・stash・reset・base更新を行わない。
 
@@ -72,7 +83,7 @@ runtime-binにはhostが信頼するNode実行file等を用意し、`asc-v05 ass
 
 ## 実行と停止
 
-`asc-v05 run /absolute/owner-request.json` を実行する。hostのprovider認証とGitHub認証はAgent tool環境へ渡さない。Agent起動前にhost dummyの読取り拒否・実体不変と、陽性対照付きloopback通信拒否を実測する。欠測・失敗なら起動せず、権限を緩めて再試行しない。Agentは必要な変更を作り、controllerが固定コマンドを隔離実行する。fresh Reviewerの具体的な指摘または検証失敗だけを、設定回数以内で修正へ戻す。
+`asc-v05 run --snapshot /absolute/owner-request.json` を実行する。hostのprovider認証とGitHub認証はAgent tool環境へ渡さない。Agent起動前にhost dummyの読取り拒否・実体不変と、陽性対照付きloopback通信拒否を実測する。欠測・失敗なら起動せず、権限を緩めて再試行しない。Agentは必要な変更を作り、controllerが固定コマンドを隔離実行する。fresh Reviewerの具体的な指摘または検証失敗だけを、設定回数以内で修正へ戻す。
 
 終了値0はDraft/CI成功、2はowner作業が必要、1は停止。stderrに進行JSON、stdoutに結果を返す。停止時の `blocked.artifact` はhost側診断資料を示す。usage欠測はnull。source・index・要求・base・権限の不一致を自動的に承認したり、隔離なしでやり直したりしない。
 
@@ -87,7 +98,7 @@ runtime-binにはhostが信頼するNode実行file等を用意し、`asc-v05 ass
 
 ## Host対応の現在地
 
-`capabilities.host` はOS種別と実行候補かを返すが、隔離の証明ではない。通常Linuxでも各runの実検査を必須とする。WSLをLinuxと同一視しない。WSL2はWindowsの正式実行環境とする設計方針だが、Windows側file・interop・Git/Docker/credential連携の実機越境試験が未完了のため、現在のrunはWSLを明示的に拒否する。macOSも実Agent/検証の受入未完了、Windows nativeはv0.5.0の対象外。安全機能を省略するfallbackはない。
+`capabilities.host` はOS種別と実行候補かを返すが、隔離の証明ではない。通常Linuxでも各runの実検査を必須とする。WSLをLinuxと同一視しない。標準経路はOS名で拒否せず、現在のHostが提供する権限境界を使用する。snapshot経路の対応可否は選択したbackendの能力で決める。安全機能を省略するfallbackはない。
 
 中規模・大規模では2 Agentを上限としない。Work Unitの依存順実行・独立cloneでの並列実装・統合・全体レビューは評価CLIに実装されています。部分再計画や本番復旧を含む受入条件は `V05_COMPLEXITY_ACCEPTANCE.md`（評価リポジトリ）に記録し、単一fixtureでの成功を全条件の達成とは扱いません。
 
@@ -108,7 +119,7 @@ ReviewerにはGit管理情報を含まないsnapshotと、controllerが観測し
 
 ### 複数Work Unitと限定的な再開
 
-`asc-v05 goal-plan /absolute/owner-plan.json` は依存関係・変更範囲・共有契約の整合性を検査する計画専用入口です。`asc-v05 run-goal /absolute/owner-request.json` は独立cloneでUnitを実行し、個別検証・レビュー後に統合、全体検証・freshレビュー、Draft/CIへ進みます。単純な変更には従来の `run` を使い、Unit計画を必須にしません。入力は [GOAL_EXECUTION.md](GOAL_EXECUTION.md) を参照してください。
+`asc-v05 goal-plan /absolute/owner-plan.json` は依存関係・変更範囲・共有契約の整合性を検査する計画専用入口です。`asc-v05 run-goal --snapshot /absolute/owner-request.json` は独立cloneでUnitを実行し、個別検証・レビュー後に統合、全体検証・freshレビュー、Draft/CIへ進みます。単純な変更には従来の `run` を使い、Unit計画を必須にしません。入力は [GOAL_EXECUTION.md](GOAL_EXECUTION.md) を参照してください。
 
 失敗した実行groupは統合しません。既に統合済みのgroupは保持します。現時点で `run-goal` はclean baseから開始するため、部分統合済みrootの自動再開には対応していません。任意の旧ログを正式Evidenceとして読み込むこともありません。
 
@@ -173,7 +184,7 @@ Providerは呼出しごとの一時user serviceで起動し、Controller専有pi
 この追加経路は静的ブラウザ描画と資源超過反例を検証中であり、UI/API/DB全体の受入合格や対応OS拡大を意味しない。関連実検証は `ASC_TEST_CGROUP=1 npm test` で明示実行する。未指定時の該当skipは隔離合格と扱わない。
 
 既にownerが作成した候補の検証・独立レビューだけを実行するには、
-`asc-v05 review /absolute/owner-request.json`を使用する。入力形式とworktree検査は`run`と共通。
+`asc-v05 review --snapshot /absolute/owner-request.json`を使用する。入力形式とworktree検査は`run`と共通。
 GitHubの要求を読み直す代わりに、候補外に置かれたowner要求の読込時点のContractを基準とする。
 成功は`reviewed-candidate`であり、PR/CI成功や提出権限を意味しない。
 実装・修復・push・Deliveryは実行しない。候補差分がない、検証失敗、レビュー指摘がある場合は停止する。

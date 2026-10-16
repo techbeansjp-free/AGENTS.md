@@ -48,13 +48,17 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  fs.writeFileSync(path.join(repo,'file'),'base');git('add','.');git('commit','-qm','base');
  const owner=path.join(root,'owner-request.json');
  fs.writeFileSync(owner,JSON.stringify({repo}));
- const refused=spawnSync(process.execPath,[cli,'run',owner],{encoding:'utf8'});
+ const refused=spawnSync(process.execPath,[cli,'run','--snapshot',owner],{encoding:'utf8'});
  assert.equal(refused.status,1);assert.match(refused.stderr,/dedicated Git worktree/);
  fs.writeFileSync(owner,JSON.stringify({repo,workspaceMode:'isolated-clone'}));
- const explicit=spawnSync(process.execPath,[cli,'run',owner],{encoding:'utf8'});
+ const explicit=spawnSync(process.execPath,[cli,'run','--snapshot',owner],{encoding:'utf8'});
  assert.equal(explicit.status,1);assert.match(explicit.stderr,/Host-pinned Codex|Execution isolation unsupported/);
  const work=path.join(root,'work');git('worktree','add','-b','task',work);
  fs.writeFileSync(owner,JSON.stringify({repo:work}));
+ const started=JSON.parse(execFileSync(process.execPath,[cli,'start',work],{encoding:'utf8'}));assert.equal(started.execution,'current-host-worktree');assert.equal(started.providerLaunch,false);assert(fs.existsSync(started.skill));
+ const workBase=execFileSync('git',['rev-parse','HEAD'],{cwd:work,encoding:'utf8'}).trim();
+ const nativeOwner=path.join(root,'native-owner.json');fs.writeFileSync(nativeOwner,JSON.stringify({intent:'Verify existing project',allowedPaths:['file'],commands:[[process.execPath,'-e',"require('assert').equal(require('fs').readFileSync('file','utf8'),'base')"]]}));
+ const checked=JSON.parse(execFileSync(process.execPath,[cli,'worktree-verify',work,workBase,nativeOwner],{encoding:'utf8'}));assert.equal(checked.passed,true);assert.equal(checked.deliveryAuthorized,false);
  const assetWork=path.join(root,'asset-work');git('worktree','add','-b','assets',assetWork);
  const assetPreview=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.equal(assetPreview.applied,false);assert(assetPreview.changes.length>50);
  const assetApply=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--apply'],{encoding:'utf8'}));assert.equal(assetApply.applied,true);
@@ -64,15 +68,15 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const registeredEntry=path.join(assetWork,'.agents/skills/asc/SKILL.md');const registeredText=fs.readFileSync(registeredEntry,'utf8');
  const projectReference=/\]\(([^)]+)\)/.exec(registeredText)[1];assert.equal(fs.realpathSync(path.resolve(path.dirname(registeredEntry),projectReference)),fs.realpathSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md')));
  const assetAgain=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.deepEqual(assetAgain.changes,[]);assert.equal(assetAgain.recordChanged,false);assert.deepEqual(assetAgain.retained,['.agents/skills/asc/SKILL.md']);
- const linked=spawnSync(process.execPath,[cli,'run-goal',owner],{encoding:'utf8'});
+ const linked=spawnSync(process.execPath,[cli,'run-goal','--snapshot',owner],{encoding:'utf8'});
  assert.equal(linked.status,1);assert.doesNotMatch(linked.stderr,/dedicated Git worktree/);
- const reviewRefused=spawnSync(process.execPath,[cli,'review',owner],{encoding:'utf8'});assert.equal(reviewRefused.status,1);assert.match(reviewRefused.stderr,/Host-pinned Codex|Execution isolation unsupported/);
- const internalOwner=path.join(work,'request.json');fs.writeFileSync(internalOwner,JSON.stringify({repo:work}));const internalReview=spawnSync(process.execPath,[cli,'review',internalOwner],{encoding:'utf8'});assert.equal(internalReview.status,1);assert.match(internalReview.stderr,/outside candidate/);
+ const reviewRefused=spawnSync(process.execPath,[cli,'review','--snapshot',owner],{encoding:'utf8'});assert.equal(reviewRefused.status,1);assert.match(reviewRefused.stderr,/Host-pinned Codex|Execution isolation unsupported/);
+ const internalOwner=path.join(work,'request.json');fs.writeFileSync(internalOwner,JSON.stringify({repo:work}));const internalReview=spawnSync(process.execPath,[cli,'review','--snapshot',internalOwner],{encoding:'utf8'});assert.equal(internalReview.status,1);assert.match(internalReview.stderr,/outside candidate/);
 
  if(process.platform==='linux'&&process.env.ASC_TEST_ISOLATION!=='0'){
   fs.unlinkSync(internalOwner);const base=execFileSync('git',['rev-parse','HEAD'],{cwd:work,encoding:'utf8'}).trim();fs.writeFileSync(path.join(work,'file'),'candidate');execFileSync('git',['add','file'],{cwd:work});execFileSync('git',['commit','-qm','candidate'],{cwd:work});
   fs.writeFileSync(owner,JSON.stringify({repo:work,base,codexExecutable:process.execPath,model:'must-not-launch',contract:{intent:'Owner candidate review',criteria:['must pass'],allowedPaths:['file'],testArgv:['/bin/false'],riskTestArgv:[],requiredChecks:['test'],policyRevision:'fixture',risks:[],unresolved:[],requiresDesign:false,design:''}}));
-  const failed=spawnSync(process.execPath,[cli,'review',owner],{encoding:'utf8'});assert.equal(failed.status,1);const diagnostic=JSON.parse(failed.stdout);assert.equal(diagnostic.status,'blocked');assert.deepEqual(diagnostic.calls,[]);assert.equal(diagnostic.controllerEvents.find(e=>e.operation==='verify').results[0].exit,1);assert.match(failed.stderr,/Verification/);
+  const failed=spawnSync(process.execPath,[cli,'review','--snapshot',owner],{encoding:'utf8'});assert.equal(failed.status,1);const diagnostic=JSON.parse(failed.stdout);assert.equal(diagnostic.status,'blocked');assert.deepEqual(diagnostic.calls,[]);assert.equal(diagnostic.controllerEvents.find(e=>e.operation==='verify').results[0].exit,1);assert.match(failed.stderr,/Verification/);
   t.after(()=>fs.rmSync(diagnostic.root,{recursive:true,force:true}));
  }
 
