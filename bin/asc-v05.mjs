@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {startWorktree,verifyWorktree} from '../src/worktree-execution.mjs';
 import {projectAssets} from '../src/project-assets.mjs';
 import {restartGoal} from '../src/goal-restart.mjs';
 import {runIssues} from '../src/issue-run.mjs';
@@ -18,26 +19,37 @@ import {inspectAssets} from '../src/verification-assets.mjs';
 import path from 'node:path';
 import {verifyApproval} from '../src/approval.mjs';
 try {
-  const [command,...args]=process.argv.slice(2);
+  const [command,...rawArgs]=process.argv.slice(2);
+  const snapshotCommands=['run','review','run-adaptive','run-goal','run-issues','restart-goal','goal-propose'];
+  const args=[...rawArgs];
+  if(snapshotCommands.includes(command)){
+    if(args[0]!=='--snapshot')throw Error('Snapshot execution requires explicit --snapshot selection. Standard: start <worktree>, then use the current AI Host and existing project tools.');
+    args.shift();
+  }
   if((command===undefined||command==='--help'||command==='-h')&&args.length===0){
     console.log(`ASC v0.5 — Goal・契約・Evidenceに基づく開発ハーネス
 
 使い方: agent-skill-chain <command> [arguments]
 
-開始:
+標準（利用中のAI・既存の開発環境）:
+  start <worktree>                         作業場所と必要な責務を確認（Agent起動なし）
+  worktree-verify <worktree> <base> <owner-contract.json>
+      現在のHost権限で既存ビルド・テストを実行し対象commitへ対応付け
+
   worktree-create <root> <issue> <type> <slug> <base>
       専用worktreeを作成（既存branch・作業場所は上書きしない）
-  run <external-owner-request.json>
+明示選択のsnapshot実行:
+  run --snapshot <external-owner-request.json>
       範囲が明確な変更を実装・検証・独立レビューし、Draft PR/CIへ進める
-  run-adaptive <external-owner-request.json>
+  run-adaptive --snapshot <external-owner-request.json>
       許可されたGoalを必要なWork Unitへ分解して実行
-  run-issues <external-owner-issue-request.json>
+  run-issues --snapshot <external-owner-issue-request.json>
       ownerが列挙した複数Issueを依存関係に従って実行
 
 確認・再開:
-  review <external-owner-request.json>       現在の変更を独立レビュー
-  goal-propose <external-owner-request.json> Goal分解を提案
-  restart-goal <external-owner-request.json> 明示した再開条件・予算で再開
+  review --snapshot <external-owner-request.json>       現在の変更を独立レビュー
+  goal-propose --snapshot <external-owner-request.json> Goal分解を提案
+  restart-goal --snapshot <external-owner-request.json> 明示した再開条件・予算で再開
   probe-native <absolute-codex-executable>  モデル呼出しなしのネイティブ隔離診断
   capabilities                             対応コマンドとHost情報をJSON表示
   --version                                配布版を表示
@@ -53,7 +65,11 @@ try {
 
 owner入力は作業repoの外に置きます。通常実行は専用worktreeを使用します。
 必要環境・入力例・承認・検証資産の準備: ${new URL('../v05/USAGE.md',import.meta.url).pathname}
-Alpha版です。明示Host経路はOS名で拒否しません。実行時の隔離検査は必須です。公開・merge・releaseの承認は別途必要です。`);
+Alpha版です。明示Host経路はOS名で拒否しません。標準経路は現在のHost権限を使います。snapshot経路は実行時の隔離検査が必須です。公開・merge・releaseの承認は別途必要です。`);
+  } else if(command==='start'&&args.length===1){
+    console.log(JSON.stringify(startWorktree(args[0]),null,2));
+  } else if(command==='worktree-verify'&&args.length===3){
+    const result=verifyWorktree(...args);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
   } else if(command==='probe-native'&&args.length===1){
     const result=await probeNativeSandbox(args[0]);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
   } else if(command==='project-assets'&&args.length>=1&&args.length<=3&&args.slice(1).every(a=>['--apply','--register-skill'].includes(a))&&new Set(args.slice(1)).size===args.length-1){
@@ -120,10 +136,10 @@ Alpha版です。明示Host経路はOS名で拒否しません。実行時の隔
     if(!(command==='review'?result.status==='reviewed-candidate':['draft-ci-passed','proposed'].includes(result.status)))process.exitCode=2;
   } else if (command==='capabilities'   && args.length===0) {
     console.log(JSON.stringify({schema:'asc-v05-capabilities/v1',releaseReady:true,releaseTarget:'native-linux',publishAuthorized:false,
-      commands:['probe-native','project-assets','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
-      execution:'host-or-linux-runner',executionBackends:['owner-selected-host','linux-runner'],host:executionHost(),legacyFallback:false}));
+      defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','worktree-verify','probe-native','project-assets','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
+      execution:'current-host-worktree',executionBackends:['current-host-worktree','owner-selected-host','linux-runner'],host:executionHost(),legacyFallback:false}));
   } else {
-    throw Error('Usage: asc-v05 --version | worktree-create <root> <issue> <type> <slug> <base> | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run <external-owner-request.json> | review <external-owner-request.json> | restart-goal <external-owner-request.json> | run-adaptive <external-owner-request.json> | goal-propose <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal <external-owner-request.json> | run-issues <external-owner-issue-request.json> | capabilities');
+    throw Error('Usage: asc-v05 --version | start <worktree> | worktree-verify <worktree> <base> <owner-contract.json> | worktree-create <root> <issue> <type> <slug> <base> | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');
   }
 } catch (e) {
   // Preserve existing controller observations without turning a failed run into success.

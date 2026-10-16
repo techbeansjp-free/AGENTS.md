@@ -1,6 +1,6 @@
 {
   "name": "agent-skill-chain",
-  "version": "0.5.0-alpha.2",
+  "version": "0.5.0-alpha.3",
   "description": "Goal・契約・Evidenceから必要な開発作業を選ぶAI開発ハーネス。",
   "type": "module",
   "private": true,

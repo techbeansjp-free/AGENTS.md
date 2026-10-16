@@ -1,5 +1,7 @@
 # Goal execution (evaluation, not release acceptance)
 
+標準経路は現在のAI Hostが専用worktreeの既存開発環境で作業する。以下の自動Controllerコマンドは明示選択するsnapshot backendの説明であり、通常開発へ依存コピーや別AIを強制しない。標準入口は[USAGE](USAGE.md)を参照。
+
 ## 現在の開発・受入目標（2026-10-17、ownerとの議論を反映）
 
 ASC v0.5を、進行役と同じAI・Hostを標準として、実プロジェクトの要求から必要な設計・実装・依存関係を使うビルド／テスト・独立レビュー・Draft PR・CI確認まで、途中成果を失わず自走できる状態にする。Macで実際に利用できることを優先し、OS名だけの拒否やv0.4で可能だった通常開発の退行を解消する。品質と、完走までの総時間・総Agent処理量の両方を受入対象にする。
@@ -16,7 +18,7 @@ ASC v0.5を、進行役と同じAI・Hostを標準として、実プロジェク
 これは既存の制限評価の目標を包含する更新であり、固定Step・専用Agent・新しいADRを増やす指示ではない。受入前にMac正常動作、品質保証、低コストが実証済みとは記載しない。
 
 
-`asc-v05 goal-plan owner-plan.json` validates an explicit owner plan and prints dependency batches. `asc-v05 run-goal external-owner-request.json` executes it. The request must remain outside the candidate repository. Ordinary single-Goal `run` remains available; small changes do not require a multi-unit plan.
+`asc-v05 goal-plan owner-plan.json` validates an explicit owner plan and prints dependency batches. `asc-v05 run-goal --snapshot external-owner-request.json` executes it. The request must remain outside the candidate repository. Ordinary single-Goal `run` remains available; small changes do not require a multi-unit plan.
 
 The run request retains the existing `repo`, `base`, `contract`, model, provider executable, verification assets and Draft delivery settings. Add:
 
@@ -82,7 +84,7 @@ Failed unit controllers carry their newly produced diagnostic result into the Go
 
 ## Multiple authorized Issues (evaluation)
 
-`asc-v05 run-issues external-owner-issue-request.json` selects from an owner-enumerated set; it does not discover or authorize arbitrary GitHub Issues. Input is `{schema:"asc-issues/v1", intent, parallelism, budget, issues}`. Each Issue has `id`, `dependsOn`, `readPaths`, optional integer `priority` (higher first), and its ordinary `request` for `run` or `run-goal`. Use a dedicated worktree and distinct delivery branch per Issue. The request file must be outside every candidate. The whole set shares the optional execution budget; per-Issue budgets are rejected instead of silently ignored.
+`asc-v05 run-issues --snapshot external-owner-issue-request.json` selects from an owner-enumerated set; it does not discover or authorize arbitrary GitHub Issues. Input is `{schema:"asc-issues/v1", intent, parallelism, budget, issues}`. Each Issue has `id`, `dependsOn`, `readPaths`, optional integer `priority` (higher first), and its ordinary `request` for `run` or `run-goal`. Use a dedicated worktree and distinct delivery branch per Issue. The request file must be outside every candidate. The whole set shares the optional execution budget; per-Issue budgets are rejected instead of silently ignored.
 
 The existing dependency compiler checks cycles and declared read/write conflicts within the same owner-declared GitHub repository. Required policy references also count as reads. These declarations do not prove absence of unknown semantic/API/DB dependencies. Specify those dependencies and retain their normal validation. Distinct ready Issues run up to the requested concurrency; an overlapping actual worktree waits instead of creating a global reservation. Invalid work locations and failed/approval-blocked Issues are recorded individually. Only their dependents are blocked; independent Issues continue. A new invocation recomputes work and never imports this result as review or completion authority.
 
@@ -92,7 +94,7 @@ This schedules existing development paths and provides separate Draft deliveries
 
 ## Optional Goal decomposition proposal
 
-`asc-v05 goal-propose <external-owner-request.json>` uses one read-only isolated
+`asc-v05 goal-propose --snapshot <external-owner-request.json>` uses one read-only isolated
 Agent when a complex Goal needs decomposition. It is optional: ordinary `run`
 does not incur a planner call. The request supplies the same explicit `repo`,
 `base`, `codexExecutable`, `model`, `contract` and optional `budget` fields.
@@ -141,7 +143,7 @@ integration, not general automatic approval or a matched performance advantage.
 
 ## Owner-delegated decomposition
 
-`asc-v05 run-adaptive external-owner-request.json` composes proposal and Goal
+`asc-v05 run-adaptive --snapshot external-owner-request.json` composes proposal and Goal
 execution when the owner explicitly supplies `decomposition.mode` as
 `within-owner-contract`. Ordinary `run` does not start a planner.
 `decomposition.unitChecks` contains `{paths, argvs}` rules covering every allowed
@@ -187,7 +189,7 @@ the synthetic fixture, not general release or comparative-performance acceptance
 
 ## Interrupted Goal restart
 
-`asc-v05 restart-goal <external-owner-request.json>` accepts the original owner
+`asc-v05 restart-goal --snapshot <external-owner-request.json>` accepts the original owner
 request plus `restart: {directory, resultFile, budget?}` (absolute paths). The directory
 must be new. Preparation preserves the partial source and creates an independent
 clone at the original base. The saved result selects candidate Git bytes only;
