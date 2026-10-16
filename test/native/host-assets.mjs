@@ -1,0 +1,14 @@
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';import assert from 'node:assert/strict';
+import {inspectAssets} from '../../src/verification-assets.mjs';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+if(!process.env.ASC_TEST_CODEX)throw Error('Explicit native Codex test executable required');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-host-deps-entry-')),workspace=path.join(root,'source'),home=path.join(root,'home'),tools=path.join(root,'tools');
+try{for(const d of [workspace,home,tools,path.join(workspace,'.codex'),path.join(workspace,'.agents')])fs.mkdirSync(d,{recursive:true});
+fs.writeFileSync(path.join(workspace,'.codex/config.toml'),'invalid candidate TOML = [');fs.writeFileSync(path.join(workspace,'.agents/data'),'retained');fs.writeFileSync(path.join(tools,'marker'),'runtime');
+const nodeName=process.platform==='win32'?'node.exe':'node';fs.copyFileSync(process.execPath,path.join(tools,nodeName));fs.chmodSync(path.join(tools,nodeName),0o755);
+const dependencies=fs.realpathSync(path.dirname(path.dirname(require.resolve('eslint/package.json')))),config=path.join(root,'host.json');fs.writeFileSync(config,JSON.stringify({executable:fs.realpathSync(process.env.ASC_TEST_CODEX),codexHome:home}));
+const js="const assert=require('assert'),fs=require('fs'),{Linter}=require('./node_modules/eslint');assert(require('path').dirname(process.execPath).endsWith('verification-runtime'),'pinned runtime must take precedence');assert(new Linter().verify('const x = ;',{}).length>0);assert.equal(new Linter().verify('const x = 1;',{}).length,0);assert.equal(fs.readFileSync('.agents/data','utf8'),'retained');let denied=false;try{fs.writeFileSync('node_modules/eslint/package.json','changed')}catch{denied=true;}assert(denied,'dependency must be read-only');process.stdout.write('ESLint valid and invalid inputs verified')";
+const input={schema:'asc-host-execution/v1',id:'dependency-entry',operation:'verify',authorityRoots:[workspace],payload:{workspace,argv:[nodeName,'-e',js],timeout:60000,contract:{verificationAssets:{runtime:{source:tools,digest:inspectAssets(tools).digest},dependencies:[{source:dependencies,digest:inspectAssets(dependencies).digest,target:'node_modules'}]}}}};
+const raw=execFileSync(process.execPath,['bin/asc-codex-host.mjs','--config',config],{input:JSON.stringify(input),encoding:'utf8',env:{PATH:path.dirname(process.execPath),TMPDIR:os.tmpdir(),TEMP:os.tmpdir(),TMP:os.tmpdir(),...(process.platform==='win32'?{SystemRoot:process.env.SystemRoot}: {})},timeout:70000,maxBuffer:1024*1024});const response=JSON.parse(raw);assert.equal(response.result.exit,0);assert.equal(response.result.stdout,'ESLint valid and invalid inputs verified');console.log(JSON.stringify(response));
+}finally{fs.rmSync(root,{recursive:true,force:true});}

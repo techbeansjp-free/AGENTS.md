@@ -108,3 +108,16 @@ test('Controller termination stops Agent and detached descendants through the tr
   }finally{parent.kill('SIGKILL');for(const p of owned){const now=state(p.pid);if(now?.live&&now.start===p.start)try{process.kill(p.pid,'SIGKILL');}catch{ /* The child may already have exited; cleanup is best effort. */ }}}
  }
 });
+
+
+test('verification retains tracked control data but launches Codex outside candidate configuration',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-verify-controls-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const workspace=path.join(root,'source'),runtime=path.join(root,'runtime'),binary=path.join(root,'provider','bin','codex');
+ for(const dir of [workspace,runtime,path.dirname(binary)])fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(binary,'fixture');
+ for(const dir of ['.codex','.agents']){fs.mkdirSync(path.join(workspace,dir));fs.writeFileSync(path.join(workspace,dir,'data'),'tracked');}
+ assert.throws(()=>configuration({workspace,runtime,executable:binary,writable:true}),/Control directory/);
+ const config=configuration({workspace,runtime,executable:binary,writable:true,purpose:'verification'});
+ assert.equal(config.launchDirectory,fs.realpathSync(runtime));assert.notEqual(config.launchDirectory,config.root);
+ assert.equal(fs.readFileSync(path.join(workspace,'.codex','data'),'utf8'),'tracked');
+ fs.mkdirSync(path.join(workspace,'.git'));assert.throws(()=>configuration({workspace,runtime,executable:binary,writable:true,purpose:'verification'}),/Control directory/);
+});

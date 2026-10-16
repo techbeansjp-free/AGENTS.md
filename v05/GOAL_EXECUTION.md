@@ -1,5 +1,21 @@
 # Goal execution (evaluation, not release acceptance)
 
+## 現在の開発・受入目標（2026-10-17、ownerとの議論を反映）
+
+ASC v0.5を、進行役と同じAI・Hostを標準として、実プロジェクトの要求から必要な設計・実装・依存関係を使うビルド／テスト・独立レビュー・Draft PR・CI確認まで、途中成果を失わず自走できる状態にする。Macで実際に利用できることを優先し、OS名だけの拒否やv0.4で可能だった通常開発の退行を解消する。品質と、完走までの総時間・総Agent処理量の両方を受入対象にする。
+
+### 完了条件
+
+1. **現在のAI・Hostを標準にする。** Claude CodeならClaude Code、CodexならCodexを使う。他AIへの変更はユーザーの明示指定時だけ。進行役は利用可能なモデルを仕事の難度・リスク・費用から選び、Fable／Astraの子Agent利用はユーザー明示指定時だけにする。独立レビューには実装とは別Contextを使う。Skill指示、実際のHost実装、未提供機能を区別する。
+2. **Macで実プロジェクト相当の経路を完走する。** worktree、Git管理された `.codex`／`.agents`、依存資産、ビルド・型検査・Lint・テスト、独立レビュー、Draft PR・CIを通す。検証を未来のCIへ先送りして合格としない。Linuxの成功やMacのプロトコル試験だけをMac実機の完走証明にしない。Windowsを含めOS名だけで拒否せず、必要なHost能力を確認する。
+3. **成果と権限を維持して継続する。** timeout・Context引継ぎ・修正・並列Unitの失敗で成果を無言で捨てない。完了済みの仕事を不要に再実装しない。Host環境障害をコード不良と誤認して修復を繰り返さない。要求・変更範囲・Git対象・検証・レビュー・提出の対応を維持し、権限を拡張しない。
+4. **無駄な反復を抑える。** 同じ候補や指摘の循環は根拠を再評価し、好みの往復をblockerとして増やさない。真の欠陥や未承認判断を合格へ読み替えない。復旧可能な場合は継続し、権限・明示予算などの停止条件は守る。
+5. **完走までの総コストで判断する。** 同条件のfixture・モデル・oracleで、準備の包含範囲、総時間、全申告Agentのusage取得率、観測input/output/cache、起動数、失敗・修復・再試行を記録する。欠測や失敗試行を除外せず、cacheを二重加算しない。小さなfixtureの結果を大規模実案件へ一般化しない。品質を落とさず、重複・再探索・再起動を減らす。既定制限は回復と完走を保ちながら総費用が減る根拠がある場合だけ採用し、根拠不足なら追加しない。利用者の明示全体予算は引継ぎで更新しない。
+6. **利用可能な成果として提出する。** 利用者固有ルール・仕様書・設定を保持し、配布パッケージ、必要なテスト、独立レビュー、CIを確認する。修正と実測・既知の未検証範囲をPR #1586にまとめる。未達を完了と記録せず、実機検証のために利用者へ無関係な再実装を求めない。merge・releaseはその操作の承認範囲に従う。
+
+これは既存の制限評価の目標を包含する更新であり、固定Step・専用Agent・新しいADRを増やす指示ではない。受入前にMac正常動作、品質保証、低コストが実証済みとは記載しない。
+
+
 `asc-v05 goal-plan owner-plan.json` validates an explicit owner plan and prints dependency batches. `asc-v05 run-goal external-owner-request.json` executes it. The request must remain outside the candidate repository. Ordinary single-Goal `run` remains available; small changes do not require a multi-unit plan.
 
 The run request retains the existing `repo`, `base`, `contract`, model, provider executable, verification assets and Draft delivery settings. Add:
@@ -407,7 +423,7 @@ declared calls have usage, but provider-wide all-Agent usage remains unknown.
 
 追加の決定論的回帰試験では、4回の内容改善を経てDeliveryまで進めることと、A→B→Aという拒否済み内容の循環を新commit・新しい指摘文言でも検出できることを確認した。AgentとGitHubはテストダブルであり、モデル品質・実PR完走・実tokensの費用対効果は証明していない。
 
-残る評価は、個別Agent終了・Context引継ぎ・循環からの再評価を含む共通fixtureについて、上限なしと候補制限ありを同じモデル・権限・テスト・レビュー・PR/CI条件で比較すること。新たな証拠が得られるまでは既定の全体時間・起動回数・個別Agent時間制限を追加しない。
+この時点で計画した評価は、個別Agent終了・Context引継ぎ・循環からの再評価を含む共通fixtureについて、上限なしと候補制限ありを同じモデル・権限・テスト・レビュー・PR/CI条件で比較すること。新たな証拠が得られるまでは既定の全体時間・起動回数・個別Agent時間制限を追加しない。
 
 
 ### 中断後の実行中引継ぎ
@@ -417,3 +433,36 @@ declared calls have usage, but provider-wide all-Agent usage remains unknown.
 `interruptedCandidate` は原作業場所に加え、コピーしたcheckpoint・内容fingerprint・削除pathを記録する。いずれも未検証の候補であり承認ではない。Context枯渇コードはHostが通知する契約であり、全ProviderのContext上限を自動検出できるとするものではない。Controller自体の異常終了後の自動再起動、任意の過去checkpointからの自動復旧は別の未提供機能。
 
 レビューが同じ拒否済み内容へ循環した場合は、別Contextで元契約・現差分・過去指摘を再評価する。真の欠陥が残る場合はその候補の自動往復を停止し、候補と指摘を残す。根拠のない好み等で独立レビューがpassになった場合だけ通常のDelivery条件へ進む。これは指摘を強制的に消す権限ではない。異なる内容を永続的に生成する意味的な無進展を完全検知する保証ではない。
+
+
+### 2026-10-17 実モデル比較と採用判断
+
+既定の個別Agent期限は採用しない。以下は各条件1回の探索試行であり、6分期限はいずれのAgentでも作動しなかった。時間・tokensの差から制限の因果的効果や一般的な成功率は算出できない。金銭費用は未計測。長時間の実案件でも無制限に消費しないことを証明した結果ではない。
+
+同一実装 `73aa8682bd70ab058395da45839867de58e42489`、同一配布物SHA256 `cce64c93119967798cc80d816e8d575fa872eb29856c04ca76d58a7c7a008296`、公開合成repo `adachi-tatsuru/asc-public-synthetic-eval-20261016` のbase `c37e08e05abc46b5a26af131f134d42a3c8a3b80` / Issue 1、モデル `gpt-5.6-sol`、同じHello修正・テスト・Helo変異oracle・独立レビュー・Draft PR/CI条件。いずれも実験用の明示全体予算900秒・6起動を使用（製品既定ではない）。時間はrun開始からCI確認までで、pack/install/worktree準備を含まない。順序は期限なし→6分。
+
+| 個別Agent期限 | run→CI秒 | 観測input | 観測output | 処理tokens | input内cache read | Agent / usage取得 | 修復 | 結果 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: | --- |
+| 未指定 | 86.885 | 135,014 | 2,076 | 137,090 | 106,880 | 2 / 2 | 0 | [Draft PR 25](https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/25)、CI成功 |
+| 360秒 | 77.485 | 123,011 | 1,390 | 124,401 | 98,048 | 2 / 2 | 0 | [Draft PR 26](https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/26)、CI成功 |
+
+処理tokensは申告された各実装・Reviewer呼出しのinput+output。cache readはinputに含まれるため重複加算しない。Controller・CIはモデルを呼ばない。この開発セッション自体の使用量、Provider内部の未観測処理、金銭料金を含む総費用ではない。
+
+初回の `9273c9b6` 比較も除外せず残す。期限なしは62.854秒・124,022処理tokens・2起動で[PR 22](https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/22)のCIまで成功。6分指定は60.699秒・123,842処理tokens・2起動でCI観測の「Ambiguous or incomplete jobs」により停止した。後続API確認ではCI成功・単一jobだった。実行時のjob応答本文は保存していないため反映遅延を確定原因とはせず、再現テストで未完了jobを待機する修正 `d2eba990` を行った。失敗試行の停止時間を完走時間と比較しない。
+
+#### 成果引継ぎ
+
+`d2eba990` の同じ合成fixtureで、最初の実モデルAgentが終了し子プロセス回収を終えた後に応答喪失（`ASC_CONTEXT_EXHAUSTED`）を注入した。自然発生のContext枯渇や実行途中のMac timeoutではない。保存ファイルを新snapshot・別Contextへ引き継ぎ、検証・独立レビューを通して[Draft PR 24](https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/24)とCIまで107.865秒で完走。3起動、修復1回。外側の試験observerが喪失前のusageも保持し、3/3呼出しでinput151,197・output3,039・処理154,236 tokensを取得（cache read128,000はinput内）。Workflow単体の失敗呼出しusageは欠測のままであり、試験observer値で製品の記録を補完したと偽らない。
+
+19ファイルの途中出力、timeout/Context通知、並列Goal内の失敗Unitだけの回復、予算を更新しないこと、無進展・scope逸脱の拒否は決定論的回帰テストで確認。循環指摘は独立再評価へ進み、根拠のない指摘が解消した場合のみDelivery、実blockerが残れば候補を保持して停止する。全Providerの自然なContext枯渇検出・任意のController再起動・意味的な無進展の完全判定は未提供。
+
+採用するのは成果引継ぎ、内容循環の検出と独立再評価、Host障害の誤修復防止、CI観測継続、明示全体予算の維持。6分・25秒・5分などの既定時間制限は追加しない。新たな制限の既定化には、実際に制限が作用する条件で、完走率と回復を保ちながら総費用が減る追加Evidenceを必要とする。
+
+
+### Host検証の依存資産と配布の区別
+
+ASC本体はv0.4ではコンパイル済みdist、v0.5では直接実行できるmjsを配布する。利用者にASC自身の開発依存やビルドを要求する問題ではない。同梱Codex Hostの不足は、利用先プロジェクトの検証で必要な依存資産を取り込めないことだった。
+
+ownerがdigestを指定したruntime・依存資産を検証呼出し専用領域へコピーし、sandbox内で読取り専用にする。指定runtimeは検証子プロセスのPATH先頭に置く。既存sourceの上書き、権限領域との重複、外向きsymlink、pin不一致を拒否する。trackedな`.codex`・`.agents`は検証データとして保持し、Codexの起動場所を候補の外へ分離する。Agent実装経路の設定注入拒否は維持する。
+
+Linux full検証268件成功・失敗0・skip0（119.558秒）。その後のruntime PATH指摘修正はlintと実Codex sandbox試験で確認した。実Nodeをpinしたruntimeへコピーし、裸のnode指定がコピーを選ぶこと、実ESLintが正常・構文異常を判別すること、依存物への書込み拒否、tracked設定データの保持を確認した。独立読み取りレビューのPATH指摘は解消。モデル通信は行っていない。Macについて同じnative試験をCIへ追加したが、このローカル試験をMac実機・実モデルE2Eの成功とは扱わない。

@@ -319,7 +319,7 @@ owner入力に`hostExecution`を明示すると、Agentと実テストの実行�
 
 この設定はownerが管理するrepo外の入力に置く。候補repo・Gitメタデータ・同時実行Issueの
 作業領域内のコマンドは指定できない。GoalのUnitから別Hostへ切替できない。
-HostにはPATHとWindowsの必須システム値のみ渡し、認証情報・SSH socket・NODE_OPTIONS等を
+HostにはPATH・解決済み一時領域とWindowsの必須システム値を渡し、認証情報・SSH socket・NODE_OPTIONS等を
 環境変数から丸ごと継承しない。認証とsandboxは明示選択したHost自身が管理する。
 
 HostはstdinのJSON `{schema,id,operation,payload}` に対し、同じschema/id/operationと
@@ -354,7 +354,7 @@ VM・WSL2・systemdはこの経路の必須条件ではない。未対応sandbox
 モデル通信の認証はHostのCodex homeで扱い、toolへ認証情報を渡さない。
 
 この経路の終了管理はCodex Hostへ委譲し、ASC独自のcgroupによる子孫プロセス終了保証は提供しない。
-明示的なCPU・メモリ・ファイルサイズ制限、依存資産のmount、Git検証環境は未対応のため拒否する。
+明示的なCPU・メモリ・ファイルサイズ制限とGit検証環境は未対応のため拒否する。依存資産はmountではなく、ownerがdigestで固定した `verificationAssets` を呼出し専用領域へコピーして提供する。元の資産は渡さず、コピーはsandbox内で読み取り専用にする。内部を指す依存物の相対symlinkは保持し、領域外リンク・追跡ソースの上書き・pinの変化は拒否する。`/runtime/` で始まる明示argvはコピー先のruntimeへ対応付ける。install hookや通信による依存追加は実行しない。
 時間上限は適用する。従来Linux backendは別経路として保持する。
 Mac/Windows実機でのモデルE2Eは、OS間のプロトコルCIやLinux診断だけでは合格と扱わない。
 
@@ -377,3 +377,6 @@ Agent時間・検証時間・CPU時間・生成ファイル容量・修正回数
 Host起動時にはControllerが解決した一時ディレクトリを `TMPDIR`・`TEMP`・`TMP` として渡す。開発者の環境全体や認証情報は引き継がない。macOSで `TMPDIR` を失って `/tmp` へ切り替わると、sandboxの暗黙の許可範囲と診断対象が重なり得るため、この経路でも単独診断と同じ一時領域を維持する。診断の不合格を無視しない。
 
 Hostの検証起動・通信・応答形式の失敗はコードのテスト失敗とは区別し、`verification-unavailable` に理由とstderr末尾をローカル記録して停止する。実装を変えても直らない環境障害で修復Agentを繰り返し起動しない。診断には利用環境のpath等が含まれ得るため、外部共有時は必要な箇所を匿名化する。
+
+
+検証snapshot内のGit管理済み `.codex`・`.agents` は削除しない。同梱Codex Hostの検証専用経路は、Codex自身を候補外の新規runtimeから起動し、実検証コマンドだけをsnapshot内で実行する。これにより設定資料を検証対象に残しながら、候補のCodex設定をHost起動設定として扱わない。Agent実装・レビュー用snapshotの制御ディレクトリ拒否と、検証のGit metadata・alias拒否は維持する。依存資産は上記のコピー方式を用いる。
