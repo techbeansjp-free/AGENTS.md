@@ -28,7 +28,7 @@ export function summarize(result){
   contextHighWaterMark:null,limitations:['Input includes cache read/write; output includes reasoning; subsets are not added twice','Declared-call coverage does not certify provider-internal or external Agent enumeration','Stage intervals include observation and waiting; they are not pure model computation','No pricing or causal performance claim']};
 }
 /** Aggregate invocation records, never infer unrecorded unit work as zero. */
-export function summarizeGoal(result){
+function goalRecords(result){
  const groups=[],missing=[];
  if(result.proposal){if(Array.isArray(result.proposal.calls))groups.push({id:'proposal',record:result.proposal});else missing.push('proposal');}
  for(const unit of result.units??[]){
@@ -41,10 +41,34 @@ export function summarizeGoal(result){
  if(final){if(Array.isArray(final.calls))groups.push({id:'whole-goal',record:final});else missing.push('whole-goal');}
  else if(result.status==='draft-ci-passed')missing.push('whole-goal');
  if(!Array.isArray(result.units))missing.push('units');
+ return {groups,missing};
+}
+export function summarizeGoal(result){
+ const {groups,missing}=goalRecords(result);
  const report=summarize({status:result.status,wallSeconds:result.wallSeconds,calls:groups.flatMap(g=>g.record.calls)});
  report.groups=groups.map(g=>({id:g.id,...summarize(g.record)}));report.missingUnitDiagnostics=missing;
  if(missing.length){report.usageCoverage.state=report.usageCoverage.completeCalls?'partial':'missing';report.allDeclaredCallProcessedTokens=null;}
  report.limitations.push('Aggregate unit and whole-Goal calls once; parallel unit wall times are not added to Goal wall time','Missing diagnostics are not zero-call proof; older result files may require their separate diagnostic artifacts');
  return report;
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){if(process.argv.length!==3)throw Error('Usage: node report_workflow.mjs result.json');const result=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));console.log(JSON.stringify(Array.isArray(result.units)?summarizeGoal(result):summarize(result),null,2));}
+/** Issue results contain either a workflow or a nested Goal, including failed work. */
+export function summarizeIssues(result){
+ const groups=[],missing=[];
+ for(const issue of result.issues??[]){
+  const record=issue.result??issue.diagnostic;
+  if(!record){missing.push(issue.id);continue;}
+  if(Array.isArray(record.units)){
+   const nested=goalRecords(record);
+   groups.push(...nested.groups.map(g=>({id:issue.id+'/'+g.id,record:g.record})));
+   missing.push(...nested.missing.map(id=>issue.id+'/'+id));
+  }else if(Array.isArray(record.calls))groups.push({id:issue.id,record});
+  else missing.push(issue.id);
+ }
+ if(!Array.isArray(result.issues))missing.push('issues');
+ const report=summarize({status:result.status,wallSeconds:result.wallSeconds,calls:groups.flatMap(g=>g.record.calls)});
+ report.groups=groups.map(g=>({id:g.id,...summarize(g.record)}));report.missingIssueDiagnostics=missing;
+ if(missing.length){report.usageCoverage.state=report.usageCoverage.completeCalls?'partial':'missing';report.allDeclaredCallProcessedTokens=null;}
+ report.limitations.push('Issue and nested Goal calls are aggregated once; parallel elapsed times are not summed','Issues without diagnostics remain missing, including pre-dispatch stops; this report does not infer zero usage from status');
+ return report;
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){if(process.argv.length!==3)throw Error('Usage: node report_workflow.mjs result.json');const result=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));console.log(JSON.stringify(Array.isArray(result.issues)?summarizeIssues(result):Array.isArray(result.units)?summarizeGoal(result):summarize(result),null,2));}

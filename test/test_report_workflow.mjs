@@ -1,4 +1,4 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {summarize,summarizeGoal} from '../v05/report_workflow.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import {summarize,summarizeGoal,summarizeIssues} from '../v05/report_workflow.mjs';
 const usage={input_tokens:100,cached_input_tokens:60,cache_write_input_tokens:10,output_tokens:20,reasoning_output_tokens:5};
 test('usage subsets are counted once and missing calls never become zero totals',()=>{
  const good={role:'implementation',status:'completed',usage:[usage]};
@@ -74,4 +74,30 @@ test('completed Goal requires final usage while an interrupted Goal may not reac
  const interrupted=summarizeGoal({status:'blocked',units});
  assert.equal(interrupted.usageCoverage.state,'complete');
  assert.equal(interrupted.allDeclaredCallProcessedTokens,0);
+});
+
+
+test('Issue usage includes failed work and nested combined Goals exactly once',()=>{
+ const call={role:'review',status:'completed',usage:[usage]};
+ const report=summarizeIssues({wallSeconds:5,issues:[
+  {id:'plain',result:{calls:[call],wallSeconds:4}},
+  {id:'goal',result:{status:'draft-ci-passed',proposal:{calls:[call]},units:[{id:'one',mode:'combined-goal-contract',workflowRoot:'/run/one'}],delivery:{root:'/run/one',calls:[call]}}},
+  {id:'failed',diagnostic:{status:'blocked',calls:[{...call,status:'failed'}]}}
+ ]});
+ assert.equal(report.adapterAttempts,4);
+ assert.equal(report.observed.processed,480);
+ assert.equal(report.wallSeconds,5);
+ assert.equal(report.usageCoverage.state,'partial');
+ assert.equal(report.allDeclaredCallProcessedTokens,null);
+ assert.equal(report.allAgentTotalTokens,null);
+ assert.deepEqual(report.groups.map(g=>g.id),['plain','goal/proposal','goal/whole-goal','failed']);
+});
+
+test('Issue summary retains missing nested and absent diagnostics',()=>{
+ const report=summarizeIssues({issues:[{id:'goal',result:{status:'draft-ci-passed',units:[]}},{id:'missing',status:'blocked'},{id:'waiting',status:'dependency-blocked'}]});
+ assert.deepEqual(report.missingIssueDiagnostics,['goal/whole-goal','missing','waiting']);
+ assert.equal(report.usageCoverage.state,'missing');
+ assert.equal(report.allDeclaredCallProcessedTokens,null);
+ assert.equal(summarizeIssues({issues:[]}).allDeclaredCallProcessedTokens,0);
+ assert.equal(summarizeIssues({}).allDeclaredCallProcessedTokens,null);
 });

@@ -120,6 +120,8 @@ GitHubのPR/CI読取り中に一時的な通信失敗が発生した場合、観
 
 ### 品質と性能の継続確認
 
+ソースcheckoutでは`node v05/report_workflow.mjs /absolute/result.json`で、単一Workflow・Goal・複数Issueの保存結果を読み取り専用で集計できる。この評価用scriptは配布物には含めない。失敗した実行の観測usageも含め、並列実行の時間は合算しない。診断記録がないIssueや呼出しは欠測として残し、明示された空の`calls: []`だけを宣言上の起動0回として扱う。宣言された呼出しの集計が完全でも、Provider内部を含む全Agent総量の証明にはならない。
+
 実行経路・Agent入力・検証・Deliveryに影響する変更では、品質検証と同じ変更単位で共通fixtureの性能回帰も確認する。既存の試験driverと実行ログを使い、常駐監視や計測専用Agentは追加しない。文言のみの変更など実行に影響しない場合は、有料E2Eの重複実行を要求しない。
 
 要求からDraft PR/CIまでのwall time、Agent起動数、取得できたinput/output/cache usage、失敗・再試行を記録し、品質oracleの結果と併記する。取得できないusageは欠測とし、観測値を全Agent総量と呼ばない。初期準備や手動中断が計測区間外なら明記する。失敗試行を削除せず、正常完走区間と分ける。
