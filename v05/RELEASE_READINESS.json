@@ -1238,6 +1238,26 @@
       "filesInspected": 4,
       "blockingFindings": 0,
       "scope": "Read-only independent source review; no formal export or execution evidence implied."
+    },
+    "registrationTrustedFull": {
+      "recorded": true,
+      "headSha": "6d7e3bc8cdb93795acd40f1bf6943f8bd26e4c42",
+      "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "scope": "full",
+      "impactDigest": "855eabb8c8aa18faedfcf4c3beb63ce84578d0ae666e632f3c2cd774c19cac4c",
+      "impactMode": "full",
+      "exitCode": 0,
+      "signal": null,
+      "recordDigest": "c5d1431c02ddf27ccd4001e421465e99e23764fea3ee4d1d32e3f1b4e68f7cd2",
+      "status": "PASS",
+      "scopeNote": "Legacy CI contract registration branch only; not v0.5 product acceptance. Formal review export and remote aggregate check remain incomplete.",
+      "assignedScenarios": 2747,
+      "executedScenarios": 2747,
+      "shards": 6
     }
   },
   "screenRouteRecoveryAttempt": {
