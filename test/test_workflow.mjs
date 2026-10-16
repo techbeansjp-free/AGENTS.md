@@ -15,7 +15,7 @@ function fixture(t){
  return {root,git,request,provider,creates:()=>creates};
 }
 test('minor mandatory contract finding causes repair, revalidation and fresh review',{skip:!enabled},async t=>{
- const f=fixture(t);f.request.contract.riskTestArgv=[['/bin/sh','-c','test -f code.txt']];let workers=0,reviews=0;
+ const f=fixture(t);delete f.request.codexExecutable;delete f.request.model;f.request.maxRepairs=4;f.request.contract.riskTestArgv=[['/bin/sh','-c','test -f code.txt']];let workers=0,reviews=0;
  const agent=async({workspace,writable,prompt})=>{
   if(writable){const input=JSON.parse(prompt);assert.deepEqual(input.verification.testArgv,f.request.contract.testArgv);assert.deepEqual(input.verification.riskTestArgv,f.request.contract.riskTestArgv);assert.match(input.verification.execution,/Controller only/);input.verification.testArgv[0]='/not-authorized';workers++;fs.writeFileSync(path.join(workspace,'code.txt'),workers===1?'after':'after\n');return {context:'worker-'+workers,seconds:0,usage:[]};}
   reviews++;const pass=fs.readFileSync(path.join(workspace,'code.txt'),'utf8')==='after\n';
@@ -193,7 +193,7 @@ test('elapsed budget bounds a running Agent process and preserves other Issue ad
   return runBoundedProcess('/bin/sh',['-c','sleep 5'],{env:{PATH:'/usr/bin:/bin'},input:'',timeout});
  }}),e=>{assert.match(e.message,/deadline exceeded/);assert.equal(e.workflowDiagnostic.calls[0].status,'failed');return true;});
  assert(timeout>0&&timeout<=1000);assert.equal(f.creates(),0);assert.equal(f.git('rev-parse','HEAD'),f.request.base);
- const {createExecutionBudget}=await import('../src/execution-budget.mjs');assert.equal(createExecutionBudget().agentTimeout(),360000);
+ const {createExecutionBudget}=await import('../src/execution-budget.mjs');assert.equal(createExecutionBudget().agentTimeout(),null);
 });
 
 
@@ -364,4 +364,97 @@ test('large text change reaches independent review without stdout quota',{skip:!
   return {context:writable?'large-worker':'large-reviewer',seconds:0,usage:[],answer:writable?'':JSON.stringify({verdict:'pass',findings:[]})};
  };
  const result=await runWorkflow(f.request,{agent,provider:f.provider});t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert(reviewed);assert.equal(result.status,'draft-ci-passed');
+});
+
+
+test('unbounded repairs stop content cycles despite new commit and finding wording',{skip:!enabled},async t=>{
+ const f=fixture(t);delete f.request.maxRepairs;let workers=0,reviews=0;
+ const agent=async({workspace,writable})=>{
+  if(writable){workers++;fs.writeFileSync(path.join(workspace,'code.txt'),workers%2?'after':'after\n');return {context:'cycle-worker-'+workers,usage:[],seconds:0};}
+  reviews++;return {context:'cycle-review-'+reviews,usage:[],seconds:0,answer:JSON.stringify({verdict:'fail',findings:[finding('Unresolved issue phrased '+reviews)]})};
+ };
+ await assert.rejects(runWorkflow(f.request,{agent,provider:f.provider}),error=>{
+  t.after(()=>fs.rmSync(error.workflowDiagnostic.root,{recursive:true,force:true}));
+  assert.match(error.message,/Repair stalled/);assert(error.workflowDiagnostic.events.some(e=>e.type==='review-reassessment'));return true;
+ });
+ assert.equal(workers,3);assert.equal(reviews,4);assert.equal(f.creates(),0);
+});
+
+test('unbounded repairs can make more than three distinct improvements',{skip:!enabled},async t=>{
+ const f=fixture(t);delete f.request.maxRepairs;let workers=0;
+ const agent=async({workspace,writable})=>{
+  if(writable){workers++;fs.writeFileSync(path.join(workspace,'code.txt'),'after'+'\n'.repeat(workers));return {context:'progress-worker-'+workers,usage:[],seconds:0};}
+  return {context:'progress-review-'+workers,usage:[],seconds:0,answer:JSON.stringify({verdict:workers===5?'pass':'fail',findings:workers===5?[]:[finding('Remaining acceptance defect')]})};
+ };
+ const result=await runWorkflow(f.request,{agent,provider:f.provider});t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));
+ assert.equal(result.status,'draft-ci-passed');assert.equal(result.repairs,4);assert.equal(workers,5);
+});
+
+
+test('failed implementation exposes all partial files without accepting or deleting them',{skip:!enabled},async t=>{
+ const f=fixture(t);f.request.contract.allowedPaths=Array.from({length:19},(_,i)=>`partial-${i}.txt`);
+ await assert.rejects(runWorkflow(f.request,{provider:f.provider,agent:async({workspace})=>{
+  for(const name of f.request.contract.allowedPaths)fs.writeFileSync(path.join(workspace,name),'partial result');
+  throw Error('Agent deadline exceeded');
+ }}),error=>{
+  const diagnostic=error.workflowDiagnostic,partial=diagnostic.interruptedCandidate;
+  t.after(()=>fs.rmSync(diagnostic.root,{recursive:true,force:true}));
+  assert.equal(partial.status,'unverified-interrupted-output');assert.equal(partial.source.head,f.request.base);
+  for(const name of f.request.contract.allowedPaths)assert.equal(fs.readFileSync(path.join(partial.workspace,name),'utf8'),'partial result');
+  assert.equal(f.git('rev-parse','HEAD'),f.request.base);assert.equal(f.creates(),0);return true;
+ });
+});
+
+
+test('timeout and Context exhaustion resume nineteen partial files through review and Delivery',{skip:!enabled},async t=>{
+ for(const code of ['ASC_AGENT_TIMEOUT','ASC_CONTEXT_EXHAUSTED']){
+  const f=fixture(t);delete f.request.maxRepairs;f.request.contract.allowedPaths=Array.from({length:19},(_,i)=>`partial-${i}.txt`);
+  f.request.contract.testArgv=['/bin/sh','-c','test "$(cat partial-18.txt)" = finished'];let workers=0,reviews=0,first;
+  const result=await runWorkflow(f.request,{provider:f.provider,agent:async({workspace,writable,prompt})=>{
+   if(writable){workers++;
+    if(workers===1){first=workspace;for(const name of f.request.contract.allowedPaths)fs.writeFileSync(path.join(workspace,name),'preserved');throw Object.assign(Error('interrupted'),{code});}
+    assert.notEqual(workspace,first);assert.equal(JSON.parse(prompt).previousFailure.kind,'interrupted-implementation');
+    for(const name of f.request.contract.allowedPaths)assert.equal(fs.readFileSync(path.join(workspace,name),'utf8'),'preserved');
+    fs.writeFileSync(path.join(workspace,'partial-18.txt'),'finished');return {context:'resumed-worker',seconds:0,usage:[]};
+   }
+   reviews++;return {context:'fresh-review',seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};
+  }});
+  t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(result.status,'draft-ci-passed');assert.equal(workers,2);assert.equal(reviews,1);assert.equal(result.calls[0].status,'failed');assert.equal(f.creates(),1);
+ }
+});
+
+test('interruption cannot renew a total budget or retry unchanged output',{skip:!enabled},async t=>{
+ for(const mode of ['budget','unchanged','scope']){
+  const f=fixture(t);delete f.request.maxRepairs;if(mode==='budget')f.request.budget={maxAgentCalls:1};let calls=0;
+  await assert.rejects(runWorkflow(f.request,{provider:f.provider,agent:async({workspace})=>{
+   calls++;if(mode!=='unchanged')fs.writeFileSync(path.join(workspace,'code.txt'),'after');
+   if(mode==='scope')fs.writeFileSync(path.join(workspace,'not-allowed'),'outside');
+   throw Object.assign(Error('interrupted'),{code:'ASC_AGENT_TIMEOUT'});
+  }}),error=>{t.after(()=>fs.rmSync(error.workflowDiagnostic.root,{recursive:true,force:true}));return true;});
+  assert.equal(calls,1);assert.equal(f.creates(),0);assert.equal(f.git('rev-parse','HEAD'),f.request.base);
+ }
+});
+
+
+test('fresh reassessment resolves unsupported cyclic findings without repeating implementation',{skip:!enabled},async t=>{
+ const f=fixture(t);delete f.request.maxRepairs;let workers=0,reviews=0;
+ const result=await runWorkflow(f.request,{provider:f.provider,agent:async({workspace,writable,prompt})=>{
+  if(writable){workers++;fs.writeFileSync(path.join(workspace,'code.txt'),workers%2?'after':'after\n');return {context:'worker-'+workers,seconds:0,usage:[]};}
+  reviews++;const reassessment=prompt.startsWith('This is a stalled-repair reassessment.');
+  return {context:'reviewer-'+reviews,seconds:0,usage:[],answer:JSON.stringify({verdict:reassessment?'pass':'fail',findings:reassessment?[]:[finding('Conflicting preference')]})};
+ }});
+ t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(workers,3);assert.equal(reviews,4);assert.equal(result.status,'draft-ci-passed');
+});
+
+
+test('Delivery passes remaining total budget to CI and rejects over-budget completion',{skip:!enabled},async t=>{
+ const f=fixture(t);let expired=false,options;const observe=f.provider.observe;
+ f.provider.ciTimeoutMilliseconds=5000;
+ f.provider.observe=(pr,input)=>{options=input;expired=true;return observe(pr);};
+ const executionBudget={check(){if(expired)throw Error('Execution time budget exhausted');},admit(){this.check();},agentTimeout:()=>null,verificationTimeout:()=>null,snapshot:()=>({remainingMilliseconds:1234})};
+ let calls=0;const agent=async({workspace,writable})=>{if(writable)fs.writeFileSync(path.join(workspace,'code.txt'),'after\n');return {context:'budget-delivery-'+(++calls),usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};};
+ await assert.rejects(runWorkflow(f.request,{provider:f.provider,agent,executionBudget}),error=>{
+  t.after(()=>fs.rmSync(error.workflowDiagnostic.root,{recursive:true,force:true}));assert.match(error.message,/time budget exhausted/);assert.equal(error.workflowDiagnostic.status,'blocked');return true;
+ });
+ assert.deepEqual(options,{timeout:1234});assert.equal(calls,2);assert.equal(f.creates(),1);
 });

@@ -4,5 +4,11 @@ test('native Host transport handles output, failure and timeout without a shell'
  const run=(code,timeout=3000)=>runHostProcess(process.execPath,['-e',code],{env:{},input:'',timeout});
  assert.equal((await run("process.stdout.write('日本語')")).stdout,'日本語');
  await assert.rejects(run('process.exit(3)'),/failed: 3/);
- await assert.rejects(run('setInterval(()=>{},1000)',100),/deadline/);
+ await assert.rejects(run('setInterval(()=>{},1000)',100),error=>{assert.match(error.message,/deadline/);assert.equal(error.code,'ASC_HOST_TRANSPORT_TIMEOUT');return true;});
+});
+
+
+test('unspecified Host time budget does not create an immediate deadline',async()=>{
+ const result=await runHostProcess(process.execPath,['-e','setTimeout(()=>console.log("completed"),30)'],{env:{},input:''});
+ assert.equal(result.stdout.trim(),'completed');
 });

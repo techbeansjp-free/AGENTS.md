@@ -8,16 +8,16 @@ import {performance} from 'node:perf_hooks';
 
 const supervisor=fileURLToPath(new URL('./agent-lifecycle-supervisor.mjs',import.meta.url));
 const managerEnvironment=()=>({PATH:'/usr/bin:/bin',XDG_RUNTIME_DIR:`/run/user/${process.getuid()}`,DBUS_SESSION_BUS_ADDRESS:`unix:path=/run/user/${process.getuid()}/bus`});
-export function runServiceProcess(executable,argv,{env,input,timeout}){
+export function runServiceProcess(executable,argv,{env,input,timeout=null}){
  if(process.platform!=='linux'||typeof process.getuid!=='function')throw Error('Agent lifecycle requires Linux user services');
- if(!Number.isSafeInteger(timeout)||timeout<1||timeout>360000)throw Error('Invalid Agent deadline');
+ if(timeout!==null&&(!Number.isSafeInteger(timeout)||timeout<1||timeout>2147483647))throw Error('Invalid Agent deadline');
  if(typeof executable!=='string'||!executable.startsWith('/')||!Array.isArray(argv)||argv.some(v=>typeof v!=='string')||typeof input!=='string'||!env||Object.values(env).some(v=>typeof v!=='string'))throw Error('Invalid provider request');
  const request=JSON.stringify({executable,argv,env,input});
  if(Buffer.byteLength(request)>8*1024*1024)throw Error('Provider request limit exceeded');
- const deadline=performance.now()+timeout;
+ const deadline=timeout===null?Infinity:performance.now()+timeout;
  const unit=`asc-agent-${randomUUID()}.service`,managerEnv=managerEnvironment();
  const control=(args,limit=5000)=>spawnSync('/usr/bin/systemctl',['--user',...args],{env:managerEnv,encoding:'utf8',timeout:limit,maxBuffer:65536});
- const probe=control(['show','--property=Version'],Math.min(5000,timeout));
+ const probe=control(['show','--property=Version'],Math.min(5000,timeout??Infinity));
  if(probe.error||probe.status!==0)throw Error('Agent lifecycle user service unavailable');
  const remaining=Math.ceil(deadline-performance.now());
  if(remaining<=0)throw Error('Agent deadline exceeded');
@@ -26,7 +26,7 @@ export function runServiceProcess(executable,argv,{env,input,timeout}){
   // stdin is a private request/lifetime pipe: leave its writer open until completion.
   const p=spawn('/usr/bin/systemd-run',['--user','--quiet','--wait','--pipe',`--unit=${unit}`,'--service-type=exec','--working-directory=/',
    '--property=KillMode=control-group','--property=ExitType=main','--property=Restart=no','--property=TimeoutStopSec=1s',
-   `--property=RuntimeMaxSec=${Math.ceil(remaining/1000)+2}s`,process.execPath,supervisor],{env:managerEnv,stdio:['pipe','pipe','pipe']});
+   ...(timeout===null?[]:[`--property=RuntimeMaxSec=${Math.ceil(remaining/1000)+2}s`]),process.execPath,supervisor],{env:managerEnv,stdio:['pipe','pipe','pipe']});
   let stdout='',stderr='',outBytes=0,errBytes=0,settled=false;
   const out=new StringDecoder('utf8'),err=new StringDecoder('utf8');
   const finish=error=>{
@@ -43,7 +43,7 @@ export function runServiceProcess(executable,argv,{env,input,timeout}){
    stdout+=out.end();stderr+=err.end();
    if(error)reject(Object.assign(error,{stdout,stderr}));else resolve({stdout,stderr});
   };
-  const timer=setTimeout(()=>finish(Error('Agent deadline exceeded')),remaining);
+  const timer=timeout===null?undefined:setTimeout(()=>finish(Object.assign(Error('Agent deadline exceeded'),{code:'ASC_AGENT_TIMEOUT'})),remaining);
   p.stdout.on('data',data=>{if(settled)return;outBytes+=data.length;if(outBytes>8*1024*1024){finish(Error('Agent output limit exceeded'));return;}stdout+=out.write(data);});
   p.stderr.on('data',data=>{if(settled)return;errBytes+=data.length;if(errBytes>1048576){finish(Error('Agent error output limit exceeded'));return;}stderr+=err.write(data);});
   p.once('error',()=>finish(Error('Agent lifecycle launch failed')));

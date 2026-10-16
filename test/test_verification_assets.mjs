@@ -60,11 +60,11 @@ test('bounded observer failure cleans up and does not block next verification',{
  const good=new AssetController({...f,contract,implementer:'worker'});good.verify();
  assert.equal(good.events.at(-1).results[0].resourceBoundary.cleanupConfirmed,true);
 });
-test('browser file bound is finite while default file bound remains unchanged',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},t=>{
+test('only explicit file bounds reject large generated files',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},t=>{
  const f=fixture(t),argv=size=>['/usr/bin/python3','-c',`import os; f=os.open('/tmp/bound-probe',os.O_CREAT|os.O_WRONLY,0o600); os.ftruncate(f,${size}); os.close(f)`];
- const defaultController=new AssetController({...f,contract:{...f.contract,testArgv:argv(2097152)},implementer:'worker'});assert.throws(()=>defaultController.verify(),/Verification failed/);
+ const defaultController=new AssetController({...f,contract:{...f.contract,testArgv:argv(2097152)},implementer:'worker'});defaultController.verify();
  const browser=new AssetController({...f,contract:{...f.contract,verificationResourceProfile:'browser-cgroup-v1',testArgv:argv(2097152)},implementer:'worker'});browser.verify();
- const over=new AssetController({...f,contract:{...f.contract,verificationResourceProfile:'browser-cgroup-v1',testArgv:argv(8388609)},implementer:'worker'});assert.throws(()=>over.verify(),/Verification failed/);
+ const over=new AssetController({...f,contract:{...f.contract,verificationResourceProfile:'browser-cgroup-v1',verificationLimits:{fileBytes:8388608},testArgv:argv(8388609)},implementer:'worker'});assert.throws(()=>over.verify(),/Verification failed/);
 });
 
 test('timed-out verification does not cancel a concurrent sibling or latch later work',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async t=>{
@@ -79,7 +79,7 @@ test('timed-out verification does not cancel a concurrent sibling or latch later
   const worker=new Worker(workerSource,{eval:true,workerData:{module:new URL('../src/verification-assets.mjs',import.meta.url).href,input}});
   let result;worker.on('message',m=>{result=m;});worker.once('error',reject);worker.once('exit',code=>code===0&&result?resolve(result):reject(Error('verification worker failed '+code)));
  });
- const badContract={...slow.contract,verificationResourceProfile:'browser-cgroup-v1',testArgv:['/usr/bin/python3','-c','import subprocess,time; child=subprocess.Popen(["/usr/bin/python3","-c","import time; time.sleep(60)"]); assert child.poll() is None; print("child-started",flush=True); time.sleep(60)']};
+ const badContract={...slow.contract,verificationLimits:{timeoutMilliseconds:25000},verificationResourceProfile:'browser-cgroup-v1',testArgv:['/usr/bin/python3','-c','import subprocess,time; child=subprocess.Popen(["/usr/bin/python3","-c","import time; time.sleep(60)"]); assert child.poll() is None; print("child-started",flush=True); time.sleep(60)']};
  const goodContract={...healthy.contract,verificationResourceProfile:'browser-cgroup-v1',testArgv:['/usr/bin/python3','-c','import time; time.sleep(10); print("healthy")']};
  const badRun=launch({...slow,contract:badContract});
  await new Promise(resolve=>setTimeout(resolve,20000));
@@ -114,13 +114,13 @@ test('verification timeout reaches the running isolated command in both resource
  }
 });
 
-test('owner file budget permits real build-sized outputs while defaults and overflows refuse',{skip:!enabled},t=>{
+test('file output is unlimited unless owner supplies a budget; explicit overflow refuses',{skip:!enabled},t=>{
  const f=fixture(t);const command=bytes=>['/runtime/node','-e',`require('node:fs').writeFileSync('generated.bin',Buffer.alloc(${bytes}));`];
  const make=limits=>new AssetController({...f,contract:{...f.contract,testArgv:command(9_112_572),...(limits?{verificationLimits:limits}:{})},implementer:'worker'});
- assert.throws(()=>make().verify(),/Verification/);
+ make().verify();
  const raised=make({fileBytes:12_000_000});raised.verify();assert.equal(raised.events.at(-1).results[0].exit,0);
  assert.throws(()=>new AssetController({...f,contract:{...f.contract,testArgv:command(12_000_001),verificationLimits:{fileBytes:12_000_000}},implementer:'worker'}).verify(),/Verification/);
- for(const verificationLimits of [{fileBytes:0},{fileBytes:64_000_001},{cpuSeconds:301},{timeoutMilliseconds:300001},{timeoutMilliseconds:1.2},{unknown:1},null,[]]){
+ for(const verificationLimits of [{fileBytes:0},{fileBytes:Number.MAX_SAFE_INTEGER+1},{cpuSeconds:-1},{timeoutMilliseconds:2147483648},{timeoutMilliseconds:1.2},{unknown:1},null,[]]){
   const c=new AssetController({...f,contract:{...f.contract,verificationLimits},implementer:'worker'});assert.throws(()=>c.target(),/Invalid verification limit/);
  }
  assert.notEqual(make().binding().contract,raised.binding().contract);
@@ -133,7 +133,11 @@ test('owner timeout never overrides remaining invocation budget',async()=>{
  const {createExecutionBudget}=await import('../src/execution-budget.mjs');
  assert.equal(createExecutionBudget().verificationTimeout(120000),120000);
  const b=createExecutionBudget({maxElapsedSeconds:1});assert(b.verificationTimeout(120000)<=1000);
- assert.throws(()=>b.verificationTimeout(300001),/Invalid verification timeout/);
+ assert.equal(createExecutionBudget().verificationTimeout(),null);
+ assert.equal(createExecutionBudget().verificationTimeout(1200000),1200000);
+ assert.equal(createExecutionBudget({agentTimeoutMilliseconds:1200000}).agentTimeout(),1200000);
+ assert(b.verificationTimeout(1200000)<=1000);
+ assert.throws(()=>b.verificationTimeout(2147483648),/Invalid verification timeout/);
 });
 
 test('owner memory budget is observed by kernel and OOM cannot become success',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},t=>{
@@ -148,7 +152,26 @@ test('owner memory budget is observed by kernel and OOM cannot become success',{
 test('normal exit waits for finite teardown but rejects a surviving descendant',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
  const {runBoundedVerification}=await import('../src/verification-resources.mjs');
  const invoke=seconds=>runBoundedVerification(['--','/bin/sh','-c',`sleep ${seconds} >/dev/null 2>&1 & exit 0`],5000);
+ const delayed=runBoundedVerification(['--','/bin/sh','-c','(sleep 0.2; echo important) & exit 0'],null);assert.equal(delayed.stdout.toString(),'important\n');assert.equal(delayed.status,0);
  const good=invoke('0.15');assert.equal(good.status,0);assert.equal(good.resourceBoundary.after.processes.length,1);assert.equal(good.resourceBoundary.cleanupConfirmed,true);
  assert.throws(()=>invoke('30'),/Verification descendants remain/);
  const retry=invoke('0.05');assert.equal(retry.status,0);assert.notEqual(retry.resourceBoundary.unit,good.resourceBoundary.unit);
+});
+
+
+test('unlimited verification stops when its Controller is killed',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async t=>{
+ const {spawn}=await import('node:child_process');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-owner-lifetime-')),marker=path.join(root,'child.json');
+ t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const script=`import {runBoundedVerification} from ${JSON.stringify(new URL('../src/verification-resources.mjs',import.meta.url).href)};runBoundedVerification(['--',process.execPath,'-e',${JSON.stringify("const fs=require('fs');fs.writeFileSync(process.argv[1],JSON.stringify({pid:process.pid,cgroup:fs.readFileSync('/proc/self/cgroup','utf8')}));setInterval(()=>{},1000)")},${JSON.stringify(marker)}],null);`;
+ const child=spawn(process.execPath,['--input-type=module','-e',script],{stdio:'ignore'});t.after(()=>child.kill('SIGKILL'));
+ const pause=()=>new Promise(r=>setTimeout(r,50));
+ for(let i=0;i<200&&!fs.existsSync(marker);i++)await pause();
+ assert(fs.existsSync(marker),'verification did not start');const observed=JSON.parse(fs.readFileSync(marker,'utf8'));
+ const unit=path.basename(observed.cgroup.trim().split('::')[1]);
+ t.after(()=>{try{execFileSync('systemctl',['--user','stop',unit],{stdio:'ignore'});}catch{/* Already stopped. */}});
+ child.kill('SIGKILL');
+ const dir=path.join('/sys/fs/cgroup',observed.cgroup.trim().split('::')[1]);
+ for(let i=0;i<200&&fs.existsSync(dir);i++)await pause();
+ assert.equal(fs.existsSync(dir),false,'orphan verification cgroup remains');
 });

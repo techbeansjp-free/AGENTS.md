@@ -9,21 +9,25 @@ import {networkPreflight} from './agent-network-preflight.mjs';
 import {runServiceProcess} from './agent-lifecycle.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 const contains=(parent,child)=>{const r=path.relative(parent,child);return !r || (!r.startsWith('..'+path.sep) && r!=='..' && !path.isAbsolute(r));};
-export function configuration({workspace,runtime,executable,writable}) {
+export function configuration({workspace,runtime,executable,writable,purpose='agent',readOnlyRoots=[]}) {
+  demand(['agent','verification'].includes(purpose),'Invalid sandbox purpose');
   const root=fs.realpathSync(workspace),temp=fs.realpathSync(runtime),binary=fs.realpathSync(executable);
   const node=fs.realpathSync(process.execPath),providerRoots=codexRuntimeRoots(binary);
   demand(!contains(root,temp) && !contains(temp,root),'Runtime and source must be disjoint');
   demand(!contains(root,binary) && !contains(root,node),'Untrusted executable');
   demand(providerRoots.every(p=>!contains(root,p)&&!contains(p,root)&&!contains(temp,p)&&!contains(p,temp)),'Provider runtime overlaps source or tool state');
+  demand(Array.isArray(readOnlyRoots)&&(purpose==='verification'||readOnlyRoots.length===0),'Invalid read-only assets');
+  for(const dir of readOnlyRoots)demand(path.isAbsolute(dir)&&fs.realpathSync(dir)===dir&&(contains(root,dir)||contains(temp,dir))&&dir!==root&&dir!==temp,'Invalid asset root');
   const walk=dir=>{for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
     const file=path.join(dir,entry.name),s=fs.lstatSync(file);
+    if(s.isSymbolicLink()&&readOnlyRoots.some(r=>contains(r,file)&&contains(r,fs.realpathSync(file))))continue;
     demand(!s.isSymbolicLink() && (s.isDirectory() || s.isFile() && s.nlink===1),'Aliased or special snapshot');
     if(s.isDirectory()) walk(file);
   }};
-  for(const name of ['.git','.codex','.agents']) demand(!fs.existsSync(path.join(root,name)),'Control directory in snapshot');
+  for(const name of (purpose==='verification'?['.git']:['.git','.codex','.agents'])) demand(!fs.existsSync(path.join(root,name)),'Control directory in snapshot');
   walk(root);
   const profile='asc_minimal_agent';
-  const filesystem={':root':'deny',':minimal':'read',...Object.fromEntries(nodeRuntimeRoots().map(p=>[p,'read'])),...Object.fromEntries(providerRoots.map(p=>[p,'read'])),[node]:'read',[root]:writable?'write':'read',[temp]:'write'};
+  const filesystem={':root':'deny',':minimal':'read',...Object.fromEntries(nodeRuntimeRoots().map(p=>[p,'read'])),...Object.fromEntries(providerRoots.map(p=>[p,'read'])),[node]:'read',[root]:writable?'write':'read',[temp]:'write',...Object.fromEntries(readOnlyRoots.map(r=>[r,'read']))};
   const table=object=>'{ '+Object.entries(object).map(([k,v])=>JSON.stringify(k)+'='+JSON.stringify(v)).join(', ')+' }';
   const toolEnv={PATH:[path.dirname(node),...(process.platform==='win32'?[path.join(process.env.SystemRoot??'C:\\Windows','System32')]:['/usr/bin','/bin'])].join(path.delimiter),HOME:temp,USERPROFILE:temp,TMPDIR:temp,TEMP:temp,TMP:temp,LANG:'C.UTF-8'};
   if(process.platform==='win32')for(const key of ['SystemRoot','WINDIR'])if(process.env[key])toolEnv[key]=process.env[key];
@@ -34,17 +38,17 @@ export function configuration({workspace,runtime,executable,writable}) {
     'features.shell_snapshot=false','web_search="disabled"'];
   const env={...toolEnv};
   for(const name of ['PATH','HOME','CODEX_HOME','OPENAI_API_KEY','CODEX_API_KEY','CODEX_ACCESS_TOKEN']) if(process.env[name])env[name]=process.env[name];
-  return {root,node,binary,profile,options:values.flatMap(v=>['-c',v]),env};
+  return {root,launchDirectory:purpose==='verification'?temp:root,node,binary,profile,options:values.flatMap(v=>['-c',v]),env};
 }
 export function assertPreflight(result,hostValue) {
   demand(result.status===0 && !result.error,'Isolation diagnostic failed');
   const data=JSON.parse(result.stdout);
   demand(data.completed===true && data.read==='denied' && ['denied','private-write-completed'].includes(data.write) && hostValue==='trusted','Isolation not established');
 }
-export async function runAgent({workspace,logs,executable,model,prompt,writable=true,schema,timeout=360000},processRunner=runBoundedProcess) {
+export async function runAgent({workspace,logs,executable,model,prompt,writable=true,schema,timeout=null},processRunner=runBoundedProcess) {
   assertExecutionHost();
-  demand(Number.isSafeInteger(timeout)&&timeout>0&&timeout<=360000,'Invalid Agent deadline');
-  const deadline=performance.now()+timeout;
+  demand(timeout===null||(Number.isSafeInteger(timeout)&&timeout>0&&timeout<=2147483647),'Invalid Agent deadline');
+  const deadline=timeout===null?Infinity:performance.now()+timeout;
   demand(typeof model==='string' && model.length && typeof prompt==='string','Explicit model and prompt required');
   const logRoot=fs.realpathSync(logs),root=fs.realpathSync(workspace);
   demand(!contains(root,logRoot),'Logs must be outside source');
@@ -52,7 +56,7 @@ export async function runAgent({workspace,logs,executable,model,prompt,writable=
   try {
     const c=configuration({workspace,runtime,executable,writable});
     const sandbox=['sandbox','-P',c.profile,...c.options,'-C',root,'--'];
-    const preflightRun=(binary,args,options)=>processRunner(binary,args,{...options,timeout:Math.min(options.timeout,remainingDeadline(deadline))});
+    const preflightRun=(binary,args,options)=>processRunner(binary,args,{...options,timeout:Math.min(options.timeout,remainingDeadline(deadline)??Infinity)});
     await preflightRun(c.binary,[...sandbox,c.node,'-e','process.exit(0)'],{env:c.env,input:'',timeout:20000});
     const sentinel=path.join(logRoot,'controller-sentinel');fs.writeFileSync(sentinel,'trusted',{flag:'wx'});
     const code=`const fs=require('node:fs');let read='denied',write='denied';
@@ -89,7 +93,7 @@ fs.writeSync(1,JSON.stringify({completed:true,read,write}));`;
   }finally{fs.rmSync(runtime,{recursive:true,force:true});}
 }
 
-function remainingDeadline(deadline){const remaining=Math.ceil(deadline-performance.now());demand(remaining>0,'Agent deadline exceeded during preflight');return remaining;}
+function remainingDeadline(deadline){if(deadline===Infinity)return null;const remaining=Math.ceil(deadline-performance.now());demand(remaining>0,'Agent deadline exceeded during preflight');return remaining;}
 
 /** Transient service owns provider descendants; Codex still owns tool confinement. */
 export const runBoundedProcess=runServiceProcess;
