@@ -1789,5 +1789,88 @@
       "Byte reduction is not measured token or speed reduction",
       "No matched provider performance acceptance for this change yet"
     ]
+  },
+  "latestPackagedLocalComparison": {
+    "head": "76793b6a5c59ddc4931a8491c2d79248bf6f38a5",
+    "archives": {
+      "baseline": {
+        "sha256": "4a9ad82173ec611a7c8a0346306ff558b55c3a07a4f4e4d315a7aad2829e808b"
+      },
+      "current": {
+        "sha256": "956f49a45c6eb8ef7b7ced26606156c1b984b068cf36c621b05083c2a63933b0"
+      }
+    },
+    "rows": [
+      {
+        "arm": "baseline",
+        "wallSeconds": 59.009234644,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 120770,
+        "observedFreshTokens": 41410,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "current",
+        "wallSeconds": 70.015213239,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 148934,
+        "observedFreshTokens": 27334,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "current",
+        "wallSeconds": 64.860381589,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 145384,
+        "observedFreshTokens": 26728,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "baseline",
+        "wallSeconds": 67.96703860900001,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 109236,
+        "observedFreshTokens": 54452,
+        "allAgentTotalTokens": null
+      }
+    ],
+    "means": {
+      "baseline": {
+        "wallSeconds": 63.48813662650001,
+        "observedProcessedTokens": 115003.0,
+        "observedFreshTokens": 47931.0
+      },
+      "current": {
+        "wallSeconds": 67.437797414,
+        "observedProcessedTokens": 147159.0,
+        "observedFreshTokens": 27031.0
+      }
+    },
+    "limitations": [
+      "Packaged runWorkflow API, not CLI request loader or GitHub Delivery",
+      "Endpoint is independently reviewed candidate; cannot compare these times directly to prior92second PR/CI observations",
+      "Two runs per arm, counterbalanced order, not statistical performance acceptance",
+      "Setup excluded, failed run costs retained; provider internal usage may be missing",
+      "Existing owner-pinned runtime/dependency assets reused identically; no GraphDB",
+      "Baseline is historical v0.5 PoC, not v0.4; root current distribution uses normal packaging lifecycle; package preparation excluded equally",
+      "Four fresh runs completed successfully, not statistical acceptance",
+      "All-Agent totals remain unknown; observations only",
+      "No demonstrated joint speed/token reduction"
+    ]
+  },
+  "latestLinuxCi": {
+    "head": "76793b6a5c59ddc4931a8491c2d79248bf6f38a5",
+    "run": 38866640345,
+    "status": "PASS",
+    "tests": 224,
+    "passed": 224,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 112872.778377,
+    "scope": "Linux product CI only; base validator still fails the pending CI contract transition"
   }
 }
