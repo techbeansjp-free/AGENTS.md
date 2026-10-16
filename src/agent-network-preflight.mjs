@@ -1,8 +1,9 @@
 import net from 'node:net';
 
 // Fixed host-owned probe, never candidate code. Missing output is not denial.
-const probe=`if (: > /dev/tcp/127.0.0.1/$1) 2>/dev/null; then r=connected; else r=denied; fi
-printf '{"completed":true,"network":"%s"}\\n' "$r"`;
+const probe=`const net=require('node:net'),fs=require('node:fs');const s=net.connect({host:'127.0.0.1',port:Number(process.argv[1])});let done=false;
+function finish(network){if(done)return;done=true;s.destroy();fs.writeSync(1,JSON.stringify({completed:true,network}));}
+s.setTimeout(2000,()=>finish('timeout'));s.on('connect',()=>finish('connected'));s.on('error',e=>finish(['EPERM','EACCES','ENETUNREACH','EHOSTUNREACH','ECONNREFUSED','ENETDOWN'].includes(e.code)?'denied':'error'));`;
 export function assertNetworkPreflight(evidence) {
   if(evidence.positive?.completed!==true || evidence.positive.network!=='connected' ||
     evidence.positiveConnections!==1 || evidence.negative?.completed!==true ||
@@ -17,7 +18,7 @@ export async function networkPreflight({executable,sandbox,env,run}) {
   });
   try {
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
-    const command=['/bin/bash','--noprofile','--norc','-c',probe,'asc-network-probe',String(server.address().port)];
+    const command=[process.execPath,'-e',probe,String(server.address().port)];
     const positive=JSON.parse((await run(command[0],command.slice(1),{env:{},input:'',timeout:5000})).stdout);
     const positiveConnections=connections;
     if(positive.completed!==true || positive.network!=='connected' || positiveConnections!==1)

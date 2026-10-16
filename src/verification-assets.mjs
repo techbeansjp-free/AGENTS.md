@@ -4,7 +4,7 @@ import {Controller,digest,safeName} from './controller.mjs';import {pinAssetFile
 function demand(ok,message){if(!ok)throw Error(message);}
 const contains=(a,b)=>{const r=path.relative(a,b);return !r||(!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
 export function inspectAssets(source,destination){
- demand(process.platform==='linux'&&path.isAbsolute(source),'Absolute Linux asset directory required');
+ demand(path.isAbsolute(source),'Absolute asset directory required');
  const root=fs.realpathSync(source);demand(fs.lstatSync(root).isDirectory(),'Asset directory missing');
  const entries=[],links=[];let bytes=0;
  if(destination){demand(path.isAbsolute(destination)&&!contains(root,destination)&&!contains(destination,root),'Asset snapshot overlaps source');fs.mkdirSync(destination,{mode:0o700});}

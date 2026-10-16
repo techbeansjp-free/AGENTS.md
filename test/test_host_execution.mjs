@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -48,4 +49,21 @@ test('a sibling registered worktree cannot provide Host code',t=>{
  const f=fixture(t),sibling=path.join(f.root,'sibling');f.git('worktree','add','-qb','peer',sibling);
  const script=path.join(sibling,'host.mjs');fs.writeFileSync(script,'');
  assert.throws(()=>hostExecution(f.c,{...f.configuration,command:[process.execPath,script]}),/Candidate/);
+});
+
+test('Host transport preserves Japanese across split UTF-8 output chunks',async t=>{
+ const f=fixture(t);fs.writeFileSync(f.script,`import fs from 'node:fs';const q=JSON.parse(fs.readFileSync(0,'utf8'));const b=Buffer.from(JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,result:{answer:'日本語'}}));const i=b.indexOf(Buffer.from('日'))+1;fs.writeSync(1,b.subarray(0,i));setTimeout(()=>fs.writeSync(1,b.subarray(i)),30);`);
+ assert.equal((await hostExecution(f.c,f.configuration).agent({timeout:3000})).answer,'日本語');
+});
+
+test('asset inventory pins ordinary native paths without an OS gate',async t=>{
+ const {inspectAssets}=await import('../src/verification-assets.mjs');const f=fixture(t),dir=path.join(f.root,'assets');fs.mkdirSync(dir);fs.writeFileSync(path.join(dir,'data.txt'),'asset');
+ const a=inspectAssets(dir);assert.equal(a.entries,1);assert.equal(a.bytes,5);fs.writeFileSync(path.join(dir,'data.txt'),'changed');assert.notEqual(inspectAssets(dir).digest,a.digest);
+});
+
+test('bundled Codex Host rejects candidate executable hidden inside owner configuration',async t=>{
+ const f=fixture(t),config=path.join(f.root,'config.json'),script=path.join(f.repo,'evil.mjs');fs.writeFileSync(script,'process.exit(0)');
+ fs.writeFileSync(config,JSON.stringify({executable:script,codexHome:f.root}));
+ const adapter=new URL('../bin/asc-codex-host.mjs',import.meta.url);
+ assert.throws(()=>execFileSync(process.execPath,[fileURLToPath(adapter),'--config',config],{input:JSON.stringify({schema:'asc-host-execution/v1',id:'test',operation:'agent',authorityRoots:[f.repo],payload:{workspace:f.root}}),stdio:['pipe','pipe','pipe']}),e=>String(e.stderr).includes('Candidate or Git metadata'));
 });

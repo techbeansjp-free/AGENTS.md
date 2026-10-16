@@ -329,4 +329,23 @@ ASCは輸送のtimeout・出力量、要求応答の対応、対象commit・変�
 
 Linuxでは代替Hostを用いたプロトコル試験で実Node検証と独立Contextの制御を確認。
 モデル・リモートPRはテスト用代替であり、Mac／Windows実機の開発完走や同等隔離の受入ではない。
-同梱Codex Hostアダプターはまだ追加されていない。公開済みAlphaタグも変更していない。
+同梱の `bin/asc-codex-host.mjs` はCodex自身のsandboxへ委譲する。公開済みAlphaタグは変更していない。
+
+
+### 同梱Codex Hostの明示選択
+
+パッケージを作業repo外へインストールし、owner管理のJSONを用意する。
+
+```json
+{"executable":"<codex.exeまたはnpm bin/codex.jsの絶対パス>","codexHome":"<認証済みCodex homeの絶対パス>"}
+```
+
+`hostExecution.command`には `["<Node絶対パス>","<パッケージ>/bin/asc-codex-host.mjs","--config","<owner JSON絶対パス>"]` を指定する。
+Mac/Windows/LinuxともOS名で拒否せず、実際のCodex sandboxのファイル・通信診断が成立した場合に実行する。
+VM・WSL2・systemdはこの経路の必須条件ではない。未対応sandboxや診断失敗時に無隔離で実行しない。
+モデル通信の認証はHostのCodex homeで扱い、toolへ認証情報を渡さない。
+
+この経路の終了管理はCodex Hostへ委譲し、ASC独自のcgroupによる子孫プロセス終了保証は提供しない。
+明示的なCPU・メモリ・ファイルサイズ制限、依存資産のmount、Git検証環境は未対応のため拒否する。
+時間上限は適用する。従来Linux backendは別経路として保持する。
+Mac/Windows実機でのモデルE2Eは、OS間のプロトコルCIやLinux診断だけでは合格と扱わない。

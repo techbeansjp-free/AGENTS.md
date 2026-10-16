@@ -1,6 +1,6 @@
 import {performance} from 'node:perf_hooks';
 import {assertExecutionHost} from './execution-host.mjs';
-/** Experimental Linux host adapter. No permission fallback; no Python runtime. */
+/** Codex sandbox adapter; lifecycle supplied by the trusted execution backend. */
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -23,14 +23,16 @@ export function configuration({workspace,runtime,executable,writable}) {
   for(const name of ['.git','.codex','.agents']) demand(!fs.existsSync(path.join(root,name)),'Control directory in snapshot');
   walk(root);
   const profile='asc_minimal_agent';
-  const filesystem={':root':'deny',':minimal':'read',...Object.fromEntries(providerRoots.map(p=>[p,'read'])),[root]:writable?'write':'read',[temp]:'write'};
+  const filesystem={':root':'deny',':minimal':'read',...Object.fromEntries(providerRoots.map(p=>[p,'read'])),[node]:'read',[root]:writable?'write':'read',[temp]:'write'};
   const table=object=>'{ '+Object.entries(object).map(([k,v])=>JSON.stringify(k)+'='+JSON.stringify(v)).join(', ')+' }';
+  const toolEnv={PATH:[path.dirname(node),...(process.platform==='win32'?[path.join(process.env.SystemRoot??'C:\\Windows','System32')]:['/usr/bin','/bin'])].join(path.delimiter),HOME:temp,USERPROFILE:temp,TMPDIR:temp,TEMP:temp,TMP:temp,LANG:'C.UTF-8'};
+  if(process.platform==='win32')for(const key of ['SystemRoot','WINDIR'])if(process.env[key])toolEnv[key]=process.env[key];
   const values=[`default_permissions="${profile}"`,`permissions.${profile}.filesystem=${table(filesystem)}`,
     `permissions.${profile}.network.enabled=false`,'approval_policy="never"','shell_environment_policy.inherit="none"',
-    `shell_environment_policy.set=${table({PATH:'/usr/bin:/bin',HOME:temp,TMPDIR:temp,LANG:'C.UTF-8'})}`,
+    `shell_environment_policy.set=${table(toolEnv)}`,
     'features.multi_agent=false','features.multi_agent_v2=false','features.enable_mcp_apps=false',
     'features.shell_snapshot=false','web_search="disabled"'];
-  const env={TMPDIR:temp,LANG:'C.UTF-8'};
+  const env={...toolEnv};
   for(const name of ['PATH','HOME','CODEX_HOME','OPENAI_API_KEY','CODEX_API_KEY','CODEX_ACCESS_TOKEN']) if(process.env[name])env[name]=process.env[name];
   return {root,node,binary,profile,options:values.flatMap(v=>['-c',v]),env};
 }
@@ -39,7 +41,7 @@ export function assertPreflight(result,hostValue) {
   const data=JSON.parse(result.stdout);
   demand(data.completed===true && data.read==='denied' && ['denied','private-write-completed'].includes(data.write) && hostValue==='trusted','Isolation not established');
 }
-export async function runAgent({workspace,logs,executable,model,prompt,writable=true,schema,timeout=360000}) {
+export async function runAgent({workspace,logs,executable,model,prompt,writable=true,schema,timeout=360000},processRunner=runBoundedProcess) {
   assertExecutionHost();
   demand(Number.isSafeInteger(timeout)&&timeout>0&&timeout<=360000,'Invalid Agent deadline');
   const deadline=performance.now()+timeout;
@@ -50,16 +52,14 @@ export async function runAgent({workspace,logs,executable,model,prompt,writable=
   try {
     const c=configuration({workspace,runtime,executable,writable});
     const sandbox=['sandbox','-P',c.profile,...c.options,'-C',root,'--'];
-    const preflightRun=(binary,args,options)=>runBoundedProcess(binary,args,{...options,timeout:Math.min(options.timeout,remainingDeadline(deadline))});
-    await preflightRun(c.binary,[...sandbox,'/bin/true'],{env:c.env,input:'',timeout:20000});
+    const preflightRun=(binary,args,options)=>processRunner(binary,args,{...options,timeout:Math.min(options.timeout,remainingDeadline(deadline))});
+    await preflightRun(c.binary,[...sandbox,c.node,'-e','process.exit(0)'],{env:c.env,input:'',timeout:20000});
     const sentinel=path.join(logRoot,'controller-sentinel');fs.writeFileSync(sentinel,'trusted',{flag:'wx'});
-    // Fixed POSIX diagnostic: both cat and shell first pass positive controls.
-    // No candidate script, Python dependency or permission relaxation.
-    await preflightRun(c.binary,[...sandbox,'/bin/cat','/dev/null'],{env:c.env,input:'',timeout:20000});
-    const code=`if /bin/cat "$1" >/dev/null 2>&1; then r=accessible; else r=denied; fi
-if (printf changed >"$1") 2>/dev/null; then w=private-write-completed; else w=denied; fi
-printf '{"completed":true,"read":"%s","write":"%s"}\\n' "$r" "$w"`;
-    const probe={status:0,...await preflightRun(c.binary,[...sandbox,'/bin/sh','-c',code,'asc-preflight',sentinel],{env:c.env,input:'',timeout:20000})};
+    const code=`const fs=require('node:fs');let read='denied',write='denied';
+try{fs.readFileSync(process.argv[1]);read='accessible';}catch(e){if(!['EACCES','EPERM','ENOENT'].includes(e.code))throw e;}
+try{fs.writeFileSync(process.argv[1],'changed');write='private-write-completed';}catch(e){if(!['EACCES','EPERM','ENOENT'].includes(e.code))throw e;}
+fs.writeSync(1,JSON.stringify({completed:true,read,write}));`;
+    const probe={status:0,...await preflightRun(c.binary,[...sandbox,c.node,'-e',code,sentinel],{env:c.env,input:'',timeout:20000})};
     const hostValue=fs.readFileSync(sentinel,'utf8');
     fs.writeFileSync(path.join(logRoot,'preflight.json'),JSON.stringify({status:probe.status,stdout:probe.stdout,stderr:probe.stderr,hostUnchanged:hostValue==='trusted'},null,2));
     assertPreflight(probe,hostValue);
@@ -72,7 +72,7 @@ printf '{"completed":true,"read":"%s","write":"%s"}\\n' "$r" "$w"`;
     argv.push('-');
     const started=performance.now();let output='',errors='';
     try {
-      const result=await runBoundedProcess(c.binary,argv,{env:c.env,input:prompt,timeout:remainingDeadline(deadline)});
+      const result=await processRunner(c.binary,argv,{env:c.env,input:prompt,timeout:remainingDeadline(deadline)});
       output=result.stdout;errors=result.stderr;
     } catch(error) {output=error.stdout??'';errors=error.stderr??'';throw error;}
     finally {

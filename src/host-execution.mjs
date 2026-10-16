@@ -12,6 +12,7 @@ function validateHostCommand(controller,command){
  const records=controller.git('worktree','list','--porcelain','-z').toString().split('\0');
  const roots=records.filter(r=>r.startsWith('worktree ')).map(r=>r.slice(9));
  authorityCommandRootsValidator(roots)(command);
+ return [...roots,...['--absolute-git-dir','--git-common-dir'].map(arg=>path.resolve(controller.repo,controller.git('rev-parse','--path-format=absolute',arg).toString().trim()))];
 }
 
 export function hostExecution(controller,configuration){
@@ -25,8 +26,8 @@ export function hostExecution(controller,configuration){
  if(process.platform==='win32')for(const name of ['SystemRoot','WINDIR'])if(process.env[name])env[name]=process.env[name];
  const invoke=(operation,payload,timeout,asynchronous)=>{
   demand(Number.isSafeInteger(timeout)&&timeout>0&&timeout<=360000,'Invalid Host execution timeout');
-  validateHostCommand(controller,command);
-  const id=randomUUID(),message={schema:'asc-host-execution/v1',id,operation,payload};
+  const authorityRoots=validateHostCommand(controller,command);
+  const id=randomUUID(),message={schema:'asc-host-execution/v1',id,operation,payload,authorityRoots};
   const input=JSON.stringify(message)+'\n';demand(Buffer.byteLength(input)<=8*1024*1024,'Host request limit exceeded');
   const decode=(code,stdout)=>{
    demand(code===0,'Host execution failed');
@@ -37,10 +38,10 @@ export function hostExecution(controller,configuration){
   const options={cwd:path.dirname(command[0]),env,windowsHide:true,maxBuffer:8*1024*1024};
   if(!asynchronous){const p=spawnSync(command[0],command.slice(1),{...options,input,timeout,killSignal:'SIGKILL'});demand(!p.error,'Host verification transport failed');return decode(p.status,p.stdout);}
   return new Promise((resolve,reject)=>{
-   const p=spawn(command[0],command.slice(1),{...options,stdio:['pipe','pipe','pipe']});let output='',bytes=0,settled=false;
-   const finish=(error,code)=>{if(settled)return;settled=true;clearTimeout(timer);p.stdin.destroy();p.stdout.destroy();p.stderr.destroy();p.kill();if(error)reject(error);else{try{resolve(decode(code,output));}catch(e){reject(e);}}};
+   const p=spawn(command[0],command.slice(1),{...options,stdio:['pipe','pipe','pipe']});const output=[];let bytes=0,settled=false;
+   const finish=(error,code)=>{if(settled)return;settled=true;clearTimeout(timer);p.stdin.destroy();p.stdout.destroy();p.stderr.destroy();p.kill();if(error)reject(error);else{try{resolve(decode(code,Buffer.concat(output).toString()));}catch(e){reject(e);}}};
    const timer=setTimeout(()=>finish(Error('Host execution deadline exceeded')),timeout);
-   p.stdout.on('data',b=>{bytes+=b.length;if(bytes>8*1024*1024)finish(Error('Host output limit'));else output+=b.toString();});
+   p.stdout.on('data',b=>{bytes+=b.length;if(bytes>8*1024*1024)finish(Error('Host output limit'));else output.push(b);});
    p.stderr.on('data',b=>{bytes+=b.length;if(bytes>8*1024*1024)finish(Error('Host output limit'));});
    p.on('error',()=>finish(Error('Host transport could not start')));p.stdin.on('error',()=>finish(Error('Host request failed')));
    p.on('close',code=>finish(undefined,code));p.stdin.end(input);

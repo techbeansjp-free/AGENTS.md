@@ -52,6 +52,6 @@ jobs:
       - name: Record actual platform
         run: node -e "console.log(JSON.stringify({platform:process.platform,arch:process.arch,release:require('node:os').release()}))"
       - name: Host transport, native diagnostic result validation and real Git
-        run: node --test test/test_host_execution.mjs test/test_native_probe.mjs
+        run: node --test test/test_host_execution.mjs test/test_native_probe.mjs test/test_host_process.mjs
       - name: Exact verification Git reconstruction
         run: node --test --test-name-pattern="verification Git reconstructs" test/test_controller.mjs
