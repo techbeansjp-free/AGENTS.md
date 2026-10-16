@@ -1269,7 +1269,7 @@
     "passed": 224,
     "failed": 0,
     "skipped": 0,
-    "durationMs": 116525.106198,
+    "durationMs": 114915.244318,
     "scope": "Linux isolation, product quality and standard unpublished package. Legacy trusted-base validator remains failed; not all PR checks passed."
   },
   "historicalComplexAcceptance": {
