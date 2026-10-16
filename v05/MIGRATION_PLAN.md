@@ -31,6 +31,11 @@ npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/ag
 
 検査だけでは移行を実行しないため`readyToMigrate: false`と`migration-execution-not-performed`を返す。未知・欠落policy、未解決参照、dirtyな対象、未対応file等は解決してから進める。runtimeディレクトリの存在も現在は停止条件であり、存在だけで稼働中と断定したものではない。この条件は未変更。別worktreeのdirty状態だけで対象を一律拒否しない。
 
+作業中のIssueが別worktreeにある場合は、その作業を止めたりruntimeを削除したりせず、移行したいcommitを持つcleanな専用worktreeを検査対象に選ぶ。必要なら既存のGit worktree運用で新規作成する。選択したworktreeのcommit済み成果だけが移行候補へ入るため、未commitの成果を移したい場合は先に内容を確認してcommitする。別Issueの未保存ファイル・runtime・branchは変更しない。
+
+この経路は`test/test_migration.mjs`の「migration of a clean linked worktree preserves another Issue with dirty files and runtime」で、候補編集後のrollbackまで確認している。旧進行記録を新しい承認へ変換する経路ではない。移行先では現在の要求と変更に対して新しい検証・レビューを行う。
+
+
 進行中の旧Issueは旧入口で完了するか、ownerが明示的に中断し、新しい要求として開始する。途中の承認を引き継がない。旧設定を新しい権限として自動採用しない。
 
 ## 独立した候補を準備する
