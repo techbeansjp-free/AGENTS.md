@@ -1430,5 +1430,75 @@
       "PR CI on committed replacement"
     ],
     "releaseReady": false
+  },
+  "rootPackagedScreenRecovery": {
+    "status": "FAIL",
+    "runtimeSourceHead": "4bcec485bf0271521d6bdd9fc38d2ae945d50d0e",
+    "packageSha256": "6216d0499cf8065dea7aed8ce0917b8bc5cce50ccb08bebd384e603d56244c0c",
+    "rawEvidenceSha256": "accd85f4c0fa89d61dd54946f71cc36ef933b3ffb29afac5429a1eb72b583e01",
+    "wallSecondsIncludingPlanning": 330.660956975,
+    "agentCalls": 4,
+    "observedProcessedTokens": 662614,
+    "observedFreshTokens": 142294,
+    "allAgentTotalTokens": null,
+    "sourceUnchanged": true,
+    "candidateHead": "e5a7eb9c8be0145f0b12446444d041b4681c5d33",
+    "deliveryAttempted": false,
+    "failure": "Verification could not confirm the oracle precondition: server received full known-valid PATCH body before reload. No successful post-repair independent review.",
+    "limits": [
+      "Same contract and verification assets as the preceding failed trial",
+      "Repaired candidate may require oracle instrumentation compatibility analysis; precondition failure alone does not prove stale-state defect",
+      "Recovery only; not initial implementation E2E or matched performance acceptance",
+      "Runtime is the fixed packaged 4bcec485, not the subsequent restart-diagnostic changes",
+      "Provider internal Agent enumeration remains unknown"
+    ],
+    "oracleDiagnosis": {
+      "status": "instrumentation-mismatch-confirmed-by-source",
+      "candidateBodyRead": "app.py:210 uses self.rfile.read1(remaining)",
+      "observerCoverage": "ObserveBody intercepts read only; __getattr__ delegates read1 without recording receipt",
+      "implication": "Receipt precondition failure does not establish candidate convergence failure. Repair observer coverage and calibrate before another provider run. Prior failed trial remains failed; no acceptance result inferred."
+    },
+    "calibratedVerification": {
+      "status": "verification-passed-not-delivered",
+      "runtimeHead": "b7c6da29d63cc1dff4c60b9ddf6b7d701b2008c8",
+      "candidateHead": "e5a7eb9c8be0145f0b12446444d041b4681c5d33",
+      "evidencePath": "/tmp/asc-body-observer-v2-8wsbww_u/verification.json",
+      "evidenceSha256": "e92dfd0a091d939c333f7359d9819440feaf33d5bcd758531b17407aff7c9646",
+      "oracleDigest": "1d805c1b0766309dc213d437d2d6c54a45c6ab4f7f4b392dd03207a9a2700c72",
+      "calibration": {
+        "read": "pass",
+        "read1": "pass",
+        "partialBodyDoesNotTrigger": true,
+        "fullBodyTriggers": true
+      },
+      "wallSeconds": 9.100315399,
+      "exitCodes": [
+        0,
+        0
+      ],
+      "sourceUnchanged": true,
+      "agentCalls": 0,
+      "limitations": [
+        "No Agent calls, no independent review, no Delivery. Verification only. Original failed trial retained."
+      ],
+      "oracleSource": "v05/evaluation/screen-body-read-oracle.mjs",
+      "oracleSourceSha256": "2248ac397207fc9c876d727b6f02ed5cc4d58f963030a2923f5aa98be75ced70",
+      "archivedSourceDifference": "Explicit globalThis bindings and equivalent if/else replacing two conditional expressions for repository lint; oracle acceptance conditions unchanged.",
+      "independentInspection": "Read-only independent review confirmed only read/read1 observer routing changed, with acceptance checks unchanged; this is not candidate review."
+    }
+  },
+  "restartDiagnosticsValidation": {
+    "runtimeHead": "b7c6da29d63cc1dff4c60b9ddf6b7d701b2008c8",
+    "command": "ASC_TEST_CGROUP=1 npm test",
+    "passed": 224,
+    "failed": 0,
+    "skipped": 0,
+    "durationSeconds": 107.452038564,
+    "logSha256": "966a3879de8602142f4ae510e5df517468b6d16f783865867481fc073cd813d2",
+    "lint": "pass",
+    "independentReview": "No blocking findings after repeated-restart persistence and envelope byte-limit corrections",
+    "limitations": [
+      "Local Linux regression only; not a performance acceptance comparison or release approval"
+    ]
   }
 }
