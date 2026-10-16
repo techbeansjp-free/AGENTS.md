@@ -2129,7 +2129,7 @@
         }
       ]
     },
-    "validatorSha256": "b26625c22c3ce0ded4f0ac64c46a4b21e19dd33a6444cea6b4d3a9cd2c7174cc",
+    "validatorSha256": "495b321569cce4890cc6aa9f9c83e9a064e8bd7977abf72a67cd68d62fa09b37",
     "validation": "node --import tsx scripts/check_project_quality.ts --root=$PWD --trusted-root=$PWD: valid true; all 29 pinned files recomputed and matched"
   },
   "projectSkillHostDiscovery": {
