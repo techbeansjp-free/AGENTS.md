@@ -1,0 +1,17 @@
+{
+  "schema": "ci-transition-validation/v1",
+  "candidateImplementationHead": "3b024749a5f9201d9395ad8b2376905c0e9fdf76",
+  "trustedRegistrationHead": "d280cdfcdd75084f0d1b312608e4d3aced5c4bb7",
+  "validatorSha256": "f026c47e1ff8942ec35b65670ff7ac13ab9525014242cc02afd47993b45881dc",
+  "command": "node --import tsx scripts/check_project_quality.ts --root=<transition> --trusted-root=<registration>",
+  "workingDirectory": "registration checkout",
+  "exit": 0,
+  "valid": true,
+  "authority": "Local read-only validation, not owner approval or formal review evidence",
+  "limits": [
+    "Previous GitHub event used an older base snapshot and failed; this local check does not rewrite that result",
+    "Registration is not merged into main",
+    "Formal audit review evidence and owner activation remain outstanding",
+    "No ruleset change, merge or release performed"
+  ]
+}
