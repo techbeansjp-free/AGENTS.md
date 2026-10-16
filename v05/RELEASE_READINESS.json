@@ -1219,18 +1219,26 @@
     ]
   },
   "ciTransitionAncestry": {
-    "registrationHead": "d280cdfcdd75084f0d1b312608e4d3aced5c4bb7",
-    "transitionHead": "4860fc581b63ffec89aed95c760da7b67d82e2dd",
+    "registrationHead": "6d7e3bc8cdb93795acd40f1bf6943f8bd26e4c42",
+    "transitionHead": "ada76bdc274ad84e38ef4fd6f3809b824d4b5895",
     "previousPullRequestBase": "ed660d327ee14a68d343bc197231232810be8498",
-    "currentPullRequestBase": "d280cdfcdd75084f0d1b312608e4d3aced5c4bb7",
+    "currentPullRequestBase": "6d7e3bc8cdb93795acd40f1bf6943f8bd26e4c42",
     "localValidator": "PASS against latest registration",
     "remoteValidator": "PASS",
     "change": "Merge registration into transition work branch to align ancestry; no content change",
     "mainMerged": false,
     "rulesetChanged": false,
     "releaseReady": false,
-    "remoteRun": 38851803285,
-    "remaining": "Formal audit review evidence and owner main activation; full quality job still running"
+    "remoteRun": 38862455635,
+    "remaining": "Registration full quality stopped at missing formal review Evidence. Transition full quality run 38862461354 rejected nondefault PR base as trusted policy authority. No trust rule weakened, no main merge.",
+    "registrationIndependentInspection": {
+      "head": "6d7e3bc8cdb93795acd40f1bf6943f8bd26e4c42",
+      "base": "2d64b8d5",
+      "reviewer": "/root/integration_review",
+      "filesInspected": 4,
+      "blockingFindings": 0,
+      "scope": "Read-only independent source review; no formal export or execution evidence implied."
+    }
   },
   "screenRouteRecoveryAttempt": {
     "status": "FAIL",
@@ -1255,10 +1263,14 @@
     ]
   },
   "currentLinuxCi": {
-    "head": "93670caeff0d4135ed8f0086c18531b69cabcda8",
-    "run": 38859585299,
+    "head": "0d9e198f42fdc1b8e206b0644a2ff985cb4b0d55",
+    "run": 38863579279,
     "status": "SUCCESS",
-    "scope": "Product Linux quality and package workflow only; trusted base contract run 38859580754 failed on legacy metadata. Not all checks passed."
+    "passed": 224,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 116525.106198,
+    "scope": "Linux isolation, product quality and standard unpublished package. Legacy trusted-base validator remains failed; not all PR checks passed."
   },
   "historicalComplexAcceptance": {
     "status": "historical-local-observations-not-current-release-acceptance",
@@ -1569,6 +1581,47 @@
         "Previous trial costs retained; no speedup claim",
         "Two bounded repairs exhausted; candidate preserved"
       ]
+    },
+    "explicitPlanRecovery": {
+      "status": "verification-and-independent-reviews-passed-no-delivery",
+      "runtimeSourceHead": "57799207",
+      "candidateHead": "3e1a5ee9a2ebd551d4be8d1aaac8c06da217419e",
+      "originalEvidenceSha256": "32b1e1757368fc108f47641d6178beeca8e3e900b5296e37364d0190d3f25c2e",
+      "wallSeconds": 421.600634601,
+      "agentCalls": 4,
+      "roles": {
+        "review": 3,
+        "repair": 1
+      },
+      "observedProcessedTokens": 807739,
+      "observedFreshTokens": 161467,
+      "allAgentTotalTokens": null,
+      "sourceUnchanged": true,
+      "unitReview": "PASS after API compatibility repair",
+      "integratedReview": "PASS at integrated HEAD",
+      "verificationExits": [
+        0,
+        0
+      ],
+      "delivery": "Intentionally stopped by evaluation provider before external PR/CI",
+      "driverPostprocessing": "Failed on nonexistent unit.workflowRoot; original failure retained. Separate adjudication checks unit.result and whole-Goal diagnostic target/verification/review binding without rerunning model. Future driver corrected.",
+      "preHandlerCounterexample": {
+        "status": "PASS",
+        "head": "3e1a5ee9a2ebd551d4be8d1aaac8c06da217419e",
+        "sourceUnchanged": true,
+        "wallSeconds": 14.518735081,
+        "exitCodes": [
+          0,
+          0
+        ],
+        "evidenceSha256": "b40900a2b8b72da338b0e0d0d42f992e3a5cd1e2bab5f21e7bcba337a3087939"
+      },
+      "limits": [
+        "Recovery trial, not initial implementation timing",
+        "Earlier failed runs and costs remain recorded",
+        "No Draft PR/CI acceptance or matched performance claim",
+        "Historical plan supplied explicitly through supported restart API; no historical Evidence rewritten"
+      ]
     }
   },
   "restartDiagnosticsValidation": {
@@ -1640,8 +1693,17 @@
     "independentReview": "Initial P2 on early-error masking corrected; read-only follow-up found no additional blockers.",
     "limits": [
       "Not live provider acceptance of repeated recovery",
-      "Earlier historical result without proposal is not rewritten",
-      "Full Linux CI pending"
-    ]
+      "Earlier historical result without proposal is not rewritten"
+    ],
+    "fullLinuxCi": {
+      "head": "0d9e198f42fdc1b8e206b0644a2ff985cb4b0d55",
+      "run": 38863579279,
+      "status": "SUCCESS",
+      "passed": 224,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 116525.106198,
+      "scope": "Linux isolation, product quality and standard unpublished package. Legacy trusted-base validator remains failed; not all PR checks passed."
+    }
   }
 }
