@@ -22,7 +22,7 @@ try{
  if(!Object.hasOwn(sourceFiles,entry))throw Error('Candidate CLI missing from package inventory');
  manifest.name='agent-skill-chain';manifest.private=true;manifest.bin={'agent-skill-chain':entry,'asc-v05':entry};
  // Distribution is a candidate, never evidence of release approval.
- if(!/^0\.5\.\d+-[a-z0-9.-]+$/.test(manifest.version))throw Error('Explicit v0.5 prerelease source required');
+ if(!/^0\.5\.(?:0|[1-9][0-9]*)(?:-[a-z0-9.-]+)?$/.test(manifest.version))throw Error('Explicit v0.5 source version required');
  if(candidateVersion)manifest.version=candidateVersion;
  const transformedManifests={};
  delete manifest.scripts;
