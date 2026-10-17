@@ -4,17 +4,22 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {performance} from 'node:perf_hooks';
 import {createHash} from 'node:crypto';
-import {assertWorkLocation} from './migration.mjs';
+import {projectLocation} from './project-location.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const git=(repo,...args)=>execFileSync('git',['-c','core.hooksPath=/dev/null',...args],{cwd:repo,encoding:'utf8'}).trim();
 export function startWorktree(directory){
- const {repo}=assertWorkLocation(directory);
+ const {repo,gitManaged}=projectLocation(directory);
+ if(!gitManaged)return {schema:'asc-project-start/v1',repo,head:null,gitManaged:false,execution:'current-host-directory',snapshot:false,providerLaunch:false,
+  skill:fileURLToPath(new URL('../skills/asc/SKILL.md',import.meta.url)),
+  obligations:['owner intent and permitted scope','project build and tests in this directory','independent context review of actual changes','Git setup and dedicated worktree before commit-bound verification or PR delivery'],verified:false,deliveryAuthorized:false};
  return {schema:'asc-worktree/v1',repo,head:git(repo,'rev-parse','HEAD'),execution:'current-host-worktree',snapshot:false,providerLaunch:false,
   skill:fileURLToPath(new URL('../skills/asc/SKILL.md',import.meta.url)),
   obligations:['owner intent and permitted scope','project build and tests in this worktree','independent context review of actual diff','verified commit matches submitted PR and CI'],verified:false};
 }
 export function verifyWorktree(directory,base,ownerFile){
- const start=startWorktree(directory),repo=start.repo,owner=fs.realpathSync(ownerFile),rel=path.relative(repo,owner);
+ const start=startWorktree(directory);
+ if(start.gitManaged===false)throw Error('Git setup and dedicated worktree required for commit-bound verification');
+ const repo=start.repo,owner=fs.realpathSync(ownerFile),rel=path.relative(repo,owner);
  if(!rel||(!rel.startsWith('..'+path.sep)&&rel!=='..'&&!path.isAbsolute(rel)))throw Error('Owner contract must be outside worktree');
  const bytes=fs.readFileSync(owner),contract=JSON.parse(bytes);
  if(typeof contract.intent!=='string'||!contract.intent.trim()||!Array.isArray(contract.allowedPaths)||!contract.allowedPaths.length||contract.allowedPaths.some(p=>typeof p!=='string'||!p||path.isAbsolute(p)||p.split('/').some(s=>!s||s==='.'||s==='..'))||!Array.isArray(contract.commands)||!contract.commands.length||contract.commands.some(a=>!Array.isArray(a)||!a.length||!a[0]||a.some(v=>typeof v!=='string'||v.includes('\0'))))throw Error('Expected intent, exact allowedPaths and command argv arrays');

@@ -391,3 +391,11 @@ Hostの検証起動・通信・応答形式の失敗はコードのテスト失�
 
 
 検証snapshot内のGit管理済み `.codex`・`.agents` は削除しない。同梱Codex Hostの検証専用経路は、Codex自身を候補外の新規runtimeから起動し、実検証コマンドだけをsnapshot内で実行する。これにより設定資料を検証対象に残しながら、候補のCodex設定をHost起動設定として扱わない。Agent実装・レビュー用snapshotの制御ディレクトリ拒否と、検証のGit metadata・alias拒否は維持する。依存資産は上記のコピー方式を用いる。
+
+## Git未管理のプロジェクトで開始する
+
+`start <project-directory>`と`project-assets <project-directory> --apply`は、Git未初期化の既存フォルダーにも使えます。ASC本体のGit cloneや、ASC資産をGitへ追加することは不要です。CLIは勝手にGit初期化・commitを行わず、現在のHostで実装・ビルド・テストを行えます。配布資産の適用は一時的なGitメタデータでpatchを適用するため、Gitコマンド自体は必要ですが、利用者フォルダーに`.git`は作りません。
+
+Git未管理の`start`は`gitManaged:false`・`head:null`・`execution:current-host-directory`を返します。元要求と実際の変更を別Contextでレビューし、検証結果を記録してください。Git履歴による差分・対象commitの保証を提供したとは扱いません。`worktree-verify`、worktree作成、PR提出はGit管理が必要です。必要になった段階で許可されたGit初期化と専用worktreeへの移行を行ってください。
+
+既にGit管理されているrepoの通常rootやサブディレクトリを非Git扱いしてworktree要件を迂回することはできません。破損した`.git`も非Gitへfallbackしません。既存の配布資産・利用者固有ルールの上書き防止は同じです。

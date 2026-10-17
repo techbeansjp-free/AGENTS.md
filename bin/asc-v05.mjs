@@ -23,7 +23,7 @@ try {
   const snapshotCommands=['run','review','run-adaptive','run-goal','run-issues','restart-goal','goal-propose'];
   const args=[...rawArgs];
   if(snapshotCommands.includes(command)){
-    if(args[0]!=='--snapshot')throw Error('Snapshot execution requires explicit --snapshot selection. Standard: start <worktree>, then use the current AI Host and existing project tools.');
+    if(args[0]!=='--snapshot')throw Error('Snapshot execution requires explicit --snapshot selection. Standard: start <project-directory>, then use the current AI Host and existing project tools.');
     args.shift();
   }
   if((command===undefined||command==='--help'||command==='-h')&&args.length===0){
@@ -32,7 +32,7 @@ try {
 使い方: agent-skill-chain <command> [arguments]
 
 標準（利用中のAI・既存の開発環境）:
-  start <worktree>                         作業場所と必要な責務を確認（Agent起動なし）
+  start <project-directory>                作業場所と必要な責務を確認（非Gitも可・Agent起動なし）
   worktree-verify <worktree> <base> <owner-contract.json>
       現在のHost権限で既存ビルド・テストを実行し対象commitへ対応付け
 
@@ -55,7 +55,7 @@ try {
   --version                                配布版を表示
 
 導入・更新:
-  project-assets <worktree> [--register-skill] [--apply]       配布資産の差分表示／未編集資産だけ更新
+  project-assets <project-directory> [--register-skill] [--apply]       配布資産の差分表示／未編集資産だけ更新
 
 移行:
   migration-inspect <root>                  旧設定と移行境界を確認
@@ -137,9 +137,9 @@ Alpha版です。明示Host経路はOS名で拒否しません。標準経路は
   } else if (command==='capabilities'   && args.length===0) {
     console.log(JSON.stringify({schema:'asc-v05-capabilities/v1',releaseReady:true,releaseTarget:'native-linux',publishAuthorized:false,
       defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','worktree-verify','probe-native','project-assets','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
-      execution:'current-host-worktree',executionBackends:['current-host-worktree','owner-selected-host','linux-runner'],host:executionHost(),legacyFallback:false}));
+      execution:'current-host-worktree',executionBackends:['current-host-worktree','current-host-directory','owner-selected-host','linux-runner'],host:executionHost(),legacyFallback:false}));
   } else {
-    throw Error('Usage: asc-v05 --version | start <worktree> | worktree-verify <worktree> <base> <owner-contract.json> | worktree-create <root> <issue> <type> <slug> <base> | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');
+    throw Error('Usage: asc-v05 --version | start <project-directory> | worktree-verify <worktree> <base> <owner-contract.json> | worktree-create <root> <issue> <type> <slug> <base> | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');
   }
 } catch (e) {
   // Preserve existing controller observations without turning a failed run into success.
