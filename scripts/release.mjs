@@ -22,7 +22,12 @@ export async function nextVersion({api,repo,sha}){
   if(object.type==='commit'&&object.sha===sha){demand(!existing,'Multiple release tags for source');existing=`0.5.${patch}`;}
  }
  demand(Number.isSafeInteger(max+1),'Release version overflow');
- return existing??`0.5.${max+1}`;
+ if(existing)return existing;
+ const manifest=await api(`/repos/${repo}/contents/package.json?ref=${sha}`);
+ const source=JSON.parse(Buffer.from(manifest.content,'base64')).version;releaseVersion(source);
+ const floor=Number(source.split('.')[2].split('-')[0]);
+ demand(Number.isSafeInteger(floor),'Release version overflow');
+ return `0.5.${Math.max(max+1,floor)}`;
 }
 export async function verify({api,repo,sha,version}){
  releaseVersion(version);demand(/^[0-9a-f]{40}$/.test(sha),'Invalid source SHA');
