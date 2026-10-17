@@ -1,71 +1,96 @@
-name: v0.5 unpublished release candidate
+name: v0.5 automatic release
 
-# Candidate generation is not publication approval. No push trigger or write token.
-"on":
+on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
-        description: Unpublished candidate version (0.5.N)
+        description: Manual version (0.5.N or 0.5.N-alpha/beta/rc.N)
         required: true
         type: string
-      expected_sha:
-        description: Exact reviewed source commit (40 hex characters)
-        required: true
-        type: string
+      dry_run:
+        description: Validate and package without publication
+        default: true
+        type: boolean
 
 permissions:
   contents: read
+  actions: read
+  checks: read
+  pull-requests: read
+
+# Serialize numbering and publication; never cancel an in-flight asset upload.
+concurrency:
+  group: asc-release
+  cancel-in-progress: false
+
+env:
+  EXPECTED_SHA: ${{ github.sha }}
 
 jobs:
-  candidate:
+  prepare:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      artifact: release-${{ github.sha }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Bind candidate to the requested commit and version
-        env:
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
-          CANDIDATE_VERSION: ${{ inputs.version }}
-        run: |
-          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$CANDIDATE_VERSION" =~ ^0\.5\.(0|[1-9][0-9]*)$ ]]
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Prepare Linux isolation
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends apparmor-profiles bubblewrap
-          sudo apparmor_parser -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
-          /usr/bin/bwrap --unshare-all --die-with-parent --new-session --ro-bind / / -- /bin/true
-      - name: Prepare per-invocation lifecycle and resource verification
-        run: |
-          sudo systemctl start "user@$(id -u).service"
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
-          systemctl --user show --property=Version
-      - name: Install pinned development dependencies
-        run: npm ci --ignore-scripts
-      - name: Test harness including Linux isolation
+      - name: Reuse matching PR checks and select next patch version
+        id: plan
         env:
-          ASC_TEST_CGROUP: "1"
-        run: npm run quality
-      - name: Build unpublished canonical package
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: node scripts/release.mjs plan
+      - name: Build fixed distribution
         env:
-          CANDIDATE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: ${{ steps.plan.outputs.version }}
         run: |
-          mkdir candidate-output
-          node scripts/pack-candidate.mjs "$PWD/candidate-output" "--version=$CANDIDATE_VERSION" > candidate-output/package-result.json
-          git rev-parse HEAD > candidate-output/source-commit.txt
-          cd candidate-output
+          mkdir release-output
+          node scripts/pack-candidate.mjs "$PWD/release-output" "--version=$RELEASE_VERSION" > release-output/package-result.json
+          git rev-parse HEAD > release-output/source-commit.txt
+          cd release-output
           sha256sum agent-skill-chain-*.tgz > SHA256SUMS
-      - name: Preserve candidate for owner review (not a release)
-        uses: actions/upload-artifact@v4
+      - name: Install and verify the actual versioned tarball
+        env:
+          RELEASE_VERSION: ${{ steps.plan.outputs.version }}
+        run: node scripts/check-release-package.mjs "release-output/agent-skill-chain-$RELEASE_VERSION.tgz" "$RELEASE_VERSION"
+      - uses: actions/upload-artifact@v4
         with:
-          name: v05-unpublished-candidate-${{ github.sha }}
-          path: candidate-output/
+          name: release-${{ github.sha }}-${{ github.run_attempt }}
+          path: release-output/
           if-no-files-found: error
           retention-days: 14
+  publish:
+    if: github.event_name == 'push' || !inputs.dry_run
+    needs: prepare
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.artifact }}
+          path: release-output
+      - name: Recheck source and publish without overwriting
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: node scripts/release.mjs publish release-output
