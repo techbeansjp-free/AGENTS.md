@@ -432,6 +432,35 @@
           "afterSha256": "e629fa6598d732768f7c726b4b621285f9c3b85303900aa912017db7617d8bdb"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-V05-AUTO-RELEASE-001",
+      "status": "staged",
+      "fromVersion": 16,
+      "toVersion": 17,
+      "owner": "repository maintainer (explicit automatic release approval)",
+      "rationale": "v0.4同様のmainマージ後の自動採番・GitHub Releaseをv0.5へ復元。品質CIのPR HEAD取得を固定してマージtreeと照合し、実tgzの導入版・公開後byte一致を検証する。",
+      "rollback": "新しい世代の事前登録で自動公開を停止する。既存のタグ・配布物は変更しない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": ".github/workflows/ci.yml",
+          "beforeSha256": "dabfeab4a8c9689324f81089e88ee8335d6f6af83030ada9aad2e47a08dc9059",
+          "afterSha256": "89e84379df5e3717cc1442e87c6d55a4e27ea29c3a4399637c6dbfe2c1b0a314"
+        },
+        {
+          "kind": "file",
+          "name": ".github/workflows/release.yml",
+          "beforeSha256": "97e94d828f62ebd2b2180bcdfa372385cb28d67197d9ad29592d92332baca72a",
+          "afterSha256": "8089f188e9ef3b55f366ad826c335a0357c8c48324872a91602081fccf6767b7"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "b17ef6d19c7a5b1ee83b907c595526dcb1eb06db8227d650d5dda0a9f4ce8cd9",
+          "afterSha256": "4523540f1504cd17100c4835e85b7eefd49911580f8efff0599a8f283be6b9e3"
+        }
+      ]
     }
   ]
 }
