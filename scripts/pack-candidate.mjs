@@ -2,7 +2,7 @@
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {execFileSync} from 'node:child_process';import {createHash} from 'node:crypto';
 const output=process.argv[2], versionOption=process.argv[3];
-if(![3,4].includes(process.argv.length)||!path.isAbsolute(output??'')||(versionOption!==undefined&&!/^--version=0\.5\.(?:0|[1-9][0-9]*)$/.test(versionOption)))throw Error('Usage: node scripts/pack-candidate.mjs <absolute-existing-output-directory> [--version=0.5.N]');
+if(![3,4].includes(process.argv.length)||!path.isAbsolute(output??'')||(versionOption!==undefined&&!/^--version=0\.5\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$/.test(versionOption)))throw Error('Usage: node scripts/pack-candidate.mjs <absolute-existing-output-directory> [--version=0.5.N[-alpha/beta/rc.N]]');
 const candidateVersion=versionOption?.slice('--version='.length);
 const destination=fs.realpathSync(output),root=process.cwd(),temporary=fs.mkdtempSync(path.join(os.tmpdir(),'asc-release-pack-'));
 const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');

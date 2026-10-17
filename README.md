@@ -56,8 +56,14 @@ v0.4の`workflow advance`等とは非互換です。旧設定や利用者の成�
 
 詳細な構成・保証境界は[v0.5利用案内](v05/README.md)を参照してください。
 
-## 未公開候補の作成
+## 自動リリース
 
-ルートから`node scripts/pack-candidate.mjs /absolute/existing/output --version=0.5.0`で、版番号を揃えた候補tarballを作成できます。元のmanifestは変更せず、変換前後のhashを配布物に残します。候補は`private: true`・未承認のままであり、正式版の番号を指定してもリリース承認にはなりません。
+v0.4系と同様、mainへのマージでRelease CIが起動し、既存の正式タグから`v0.5.1`、`v0.5.2`…とpatchを採番します。同じcommitの再実行は同じタグを使い、既存の公開物は上書きしません。続けてmainが更新された場合、追い越された実行は停止し、最新mainの実行が未公開変更をまとめて配布します。
 
-GitHubの候補生成workflowも手動実行のみです。指定commitの一致とLinux品質検証を確認してartifactを保存します。commit一致は独立レビューの合格を証明するものではありません。旧base品質契約の切替は完了しています。正式公開には別途ownerの承認が必要です。
+ソースのpackage.jsonは開発用の基点バージョンです。配布生成時に確定バージョンを埋め込み、**タグ・配布package.json・導入後の両CLIの`--version`を一致**させます。バージョン更新commitをbotが追加しないため、リリースの無限起動も発生しません。
+
+公開前に、同じrepositoryからmainへマージされたPRのHEADと公開対象のtree一致、指定された全品質workflowの成功を確認します。品質CIはPR HEADを明示取得し、Release側では同一内容の総合テストを繰り返さず、実際に配布するtgzのオフライン導入と版表示を確認します。既存タグの別commit、添付物の不一致、Latestの巻き戻しは拒否します。アップロード後のbyte列を再取得して照合してからDraftを公開します。
+
+手動の`workflow_dispatch`では`version`と`dry_run`（既定true）を指定できます。Alpha・Beta・RCはプレリリース扱いでLatestを変更しません。公開失敗時は同じ実行を再実行でき、途中のDraftと一致する添付物を再利用します。公開先はGitHub Releasesで、npm registryへは公開しません。
+
+候補だけをローカル生成する場合は`node scripts/pack-candidate.mjs /absolute/existing/output --version=0.5.N`を使います。生成自体は公開許可ではありません。配布物の出自記録とruntimeの権限表示は、GitHub上の公開状態とは別です。
