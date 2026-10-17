@@ -5,7 +5,7 @@ import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {hash,safeName} from './controller.mjs';
-import {assertWorkLocation} from './migration.mjs';
+import {projectLocation} from './project-location.mjs';
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
 function demand(ok,message){if(!ok)throw Error(message);}
@@ -55,7 +55,7 @@ function git(repo,args,input){
  demand(!result.error&&result.status===0,'Asset Git operation failed; inspect worktree before retry');return result.stdout;
 }
 export function projectAssets(directory,{apply=false,registerSkill=false,packageRoot=defaultPackage}={}){
- const {repo}=assertWorkLocation(directory);packageRoot=fs.realpathSync(packageRoot);
+ const {repo}=projectLocation(directory);packageRoot=fs.realpathSync(packageRoot);
  const assets=catalog(packageRoot,registerSkill),priorBytes=read(repo,record);
  let previous={};
  if(priorBytes){

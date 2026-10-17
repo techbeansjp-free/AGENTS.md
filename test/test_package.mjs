@@ -42,6 +42,11 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  assert.equal(Object.keys(req('./package.json').dependencies ?? {}).length,0);
  const malformed=spawnSync(process.execPath,[cli,'approval-verify'],{cwd:root,input:'{"approved":true}',encoding:'utf8'});
  assert.equal(malformed.status,1);
+ const ordinary=path.join(root,'ordinary');fs.mkdirSync(ordinary);
+ const ordinaryStart=JSON.parse(execFileSync(process.execPath,[cli,'start',ordinary],{encoding:'utf8'}));
+ assert.equal(ordinaryStart.gitManaged,false);assert.equal(ordinaryStart.head,null);assert.equal(ordinaryStart.deliveryAuthorized,false);
+ const ordinaryAssets=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',ordinary,'--apply','--register-skill'],{encoding:'utf8'}));
+ assert.equal(ordinaryAssets.applied,true);assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
  const repo=path.join(root,'project');fs.mkdirSync(repo);
  const git=(...a)=>execFileSync('git',a,{cwd:repo,encoding:'utf8',stdio:'pipe'});
  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
