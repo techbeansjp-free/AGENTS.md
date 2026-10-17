@@ -2,11 +2,11 @@
 
 ASCは、Goal・要求・リスク・プロジェクト契約・検証Evidenceから必要な開発作業を選ぶAI開発ハーネスです。固定Step 0〜11を実行する旧runtimeは、新版の標準CLIと配布物には含めません。
 
-v0.5 Alphaを明示導入用プレリリースとして提供しています。v0.4のLatestを自動置換するものではありません。
+v0.5.0を正式版として提供します。[GitHub Release](https://github.com/techbeansjp-free/AGENTS.md/releases/tag/v0.5.0)の固定tarballを明示指定して導入してください。v0.4とは非互換のため、既存プロジェクトへの適用前に移行手順を確認してください。
 
 ## 利用入口
 
-このソースの`npm pack`で作成したtarballを、検証用の別ディレクトリへインストールできます。通常のコマンド名は`agent-skill-chain`です。`asc-v05`も同じruntimeを呼び出します。旧コマンドへの暗黙の切り替えは行いません。
+Release添付のtarballを、開発対象とは別のディレクトリへインストールします。ASC本体のビルドは不要です。通常のコマンド名は`agent-skill-chain`です。`asc-v05`も同じruntimeを呼び出します。旧コマンドへの暗黙の切り替えは行いません。
 
 ```sh
 agent-skill-chain --version

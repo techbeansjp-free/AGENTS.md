@@ -83,7 +83,7 @@ test('packed Node distribution runs without source checkout, Python or dependenc
 
 });
 
-for(const version of [null,'0.5.0'])test(`canonical ${version??'alpha'} candidate installs both CLI names without enabling legacy commands or publication`,t=>{
+for(const version of [null,'0.5.0'])test(`canonical ${version??'source-version'} candidate installs both CLI names without enabling legacy commands or publication`,t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-canonical-package-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const packArgs=['scripts/pack-candidate.mjs',root,...(version?[`--version=${version}`]:[])];
  const output=JSON.parse(execFileSync(process.execPath,packArgs,{encoding:'utf8'}));

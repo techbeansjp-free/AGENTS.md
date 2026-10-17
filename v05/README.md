@@ -2,16 +2,16 @@
 
 ASCは、目的と受入条件、許可された変更範囲、既存規約を入力として、必要な実装・検証・独立レビューを選択します。固定Step列や工程ごとのAgent起動は要求しません。小規模変更は実装と独立Reviewerを基本とし、複雑なGoalでは依存関係に従ってWork Unitを実行・統合します。
 
-**Alphaとして提供中です。標準は利用中のAI Hostによる専用worktreeでの開発です。** [受入状態](RELEASE_READINESS.json)の`finalAcceptanceAudit`に対象commit、受入根拠、制限を記録しています。`capabilities.releaseReady`は製品のLinux受入を表し、現在のHostの隔離成立や公開承認ではありません。`host.releaseReady: false`はOS識別だけで個別環境の隔離を認定しないことを表し、snapshot経路のpreflightは引き続き必須です。
+**v0.5.0正式版です。標準は利用中のAI Hostによる専用worktreeでの開発です。** [受入状態](RELEASE_READINESS.json)の`finalAcceptanceAudit`に対象commit、受入根拠、制限を記録しています。`capabilities.releaseReady`は製品のLinux受入を表し、現在のHostの隔離成立や公開承認ではありません。`host.releaseReady: false`はOS識別だけで個別環境の隔離を認定しないことを表し、snapshot経路のpreflightは引き続き必須です。
 
 ## 導入と入口
 
 標準worktree入口は0.5.0-alpha.3からの機能です。既公開alpha.2以前には含まれません。候補のversion更新だけでGitHub Releaseが公開されたことにはなりません。
 
-Node.js 20以上を使用します。承認された候補tarballを、開発対象のworktreeとは別のprefixへ導入してください。npmのlifecycle scriptは実行しません。
+Node.js 20以上を使用します。GitHub Release添付の固定tarballを、開発対象のworktreeとは別のprefixへ導入してください。npmのlifecycle scriptは実行しません。
 
 ```sh
-npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.0-alpha.3.tgz
+npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.0.tgz
 /absolute/asc-tools/node_modules/.bin/agent-skill-chain --version
 /absolute/asc-tools/node_modules/.bin/agent-skill-chain capabilities
 ```
@@ -67,3 +67,9 @@ npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/ag
 ## Linux限定の初回受入
 
 初回リリース判定はnative Linuxを対象とします。これはLinux snapshot backendの受入範囲です。標準worktree経路はOS名で拒否せず、利用中のHostとプロジェクトの対応範囲に従います。これらのOSは初回Linux版の判定条件に含めません。Linuxでも実行時のファイル・通信・子プロセスの隔離成立を確認し、失敗時に権限を緩めません。Ubuntu 24.04のCI構成を維持して互換性を検証します。
+
+## v0.5.0の公開範囲
+
+Ownerの正式公開承認に基づくリリースです。標準worktree経路はLinux・macOS・Windows上の現在のAI Hostと既存の開発環境を使います。各OSの合成CI成功を、すべての実案件やHostの隔離保証と同一視しません。snapshot経路の環境要件と診断は維持します。
+
+Alphaの測定結果は対象commit・適用範囲付きの履歴です。正式版への昇格で過去の欠測や未検証を合格へ変更しません。v0.4に対する同条件の速度・総tokens削減、CodeRabbit同等性、任意規模での品質は未証明です。CLIの`publishAuthorized: false`は実行時の公開権限を付与しない意味であり、GitHub Releaseの存在とは別です。
