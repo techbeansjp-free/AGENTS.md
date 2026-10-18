@@ -1,5 +1,25 @@
 # v0.5評価CLIの実行手順
 
+## 標準の導入先（ASC_CLIは不要）
+
+GitHub Releaseから使用する版のtarballとSHA256SUMSを取得・照合し、ASCを置くディレクトリで次を実行する。`<tarball>`には取得済みファイルを指定する。npm registryやnpxからの取得は前提にしない。
+
+```sh
+npm install --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false <tarball>
+node .agent-skill-chain/node_modules/agent-skill-chain/bin/asc-v05.mjs project-assets . --register-skill --apply
+node .agent-skill-chain/bin/asc.mjs start .
+```
+
+Git管理済みの対象では専用worktreeで実施する。Git未管理の対象や複数repoの親にも配置できる。標準入口は`.agent-skill-chain/node_modules/agent-skill-chain/`のCLIを自動解決し、`runtime.json`の版と照合する。`ASC_CLI`は未設定でよい。既に設定されている場合はその明示指定が優先されるため、標準配置へ切り替えるときは現在のHostで設定を解除する。
+
+Gitを使う場合は`.agent-skill-chain/node_modules/`をignore対象にする。CLI本体をcommitする必要はない。共有するSkill・資料・`bin/asc.mjs`・`runtime.json`・`distribution.json`は維持する。上記のnpmオプションは利用者のpackage.jsonやlockfileを更新しない。
+
+更新・版指定・切戻しは、目的の版のtarballで同じ導入コマンドを実行し、そのCLIの`project-assets`で差分を確認してから`--apply`する。共有版とCLI版が違う間は共有入口が停止するため、更新直後の資産更新には上記の直接CLIを使う。利用者編集との競合は自動上書きしない。別環境でも同じ版を標準配置に導入すれば共有資産の再生成は不要。
+
+CLI本体のみを削除する場合は `npm uninstall --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false agent-skill-chain`。共有資産・固有ルール・成果物は残る。再導入には同じ導入コマンドを使う。`.agent-skill-chain/`全体を削除しない。
+
+外部prefixを共用したい場合だけ、その環境の`ASC_CLI`にインストール済み`bin/asc-v05.mjs`を明示する。snapshot ControllerのHost実行ツールは候補外で管理するという別の信頼境界を維持する。この節は現在のHostで作業する標準経路の導入方法である。
+
 ## 標準: 現在のAIとプロジェクトの開発環境
 
 `asc-v05 start <project-directory>` で作業場所を確認し、現在のAIがその場所で通常の実装・ビルド・テストを行う。Git管理済みrepoの場合は専用worktreeが必要。Git未管理のフォルダー（Git管理予定がないプロジェクトや複数repoの親を含む）でも開始でき、Git初期化やworktree作成は不要。pnpmの既存workspace・store・symlinkをそのまま使い、ASC向けの依存コピーやhash登録は行わない。依存が未導入ならプロジェクトのlockfileと現在のHost権限に従って導入する。worktree間の共有依存を無断で変更しない。
@@ -163,7 +183,7 @@ Source observation has no fixed repository byte/file-count quota. Git contents a
 
 ## 評価配布物の更新・差し戻し
 
-信頼するhost管理のprefixをcandidate worktree外に用意し、固定したlocal tarballをnpmで導入する。例: `npm install --prefix <host-prefix> --offline --ignore-scripts --no-audit --no-fund --save-exact <tarball>`。入口は`<host-prefix>/node_modules/.bin/asc-v05`。Nodeはhostが用意する。更新も同じコマンドで新tarballを指定し、差し戻しでは保持した旧tarballを指定する。package.jsonとlockfileはnpmが更新するため、旧tarballとそのhashを保持する。全世界へのglobal installやcandidate側からの自己更新は行わない。
+標準経路の導入・更新は冒頭の`.agent-skill-chain/`配置を使う。以下はsnapshot Controller用の外部ツール管理または任意の外部prefixを選ぶ場合の手順である。信頼するhost管理のprefixをcandidate worktree外に用意し、固定したlocal tarballをnpmで導入する。例: `npm install --prefix <host-prefix> --offline --ignore-scripts --no-audit --no-fund --save-exact <tarball>`。入口は`<host-prefix>/node_modules/.bin/asc-v05`。Nodeはhostが用意する。更新も同じコマンドで新tarballを指定し、差し戻しでは保持した旧tarballを指定する。package.jsonとlockfileはnpmが更新するため、旧tarballとそのhashを保持する。全世界へのglobal installやcandidate側からの自己更新は行わない。
 
 `NODE_PACKAGE_UPGRADE_EVIDENCE.json`ではLinuxの同一prefixで2つのprivate alpha snapshotを往復し、配布37fileの一覧とbytes、npmのCLI入口、利用者file保持を確認した。公開registry、他OS、v0.4のpolicy/Skill/CI変換、実行中プロセスのhot upgradeは対象外。既存プロセス終了後に切り替え、新しい実行では現在のContractとEvidenceを再確認する。これによって旧版のレビューや承認が新しい変更に引き継がれるわけではない。
 
@@ -406,7 +426,7 @@ Git未管理の`start`は`gitManaged:false`・`head:null`・`execution:current-h
 
 ### 共有資産と環境ごとの実行入口
 
-`project-assets --apply` は共有可能な相対参照のSkill・案内・資料と、`.agent-skill-chain/bin/asc.mjs`、`runtime.json`（使用版）を配置する。これらをGitで共有しても、導入者の絶対パスは含まれない。入口は配置場所からローカルの `agent-skill-chain` npmパッケージを解決する。別のprefixへ導入した場合は、その環境の `ASC_CLI` にインストール済み `bin/asc-v05.mjs` の絶対パスを設定する。環境設定は共有Skillに書き込まない。
+`project-assets --apply` は共有可能な相対参照のSkill・案内・資料と、`.agent-skill-chain/bin/asc.mjs`、`runtime.json`（使用版）を配置する。これらをGitで共有しても、導入者の絶対パスは含まれない。標準配置は`.agent-skill-chain/node_modules/agent-skill-chain/`であり、ASC_CLIなしで解決する。入口は配置場所からローカルの `agent-skill-chain` npmパッケージを解決する。別のprefixへ導入した場合は、その環境の `ASC_CLI` にインストール済み `bin/asc-v05.mjs` の絶対パスを設定する。環境設定は共有Skillに書き込まない。
 
 例: `node .agent-skill-chain/bin/asc.mjs start /path/to/project`。現在の作業ディレクトリとASC設置先が違う場合は入口のパスを指定する。CLIへ渡す対象ディレクトリは明示する。指定版が未導入・不一致の場合は実行せず案内し、自動ダウンロードやPATH上の別版への切替はしない。バージョン一致は配布元の真正性の証明ではないため、インストール元は利用者が信頼した配布物を使う。
 
