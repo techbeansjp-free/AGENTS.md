@@ -3,6 +3,7 @@
  * The candidate is not published; no user project or credentials enter the namespace.
  */
 import fs from 'node:fs';
+import {performance} from 'node:perf_hooks';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
