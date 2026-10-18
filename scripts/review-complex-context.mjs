@@ -12,7 +12,7 @@ const proofPath=fs.existsSync(path.join(evidenceRoot,'repair-integration.json'))
 const proof=JSON.parse(fs.readFileSync(proofPath)),gitEnv={...process.env};for(const key of Object.keys(gitEnv))if(key.startsWith('GIT_'))delete gitEnv[key];
 const integrationRoot=item.worktrees.integration.repo;
 const head=execFileSync('git',['rev-parse','HEAD'],{cwd:integrationRoot,env:gitEnv,encoding:'utf8'}).trim();
-if(head===item.base||head!==proof.integrationHead)throw Error('Integration target is missing or stale');
+if(proof.oracleStatus!==0||head===item.base||head!==proof.integrationHead)throw Error('Integration target is missing or stale');
 execFileSync('git',['diff','--quiet','HEAD','--','reservation','billing'],{cwd:integrationRoot,env:gitEnv});
 const log=path.join(setup.root,variant+(process.argv[5]?'-rereview':'-review'));fs.mkdirSync(log);fs.writeFileSync(path.join(log,'SKILL.md'),skill);
 async function run(role,prompt,writes){

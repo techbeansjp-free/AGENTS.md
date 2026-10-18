@@ -6,7 +6,7 @@ export function nativeReviewEvidence(rootId, head, rollouts) {
   if(usage.missingUsage.length)throw Error('Incomplete usage');
   const spawnCalls=rollouts.flat().filter(e=>e.type==='response_item'&&['function_call','custom_tool_call'].includes(e.payload?.type)&&/(?:^|__)spawn_agent$/.test(e.payload.name??''));
   if(spawnCalls.length!==rollouts.length-1)throw Error('Descendant inventory does not match spawn calls');
-  const reviewers=[];
+  const reviewers=[];let rejectedCurrent=false;
   for(const events of rollouts){
     const meta=events.find(e=>e.type==='session_meta').payload;
     const lifecycle=events.filter(e=>e.type==='event_msg'&&['task_started','task_complete','turn_aborted'].includes(e.payload?.type));
@@ -20,9 +20,10 @@ export function nativeReviewEvidence(rootId, head, rollouts) {
     const final=events.filter(e=>e.type==='response_item'&&e.payload?.type==='message'&&e.payload.role==='assistant').at(-1)?.payload;
     const text=final?.content?.filter(c=>c.type==='output_text').map(c=>c.text).join('\n')??'';
     // Exact first line is deliberately required; quoted PASS or earlier approval does not count.
-    if(text.split('\n')[0].trim()!==`PASS ${head}`)throw Error('Independent review did not approve candidate');
-    reviewers.push({id:meta.id,head,verdict:'PASS'});
+    const first=text.split('\n')[0].trim();
+    if(first===`FAIL ${head}`)rejectedCurrent=true;
+    if(first===`PASS ${head}`)reviewers.push({id:meta.id,head,verdict:'PASS'});
   }
-  if(reviewers.length!==1)throw Error('Expected one completed independent reviewer');
+  if(rejectedCurrent||reviewers.length===0)throw Error('Independent reviewer did not approve current candidate');
   return {review:reviewers[0],usage};
 }

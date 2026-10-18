@@ -1,3 +1,4 @@
+import {assertGitControlState} from './native-git-boundary.mjs';
 /** Synthetic evaluation only. No private source, workflow edits, merge or release. */
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';
 import {createInterface} from 'node:readline';import {execFileSync} from 'node:child_process';import {pathToFileURL} from 'node:url';import {performance} from 'node:perf_hooks';
@@ -12,7 +13,7 @@ export function sessionDates(began,ended=new Date()){
   for(;day<=end;utc?day.setUTCDate(day.getUTCDate()+1):day.setDate(day.getDate()+1))days.add([year(day),String(month(day)+1).padStart(2,'0'),String(date(day)).padStart(2,'0')].join('/'));
  }return [...days];
 }
-async function rolloutsFor(rootId, began){
+export async function rolloutsFor(rootId, began){
  const home=process.env.CODEX_HOME??path.join(os.homedir(),'.codex');const records=[];
  // Only dates belonging to this run; read identities, never export unrelated content.
  for(const day of sessionDates(began)){
@@ -31,6 +32,7 @@ async function rolloutsFor(rootId, began){
 export async function finishNativeDelivery(root){
  const s=JSON.parse(fs.readFileSync(path.join(root,'setup.json'))),result=JSON.parse(fs.readFileSync(path.join(root,'result.json')));
  if(s.repository!=='adachi-tatsuru/asc-public-synthetic-eval-20261016'||s.issue.number!==1||result.status!==0)throw Error('Synthetic delivery scope or Agent status invalid');
+ assertGitControlState(s.origin,JSON.parse(fs.readFileSync(path.join(root,'git-controls.json'))));
  const started=performance.now();
  const gitEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^GIT_/i.test(key)));
  const command=(argv,cwd)=>execFileSync(argv[0],argv.slice(1),{cwd,env:argv[0]==='git'?gitEnv:process.env,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:4*1024*1024}).trim();

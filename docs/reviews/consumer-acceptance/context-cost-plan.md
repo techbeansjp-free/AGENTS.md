@@ -165,3 +165,15 @@ PR #1606の再レビューで、集計器がHostのGit参照環境を引き継�
 独立レビューで子の記録欠落とambient Git環境の混入を指摘され、起動数照合とHost Gitの環境分離で是正した。CIの固定期限はユーザーの方針に従い追加しない。無期限観測が続く場合は成功とは判定しない。レビュー照合の反例とローカル/UTC日付境界を5テストで確認した。
 
 修正後の新規試行（`native-auto-delivery-results.json`）は、元要求からAgent実装・独立レビュー・実検証・[Draft PR #30](https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/30)・CI成功まで89.85秒で完走した。提出への手動引継ぎ0、試験側実装修正0、評価driver失敗なし。これは小規模合成Issueの自動完走1件の証拠であり、性能改善の比較結果や複雑Goal全般の保証とはしない。
+
+### PR review follow-up (2026-10-19, candidate after 2410ac94)
+
+Five still-valid CodeRabbit findings were corrected: a missing interruption checkpoint now fails the trial; acceptance review requires a successful integration oracle at the recorded HEAD; the user-management fixture rejects invalid email local-part symbols; the delivery runner names itself in Usage; and native trials record Git configuration/hooks before Agent launch and compare them before Host-side Git inspection or delivery. These records live outside Agent-writable directories. Missing records fail closed; older runs are not retroactively treated as having this protection.
+
+The earlier domain/dot validation, empty integration target and shared SQLite namespace observations were already addressed. Table namespace coordination remains an intentional integration requirement, not a prescribed implementation prefix.
+
+Targeted evidence: 9 tests passed (failed/missing oracle, config/hook/link changes, native review/usage/completion binding), and the isolated consumer browser journey passed. No performance superiority claim follows from these regression tests.
+
+The native complex run completed in 238.54 seconds, but its reviewer inherited the parent conversation (`forked_from_id`); strict Host evidence validation rejected it. It is not an accepted independent-review or autonomous-delivery result, and aggregate usage remains unvalidated because inherited session records require separate accounting. The services and logs are preserved; no public delivery occurred. New trials explicitly require `fork_turns="none"` for the independent reviewer.
+
+Validation after these changes: required `npm run quality` passed (333 passed, 11 skipped, zero failed); the subsequently added interruption-termination regression passed separately. Changed-script lint passed. An optional lint of every script exposed a pre-existing `fetch` no-undef in unchanged `scripts/release.mjs`; this is not a clean all-script lint claim.

@@ -23,3 +23,9 @@ test('unfinished, resumed, wrong-turn and forked review fail closed',()=>{
 test('unobserved child cannot disappear from delivery accounting',()=>{const f=fixture();f[0].splice(2,0,{type:'response_item',payload:{type:'function_call',name:'spawn_agent'}});assert.throws(()=>nativeReviewEvidence('p',head,f),/inventory/);});
 
 test('rollout discovery covers local and UTC dates around midnight',async()=>{const {sessionDates}=await import('../scripts/native-delivery.mjs');const old=process.env.TZ;try{process.env.TZ='Asia/Tokyo';assert.deepEqual(new Set(sessionDates('2026-10-18T22:33:12Z','2026-10-18T22:35:00Z')),new Set(['2026/10/18','2026/10/19']));assert.throws(()=>sessionDates('invalid'),/Invalid/);}finally{if(old===undefined)delete process.env.TZ;else process.env.TZ=old;}});
+
+test('a repaired commit can supersede old findings, but a current conflicting verdict cannot',()=>{
+ const f=fixture(),old=record('r-old','p',`FAIL ${'b'.repeat(40)}`);f.push(old);f[0].splice(2,0,{type:'response_item',payload:{type:'function_call',name:'spawn_agent'}});
+ assert.equal(nativeReviewEvidence('p',head,f).review.head,head);
+ old[3].payload.content[0].text=`FAIL ${head}`;assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);
+});
