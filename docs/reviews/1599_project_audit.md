@@ -35,6 +35,13 @@
 - 独立レビュー: 追加差分に重大な残存欠陥なし。外部GitHub APIの実サービス観測は今回再実行していない。
 - 同PRの文書/配布修正ではネットワークを分離した合成利用者でtarballのinstall/update/rollback/remove/reinstallと同梱startを検証済み。モデル開発速度やtoken削減の実証とはしない。
 
+## 追加確認（Windows CI・品質契約試験）
+
+- Windows CIで大容量Git出力試験の210字ファイル名がGitのpath制限に当たり、`git add`で停止した。80字の名前を12,000件生成する形に変更し、NUL区切り1MiB超の検証条件を維持。修正後のWindows/macOS/Linux worktree CIは成功。
+- `test/v05_quality_transition.ts`は削除済み`cucumber.mjs`を要求し単独実走で失敗。標準`npm test`の対象外だった旧移行試験を、`test/test_quality_contract.mjs`の現行base/candidate試験へ置換した。未承認のscript/helper/CI変更、候補checkerの不実行、base欠落、壊れたregistry、事前登録済みの正当な変更とexact bytes、設定の欠落/間接参照、JSON特殊キーを検証する。
+- root側ignored資産は内容を読まず分類した。Host設定、依存関係、worktree、ローカル記録、旧生成物を含む。rootに残るignoredファイルの削除は、tracked配布元の整理とは別であり実施していない。
+- 互換libのentrypoint/package-root/process/security/version、Provider capability/reviewer、rule廃止処理を追加読取。現行公開CLIへの適用と旧互換処理を区別した。
+
 ## 続きの監査
 
 旧品質互換コードの関数・schema単位の照合、履歴以外の未確認ファイル、テストと実装の保証範囲の対応を継続する。現行手順の整合性、履歴の保存、検証済み対象は区別する。本記録だけを根拠に「全件監査完了」としない。
