@@ -12,14 +12,14 @@ const head=command(['git','rev-parse','HEAD'],s.worktree),events=fs.readFileSync
 const proof=nativeReviewEvidence(rootId,head,await rolloutsFor(rootId,s.startedAt));
 const {verifyWorktree}=await import(pathToFileURL(path.join(root,'distribution/package/src/worktree-execution.mjs')));
 const {Github}=await import(pathToFileURL(path.join(root,'distribution/package/src/github.mjs')));
-const owner=path.join(root,'owner.json');fs.writeFileSync(owner,JSON.stringify({intent:'Complete both synthetic reservation and billing requirements; no revision phase yet',allowedPaths:['complex/reservation/service.mjs','complex/billing/service.mjs'],commands:['reservation','billing','integration','unknown-keys'].map(name=>[process.execPath,`complex/oracle/${name}.mjs`,'complex'])}));
+const owner=path.join(root,'owner.json');fs.writeFileSync(owner,JSON.stringify({intent:s.phase==='revision'?'Apply explicit currency revision preserving original security and stored replay records':'Complete both synthetic reservation and billing requirements; no revision phase yet',allowedPaths:['complex/reservation/service.mjs','complex/billing/service.mjs'],commands:[...['reservation','billing','integration','unknown-keys'].map(name=>[process.execPath,`complex/oracle/${name}.mjs`,'complex',...(s.phase==='revision'&&['reservation','billing'].includes(name)?['revised']:[])]),...(s.phase==='revision'?[[process.execPath,'complex/oracle/revision.mjs','complex/previous','complex']]:[])]}));
 const verification=verifyWorktree(s.worktree,s.base,owner);if(!verification.passed||verification.head!==proof.review.head)throw Error('Complex oracle or reviewed HEAD mismatch');
-const data={mode,head,base:s.base,remoteBase:s.remoteBase,review:proof.review,usage:proof.usage,verification,implementationAndReviewSeconds:result.seconds,driverImplementationEdits:0};
+const data={mode,phase:s.phase??'original',head,base:s.base,remoteBase:s.remoteBase,review:proof.review,usage:proof.usage,verification,implementationAndReviewSeconds:result.seconds,driverImplementationEdits:0};
 fs.writeFileSync(path.join(root,'complex-verification.json'),JSON.stringify(data,null,2));console.log(JSON.stringify({head,passed:true,tokens:proof.usage.observedProcessedTokens}));
 if(mode==='--deliver'){
  const started=performance.now(),github=new Github({repository:s.repository,issue:3,repo:s.worktree,branch:s.branch,baseBranch:'main',base:s.remoteBase,workflowPath:'.github/workflows/complex.yml',command:(argv,cwd)=>{
   const a=[...argv];if(a[0]==='gh'&&a[1]==='pr'&&a[2]==='create'){
-   a[a.indexOf('--title')+1]='Synthetic native multi-Issue reservation and billing acceptance';
+   a[a.indexOf('--title')+1]=s.phase==='revision'?'Synthetic shared-contract revision and legacy replay acceptance':'Synthetic native multi-Issue reservation and billing acceptance';
    a[a.indexOf('--body')+1]=`Synthetic-only fixture: concurrent Issue ownership, real SQLite, integration, independent review PASS for ${head}, fixed oracles. Initial fixture and CI supplied by evaluator; service implementation and integration performed by native Host Agent. No private data. Draft only; no merge/release.`;
   }return command(a,cwd);
  }});

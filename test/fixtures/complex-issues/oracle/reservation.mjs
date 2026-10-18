@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 const {ReservationService}=await import(pathToFileURL(path.resolve(process.argv[2],'reservation/service.mjs')));
+if(process.argv[3]!==undefined&&process.argv[3]!=='revised')throw Error('Unknown contract phase');
+const revised=process.argv[3]==='revised';
 const admin={tenant:'alpha',role:'admin'},reader={tenant:'alpha',role:'reader'},other={tenant:'beta',role:'admin'};
 const code=(fn,expected)=>assert.throws(fn,e=>e.code===expected);
 function fixture(fn){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'reservation-oracle-')),file=path.join(dir,'state.sqlite');let service;
@@ -13,7 +15,7 @@ const seed=s=>s.seed(admin,{sku:'seat',available:10,unitCents:25});
 const reserve=s=>s.reserve(admin,{key:'request-1',sku:'seat',quantity:2});
 test('reservation lifecycle, pagination, immutable results and tenant boundaries',()=>fixture(s=>{
  seed(s);const a=reserve(s);assert.equal(typeof a.id,'string');assert(a.id.length);
- assert.deepEqual(a,{id:a.id,tenant:'alpha',sku:'seat',quantity:2,amountCents:50,status:'reserved',version:1});
+ assert.deepEqual(a,{id:a.id,tenant:'alpha',sku:'seat',quantity:2,amountCents:50,status:'reserved',version:1,...(revised?{currency:'JPY'}:{})});
  assert.deepEqual(s.inventory(reader,'seat'),{sku:'seat',available:8,unitCents:25});
  try{a.quantity=999;}catch(error){assert.ok(error instanceof TypeError);}assert.equal(s.get(reader,a.id).quantity,2);
  code(()=>s.get(other,a.id),'NOT_FOUND');code(()=>s.inventory(other,'seat'),'NOT_FOUND');

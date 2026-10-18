@@ -6,13 +6,15 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 const {BillingService}=await import(pathToFileURL(path.resolve(process.argv[2],'billing/service.mjs')));
+if(process.argv[3]!==undefined&&process.argv[3]!=='revised')throw Error('Unknown contract phase');
+const revised=process.argv[3]==='revised';
 const admin={tenant:'alpha',role:'admin'},reader={tenant:'alpha',role:'reader'},other={tenant:'beta',role:'admin'};
 const code=(fn,expected)=>assert.throws(fn,error=>error.code===expected);
 function fixture(fn){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'billing-oracle-')),file=path.join(dir,'state.sqlite');let service;
  try{service=new BillingService(file);fn(service,file);}finally{service?.close();fs.rmSync(dir,{recursive:true,force:true});}
 }
-const event=(id='reservation-1',tenant='alpha')=>({id,tenant,sku:'seat',quantity:2,amountCents:50,status:'reserved',version:1});
+const event=(id='reservation-1',tenant='alpha')=>({id,tenant,sku:'seat',quantity:2,amountCents:50,status:'reserved',version:1,...(revised?{currency:'JPY'}:{})});
 const issue=(service,key='issue-1',value=event())=>service.issue(admin,{key,event:value});
 
 test('billing lifecycle, listing, immutable results and tenant boundaries',()=>fixture(service=>{

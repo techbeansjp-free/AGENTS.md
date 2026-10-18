@@ -1,0 +1,73 @@
+{
+  "scope": "Diagnostic counts for PR31, not a performance comparison. Tool bytes are not tokens; usage update count is not a guaranteed model-request count.",
+  "observations": [
+    {
+      "role": "parent",
+      "usageUpdates": 28,
+      "initialUsage": {
+        "input_tokens": 16256,
+        "cached_input_tokens": 4096,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 197,
+        "reasoning_output_tokens": 26,
+        "total_tokens": 16453
+      },
+      "toolOutputBytes": 87662,
+      "tools": {
+        "exec": 19,
+        "spawn_agent": 3,
+        "wait_agent": 4,
+        "followup_task": 1
+      }
+    },
+    {
+      "role": "/root/reservation_9001",
+      "usageUpdates": 15,
+      "initialUsage": {
+        "input_tokens": 16018,
+        "cached_input_tokens": 4096,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 153,
+        "reasoning_output_tokens": 11,
+        "total_tokens": 16171
+      },
+      "toolOutputBytes": 52708,
+      "tools": {
+        "exec": 13,
+        "send_message": 1
+      }
+    },
+    {
+      "role": "/root/billing_9002",
+      "usageUpdates": 12,
+      "initialUsage": {
+        "input_tokens": 16018,
+        "cached_input_tokens": 14208,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 177,
+        "reasoning_output_tokens": 39,
+        "total_tokens": 16195
+      },
+      "toolOutputBytes": 50186,
+      "tools": {
+        "exec": 11
+      }
+    },
+    {
+      "role": "/root/independent_review",
+      "usageUpdates": 24,
+      "initialUsage": {
+        "input_tokens": 16228,
+        "cached_input_tokens": 14208,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 206,
+        "reasoning_output_tokens": 18,
+        "total_tokens": 16434
+      },
+      "toolOutputBytes": 126100,
+      "tools": {
+        "exec": 22
+      }
+    }
+  ]
+}
