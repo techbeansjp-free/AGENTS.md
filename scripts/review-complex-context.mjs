@@ -2,6 +2,7 @@
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';import path from 'node:path';import {spawn,execFileSync} from 'node:child_process';import {performance} from 'node:perf_hooks';
 import {configuration} from '../src/restricted-agent.mjs';
+import {extendFixturePermissions} from './complex-permissions.mjs';
 const setup=JSON.parse(fs.readFileSync(process.argv[2]));const variant=process.argv[3];const item=setup.cases.find(c=>c.strategy===variant);if(!item)throw Error('strategy');
 const skill=fs.readFileSync(path.join(setup.root,'SKILL.md'));
 if(createHash('sha256').update(skill).digest('hex')!==setup.skillSha256)throw Error('Skill snapshot changed');
@@ -17,8 +18,7 @@ const log=path.join(setup.root,variant+(process.argv[5]?'-rereview':'-review'));
 async function run(role,prompt,writes){
  const runtime=fs.mkdtempSync(path.join(setup.root,'runtime-')),empty=fs.mkdtempSync(path.join(setup.root,'empty-'));
  const c=configuration({workspace:empty,runtime,executable,writable:false});
- const i=c.options.findIndex(x=>x.startsWith('permissions.')&&x.includes('.filesystem='));
- c.options[i]=c.options[i].replace(/ }$/,`, ${JSON.stringify(item.origin)}="read", ${JSON.stringify(log)}="read"${writes.map(x=>`, ${JSON.stringify(x)}="write"`).join('')} }`);
+ extendFixturePermissions(c.options,[item.origin,log],writes);
  fs.writeFileSync(path.join(log,role+'.prompt.txt'),prompt);
  const out=fs.openSync(path.join(log,role+'.jsonl'),'w'),err=fs.openSync(path.join(log,role+'.stderr'),'w');const startedAt=new Date().toISOString(),start=performance.now();
  const p=spawn(c.binary,['exec','--ignore-user-config','--ignore-rules','--ephemeral','--skip-git-repo-check','--json','-m','gpt-5.6-sol','-c','model_reasoning_effort="medium"','-C',empty,...c.options,'-'],{env:c.env,stdio:['pipe',out,err]});p.stdin.end(prompt);
