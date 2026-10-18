@@ -44,7 +44,7 @@ for(const flag of ['--assume-unchanged','--skip-worktree'])test(`hidden index fl
 });
 
 test('verification handles tracked and changed path lists larger than the default Git output buffer',t=>{
- const f=fixture(t),names=Array.from({length:5000},(_,i)=>`${String(i).padStart(5,'0')}-${'x'.repeat(210)}.txt`);
+ const f=fixture(t),names=Array.from({length:12000},(_,i)=>`${String(i).padStart(5,'0')}-${'x'.repeat(80)}.txt`);
  for(const name of names)fs.writeFileSync(path.join(f.work,name),'');
  f.git(f.work,'add','.');f.git(f.work,'commit','-qm','many changed paths');
  assert(Buffer.byteLength(names.join('\0'))>1024*1024);
