@@ -81,3 +81,17 @@ test('completed run waits for job completion without accepting incomplete eviden
  provider.api=route=>route.includes('/actions/runs?')?{workflow_runs:[run]}:route.includes('/jobs?')?{total_count:2,jobs:[{name:'check',status:'completed'},{name:'check',status:'completed'}]}:data;
  await assert.rejects(provider.observe(1,{timeout:1000,interval:0}),/Ambiguous jobs/);
 });
+
+test('empty and partial job indexes are reobserved; all pages are required',async()=>{
+ const {provider,data,calls}=setup();provider.expectedHead=head;let observations=0;
+ const run={id:10,head_sha:head,event:'pull_request',path:'.github/workflows/safety.yml',repository:{full_name:repository},pull_requests:[{number:1,head:{sha:head},base:{sha:base}}],status:'completed',conclusion:'success'};
+ const jobs=Array.from({length:101},(_,i)=>({name:'check-'+i,status:'completed',conclusion:'success'}));
+ provider.api=route=>{
+  if(route.includes('/actions/runs?'))return {workflow_runs:[run]};
+  if(route.includes('&page=2'))return {total_count:101,jobs:jobs.slice(100)};
+  if(route.includes('/jobs?')){observations++;return observations===1?{total_count:0,jobs:[]}:observations===2?{total_count:1,jobs:[]}:{total_count:101,jobs:jobs.slice(0,100)};}
+  return data;
+ };
+ const result=await provider.observe(1,{timeout:1000,interval:0});assert.equal(Object.keys(result.checks).length,101);assert.equal(observations,3);assert.equal(calls.length,0);
+ observations=0;await assert.rejects(provider.observe(1,{timeout:0}),/deadline/);
+});

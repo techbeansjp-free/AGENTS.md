@@ -21,3 +21,9 @@ test('serialized diagnostic envelope respects the byte limit including escaped t
  const text=reviewDiagnosticContext(values);assert(Buffer.byteLength(text)<=65536);
  assert.match(JSON.parse(text).authority,/not approval/);
 });
+
+test('SHA-256 Git review history remains diagnostic data without approval',()=>{
+ const value=claim(1);value.target.head='d'.repeat(64);value.target.base='e'.repeat(64);
+ const [result]=reviewDiagnostics([value]);assert.deepEqual(result.target,value.target);assert.equal(result.approved,undefined);
+ for(const length of [39,41,63,65])assert.deepEqual(reviewDiagnostics([{...value,target:{...value.target,base:'a'.repeat(length)}}]),[]);
+});

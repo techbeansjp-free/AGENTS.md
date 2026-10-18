@@ -28,7 +28,7 @@ export function reviewDiagnostics(values){
    if(value?.verdict!=='fail')continue;
    const {findings}=parseReview({verdict:'fail',findings:value.findings});
    const target=Object.fromEntries(['head','base','contract','diff'].map(key=>[key,value.target?.[key]]));
-   if(!Object.entries(target).every(([key,v])=>typeof v==='string'&&(key==='head'||key==='base'?/^[a-f0-9]{40}$/:/^[a-f0-9]{64}$/).test(v)))continue;
+   if(!Object.entries(target).every(([key,v])=>typeof v==='string'&&(key==='head'||key==='base'?/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/:/^[a-f0-9]{64}$/).test(v)))continue;
    const item={verdict:'fail',target,findings},serialized=JSON.stringify(item),size=Buffer.byteLength(serialized);
    if(seen.has(serialized)||bytes+size>65536)continue;
    seen.add(serialized);selected.unshift(item);bytes+=size;if(selected.length===3)break;

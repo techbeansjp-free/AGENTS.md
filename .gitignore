@@ -6,18 +6,13 @@
 node_modules/
 .worktrees/
 
-# compileが毎回削除して再生成する配布用ビルド成果物。配布はpackage.jsonのfilesが行う
-# distはGit remoteからの取得で即実行できるよう版管理下に置く（Issue #1187）。
-# 承認機構つき環境では`prepare`が実行されず、buildできないためである。
-# 実行に不要な型定義とsource mapだけを除外し、差分の雑音を抑える。
-dist/**/*.d.ts
-dist/**/*.d.ts.map
-dist/**/*.js.map
+# 旧版の生成済みdistは現行runtimeではない。再生成されたローカル成果物を共有しない。
+dist/
 
 # 同期前staging、失効済みlocal issue、他案件を含み得るmemo
 .agent-skill-chain/tmp/
 
-# 実行ログと開発計測の生成物。src/domain/staging.tsのSTAGING_LIFECYCLE_AREASが正本
+# 実行ログと開発計測の生成物（利用者ごとのローカル状態）
 .agent-skill-chain/role-log/
 .agent-skill-chain/metrics/
 .agent-skill-chain/runtime/
@@ -41,5 +36,4 @@ dist/**/*.js.map
 test-execution.log
 *.log
 
-# install/updateが配布するproject-local CLI
-.agent-skill-chain/managed-runtime/
+# project-assetsが配置するmanaged-runtimeはGit共有対象。node_modulesは上で除外する。
