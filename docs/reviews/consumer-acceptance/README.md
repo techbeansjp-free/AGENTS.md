@@ -14,11 +14,11 @@
 | Git共有 | clone/worktreeで同梱本体を起動、ASC_CLI/外部prefix不要 | C06 成功 |
 | 更新・版指定 | 一つのworktreeを更新しても兄弟worktreeは旧版で継続 | C07/C08 成功 |
 | 更新競合・復旧 | ローカル編集のある資産を無断上書きせず、解消後再試行 | C09/C18 成功。Git apply中のfile-size障害で部分書込みを再現し、選択復元後に再更新。実ディスク枯渇/電源断そのものは未実施 |
-| ビルド・依存 | 既存の依存symlinkを利用し、ignore生成物を維持 | C11/C19 成功。pnpm 10.0.0、TypeScript 5.9.3で2 packageを実ビルド・実行テスト。React/ブラウザは未実施 |
+| ビルド・依存 | 既存の依存symlinkを利用し、ignore生成物を維持 | C11/C19 成功。pnpm 10.0.0、TypeScript 5.9.3で2 packageを実ビルド・実行テスト。Reactは未実施。別途J01–J06でブラウザ/SQLiteを確認 |
 | 失敗・再試行 | 失敗が別worktreeや次の正常検証を拒否しない | C12/C16 成功 |
 | 検証の否定例 | 範囲外の変更、検証中のsource変更を成功扱いしない | C13/C14 成功 |
 | 削除 | manifest列挙の配布資産のみ撤去、利用者成果/規約を保持 | C17 成功。hash不一致の編集済み配布資料を保存。文書に従う手動撤去でありuninstall CLIの実装ではない |
-| 意味的実装・独立レビュー | 元要求から実装し、不足シナリオをReviewerが発見・是正 | 本CLI試験では未実施 |
+| 意味的実装・独立レビュー | 元要求から実装し、不足シナリオをReviewerが発見・是正 | J01–J06。親Hostが合成業務機能を実装、別Contextが未検査のemail反例を発見・是正。自動モデル起動のE2Eではない |
 | PR・CI・後始末 | 正しいbaseへ提出、CI遅延/失敗を扱い、merge後に利用者資産を保護 | 今回は外部通信を遮断しており未実施 |
 | 複雑Goal | 契約変更・競合・中断後に必要な範囲だけ再計画 | 本CLI試験では未実施 |
 | 別OS/Host | Mac/Windows、Codex/Claude Codeの実利用 | 本記録はLinux CLIのみ。他OSのCIをこの試験の実施とみなさない |
@@ -76,3 +76,31 @@ node scripts/run-consumer-scenarios.mjs /absolute/agent-skill-chain-0.5.8.tgz /a
 `tooling`には`pnpm-10.0.0.tgz`と`typescript-5.9.3.tgz`を置く。省略時、C19はnot-runで記録する。driverは指定tarballの公開元を認証する機構ではない。公開版の入手先とSHA照合は上記の記録に基づき、任意に渡したファイルは単にsupplied-artifactとして扱う。CLIによる19ケースの成功は意味的レビュー・外部PR完走の証明ではない。
 
 Toolingは公式npm registryの各固定版dist.integrity（SHA512）と実tarballを照合して`consumer-tooling.json`へpinした。driverは各tarballのSHA256と内包package name/versionを検査し、不一致ならsandboxへ渡す前に拒否する。
+
+## 業務操作の受入（画面・API・SQLite、2026-10-18）
+
+最新の設計入力は、画面単体ではなく利用者の目的を達成する一連の操作を小さな単位で実装し、正常系だけでなく回復・権限・server入力検証を確認すること。配布元 `skills/asc/SKILL.md` の実装・独立レビュー双方へ組み込んだ。新たな専用Agentや固定工程は追加していない。
+
+合成要件 `test/fixtures/consumer-user-management/REQUIREMENTS.md` を基に親Hostが実装し、別ContextのReviewerが元要求から照合した。実ブラウザ試験は配布候補をoffline installした後、developをbaseとするworktreeで、同梱launcherの `start` と `worktree-verify` を使用する。検証はfixture原本ではなく、worktreeにcommitしたserver/pageを起動する。
+
+- J01: 一覧・登録・頁移動・編集・取消・削除・再表示。
+- J02: 入力不備と重複からの復旧、利用者文字列のHTML非実行。
+- J03: UI迂回時の型・値・未知field・権限・存在チェック。不正emailのPOST/PUT拒否と保存データ不変。
+- J04: 同時更新による古い編集の拒否、入力維持、再読込み。
+- J05: 通信失敗時の入力保持と再試行。
+- J06: server再起動後の保存状態。
+
+初回は全ケース成功したが、独立Reviewerは未検査だった `a@@b.com` の受理を発見した。旧処理を隔離環境で再現すると期待400に対し201だった。合成実装を修正し、email4反例を追加した後も6ケース成功。別頁へ追加された登録結果には末頁への案内を表示する。これは合成アプリで見つかった欠陥であり、ASC runtimeの欠陥とは分類しない。
+
+さらにworktree内のcandidateだけに旧email処理を戻してcommitした負例では、同じ配布CLIの検証がexit2・passed:false・テストexit1になった（`journey-negative.json`）。正しいfixture原本を参照するだけの偽陽性ではないことを確認した。元の成功対象commitは `journey-verification.json`、fixtureとtarballのhashは `journey-provenance.json` に記録した。
+
+```sh
+# 別のtooling prefixへplaywright-core 1.56.1を用意する。Chromeも必要。
+node scripts/run-consumer-journey.mjs /absolute/browser-tooling
+```
+
+試験はLinuxのnetwork namespace内で完結。空HOME、認証情報なし、合成入力のみで、個人repoをmountしない。Chromeの内部sandboxを無効にする代わりに、全体をbubblewrap内へ隔離している。これは合成受入試験の構成であり、通常利用者のブラウザ/Host設定を変更するものではない。
+
+単発観測はブラウザ6ケース2.200秒、CLI検証2.620秒、offline導入から検証まで3.648秒（pack時間を除く）。runner自身のモデル呼出しは0回だが、事前の親Host実装と独立レビューにはAIを使用している。総tokensとAI実装時間はこの計測に含まれず、費用削減やCodeRabbit同等性は未証明。少ない機構で具体的な不足を発見・修正できた一例として扱う。
+
+固定dummy headerは権限別操作を模擬するだけで、実認証・session・CSRF・tenant保証は対象外。合成アプリの外部PR/CI、複雑Goalの再計画、Mac/Windowsの実走をこの記録で完了扱いにしない。レビュー完了を自動認定するコードも追加していない。

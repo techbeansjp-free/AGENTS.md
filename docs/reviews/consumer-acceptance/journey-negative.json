@@ -1,0 +1,28 @@
+{
+  "schema": "asc-worktree-verification/v1",
+  "execution": "current-host-worktree",
+  "repo": "/work/application",
+  "base": "115455563d939b41ae83679c531d6623e46bb1df",
+  "head": "0f671f9fda030825593277f52adda57f093e8bcd",
+  "contractSha256": "d796ec6c11c184d00fd686d347a5ad6f2bdf34a0b72090259e0dc56568cd5266",
+  "intent": "Fulfil REQUIREMENTS.md user-management journey",
+  "results": [
+    {
+      "argv": [
+        "/runtime/bin/node",
+        "/fixture/browser.mjs",
+        "/work/application"
+      ],
+      "exit": 1,
+      "seconds": 31.193971955,
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSha256": "19e616bdad1f3d9d1835472e4088ce67beea371da90e5e7ab140776af3fddbe7",
+      "error": "Command failed",
+      "stdout": "",
+      "stderr": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\npage.waitForFunction: Timeout 30000ms exceeded.\n    at text (/fixture/browser.mjs:16:47)\n    at /fixture/browser.mjs:22:161\n    at async check (/fixture/browser.mjs:15:58)\n    at async file:///fixture/browser.mjs:21:2 {\n  name: 'TimeoutError'\n}\n\nNode.js v24.19.0\n"
+    }
+  ],
+  "passed": false,
+  "independentReview": "required",
+  "deliveryAuthorized": false
+}
