@@ -27,6 +27,6 @@ baselineは9f19ce4bd76a8e59eedd01adec8ec8a3a825fea7のSkill。候補との差は
 - Skillの構文検査: 成功。動作・性能の証明ではない。
 - 別Contextの独立設計レビュー: 具体的な矛盾・品質後退の指摘なし。性能比較ではない。
 - 配布テスト: `TMPDIR=/var/tmp npm run package:check`、7件成功・失敗0。配布・導入互換性の確認であり、Context戦略の性能試験ではない。
-- モデルによる同条件比較: 未実施。tokens・時間の削減率を主張しない。
+- モデルによる同条件比較: 小規模の実装部分を各1回実施（`context-small-results.json`）。両方のoracle成功、同一モデル・medium・fresh context。旧15.43秒/77,140 processed tokens、新15.76秒/68,230 processed tokens。単発・cache条件未統制であり削減効果は未証明。各1回のまとめたソース読込みで重複読込みなし。子Agent無効のため階層選択は未評価。修復・複数Issue比較と独立レビューを含む計測は未完了。
 
 比較で品質が落ちる場合は候補を是正する。改善しない構成を既定にせず、条件付き選択の妥当性を再評価する。merge/releaseは本作業の対象外。

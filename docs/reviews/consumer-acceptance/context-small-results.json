@@ -1,0 +1,76 @@
+{
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "results": [
+    {
+      "variant": "baseline",
+      "status": 0,
+      "seconds": 15.432498901,
+      "usage": [
+        {
+          "input_tokens": 76425,
+          "cached_input_tokens": 58752,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 715,
+          "reasoning_output_tokens": 143
+        }
+      ],
+      "oracleExit": 0,
+      "events": 12,
+      "error": null,
+      "skillSha256": "1a1f27371fae1f54fa93f15ce7893601138a1d2b2557bab0bc7aa90ef88440be",
+      "agentCalls": 1,
+      "sourceReadCommands": 1,
+      "repeatedSourceReadCommands": 0,
+      "localTestExit": 0,
+      "outputFilesSha256": {
+        "format.mjs": "ee391213391f1f91b25011040d6ae708b2f5d4d0527d75b29fb24d955c3f9f83",
+        "test.mjs": "8c19afb3ffe6c1cf0bbb98ec89c13eecbc7417ba11276165eb61a781b3a4ca1b"
+      },
+      "observedProcessedTokens": 77140
+    },
+    {
+      "variant": "candidate",
+      "status": 0,
+      "seconds": 15.76239302,
+      "usage": [
+        {
+          "input_tokens": 67604,
+          "cached_input_tokens": 56448,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 626,
+          "reasoning_output_tokens": 121
+        }
+      ],
+      "oracleExit": 0,
+      "events": 12,
+      "error": null,
+      "skillSha256": "38f9a666ff4312c15ebbb222ff03d76559c4c2e0ab413fa69a117aeb1602e45f",
+      "agentCalls": 1,
+      "sourceReadCommands": 1,
+      "repeatedSourceReadCommands": 0,
+      "localTestExit": 0,
+      "outputFilesSha256": {
+        "format.mjs": "ee391213391f1f91b25011040d6ae708b2f5d4d0527d75b29fb24d955c3f9f83",
+        "test.mjs": "0f5c998f90b00abc50291608240cc6814594e85b4c1b128ea3e33322b838303b"
+      },
+      "observedProcessedTokens": 68230
+    }
+  ],
+  "scenario": "small non-Git plural label fix",
+  "baselineCommit": "9f19ce4bd76a8e59eedd01adec8ec8a3a825fea7",
+  "candidateCommit": "7e8aaadd8",
+  "trialsPerVariant": 1,
+  "order": [
+    "baseline",
+    "candidate"
+  ],
+  "independentReview": "Separate reviewer inspected both implementations against original requirements; no findings; both node test.mjs exit 0. Reviewer usage/time not collected.",
+  "cli": "0.153.4",
+  "scope": "fresh implementation contexts only; not multi-Issue hierarchy or end-to-end PR delivery",
+  "multiAgentEnabled": false,
+  "networkForTools": false,
+  "rawLogsPublished": false,
+  "secondsIncludes": "model execution plus external oracle; excludes independent review",
+  "monetaryCost": null
+}
