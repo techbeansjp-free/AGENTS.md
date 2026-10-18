@@ -1,6 +1,13 @@
 {
   "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "distribution": {
+    "skillBundleSha256": "9cafcfbd410f423ebe3319132d206a1506219ad57b01f82dc2b3d4466b7c7779",
+    "version": "0.5.900-alpha.6",
+    "skillSha256": "1a1f27371fae1f54fa93f15ce7893601138a1d2b2557bab0bc7aa90ef88440be",
+    "identitySha256": "f4ef03db39ddb89b3d73f3b46b83e9aad6426b3839ea9ae7f7de8bcd6d37ee31"
+  },
   "conditions": {
+    "runtimeSha256": "8d98572f3378f009b3157c73708af9529000cac32102f7ab1a2f0f72aae07efb",
     "intentSha256": "0764dc1fcf26421b837fd0d9e6197f72d213240949ace2503ece75a71d2df5d7",
     "commands": [
       [

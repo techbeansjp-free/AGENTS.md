@@ -5,7 +5,12 @@ export function summarizeNativePairs(pairs){
  assert(Array.isArray(pairs)&&pairs.length>0,'Explicit pairs required');
  const records=pairs.flatMap(p=>[p.baseline,p.candidate]);
  const conditions=records[0]?.conditions;
- assert(conditions?.intentSha256&&conditions?.commands?.length,'Measured conditions required');
+ assert(conditions?.runtimeSha256&&conditions?.intentSha256&&conditions?.commands?.length,'Measured conditions required');
+ for(const side of ['baseline','candidate']){
+  const skill=pairs[0][side]?.distribution?.skillBundleSha256;
+  assert(skill,'Distribution Skill identity required');
+  for(const pair of pairs)assert.equal(pair[side]?.distribution?.skillBundleSha256,skill,'Variant changed during comparison');
+ }
  const heads=new Set();
  for(const r of records){
   assert.deepEqual(r.conditions,conditions,'Comparison conditions differ');
@@ -17,8 +22,10 @@ export function summarizeNativePairs(pairs){
  const usable=records.every(complete),qualityPassed=records.every(quality);
  const result={pairs:pairs.length,qualityPassed,measurementComplete:usable,requiredPairs:5,accepted:false,scope:'This fixed synthetic fixture and model only; no general autonomous-development guarantee.'};
  if(usable){
-  for(const side of ['baseline','candidate'])result[side]={medianSeconds:median(pairs.map(p=>p[side].elapsedSeconds)),medianProcessedTokens:median(pairs.map(p=>p[side].usage.observedProcessedTokens))};
-  result.accepted=pairs.length>=5&&qualityPassed&&result.candidate.medianSeconds<result.baseline.medianSeconds&&result.candidate.medianProcessedTokens<result.baseline.medianProcessedTokens;
+  for(const side of ['baseline','candidate'])result[side]={maxSeconds:Math.max(...pairs.map(p=>p[side].elapsedSeconds)),maxProcessedTokens:Math.max(...pairs.map(p=>p[side].usage.observedProcessedTokens)),medianSeconds:median(pairs.map(p=>p[side].elapsedSeconds)),medianProcessedTokens:median(pairs.map(p=>p[side].usage.observedProcessedTokens))};
+  result.worstCaseRegression=result.candidate.maxSeconds>result.baseline.maxSeconds||result.candidate.maxProcessedTokens>result.baseline.maxProcessedTokens;
+  result.requiresWorstCaseAssessment=result.worstCaseRegression;
+  result.accepted=!result.worstCaseRegression&&pairs.length>=5&&qualityPassed&&result.candidate.medianSeconds<result.baseline.medianSeconds&&result.candidate.medianProcessedTokens<result.baseline.medianProcessedTokens;
  }
  return result;
 }

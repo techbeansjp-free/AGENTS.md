@@ -225,3 +225,26 @@ The interrupted attempt's last observable cumulative usage is recorded separatel
 The live alpha.7 interruption trial completed at reviewed HEAD `34cac398736c4fd34cfb52bf838453c747c5f549`, [Draft PR #39](https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/39), with both `complex` and `test` CI successful. The first attempt saved a reservation-service edit and was interrupted after 20.790 seconds; the entire synthetic service stopped before the fresh continuation started. Continuation, actual tests, independent review and local commit took 107.559 seconds; total elapsed through CI was 150.632 seconds. No evaluator repair/commit/integration or manual delivery handoff occurred.
 
 `native-interruption-delivery.json` retains 640,742 processed tokens for the resumed parent and reviewer and 36,350 last-observed tokens for the interrupted attempt. The latter may omit in-flight work, so the whole-run total is **null**, not their sum. This demonstrates this Linux single-writer saved-work continuation case; it does not prove simultaneous multi-worker interruption, cross-OS process cleanup or a cost reduction.
+
+
+### 利用者の追加計測を踏まえた評価範囲
+
+提供された非公開報告は問題発見の入力として扱い、個別Issue・利用者情報・元ログは転載しない。単独稼働と単一実装担当は異なる分類であり、並走率・変更規模・生成物・共有進行役の帰属誤差がある観測から、並列化やAgent数の因果効果を断定しない。追加の内訳集計は元ログ・算出コードを未確認であり、独立検証済みの数値として扱わない。
+
+- 既存のDraft PR/CIまでの対比較は継続するが、それだけで開発全体の費用改善を完了扱いしない。PR後のレビュー指摘・修正・再検証からmerge可能な状態までを別区間として測る。実際のmergeをこの評価のために行わない。
+- processed tokens、モデル呼出し数、役割別入力・cache・出力、実時間、待ち時間、再試行、欠測を分ける。tool呼出しやusage更新をモデル呼出し数と同一視しない。providerごとの包含関係を確認し、cacheを重複加算しない。仮定の単価による換算は請求実績ではない。
+- 複数Issueを扱う進行役の費用を直前に操作したIssueへ全額帰属させない。共有調整分・帰属不明分を残し、担当分に加えてセッション全体の費用を比較する。
+- 文脈を一定値で切った反実仮想の試算は、引継ぎ、必要資料の再取得、cache再作成、品質低下による手戻りを含まない。固定のContext上限や、主担当による実装の一律禁止は導入しない。必要な作業境界でのfresh contextと継続を同条件で比較する。
+- 次の原因分析では規約・要求・コード・テスト出力・CIログ・進捗確認・レビュー是正に分類し、同一内容の再取得と変更後の必要な読戻しを分ける。tool出力bytesをtoken量へ換算したり、長い出力だけで費用原因と断定したりしない。
+- 改善候補は、不要な全文取得・反復確認・担当間の履歴複製を減らすこと。関連コードの確認、独立レビュー、実テストは維持する。固定Stepや固定Agent階層の復活は改善の前提にしない。
+
+この更新は評価条件の明確化であり、性能改善の実証ではない。長寿命ContextとPR後是正を再現しない小規模試験だけで、本目標を完了にしない。
+
+
+### Anchored-reference comparison: token reduction without time improvement
+
+The alpha.7 candidate and alpha.6 baseline completed two alternating pairs: candidate/baseline Draft PRs 40/41, then baseline/candidate PRs 42/43. All four passed the same exact-HEAD tests, independent review and CI with two observed Agents and no evaluator implementation or manual handoff. Median elapsed time was baseline 88.334 seconds versus candidate 101.4545; median processed tokens were 314,621 versus 276,963. Tokens decreased about 12%, but time increased about 15%, so this is **not an accepted improvement**. The five-pair requirement remains; further unchanged repetitions are deferred pending a concrete latency hypothesis.
+
+The shared runtime identity is now computed from verified release-identity source hashes excluding the entire `skills/asc/` bundle. Each arm separately pins the entire Skill bundle, including references, across observations. Different reference contents must not masquerade as the same candidate, and a deliberate reference-only variant is not a runtime mismatch. Existing observations were re-exported from their preserved distributions without rerunning models. The summary reports worst-case time/tokens and requires assessment of regressions rather than automatically accepting better medians. Four focused tests and changed-script lint passed.
+
+`native-small-anchored-diagnostics.json` separates delivery (about 20–21 seconds) from implementation/review. Candidate implementation/review took 83.916/78.206 seconds versus baseline 61.964/74.366. Candidate parent tool calls were 9/9 versus 10/11; every reviewer made two tool calls. Therefore fewer tool calls did not establish lower elapsed time, and CI waiting does not explain the gap. Reviewer output bytes were higher with the candidate, but bytes alone do not establish a latency cause. Cache/model latency remains uncontrolled. No fixed Context limit or extra Agent is justified by these results.
