@@ -43,6 +43,26 @@ CI観測は既定では時間上限を持たず、対象PR・commitに拘束さ�
 
 `agent-skill-chain --help`（別名`asc-v05 --help`）で開始・再開・移行の入口と、この手順書の配布先を確認できます。引数なしも案内のみを表示し、Agent起動やGit変更は行いません。
 
+## プロジェクト固有ルールの適用
+
+通常経路の`start`は、対象内の`AGENTS.md`、`CLAUDE.md`、`.agent-skill-chain/project/00_利用案内.md`、旧`project-policy.json`を存在する場合に参照として返す。`--path`を指定するとその祖先directoryの`AGENTS.md` / `CLAUDE.md`も確認する。本文や秘密情報をJSONへ展開せず、path・SHA256・byte数だけを返す。CLIは規約を実行せず、現在のHostと独立Reviewerが適用する。
+
+追加の固有規約は利用者所有の`.agent-skill-chain/project/context.json`へ登録できる。ASC更新はこの設定・参照文書を変更しない。
+
+```json
+{
+  "schema": "asc-project-context/v1",
+  "rules": [
+    {"path": ".agent-skill-chain/project/rules.md"},
+    {"path": "docs/ui.md", "appliesTo": ["src/frontend", "docs/ui.md"]}
+  ]
+}
+```
+
+pathはproject root相対、`appliesTo`はglobではなく完全一致またはdirectory prefix。省略した規約は常時対象。`start . --path src/frontend/page.tsx`のように変更予定・実差分のpathを複数指定できる。path省略時はmanifestの全scopeが候補になる。入れ子のAGENTS.md/CLAUDE.mdは全走査せず未探索noticeを出すため、編集対象確定後、実装前に全対象pathで再実行する。条件不一致の本文は読まない。設定不正、選択対象の欠落、symlink経由の参照は明示エラーになる。選択結果のdigestで内容変化を比較できるが、AIが読んだことや意味的遵守の証明ではない。
+
+新しい設定の登録は任意。既存のproject directoryに索引設定がなければnoticeを返し、Hostが適用規約を確認する。旧project-policyは解釈・移行対象として提示し、旧版の設定エンジンを暗黙実行しない。親の統合directoryの共通規約はHostが別途確認する。専用worktreeに存在しない未追跡の共通設定を自動コピーしない。追加Agent・モデル通信・全repo走査は行わず、設定の参照と必要なfileのhash計算だけを行う。
+
 ## マージ後の後始末
 
 配布Skillは、許可されたPRのmerge確認後に、現在のHostが実際のマージ先（`main`、`develop`等）を確認し、対象remoteの取得、cleanなマージ先local branchのfast-forward同期、完了worktreeの安全な整理まで行うよう指示する。PR作成だけの依頼からmergeを推定しない。CLIによる自動cleanupではない。

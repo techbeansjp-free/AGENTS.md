@@ -32,7 +32,7 @@ try {
 使い方: agent-skill-chain <command> [arguments]
 
 標準（利用中のAI・既存の開発環境）:
-  start <project-directory>                作業場所と必要な責務を確認（非Gitも可・Agent起動なし）
+  start <project-directory> [--path <changed-path>]... 作業場所と必要な責務を確認（非Gitも可・Agent起動なし）
   worktree-verify <worktree> <base> <owner-contract.json>
       現在のHost権限で既存ビルド・テストを実行し対象commitへ対応付け
 
@@ -66,8 +66,9 @@ try {
 owner入力は作業repoの外に置きます。通常実行は専用worktreeを使用します。
 必要環境・入力例・承認・検証資産の準備: ${new URL('../v05/USAGE.md',import.meta.url).pathname}
 Alpha版です。明示Host経路はOS名で拒否しません。標準経路は現在のHost権限を使います。snapshot経路は実行時の隔離検査が必須です。公開・merge・releaseの承認は別途必要です。`);
-  } else if(command==='start'&&args.length===1){
-    console.log(JSON.stringify(startWorktree(args[0]),null,2));
+  } else if(command==='start'&&args.length>=1){
+    const paths=[];for(let i=1;i<args.length;i+=2){if(args[i]!=='--path'||!args[i+1])throw Error('Expected --path <changed-path>');paths.push(args[i+1]);}
+    console.log(JSON.stringify(startWorktree(args[0],paths),null,2));
   } else if(command==='worktree-verify'&&args.length===3){
     const result=verifyWorktree(...args);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
   } else if(command==='probe-native'&&args.length===1){

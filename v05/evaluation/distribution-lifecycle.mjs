@@ -60,11 +60,13 @@ if(process.argv[2]!=='--inside'){
  fs.mkdirSync(work+'/docs',{recursive:true});fs.writeFileSync(work+'/docs/owner.md','owner specification');
  fs.mkdirSync(work+'/.agent-skill-chain/project',{recursive:true});fs.writeFileSync(work+'/.agent-skill-chain/project/rules.md','owner rules');
  fs.writeFileSync(work+'/app.txt','uncommitted owner code');
- const ownerFiles=['app.txt','docs/owner.md','.agent-skill-chain/project/rules.md'];
+ fs.writeFileSync(work+'/.agent-skill-chain/project/context.json',JSON.stringify({schema:'asc-project-context/v1',rules:[{path:'.agent-skill-chain/project/rules.md',appliesTo:['src/ui']},{path:'docs/owner.md',appliesTo:['src/api']}]}));
+ const ownerFiles=['.agent-skill-chain/project/context.json','app.txt','docs/owner.md','.agent-skill-chain/project/rules.md'];
  const ownerBefore=ownerFiles.map(p=>sha(fs.readFileSync(path.join(work,p))));
  const indexPath=git('rev-parse','--git-path','worktrees/project/index').trim();
  const indexBefore=sha(fs.readFileSync(path.resolve(repo,indexPath)));
  const preserved=()=>{assert.deepEqual(ownerFiles.map(p=>sha(fs.readFileSync(path.join(work,p)))),ownerBefore);assert.equal(sha(fs.readFileSync(path.resolve(repo,indexPath))),indexBefore);};
+ const beforeStart=performance.now();for(let i=0;i<5;i++)call('start',work);const baselineStartMs=(performance.now()-beforeStart)/5;
  checks.push('baseline tarball installed and legacy assets deployed');
  fs.writeFileSync('/work/broken.tgz','not a tarball');
  const broken=attempt([node,npm,'install','--prefix',tools,'--offline','--ignore-scripts','--no-audit','--no-fund','/work/broken.tgz']);assert.notEqual(broken.status,0);assert.equal(run([node,cli,'--version']).trim(),oldVersion);preserved();
@@ -75,7 +77,11 @@ if(process.argv[2]!=='--inside'){
  const launch=(...args)=>run([node,launcher,...args],'/work',{ASC_CLI:cli});
  assert.equal(launch('--version').trim(),candidateVersion);
  assert.equal(call('project-assets',work).changes.length,0);
+ const afterStart=performance.now();let selected;for(let i=0;i<5;i++)selected=call('start',work,'--path','src/ui/view.ts');const candidateStartMs=(performance.now()-afterStart)/5;
+ assert.deepEqual(selected.context.references.map(r=>r.path),['.agent-skill-chain/project/rules.md']);assert(!JSON.stringify(selected.context).includes('owner rules'));
+ const beforeDigest=selected.context.digest;fs.writeFileSync(work+'/.agent-skill-chain/project/rules.md','changed rule');assert.notEqual(call('start',work,'--path','src/ui/view.ts').context.digest,beforeDigest);fs.writeFileSync(work+'/.agent-skill-chain/project/rules.md','owner rules');preserved();
  checks.push('candidate update, legacy asset migration and idempotent reapply');
+ checks.push('installed CLI selects owner rules, omits bodies, detects changes and preserves settings');
  const skill=work+'/.agent-skill-chain/skills/asc/SKILL.md',original=fs.readFileSync(skill);
  fs.appendFileSync(skill,'\nowner customization\n');const conflict=attempt([node,cli,'project-assets',work,'--apply']);assert.equal(conflict.status,2);assert(fs.readFileSync(skill,'utf8').endsWith('owner customization\n'));preserved();fs.writeFileSync(skill,original);
  checks.push('owner-edited shared Skill blocks overwrite');
@@ -93,9 +99,9 @@ if(process.argv[2]!=='--inside'){
  const second='/work/second environment';fs.mkdirSync(second);fs.cpSync(work+'/.agent-skill-chain',second+'/.agent-skill-chain',{recursive:true});
  const otherTools='/work/other tools';install('/input/candidate.tgz',otherTools);
  const otherCLI=otherTools+'/node_modules/agent-skill-chain/bin/asc-v05.mjs';
- const result=JSON.parse(run([node,second+'/.agent-skill-chain/bin/asc.mjs','start',second],'/work',{ASC_CLI:otherCLI}));assert.equal(result.gitManaged,false);assert.deepEqual(fs.readFileSync(second+'/.agent-skill-chain/distribution.json'),record);
+ const result=JSON.parse(run([node,second+'/.agent-skill-chain/bin/asc.mjs','start',second,'--path','src/ui/view.ts'],'/work',{ASC_CLI:otherCLI}));assert.equal(result.gitManaged,false);assert.deepEqual(fs.readFileSync(second+'/.agent-skill-chain/distribution.json'),record);
  checks.push('second non-Git environment uses identical shared assets with a different installation prefix');
- console.log(JSON.stringify({oldVersion,candidateVersion,checks,ownerFilesPreserved:true,indexPreserved:true,externalModelCalls:0,
+ console.log(JSON.stringify({oldVersion,candidateVersion,checks,startMeasurement:{samples:5,baselineStartMs,candidateStartMs,contextOutputBytes:Buffer.byteLength(JSON.stringify(selected.context)),modelTokens:'not measured; no model invocation'},ownerFilesPreserved:true,indexPreserved:true,externalModelCalls:0,
   deletionScope:'npm runtime uninstall; shared project assets intentionally retained, not an automatic project-asset remover',
   failureScope:'invalid archive before update; not disk-full, SIGKILL or power-loss atomicity'}));
 }

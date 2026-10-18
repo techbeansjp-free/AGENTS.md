@@ -45,7 +45,17 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const ordinary=path.join(root,'ordinary');fs.mkdirSync(ordinary);
  const ordinaryStart=JSON.parse(execFileSync(process.execPath,[cli,'start',ordinary],{encoding:'utf8'}));
  assert.equal(ordinaryStart.gitManaged,false);assert.equal(ordinaryStart.head,null);assert.equal(ordinaryStart.deliveryAuthorized,false);
+ // Consumer-owned configuration is discovered by the installed artifact, not source imports.
+ fs.mkdirSync(path.join(ordinary,'.agent-skill-chain/project'),{recursive:true});
+ const ownerConfig=JSON.stringify({schema:'asc-project-context/v1',rules:[{path:'.agent-skill-chain/project/rules.md',appliesTo:['src/ui']},{path:'missing-api-rule.md',appliesTo:['src/api']}]});
+ fs.writeFileSync(path.join(ordinary,'.agent-skill-chain/project/context.json'),ownerConfig);
+ fs.writeFileSync(path.join(ordinary,'.agent-skill-chain/project/rules.md'),'Synthetic owner UI contract');
+ const selected=JSON.parse(execFileSync(process.execPath,[cli,'start',ordinary,'--path','src/ui/view.ts'],{cwd:root,encoding:'utf8'}));
+ assert.equal(selected.context.references.length,1);assert(!JSON.stringify(selected).includes('Synthetic owner UI contract'));
+ const missingRule=spawnSync(process.execPath,[cli,'start',ordinary,'--path','src/api/server.ts'],{cwd:root,encoding:'utf8'});assert.equal(missingRule.status,1);
+ fs.writeFileSync(path.join(ordinary,'missing-api-rule.md'),'Synthetic API contract');
  const ordinaryAssets=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',ordinary,'--apply','--register-skill'],{encoding:'utf8'}));
+ assert.equal(fs.readFileSync(path.join(ordinary,'.agent-skill-chain/project/context.json'),'utf8'),ownerConfig);
  assert.equal(ordinaryAssets.applied,true);assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
  const inventory=JSON.parse(fs.readFileSync(path.join(ordinary,'.agent-skill-chain/distribution.json'))).files;
  for(const name of Object.keys(inventory)){
