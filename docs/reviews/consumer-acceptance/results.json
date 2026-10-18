@@ -1,0 +1,91 @@
+{
+  "results": [
+    {
+      "id": "C01 offline install preserves existing project manifests",
+      "status": "passed",
+      "seconds": 0.6377067240000001
+    },
+    {
+      "id": "C02 preview is read-only and non-Git deployment never initializes Git",
+      "status": "passed",
+      "seconds": 0.34753494999999995
+    },
+    {
+      "id": "C03 shared assets bind every file hash and contain no installer path",
+      "status": "passed",
+      "seconds": 0.006542123999999831
+    },
+    {
+      "id": "C04 remove bootstrap dependencies; bundled runtime remains usable",
+      "status": "passed",
+      "seconds": 0.3587391850000001
+    },
+    {
+      "id": "C05 scoped and nested project rules are selected without exposing contents",
+      "status": "passed",
+      "seconds": 0.11045458300000019
+    },
+    {
+      "id": "C06 clone and two worktrees run bundled version without external installation",
+      "status": "passed",
+      "seconds": 0.689288352
+    },
+    {
+      "id": "C07 update one worktree without changing sibling or owner settings",
+      "status": "passed",
+      "seconds": 0.8372046059999998
+    },
+    {
+      "id": "C08 downgrade and repeated deployment are idempotent",
+      "status": "passed",
+      "seconds": 0.7588440030000002
+    },
+    {
+      "id": "C09 local asset conflict blocks whole update and retry succeeds after resolution",
+      "status": "passed",
+      "seconds": 0.6549025870000005
+    },
+    {
+      "id": "C10 non-Git umbrella selects sibling repositories independently",
+      "status": "passed",
+      "seconds": 0.29678614500000006
+    },
+    {
+      "id": "C11 build/test uses existing workspace dependency links and retains ignored output",
+      "status": "passed",
+      "seconds": 0.24543015600000034
+    },
+    {
+      "id": "C12 failed verification can be retried without poisoning sibling worktree",
+      "status": "passed",
+      "seconds": 0.4812323820000001
+    },
+    {
+      "id": "C13 scope violation refuses verification before running owner command",
+      "status": "passed",
+      "seconds": 0.1382585710000003
+    },
+    {
+      "id": "C14 test modifying tracked source cannot produce valid verification",
+      "status": "passed",
+      "seconds": 0.3369998459999997
+    },
+    {
+      "id": "C15 missing selected project rule stops rather than silently omitting it",
+      "status": "passed",
+      "seconds": 0.28754688799999983
+    },
+    {
+      "id": "C16 main checkout refusal does not block a subsequent valid worktree",
+      "status": "passed",
+      "seconds": 0.2684273800000001
+    },
+    {
+      "id": "C17 manifest-scoped manual removal preserves all user-owned files",
+      "status": "passed",
+      "seconds": 0.011036560999999893
+    }
+  ],
+  "aiCalls": 0,
+  "modelQualityEvaluated": false
+}
