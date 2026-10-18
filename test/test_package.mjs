@@ -113,6 +113,12 @@ assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
  const assetApply=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--apply'],{encoding:'utf8'}));assert.equal(assetApply.applied,true);
  assert.equal(fs.readFileSync(path.join(assetWork,'.agent-skill-chain/templates/specs/01_要求定義.md'),'utf8'),fs.readFileSync(path.join(templates,'01_要求定義.md'),'utf8'));
  const projectSkill=fs.readFileSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8');assert(!projectSkill.includes(cli));assert(projectSkill.includes('../../bin/asc.mjs'));
+ const sharedSkillRoot=path.join(assetWork,'.agent-skill-chain/skills/asc');
+ for(const name of ['review.md','coordination.md','post-merge.md','controller.md']){
+  const file=path.join(sharedSkillRoot,'references',name),content=fs.readFileSync(file,'utf8');
+  assert.equal(content,fs.readFileSync(path.join(packageRoot,'skills/asc/references',name),'utf8'));
+  for(const match of content.matchAll(/\]\(([^)]+)\)/g))assert(fs.existsSync(path.resolve(path.dirname(file),match[1])),match[1]);
+ }
  const registration=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--register-skill','--apply'],{encoding:'utf8'}));assert.equal(registration.applied,true);
  const registeredEntry=path.join(assetWork,'.agents/skills/asc/SKILL.md');const registeredText=fs.readFileSync(registeredEntry,'utf8');
  const projectReference=/\]\(([^)]+)\)/.exec(registeredText)[1];assert.equal(fs.realpathSync(path.resolve(path.dirname(registeredEntry),projectReference)),fs.realpathSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md')));

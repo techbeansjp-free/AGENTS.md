@@ -109,5 +109,9 @@
   "v05/templates/specs/details/16_参照資料/00_官公庁一次資料台帳.md",
   "v05/templates/specs/details/17_デザイン/00_デザイントークン.md",
   "v05/templates/specs/details/18_レイアウト/00_レイアウトトークン.md",
-  "src/runtime-files.json"
+  "src/runtime-files.json",
+  "skills/asc/references/post-merge.md",
+  "skills/asc/references/review.md",
+  "skills/asc/references/coordination.md",
+  "skills/asc/references/controller.md"
 ]
