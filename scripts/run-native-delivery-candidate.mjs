@@ -5,8 +5,7 @@ import {configuration} from '../src/restricted-agent.mjs';
 import {finishNativeDelivery} from './native-delivery.mjs';
 import {extendFixturePermissions} from './complex-permissions.mjs';
 const [tarball, codex, delivery] = process.argv.slice(2);
-if(delivery!==undefined&&delivery!=='--deliver')throw Error('Only --deliver is supported');
-if (!tarball || !codex || !path.isAbsolute(tarball) || !path.isAbsolute(codex)) throw Error('Usage: node scripts/run-native-delivery-candidate.mjs <absolute-tarball> <absolute-codex>');
+if (process.argv.length>5 || (delivery!==undefined&&delivery!=='--deliver') || !tarball || !codex || !path.isAbsolute(tarball) || !path.isAbsolute(codex)) throw Error('Usage: node scripts/run-native-delivery-candidate.mjs <absolute-tarball> <absolute-codex> [--deliver]');
 const root=fs.mkdtempSync('/var/tmp/asc-native-delivery-'),origin=path.join(root,'origin'),runtime=path.join(root,'runtime'),bootstrap=path.join(root,'bootstrap'),pkg=path.join(root,'distribution');
 for(const p of [origin,runtime,bootstrap,pkg])fs.mkdirSync(p);
 execFileSync('tar',['-xzf',tarball,'-C',pkg]);
@@ -29,4 +28,4 @@ fs.writeFileSync(path.join(root,'setup.json'),JSON.stringify({root,origin,worktr
 fs.writeFileSync(path.join(root,'git-controls.json'),JSON.stringify(gitControlState(origin)));
 const out=fs.openSync(path.join(root,'events.jsonl'),'w'),err=fs.openSync(path.join(root,'stderr'),'w'),started=performance.now();
 const p=spawn(c.binary,['exec','--ignore-user-config','--ignore-rules','--skip-git-repo-check','--json','-m','gpt-5.6-sol','-c','model_reasoning_effort="medium"','-C',worktree,...c.options,'-'],{env:c.env,stdio:['pipe',out,err]});p.stdin.end(prompt);
-p.on('close',(status,signal)=>{fs.closeSync(out);fs.closeSync(err);fs.writeFileSync(path.join(root,'result.json'),JSON.stringify({status,signal,seconds:(performance.now()-started)/1000}));console.log(root);if(delivery==='--deliver')finishNativeDelivery(root).catch(error=>{fs.writeFileSync(path.join(root,'delivery-error.json'),JSON.stringify({error:error.message}));console.error(error.message);process.exitCode=1;});});console.log(JSON.stringify({root,pid:p.pid}));
+p.on('close',(status,signal)=>{if(status!==0||signal)process.exitCode=status||1;fs.closeSync(out);fs.closeSync(err);fs.writeFileSync(path.join(root,'result.json'),JSON.stringify({status,signal,seconds:(performance.now()-started)/1000}));console.log(root);if(delivery==='--deliver')finishNativeDelivery(root).catch(error=>{fs.writeFileSync(path.join(root,'delivery-error.json'),JSON.stringify({error:error.message}));console.error(error.message);process.exitCode=1;});});console.log(JSON.stringify({root,pid:p.pid}));

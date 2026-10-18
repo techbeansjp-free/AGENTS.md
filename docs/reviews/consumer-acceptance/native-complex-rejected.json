@@ -1,0 +1,15 @@
+{
+  "schema": "asc-native-complex-observation/v1",
+  "status": "not-accepted",
+  "seconds": 238.53785991200002,
+  "agentExit": 0,
+  "scope": "original reservation and billing; no revision or restart phase",
+  "observedThreads": 4,
+  "observedProcessedTokens": null,
+  "missingness": "forked rollout includes inherited session identity and usage; aggregation rejected rather than double counted",
+  "independentReview": false,
+  "reason": "reviewer forked_from_id is the implementation parent",
+  "delivery": false,
+  "gitControlBaseline": false,
+  "performanceImprovementProven": false
+}
