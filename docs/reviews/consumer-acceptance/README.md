@@ -20,10 +20,10 @@
 | 削除 | manifest列挙の配布資産のみ撤去、利用者成果/規約を保持 | C17 成功。hash不一致の編集済み配布資料を保存。文書に従う手動撤去でありuninstall CLIの実装ではない |
 | 意味的実装・独立レビュー | 元要求から実装し、不足シナリオをReviewerが発見・是正 | J01–J06。親Hostが合成業務機能を実装、別Contextが未検査のemail反例を発見・是正。自動モデル起動のE2Eではない |
 | PR・CI・後始末 | 正しいbaseへ提出、CI遅延/失敗を扱い、merge後に利用者資産を保護 | 外部提出は別のHost経路で合成PR #27へ到達、対象HEADのCI成功。merge後の整理は未実施（merge未承認） |
-| 複雑Goal | 契約変更・競合・中断後に必要な範囲だけ再計画 | 本CLI試験では未実施 |
+| 複数作業の調整 | 契約変更・依存・競合から復旧し、独立Issueを維持 | C20–C22成功。Hostの判断を固定した試験であり、AIの自律分解・再計画品質は未証明 |
 | 別OS/Host | Mac/Windows、Codex/Claude Codeの実利用 | 本記録はLinux CLIのみ。他OSのCIをこの試験の実施とみなさない |
 
-次は、更新中断/復旧、実プロジェクト相当の依存・ビルド、標準current-hostでの実装→独立レビュー→是正、複数Issue/外部PR・CIの順に、不足領域のケースを追加する。snapshot専用の状態管理を標準current-hostの実装済み能力と混同しない。過去の受入記録は対象commitと差分の適用範囲を照合してから再利用する。
+上表は実行済みシナリオと適用限界を示す。snapshot専用の状態管理を標準current-hostの実装済み能力と混同しない。過去の受入記録は対象commitと差分の適用範囲を照合してから再利用する。
 
 ## 再現方法と隔離境界
 
@@ -116,3 +116,29 @@ server/page/requirementsは隔離ブラウザ試験の入力とbyte一致を確�
 提出時にはHTTPS資格情報未設定とOAuth workflow scope不足が発生した。本体PRでも使用している既存のSSH認証で同じ承認済み合成repoへ提出した。Token scope・Host設定・CI検査の緩和は行っていない。
 
 公開差分は合成アプリ3ファイル、API試験1ファイル、PR workflow1ファイル、既存合成greeting修正2ファイルのみ。利用者コード・個人パス・認証情報・ASC導入資産・生ログを含めない。merge/releaseは実施していない。全開発wall timeと全Agent tokensは欠測であり、CI時間を開発総コストに代用しない。
+
+## 複数worktree・契約変更・競合の復旧
+
+`coordination-results.json` / `coordination-provenance.json` は公開v0.5.8からの利用者シナリオ22件すべてが成功した追加実行。C01–C19を維持し、以下を同じnetwork隔離環境と配布候補で追加した。
+
+- C20: API変更をproducer、呼出側をconsumer、無関係な作業を独立Issueのworktreeへ分離。依存未統合時は実コマンドのAssertionErrorで拒否し、Gitで統合後に同じコマンドが成功。他worktreeのHEADは変わらない。
+- C21: 受入済み候補の要求とAPIを変更すると、旧HEAD/contract hashとは異なり、新しい検証が失敗する。影響するconsumerのみ修正し、新しいCLIプロセスでGit/owner入力から再検証して成功。旧結果を自動失効する機構の証明ではなく、Hostが対象と契約を照合して再検証する経路。
+- C22: 同一ファイルへの競合commitで実際にGit unmerged状態を発生させ、CLIが検証を拒否することを確認。同時に独立Issueの検証は成功。cherry-pickをabortすると元HEAD・内容へ戻り、その候補を再実装せず検証できる。
+
+C20–C22は計約2.40秒の単発観測。意味的判断は事前定義したowner選択であり、runnerはAIを起動しない。共有領域を操作しないことと試験の偽陽性を別Contextでレビュー済み。実アプリをAIが自律分解する能力、未知のサービス間依存の発見、実モデルのContext圧縮からの復旧、並列プロセスの全競合を保証したとは扱わない。
+
+## 目標に対する証拠の対応
+
+| 今回の調査目標 | 証拠と判定 |
+|---|---|
+| 現行契約から利用者シナリオを定義 | 本表、C01–C22、合成業務要件とJ01–J06。標準current-hostと任意snapshotを区別 |
+| 実配布物、隔離疑似利用者環境 | 公開tgz/SHAと候補pack identity、network namespace・空HOME・開発checkout非mount |
+| 導入・起動・Git/非Git・複数repo/worktree | C01–C06/C10/C16。main/developと作業先の区別を確認 |
+| 固有設定保護、更新・版指定・削除・復旧 | C05/C07–C09/C15/C17/C18。削除は資料に従う手動撤去で、自動CLIとは主張しない |
+| 実装・ビルド・検証・独立レビュー | C11/C19、合成業務実装、別Context反例発見、J01–J06、意図的candidate退行の拒否 |
+| PR到達・失敗時再開 | 合成PR27の同一対象HEAD/CI成功、初回CI失敗保持。C12/C18/C20–C22 |
+| 再現した不具合だけの是正 | 今回のアプリemailと既存合成greetingを是正。ASC runtimeの新規欠陥とは扱わない。配布Skillと更新復旧案内を改善 |
+| 回帰・配布整合性・コスト | 22シナリオ、package7件、Lint、Skill validator。原本/source/script hashを保存。決定論的処理のAgent起動0、総開発tokens/時間は欠測 |
+| レビュー可能なPR、未承認操作を行わない | 本体PR1606と合成Draft PR27。merge/release・実利用者資産の変更なし |
+
+残存課題は製品全体の追加保証であり、成功したシナリオへ含めない：実モデルによる複雑Goalの分解/再計画、全体コストの比較、別OS/Host実走、実認証、merge後の整理。特にmerge後整理は今回は未承認なので実行しない。今回の調査結果は既存不具合が皆無という宣言でも正式release承認でもない。

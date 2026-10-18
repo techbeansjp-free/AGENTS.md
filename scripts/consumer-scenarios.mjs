@@ -160,6 +160,43 @@ if(fs.existsSync('/work/tooling/pnpm-10.0.0.tgz'))check('C19 real pnpm workspace
  assert.equal(result.deliveryAuthorized,false);assert(fs.existsSync(path.join(target,'packages/app/dist/index.js')));
 });
 else{results.push({id:'C19 real pnpm workspace',status:'not-run',reason:'Optional fixed tooling tarballs not supplied'});fs.writeFileSync('results.json',JSON.stringify({results,aiCalls:0,modelQualityEvaluated:false},null,2));}
+// Current-Host coordination: ordinary Git integrates code; ASC observes/verifies.
+// Scripted owner decisions below are not an automatic AI planning benchmark.
+const coordinated='/work/coordinated',producer='/work/producer',consumer='/work/consumer',independent='/work/independent';let coordinationBase,producerHead,independentHead,accepted;
+const owner='/work/coordination-owner.json',independentOwner='/work/independent-owner.json';
+const verifyConsumer=()=>invoke(launcher(consumer),'worktree-verify',consumer,coordinationBase,owner);
+const rejectedConsumer=()=>{const r=spawnSync(process.execPath,[launcher(consumer),'worktree-verify',consumer,coordinationBase,owner],{encoding:'utf8'});assert.equal(r.status,2,r.stderr);const v=JSON.parse(r.stdout);assert.equal(v.passed,false);assert.equal(v.results[0].exit,1);return v;};
+check('C20 dependent work fails until integrated while independent work remains usable',()=>{
+ fs.cpSync(project,coordinated,{recursive:true});install(coordinated,versionB);invoke(cli(coordinated),'project-assets',coordinated,'--apply');
+ write(path.join(coordinated,'.gitignore'),'.agent-skill-chain/node_modules/\n');write(path.join(coordinated,'api.cjs'),"module.exports={greeting:'Hello'};\n");write(path.join(coordinated,'REQUIREMENTS.md'),'Initial greeting contract.\n');
+ git(coordinated,'init','-q','-b','develop');git(coordinated,'config','user.name','Synthetic');git(coordinated,'config','user.email','synthetic@example.invalid');git(coordinated,'add','.');git(coordinated,'commit','-qm','coordination base');coordinationBase=git(coordinated,'rev-parse','HEAD');
+ for(const [branch,dir] of [['producer',producer],['consumer',consumer],['independent',independent]])git(coordinated,'worktree','add','-b',branch,dir);
+ write(path.join(producer,'api.cjs'),"module.exports={label:'Hello'};\n");write(path.join(producer,'REQUIREMENTS.md'),'Response uses label; consumer displays Hello.\n');git(producer,'add','api.cjs','REQUIREMENTS.md');git(producer,'commit','-qm','owner-selected API contract');producerHead=git(producer,'rev-parse','HEAD');
+ write(path.join(consumer,'consumer.cjs'),"require('assert').equal(require('./api.cjs').label,'Hello');\n");git(consumer,'add','consumer.cjs');git(consumer,'commit','-qm','dependent consumer');
+ write(owner,JSON.stringify({intent:'Display label from approved API contract',allowedPaths:['api.cjs','REQUIREMENTS.md','consumer.cjs'],commands:[[process.execPath,'consumer.cjs']]}));
+ const failed=rejectedConsumer();assert.match(failed.results[0].stderr,/AssertionError/);
+ write(path.join(independent,'independent.cjs'),"require('assert').equal(2+2,4);\n");git(independent,'add','independent.cjs');git(independent,'commit','-qm','unrelated issue');independentHead=git(independent,'rev-parse','HEAD');
+ write(independentOwner,JSON.stringify({intent:'Independent calculation',allowedPaths:['independent.cjs'],commands:[[process.execPath,'independent.cjs']]}));assert.equal(invoke(launcher(independent),'worktree-verify',independent,coordinationBase,independentOwner).passed,true);
+ git(consumer,'cherry-pick',producerHead);accepted=verifyConsumer();assert.equal(accepted.passed,true);assert.notEqual(failed.head,accepted.head);assert.equal(git(producer,'rev-parse','HEAD'),producerHead);assert.equal(git(independent,'rev-parse','HEAD'),independentHead);
+ write('/work/coordination-evidence.json',JSON.stringify({initialFailure:failed,integrated:accepted,independentHead},null,2));
+});
+check('C21 changed requirements invalidate prior head and only affected consumer is repaired',()=>{
+ const before=accepted;write(path.join(consumer,'REQUIREMENTS.md'),'Revised owner requirement: label is Hello!\n');write(path.join(consumer,'api.cjs'),"module.exports={label:'Hello!'};\n");git(consumer,'add','api.cjs','REQUIREMENTS.md');git(consumer,'commit','-qm','owner revises contract');
+ const contract=JSON.parse(fs.readFileSync(owner));contract.intent='Display revised label Hello!';write(owner,JSON.stringify(contract));const failed=rejectedConsumer();assert.notEqual(failed.head,before.head);assert.notEqual(failed.contractSha256,before.contractSha256);
+ write(path.join(consumer,'consumer.cjs'),"require('assert').equal(require('./api.cjs').label,'Hello!');\n");git(consumer,'add','consumer.cjs');git(consumer,'commit','-qm','repair affected consumer');
+ // A new CLI process reconstructs target/contract from disk; no old result is input.
+ assert.equal(invoke(launcher(consumer),'start',consumer,'--path','consumer.cjs').head,git(consumer,'rev-parse','HEAD'));accepted=verifyConsumer();assert.equal(accepted.passed,true);assert.equal(git(independent,'rev-parse','HEAD'),independentHead);assert.equal(git(producer,'rev-parse','HEAD'),producerHead);
+ const evidence=JSON.parse(fs.readFileSync('/work/coordination-evidence.json'));Object.assign(evidence,{changedRequirementFailure:failed,repaired:accepted});write('/work/coordination-evidence.json',JSON.stringify(evidence,null,2));
+});
+check('C22 integration conflict preserves accepted work and does not globally block other issues',()=>{
+ const competing='/work/competing';git(coordinated,'worktree','add','-b','competing',competing,coordinationBase);write(path.join(competing,'api.cjs'),"module.exports={label:'Alternative'};\n");git(competing,'add','api.cjs');git(competing,'commit','-qm','competing contract');
+ const oldHead=git(consumer,'rev-parse','HEAD'),oldBytes=fs.readFileSync(path.join(consumer,'api.cjs'));
+ const conflict=spawnSync('git',['cherry-pick',git(competing,'rev-parse','HEAD')],{cwd:consumer,encoding:'utf8'});assert.equal(conflict.status,1);assert(git(consumer,'ls-files','--unmerged'));
+ const refusal=spawnSync(process.execPath,[launcher(consumer),'worktree-verify',consumer,coordinationBase,owner],{encoding:'utf8'});assert.notEqual(refusal.status,0);assert.match(refusal.stderr,/Commit intended changes/);
+ assert.equal(invoke(launcher(independent),'worktree-verify',independent,coordinationBase,independentOwner).passed,true);
+ git(consumer,'cherry-pick','--abort');assert.equal(git(consumer,'rev-parse','HEAD'),oldHead);assert.deepEqual(fs.readFileSync(path.join(consumer,'api.cjs')),oldBytes);const resumed=verifyConsumer();assert.equal(resumed.passed,true);assert.equal(resumed.head,accepted.head);
+ const evidence=JSON.parse(fs.readFileSync('/work/coordination-evidence.json'));Object.assign(evidence,{conflictDetected:true,conflictingVerificationRefused:true,afterAbort:resumed});write('/work/coordination-evidence.json',JSON.stringify(evidence,null,2));
+});
 check('C17 manifest-scoped manual removal preserves all user-owned files',()=>{
  const manifest=JSON.parse(fs.readFileSync(path.join(project,'.agent-skill-chain/distribution.json')));
  const edited='.agent-skill-chain/v05/USAGE.md';fs.appendFileSync(path.join(project,edited),'\nuser-owned amendment\n');const retained=[];
