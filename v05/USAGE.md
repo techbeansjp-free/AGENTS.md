@@ -43,11 +43,17 @@ CI観測は既定では時間上限を持たず、対象PR・commitに拘束さ�
 
 `agent-skill-chain --help`（別名`asc-v05 --help`）で開始・再開・移行の入口と、この手順書の配布先を確認できます。引数なしも案内のみを表示し、Agent起動やGit変更は行いません。
 
+## マージ後の後始末
+
+配布Skillは、許可されたPRのmerge確認後に、現在のHostが実際のマージ先（`main`、`develop`等）を確認し、対象remoteの取得、cleanなマージ先local branchのfast-forward同期、完了worktreeの安全な整理まで行うよう指示する。PR作成だけの依頼からmergeを推定しない。CLIによる自動cleanupではない。
+
+未保存変更・未追跡/ignoredファイル・未push commit・入れ子repo・他の作業やプロセスがあれば保持する。`git status`がcleanなだけで削除可能と判断しない。squash mergeでもPRのHEADと作業先の対応を確認し、強制削除やresetは行わない。複数repoではそれぞれのPRのマージ先に従い、同期・削除できた対象と保留理由を報告する。詳細は[配布Skill](../skills/asc/SKILL.md#マージ後の同期と整理)を参照する。
+
 ## 作業場所
 
 標準の`start`と`project-assets`がlinked worktreeを要求するのは、対象がGit管理済みrepoの場合に限る。Git未管理のフォルダーにはそのまま使用できる。snapshot入口の`run`/`run-goal`は引き続きGit管理された作業場所を必要とする。以下はGitの作業場所を作成・使用する場合の説明である。新規作成時の標準命名はv0.4と同じく、directoryを`.worktrees/<YYYYMMDD_HHMMSS>-<Issue番号>-<slug>`、作業branchを`<type>/<Issue番号>-<slug>`とする。時刻は作成環境のlocal time、slugは小文字英数字とハイフン、標準typeは`feature`・`fix`・`refactor`・`test`・`docs`・`chore`。Issue番号とslugはdirectoryとbranchで揃える。プロジェクトが明示した命名規約を優先する。同じIssueを並列分担する場合はslugへ担当名を含める（例: `account-api` / `account-ui`）。
 
-例: `git worktree add -b fix/123-login-message .worktrees/20261015_143000-123-login-message <base>`。専用作業先の絶対pathを`repo`に指定する。名前が衝突したら別slugを選び、既存branchの強制reset・worktree上書きを行わない。必要に応じてownerがmerge/rebaseでbase変更を取り込み、更新した要求で検証・reviewを再実行する。ASCは自動fetch・stash・reset・base更新を行わない。
+例: `git worktree add -b fix/123-login-message .worktrees/20261015_143000-123-login-message <base>`。専用作業先の絶対pathを`repo`に指定する。名前が衝突したら別slugを選び、既存branchの強制reset・worktree上書きを行わない。必要に応じてownerがmerge/rebaseでbase変更を取り込み、更新した要求で検証・reviewを再実行する。実装中のCLIは自動fetch・stash・reset・base更新を行わない。マージ後のHostによる同期・整理は下記の契約に従う。
 
 命名は作成時の標準であり、安全性の証拠ではない。既存worktreeの改名や時刻の鮮度を再開条件にしない。`asc-v05 worktree-create <root> <issue> <type> <slug> <base>`で標準名の作業先を作成できる。checkout filterやhookを実行せず、既存branch/pathは上書きしない。途中失敗した作業先は調査用に保持する。独自規約の作業先はownerが作成して`run`へ渡せる。実行時は名前ではなくGitの実体、変更範囲、ContractとEvidenceを検証する。独自規約や過去の名前だけを理由に正常な作業を一律拒否しない。
 
