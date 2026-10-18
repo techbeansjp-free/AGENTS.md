@@ -143,3 +143,9 @@ PR #1606の再レビューで、集計器がHostのGit参照環境を引き継�
 `scripts/native-host-usage.mjs` は明示指定された合成rolloutだけを集計する評価用関数。最終累積値を一度だけ採用し、親子関係がない記録や安全な整数範囲外の合計は拒否する。usageが欠けるthreadはnullとして残す。呼出し一覧の完全性と終了確認は別に必要で、この関数だけで未観測の子を検出できるとは主張しない。親子・孫、cache、欠測、混入、overflowを4テストで確認した。
 
 これは計測経路の確認であり、自律開発の完走や性能改善の証明ではない。配布物と実worktreeを使った小規模pilotでは、Agentが実装と実テストを行ったが、合成Host境界でGit管理領域がread-onlyとなりcommitが拒否された。加えてstartの内部Git起動がEPERMとなった。境界を外して成功扱いにせず、試験設定と製品の責務を切り分ける。これらを解消しない限り、このpilotを正常完走のEvidenceには数えない。
+
+### pilotの停止原因と修正
+
+合成repoのGit管理領域を明示的な書込み先として渡すとcommit停止は解消した。実プロジェクトやネットワークへの権限は増やしていない。別のEPERMは、Node 24.19.0の`spawnSync`で未使用stdinをpipeにした場合に再現した。同じCodex境界でstdinだけを`ignore`にすると、stdout/stderrを取得したまま正常終了した。標準`start`/`worktree-verify`の4呼出しをこの非対話設定へ変更し、エラーの無視や隔離解除はしていない。既存worktreeテスト10件と独立レビューに合格。
+
+`native-host-pilot-results.json`に失敗した2試行も含めて記録した。修正済みtarballの3試行目は、実worktreeのstart、Agent自身の実装、テスト、別Contextレビュー、commitまで60.84秒で完走し、親子合計275,971 processed tokensだった。試験側が実装を修正した回数は0。同じ隔離条件で配布物のworktree-verifyも成功した（この最終確認は試験側の実行として区別）。PR/CIはこのpilotでは実行しておらず、5組の性能比較や複雑Goalの受入を代替しない。比較条件が変わった診断試行から速度改善率を算出しない。
