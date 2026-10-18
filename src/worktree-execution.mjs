@@ -7,7 +7,8 @@ import {performance} from 'node:perf_hooks';
 import {createHash} from 'node:crypto';
 import {projectLocation} from './project-location.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
-const git=(repo,...args)=>execFileSync('git',['-c','core.hooksPath=/dev/null',...args],{cwd:repo,encoding:'utf8'}).trim();
+const gitMaxBuffer=16*1024*1024;
+const git=(repo,...args)=>execFileSync('git',['-c','core.hooksPath=/dev/null',...args],{cwd:repo,encoding:'utf8',maxBuffer:gitMaxBuffer}).trim();
 export function startWorktree(directory,paths=[]){
  const {repo,gitManaged}=projectLocation(directory);
  const context=projectContext(repo,paths);
@@ -27,12 +28,12 @@ export function verifyWorktree(directory,base,ownerFile){
  if(typeof contract.intent!=='string'||!contract.intent.trim()||!Array.isArray(contract.allowedPaths)||!contract.allowedPaths.length||contract.allowedPaths.some(p=>typeof p!=='string'||!p||path.isAbsolute(p)||p.split('/').some(s=>!s||s==='.'||s==='..'))||!Array.isArray(contract.commands)||!contract.commands.length||contract.commands.some(a=>!Array.isArray(a)||!a.length||!a[0]||a.some(v=>typeof v!=='string'||v.includes('\0'))))throw Error('Expected intent, exact allowedPaths and command argv arrays');
  const baseHead=git(repo,'rev-parse','--verify','--end-of-options',base+'^{commit}');git(repo,'merge-base','--is-ancestor',baseHead,start.head);
  const state=()=>{
-  const entries=execFileSync('git',['ls-files','-v','-z'],{cwd:repo}).toString().split('\0').filter(Boolean);
+  const entries=execFileSync('git',['ls-files','-v','-z'],{cwd:repo,maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
   if(entries.some(e=>e[0]==='S'||e[0]===e[0].toLowerCase()))throw Error('Hidden index flags prevent verification of tracked source');
   return git(repo,'status','--porcelain=v1','--untracked-files=all');
  };
  if(state())throw Error('Commit intended changes before verification; preserve unrelated work separately');
- const names=execFileSync('git',['diff','--name-only','--no-renames','-z',baseHead,start.head],{cwd:repo}).toString().split('\0').filter(Boolean);
+ const names=execFileSync('git',['diff','--name-only','--no-renames','-z',baseHead,start.head],{cwd:repo,maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
  if(names.some(p=>!contract.allowedPaths.includes(p)))throw Error('Changes exceed owner scope');
  const results=[];
  for(const argv of contract.commands){

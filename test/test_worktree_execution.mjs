@@ -42,3 +42,14 @@ for(const flag of ['--assume-unchanged','--skip-worktree'])test(`hidden index fl
  const f=fixture(t);f.git(f.work,'update-index',flag,'feature.cjs');fs.writeFileSync(path.join(f.work,'feature.cjs'),'module.exports=99;');
  assert.equal(f.git(f.work,'status','--porcelain'),'');assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/Hidden index/);
 });
+
+test('verification handles tracked and changed path lists larger than the default Git output buffer',t=>{
+ const f=fixture(t),names=Array.from({length:12000},(_,i)=>`${String(i).padStart(5,'0')}-${'x'.repeat(80)}.txt`);
+ for(const name of names)fs.writeFileSync(path.join(f.work,name),'');
+ f.git(f.work,'add','.');f.git(f.work,'commit','-qm','many changed paths');
+ assert(Buffer.byteLength(names.join('\0'))>1024*1024);
+ f.contract.allowedPaths.push(...names);f.save();
+ assert.equal(verifyWorktree(f.work,f.base,f.owner).passed,true);
+ f.contract.allowedPaths.pop();f.save();
+ assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/scope/);
+});

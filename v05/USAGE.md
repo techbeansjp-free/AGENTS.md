@@ -22,7 +22,7 @@ Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・
 
 初回導入用のnpmパッケージは `npm uninstall --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false agent-skill-chain` で削除できる。同梱本体は残り、通常起動は継続する。ASCを取り外す場合は配布manifestと実差分を確認して管理対象資産・Host登録だけを除去し、`project/`や利用者成果物を削除しない。`.agent-skill-chain/`全体を削除しない。
 
-任意の外部prefixを使う場合だけ`ASC_CLI`で明示する。外部prefixを上書きするとそれを参照する別worktreeへ影響するため、版別prefixを使う。同梱版がない旧配置のみnode_modulesを探索する。snapshot ControllerのHost実行ツールは候補外で管理する別の信頼境界を維持する。
+任意の外部prefixを使う場合だけ`ASC_CLI`で明示する。外部prefixを上書きするとそれを参照する別worktreeへ影響するため、版別prefixを使う。旧配置互換のため、同梱package.jsonが見つからない場合はnode_modulesを探索する。snapshot ControllerのHost実行ツールは候補外で管理する別の信頼境界を維持する。
 
 ## 標準: 現在のAIとプロジェクトの開発環境
 
@@ -43,7 +43,7 @@ snapshot方式の `run` / `review` / `goal-propose` / `run-adaptive` / `run-goal
 CI観測は既定では時間上限を持たず、対象PR・commitに拘束されたCIの完了まで待つ。ownerが待機期限を必要とする場合だけ `delivery.ciTimeoutMilliseconds` に非負の整数（ミリ秒）を指定する。`null` または省略は無期限、`0` は一度だけ観測する。期限到達はCI失敗や合格とは別の観測終了である。OS・プロセス自体の終了や通信障害は別途起こり得る。
 
 
-正式リリース前の評価用。現在、要求からDraft PR/CIまで実証した実行環境はLinux。同梱のLinux Codex自動実行アダプターにはNode.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。これは全Host共通の必要条件ではない。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
+以下は明示選択のLinux snapshot経路の条件。過去の要求からDraft PR/CIまでの実証は受入記録の対象commit・条件に限る。同梱のLinux Codex自動実行アダプターにはNode.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。これは全Host共通の必要条件ではない。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
 
 `agent-skill-chain --help`（別名`asc-v05 --help`）で開始・再開・移行の入口と、この手順書の配布先を確認できます。引数なしも案内のみを表示し、Agent起動やGit変更は行いません。
 
@@ -143,7 +143,7 @@ runtime-binにはhostが信頼するNode実行file等を用意し、`asc-v05 ass
 
 作成するのはDraft PRのみ。PRのrepo・branch・base・HEAD・状態を確認し、そのPRに結び付いた必要CIを待つ。merge・releaseは実施しない。CIの成功は、指定oracleを超える品質やASC旧版との完全同等性の証明ではない。
 
-`asc-v05 migration-rollback <移行保存先>` は評価用の選択記録だけを旧版へ戻し、元repoと新しい候補変更を保持する。旧パッケージの再インストール、PATHの変更、設定の復元は実行しない。実際の切戻しは旧版の再導入・入口の再選択と、変更した場合だけ設定commitのrevertで行う（[移行手順](MIGRATION_PLAN.md#rollback)）。旧版の承認を復元せず、必要な再検証を要求する。利用者のCLI/Skill/CI設定を本番切替する機能はまだ含まれない。
+`asc-v05 migration-rollback <移行保存先>` は評価用の選択記録だけを旧版へ戻し、元repoと新しい候補変更を保持する。旧パッケージの再インストール、PATHの変更、設定の復元は実行しない。実際の切戻しは旧版の再導入・入口の再選択と、変更した場合だけ設定commitのrevertで行う（[移行手順](MIGRATION_PLAN.md#migration-recovery)）。旧版の承認を復元せず、必要な再検証を要求する。利用者のCLI/Skill/CI設定を本番切替する機能はまだ含まれない。
 
 
 ## Host対応の現在地
@@ -314,6 +314,7 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 ├── skills/asc/SKILL.md     相対参照の共有Skill
 ├── bin/asc.mjs             ローカル実行入口
 ├── runtime.json            使用バージョン
+├── managed-runtime/        版固定された実行本体一式（Git共有対象）
 ├── v05/                    共有資料
 └── templates/specs/       基本雛形と任意の詳細雛形
 ```
@@ -322,7 +323,7 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 `project/`、利用者作成の仕様書、カスタム雛形、アプリコード、他worktree、Git indexは変更しない。新しい配布版からなくなった資産や、今回のオプションで更新対象に選ばなかった資産も自動削除せず`retained`に表示する。不要なら実ファイルの差分を確認して別途削除する。適用はcommit・pushを行わない。Git管理下ではGit差分でレビューし、必要ならその変更だけを戻せる。非Gitでは実ファイルの変更内容を確認し、復元が必要な場合は利用者が保持したバックアップを使用する。
 
-通常の更新ではHostのSkill入口・AGENTS.md・Hook・権限設定は変更しない。Skillは相対参照とruntime.jsonの版を共有する。別Hostや別prefixでは同じ版を導入し、必要なら環境変数ASC_CLIを設定する。共有資産の再生成は不要。実行中のAgentと並行して設定更新しない。中断・I/Oエラー時はworktreeを確認し、再度previewする。途中状態を成功と扱わず、競合がある場合は自動復旧やresetを行わない。正常な別worktreeの変更だけで更新を拒否することはない。
+通常の更新ではHostのSkill入口・AGENTS.md・Hook・権限設定は変更しない。Skillは相対参照とruntime.jsonの版を共有する。同梱本体も共有すれば別Host・clone・worktreeでのASC再導入やASC_CLI設定は不要。外部prefixを明示選択する場合だけ、版別prefixとASC_CLIを使用する。共有資産の再生成は不要。実行中のAgentと並行して設定更新しない。中断・I/Oエラー時はworktreeを確認し、再度previewする。途中状態を成功と扱わず、競合がある場合は自動復旧やresetを行わない。正常な別worktreeの変更だけで更新を拒否することはない。
 
 
 配布資産も前の候補へ戻す場合は、保持した旧tarballを同じprefixへ再インストールしてから、そのCLIで`project-assets <project-directory>`の差分を確認し、`--apply`する。利用者が編集した資産は差し戻し時も競合として停止する。旧版にない新規資産は自動削除しない。必要なら変更を確認して別途撤去する。CLIの再インストールだけでプロジェクト内の資産が戻ったとは扱わない。
@@ -347,7 +348,7 @@ LinuxのCodex CLI 0.153.4では、通信を遮断した`app-server`の`skills/li
 ## Mac・Windowsネイティブ対応の検証入口
 
 対応対象はmacOS（Apple Silicon・Intel）とWindows 10／11。VM・WSL2を必須にしない。
-現行Alphaの開発実行はまだLinux限定であり、以下はネイティブ実装を進めるための診断入口である。
+標準のcurrent-host経路はOS名で拒否しない。以下は、明示選択のsnapshot Codex Host経路でsandbox能力を確認する診断入口であり、標準のstartに必要な手順ではない。
 
 ```text
 agent-skill-chain probe-native <Codex実行ファイルの絶対パス>
@@ -455,11 +456,15 @@ Git未管理の`start`は`gitManaged:false`・`head:null`・`execution:current-h
 
 ### 共有資産と環境ごとの実行入口
 
-`project-assets --apply` は共有可能な相対参照のSkill・案内・資料と、`.agent-skill-chain/bin/asc.mjs`、`runtime.json`（使用版）を配置する。これらをGitで共有しても、導入者の絶対パスは含まれない。標準配置は`.agent-skill-chain/node_modules/agent-skill-chain/`であり、ASC_CLIなしで解決する。入口は配置場所からローカルの `agent-skill-chain` npmパッケージを解決する。別のprefixへ導入した場合は、その環境の `ASC_CLI` にインストール済み `bin/asc-v05.mjs` の絶対パスを設定する。環境設定は共有Skillに書き込まない。
+`project-assets --apply` は相対参照のSkill・案内・資料、`.agent-skill-chain/bin/asc.mjs`、`runtime.json`（使用版）、および実行可能な本体一式を`managed-runtime/`へ配置する。本体もGitで共有するため、clone・新規worktreeでもその版を利用でき、導入者の絶対パスや別インストールは不要。
+
+標準入口は同梱の`.agent-skill-chain/managed-runtime/`を優先して版を照合する。初回配置用の`node_modules`はGit共有対象ではなく、配置後の実行にも不要。旧配置との互換のため、同梱のpackage.jsonが見つからない場合はローカルnpmパッケージを探索する。`ASC_CLI`は任意の外部prefixを明示選択する場合だけ使用し、設定時は同梱版より優先される。標準利用のために設定する必要はない。外部prefixを使用する場合も、環境設定を共有Skillに書き込まない。
 
 例: `node .agent-skill-chain/bin/asc.mjs start /path/to/project`。現在の作業ディレクトリとASC設置先が違う場合は入口のパスを指定する。CLIへ渡す対象ディレクトリは明示する。指定版が未導入・不一致の場合は実行せず案内し、自動ダウンロードやPATH上の別版への切替はしない。バージョン一致は配布元の真正性の証明ではないため、インストール元は利用者が信頼した配布物を使う。
 
-既存の絶対パス型資産は、導入先で更新CLIの `project-assets <directory> --apply` を一度実行すれば、未編集資産だけが移行される。利用者が編集した資産は従来どおり競合として保持し、上書きしない。移行後は他環境で共有資産の再生成は不要であり、その環境へ指定版のASCを導入すればよい。
+既存の絶対パス型資産は、導入先で更新CLIの `project-assets <directory> --apply` を一度実行すれば、未編集資産だけが移行される。利用者が編集した資産は従来どおり競合として保持し、上書きしない。移行後は同梱本体を含む共有資産が揃っていれば、他環境でASCの再導入・共有資産の再生成は不要。Node等の実行環境は別途必要。
+
+v0.4で開始した作業中worktreeは、明示的に移行するまで既存のv0.4入口を使い続けられる。v0.5導入のためにglobal PATHや旧インストールを上書きしない。これはv0.5が失敗時にv0.4へ自動fallbackするという意味ではない。
 
 ### Gitを使わない作業・複数repo
 

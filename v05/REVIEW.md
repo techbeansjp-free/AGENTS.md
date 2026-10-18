@@ -1,6 +1,8 @@
-# v0.5 本体統合レビュー
+# v0.5 本体統合レビュー（履歴）
 
-Goal・Contract・Evidence駆動のv0.5実装はルートの`src/`、CLIは`bin/`、テストは`test/`にあります。本体の標準CLIと配布対象はv0.5へ切り替え済みで、v0.4を呼び出すfallbackはありません。旧品質契約との接続用資産がリポジトリに残りますが、旧runtimeを配布・実行するものではありません。PR #1577は凍結を維持します。必須CI契約はv0.5の`linux`とbase validatorへ切り替え済みです。Linux限定の受入判定と根拠は`RELEASE_READINESS.json`の`finalAcceptanceAudit`に記録しています。公開・merge・releaseは未承認のままです。
+この文書は初回統合時のレビューと受入経緯です。以下の未承認・Draft維持の記述は当時の操作境界であり、現在の作業を禁止・許可する指示ではありません。現在の利用方法は[USAGE](USAGE.md)、公開物は[GitHub Releases](https://github.com/techbeansjp-free/AGENTS.md/releases)を参照してください。
+
+Goal・Contract・Evidence駆動のv0.5実装はルートの`src/`、CLIは`bin/`、テストは`test/`にあります。本体の標準CLIと配布対象はv0.5へ切り替え済みで、v0.4を呼び出すfallbackはありません。旧品質契約との接続用資産がリポジトリに残りますが、旧runtimeを配布・実行するものではありません。PR #1577は凍結を維持します。必須CI契約はv0.5の`linux`とbase validatorへ切り替え済みです。Linux限定の受入判定と根拠は`RELEASE_READINESS.json`の`finalAcceptanceAudit`に記録しています。この統合レビュー時点では公開・merge・releaseは未承認でした。
 
 repositoryルートの`README.md`、`src/controller.mjs`、`src/workflow.mjs`、Goal/Issue関連実装、対応する`test/test_*.mjs`、`v05/MIGRATION_PLAN.md`を参照してください。固定Step列を再現せず、必要な作業と独立レビューを選択します。
 
@@ -23,13 +25,21 @@ Node 20以上。Linuxの隔離テストはbubblewrap等を必要とします。m
 
 ## 受入範囲
 
-CI切替は完了しています。小規模Draft PR/CI、複数Work Unitの統合、Issue競合後の復旧、移行、性能測定の既存結果は、RELEASE_READINESS.jsonの`acceptanceEvidenceReuse`に対象と適用範囲を記録しています。画面提案・古い文書検出の歴史的試行は実Agentによるものですが、そのDelivery/CIはtest doubleであり、実行時の製品treeを固定した証拠ではありません。現在の実装・テストとの対応と独立レビューに基づく限定的な受入であり、過去の成功を現行HEADの実走と表示しません。外部レビュー製品との比較はowner承認で将来課題へ変更しています。各試験の対象HEAD・成功・失敗・限定はRELEASE_READINESS.jsonを参照してください。Draftを維持し、merge/releaseしないでください。
+CI切替は完了しています。小規模Draft PR/CI、複数Work Unitの統合、Issue競合後の復旧、移行、性能測定の既存結果は、RELEASE_READINESS.jsonの`acceptanceEvidenceReuse`に対象と適用範囲を記録しています。画面提案・古い文書検出の歴史的試行は実Agentによるものですが、そのDelivery/CIはtest doubleであり、実行時の製品treeを固定した証拠ではありません。現在の実装・テストとの対応と独立レビューに基づく限定的な受入であり、過去の成功を現行HEADの実走と表示しません。外部レビュー製品との比較はowner承認で将来課題へ変更しています。各試験の対象HEAD・成功・失敗・限定はRELEASE_READINESS.jsonを参照してください。当時はDraft維持・merge/release未実施という判断でした。
 
 ## レビュー品質の評価用fixture
 
 `evaluation/`には既存PoCから再利用した計算・認可・重大度前提・指示混入・SQLite永続化の合成fixtureを置きます。`test/test_review_corpus.mjs`でbaselineと21候補の期待結果・具体的な失敗理由を検証します。単なる非zero終了を欠陥検出と扱いません。重大度・指示混入の群は認可mutationを再利用するため、21種類の独立した欠陥という意味ではありません。
 
 これは評価器の正しさの確認であり、AI ReviewerのPrecision/RecallやCodeRabbit等との同等性の証明ではありません。比較時は同じ候補・Intent・oracleを使用し、oracleと期待ラベルをReviewerへ渡さず、指摘を独立に裁定してください。環境失敗を欠陥の正検出に数えず、欠測をゼロにしません。通常の製品配布にこの評価用ディレクトリは含めません。
+
+## 評価資産の適用範囲
+
+- `evaluation/configuration-roundtrip.mjs`は、旧設定の保持・Git revert・競合停止を調べる合成移行試験です。試験内で作る絶対パスのSkillは当時の切替方式の再現であり、現在の標準導入手順ではありません。
+- `evaluation/distribution-lifecycle.mjs`は、指定した2つのtarballをLinuxの隔離環境でinstall/update/rollback/uninstall/reinstallし、同梱本体がclone・別worktreeでも動くことを検証します。削除対象は外部npm導入先であり、project固有設定や共有配布資産の自動削除はしません。電源断・disk-full時の原子性までは検証しません。
+- `evaluation/screen-*-oracle.mjs`は特定の合成画面・API・SQLite契約に対する検査です。実行する側が隔離を用意する必要があり、任意projectの汎用テストや製品のOS対応判定には使いません。
+- `evaluation/*LIFECYCLE.json`、`scenario-review-results/`は記録された試行の結果です。現在の配布物の合格証明には、その対象・差分・適用範囲の確認が別途必要です。
+- `report_workflow.mjs`は観測済み呼出しの集計用です。欠測をゼロとみなさず、全Agent総tokensや料金、因果的な速度改善を証明しません。
 
 ## 過去の統合実測（aa64d9e3）
 

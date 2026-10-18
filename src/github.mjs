@@ -71,10 +71,20 @@ export class Github {
         if(run.status==='completed'){
           demand(run.conclusion==='success','PR workflow failed');
           const result=this.api(`repos/${this.repository}/actions/runs/${run.id}/jobs?per_page=100`);
-          demand(result.total_count===result.jobs.length && result.jobs.length>0,'Incomplete job coverage');
+          demand(Number.isSafeInteger(result.total_count)&&result.total_count>=0&&Array.isArray(result.jobs),'Invalid job response');
+          let consistent=true;
+          for(let page=2;page<=Math.ceil(result.total_count/100);page++){
+            const next=this.api(`repos/${this.repository}/actions/runs/${run.id}/jobs?per_page=100&page=${page}`);
+            demand(Number.isSafeInteger(next.total_count)&&next.total_count>=0&&Array.isArray(next.jobs),'Invalid job response');
+            if(next.total_count!==result.total_count){consistent=false;break;}
+            result.jobs.push(...next.jobs);
+          }
+          // A successful run can precede its job index. Reobserve without
+          // accepting partial evidence or repeating any submission operation.
+          const complete=consistent&&result.total_count===result.jobs.length&&result.jobs.length>0;
           const names=new Set();const checks={};
           for(const job of result.jobs){demand(!names.has(job.name),'Ambiguous jobs');names.add(job.name);checks[job.name]=job.conclusion;}
-          if(result.jobs.every(job=>job.status==='completed')){
+          if(complete&&result.jobs.every(job=>job.status==='completed')){
           this.assertPr(this.api(`repos/${this.repository}/pulls/${pr}`));
           return {head:this.expectedHead,draft:true,merged:false,boundToPr:true,checks,run:run.html_url,transportFailures};
           }

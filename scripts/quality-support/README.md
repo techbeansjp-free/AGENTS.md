@@ -1,6 +1,6 @@
 # base品質検査の互換依存
 
-このディレクトリは`check_project_quality.ts`と`check_source_quality.ts`が使用する最小の旧検査依存を保持する。v0.5の実行モデル、CLI、利用者向けSkillではない。npm配布物には含めない。
+このディレクトリは`check_project_quality.ts`と`check_source_quality.ts`が使用する旧検査依存を保持する。v0.5の実行モデル、CLI、利用者向けSkillではない。npm配布物には含めない。
 
 candidateが自分の品質・権限契約を緩和したことを自己承認しないため、既存base CIとの移行を完了するまで保持する。検査契約を変更する場合はtrusted側の登録・独立レビューと照合する。旧Step runtimeを再導入する入口として使用しない。
 

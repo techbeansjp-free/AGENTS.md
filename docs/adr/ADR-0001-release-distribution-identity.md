@@ -1,5 +1,7 @@
 # ADR-0001 Git tagをSource Identity、GitHub Release assetをDistributionとする
 
+> v0.4当時の決定記録です。tagと検証済み配布物を区別する原則は継続しますが、以下の固定asset名、`release-identity.json`、job名、旧CLI、`npx github:`の説明は現行v0.5の手順ではありません。現在の配布契約は[README](../../README.md)と[利用手順](../../v05/USAGE.md)、生成・公開処理は[release workflow](../../.github/workflows/release.yml)と[release script](../../scripts/release.mjs)を参照してください。本文の承認状態は当時の判断に対するものです。
+
 - 状態: 承認済み
 - 日付: 2026-09-29
 - 決定者: repository maintainer（owner確定入力、Issue #1527）

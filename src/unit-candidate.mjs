@@ -5,7 +5,7 @@ import {commitCandidate} from './candidate.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 const entries=(blobs,paths)=>[...blobs].filter(([name])=>paths.some(p=>name===p||name.startsWith(p+'/'))).map(([name,b])=>[name,b.mode,b.oid]).sort((a,b)=>a[0].localeCompare(b[0]));
 export function candidateMatchesContract(reference,contract){
- demand(reference&&typeof reference.repo==='string'&&path.isAbsolute(reference.repo)&&/^[a-f0-9]{40}$/.test(reference.base)&&/^[a-f0-9]{40}$/.test(reference.head),'Explicit candidate Git binding required');
+ demand(reference&&typeof reference.repo==='string'&&path.isAbsolute(reference.repo)&&/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(reference.base)&&/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(reference.head),'Explicit candidate Git binding required');
  return reference.contractDigest===digest(contract);
 }
 export function importUnitCandidate({reference,unit,contract,candidate,base,workspace,commitIdentity,controller}){
