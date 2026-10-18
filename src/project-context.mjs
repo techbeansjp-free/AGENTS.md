@@ -11,7 +11,7 @@ function read(root,relative,optional=false,contents=false){
  let current=root;
  for(const part of name(relative).split('/')){
   current=path.join(current,part);let st;
-  try{st=fs.lstatSync(current);}catch(e){if(e.code==='ENOENT'&&optional)return null;throw e;}
+  try{st=fs.lstatSync(current);}catch(e){if((e.code==='ENOENT'||e.code==='ENOTDIR')&&optional)return null;throw e;}
   if(st.isSymbolicLink())throw Error('Project context must not traverse symlinks: '+relative);
  }
  const fd=fs.openSync(current,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);

@@ -22,3 +22,8 @@ test('malformed, missing and escaping selected references fail instead of silent
 test('separate project selections never reuse another project context',t=>{
  const a=fixture(t),b=fixture(t);a.write('AGENTS.md','first');b.write('AGENTS.md','second');assert.notEqual(projectContext(a.root).digest,projectContext(b.root).digest);fs.rmSync(path.join(a.root,'AGENTS.md'));assert.equal(projectContext(a.root).references.length,0);assert.equal(projectContext(b.root).references.length,1);
 });
+
+test('optional ancestor discovery permits a planned file-to-directory change',t=>{
+ const f=fixture(t);f.write('src','old file');assert.deepEqual(projectContext(f.root,['src/new/file.ts']).references,[]);
+ f.config([{path:'src/required.md'}]);assert.throws(()=>projectContext(f.root,['src/new/file.ts']),/ENOTDIR/);
+});
