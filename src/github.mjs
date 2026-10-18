@@ -64,7 +64,7 @@ export class Github {
       try {
       const data=this.api(`repos/${this.repository}/pulls/${pr}`);this.assertPr(data);
       const runs=this.api(`repos/${this.repository}/actions/runs?head_sha=${this.expectedHead}&event=pull_request`).workflow_runs;
-      const bound=runs.filter(r=>r.head_sha===this.expectedHead && r.event==='pull_request' && r.path===this.workflowPath &&
+      const bound=runs.filter(r=>r.head_sha===this.expectedHead && r.event==='pull_request' && typeof r.path==='string' && r.path.split('@',1)[0]===this.workflowPath &&
         r.repository?.full_name===this.repository && r.pull_requests?.some(p=>p.number===pr && p.head?.sha===this.expectedHead && p.base?.sha===this.base));
       if(bound.length){
         const run=bound.sort((a,b)=>b.id-a.id)[0];
