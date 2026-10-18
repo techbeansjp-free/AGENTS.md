@@ -6,16 +6,22 @@ import {pathToFileURL} from 'node:url';
 const [previous,current]=process.argv.slice(2);
 const load=async(root,role,name)=>(await import(pathToFileURL(path.resolve(root,role,'service.mjs'))))[name];
 const Old=await load(previous,'reservation','ReservationService');
+const OldBilling=await load(previous,'billing','BillingService');
 const Revised=await load(current,'reservation','ReservationService');
 const Billing=await load(current,'billing','BillingService');
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'complex-revision-')),file=path.join(dir,'state.sqlite');
-const actor={tenant:'alpha',role:'admin'};let old,reservation,billing;
+const actor={tenant:'alpha',role:'admin'};let old,oldBilling,reservation,billing;
 try{
  old=new Old(file);old.seed(actor,{sku:'seat',available:5,unitCents:10});
- const original=old.reserve(actor,{key:'existing',sku:'seat',quantity:2});old.close();old=undefined;
+ const original=old.reserve(actor,{key:'existing',sku:'seat',quantity:2});
+ oldBilling=new OldBilling(file);
+ const legacyEvent={...original,id:'legacy-billing-reservation'};
+ const legacyInvoice=oldBilling.issue(actor,{key:'legacy-invoice',event:legacyEvent});
+ old.close();old=undefined;oldBilling.close();oldBilling=undefined;
  reservation=new Revised(file);billing=new Billing(file);
  const event=reservation.reserve(actor,{key:'existing',sku:'seat',quantity:2});
  assert.deepEqual(event,{...original,currency:'JPY'});
+ assert.deepEqual(billing.issue(actor,{key:'legacy-invoice',event:{...legacyEvent,currency:'JPY'}}),legacyInvoice);
  assert.deepEqual(reservation.get(actor,event.id),event);
  assert.deepEqual(reservation.list(actor,{page:1,pageSize:1}),{items:[event],total:1});
  const invalid={...event,currency:'USD'},missing={...event};delete missing.currency;
@@ -27,4 +33,4 @@ try{
  assert.equal(reservation.inventory(actor,'seat').available,5);
  assert.deepEqual(reservation.reserve(actor,{key:'existing',sku:'seat',quantity:2}),event);
  console.log('revision: old-state replay, shared event validation, lifecycle and preservation passed');
-}finally{old?.close();reservation?.close();billing?.close();fs.rmSync(dir,{recursive:true,force:true});}
+}finally{old?.close();oldBilling?.close();reservation?.close();billing?.close();fs.rmSync(dir,{recursive:true,force:true});}

@@ -1,12 +1,19 @@
 /** Synthetic strategy comparison, explicit CLI invocation only. No customer repositories. */
 import {createHash} from 'node:crypto';
-import fs from 'node:fs';import path from 'node:path';import {spawn} from 'node:child_process';import {performance} from 'node:perf_hooks';
+import fs from 'node:fs';import path from 'node:path';import {spawn,execFileSync} from 'node:child_process';import {performance} from 'node:perf_hooks';
 import {configuration} from '../src/restricted-agent.mjs';
 const setup=JSON.parse(fs.readFileSync(process.argv[2]));const variant=process.argv[3];const item=setup.cases.find(c=>c.strategy===variant);if(!item)throw Error('strategy');
 const skill=fs.readFileSync(path.join(setup.root,'SKILL.md'));
 if(createHash('sha256').update(skill).digest('hex')!==setup.skillSha256)throw Error('Skill snapshot changed');
 const executable=fs.realpathSync(process.argv[4]);
-const log=path.join(setup.root,variant+'-review');fs.mkdirSync(log);fs.writeFileSync(path.join(log,'SKILL.md'),skill);
+const evidenceRoot=path.join(setup.root,variant+'-logs');
+const proofPath=fs.existsSync(path.join(evidenceRoot,'repair-integration.json'))?path.join(evidenceRoot,'repair-integration.json'):path.join(evidenceRoot,'integration.json');
+const proof=JSON.parse(fs.readFileSync(proofPath)),gitEnv={...process.env};for(const key of Object.keys(gitEnv))if(key.startsWith('GIT_'))delete gitEnv[key];
+const integrationRoot=item.worktrees.integration.repo;
+const head=execFileSync('git',['rev-parse','HEAD'],{cwd:integrationRoot,env:gitEnv,encoding:'utf8'}).trim();
+if(head===item.base||head!==proof.integrationHead)throw Error('Integration target is missing or stale');
+execFileSync('git',['diff','--quiet','HEAD','--','reservation','billing'],{cwd:integrationRoot,env:gitEnv});
+const log=path.join(setup.root,variant+(process.argv[5]?'-rereview':'-review'));fs.mkdirSync(log);fs.writeFileSync(path.join(log,'SKILL.md'),skill);
 async function run(role,prompt,writes){
  const runtime=fs.mkdtempSync(path.join(setup.root,'runtime-')),empty=fs.mkdtempSync(path.join(setup.root,'empty-'));
  const c=configuration({workspace:empty,runtime,executable,writable:false});
@@ -20,5 +27,5 @@ async function run(role,prompt,writes){
  const result={role,status,skillSha256:setup.skillSha256,startedAt,finishedAt:new Date().toISOString(),seconds:(performance.now()-start)/1000,usage:events.filter(x=>x.type==='turn.completed').map(x=>x.usage),answer:events.filter(x=>x.type==='item.completed'&&x.item?.type==='agent_message').map(x=>x.item.text)};
  fs.writeFileSync(path.join(log,role+'.result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));if(status!==0)throw Error(`${role} failed: ${status}`);return result;
 }
-const w=item.worktrees.integration.repo;
-await run('independent-review',`Synthetic independent review only. Inspect ${w}/REQUIREMENTS.md, the actual Git diffs from ${item.base} to HEAD in ${w}, and service implementations and oracle tests. No file edits, no commits, no network or delegation. Determine whether full business lifecycle, auth/tenant boundaries, invalid inputs, persisted idempotency and multi-instance behavior meet contract. Execute additional read-only-source tests using temporary files only if useful. Do not merely trust existing oracle passes or implementer self-evaluation. Identify concrete untested failure scenarios with reproduction evidence; distinguish contract defects from suggestions. Return PASS or FAIL with concise findings, current HEAD and commands tested.`,[]);
+const w=item.worktrees.integration.repo;const reviewBase=process.argv[5]??item.base;
+await run('independent-review',`Synthetic independent review only. ${process.argv[5]?"Incremental re-review: Focus on actual corrective diff and affected validation, persistence, replay and rollback behavior, do not repeat unrelated investigation.":""} Inspect ${w}/REQUIREMENTS.md and any explicit ${w}/REVISION.md, the actual Git diffs from ${reviewBase} to HEAD in ${w}, and service implementations and oracle tests. No file edits, no commits, no network or delegation. Determine whether full business lifecycle, auth/tenant boundaries, invalid inputs, persisted idempotency and multi-instance behavior meet contract. Execute additional read-only-source tests using temporary files only if useful. Do not merely trust existing oracle passes or implementer self-evaluation. Identify concrete untested failure scenarios with reproduction evidence; distinguish contract defects from suggestions. Return PASS or FAIL with concise findings, current HEAD and commands tested.`,[]);

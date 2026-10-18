@@ -22,7 +22,13 @@ async function run(role,prompt,writes){
 }
 const R=item.worktrees.reservation.repo,B=item.worktrees.billing.repo;
 const common=`Synthetic isolated evaluation. Read ${log}/SKILL.md and ${R}/REQUIREMENTS.md. No network, installation, commits, push or publication. No ASC CLI launch required. Worktrees already exist; preserve .git. Fixed oracles may be read and executed but never edited. Only write assigned implementation directories. Use Node built-in sqlite; no dependencies. Independently written oracles are at each worktree's oracle/*.mjs and accept candidate worktree root as argv2. Implement the entire contract, not only tested examples. Independent review follows separately; do not claim it done. Report actual validation and unresolved items concisely. `;
-if(variant==='single')await run('single-implementer',common+`One context implements both Issues sequentially, preserving work. Issue R in ${R}/reservation; Issue B in ${B}/billing. Execute reservation and billing oracles against their respective worktrees. Integration will occur later. Do not delegate for this baseline strategy.`,[R+'/reservation',B+'/billing']);
+if(variant==='revision'){
+ const outcomes=await Promise.allSettled(['reservation','billing'].map(role=>{
+  const w=item.worktrees[role].repo;
+  return run(role+'-revision',common+`Explicit subsequent contract revision at ${w}/REVISION.md supersedes the original public resource/event shape only. Existing implementation is accepted baseline, preserve it. Implement only ${w}/${role}/service.mjs for this revision. Other service is updated in a separate worktree. Validate with the revised fixed ${w}/oracle/${role}.mjs. No need to re-plan already assigned dependencies.`,[w+'/'+role]);
+ }));
+ if(outcomes.some(result=>result.status==='rejected'))throw Error('Revision owner failed; all owners have exited');
+}else if(variant==='single')await run('single-implementer',common+`One context implements both Issues sequentially, preserving work. Issue R in ${R}/reservation; Issue B in ${B}/billing. Execute reservation and billing oracles against their respective worktrees. Integration will occur later. Do not delegate for this baseline strategy.`,[R+'/reservation',B+'/billing']);
 else{
  const plan=await run('coordinator-plan',common+`Plan the two parallel Issue assignments for reservation at ${R} and billing at ${B}. Read contract, identify shared dependency and integration risks. Return concise task instructions. Do not implement or delegate; the evaluation driver will launch distinct Issue-owner contexts using your instructions and measure all calls.`,[]);
  if(plan.status!==0)throw Error('coordinator failed');

@@ -34,7 +34,7 @@ try{
  await check('J03 direct-api-validation-and-authorization',async()=>{
   for(const body of [{name:[],email:'x@y.test'},{name:'x',email:8},{name:'x',email:'x@y.test',role:'admin'},{name:'x'.repeat(81),email:'x@y.test'}])assert.equal((await request('POST','/api/users',body)).status,400);
   const before=await (await request('GET','/api/users')).json();
-  for(const email of ['a@@b.com','a@.com','a@b..com','a@b.','a@bad!.example','a@-bad.example','a@bad-.example','a@'+ 'a'.repeat(64)+'.example']){
+  for(const email of ['a..b@example.com','.a@example.com','a.@example.com','a@@b.com','a@.com','a@b..com','a@b.','a@bad!.example','a@-bad.example','a@bad-.example','a@'+ 'a'.repeat(64)+'.example']){
    assert.equal((await request('POST','/api/users',{name:'bad',email})).status,400);
    assert.equal((await request('PUT','/api/users/1',{name:'bad',email,version:1})).status,400);
   }

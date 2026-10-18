@@ -157,3 +157,5 @@ C23は実配布候補CLIで標準worktreeを作り、directory・branch・base�
 [比較条件・判断](context-cost-plan.md)とsmall/repair/multi/handoffのJSONに、同一モデルの旧・新Skill各1試行を記録した。全ケースの要件・独立レビューは合格したが、時間・tokensの一貫した改善は未証明。小規模に固定のAgent階層・Context交代を要求しない。引継ぎと階層化はHostが選択する指示であり、自動実行機能を追加したわけではない。
 
 CodeRabbitの不正emailドメイン指摘は現行fixtureで再現した（POSTが400ではなく201）。ドメインラベルを検証する最小修正と拒否・許可境界を追加し、ネットワーク隔離された6操作シナリオを再実行して成功。最新fixtureの証拠は `domain-journey-results.json` / `domain-journey-provenance.json`。既存の外部Draft PR #27は旧fixtureの証拠であり、この修正を外部CIで検証済みとは扱わない。
+
+複雑な予約・請求Issueの実モデル比較、共有契約変更、実Git競合、実装中断と別Context継続、レビュー指摘からの修復は [context-cost-plan.md](context-cost-plan.md) と `context-complex-results.json` に記録。固定の合成要求・直接管理するworkerによる試験であり、任意Goalの自律分解や全体費用削減の証明ではない。Claude Codeの入れ子・停止の限定観測は `claude-descendant-capability.json` を参照。

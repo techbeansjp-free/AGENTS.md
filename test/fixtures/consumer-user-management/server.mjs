@@ -28,7 +28,7 @@ const server=http.createServer(async(req,res)=>{
   const fields=req.method==='POST'?['name','email']:['name','email','version'];
   if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!fields.includes(k)))fail(400,'入力項目が不正です');
   if(typeof body.name!=='string'||!body.name.trim()||body.name.trim().length>80)fail(400,'名前は1〜80文字です');
-  if(typeof body.email!=='string'||body.email.length>254||!/^[^\s@]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(body.email.trim()))fail(400,'メールアドレスが不正です');
+  if(typeof body.email!=='string'||body.email.length>254||!/^[^\s@.]+(?:\.[^\s@.]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(body.email.trim()))fail(400,'メールアドレスが不正です');
   const name=body.name.trim(),email=body.email.trim().toLowerCase();
   if(req.method==='POST'){const r=db.prepare('INSERT INTO users(name,email) VALUES(?,?)').run(name,email);send(res,201,{id:r.lastInsertRowid});return;}
   if(!Number.isSafeInteger(body.version)||body.version<1)fail(400,'versionが不正です');

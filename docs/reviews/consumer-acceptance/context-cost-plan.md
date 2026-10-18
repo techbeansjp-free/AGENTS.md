@@ -53,9 +53,9 @@ baselineは9f19ce4bd76a8e59eedd01adec8ec8a3a825fea7のSkill。候補との差は
 
 引継ぎログでは旧側がHANDOFF/REQUIREMENTSを変更前に2回読み、新側は各1回だった。変更後の実装・テスト読戻しは両側にあり、必要な検証として別扱いにした。これは取得コマンドの観測であり内部Context長ではない。読込みの重複が減ったケースでも総tokens・時間が減るとは限らなかった。
 
-## 複雑な並列Issue：未完了の受入条件
+## 複雑な並列Issueの受入条件
 
-ユーザー指摘により、小規模な複数Issueでの成功を完了根拠にしない。以下を**同じPR #1606内で**実施・是正する。別PRへの先送りは禁止。
+ユーザー指摘により、小規模な複数Issueでの成功を完了根拠にしない。以下を**同じPR #1606内で**実施・是正した。別PRへの先送りは禁止。
 
 合成の予約・請求を使う（`test/fixtures/complex-issues/REQUIREMENTS.md`）。各Issueが永続化、権限/tenant境界、入力拒否、冪等性、状態遷移を持つ。単一進行役方式と、全体進行役が別ContextのIssue担当を管理する方式を、同一要求・oracleで比較する。実際の別worktree・並列稼働を確認し、一覧上の役割名だけを委譲実績にしない。
 
@@ -73,3 +73,40 @@ Claude Codeについては`claude-descendant-capability.json`に公式資料と�
 複雑ケースの比較は同じSkillの**実行戦略比較**であり、旧/新SkillのA/Bではない。旧/新Skillの限定比較は前節の4ケースに限る。`prepare-complex-context.mjs`が固定Skillと同一契約からGit worktreeを作り、`run-complex-context.mjs`が単一Contextまたは計画Context＋並列Issue担当を起動する。後者は計画Agentの出力をdriverが担当へ渡し、メインが直接各プロセスを所有する構成であり、孫Agent方式を実走したと扱わない。
 
 試験準備の独立レビューで、返却値の凍結を誤って拒否するoracleと、Skillの実行間変化・driver終了判定の弱さを指摘された。凍結した独立オブジェクトも受理し、同じ固定Skillを照合し、Agent非0終了とdriverによる独立oracle結果を別々に判定するよう是正した。開始済み単一側には同じoracle修正を適用して独立再実行した。比較に使う原ログ・修正版oracle・対象commitの対応を残す。
+
+## 複雑ケースの実測
+
+`context-complex-results.json`には合成の出力ソース、対象commit、各Contextのusage・時間・レビュー判定を保存した。初期実装は単一担当170.93秒、計画担当72.49秒＋並列の予約140.98秒/請求286.54秒。後者の請求担当は追加検査のstdin/TTY操作に手間取り、並列化そのものの因果効果と混同できない。
+
+単一側は最初の独立レビューで未知の非列挙/symbolキーを受理する欠陥が見つかった。新Contextで両Issueを順次修復し、予約修復中の請求ファイルbyte一致、固定oracle・新しい反例・統合・再レビューPASSを確認した。並列側は初回の独立レビューPASS。ここまでの観測processed tokensは単一1,283,594（5呼出し）、計画＋並列1,414,154（4呼出し）。cacheはinputの内数、root作業費用は欠測であり、課金額・全体費用・一般的な速度改善を示す数字ではない。レビューは別試行の実装と時間的に重なったため、phase時間から厳密なE2E倍率を作らない。
+
+後続の共有契約変更では、別worktree・新Contextの2担当がJPY属性の追加と検証を更新した。既存DB・保存済み冪等結果の読戻し、実予約eventからの請求、拒否後の同じkeyでの再試行が成功し、独立レビューもPASS。計画専用Agentは追加しなかった。この別要求での時間を初期実装と直接比較しない。
+
+共有要求文の競合をdriverが意図的に注入し、Gitのcherry-pick失敗を実際に確認。明示したREVISIONから共有記述を統合し、両サービスの実装を保持した状態で再検証した。任意の競合をASCが自動解決する機能の証明ではない。複雑な予約Issueを実際のファイル変更後に中断し、元プロセスの終了後に新Contextへ引き継いだ。保存済みソースのSHA-256は再開前後で一致し、追加編集せず予約・請求・統合・既存DB互換oracleを通過した。中断した呼出しのusageは欠測であり、再開分だけを全体コストとは扱わない。Claudeの小さなcheckpoint試験とは別の実測である。
+
+判断: 同じ内容の計画を追加Agentへ再調査させる費用が観測された。担当範囲・依存・要求が既に明確なときは進行役が直接割り当てるようSkillを補足した。この追記の性能効果は未測定。固定の階層数・Context寿命・時間上限は追加しない。
+
+再実行用入口（モデル利用には認証・利用枠が必要。合成専用）:
+
+```sh
+node scripts/prepare-complex-context.mjs /absolute/packaged/bin/asc-v05.mjs > setup.json
+node scripts/run-complex-context.mjs setup.json single /absolute/codex
+node scripts/integrate-complex-context.mjs setup.json single
+node scripts/review-complex-context.mjs setup.json single /absolute/codex
+node scripts/run-complex-context.mjs setup.json coordinated /absolute/codex
+node scripts/integrate-complex-context.mjs setup.json coordinated
+node scripts/review-complex-context.mjs setup.json coordinated /absolute/codex
+node scripts/prepare-complex-revision.mjs setup.json
+node scripts/run-complex-context.mjs setup.json revision /absolute/codex
+node scripts/integrate-complex-context.mjs setup.json revision
+node scripts/review-complex-context.mjs setup.json revision /absolute/codex
+node scripts/summarize-complex-context.mjs setup.json results.json
+```
+
+独立レビューを実行する前に統合HEADの証拠と実体を照合し、未統合・古い対象をモデル起動前に拒否する。上記の標準統合コマンドは競合を勝手に解消しない。今回の競合注入・限定是正・中断試験は追加操作として記録しており、標準コマンドを順に実行しただけで全障害ケースまで再現したとは扱わない。
+
+再開後の独立レビューでは、旧請求の冪等記録をJPY付きで再実行するとCONFLICTになる欠陥が判明した。先のrevisionレビューPASSと旧oracle成功はこの経路を保証していなかった。旧BillingServiceで記録したDBを新版で開く反例を追加し、修正前の失敗と修正後の成功を確認した。請求だけを別Contextで是正し、予約・請求・統合・旧DB互換を再検証した。初回PASSを無かったことにせず、後続FAIL・是正をEvidenceに併記する。
+
+中断試験の原記録はexit時点で取得したため、usage末尾の取得完全性も未保証。今後の再実行用scriptはstdioが閉じるclose後に記録するよう独立レビュー指摘を反映した。欠測を0へ変換しない。
+
+請求修正後の独立再レビューはPASS。旧記録の払込・返金後リプレイ、権限/tenant境界、無効通貨、別入力、複数instance、再起動、失敗keyの非消費を確認した。修正後HEADは`0a0c578fee0766487d8065ed5b39b650c696fc9b`（合成repo）であり、ASC本体のcommitとは区別する。

@@ -231,5 +231,132 @@
       "Aggregate killed counters were zero despite successful TaskStop result; counters alone are insufficient cancellation evidence.",
       "Not a performance comparison; reported dollar values are CLI list-price estimates, not Max subscription charges."
     ]
+  },
+  "interruptionHandoffTrial": {
+    "rawLogSha256": "fb20cef14665dd48064c7bbf3d4b7b4e400f7c3206333996964ad2f03bd895b8",
+    "version": "2.1.282",
+    "toolsObserved": [
+      {
+        "name": "Bash",
+        "main": true
+      },
+      {
+        "name": "Agent",
+        "main": true
+      },
+      {
+        "name": "Bash",
+        "main": false
+      },
+      {
+        "name": "Agent",
+        "main": false
+      },
+      {
+        "name": "Write",
+        "main": false
+      },
+      {
+        "name": "Bash",
+        "main": false
+      },
+      {
+        "name": "Read",
+        "main": true
+      },
+      {
+        "name": "Bash",
+        "main": false
+      },
+      {
+        "name": "TaskStop",
+        "main": true
+      },
+      {
+        "name": "Read",
+        "main": true
+      },
+      {
+        "name": "Agent",
+        "main": true
+      },
+      {
+        "name": "Read",
+        "main": false
+      },
+      {
+        "name": "Write",
+        "main": false
+      },
+      {
+        "name": "Read",
+        "main": true
+      }
+    ],
+    "durationMilliseconds": 35193,
+    "subagentStats": {
+      "spawned": 3,
+      "requested": {
+        "background": 1,
+        "foreground": 2,
+        "unset": 0
+      },
+      "started_in_background": 1,
+      "max_depth": 2,
+      "spawned_by_subagents": 1,
+      "completed": 2,
+      "failed": 0,
+      "killed": {
+        "parent": 1,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {
+        "general-purpose": 3
+      }
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 1066,
+        "outputTokens": 17,
+        "cacheReadInputTokens": 0,
+        "cacheCreationInputTokens": 0,
+        "webSearchRequests": 0,
+        "costUSD": 0.0011510000000000001,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "thinkingTokens": 0,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty",
+        "costBasis": "list"
+      },
+      "claude-sonnet-5": {
+        "inputTokens": 32,
+        "outputTokens": 2412,
+        "cacheReadInputTokens": 217952,
+        "cacheCreationInputTokens": 38067,
+        "webSearchRequests": 0,
+        "costUSD": 0.1930904,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "thinkingTokens": 90,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty",
+        "costBasis": "list"
+      }
+    },
+    "listPriceEstimateUsd": 0.19424139999999998,
+    "checkpointAfterStop": "PARTIAL_OK",
+    "replacementOutput": "CONTINUED_OK",
+    "result": "Main TaskStop succeeded on descendant after checkpoint write; replacement context read preserved checkpoint and completed. Actual disk values verified by evaluation driver.",
+    "limits": [
+      "Synthetic text checkpoint only, not interrupted complex implementation.",
+      "No proof of prompt OS process cleanup or general crash recovery."
+    ]
   }
 }
