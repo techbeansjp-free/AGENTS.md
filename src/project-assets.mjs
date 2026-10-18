@@ -43,7 +43,7 @@ function catalog(packageRoot,registerSkill){
  }
  const skill=read(packageRoot,'skills/asc/SKILL.md').toString()
   .replaceAll('../../bin/asc-v05.mjs','../../bin/asc.mjs')
-  .replace('このSkillは配布パッケージ内の場所で使用する。','このSkillはプロジェクトで共有できる。入口はruntime.jsonの版と一致するローカルパッケージを使用する。別の場所にインストールした場合は環境変数ASC_CLIでそのbin/asc-v05.mjsを指定する。共有ファイルに絶対パスを書かない。');
+  .replace('このSkillは配布パッケージ内の場所で使用する。','このSkillはプロジェクトで共有できる。入口はruntime.jsonの版と一致するローカルパッケージを使用する。標準の.agent-skill-chain/node_modules/agent-skill-chain/配置ならASC_CLIは不要。別の場所にインストールした場合は環境変数ASC_CLIでそのbin/asc-v05.mjsを指定する。共有ファイルに絶対パスを書かない。');
  assets.set(prefix+'skills/asc/SKILL.md',Buffer.from(skill));
  assets.set(prefix+'00_利用案内.md',Buffer.from(`# ASC v0.5 利用案内\n\n- [実行手順](v05/USAGE.md)\n- [移行手順](v05/MIGRATION_PLAN.md)\n- [実行Skill](skills/asc/SKILL.md)\n- [任意の仕様書雛形](templates/specs/00_利用案内.md)\n\nproject/と既存の固有ルールは利用者が所有し、ASC更新では変更しない。作成済み仕様書も利用者の成果物として保持する。Host用入口は明示した--register-skillで配置する。ファイル配置だけで実際のHost認識を確認したことにはならない。\n`));
  if(registerSkill)assets.set('.agents/skills/asc/SKILL.md',Buffer.from(`---

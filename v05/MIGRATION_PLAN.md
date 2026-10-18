@@ -10,12 +10,9 @@ v0.5は固定Step実行系の置換であり、旧`workflow advance`等とのCLI
 
 ## 配布物と作業場所
 
-承認された候補tarballを開発対象外の専用prefixへ導入し、その版のCLIを使用する。共有資産は`project-assets`で導入し、実パスは各環境の`ASC_CLI`で解決する。共有Skillにホームディレクトリの絶対パスを保存しない。global PATH・既存v0.4インストールを上書きしない。
+標準経路では[導入手順](USAGE.md#標準の導入先asc_cliは不要)に従い、承認されたtarballを`.agent-skill-chain/`配下へ導入する。共有入口は同配下のCLIを自動解決するため、`ASC_CLI`は不要。共有Skillにホームディレクトリの絶対パスを保存しない。global PATH・既存v0.4インストールを上書きしない。
 
-```sh
-npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.0-alpha.0.tgz
-/absolute/asc-tools/node_modules/.bin/agent-skill-chain capabilities
-```
+snapshot ControllerのHostツール管理や任意の外部prefixを選ぶ場合だけ、開発対象外の場所へ導入し、その環境の`ASC_CLI`で実パスを指定する。snapshotの候補外ツール管理を標準配置へ暗黙に切り替えない。
 
 `agent-skill-chain`と`asc-v05`は同じ新版CLI。実行条件は[実行手順](USAGE.md)を参照する。通常開発は専用worktree、移行候補は独立cloneを明示的に使用できる。owner入力・実行ツール・依存物・認証情報は候補の外へ置く。
 

@@ -65,9 +65,17 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  fs.writeFileSync(path.join(badPackage,'package.json'),JSON.stringify({name:'agent-skill-chain',version:'99.0.0'}));
  const badCli=path.join(badPackage,'bin/asc-v05.mjs');fs.writeFileSync(badCli,"throw Error('must not execute')");
  const mismatch=spawnSync(process.execPath,[launcher,'--version'],{encoding:'utf8',env:{...process.env,ASC_CLI:badCli}});assert.equal(mismatch.status,1);assert.match(mismatch.stderr,/version mismatch/);assert.doesNotMatch(mismatch.stderr,/must not execute/);
- fs.mkdirSync(path.join(moved,'node_modules'),{recursive:true});fs.cpSync(packageRoot,path.join(moved,'node_modules/agent-skill-chain'),{recursive:true});
+ const localPrefix=path.join(moved,'.agent-skill-chain');
+ const installLocal=()=>execFileSync(process.execPath,[npm,'install','--prefix',localPrefix,'--ignore-scripts','--no-audit','--no-fund','--offline','--no-save','--package-lock=false',path.join(root,tarballs[0].filename)],{stdio:'pipe'});
+ installLocal();installLocal(); // reinstall/update using the documented standard prefix
+ assert(!fs.existsSync(path.join(localPrefix,'package.json')));assert(!fs.existsSync(path.join(localPrefix,'package-lock.json')));
  const local=spawnSync(process.execPath,[launcher,'--version'],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:''}});assert.equal(local.status,0,local.stderr);
  assert.deepEqual(fs.readFileSync(path.join(moved,'.agent-skill-chain/distribution.json')),sharedBefore);
+ execFileSync(process.execPath,[npm,'uninstall','--prefix',localPrefix,'--offline','--ignore-scripts','--no-audit','--no-fund','--no-save','--package-lock=false','agent-skill-chain'],{stdio:'pipe'});
+ assert.equal(spawnSync(process.execPath,[launcher,'--version'],{env:{...process.env,ASC_CLI:''}}).status,1);
+ assert.deepEqual(fs.readFileSync(path.join(localPrefix,'distribution.json')),sharedBefore);
+ installLocal();assert.equal(spawnSync(process.execPath,[launcher,'--version'],{env:{...process.env,ASC_CLI:''}}).status,0);
+
  const repo=path.join(root,'project');fs.mkdirSync(repo);
  const git=(...a)=>execFileSync('git',a,{cwd:repo,encoding:'utf8',stdio:'pipe'});
  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
