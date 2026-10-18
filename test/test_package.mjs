@@ -42,6 +42,32 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  assert.equal(Object.keys(req('./package.json').dependencies ?? {}).length,0);
  const malformed=spawnSync(process.execPath,[cli,'approval-verify'],{cwd:root,input:'{"approved":true}',encoding:'utf8'});
  assert.equal(malformed.status,1);
+ const ordinary=path.join(root,'ordinary');fs.mkdirSync(ordinary);
+ const ordinaryStart=JSON.parse(execFileSync(process.execPath,[cli,'start',ordinary],{encoding:'utf8'}));
+ assert.equal(ordinaryStart.gitManaged,false);assert.equal(ordinaryStart.head,null);assert.equal(ordinaryStart.deliveryAuthorized,false);
+ const ordinaryAssets=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',ordinary,'--apply','--register-skill'],{encoding:'utf8'}));
+ assert.equal(ordinaryAssets.applied,true);assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
+ const inventory=JSON.parse(fs.readFileSync(path.join(ordinary,'.agent-skill-chain/distribution.json'))).files;
+ for(const name of Object.keys(inventory)){
+  const bytes=fs.readFileSync(path.join(ordinary,name),'utf8');assert(!bytes.includes(packageRoot));
+  if(name.endsWith('.md'))for(const match of bytes.matchAll(/\]\(([^)]+)\)/g)){
+   const link=match[1].split('#')[0];if(!link||/^[a-z]+:/i.test(link))continue;
+   assert(fs.existsSync(path.resolve(path.dirname(path.join(ordinary,name)),link)),`${name}: ${link}`);
+  }
+ }
+ const moved=path.join(root,'moved project');fs.renameSync(ordinary,moved);
+ const launcher=path.join(moved,'.agent-skill-chain/bin/asc.mjs');
+ const sharedBefore=fs.readFileSync(path.join(moved,'.agent-skill-chain/distribution.json'));
+ const portable=spawnSync(process.execPath,[launcher,'start',moved],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:cli}});
+ assert.equal(portable.status,0,portable.stderr);assert.equal(JSON.parse(portable.stdout).repo,fs.realpathSync(moved));
+ const absent=spawnSync(process.execPath,[launcher,'--version'],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:''}});assert.equal(absent.status,1);assert.match(absent.stderr,/Install agent-skill-chain/);
+ const badPackage=path.join(root,'wrong-version');fs.mkdirSync(path.join(badPackage,'bin'),{recursive:true});
+ fs.writeFileSync(path.join(badPackage,'package.json'),JSON.stringify({name:'agent-skill-chain',version:'99.0.0'}));
+ const badCli=path.join(badPackage,'bin/asc-v05.mjs');fs.writeFileSync(badCli,"throw Error('must not execute')");
+ const mismatch=spawnSync(process.execPath,[launcher,'--version'],{encoding:'utf8',env:{...process.env,ASC_CLI:badCli}});assert.equal(mismatch.status,1);assert.match(mismatch.stderr,/version mismatch/);assert.doesNotMatch(mismatch.stderr,/must not execute/);
+ fs.mkdirSync(path.join(moved,'node_modules'),{recursive:true});fs.cpSync(packageRoot,path.join(moved,'node_modules/agent-skill-chain'),{recursive:true});
+ const local=spawnSync(process.execPath,[launcher,'--version'],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:''}});assert.equal(local.status,0,local.stderr);
+ assert.deepEqual(fs.readFileSync(path.join(moved,'.agent-skill-chain/distribution.json')),sharedBefore);
  const repo=path.join(root,'project');fs.mkdirSync(repo);
  const git=(...a)=>execFileSync('git',a,{cwd:repo,encoding:'utf8',stdio:'pipe'});
  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
@@ -63,7 +89,7 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const assetPreview=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.equal(assetPreview.applied,false);assert(assetPreview.changes.length>50);
  const assetApply=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--apply'],{encoding:'utf8'}));assert.equal(assetApply.applied,true);
  assert.equal(fs.readFileSync(path.join(assetWork,'.agent-skill-chain/templates/specs/01_要求定義.md'),'utf8'),fs.readFileSync(path.join(templates,'01_要求定義.md'),'utf8'));
- const projectSkill=fs.readFileSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8');assert(projectSkill.includes(cli));assert.doesNotMatch(projectSkill,/\.\.\/\.\.\//);
+ const projectSkill=fs.readFileSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8');assert(!projectSkill.includes(cli));assert(projectSkill.includes('../../bin/asc.mjs'));
  const registration=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--register-skill','--apply'],{encoding:'utf8'}));assert.equal(registration.applied,true);
  const registeredEntry=path.join(assetWork,'.agents/skills/asc/SKILL.md');const registeredText=fs.readFileSync(registeredEntry,'utf8');
  const projectReference=/\]\(([^)]+)\)/.exec(registeredText)[1];assert.equal(fs.realpathSync(path.resolve(path.dirname(registeredEntry),projectReference)),fs.realpathSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md')));

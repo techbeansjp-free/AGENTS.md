@@ -1,0 +1,43 @@
+{
+  "schema": "asc-distribution-lifecycle/v1",
+  "passed": true,
+  "seconds": 4.599,
+  "isolation": "bubblewrap unshare-all; runtime/input read-only; private HOME/tmp; no host project or credentials mounted",
+  "oldSha256": "1052474636d73c86670d5d15b8c620967602db321c349da89ae12797efbc1684",
+  "candidateSha256": "0a7505a5efedd1d807c813af9786096f37e56434061b7e78013ec1f1c7c8ccb0",
+  "oldVersion": "0.5.1",
+  "candidateVersion": "0.5.2-rc.0",
+  "checks": [
+    "host sentinel unreadable and host TCP listener unreachable",
+    "baseline tarball installed and legacy assets deployed",
+    "invalid update rejected; previous CLI and owner files preserved",
+    "candidate update, legacy asset migration and idempotent reapply",
+    "owner-edited shared Skill blocks overwrite",
+    "explicit old-version rollback and asset rollback preserve user data; mismatched launcher refused",
+    "uninstall removes runtime, fails closed at shared entry, preserves shared assets and owner files",
+    "reinstall restores execution without regenerating shared assets",
+    "second non-Git environment uses identical shared assets with a different installation prefix"
+  ],
+  "ownerFilesPreserved": true,
+  "indexPreserved": true,
+  "externalModelCalls": 0,
+  "deletionScope": "npm runtime uninstall; shared project assets intentionally retained, not an automatic project-asset remover",
+  "failureScope": "invalid archive before update; not disk-full, SIGKILL or power-loss atomicity",
+  "productSourceCommit": "fe9645e73e8114cb9ed977ec902613f6d455b9d8",
+  "driverSha256": "0137f51740c3ee44a379fe3c2cba1abbb87d5486e25c1e77b2d96782c1811865",
+  "nodeVersion": "v24.19.0",
+  "platform": "linux",
+  "oldRelease": "https://github.com/techbeansjp-free/AGENTS.md/releases/tag/v0.5.1",
+  "oldPublishedChecksumMatched": true,
+  "candidatePackCommand": "node scripts/pack-candidate.mjs <output> --version=0.5.2-rc.0",
+  "candidatePackChecksumMatched": true,
+  "published": false,
+  "limitations": [
+    "Linux bubblewrap only; not a macOS/Windows OS-isolation trial",
+    "Synthetic owner project, not a real business project",
+    "No external model or development-to-PR flow in this distribution lifecycle trial"
+  ],
+  "oldChecksumSource": "https://github.com/techbeansjp-free/AGENTS.md/releases/download/v0.5.1/SHA256SUMS",
+  "oldChecksumLine": "1052474636d73c86670d5d15b8c620967602db321c349da89ae12797efbc1684  agent-skill-chain-0.5.1.tgz",
+  "negativeExpectedVersionTest": "Passed: requesting 0.5.99 for candidate 0.5.2-rc.0 exits nonzero and emits no success JSON"
+}

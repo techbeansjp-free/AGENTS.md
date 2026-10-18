@@ -10,7 +10,7 @@ v0.5は固定Step実行系の置換であり、旧`workflow advance`等とのCLI
 
 ## 配布物と作業場所
 
-承認された候補tarballを開発対象外の専用prefixへ導入し、その固定CLIを使用する。global PATH・既存v0.4インストールを上書きしない。
+承認された候補tarballを開発対象外の専用prefixへ導入し、その版のCLIを使用する。共有資産は`project-assets`で導入し、実パスは各環境の`ASC_CLI`で解決する。共有Skillにホームディレクトリの絶対パスを保存しない。global PATH・既存v0.4インストールを上書きしない。
 
 ```sh
 npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.0-alpha.0.tgz
@@ -67,7 +67,7 @@ owner-planは元repo外の通常fileとする。`schema: "asc-v05-cutover/v1"`�
 
 ## 新入口への切替を検証する
 
-候補branchでownerが認めた設定差分を作る。旧Step用登録を除去し、新Skillは配布済み`skills/asc/SKILL.md`と固定CLIへの案内として登録する。Skill本文だけを別directoryへコピーすると相対リンクが壊れるため避ける。利用者固有AGENTS規約・permissions・無関係なHookは保持する。追加・削除が必要ならstage後の通常のGit変更として扱う。
+候補branchでownerが認めた設定差分を作る。旧Step用登録を除去し、新Skillは`project-assets --register-skill --apply`で相対参照の共有入口として登録する。Skill本文だけを別directoryへコピーすると相対リンクが壊れるため、入口・版指定・資料を含む配布資産一式を使う。利用者固有AGENTS規約・permissions・無関係なHookは保持する。追加・削除が必要ならstage後の通常のGit変更として扱う。
 
 設定差分をアプリ変更とは別commitにし、元要求・規約・実差分を独立レビューする。ownerが作成した候補には`review /absolute/owner-request.json`を使える。実装・修復・提出は行わないが、隔離検証と必要なowner承認commandは実行する。`.agents`・`.codex`の対象内容はReviewerへデータとして渡し、実入口として配置しない。通常実装の書込禁止は維持する。
 

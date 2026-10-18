@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -13,7 +14,7 @@ function fixture(t){
  fs.writeFileSync(path.join(repo,'app.txt'),'base');git('add','.');git('commit','-qm','base');
  const work=path.join(root,'work');git('worktree','add','-qb','task',work);
  const pkg=path.join(root,'package');fs.mkdirSync(pkg);
- for(const name of ['v05/templates/specs','skills/asc'])fs.cpSync(name,path.join(pkg,name),{recursive:true});
+ for(const name of ['v05','skills/asc','src/project-launcher.mjs','package.json'])fs.cpSync(name,path.join(pkg,name),{recursive:true});
  const write=(name,value)=>{const file=path.join(work,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,value);};
  return {root,repo,work,pkg,write,git};
 }
@@ -32,7 +33,7 @@ test('project asset install/update preserves owner files, dirty siblings and ind
  assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);assert.equal(fs.readFileSync(path.join(f.work,asset),'utf8'),fs.readFileSync(shipped,'utf8'));
  for(const [name,value] of [['.agent-skill-chain/project/rules.md','Owner rule'],['docs/specs/API.md','Owner specification'],['.agent-skill-chain/templates/custom.md','Custom template'],['app.txt','Uncommitted app']])assert.equal(fs.readFileSync(path.join(f.work,name),'utf8'),value);
  assert.equal(fs.readFileSync(path.join(f.repo,'app.txt'),'utf8'),'Dirty sibling');assert.deepEqual(fs.readFileSync(path.join(f.repo,'.git/worktrees/work/index')),beforeIndex);
- assert.match(fs.readFileSync(path.join(f.work,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8'),/file:\/\//);
+ assert(!fs.readFileSync(path.join(f.work,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8').includes(f.pkg));
 });
 test('one edited or pre-existing asset blocks the entire update without overwriting it',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,apply:true};f.write(asset,'Existing owner text');
@@ -101,14 +102,14 @@ test('concurrent worktrees update independently and one conflict does not block 
  indexPaths.forEach((p,i)=>assert.deepEqual(fs.readFileSync(p),indexes[i]));
  assert.equal(projectAssets(other,{packageRoot:f.pkg}).recordChanged,false);
 });
-test('moving the package prefix updates references without replacing authored documents',t=>{
+test('moving the package prefix leaves shared assets byte-identical',t=>{
  const f=fixture(t);projectAssets(f.work,{packageRoot:f.pkg,apply:true});
  f.write('docs/specs/API.md','Authored specification');
  const moved=path.join(f.root,'別の prefix');fs.cpSync(f.pkg,moved,{recursive:true});
  const result=projectAssets(f.work,{packageRoot:moved,apply:true});assert.equal(result.applied,true);
- assert.deepEqual(result.changes.map(c=>c.path).sort(),['.agent-skill-chain/00_利用案内.md','.agent-skill-chain/skills/asc/SKILL.md'].sort());
+ assert.deepEqual(result.changes,[]);assert.equal(result.recordChanged,false);
  const skill=fs.readFileSync(path.join(f.work,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8');
- assert(skill.includes(path.join(moved,'bin/asc-v05.mjs')));assert(!skill.includes(f.pkg));
+ assert(!skill.includes(moved));assert(!skill.includes(f.pkg));
  assert.equal(fs.readFileSync(path.join(f.work,'docs/specs/API.md'),'utf8'),'Authored specification');
 });
 
@@ -143,3 +144,16 @@ test('review Skill update reaches registered and project entries without alterin
  assert.deepEqual(fs.readFileSync(path.join(other,'.agent-skill-chain/skills/asc/SKILL.md')),otherBefore);
  assert.equal(projectAssets(f.work,options).changes.length,0);
 });
+
+ test('legacy absolute references migrate without adopting owner edits',t=>{
+ const f=fixture(t),name='.agent-skill-chain/skills/asc/SKILL.md',record='.agent-skill-chain/distribution.json';
+ const old='CLI: /old-user/tools/bin/asc-v05.mjs\n';f.write(name,old);
+ f.write(record,JSON.stringify({schema:'asc-project-assets/v1',files:{[name]:createHash('sha256').update(old).digest('hex')}}));
+ f.write('.agent-skill-chain/project/rules.md','owner');
+ assert.equal(projectAssets(f.work,{packageRoot:f.pkg,apply:true}).applied,true);
+ assert(!fs.readFileSync(path.join(f.work,name),'utf8').includes('/old-user/'));
+ assert.equal(fs.readFileSync(path.join(f.work,'.agent-skill-chain/project/rules.md'),'utf8'),'owner');
+ f.write(name,old+'owner edit');f.write(record,JSON.stringify({schema:'asc-project-assets/v1',files:{[name]:createHash('sha256').update(old).digest('hex')}}));
+ assert.equal(projectAssets(f.work,{packageRoot:f.pkg,apply:true}).applied,false);
+ assert.equal(fs.readFileSync(path.join(f.work,name),'utf8'),old+'owner edit');
+ });
