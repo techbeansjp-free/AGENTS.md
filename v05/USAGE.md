@@ -18,6 +18,8 @@ Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・
 
 更新・版指定・切戻しは、目的のtarballを導入したCLIから`project-assets`の差分を確認し、`--apply`する。現在のworktreeの同梱本体と版指定を一緒に更新するため、他の作業中worktreeは旧版のまま動く。利用者の編集と競合したら一括停止し、無断上書きしない。配布資産の変更をcommitして共有し、他のworktreeでは必要な時に通常のGit操作で取り込む。実行中プロセスのhot updateは行わない。
 
+旧配布方式（v0.5.3以前）への切戻しは例外。旧CLIは同梱本体を残したまま配布記録から外すため、その後の新版導入が「記録外の既存ファイル」として停止し得る。旧版へ戻す前に配布資産をcommit（非Gitならバックアップ）する。再更新時は、その既知のcommitから**配布manifestに列挙された資産とdistribution.jsonだけ**を戻してから新版を適用する。現在の編集と差分を確認し、固有設定・利用者成果物を一括restoreしない。保存済みの配布状態がなければ既存本体を自動採用・削除せず個別に確認する。同梱方式同士の更新・切戻しは通常手順で行える。
+
 初回導入用のnpmパッケージは `npm uninstall --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false agent-skill-chain` で削除できる。同梱本体は残り、通常起動は継続する。ASCを取り外す場合は配布manifestと実差分を確認して管理対象資産・Host登録だけを除去し、`project/`や利用者成果物を削除しない。`.agent-skill-chain/`全体を削除しない。
 
 任意の外部prefixを使う場合だけ`ASC_CLI`で明示する。外部prefixを上書きするとそれを参照する別worktreeへ影響するため、版別prefixを使う。同梱版がない旧配置のみnode_modulesを探索する。snapshot ControllerのHost実行ツールは候補外で管理する別の信頼境界を維持する。

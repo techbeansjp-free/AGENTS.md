@@ -1,12 +1,12 @@
 {
   "schema": "asc-distribution-lifecycle/v1",
   "passed": true,
-  "seconds": 6.331,
+  "seconds": 6.312,
   "isolation": "bubblewrap unshare-all; runtime/input read-only; private HOME/tmp; no host project or credentials mounted",
   "oldSha256": "6af9cd1de281b03058df83cbce2ccb718521c14f23c57de04b43f107d29b8fc8",
-  "candidateSha256": "3f1787d930c02bf5bc7f607a25fa2b4d81ecf47868bc62c4f07ecae835b850e2",
+  "candidateSha256": "1af9c31f16ae88866c6f051935b152b3cdf91ad7cf4e71daac4c315cfaf3d0e3",
   "oldVersion": "0.5.4-rc.1",
-  "candidateVersion": "0.5.4-rc.2",
+  "candidateVersion": "0.5.4-rc.3",
   "checks": [
     "host sentinel unreadable and host TCP listener unreachable",
     "baseline tarball installed and legacy assets deployed",
@@ -24,8 +24,8 @@
   ],
   "startMeasurement": {
     "samples": 5,
-    "baselineStartMs": 71.14357520000002,
-    "candidateStartMs": 71.83262720000002,
+    "baselineStartMs": 71.7092428,
+    "candidateStartMs": 70.31156080000001,
     "contextOutputBytes": 673,
     "modelTokens": "not measured; no model invocation"
   },

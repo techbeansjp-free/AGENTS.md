@@ -37,8 +37,9 @@ function catalog(packageRoot,registerSkill){
  demand(pkg.name==='agent-skill-chain'&&typeof pkg.version==='string','Invalid package identity');
  // Ship the runnable package, including its relative documentation/Skill assets.
  const runtime=prefix+'managed-runtime/';
- demand(Array.isArray(pkg.files),'Package file inventory required');
- for(const relative of new Set(['package.json',...pkg.files])){
+ const runtimeFiles=JSON.parse(read(packageRoot,'src/runtime-files.json'));
+ demand(Array.isArray(runtimeFiles),'Runtime file inventory required');
+ for(const relative of new Set(runtimeFiles)){
   safeName(relative);const bytes=read(packageRoot,relative);
   demand(bytes!==null,'Runtime inventory file missing');assets.set(runtime+relative,bytes);
  }

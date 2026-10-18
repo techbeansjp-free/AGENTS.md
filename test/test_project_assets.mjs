@@ -47,7 +47,7 @@ test('one edited or pre-existing asset blocks the entire update without overwrit
 test('removed distribution assets are retained, and malformed records cannot target owner paths',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,apply:true};projectAssets(f.work,options);
  fs.unlinkSync(path.join(f.pkg,'v05/templates/specs/01_要求定義.md'));
- const manifestPath=path.join(f.pkg,'package.json'),manifest=JSON.parse(fs.readFileSync(manifestPath));manifest.files=manifest.files.filter(p=>p!=='v05/templates/specs/01_要求定義.md');fs.writeFileSync(manifestPath,JSON.stringify(manifest));
+ const manifestPath=path.join(f.pkg,'src/runtime-files.json'),manifest=JSON.parse(fs.readFileSync(manifestPath));fs.writeFileSync(manifestPath,JSON.stringify(manifest.filter(p=>p!=='v05/templates/specs/01_要求定義.md')));
  const result=projectAssets(f.work,options);assert.equal(result.applied,true);assert.deepEqual(result.retained,['.agent-skill-chain/managed-runtime/v05/templates/specs/01_要求定義.md',asset]);assert(fs.existsSync(path.join(f.work,asset)));
  f.write('.agent-skill-chain/distribution.json',JSON.stringify({schema:'asc-project-assets/v1',files:{'../outside':'a'.repeat(64)}}));assert.throws(()=>projectAssets(f.work,options),/Unsafe source path/);
 });
@@ -164,4 +164,17 @@ test('runtime inventory excludes unrelated local files and preserves modified ru
  projectAssets(f.work,options);assert(!fs.existsSync(path.join(f.work,'.agent-skill-chain/managed-runtime/src/private-token.txt')));
  const entry='.agent-skill-chain/managed-runtime/src/project-context.mjs';f.write(entry,'owner modified runtime');fs.appendFileSync(path.join(f.pkg,'src/project-context.mjs'),'\n// new version\n');
  const result=projectAssets(f.work,options);assert.equal(result.applied,false);assert(result.conflicts.includes(entry));assert.equal(fs.readFileSync(path.join(f.work,entry),'utf8'),'owner modified runtime');
+});
+
+test('legacy removal of runtime inventory fails closed and saved distribution restores future updates',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg,apply:true};f.write('.agent-skill-chain/project/rules.md','owner');projectAssets(f.work,options);
+ const record='.agent-skill-chain/distribution.json',saved=fs.readFileSync(path.join(f.work,record));const inventory=JSON.parse(saved);
+ const backup=new Map(Object.keys(inventory.files).map(p=>[p,fs.readFileSync(path.join(f.work,p))]));
+ for(const p of Object.keys(inventory.files))if(p.startsWith('.agent-skill-chain/managed-runtime/'))delete inventory.files[p];
+ f.write(record,JSON.stringify(inventory));
+ const pkg=JSON.parse(fs.readFileSync(path.join(f.pkg,'package.json')));pkg.version='0.5.99';fs.writeFileSync(path.join(f.pkg,'package.json'),JSON.stringify(pkg));
+ const rejected=projectAssets(f.work,options);assert.equal(rejected.applied,false);assert(rejected.conflicts.includes('.agent-skill-chain/managed-runtime/package.json'));
+ // Restore only known distribution assets from the pre-downgrade backup.
+ for(const [p,bytes] of backup)f.write(p,bytes);f.write(record,saved);
+ assert.equal(projectAssets(f.work,options).applied,true);assert.equal(fs.readFileSync(path.join(f.work,'.agent-skill-chain/project/rules.md'),'utf8'),'owner');
 });

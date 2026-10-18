@@ -56,7 +56,10 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  fs.writeFileSync(path.join(ordinary,'missing-api-rule.md'),'Synthetic API contract');
  const ordinaryAssets=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',ordinary,'--apply','--register-skill'],{encoding:'utf8'}));
  assert.equal(fs.readFileSync(path.join(ordinary,'.agent-skill-chain/project/context.json'),'utf8'),ownerConfig);
- assert.equal(ordinaryAssets.applied,true);assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
+ assert.equal(ordinaryAssets.applied,true);
+ const assertRuntime=relative=>{for(const entry of fs.readdirSync(path.join(packageRoot,relative),{withFileTypes:true})){const name=relative+'/'+entry.name;if(entry.isDirectory())assertRuntime(name);else assert.deepEqual(fs.readFileSync(path.join(ordinary,'.agent-skill-chain/managed-runtime',name)),fs.readFileSync(path.join(packageRoot,name)),name);}};
+ assertRuntime('src');assertRuntime('bin');
+assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
  const inventory=JSON.parse(fs.readFileSync(path.join(ordinary,'.agent-skill-chain/distribution.json'))).files;
  for(const name of Object.keys(inventory)){
   const bytes=fs.readFileSync(path.join(ordinary,name),'utf8');assert(!bytes.includes(packageRoot));
