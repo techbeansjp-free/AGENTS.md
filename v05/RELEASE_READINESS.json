@@ -1,4 +1,5 @@
 {
+  "recordScope": "Historical acceptance record: unpublished status and publishAuthorized refer to the recorded sourceCommit candidate, not the published v0.5.4 release. Source checkout version 0.5.0 is the development baseline; release tooling stamps the actual distribution version. Consult the installed package.json, --version and matching release tag for distribution identity.",
   "status": "linux-release-ready-unpublished",
   "publishAuthorized": false,
   "sourceCommit": "f6506f7b1c22a8a8af3fbca8ba243f2a62c972c3",

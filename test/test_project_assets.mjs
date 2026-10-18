@@ -178,3 +178,17 @@ test('legacy removal of runtime inventory fails closed and saved distribution re
  for(const [p,bytes] of backup)f.write(p,bytes);f.write(record,saved);
  assert.equal(projectAssets(f.work,options).applied,true);assert.equal(fs.readFileSync(path.join(f.work,'.agent-skill-chain/project/rules.md'),'utf8'),'owner');
 });
+
+test('both distributed usage documents resolve templates and match recorded content hashes',t=>{
+ const f=fixture(t);assert.equal(projectAssets(f.work,{packageRoot:f.pkg,apply:true}).applied,true);
+ const manifest=JSON.parse(fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json')));
+ for(const name of ['.agent-skill-chain/v05/USAGE.md','.agent-skill-chain/managed-runtime/v05/USAGE.md']){
+  const file=path.join(f.work,name),bytes=fs.readFileSync(file),links=[...bytes.toString().matchAll(/\]\(([^)]*templates\/specs\/[^)]+)\)/g)];
+  assert(links.length>0);
+  for(const [,link] of links)assert(fs.existsSync(path.resolve(path.dirname(file),link)),link);
+  assert.equal(manifest.files[name],createHash('sha256').update(bytes).digest('hex'));
+  const migration=fs.readFileSync(path.join(path.dirname(file),'MIGRATION_PLAN.md'),'utf8');
+  assert(bytes.toString().includes('MIGRATION_PLAN.md#migration-recovery'));
+  assert(migration.includes('<a id="migration-recovery"></a>'));
+ }
+});

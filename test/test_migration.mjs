@@ -1,11 +1,11 @@
 import {setTimeout} from 'node:timers';
 import {Controller} from '../src/controller.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';import {prepareMigration,rollbackMigration,createWorktree} from '../src/migration.mjs';
-function fixture(t){
+function fixture(t,format='sha1'){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-transition-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=path.join(root,'legacy');fs.mkdirSync(path.join(source,'.agent-skill-chain'),{recursive:true});
  const git=(...args)=>execFileSync('git',args,{cwd:source,encoding:'utf8',stdio:'pipe'}).trim();
- git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
+ git('init','-q',`--object-format=${format}`);git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
  fs.writeFileSync(path.join(source,'.agent-skill-chain/project-policy.json'),JSON.stringify({schemaVersion:'agent-skill-chain/project-policy/v0.3.1'}));
  fs.writeFileSync(path.join(source,'AGENTS.md'),'Owner instructions');git('add','.');git('commit','-qm','legacy');
  return {root,source,git,destination:path.join(root,'transition')};
@@ -255,4 +255,17 @@ test('worktree creation streams tracked assets above the former aggregate source
  const created=createWorktree(f.source,{issue:1584,slug:'large-assets'});
  for(let i=0;i<7;i++)assert.equal(fs.statSync(path.join(created.repo,`asset-${i}.bin`)).size,data.length);
  assert.equal(f.git('rev-parse','HEAD'),created.base);
+});
+
+test('SHA-256 transition metadata permits retry and rollback without accepting malformed heads',t=>{
+ const f=fixture(t,'sha256'),prepared=prepareMigration(f.source,f.destination);
+ assert.equal(prepared.sourceHead.length,64);
+ assert.equal(prepareMigration(f.source,f.destination).idempotent,true);
+ assert.equal(rollbackMigration(f.destination).selection,'legacy');
+ const file=path.join(f.destination,'transition.json'),valid=JSON.parse(fs.readFileSync(file));
+ for(const head of ['a'.repeat(39),'a'.repeat(41),'a'.repeat(63),'a'.repeat(65),'g'.repeat(64)]){
+  fs.writeFileSync(file,JSON.stringify({...valid,sourceHead:head}));
+  assert.throws(()=>rollbackMigration(f.destination),/Invalid transition metadata/);
+ }
+ fs.writeFileSync(file,JSON.stringify(valid));assert.equal(rollbackMigration(f.destination).selection,'legacy');
 });

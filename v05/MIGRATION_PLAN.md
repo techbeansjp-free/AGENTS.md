@@ -1,6 +1,6 @@
 # v0.4.xからv0.5への移行・復旧
 
-v0.5は固定Step実行系の置換であり、旧`workflow advance`等とのCLI互換を提供しない。現在はLinux向け未公開候補で、製品の正式リリース受入は未完了。[受入記録](RELEASE_READINESS.json)の対象HEADと制約を確認する。以下は現行CLIの手順であり、実施しただけで本番適合を証明するものではない。
+v0.5は固定Step実行系の置換であり、旧`workflow advance`等とのCLI互換を提供しない。v0.5.4は公開済みの正式配布版である。ソースcheckoutのpackage.jsonにある0.5.0は開発用の基準版であり、配布版の番号はrelease時に設定する。[受入記録](RELEASE_READINESS.json)の未公開状態は記録内のsourceCommit時点の候補を指し、公開済みv0.5.4の状態ではない。検証結果は各記録の対象HEADと適用範囲を確認する。以下は現行CLIの手順であり、実施しただけで本番適合を証明するものではない。
 
 ## 引き継ぐものと廃止するもの
 
@@ -69,6 +69,8 @@ owner-planは元repo外の通常fileとする。`schema: "asc-v05-cutover/v1"`�
 設定差分をアプリ変更とは別commitにし、元要求・規約・実差分を独立レビューする。ownerが作成した候補には`review /absolute/owner-request.json`を使える。実装・修復・提出は行わないが、隔離検証と必要なowner承認commandは実行する。`.agents`・`.codex`の対象内容はReviewerへデータとして渡し、実入口として配置しない。通常実装の書込禁止は維持する。
 
 新しいowner requestで許可範囲・規約・検証方法・提出先を指定し、実テスト、独立レビュー、許可されたDraft PR/CIを確認する。旧CI成功や旧承認を新HEADへ流用しない。Git依存テストの`verificationGit`や資源予算の設定は[実行手順](USAGE.md)に従う。必要なHost設定・Skill発見の動作は利用Hostで別途確認する。
+
+<a id="migration-recovery"></a>
 
 ## 中断・再試行・切戻し
 

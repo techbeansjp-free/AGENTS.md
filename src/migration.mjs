@@ -32,7 +32,7 @@ function readManifest(root){
  demand(s.isFile()&&!s.isSymbolicLink()&&s.nlink===1&&s.size<manifestByteLimit,'Unsafe transition metadata');
  const fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0));
  let data;try{const st=fs.fstatSync(fd);demand(st.isFile()&&st.nlink===1&&st.size<manifestByteLimit,'Changed metadata');data=JSON.parse(fs.readFileSync(fd));}finally{fs.closeSync(fd);}
- demand(data.schema==='asc-v05-transition/v1'&&typeof data.source==='string'&&/^[a-f0-9]{40}$/.test(data.sourceHead)&&
+ demand(data.schema==='asc-v05-transition/v1'&&typeof data.source==='string'&&/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(data.sourceHead)&&
   ['preparing','prepared','rolled-back'].includes(data.state),'Invalid transition metadata');
  return data;
 }
