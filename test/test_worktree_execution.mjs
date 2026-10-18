@@ -53,3 +53,15 @@ test('verification handles tracked and changed path lists larger than the defaul
  f.contract.allowedPaths.pop();f.save();
  assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/scope/);
 });
+
+test('foreign Git environment cannot redirect worktree verification',t=>{
+ const f=fixture(t),saved={...process.env};
+ f.contract.commands.push(['git','rev-parse','--show-toplevel']);f.save();
+ try{
+  process.env.GIT_DIR=path.join(f.repo,'.git');process.env.GIT_WORK_TREE=f.repo;process.env.GIT_INDEX_FILE=path.join(f.root,'wrong-index');
+  process.env.GIT_OBJECT_DIRECTORY=path.join(f.root,'missing-objects');
+  const result=verifyWorktree(f.work,f.base,f.owner);assert.equal(result.passed,true);
+  assert.notEqual(result.head,f.base);assert.equal(result.repo,fs.realpathSync(f.work));
+  assert.equal(result.results[1].exit,0);
+ }finally{for(const key of Object.keys(process.env))if(!Object.hasOwn(saved,key))delete process.env[key];Object.assign(process.env,saved);}
+});

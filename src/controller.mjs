@@ -93,7 +93,7 @@ export class Controller {
   }
   blobs(head) {
     const entries=this.git('ls-tree','-rlz','--full-tree',head).toString('utf8').split('\0').filter(Boolean);
-    const blobs=new Map(),portableNames=new Set(),objects=[];
+    const portableNames=new Set(),objects=[];
     for(const entry of entries){
       const tab=entry.indexOf('\t'),name=entry.slice(tab+1);
       const fields=entry.slice(0,tab).trim().split(/ +/),[mode,kind,oid,sizeText]=fields;
@@ -103,6 +103,10 @@ export class Controller {
       demand(/^\d+$/.test(sizeText)&&Number.isSafeInteger(size)&&size>=0,'Invalid source byte size');
       objects.push({name,mode,oid,size});
     }
+    return this.readBlobs(objects);
+  }
+  readBlobs(objects,onBlob) {
+    const blobs=new Map(),store=(name,blob)=>onBlob?onBlob(name,blob):blobs.set(name,blob);
     if(!objects.length)return blobs;
     // Validate the full inventory/size before requesting any contents. Object IDs,
     // never filenames or source text, form the batch protocol input.
@@ -111,7 +115,7 @@ export class Controller {
       if(object.size>SOURCE_BATCH_BYTES){
         const dir=fs.mkdtempSync(path.join(os.tmpdir(),'asc-blob-')),file=path.join(dir,'blob');
         try{const fd=fs.openSync(file,'wx');try{this.gitOutput(undefined,['cat-file','blob',object.oid],fd);}finally{fs.closeSync(fd);}
-          demand(fs.statSync(file).size===object.size,'Truncated blob');blobs.set(object.name,{mode:object.mode,oid:object.oid,bytes:fs.readFileSync(file)});
+          demand(fs.statSync(file).size===object.size,'Truncated blob');store(object.name,{mode:object.mode,oid:object.oid,bytes:fs.readFileSync(file)});
         }finally{fs.rmSync(dir,{recursive:true,force:true});}continue;
       }
       if(batch.length&&batchBytes+object.size>SOURCE_BATCH_BYTES){batches.push(batch);batch=[];batchBytes=0;}
@@ -124,7 +128,7 @@ export class Controller {
       const end=data.indexOf(10,offset);demand(end>=offset&&data.subarray(offset,end).toString('ascii')===`${oid} blob ${size}`,'Changed blob header');
       offset=end+1;demand(offset+size<data.length&&data[offset+size]===10,'Truncated blob');
       const bytes=Buffer.from(data.subarray(offset,offset+size));offset+=size+1;
-      blobs.set(name,{mode,oid,bytes});
+      store(name,{mode,oid,bytes});
     }
     demand(offset===data.length,'Unexpected blob data');
     }
@@ -203,7 +207,7 @@ export class Controller {
   // Host-only extension points for pinned runtimes and immutable dependencies.
   sandboxBlobs(head) {return this.blobs(head);}
   sandboxProfile() {return {directories:[],bindings:[],runtimePath:'/usr/bin:/bin',addressLimit:1073741824,readOnly:false};}
-  executeVerification(args,timeout=null) {if(this.contract.verificationResourceProfile==='browser-cgroup-v1')return runBoundedVerification(args,timeout,this.verificationLimits().memoryBytes);return spawnSync('/usr/bin/prlimit',args,{env:{PATH:'/usr/bin:/bin'},timeout:timeout??0,maxBuffer:1048576,killSignal:'SIGKILL'});}
+  executeVerification(args,timeout=null) {if(this.contract.verificationResourceProfile==='browser-cgroup-v1')return runBoundedVerification(args,timeout,this.verificationLimits().memoryBytes);const result=spawnSync('/usr/bin/prlimit',args,{env:{PATH:'/usr/bin:/bin'},timeout:timeout??0,maxBuffer:1048576,killSignal:'SIGKILL'});if(result.error?.code==='ENOBUFS')throw Object.assign(Error('Verification output exceeded 1 MiB'),{code:'ASC_VERIFICATION_OUTPUT_LIMIT'});return result;}
   sandbox(target,argv,timeout=()=>this.verificationLimits().timeoutMilliseconds) {
 
     const temp=fs.mkdtempSync(path.join(os.tmpdir(),'asc-v05-verify-'));

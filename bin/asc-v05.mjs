@@ -5,6 +5,7 @@ import {restartGoal} from '../src/goal-restart.mjs';
 import {runIssues} from '../src/issue-run.mjs';
 /** Linux distribution candidate. Unsupported operations stop; never invoke v0.4 implicitly. */
 import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {executionHost} from '../src/execution-host.mjs';
 import {probeNativeSandbox} from '../src/native-probe.mjs';
 import {inspectMigration} from '../migration_inspect.mjs';
@@ -64,7 +65,7 @@ try {
   migration-rollback <location>  評価の選択記録のみを戻す（再導入・設定復元はしない）
 
 snapshot実行やworktree-verifyのowner入力ファイルは作業repoの外に置きます。Git管理済みrepoの通常実行は専用worktreeを使用します。
-必要環境・入力例・承認・検証資産の準備: ${new URL('../v05/USAGE.md',import.meta.url).pathname}
+必要環境・入力例・承認・検証資産の準備: ${fileURLToPath(new URL('../v05/USAGE.md',import.meta.url))}
 v0.5の実行入口です。使用版は--versionで確認してください。明示Host経路はOS名で拒否しません。標準経路は現在のHost権限を使います。snapshot経路は実行時の隔離検査が必須です。公開・merge・releaseの承認は別途必要です。`);
   } else if(command==='start'&&args.length>=1){
     const paths=[];for(let i=1;i<args.length;i+=2){if(args[i]!=='--path'||!args[i+1])throw Error('Expected --path <changed-path>');paths.push(args[i+1]);}

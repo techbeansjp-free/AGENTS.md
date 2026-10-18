@@ -4,7 +4,7 @@ ASCは、Goal・要求・リスク・プロジェクト契約・検証Evidence�
 
 v0.5系を正式版として提供します。[GitHub Release](https://github.com/techbeansjp-free/AGENTS.md/releases)の固定tarballを明示指定して導入してください。v0.4とは非互換のため、既存プロジェクトへの適用前に移行手順を確認してください。
 
-公開済みv0.5.4と、ソースcheckoutの開発用基準版0.5.0は区別してください。release時にタグと配布パッケージの版を一致させます。実際に使用する版は配布物の`package.json`と`--version`で確認できます。`v05/RELEASE_READINESS.json`の未公開状態は記録内の`sourceCommit`時点の候補についての履歴であり、現在の公開状態ではありません。
+公開済みv0.5.6と、ソースcheckoutの開発用基準版0.5.0は区別してください。release時にタグと配布パッケージの版を一致させます。実際に使用する版は配布物の`package.json`と`--version`で確認できます。`v05/RELEASE_READINESS.json`の未公開状態は記録内の`sourceCommit`時点の候補についての履歴であり、現在の公開状態ではありません。
 
 ## 利用入口
 

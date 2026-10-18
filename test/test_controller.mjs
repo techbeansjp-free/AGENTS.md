@@ -293,3 +293,8 @@ test('tracked-only trees do not spend an extra Git process on ignored inventory'
  c.observeSource();assert.equal(ignoredQueries,0);
  fs.writeFileSync(path.join(root,'unexpected'),'untracked');assert.throws(()=>c.observeSource(),/Untracked or special/);assert.equal(ignoredQueries,1);
 });
+
+test('verification output overflow is an infrastructure error with the bounded buffer intact',{skip:process.platform!=='linux'},t=>{
+ const {c}=fixture(t);
+ assert.throws(()=>c.executeVerification(['--',process.execPath,'-e',"process.stdout.write('x'.repeat(2*1024*1024))"]),{code:'ASC_VERIFICATION_OUTPUT_LIMIT'});
+});

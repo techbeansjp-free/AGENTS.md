@@ -181,6 +181,7 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
    if(work.work==='verify'){
     try{c.verify({timeout:()=>budget.verificationTimeout(c.verificationLimits().timeoutMilliseconds)});}catch(error){
      c.target(); // Malformed/changed Git or lost authority is not a repair task.
+     if(error?.code==='ASC_VERIFICATION_OUTPUT_LIMIT')throw error;
      if(error?.code==='ASC_HOST_VERIFICATION_UNAVAILABLE'){emit('verification-unavailable',{code:error.code,message:error.message,hostStderr:error.hostStderr??''});throw error;}
      if(repairs>=limit)throw error;requireRepairProgress('verification');repairs++;
      failure={kind:'verification',message:error.message,observations:c.events.filter(e=>e.operation==='verify').slice(-1)};
@@ -230,5 +231,5 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
    }
    return save({status:'owner-work-required',root,work,approvalBinding:c.binding(),calls,events,allAgentTotalTokens:null});
   }
- }catch(error){emit('blocked',{error:String(error),artifact:path.join(root,'result.json')});const diagnostic=save({status:'blocked',root,...(error.interruptedCandidate?{interruptedCandidate:error.interruptedCandidate}:{}),error:String(error),wallSeconds:(performance.now()-started)/1000,calls,events,controllerEvents:c.events,repairs,allAgentTotalTokens:null});const failure=new Error(error instanceof Error?error.message:String(error),{cause:error});failure.workflowDiagnostic=diagnostic;throw failure;}
+ }catch(error){emit('blocked',{error:String(error),artifact:path.join(root,'result.json')});const diagnostic=save({status:'blocked',root,...(error.interruptedCandidate?{interruptedCandidate:error.interruptedCandidate}:{}),error:String(error),wallSeconds:(performance.now()-started)/1000,calls,events,controllerEvents:c.events,repairs,allAgentTotalTokens:null});const failure=new Error(error instanceof Error?error.message:String(error),{cause:error});if(error?.code==='ASC_VERIFICATION_OUTPUT_LIMIT')failure.code=error.code;failure.workflowDiagnostic=diagnostic;throw failure;}
 }

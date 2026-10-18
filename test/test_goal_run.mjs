@@ -743,3 +743,17 @@ test('parallel Goal keeps interrupted Unit output and reaches final Delivery',{s
  t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(result.status,'draft-ci-passed');assert.deepEqual(starts,{a:2,b:1,sum:1});assert.equal(f.deliveries(),1);
  assert.equal(result.units.find(u=>u.id==='a').result.calls[0].status,'failed');
 });
+
+test('restart rejects missing Goal and malformed reused proposals before cloning',t=>{
+ const f=fixture(t),root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-restart-proposal-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const resultFile=path.join(root,'prior.json'),directory=path.join(root,'work');
+ const request={...f.request,restart:{directory,resultFile}};delete request.goal;delete request.unitRequests;
+ fs.writeFileSync(resultFile,JSON.stringify({units:[]}));assert.throws(()=>prepareGoalRestart(request),/Goal or decomposition/);assert(!fs.existsSync(directory));
+ request.decomposition={mode:'within-owner-contract',unitChecks:[{paths:request.contract.allowedPaths,argvs:[request.contract.testArgv]}]};
+ const binding={head:request.base,contract:digest(request.contract),contractFiles:digest(request.contractFiles)};
+ for(const proposal of [{binding,status:'proposed',goal:{}},{binding,status:'needs-owner',questions:['Pending decision']}]){
+  fs.writeFileSync(resultFile,JSON.stringify({units:[],proposal}));assert.throws(()=>prepareGoalRestart(request));assert(!fs.existsSync(directory));
+ }
+ const proposal={binding,status:'proposed',goal:f.request.goal};fs.writeFileSync(resultFile,JSON.stringify({units:[],proposal}));
+ const prepared=prepareGoalRestart(request);assert.equal(prepared.request.goal.units.length,3);
+});

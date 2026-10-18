@@ -1,7 +1,13 @@
 /** Resolve host-owned Codex package assets without executing package code. */
 import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';
 export function codexRuntimeRoots(executable){
- const binary=fs.realpathSync(executable),root=fs.realpathSync(path.dirname(path.dirname(binary))),roots=[root];
+ const binary=fs.realpathSync(executable);
+ // Standalone native executables need no inferred parent directory grant.
+ if(!/\.m?js$/i.test(binary))return [binary];
+ const root=fs.realpathSync(path.dirname(path.dirname(binary))),roots=[];
+ const manifest=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+ if(manifest.name!=='@openai/codex')throw Error('Expected @openai/codex package root');
+ roots.push(root);
  // The official npm launcher resolves these optional native packages itself.
  // Include only the current platform package, never the whole node_modules tree.
  if(['linux','darwin','win32'].includes(process.platform)&&['x64','arm64'].includes(process.arch)){

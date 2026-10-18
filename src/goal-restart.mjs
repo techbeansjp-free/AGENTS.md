@@ -57,7 +57,12 @@ export function prepareGoalRestart(input){
   demand(!priorIds.has(unit.id),'Duplicate prior unit');priorIds.add(unit.id);
  }
  const suppliedPlan=request.goal?compileGoal(request.goal):undefined;
- if(request.decomposition&&!request.goal&&!restart.replan)demand(previous.proposal,'Prior proposal required');
+ demand(request.goal||request.decomposition,'Goal or decomposition required');
+ let adopted;
+ if(request.decomposition&&!request.goal&&!restart.replan){
+  demand(previous.proposal,'Prior proposal required');
+  adopted=adoptProposal(request,previous.proposal);
+ }
  const parent=fs.realpathSync(path.dirname(restart.directory)),destination=path.join(parent,path.basename(restart.directory));
  const requestFile=path.join(parent,path.basename(destination)+'.restart-request.json');
  try{fs.lstatSync(requestFile);throw Error('Restart request destination already exists');}catch(error){if(error.code!=='ENOENT')throw error;}
@@ -68,9 +73,8 @@ export function prepareGoalRestart(input){
  for(const unit of Object.values(request.unitRequests??{}))assertAuthority(unit.approvalCommand??request.approvalCommand);
  cloneSource(c.repo,destination,c.base,source.head);
  demand(digest(c.observeTarget({allowEmpty:true}))===digest(source),'Source changed during restart preparation');
- let next={...request,repo:destination,workspaceMode:'isolated-clone'};delete next.restart;
+ let next={...(adopted??request),repo:destination,workspaceMode:'isolated-clone'};delete next.restart;
  if(!restart.replan){
-  if(request.decomposition&&!request.goal)next=adoptProposal(next,previous.proposal);
   next.unitCandidates=candidateReferences(previous,(suppliedPlan??compileGoal(next.goal)).plan);
  }
  fs.writeFileSync(requestFile,JSON.stringify(next,null,2),{flag:'wx',mode:0o600});

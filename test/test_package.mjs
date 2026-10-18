@@ -13,10 +13,12 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const npm=process.env.npm_execpath || path.resolve(path.dirname(process.execPath),
    process.platform==='win32' ? 'node_modules/npm/bin/npm-cli.js' : '../lib/node_modules/npm/bin/npm-cli.js');
  const tarballs=JSON.parse(execFileSync(process.execPath,[npm,'pack','--ignore-scripts','--json','--pack-destination',root],{cwd:process.cwd(),encoding:'utf8'}));
- const install=path.join(root,'isolated');fs.mkdirSync(install);
+ const install=path.join(root,'isolated 日本語 %');fs.mkdirSync(install);
  execFileSync(process.execPath,[npm,'install','--prefix',install,'--ignore-scripts','--no-audit','--no-fund','--offline',path.join(root,tarballs[0].filename)],{stdio:'pipe'});
  const packageRoot=path.join(install,'node_modules/agent-skill-chain');
  const cli=path.join(packageRoot,'bin/asc-v05.mjs');
+ const help=execFileSync(process.execPath,[cli,'--help'],{encoding:'utf8'});
+ assert(help.includes(path.join(packageRoot,'v05/USAGE.md')),'Help must display a decoded native filesystem path');
  const templates=path.join(packageRoot,'v05/templates/specs');
  const guide=fs.readFileSync(path.join(templates,'00_利用案内.md'),'utf8');
  for(const match of guide.matchAll(/\]\(([^)]+)\)/g)){
