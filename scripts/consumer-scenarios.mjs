@@ -197,6 +197,17 @@ check('C22 integration conflict preserves accepted work and does not globally bl
  git(consumer,'cherry-pick','--abort');assert.equal(git(consumer,'rev-parse','HEAD'),oldHead);assert.deepEqual(fs.readFileSync(path.join(consumer,'api.cjs')),oldBytes);const resumed=verifyConsumer();assert.equal(resumed.passed,true);assert.equal(resumed.head,accepted.head);
  const evidence=JSON.parse(fs.readFileSync('/work/coordination-evidence.json'));Object.assign(evidence,{conflictDetected:true,conflictingVerificationRefused:true,afterAbort:resumed});write('/work/coordination-evidence.json',JSON.stringify(evidence,null,2));
 });
+check('C23 packaged standard worktree creation binds directory issue slug branch and base',()=>{
+ const created=invoke(launcher(consumer),'worktree-create',coordinated,'42','fix','account-api',coordinationBase);
+ assert.equal(path.dirname(created.repo),path.join(coordinated,'.worktrees'));
+ assert.match(path.basename(created.repo),/^\d{8}_\d{6}-42-account-api$/);assert.equal(created.branch,'fix/42-account-api');assert.equal(created.base,coordinationBase);
+ assert.equal(git(created.repo,'branch','--show-current'),created.branch);assert.equal(invoke(launcher(created.repo),'start',created.repo).head,coordinationBase);
+ const again=spawnSync(process.execPath,[launcher(consumer),'worktree-create',coordinated,'42','fix','account-api',coordinationBase],{encoding:'utf8'});assert.notEqual(again.status,0);assert.match(again.stderr,/already exists/);
+ const sibling=invoke(launcher(consumer),'worktree-create',coordinated,'42','fix','account-ui',coordinationBase);assert.notEqual(sibling.repo,created.repo);assert.equal(sibling.branch,'fix/42-account-ui');
+ const skill=fs.readFileSync(path.join(created.repo,'.agent-skill-chain/managed-runtime/skills/asc/SKILL.md'),'utf8');assert(skill.includes('.worktrees/<YYYYMMDD_HHMMSS>-<Issue番号>-<slug>'));assert(skill.includes('<type>/<Issue番号>-<slug>'));
+ // C06/C10 deliberately use legacy/custom names and still exercise supported resume.
+ assert.equal(invoke(launcher(consumer),'start',consumer).execution,'current-host-worktree');
+});
 check('C17 manifest-scoped manual removal preserves all user-owned files',()=>{
  const manifest=JSON.parse(fs.readFileSync(path.join(project,'.agent-skill-chain/distribution.json')));
  const edited='.agent-skill-chain/v05/USAGE.md';fs.appendFileSync(path.join(project,edited),'\nuser-owned amendment\n');const retained=[];

@@ -1,0 +1,121 @@
+{
+  "results": [
+    {
+      "id": "C01 offline install preserves existing project manifests",
+      "status": "passed",
+      "seconds": 0.63102914
+    },
+    {
+      "id": "C02 preview is read-only and non-Git deployment never initializes Git",
+      "status": "passed",
+      "seconds": 0.364558012
+    },
+    {
+      "id": "C03 shared assets bind every file hash and contain no installer path",
+      "status": "passed",
+      "seconds": 0.007248485999999957
+    },
+    {
+      "id": "C04 remove bootstrap dependencies; bundled runtime remains usable",
+      "status": "passed",
+      "seconds": 0.4048773640000002
+    },
+    {
+      "id": "C05 scoped and nested project rules are selected without exposing contents",
+      "status": "passed",
+      "seconds": 0.10457549700000005
+    },
+    {
+      "id": "C06 clone and two worktrees run bundled version without external installation",
+      "status": "passed",
+      "seconds": 0.6973600720000002
+    },
+    {
+      "id": "C07 update one worktree without changing sibling or owner settings",
+      "status": "passed",
+      "seconds": 0.8588045879999999
+    },
+    {
+      "id": "C08 downgrade and repeated deployment are idempotent",
+      "status": "passed",
+      "seconds": 0.8770973079999999
+    },
+    {
+      "id": "C09 local asset conflict blocks whole update and retry succeeds after resolution",
+      "status": "passed",
+      "seconds": 0.6529599250000001
+    },
+    {
+      "id": "C10 non-Git umbrella selects sibling repositories independently",
+      "status": "passed",
+      "seconds": 0.2961275169999999
+    },
+    {
+      "id": "C11 build/test uses existing workspace dependency links and retains ignored output",
+      "status": "passed",
+      "seconds": 0.17358044100000006
+    },
+    {
+      "id": "C12 failed verification can be retried without poisoning sibling worktree",
+      "status": "passed",
+      "seconds": 0.7292833540000001
+    },
+    {
+      "id": "C13 scope violation refuses verification before running owner command",
+      "status": "passed",
+      "seconds": 0.12267564000000039
+    },
+    {
+      "id": "C14 test modifying tracked source cannot produce valid verification",
+      "status": "passed",
+      "seconds": 0.40351920900000005
+    },
+    {
+      "id": "C15 missing selected project rule stops rather than silently omitting it",
+      "status": "passed",
+      "seconds": 0.21769452999999975
+    },
+    {
+      "id": "C16 main checkout refusal does not block a subsequent valid worktree",
+      "status": "passed",
+      "seconds": 0.21190291499999966
+    },
+    {
+      "id": "C18 interrupted asset write preserves owner files and recovers from recorded baseline",
+      "status": "passed",
+      "seconds": 1.281975528
+    },
+    {
+      "id": "C19 real pnpm workspace builds TypeScript packages and tests without copying dependencies",
+      "status": "passed",
+      "seconds": 4.669287197000001
+    },
+    {
+      "id": "C20 dependent work fails until integrated while independent work remains usable",
+      "status": "passed",
+      "seconds": 1.4209182779999991
+    },
+    {
+      "id": "C21 changed requirements invalidate prior head and only affected consumer is repaired",
+      "status": "passed",
+      "seconds": 0.5116429009999992
+    },
+    {
+      "id": "C22 integration conflict preserves accepted work and does not globally block other issues",
+      "status": "passed",
+      "seconds": 0.6044171430000006
+    },
+    {
+      "id": "C23 packaged standard worktree creation binds directory issue slug branch and base",
+      "status": "passed",
+      "seconds": 1.601911449000001
+    },
+    {
+      "id": "C17 manifest-scoped manual removal preserves all user-owned files",
+      "status": "passed",
+      "seconds": 0.010013240000000223
+    }
+  ],
+  "aiCalls": 0,
+  "modelQualityEvaluated": false
+}

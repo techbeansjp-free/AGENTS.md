@@ -142,3 +142,11 @@ C20–C22は計約2.40秒の単発観測。意味的判断は事前定義したo
 | レビュー可能なPR、未承認操作を行わない | 本体PR1606と合成Draft PR27。merge/release・実利用者資産の変更なし |
 
 残存課題は製品全体の追加保証であり、成功したシナリオへ含めない：実モデルによる複雑Goalの分解/再計画、全体コストの比較、別OS/Host実走、実認証、merge後の整理。特にmerge後整理は今回は未承認なので実行しない。今回の調査結果は既存不具合が皆無という宣言でも正式release承認でもない。
+
+## 新規worktree命名の監査（2026-10-19）
+
+正本USAGEの標準は `.worktrees/YYYYMMDD_HHMMSS-Issue番号-slug` と `type/Issue番号-slug`。CLIの `createWorktree` は既にこの形式を生成していたが、配布Skillには作成前の確認と具体的な形式が抜けていた。私たちの旧作業先 `20261018-consumer-scenarios` も時刻・Issue番号を欠いた。Skillを修正し、対象repoの明示規約を優先、新規標準作成、結果確認、Issue未指定時の扱いを明記した。既存名やプロジェクト独自名での再開を一律拒否しない。
+
+C23は実配布候補CLIで標準worktreeを作り、directory・branch・base・実Git HEADと配布Skillを照合する。同名作成拒否、同Issue別slug分担、旧名での再開も確認。C01–C23すべて成功（naming-results/provenance.json）。C06などの任意名は既存/独自worktreeの互換性を試すための合成入力であり、新規作成例として推奨しない。過去の記録のpathも事実を保つため書き換えない。
+
+ローカルの実作業先はreflogの作成時刻と対応Issue1579に基づき `20261018_210640-1579-consumer-scenarios`、local branchは `test/1579-consumer-scenarios` へ変更。既存PR接続のためremote head名は維持。利用者の既存worktreeを無断改名せず、配布元Skillの改善を次の配布へ反映する。今回検査した利用者環境は隔離した合成プロジェクトであり、実利用者環境を一括変更していない。
