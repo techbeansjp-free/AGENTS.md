@@ -33,6 +33,14 @@ CI切替は完了しています。小規模Draft PR/CI、複数Work Unitの統�
 
 これは評価器の正しさの確認であり、AI ReviewerのPrecision/RecallやCodeRabbit等との同等性の証明ではありません。比較時は同じ候補・Intent・oracleを使用し、oracleと期待ラベルをReviewerへ渡さず、指摘を独立に裁定してください。環境失敗を欠陥の正検出に数えず、欠測をゼロにしません。通常の製品配布にこの評価用ディレクトリは含めません。
 
+## 評価資産の適用範囲
+
+- `evaluation/configuration-roundtrip.mjs`は、旧設定の保持・Git revert・競合停止を調べる合成移行試験です。試験内で作る絶対パスのSkillは当時の切替方式の再現であり、現在の標準導入手順ではありません。
+- `evaluation/distribution-lifecycle.mjs`は、指定した2つのtarballをLinuxの隔離環境でinstall/update/rollback/uninstall/reinstallし、同梱本体がclone・別worktreeでも動くことを検証します。削除対象は外部npm導入先であり、project固有設定や共有配布資産の自動削除はしません。電源断・disk-full時の原子性までは検証しません。
+- `evaluation/screen-*-oracle.mjs`は特定の合成画面・API・SQLite契約に対する検査です。実行する側が隔離を用意する必要があり、任意projectの汎用テストや製品のOS対応判定には使いません。
+- `evaluation/*LIFECYCLE.json`、`scenario-review-results/`は記録された試行の結果です。現在の配布物の合格証明には、その対象・差分・適用範囲の確認が別途必要です。
+- `report_workflow.mjs`は観測済み呼出しの集計用です。欠測をゼロとみなさず、全Agent総tokensや料金、因果的な速度改善を証明しません。
+
 ## 過去の統合実測（aa64d9e3）
 
 Ubuntu24 CIは207成功・失敗0・skip0。新規公開合成fixtureのDraft PR/CIまで83.48秒・2 Agentで完走しました。setupは時間から除外し、旧private fixtureとの速度比較には使用しません。公開対象は新規合成5ファイルのみでprivate履歴・生ログは含めません。
