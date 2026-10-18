@@ -21,7 +21,7 @@ try{fs.readFileSync(file);read='allowed';}catch(e){if(!['EACCES','EPERM','ENOENT
 try{fs.writeFileSync(file,'probe');write='allowed';}catch(e){if(!['EACCES','EPERM','ENOENT'].includes(e.code))throw e;}
 const s=net.connect({host:'127.0.0.1',port:Number(port)});let done=false;
 function finish(network){if(done)return;done=true;s.destroy();fs.writeSync(1,JSON.stringify({completed:true,read,write,network})+'\\n');}
-s.setTimeout(2000,()=>finish('timeout'));s.on('connect',()=>finish('connected'));s.on('error',e=>finish(['EPERM','EACCES','ENETUNREACH','EHOSTUNREACH'].includes(e.code)?'denied':'error:'+e.code));`;
+s.setTimeout(2000,()=>finish('timeout'));s.on('connect',()=>finish('connected'));s.on('error',e=>finish(['EPERM','EACCES','ENETUNREACH','EHOSTUNREACH','ECONNREFUSED','ENETDOWN'].includes(e.code)?'denied':'error:'+e.code));`;
 
 function run(binary,args,env,cwd) {
  return new Promise((resolve,reject)=>{

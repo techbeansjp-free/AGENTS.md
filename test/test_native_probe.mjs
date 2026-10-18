@@ -21,3 +21,14 @@ test('Mac Node runtime grants only system OpenSSL read dependency',async()=>{
  assert.deepEqual(nodeRuntimeRoots('darwin'),['/System/Library/OpenSSL']);
  assert.deepEqual(nodeRuntimeRoots('linux'),[]);assert.deepEqual(nodeRuntimeRoots('win32'),[]);
 });
+
+test('Codex runtime roots reject an unrelated executable parent',async t=>{
+ const fs=await import('node:fs'),os=await import('node:os'),path=await import('node:path');
+ const {codexRuntimeRoots}=await import('../src/codex-runtime.mjs');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-runtime-root-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ fs.mkdirSync(path.join(root,'bin'));const binary=path.join(root,'bin','codex.js');fs.writeFileSync(binary,'');
+ assert.throws(()=>codexRuntimeRoots(binary),/ENOENT/);
+ const native=path.join(root,'bin','codex.exe');fs.writeFileSync(native,'native fixture');assert.deepEqual(codexRuntimeRoots(native),[fs.realpathSync(native)]);
+ fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({name:'other'}));assert.throws(()=>codexRuntimeRoots(binary),/Expected @openai/);
+ fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({name:'@openai/codex'}));assert.equal(codexRuntimeRoots(binary)[0],fs.realpathSync(root));
+});

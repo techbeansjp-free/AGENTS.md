@@ -1,6 +1,6 @@
 # v0.4.xからv0.5への移行・復旧
 
-v0.5は固定Step実行系の置換であり、旧`workflow advance`等とのCLI互換を提供しない。v0.5.4は公開済みの正式配布版である。ソースcheckoutのpackage.jsonにある0.5.0は開発用の基準版であり、配布版の番号はrelease時に設定する。[受入記録](RELEASE_READINESS.json)の未公開状態は記録内のsourceCommit時点の候補を指し、公開済みv0.5.4の状態ではない。検証結果は各記録の対象HEADと適用範囲を確認する。以下は現行CLIの手順であり、実施しただけで本番適合を証明するものではない。
+v0.5は固定Step実行系の置換であり、旧`workflow advance`等とのCLI互換を提供しない。v0.5.6は公開済みの正式配布版である。ソースcheckoutのpackage.jsonにある0.5.0は開発用の基準版であり、配布版の番号はrelease時に設定する。[受入記録](RELEASE_READINESS.json)の未公開状態は記録内のsourceCommit時点の候補を指し、公開済みv0.5.6の状態ではない。検証結果は各記録の対象HEADと適用範囲を確認する。以下は現行CLIの手順であり、実施しただけで本番適合を証明するものではない。
 
 ## 引き継ぐものと廃止するもの
 
@@ -18,10 +18,12 @@ snapshot ControllerのHostツール管理や任意の外部prefixを選ぶ場合
 
 ソースcheckoutでは`node scripts/pack-candidate.mjs /absolute/existing/output --version=0.5.0`で未公開候補を作成できる。インストール済みtarballには開発スクリプトを含めない。番号指定は公開承認ではなく、候補はprivateのまま。identityは内容hashであり、署名や独立した信頼の証明ではない。
 
+以下のコマンド例は、v0.5を導入済みのworktreeルートから実行する。検査対象は引数で明示する。
+
 ## 既存プロジェクトを調べる
 
 ```sh
-/absolute/asc-tools/node_modules/.bin/agent-skill-chain migration-inspect /absolute/legacy-project
+node .agent-skill-chain/bin/asc.mjs migration-inspect /absolute/legacy-project
 ```
 
 元projectを書き換えず、Git HEAD・index・作業file、policy形式、設定inventoryを確認する。設定・Hook・Skill・CIを実行せず、秘密や設定本文を結果へ出さない。`configurationInventory`にはCLI依存file、Agent入口、CI、policyのpathとhashが含まれる。`.agents/`だけでなく`.agent-skill-chain/skills/`と`hooks/`も棚卸しする。
@@ -40,7 +42,7 @@ snapshot ControllerのHostツール管理や任意の外部prefixを選ぶ場合
 設定を保持して調べる場合：
 
 ```sh
-/absolute/asc-tools/node_modules/.bin/agent-skill-chain migration-prepare /absolute/legacy-project /absolute/new-location
+node .agent-skill-chain/bin/asc.mjs migration-prepare /absolute/legacy-project /absolute/new-location
 ```
 
 保存先は元projectとGit管理領域の外に作る。固定commitのblobから`new-location/project`を生成し、sourceのHook・filterをcheckoutで実行しない。元repoは不変、他branch固有の履歴・参照は元repoに残る。cloneのremoteは削除する。旧設定はGit上に保持しても、通常のfresh Agentへ`.agents`・`.codex`を配置しない。
@@ -48,7 +50,7 @@ snapshot ControllerのHostツール管理や任意の外部prefixを選ぶ場合
 manifest型policyではprepareを停止する。全設定の保持／置換をownerが判断する次のstageを使う。wrapper内に既知schemaがあっても未知形式を受理しない。
 
 ```sh
-/absolute/asc-tools/node_modules/.bin/agent-skill-chain migration-stage /absolute/legacy-project /absolute/new-location /absolute/owner-plan.json
+node .agent-skill-chain/bin/asc.mjs migration-stage /absolute/legacy-project /absolute/new-location /absolute/owner-plan.json
 ```
 
 owner-planは元repo外の通常fileとする。`schema: "asc-v05-cutover/v1"`、検査時の`sourceHead`、`files`を持ち、inventory全件へ次を指定する。
@@ -77,7 +79,7 @@ owner-planは元repo外の通常fileとする。`schema: "asc-v05-cutover/v1"`�
 準備途中の保存先は保全し、上書きしない。原因を確認し、新しい保存先で再試行する。prepareが完了済みの場合の再試行は元HEAD・index・作業file等を再確認し、候補の追加編集を保持する。stageは新しい保存先を必要とする。制御metadataは候補外で16MiB未満に制限し、超過・不正状態で候補を削除しない。
 
 ```sh
-/absolute/asc-tools/node_modules/.bin/agent-skill-chain migration-rollback /absolute/new-location
+node .agent-skill-chain/bin/asc.mjs migration-rollback /absolute/new-location
 ```
 
 このコマンドは選択記録をlegacyへ戻すだけ。旧CLIの再導入や設定復元、sourceのresetは行わない。未完成状態をrollback成功とせず、候補編集と元projectを保持する。旧承認を復活させない。

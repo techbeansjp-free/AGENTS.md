@@ -269,3 +269,16 @@ test('SHA-256 transition metadata permits retry and rollback without accepting m
  }
  fs.writeFileSync(file,JSON.stringify(valid));assert.equal(rollbackMigration(f.destination).selection,'legacy');
 });
+
+test('migration inventory batches tracked blobs and preserves unsupported path reporting',async t=>{
+ const {inspectMigration}=await import('../migration_inspect.mjs');const f=fixture(t);
+ for(let i=0;i<80;i++)fs.writeFileSync(path.join(f.source,`file-${i}`),'fixture');
+ fs.writeFileSync(path.join(f.source,'bad:name'),'unsupported');f.git('add','.');f.git('commit','-qm','inventory');
+ const original=Controller.prototype.gitOutput,commands=[];
+ Controller.prototype.gitOutput=function(input,args,...rest){commands.push(args);return original.call(this,input,args,...rest);};
+ try{
+  const result=inspectMigration(f.source);assert(result.unsupported.includes('bad:name'));assert.deepEqual(result.dirty,[]);
+  assert.equal(commands.filter(a=>a[0]==='cat-file'&&a[1]==='--batch').length,1);
+  assert.equal(commands.filter(a=>a[0]==='cat-file'&&['-s','blob'].includes(a[1])).length,0);
+ }finally{Controller.prototype.gitOutput=original;}
+});

@@ -18,7 +18,7 @@ test('profile keeps provider credentials out of tool environment and rejects ali
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-node-profile-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const workspace=path.join(root,'source'),runtime=path.join(root,'runtime');fs.mkdirSync(workspace);fs.mkdirSync(runtime);
  // Configuration-only fixture binary. It is never executed as Codex.
- const binary=path.join(root,'provider','bin','codex');fs.mkdirSync(path.dirname(binary),{recursive:true});fs.writeFileSync(binary,'fixture');
+ const binary=path.join(root,'provider','bin','codex.js');fs.mkdirSync(path.dirname(binary),{recursive:true});fs.writeFileSync(binary,'fixture');fs.writeFileSync(path.join(path.dirname(path.dirname(binary)),'package.json'),JSON.stringify({name:'@openai/codex'}));
  const config=configuration({workspace,runtime,executable:binary,writable:false});
  assert(config.options.includes('shell_environment_policy.inherit="none"'));
  assert(config.options.includes('permissions.asc_minimal_agent.network.enabled=false'));
@@ -42,7 +42,7 @@ test('split npm native runtime is narrowly included and cannot contain candidate
  const workspace=path.join(root,'source'),runtime=path.join(root,'runtime'),pkg=path.join(root,'node_modules','@openai','codex');
  const native=path.join(root,'node_modules','@openai',`codex-${process.platform}-${process.arch}`);
  for(const dir of [workspace,runtime,path.join(pkg,'bin'),native])fs.mkdirSync(dir,{recursive:true});
- const binary=path.join(pkg,'bin','codex.js');fs.writeFileSync(binary,'fixture');
+ const binary=path.join(pkg,'bin','codex.js');fs.writeFileSync(binary,'fixture');fs.writeFileSync(path.join(path.dirname(path.dirname(binary)),'package.json'),JSON.stringify({name:'@openai/codex'}));
  fs.writeFileSync(path.join(native,'package.json'),JSON.stringify({name:`@openai/codex-${process.platform}-${process.arch}`,version:'0.0.0'}));
  const config=configuration({workspace,runtime,executable:binary,writable:false});
  const permissions=config.options.find(v=>v.startsWith('permissions.asc_minimal_agent.filesystem='));
@@ -112,8 +112,8 @@ test('Controller termination stops Agent and detached descendants through the tr
 
 test('verification retains tracked control data but launches Codex outside candidate configuration',t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-verify-controls-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- const workspace=path.join(root,'source'),runtime=path.join(root,'runtime'),binary=path.join(root,'provider','bin','codex');
- for(const dir of [workspace,runtime,path.dirname(binary)])fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(binary,'fixture');
+ const workspace=path.join(root,'source'),runtime=path.join(root,'runtime'),binary=path.join(root,'provider','bin','codex.js');
+ for(const dir of [workspace,runtime,path.dirname(binary)])fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(binary,'fixture');fs.writeFileSync(path.join(path.dirname(path.dirname(binary)),'package.json'),JSON.stringify({name:'@openai/codex'}));
  for(const dir of ['.codex','.agents']){fs.mkdirSync(path.join(workspace,dir));fs.writeFileSync(path.join(workspace,dir,'data'),'tracked');}
  assert.throws(()=>configuration({workspace,runtime,executable:binary,writable:true}),/Control directory/);
  const config=configuration({workspace,runtime,executable:binary,writable:true,purpose:'verification'});

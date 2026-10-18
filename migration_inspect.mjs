@@ -28,17 +28,19 @@ export function inspectMigration(directory) {
     } finally { fs.closeSync(fd); }
   };
   const inventory=[]; const configurationInventory=[]; const dirty=[]; const unsupported=[];
-  const entries=git('ls-tree','-rz','--full-tree',head).toString('utf8').split('\0').filter(Boolean);
-  const expectedIndex=new Map();
+  const entries=git('ls-tree','-rlz','--full-tree',head).toString('utf8').split('\0').filter(Boolean);
+  const expectedIndex=new Map(),objects=[];
   for (const entry of entries) {
     const tab=entry.indexOf('\t');
-    const [mode,kind,oid]=entry.slice(0,tab).split(' '); const name=entry.slice(tab+1);
+    const [mode,kind,oid,sizeText]=entry.slice(0,tab).trim().split(/ +/); const name=entry.slice(tab+1);
     expectedIndex.set(name,{mode,oid});
     try { safeName(name); } catch { unsupported.push(name);continue; }
     if (kind!=='blob' || !['100644','100755'].includes(mode)) {unsupported.push(name);continue;}
-    const size=Number(git('cat-file','-s',oid).toString());
-    if (!Number.isSafeInteger(size) || size<0) {unsupported.push(name);continue;}
-    const expected=git('cat-file','blob',oid);
+    const size=Number(sizeText);
+    if (!/^\d+$/.test(sizeText) || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid) || !Number.isSafeInteger(size) || size<0) {unsupported.push(name);continue;}
+    objects.push({name,mode,oid,size});
+  }
+  observer.readBlobs(objects,(name,{mode,bytes:expected})=>{
     try {
       if (!read(name).equals(expected)) dirty.push(name);
       if (process.platform!=='win32' && Boolean(fs.statSync(path.join(root,name)).mode & 0o111)!==(mode==='100755')) dirty.push(name);
@@ -53,7 +55,7 @@ export function inspectMigration(directory) {
       inventory.push({path:name,sha256:crypto.createHash('sha256').update(expected).digest('hex'),
         disposition:'preserve-as-input-not-approval'});
     }
-  }
+  });
   const indexed=new Set();
   for (const entry of git('ls-files','--stage','-z').toString().split('\0').filter(Boolean)) {
     const tab=entry.indexOf('\t');const [mode,oid,stage]=entry.slice(0,tab).split(' ');const name=entry.slice(tab+1);
