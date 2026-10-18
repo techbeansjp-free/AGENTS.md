@@ -460,10 +460,12 @@ test('Delivery passes remaining total budget to CI and rejects over-budget compl
 });
 
 test('output overflow does not dispatch repair or consume another Agent call',{skip:!enabled},async t=>{
- const f=fixture(t);f.request.maxRepairs=3;f.request.contract.testArgv=['/bin/sh','-c','head -c 2097152 /dev/zero'];let calls=0,root;
+ for(const bounded of [false,...(process.env.ASC_TEST_CGROUP==='1'?[true]:[])]){
+ const f=fixture(t);f.request.maxRepairs=3;if(bounded)f.request.contract.verificationResourceProfile='browser-cgroup-v1';f.request.contract.testArgv=['/bin/sh','-c','head -c 2097152 /dev/zero'];let calls=0,root;
  t.after(()=>{if(root)fs.rmSync(root,{recursive:true,force:true});});
  await assert.rejects(runWorkflow(f.request,{provider:f.provider,onEvent:e=>{if(e.type==='run-started')root=e.root;},agent:async({workspace,writable})=>{
   calls++;assert(writable);fs.writeFileSync(path.join(workspace,'code.txt'),'after\n');return {context:'implementation',usage:[]};
- }}),e=>{assert.equal(e.code,'ASC_VERIFICATION_OUTPUT_LIMIT');assert.equal(e.workflowDiagnostic.calls.length,1);return true;});
+ }}),e=>{assert.equal(e.code,'ASC_VERIFICATION_OUTPUT_LIMIT');assert.equal(e.workflowDiagnostic.calls.length,1);assert.equal(e.workflowDiagnostic.repairs,0);assert.equal(e.workflowDiagnostic.budget.admittedAgentCalls,1);return true;});
  assert.equal(calls,1);assert.equal(f.creates(),0);
+ }
 });

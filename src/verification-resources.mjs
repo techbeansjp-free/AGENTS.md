@@ -48,8 +48,8 @@ async function worker(requestPath){
  const before=observe(request.unit,request.memoryBytes);
  demand(before.processes.length===1&&before.processes[0]===process.pid,'Verification cgroup is not exclusive');
  const p=await verificationProcess(request.argv,request.timeout,request.owner);
- const timedOut=p.error?.code==='ETIMEDOUT';
- demand((!p.error&&Number.isInteger(p.status))||timedOut,`Verification execution failed: ${p.error?.code??'invalid-exit-status'}`);
+ const timedOut=p.error?.code==='ETIMEDOUT',outputLimited=p.error?.code==='ENOBUFS';
+ demand((!p.error&&Number.isInteger(p.status))||timedOut||outputLimited,`Verification execution failed: ${p.error?.code??'invalid-exit-status'}`);
  // Killing the namespace leader and reaping its descendants are not atomic.
  // Normal exit also races namespace teardown. Confirm actual emptiness within
  // the existing service grace; a surviving descendant still rejects the result.
@@ -67,7 +67,7 @@ async function worker(requestPath){
   }
  }
  const exhausted=['max','oom','oom_kill'].some(k=>delta['memory.events'][k]>0)||delta['pids.events'].max>0;
- process.stdout.write(JSON.stringify({status:exhausted||timedOut?125:p.status,stdout:p.stdout.toString('base64'),stderr:p.stderr.toString('base64'),resourceBoundary:{unit:request.unit,before,after,delta,exhausted,processExit:p.status,executionError:timedOut?'ETIMEDOUT':null}}));
+ process.stdout.write(JSON.stringify({status:exhausted||timedOut||outputLimited?125:p.status,stdout:p.stdout.toString('base64'),stderr:p.stderr.toString('base64'),resourceBoundary:{unit:request.unit,before,after,delta,exhausted,processExit:p.status,executionError:p.error?.code??null}}));
 }
 export function runBoundedVerification(argv,timeout=null,memoryBytes=1073741824){
  verificationMemoryLimit(memoryBytes);
@@ -97,6 +97,7 @@ export function runBoundedVerification(argv,timeout=null,memoryBytes=1073741824)
   demand(cleanup,'Bounded verification cleanup unconfirmed');
  }
  demand(!fs.existsSync(path.join('/sys/fs/cgroup',result.resourceBoundary.after.cgroup)),'Verification cgroup remains');
+ if(result.resourceBoundary.executionError==='ENOBUFS')throw Object.assign(Error('Verification output exceeded 1 MiB'),{code:'ASC_VERIFICATION_OUTPUT_LIMIT',verificationDiagnostic:{...result.resourceBoundary,cleanupConfirmed:cleanup,authority:'diagnostic only; no successful verification or approval'}});
  return {status:result.status,stdout:Buffer.from(result.stdout,'base64'),stderr:Buffer.from(result.stderr,'base64'),resourceBoundary:{...result.resourceBoundary,cleanupConfirmed:cleanup}};
 }
 if(process.argv[1]===self&&process.argv[2]==='--resource-worker')await worker(process.argv[3]);

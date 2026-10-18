@@ -46,19 +46,21 @@ test('dedicated resource verification rejects caught OOM and subsequent healthy 
  const rejected=bad.events.at(-1).results[0];assert.equal(rejected.exit,125);assert.equal(rejected.resourceBoundary.processExit,0);assert.equal(rejected.resourceBoundary.exhausted,true);
  good.verify();const last=good.events.at(-1).results[0];assert.equal(last.exit,0);assert.notEqual(first.resourceBoundary.unit,last.resourceBoundary.unit);assert.notEqual(rejected.resourceBoundary.unit,last.resourceBoundary.unit);
 });
-test('bounded observer failure cleans up and does not block next verification',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},t=>{
+test('bounded output overflow is typed after cleanup and does not block next verification',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},t=>{
  const f=fixture(t),contract={...f.contract,verificationResourceProfile:'browser-cgroup-v1'};
- const broken=new AssetController({...f,contract:{...contract,testArgv:['/usr/bin/python3','-c','import os; os.write(1,b"x"*2097152)']},implementer:'worker'});
+ for(const fd of [1,2]){
+ const broken=new AssetController({...f,contract:{...contract,testArgv:['/usr/bin/python3','-c',`import os; os.write(${fd},b"x"*2097152)`]},implementer:'worker'});
  assert.throws(()=>broken.verify(),error=>{
-  assert.match(error.message,/Bounded verification observer failed/);
-  assert.match(error.verificationDiagnostic.stderr,/Verification execution failed: ENOBUFS/);
-  assert.equal(error.verificationDiagnostic.status,1);
-  assert(error.verificationDiagnostic.stderr.length<=2048);
+  assert.equal(error.code,'ASC_VERIFICATION_OUTPUT_LIMIT');
+  assert.equal(error.verificationDiagnostic.executionError,'ENOBUFS');
+  assert.equal(error.verificationDiagnostic.cleanupConfirmed,true);
+  assert.equal(fs.existsSync(path.join('/sys/fs/cgroup',error.verificationDiagnostic.after.cgroup)),false);
   assert.equal(error.verificationDiagnostic.authority,'diagnostic only; no successful verification or approval');
   return true;
  });
  const good=new AssetController({...f,contract,implementer:'worker'});good.verify();
  assert.equal(good.events.at(-1).results[0].resourceBoundary.cleanupConfirmed,true);
+ }
 });
 test('only explicit file bounds reject large generated files',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},t=>{
  const f=fixture(t),argv=size=>['/usr/bin/python3','-c',`import os; f=os.open('/tmp/bound-probe',os.O_CREAT|os.O_WRONLY,0o600); os.ftruncate(f,${size}); os.close(f)`];
