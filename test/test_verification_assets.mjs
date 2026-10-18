@@ -62,6 +62,27 @@ test('bounded output overflow is typed after cleanup and does not block next ver
  assert.equal(good.events.at(-1).results[0].resourceBoundary.cleanupConfirmed,true);
  }
 });
+test('bounded output failure survives a later timeout while descendants hold pipes',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
+ const {runBoundedVerification}=await import('../src/verification-resources.mjs');
+ // The child keeps inherited pipes open beyond the timeout after the parent
+ // exceeds the output limit. The first failure must not become repairable.
+ const code='import os,time\np=os.fork()\nif p==0:\n time.sleep(0.8)\n os._exit(0)\nos.write(1,b"x"*2097152)\n';
+ assert.throws(()=>runBoundedVerification(['--','/usr/bin/python3','-c',code],400),error=>{
+  assert.equal(error.code,'ASC_VERIFICATION_OUTPUT_LIMIT');
+  assert.equal(error.verificationDiagnostic.executionError,'ENOBUFS');
+  assert.equal(error.verificationDiagnostic.cleanupConfirmed,true);
+  assert.equal(fs.existsSync(path.join('/sys/fs/cgroup',error.verificationDiagnostic.after.cgroup)),false);
+  return true;
+ });
+});
+test('bounded protocol preserves both streams at the exact output limit',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
+ const {runBoundedVerification}=await import('../src/verification-resources.mjs');
+ const result=runBoundedVerification(['--','/usr/bin/python3','-c','import os; os.write(1,b"x"*1048576); os.write(2,b"y"*1048576)']);
+ assert.equal(result.status,0);
+ assert.deepEqual(result.stdout,Buffer.alloc(1048576,'x'));
+ assert.deepEqual(result.stderr,Buffer.alloc(1048576,'y'));
+ assert.equal(result.resourceBoundary.cleanupConfirmed,true);
+});
 test('only explicit file bounds reject large generated files',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},t=>{
  const f=fixture(t),argv=size=>['/usr/bin/python3','-c',`import os; f=os.open('/tmp/bound-probe',os.O_CREAT|os.O_WRONLY,0o600); os.ftruncate(f,${size}); os.close(f)`];
  const defaultController=new AssetController({...f,contract:{...f.contract,testArgv:argv(2097152)},implementer:'worker'});defaultController.verify();

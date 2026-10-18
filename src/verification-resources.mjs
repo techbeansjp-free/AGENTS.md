@@ -33,8 +33,9 @@ async function verificationProcess(argv,timeout,owner){
  try{return await new Promise((resolve,reject)=>{
   const child=spawn('/usr/bin/prlimit',argv,{env:{PATH:'/usr/bin:/bin'},stdio:['ignore','pipe','pipe']});
   const stdout=[],stderr=[];let error,settled=false,drain;
-  const timer=timeout===null?undefined:setTimeout(()=>{error=Object.assign(Error('Verification timeout'),{code:'ETIMEDOUT'});child.kill('SIGKILL');},timeout);
-  for(const [stream,chunks] of [[child.stdout,stdout],[child.stderr,stderr]]){let size=0;stream.on('data',b=>{size+=b.length;if(size>1048576){error=Object.assign(Error('Verification output limit'),{code:'ENOBUFS'});child.kill('SIGKILL');}else chunks.push(b);});}
+  // A later timeout or stream event must not replace the original failure.
+  const timer=timeout===null?undefined:setTimeout(()=>{error??=Object.assign(Error('Verification timeout'),{code:'ETIMEDOUT'});child.kill('SIGKILL');},timeout);
+  for(const [stream,chunks] of [[child.stdout,stdout],[child.stderr,stderr]]){let size=0;stream.on('data',b=>{size+=b.length;if(size>1048576){error??=Object.assign(Error('Verification output limit'),{code:'ENOBUFS'});child.kill('SIGKILL');}else chunks.push(b);});}
   const finish=status=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(drain);child.stdout.destroy();child.stderr.destroy();resolve({status,error,stdout:Buffer.concat(stdout),stderr:Buffer.concat(stderr)});};
   child.once('error',e=>{clearTimeout(timer);clearTimeout(drain);reject(e);});
   child.once('exit',status=>{drain=setTimeout(()=>{error??=Object.assign(Error('Verification output did not close'),{code:'EINCOMPLETE'});finish(status);},1000);});
