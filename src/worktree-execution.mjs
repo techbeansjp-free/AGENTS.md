@@ -11,7 +11,7 @@ export function startWorktree(directory){
  const {repo,gitManaged}=projectLocation(directory);
  if(!gitManaged)return {schema:'asc-project-start/v1',repo,head:null,gitManaged:false,execution:'current-host-directory',snapshot:false,providerLaunch:false,
   skill:fileURLToPath(new URL('../skills/asc/SKILL.md',import.meta.url)),
-  obligations:['owner intent and permitted scope','project build and tests in this directory','independent context review of actual changes','Git setup and dedicated worktree before commit-bound verification or PR delivery'],verified:false,deliveryAuthorized:false};
+  obligations:['owner intent and permitted scope','project build and tests in this directory','independent context review of actual changes','complete without Git when no Git delivery is requested; Git setup only for explicitly requested commit-bound verification or PR delivery'],verified:false,deliveryAuthorized:false};
  return {schema:'asc-worktree/v1',repo,head:git(repo,'rev-parse','HEAD'),execution:'current-host-worktree',snapshot:false,providerLaunch:false,
   skill:fileURLToPath(new URL('../skills/asc/SKILL.md',import.meta.url)),
   obligations:['owner intent and permitted scope','project build and tests in this worktree','independent context review of actual diff','verified commit matches submitted PR and CI'],verified:false};

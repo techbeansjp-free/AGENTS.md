@@ -262,7 +262,10 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 .agent-skill-chain/
 ├── 00_利用案内.md
 ├── distribution.json      配布済み内容のhash（Git管理する）
-├── skills/asc/SKILL.md     固定インストール先を参照
+├── skills/asc/SKILL.md     相対参照の共有Skill
+├── bin/asc.mjs             ローカル実行入口
+├── runtime.json            使用バージョン
+├── v05/                    共有資料
 └── templates/specs/       基本雛形と任意の詳細雛形
 ```
 
@@ -270,7 +273,7 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 `project/`、利用者作成の仕様書、カスタム雛形、アプリコード、他worktree、Git indexは変更しない。新しい配布版からなくなった資産や、今回のオプションで更新対象に選ばなかった資産も自動削除せず`retained`に表示する。不要ならGit差分を確認して別途削除する。適用はcommit・pushを行わないため、通常のGitレビューで確認し、必要ならその変更だけを戻せる。
 
-通常の更新ではHostのSkill入口・AGENTS.md・Hook・権限設定は変更しない。Skillはインストール先の絶対パスを参照するため、別Hostや別prefixへ移した場合はそのHostのCLIで再生成する。実行中のAgentと並行して設定更新しない。中断・I/Oエラー時はworktreeを確認し、再度previewする。途中状態を成功と扱わず、競合がある場合は自動復旧やresetを行わない。正常な別worktreeの変更だけで更新を拒否することはない。
+通常の更新ではHostのSkill入口・AGENTS.md・Hook・権限設定は変更しない。Skillは相対参照とruntime.jsonの版を共有する。別Hostや別prefixでは同じ版を導入し、必要なら環境変数ASC_CLIを設定する。共有資産の再生成は不要。実行中のAgentと並行して設定更新しない。中断・I/Oエラー時はworktreeを確認し、再度previewする。途中状態を成功と扱わず、競合がある場合は自動復旧やresetを行わない。正常な別worktreeの変更だけで更新を拒否することはない。
 
 
 配布資産も前の候補へ戻す場合は、保持した旧tarballを同じprefixへ再インストールしてから、そのCLIで`project-assets <worktree>`の差分を確認し、`--apply`する。利用者が編集した資産は差し戻し時も競合として停止する。旧版にない新規資産は自動削除しない。必要なら変更を確認して別途撤去する。CLIの再インストールだけでプロジェクト内の資産が戻ったとは扱わない。
@@ -399,3 +402,18 @@ Hostの検証起動・通信・応答形式の失敗はコードのテスト失�
 Git未管理の`start`は`gitManaged:false`・`head:null`・`execution:current-host-directory`を返します。元要求と実際の変更を別Contextでレビューし、検証結果を記録してください。Git履歴による差分・対象commitの保証を提供したとは扱いません。`worktree-verify`、worktree作成、PR提出はGit管理が必要です。必要になった段階で許可されたGit初期化と専用worktreeへの移行を行ってください。
 
 既にGit管理されているrepoの通常rootやサブディレクトリを非Git扱いしてworktree要件を迂回することはできません。破損した`.git`も非Gitへfallbackしません。既存の配布資産・利用者固有ルールの上書き防止は同じです。
+
+
+### 共有資産と環境ごとの実行入口
+
+`project-assets --apply` は共有可能な相対参照のSkill・案内・資料と、`.agent-skill-chain/bin/asc.mjs`、`runtime.json`（使用版）を配置する。これらをGitで共有しても、導入者の絶対パスは含まれない。入口は配置場所からローカルの `agent-skill-chain` npmパッケージを解決する。別のprefixへ導入した場合は、その環境の `ASC_CLI` にインストール済み `bin/asc-v05.mjs` の絶対パスを設定する。環境設定は共有Skillに書き込まない。
+
+例: `node .agent-skill-chain/bin/asc.mjs start /path/to/project`。現在の作業ディレクトリとASC設置先が違う場合は入口のパスを指定する。CLIへ渡す対象ディレクトリは明示する。指定版が未導入・不一致の場合は実行せず案内し、自動ダウンロードやPATH上の別版への切替はしない。バージョン一致は配布元の真正性の証明ではないため、インストール元は利用者が信頼した配布物を使う。
+
+既存の絶対パス型資産は、導入先で更新CLIの `project-assets <directory> --apply` を一度実行すれば、未編集資産だけが移行される。利用者が編集した資産は従来どおり競合として保持し、上書きしない。移行後は他環境で共有資産の再生成は不要であり、その環境へ指定版のASCを導入すればよい。
+
+### Gitを使わない作業・複数repo
+
+Git管理予定がないプロジェクトも、要求・変更内容・実テスト・独立レビューに基づき完了できる。Git初期化やPRは必須ではない。commit拘束やPR提出は、Gitで提出する場合の追加条件である。
+
+Git未管理の親ディレクトリへASCを置き、配下の複数repoで共用できる。資産導入は指定した親だけを変更し、子repoを自動初期化・変更・commitしない。進行役は共通ルールと対象repoの固有ルールを読み、許可範囲・検証結果・Gitのbase/HEADをrepoごとに区別する。Git管理済みrepoでの実装には各repoの専用worktreeを使い、repo横断の要求には統合検証も行う。非Gitファイルも許可範囲内の検証対象にできるが、Git差分に含まれているとは記録しない。この案内は複数repoを単一トランザクションとして自動提出する機能を意味しない。

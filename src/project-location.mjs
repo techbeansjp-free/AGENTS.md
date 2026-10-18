@@ -10,7 +10,7 @@ export function projectLocation(directory){
  // a repository into the non-Git path, nor may a subdirectory escape its boundary.
  for(let current=repo;;current=path.dirname(current)){
   if(exists(path.join(current,'.git')))return {...assertWorkLocation(repo),gitManaged:true};
-  if(exists(path.join(current,'HEAD'))&&exists(path.join(current,'objects'))&&exists(path.join(current,'refs')))throw Error('Git metadata directory is not a project workspace');
+  if(['HEAD','objects','refs'].filter(name=>exists(path.join(current,name))).length>=2)throw Error('Git metadata directory is not a project workspace');
   if(path.dirname(current)===current)break;
  }
  return {repo,mode:'directory',gitManaged:false};
