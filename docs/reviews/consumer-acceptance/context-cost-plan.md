@@ -110,3 +110,7 @@ node scripts/summarize-complex-context.mjs setup.json results.json
 中断試験の原記録はexit時点で取得したため、usage末尾の取得完全性も未保証。今後の再実行用scriptはstdioが閉じるclose後に記録するよう独立レビュー指摘を反映した。欠測を0へ変換しない。
 
 請求修正後の独立再レビューはPASS。旧記録の払込・返金後リプレイ、権限/tenant境界、無効通貨、別入力、複数instance、再起動、失敗keyの非消費を確認した。修正後HEADは`0a0c578fee0766487d8065ed5b39b650c696fc9b`（合成repo）であり、ASC本体のcommitとは区別する。
+
+## 集計器の再レビュー
+
+PR #1606の再レビューで、集計器がHostのGit参照環境を引き継ぐ点と、export時点のoracle hashを過去実行時のhashと誤認できる点を是正した。Git場所指定環境を除外し、`oracleHashesAtExport`と適用範囲を明記する。過去のoracleを現在のファイルから復元したとは主張しない。call単位のusage欠測も明示する。旧集計器は汚染Git環境で失敗し、修正後は通常環境とbyte一致。専用回帰テスト、保存ソース12件のhash、usage合計、失敗/再レビュー記録の保持を確認した。AIの再実行は不要で、既存の原記録から再集計した。

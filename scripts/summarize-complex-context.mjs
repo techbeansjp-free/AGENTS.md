@@ -4,6 +4,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 const setup=JSON.parse(fs.readFileSync(process.argv[2])),root=setup.root;
+const gitEnv={...process.env};for(const key of Object.keys(gitEnv))if(key.startsWith('GIT_'))delete gitEnv[key];
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const read=file=>JSON.parse(fs.readFileSync(file));
 const results={status:'recorded-observations',kind:'same-Skill strategy comparison; not old/new Skill A/B',skillSha256:setup.skillSha256,contractSha256:setup.contractSha256,model:'gpt-5.6-sol',effort:'medium',trials:[],limits:[
@@ -17,7 +18,7 @@ const results={status:'recorded-observations',kind:'same-Skill strategy comparis
 for(const item of setup.cases){
  const strategy=item.strategy,log=path.join(root,strategy+'-logs');if(!fs.existsSync(path.join(log,'integration.json')))continue;
  const integration=read(path.join(log,'integration.json'));delete integration.worktree;
- const trial={strategy,base:item.base,oracleSha256:Object.fromEntries(fs.readdirSync(path.join(item.worktrees.integration.repo,'oracle')).filter(n=>n.endsWith('.mjs')).map(n=>[n,sha(fs.readFileSync(path.join(item.worktrees.integration.repo,'oracle',n)))])),integration,verification:fs.existsSync(path.join(log,'verification.json'))?read(path.join(log,'verification.json')):null,calls:[],initialSources:{},readMetrics:[]};
+ const trial={strategy,base:item.base,oracleHashesAtExport:Object.fromEntries(fs.readdirSync(path.join(item.worktrees.integration.repo,'oracle')).filter(n=>n.endsWith('.mjs')).map(n=>[n,sha(fs.readFileSync(path.join(item.worktrees.integration.repo,'oracle',n)))])),oracleHashScope:'Current worktree files at export; not proof of the oracle used by earlier calls.',integration,verification:fs.existsSync(path.join(log,'verification.json'))?read(path.join(log,'verification.json')):null,calls:[],initialSources:{},readMetrics:[]};
  for(const dir of fs.readdirSync(root).filter(d=>d===strategy+'-logs'||d===strategy+'-review'||d===strategy+'-rereview'||d.startsWith(strategy+'-repair-'))){
   for(const name of fs.readdirSync(path.join(root,dir)).filter(n=>n.endsWith('.result.json'))){
    const call=read(path.join(root,dir,name));
@@ -36,13 +37,14 @@ for(const item of setup.cases){
   }
  }
  for(const [role,commit] of Object.entries(integration.commits)){
-  const code=execFileSync('git',['show',`${commit}:${role}/service.mjs`],{cwd:item.origin,encoding:'utf8'});trial.initialSources[role]={sha256:sha(code),code};
+  const code=execFileSync('git',['show',`${commit}:${role}/service.mjs`],{cwd:item.origin,env:gitEnv,encoding:'utf8'});trial.initialSources[role]={sha256:sha(code),code};
  }
  const repair=path.join(log,'repair-integration.json');if(fs.existsSync(repair)){
   trial.repairVerification=read(repair);trial.repairedSources={};
-  for(const role of ['reservation','billing']){const code=execFileSync('git',['show',`${trial.repairVerification.integrationHead}:${role}/service.mjs`],{cwd:item.origin,encoding:'utf8'});trial.repairedSources[role]={sha256:sha(code),code};}
+  for(const role of ['reservation','billing']){const code=execFileSync('git',['show',`${trial.repairVerification.integrationHead}:${role}/service.mjs`],{cwd:item.origin,env:gitEnv,encoding:'utf8'});trial.repairedSources[role]={sha256:sha(code),code};}
  }
- trial.initialContract=execFileSync('git',['show',`${item.base}:REQUIREMENTS.md`],{cwd:item.origin,encoding:'utf8'});
+ trial.initialContract=execFileSync('git',['show',`${item.base}:REQUIREMENTS.md`],{cwd:item.origin,env:gitEnv,encoding:'utf8'});
+ trial.usageMissingCalls=trial.calls.filter(c=>!c.usage?.length).map(c=>c.role);
  trial.observedProcessedTokens=trial.calls.reduce((total,c)=>total+(c.usage??[]).reduce((n,u)=>n+u.input_tokens+u.output_tokens,0),0);
  results.trials.push(trial);
 }
