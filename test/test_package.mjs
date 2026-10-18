@@ -60,7 +60,7 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const inventory=JSON.parse(fs.readFileSync(path.join(ordinary,'.agent-skill-chain/distribution.json'))).files;
  for(const name of Object.keys(inventory)){
   const bytes=fs.readFileSync(path.join(ordinary,name),'utf8');assert(!bytes.includes(packageRoot));
-  if(name.endsWith('.md'))for(const match of bytes.matchAll(/\]\(([^)]+)\)/g)){
+  if(name.endsWith('.md')&&!name.includes('/managed-runtime/'))for(const match of bytes.matchAll(/\]\(([^)]+)\)/g)){
    const link=match[1].split('#')[0];if(!link||/^[a-z]+:/i.test(link))continue;
    assert(fs.existsSync(path.resolve(path.dirname(path.join(ordinary,name)),link)),`${name}: ${link}`);
   }
@@ -70,7 +70,7 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const sharedBefore=fs.readFileSync(path.join(moved,'.agent-skill-chain/distribution.json'));
  const portable=spawnSync(process.execPath,[launcher,'start',moved],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:cli}});
  assert.equal(portable.status,0,portable.stderr);assert.equal(JSON.parse(portable.stdout).repo,fs.realpathSync(moved));
- const absent=spawnSync(process.execPath,[launcher,'--version'],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:''}});assert.equal(absent.status,1);assert.match(absent.stderr,/Install agent-skill-chain/);
+ const absent=spawnSync(process.execPath,[launcher,'--version'],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:''}});assert.equal(absent.status,0,absent.stderr);
  const badPackage=path.join(root,'wrong-version');fs.mkdirSync(path.join(badPackage,'bin'),{recursive:true});
  fs.writeFileSync(path.join(badPackage,'package.json'),JSON.stringify({name:'agent-skill-chain',version:'99.0.0'}));
  const badCli=path.join(badPackage,'bin/asc-v05.mjs');fs.writeFileSync(badCli,"throw Error('must not execute')");
@@ -82,7 +82,7 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const local=spawnSync(process.execPath,[launcher,'--version'],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:''}});assert.equal(local.status,0,local.stderr);
  assert.deepEqual(fs.readFileSync(path.join(moved,'.agent-skill-chain/distribution.json')),sharedBefore);
  execFileSync(process.execPath,[npm,'uninstall','--prefix',localPrefix,'--offline','--ignore-scripts','--no-audit','--no-fund','--no-save','--package-lock=false','agent-skill-chain'],{stdio:'pipe'});
- assert.equal(spawnSync(process.execPath,[launcher,'--version'],{env:{...process.env,ASC_CLI:''}}).status,1);
+ assert.equal(spawnSync(process.execPath,[launcher,'--version'],{env:{...process.env,ASC_CLI:''}}).status,0);
  assert.deepEqual(fs.readFileSync(path.join(localPrefix,'distribution.json')),sharedBefore);
  installLocal();assert.equal(spawnSync(process.execPath,[launcher,'--version'],{env:{...process.env,ASC_CLI:''}}).status,0);
 

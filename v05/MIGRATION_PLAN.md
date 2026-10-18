@@ -10,7 +10,7 @@ v0.5は固定Step実行系の置換であり、旧`workflow advance`等とのCLI
 
 ## 配布物と作業場所
 
-標準経路では[導入手順](USAGE.md#標準の導入先asc_cliは不要)に従い、承認されたtarballを`.agent-skill-chain/`配下へ導入する。共有入口は同配下のCLIを自動解決するため、`ASC_CLI`は不要。共有Skillにホームディレクトリの絶対パスを保存しない。global PATH・既存v0.4インストールを上書きしない。
+標準経路では[導入手順](USAGE.md#標準の導入先asc_cliは不要)に従い、承認されたtarballを`.agent-skill-chain/`配下へ導入する。`project-assets`は実行可能な本体一式を`managed-runtime/`へ配置する。Git共有では同梱本体もcommitし、各worktreeが自身の版を使う。共有入口は同配下のCLIを自動解決するため、`ASC_CLI`は不要。共有Skillにホームディレクトリの絶対パスを保存しない。global PATH・既存v0.4インストールを上書きしない。
 
 snapshot ControllerのHostツール管理や任意の外部prefixを選ぶ場合だけ、開発対象外の場所へ導入し、その環境の`ASC_CLI`で実パスを指定する。snapshotの候補外ツール管理を標準配置へ暗黙に切り替えない。
 
