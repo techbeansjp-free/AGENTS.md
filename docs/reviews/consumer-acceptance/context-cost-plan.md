@@ -149,3 +149,9 @@ PR #1606の再レビューで、集計器がHostのGit参照環境を引き継�
 合成repoのGit管理領域を明示的な書込み先として渡すとcommit停止は解消した。実プロジェクトやネットワークへの権限は増やしていない。別のEPERMは、Node 24.19.0の`spawnSync`で未使用stdinをpipeにした場合に再現した。同じCodex境界でstdinだけを`ignore`にすると、stdout/stderrを取得したまま正常終了した。標準`start`/`worktree-verify`の4呼出しをこの非対話設定へ変更し、エラーの無視や隔離解除はしていない。既存worktreeテスト10件と独立レビューに合格。
 
 `native-host-pilot-results.json`に失敗した2試行も含めて記録した。修正済みtarballの3試行目は、実worktreeのstart、Agent自身の実装、テスト、別Contextレビュー、commitまで60.84秒で完走し、親子合計275,971 processed tokensだった。試験側が実装を修正した回数は0。同じ隔離条件で配布物のworktree-verifyも成功した（この最終確認は試験側の実行として区別）。PR/CIはこのpilotでは実行しておらず、5組の性能比較や複雑Goalの受入を代替しない。比較条件が変わった診断試行から速度改善率を算出しない。
+
+### 標準Host候補のDraft PR/CI到達
+
+`native-host-delivery-results.json`: 公開合成Issue #1の元要求を配布物と実worktreeへ渡し、Agentが修正・厳密な回帰テスト・commit・同一HEADの独立レビューまで実施した。Host所有の提出アダプターで[Draft PR #28](https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/28)を作成し、そのHEADに対応する既存CI（回帰テストと独立Hello oracle）が成功した。変更は合成の2ファイルだけで、試験側の実装修正・計画代行は0回。認証情報はAgentへ渡していない。
+
+ただし、この試行では評価側が独立ReviewerのHEADを確認し、提出アダプターを別途起動した。その引継ぎを無人の統合実行と偽らない。Agent実装・レビュー、提出・CI観測、引継ぎを含む実経過を分離して記録した。親子usageは取得したが、外側の評価進行役は欠測。単発の提出実証であり、完全な自律制御や複数試行の低コスト保証は未達。

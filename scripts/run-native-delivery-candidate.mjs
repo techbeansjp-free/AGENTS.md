@@ -1,0 +1,27 @@
+/** Synthetic current-Host delivery candidate. Agent has no network; publication is a separate verified Host operation. */
+import fs from 'node:fs';import path from 'node:path';import {spawn,execFileSync} from 'node:child_process';import {performance} from 'node:perf_hooks';
+import {configuration} from '../src/restricted-agent.mjs';
+import {extendFixturePermissions} from './complex-permissions.mjs';
+const [tarball, codex] = process.argv.slice(2);
+if (!tarball || !codex || !path.isAbsolute(tarball) || !path.isAbsolute(codex)) throw Error('Usage: node scripts/run-native-host-pilot.mjs <absolute-tarball> <absolute-codex>');
+const root=fs.mkdtempSync('/var/tmp/asc-native-delivery-'),origin=path.join(root,'origin'),runtime=path.join(root,'runtime'),bootstrap=path.join(root,'bootstrap'),pkg=path.join(root,'distribution');
+for(const p of [origin,runtime,bootstrap,pkg])fs.mkdirSync(p);
+execFileSync('tar',['-xzf',tarball,'-C',pkg]);
+const env={...process.env};for(const k of Object.keys(env))if(/^git_/i.test(k))delete env[k];
+const repository='adachi-tatsuru/asc-public-synthetic-eval-20261016';
+execFileSync('git',['clone','--single-branch','--branch','main',`git@github.com:${repository}.git`,origin],{env,stdio:['ignore','pipe','pipe']});
+const git=(...a)=>execFileSync('git',a,{cwd:origin,env,encoding:'utf8'}).trim();
+git('config','user.name','Synthetic Tester');git('config','user.email','test@example.invalid');
+const base=git('rev-parse','HEAD');
+const issue=JSON.parse(execFileSync('gh',['issue','view','1','--repo',repository,'--json','number,title,body'],{encoding:'utf8'}));
+const now=new Date(),pad=n=>String(n).padStart(2,'0');
+const stamp=`${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+const branch='fix/1-native-'+stamp,worktree=path.join(origin,'.worktrees',stamp+'-1-native-'+stamp);git('worktree','add','-b',branch,worktree,base);
+const cli=path.join(pkg,'package','bin','asc-v05.mjs'),skill=path.join(pkg,'package','skills','asc','SKILL.md');
+const c=configuration({workspace:bootstrap,runtime,executable:fs.realpathSync(codex),writable:true});
+extendFixturePermissions(c.options,[pkg],[origin,path.join(origin,'.git')]);c.options=c.options.map(v=>v==='features.multi_agent=false'?'features.multi_agent=true':v);
+const prompt=`Synthetic development trial. Use packaged ASC skill at ${skill} and CLI ${cli}. Authorized repo ${worktree}, branch ${branch}, base ${base}, public synthetic Issue 1. Owner requirement: ${issue.body} Your current boundary has no network. Complete all local work, actual tests, independent fresh-context review using the same model, corrections if needed, and local commit. Test with python3 -I test_greeting.py plus an independent exact Hello oracle. Review the committed candidate: give reviewer original requirement, base and candidate HEAD, and ask it to return PASS or FAIL with the exact reviewed HEAD. Do not modify workflow or other files. After local acceptance request delivery by reporting final HEAD and reviewer ID; the Host-owned adapter will perform the authorized push, Draft PR and CI observation. Never claim publication before the Host result. Decide work yourself; avoid extra planning agents. No other questions are needed for this fixture.`;
+fs.writeFileSync(path.join(root,'setup.json'),JSON.stringify({root,origin,worktree,base,branch,repository,issue,cli,skill,model:'gpt-5.6-sol',effort:'medium',scope:'local candidate for Host-owned Draft PR/CI; no publication by Agent'},null,2));
+const out=fs.openSync(path.join(root,'events.jsonl'),'w'),err=fs.openSync(path.join(root,'stderr'),'w'),started=performance.now();
+const p=spawn(c.binary,['exec','--ignore-user-config','--ignore-rules','--skip-git-repo-check','--json','-m','gpt-5.6-sol','-c','model_reasoning_effort="medium"','-C',worktree,...c.options,'-'],{env:c.env,stdio:['pipe',out,err]});p.stdin.end(prompt);
+p.on('close',(status,signal)=>{fs.closeSync(out);fs.closeSync(err);fs.writeFileSync(path.join(root,'result.json'),JSON.stringify({status,signal,seconds:(performance.now()-started)/1000}));console.log(root);});console.log(JSON.stringify({root,pid:p.pid}));
