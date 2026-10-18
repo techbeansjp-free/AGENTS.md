@@ -25,6 +25,16 @@
       "outputFilesSha256": {
         "cart/total.mjs": "b17a85e67e6c3e73e09bd071f04572831ed207087993194362724acdf40b6424",
         "test.mjs": "78e6394e0865b2f53cbb025c08ea73c8d995accea843c985ff882c095952122c"
+      },
+      "readObservation": {
+        "scope": "manual inspection of completed command events; not internal model context usage",
+        "preEditContentReadCommands": 2,
+        "repeatedUnchangedContentFiles": [
+          "HANDOFF.md",
+          "REQUIREMENTS.md"
+        ],
+        "postEditReadback": true,
+        "postEditReadbackCountsAsDuplicate": false
       }
     },
     {
@@ -50,6 +60,13 @@
       "outputFilesSha256": {
         "cart/total.mjs": "b17a85e67e6c3e73e09bd071f04572831ed207087993194362724acdf40b6424",
         "test.mjs": "8419aa384ff90abc7991cbf3a8f36411896dccc267d24f5d005ae934096d6264"
+      },
+      "readObservation": {
+        "scope": "manual inspection of completed command events; not internal model context usage",
+        "preEditContentReadCommands": 2,
+        "repeatedUnchangedContentFiles": [],
+        "postEditReadback": true,
+        "postEditReadbackCountsAsDuplicate": false
       }
     }
   ],
