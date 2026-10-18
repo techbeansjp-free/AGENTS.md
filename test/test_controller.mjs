@@ -298,3 +298,14 @@ test('verification output overflow is an infrastructure error with the bounded b
  const {c}=fixture(t);
  assert.throws(()=>c.executeVerification(['--',process.execPath,'-e',"process.stdout.write('x'.repeat(2*1024*1024))"]),{code:'ASC_VERIFICATION_OUTPUT_LIMIT'});
 });
+
+test('empty blob inventories bound batch headers as well as content bytes',t=>{
+ const {c,root}=fixture(t);
+ const oid=execFileSync('git',['hash-object','-w','--stdin'],{cwd:root,input:'',encoding:'utf8'}).trim();
+ // 350,000 empty SHA-1 blobs emitted together exceed the 16 MiB Git pipe buffer.
+ const count=350000,objects=Array.from({length:count},(_,i)=>({name:`empty-${i}`,mode:'100644',oid,size:0}));
+ const original=c.gitInput.bind(c);let calls=0,seen=0;
+ c.gitInput=(input,...args)=>{calls++;assert(input.trim().split('\n').length<=4096);return original(input,...args);};
+ const result=c.readBlobs(objects,(_name,blob)=>{assert.equal(blob.bytes.length,0);seen++;});
+ assert.equal(seen,count);assert.equal(calls,Math.ceil(count/4096));assert.equal(result.size,0);
+});

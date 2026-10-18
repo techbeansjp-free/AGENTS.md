@@ -110,6 +110,7 @@ export class Controller {
     if(!objects.length)return blobs;
     // Validate the full inventory/size before requesting any contents. Object IDs,
     // never filenames or source text, form the batch protocol input.
+    // Bound protocol headers too: empty blobs still emit an OID, size and separators.
     const batches=[];let batch=[],batchBytes=0;
     for(const object of objects){
       if(object.size>SOURCE_BATCH_BYTES){
@@ -118,7 +119,7 @@ export class Controller {
           demand(fs.statSync(file).size===object.size,'Truncated blob');store(object.name,{mode:object.mode,oid:object.oid,bytes:fs.readFileSync(file)});
         }finally{fs.rmSync(dir,{recursive:true,force:true});}continue;
       }
-      if(batch.length&&batchBytes+object.size>SOURCE_BATCH_BYTES){batches.push(batch);batch=[];batchBytes=0;}
+      if(batch.length&&(batch.length>=4096||batchBytes+object.size>SOURCE_BATCH_BYTES)){batches.push(batch);batch=[];batchBytes=0;}
       batch.push(object);batchBytes+=object.size;
     }
     if(batch.length)batches.push(batch);

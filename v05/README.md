@@ -11,7 +11,7 @@ ASCは、目的と受入条件、許可された変更範囲、既存規約を�
 Node.js 20以上を使用します。標準導入は[利用手順](USAGE.md#標準の導入先asc_cliは不要)に従い、固定tarballから`project-assets`で本体を`managed-runtime/`へ配置します。以下は任意の外部prefixへ導入する例です。npmのlifecycle scriptは実行しません。
 
 ```sh
-npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.4.tgz
+npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.6.tgz
 /absolute/asc-tools/node_modules/.bin/agent-skill-chain --version
 /absolute/asc-tools/node_modules/.bin/agent-skill-chain capabilities
 ```

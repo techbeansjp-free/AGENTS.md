@@ -61,7 +61,7 @@ test('foreign Git environment cannot redirect worktree verification',t=>{
   process.env.GIT_DIR=path.join(f.repo,'.git');process.env.GIT_WORK_TREE=f.repo;process.env.GIT_INDEX_FILE=path.join(f.root,'wrong-index');
   process.env.GIT_OBJECT_DIRECTORY=path.join(f.root,'missing-objects');
   const result=verifyWorktree(f.work,f.base,f.owner);assert.equal(result.passed,true);
-  assert.notEqual(result.head,f.base);assert.equal(result.repo,fs.realpathSync(f.work));
+  assert.notEqual(result.head,f.base);assert.equal(fs.realpathSync.native(result.repo),fs.realpathSync.native(f.work));
   assert.equal(result.results[1].exit,0);
  }finally{for(const key of Object.keys(process.env))if(!Object.hasOwn(saved,key))delete process.env[key];Object.assign(process.env,saved);}
 });
