@@ -1,0 +1,23 @@
+{
+  "scope": "Current Codex collaboration tools only; not Codex CLI or Claude Code",
+  "operation": "Non-mutating parent/child lifecycle probe",
+  "parent": "/root/descendant_probe",
+  "child": "/root/descendant_probe/leaf",
+  "model": "gpt-5.6-sol",
+  "observations": [
+    "Parent completed immediately after spawning child",
+    "Child sent a message directly to root",
+    "Root list_agents observed parent completed and child running",
+    "Root interrupt_agent addressed child directly and returned previous_status running",
+    "Root list_agents then observed child interrupted"
+  ],
+  "filesModifiedByProbe": false,
+  "osProcessesTested": false,
+  "usage": null,
+  "limitations": [
+    "Parent completion does not imply descendant completion",
+    "Interrupting an Agent does not establish OS child-process cleanup",
+    "This Host supports descendant observation/control; do not generalize to other Hosts",
+    "No hierarchy performance advantage demonstrated"
+  ]
+}

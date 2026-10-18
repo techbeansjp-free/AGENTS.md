@@ -1,0 +1,235 @@
+{
+  "scope": "Claude Code descendant capability; not ASC performance evidence",
+  "observedDate": "2026-10-19",
+  "localVersion": "2.1.282",
+  "officialSources": [
+    {
+      "url": "https://code.claude.com/docs/en/sub-agents#let-subagents-spawn-their-own-subagents",
+      "finding": "Current documentation permits nested subagents, default depth three. It distinguishes interactive parent waiting from non-interactive late descendant results returning to main. This is not proof of main-directed descendant cancellation."
+    },
+    {
+      "url": "https://code.claude.com/docs/en/agent-teams#limitations",
+      "finding": "Nested teams are not supported. Only the lead manages the team. This restriction must not be generalized to nested subagents."
+    }
+  ],
+  "localTrial": {
+    "mode": "print; restricted; no file, shell, or network tools; synthetic delegation prompt; sonnet",
+    "result": "authentication_failed",
+    "message": "OAuth session expired and could not be refreshed",
+    "agentSpawned": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "modelCostUsd": 0,
+    "conclusion": "Nested spawning, direct descendant observation, messaging and cancellation remain unverified locally."
+  },
+  "acceptance": "Current local version supports nested spawn and main-directed message/TaskStop by known descendant ID in this limited trial. Do not generalize to older versions, other Hosts, enumeration without ID, or OS subprocess cleanup.",
+  "authenticatedTrials": [
+    {
+      "name": "authenticated-probe",
+      "rawLogSha256": "1bd200f02c5fa034762b5bb9843a350783b4fddea9d49fb039565a4e87e09995",
+      "version": "2.1.282",
+      "mode": "restricted print; sonnet; only Agent/TaskOutput/TaskStop/SendMessage tools; synthetic text",
+      "durationMilliseconds": 18102,
+      "isError": false,
+      "subagentStats": {
+        "spawned": 2,
+        "requested": {
+          "background": 0,
+          "foreground": 2,
+          "unset": 0
+        },
+        "started_in_background": 0,
+        "max_depth": 2,
+        "spawned_by_subagents": 1,
+        "completed": 2,
+        "failed": 0,
+        "killed": {
+          "parent": 0,
+          "user": 0,
+          "system": 0
+        },
+        "refused": {
+          "depth_limit": 0,
+          "concurrency_limit": 0,
+          "budget": 0
+        },
+        "by_type": {
+          "general-purpose": 2
+        }
+      },
+      "usage": {
+        "input_tokens": 4,
+        "cache_creation_input_tokens": 12502,
+        "cache_read_input_tokens": 11504,
+        "output_tokens": 487,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 12502,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 108,
+            "cache_read_input_tokens": 11504,
+            "cache_creation_input_tokens": 998,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 998
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "modelUsage": {
+        "claude-haiku-4-5-20251001": {
+          "inputTokens": 976,
+          "outputTokens": 13,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0,
+          "webSearchRequests": 0,
+          "costUSD": 0.001041,
+          "contextWindow": 200000,
+          "maxOutputTokens": 32000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-haiku-4-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        },
+        "claude-sonnet-5": {
+          "inputTokens": 10,
+          "outputTokens": 968,
+          "cacheReadInputTokens": 24860,
+          "cacheCreationInputTokens": 21245,
+          "webSearchRequests": 0,
+          "costUSD": 0.0865375,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 64000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-sonnet-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "listPriceEstimateUsd": 0.0875785
+    },
+    {
+      "name": "lifecycle-probe",
+      "rawLogSha256": "61af70b14e838fbcb264069b0a27740563bd22d16d35d9958306e21c42da6079",
+      "version": "2.1.282",
+      "mode": "restricted print; sonnet; only Agent/TaskOutput/TaskStop/SendMessage tools; synthetic text",
+      "durationMilliseconds": 12858,
+      "isError": false,
+      "subagentStats": {
+        "spawned": 2,
+        "requested": {
+          "background": 1,
+          "foreground": 1,
+          "unset": 0
+        },
+        "started_in_background": 1,
+        "max_depth": 2,
+        "spawned_by_subagents": 1,
+        "completed": 2,
+        "failed": 0,
+        "killed": {
+          "parent": 0,
+          "user": 0,
+          "system": 0
+        },
+        "refused": {
+          "depth_limit": 0,
+          "concurrency_limit": 0,
+          "budget": 0
+        },
+        "by_type": {
+          "general-purpose": 2
+        }
+      },
+      "usage": {
+        "input_tokens": 6,
+        "cache_creation_input_tokens": 2963,
+        "cache_read_input_tokens": 34031,
+        "output_tokens": 851,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 2963,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 299,
+            "cache_read_input_tokens": 12278,
+            "cache_creation_input_tokens": 836,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 836
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "modelUsage": {
+        "claude-haiku-4-5-20251001": {
+          "inputTokens": 1034,
+          "outputTokens": 12,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0,
+          "webSearchRequests": 0,
+          "costUSD": 0.001094,
+          "contextWindow": 200000,
+          "maxOutputTokens": 32000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-haiku-4-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        },
+        "claude-sonnet-5": {
+          "inputTokens": 12,
+          "outputTokens": 1143,
+          "cacheReadInputTokens": 53575,
+          "cacheCreationInputTokens": 5369,
+          "webSearchRequests": 0,
+          "costUSD": 0.040035999999999995,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 64000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-sonnet-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "listPriceEstimateUsd": 0.04113
+    }
+  ],
+  "observedCapabilities": {
+    "nestedSpawn": "Two actual Agent calls with parent_tool_use_id relationship; max_depth 2 and spawned_by_subagents 1.",
+    "mainMessage": "Main SendMessage addressed leaf ID returned by parent; tool success true, response Resuming agent. Delivery acknowledgement not observed.",
+    "mainStop": "Main TaskStop on same leaf ID returned Successfully stopped task, task_type local_agent. Does not establish OS process termination.",
+    "limits": [
+      "Foreground/background print mode only; interactive UI not tested.",
+      "Leaf may have completed before SendMessage resumed it; no claim it remained running continuously after parent exit.",
+      "Aggregate killed counters were zero despite successful TaskStop result; counters alone are insufficient cancellation evidence.",
+      "Not a performance comparison; reported dollar values are CLI list-price estimates, not Max subscription charges."
+    ]
+  }
+}
