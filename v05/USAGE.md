@@ -1,8 +1,8 @@
 # v0.5評価CLIの実行手順
 
-## 標準: 現在のAIとworktreeの開発環境
+## 標準: 現在のAIとプロジェクトの開発環境
 
-`asc-v05 start <worktree>` で専用worktreeを確認し、現在のAIがその場所で通常の実装・ビルド・テストを行う。pnpmの既存workspace・store・symlinkをそのまま使い、ASC向けの依存コピーやhash登録は行わない。依存が未導入ならプロジェクトのlockfileと現在のHost権限に従って導入する。worktree間の共有依存を無断で変更しない。
+`asc-v05 start <project-directory>` で作業場所を確認し、現在のAIがその場所で通常の実装・ビルド・テストを行う。Git管理済みrepoの場合は専用worktreeが必要。Git未管理のフォルダー（Git管理予定がないプロジェクトや複数repoの親を含む）でも開始でき、Git初期化やworktree作成は不要。pnpmの既存workspace・store・symlinkをそのまま使い、ASC向けの依存コピーやhash登録は行わない。依存が未導入ならプロジェクトのlockfileと現在のHost権限に従って導入する。worktree間の共有依存を無断で変更しない。
 
 検証の機械記録が必要なら `worktree-verify <worktree> <base> <owner-contract.json>` を使用できる。ownerファイルはworktree外に置き、`{"intent":"目的","allowedPaths":["src/file.ts"],"commands":[["pnpm","test"],["pnpm","build"]]}` のように指定する。変更をcommitしてから実行する。テストは現在のHost権限・環境変数で実際のworktree内に実行される（ASC独自sandboxではない）。現在のHostで許可されたコマンドだけ指定する。Windowsで.cmdを介する場合はHostが通常使うNodeとCLI scriptのargvなど、shellを必要としない実行入口を指定する。
 
@@ -12,7 +12,7 @@ snapshot方式の `run` / `review` / `goal-propose` / `run-adaptive` / `run-goal
 
 ## 利用中のAIと実行経路
 
-対話型開発は利用中のHostで実施する。Claude Code利用者にCodexを必須にしない。配布Skill `skills/asc/SKILL.md` は、専用worktree・既存依存関係・実テスト・別コンテキストの独立レビュー・Draft PR/CIを現在のHostで行う入口である。
+対話型開発は利用中のHostで実施する。Claude Code利用者にCodexを必須にしない。配布Skill `skills/asc/SKILL.md` は、既存依存関係・実テスト・別コンテキストの独立レビューを現在のHostで行う入口である。Git管理済みrepoでは専用worktreeを使い、Gitでの提出を求められた場合はDraft PR/CIへ進む。Git未管理の作業にGit導入やPR提出を強制しない。
 
 以下の `run` 等は別途選択するControllerの自動実行APIである。同梱のCodexアダプターを選ぶときだけ `codexExecutable` と `model` が必要になる。owner指定の `hostExecution` または埋込みHostのAgent関数では、そのHostが実行製品とモデルを決める。汎用Hostプロトコルの提供だけを、Claude Code CLIアダプターの実装済み保証とみなさない。
 
@@ -25,7 +25,7 @@ CI観測は既定では時間上限を持たず、対象PR・commitに拘束さ�
 
 ## 作業場所
 
-標準の`start`とsnapshot入口の`run`/`run-goal`はlinked worktreeを要求する。新規作成時の標準命名はv0.4と同じく、directoryを`.worktrees/<YYYYMMDD_HHMMSS>-<Issue番号>-<slug>`、作業branchを`<type>/<Issue番号>-<slug>`とする。時刻は作成環境のlocal time、slugは小文字英数字とハイフン、標準typeは`feature`・`fix`・`refactor`・`test`・`docs`・`chore`。Issue番号とslugはdirectoryとbranchで揃える。プロジェクトが明示した命名規約を優先する。同じIssueを並列分担する場合はslugへ担当名を含める（例: `account-api` / `account-ui`）。
+標準の`start`と`project-assets`がlinked worktreeを要求するのは、対象がGit管理済みrepoの場合に限る。Git未管理のフォルダーにはそのまま使用できる。snapshot入口の`run`/`run-goal`は引き続きGit管理された作業場所を必要とする。以下はGitの作業場所を作成・使用する場合の説明である。新規作成時の標準命名はv0.4と同じく、directoryを`.worktrees/<YYYYMMDD_HHMMSS>-<Issue番号>-<slug>`、作業branchを`<type>/<Issue番号>-<slug>`とする。時刻は作成環境のlocal time、slugは小文字英数字とハイフン、標準typeは`feature`・`fix`・`refactor`・`test`・`docs`・`chore`。Issue番号とslugはdirectoryとbranchで揃える。プロジェクトが明示した命名規約を優先する。同じIssueを並列分担する場合はslugへ担当名を含める（例: `account-api` / `account-ui`）。
 
 例: `git worktree add -b fix/123-login-message .worktrees/20261015_143000-123-login-message <base>`。専用作業先の絶対pathを`repo`に指定する。名前が衝突したら別slugを選び、既存branchの強制reset・worktree上書きを行わない。必要に応じてownerがmerge/rebaseでbase変更を取り込み、更新した要求で検証・reviewを再実行する。ASCは自動fetch・stash・reset・base更新を行わない。
 
@@ -249,11 +249,11 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 ### プロジェクト内の配布資産を導入・更新する
 
-インストール済みの固定CLIを使い、専用worktreeで実施する。
+インストール済みの固定CLIを使い、対象ディレクトリに対して実施する。Git管理済みrepoなら専用worktreeを指定する。Git未管理のフォルダーならそのフォルダーを直接指定でき、Git初期化やworktree作成は不要。
 
 ```text
-<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <worktree>
-<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <worktree> --apply
+<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory>
+<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --apply
 ```
 
 最初のコマンドは読取りのみで、作成・更新予定と競合をJSON表示する。`--apply`を指定すると、現在の配布パッケージから次の資産を配置する。
@@ -261,7 +261,7 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 ```text
 .agent-skill-chain/
 ├── 00_利用案内.md
-├── distribution.json      配布済み内容のhash（Git管理する）
+├── distribution.json      配布済み内容のhash（Git利用時は共有資産とともに管理）
 ├── skills/asc/SKILL.md     相対参照の共有Skill
 ├── bin/asc.mjs             ローカル実行入口
 ├── runtime.json            使用バージョン
@@ -276,7 +276,7 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 通常の更新ではHostのSkill入口・AGENTS.md・Hook・権限設定は変更しない。Skillは相対参照とruntime.jsonの版を共有する。別Hostや別prefixでは同じ版を導入し、必要なら環境変数ASC_CLIを設定する。共有資産の再生成は不要。実行中のAgentと並行して設定更新しない。中断・I/Oエラー時はworktreeを確認し、再度previewする。途中状態を成功と扱わず、競合がある場合は自動復旧やresetを行わない。正常な別worktreeの変更だけで更新を拒否することはない。
 
 
-配布資産も前の候補へ戻す場合は、保持した旧tarballを同じprefixへ再インストールしてから、そのCLIで`project-assets <worktree>`の差分を確認し、`--apply`する。利用者が編集した資産は差し戻し時も競合として停止する。旧版にない新規資産は自動削除しない。必要なら変更を確認して別途撤去する。CLIの再インストールだけでプロジェクト内の資産が戻ったとは扱わない。
+配布資産も前の候補へ戻す場合は、保持した旧tarballを同じprefixへ再インストールしてから、そのCLIで`project-assets <project-directory>`の差分を確認し、`--apply`する。利用者が編集した資産は差し戻し時も競合として停止する。旧版にない新規資産は自動削除しない。必要なら変更を確認して別途撤去する。CLIの再インストールだけでプロジェクト内の資産が戻ったとは扱わない。
 
 Linuxで2つの未公開v0.5候補を旧→新→旧とoffline導入し、配布資産の復元、固有ルール・作成済み仕様書・アプリの保持、編集済み資産での全体停止を確認した（`RELEASE_READINESS.json`の`projectAssetPackageRoundtrip`）。v0.4 runtimeへの復帰、実行中の更新、任意の設定変換を保証する試験ではない。
 
@@ -285,8 +285,8 @@ Linuxで2つの未公開v0.5候補を旧→新→旧とoffline導入し、配布
 `.agents/skills/`を認識するHostでは、次の明示オプションでプロジェクト内の入口を配置できる。
 
 ```text
-<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <worktree> --register-skill
-<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <worktree> --register-skill --apply
+<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --register-skill
+<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --register-skill --apply
 ```
 
 追加対象は`.agents/skills/asc/SKILL.md`だけ。この短い入口は`.agent-skill-chain/skills/asc/SKILL.md`を相対参照するため、通常の配布資産更新後も新しい本文へ辿れる。既存の同名Skillが異なる内容なら競合として停止し、他Skill・ユーザー全体の設定・AGENTS.md・Hook・権限は変更しない。通常の更新で登録入口が`retained`に出ても、不要になったという意味ではない。
