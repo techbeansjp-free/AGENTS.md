@@ -11,12 +11,14 @@ v0.5系を正式版として提供します。[GitHub Release](https://github.co
 Release添付のtarballから、[導入手順](v05/USAGE.md)の`project-assets`で実行本体を`.agent-skill-chain/managed-runtime/`へ配置します。Git共有時は本体もcommitし、clone・worktreeごとに同じ版を使います。ASC本体のビルドは不要です。通常のコマンド名は`agent-skill-chain`です。`asc-v05`も同じruntimeを呼び出します。旧コマンドへの暗黙の切り替えは行いません。
 
 ```sh
-agent-skill-chain --version
-agent-skill-chain capabilities
-agent-skill-chain start /absolute/path/to/worktree
+node .agent-skill-chain/bin/asc.mjs --version
+node .agent-skill-chain/bin/asc.mjs capabilities
+node .agent-skill-chain/bin/asc.mjs start /absolute/path/to/project
 ```
 
-標準は専用worktreeで、現在のClaude Code／Codexが既存の開発環境・依存関係を使って実装・検証し、別Contextの独立レビューを経てDraft PR/CIへ進む経路です。ASC本体は直接実行できる配布物で、利用者にASCのビルドや依存資産のコピー・ハッシュ登録を要求しません。`start`は作業場所と責務の案内で、開発完了やレビューの証明ではありません。
+Git管理済みrepoでは専用worktreeを使い、現在のClaude Code／Codexが既存の開発環境・依存関係を使って実装・検証し、別Contextの独立レビューを経てDraft PR/CIへ進む経路です。ASC本体は直接実行できる配布物で、利用者にASCのビルドや依存資産のコピー・ハッシュ登録を要求しません。`start`は作業場所と責務の案内で、開発完了やレビューの証明ではありません。
+
+Git未管理のフォルダーや、複数repoをまとめるGit未管理の親ディレクトリにも導入できます。Git初期化やPR提出は強制しません。Git管理する対象ではrepoごとに専用worktreeを使います。
 
 snapshot Controllerは明示選択の別経路です。利用する場合だけ `run --snapshot <external-owner-request.json>` 等を指定します。そこで必要となる隔離・依存コピーの制約は、標準経路の前提ではありません。
 
@@ -30,6 +32,10 @@ snapshot Controllerは明示選択の別経路です。利用する場合だけ 
 利用者プロジェクト/
 ├── .agent-skill-chain/
 │   ├── 00_利用案内.md
+│   ├── bin/asc.mjs          同梱本体の起動入口
+│   ├── runtime.json         使用版
+│   ├── managed-runtime/     実行可能なASC本体（Git共有可能）
+│   ├── v05/                 利用・移行などの資料
 │   ├── project/             利用者固有ルール（保持）
 │   ├── skills/asc/          v0.5の実行案内
 │   ├── templates/specs/     仕様書の雛形
@@ -40,15 +46,15 @@ snapshot Controllerは明示選択の別経路です。利用する場合だけ 
 └── .worktrees/              Issue別作業先
 ```
 
-ASCのプログラムはプロジェクト外の固定npmインストール先に置きます。パッケージ更新と、プロジェクトへ配った案内・Skill・雛形の更新は分かれています。専用worktreeで、インストール済みCLIの`project-assets <worktree>`で差分を確認し、`--apply`で適用します。Host向け入口も配置する場合だけ`--register-skill`を指定します。
+ASCのプログラムも案内・Skill・雛形と一緒に更新します。更新先の固定tarballを導入し、その版のCLIの`project-assets <project-directory>`で差分を確認して、`--apply`で適用します。Git管理済みなら専用worktreeで行います。既存の同梱CLIは自動で新版をダウンロードしません。Host向け入口も配置する場合だけ`--register-skill`を指定します。
 
 未編集の配布資産だけを更新し、利用者が編集・削除した資産は競合として停止します。`project/`、作成済み仕様書、独自の雛形、アプリは上書きしません。旧Step専用の設定・Hook・Skillの撤去はこの更新操作に含めません。具体的な操作と制約は[配布資産の導入・更新](v05/USAGE.md#プロジェクト内の配布資産を導入更新する)を参照してください。
 
 ## 品質と移行
 
-実装者とReviewerのContextを分離し、元要求・実差分・テスト・規約を検分します。Controllerは変更範囲、Evidence、提出commitの一致を検証します。文書やGherkin・DDD等は利用プロジェクトの契約と変更内容に応じて適用し、毎回の生成や専用Agent起動を強制しません。
+実装者とReviewerのContextを分離し、元要求・実差分・テスト・規約を検分します。標準経路では現在のHostが実テストとレビューを行い、Git提出時に対象commitとCIの一致を確認します。任意の`worktree-verify`は変更範囲と実検証結果をcommitへ対応付けます。明示選択のsnapshot経路ではControllerがこれらを制御します。文書やGherkin・DDD等は利用プロジェクトの契約と変更内容に応じて適用し、毎回の生成や専用Agent起動を強制しません。
 
-v0.4の`workflow advance`等とは非互換です。旧設定や利用者の成果を勝手に削除・変換しません。[移行・復旧手順](v05/MIGRATION_PLAN.md)と[現在の受入状態](v05/RELEASE_READINESS.json)を確認してください。通常配布入口の切り替えと、全移行経路・正式release手順の受入完了は別です。
+v0.4の`workflow advance`等とは非互換です。旧設定や利用者の成果を勝手に削除・変換しません。[移行・復旧手順](v05/MIGRATION_PLAN.md)と[対象commit付きの受入記録](v05/RELEASE_READINESS.json)を確認してください。通常配布入口の切り替えと、全移行経路・正式release手順の受入完了は別です。
 
 ## 開発と検証
 

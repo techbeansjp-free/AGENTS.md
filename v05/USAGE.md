@@ -43,7 +43,7 @@ snapshot方式の `run` / `review` / `goal-propose` / `run-adaptive` / `run-goal
 CI観測は既定では時間上限を持たず、対象PR・commitに拘束されたCIの完了まで待つ。ownerが待機期限を必要とする場合だけ `delivery.ciTimeoutMilliseconds` に非負の整数（ミリ秒）を指定する。`null` または省略は無期限、`0` は一度だけ観測する。期限到達はCI失敗や合格とは別の観測終了である。OS・プロセス自体の終了や通信障害は別途起こり得る。
 
 
-正式リリース前の評価用。現在、要求からDraft PR/CIまで実証した実行環境はLinux。同梱のLinux Codex自動実行アダプターにはNode.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。これは全Host共通の必要条件ではない。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
+以下は明示選択のLinux snapshot経路の条件。過去の要求からDraft PR/CIまでの実証は受入記録の対象commit・条件に限る。同梱のLinux Codex自動実行アダプターにはNode.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。これは全Host共通の必要条件ではない。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
 
 `agent-skill-chain --help`（別名`asc-v05 --help`）で開始・再開・移行の入口と、この手順書の配布先を確認できます。引数なしも案内のみを表示し、Agent起動やGit変更は行いません。
 
