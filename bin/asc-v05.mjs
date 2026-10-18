@@ -63,9 +63,9 @@ try {
   migration-stage <source> <new-location> <external-owner-plan>
   migration-rollback <location>  評価の選択記録のみを戻す（再導入・設定復元はしない）
 
-owner入力は作業repoの外に置きます。通常実行は専用worktreeを使用します。
+snapshot実行やworktree-verifyのowner入力ファイルは作業repoの外に置きます。Git管理済みrepoの通常実行は専用worktreeを使用します。
 必要環境・入力例・承認・検証資産の準備: ${new URL('../v05/USAGE.md',import.meta.url).pathname}
-Alpha版です。明示Host経路はOS名で拒否しません。標準経路は現在のHost権限を使います。snapshot経路は実行時の隔離検査が必須です。公開・merge・releaseの承認は別途必要です。`);
+v0.5の実行入口です。使用版は--versionで確認してください。明示Host経路はOS名で拒否しません。標準経路は現在のHost権限を使います。snapshot経路は実行時の隔離検査が必須です。公開・merge・releaseの承認は別途必要です。`);
   } else if(command==='start'&&args.length>=1){
     const paths=[];for(let i=1;i<args.length;i+=2){if(args[i]!=='--path'||!args[i+1])throw Error('Expected --path <changed-path>');paths.push(args[i+1]);}
     console.log(JSON.stringify(startWorktree(args[0],paths),null,2));

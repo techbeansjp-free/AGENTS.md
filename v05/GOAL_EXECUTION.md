@@ -1,8 +1,10 @@
-# Goal execution (evaluation, not release acceptance)
+# Goal execution — snapshot Controllerと評価履歴
 
-標準経路は現在のAI Hostが専用worktreeの既存開発環境で作業する。以下の自動Controllerコマンドは明示選択するsnapshot backendの説明であり、通常開発へ依存コピーや別AIを強制しない。標準入口は[USAGE](USAGE.md)を参照。
+標準経路は現在のAI Hostが既存開発環境で作業する。Git管理済みrepoでは専用worktreeを使い、非Gitフォルダーではworktreeを要求しない。以下の自動Controllerコマンドは明示選択するsnapshot backendの説明であり、通常開発へ依存コピーや別AIを強制しない。標準入口は[USAGE](USAGE.md)を参照。
 
-## 現在の開発・受入目標（2026-10-17、ownerとの議論を反映）
+## 開発・受入目標の記録（2026-10-17）
+
+この節は当時の目標・提出先・評価条件の記録であり、現在の利用者への作業指示や全項目の実証完了を意味しない。以下の現行API説明と、対象commitに限定された実験結果を区別する。
 
 ASC v0.5を、進行役と同じAI・Hostを標準として、実プロジェクトの要求から必要な設計・実装・依存関係を使うビルド／テスト・独立レビュー・Draft PR・CI確認まで、途中成果を失わず自走できる状態にする。Macで実際に利用できることを優先し、OS名だけの拒否やv0.4で可能だった通常開発の退行を解消する。品質と、完走までの総時間・総Agent処理量の両方を受入対象にする。
 
@@ -18,7 +20,7 @@ ASC v0.5を、進行役と同じAI・Hostを標準として、実プロジェク
 これは既存の制限評価の目標を包含する更新であり、固定Step・専用Agent・新しいADRを増やす指示ではない。受入前にMac正常動作、品質保証、低コストが実証済みとは記載しない。
 
 
-`asc-v05 goal-plan owner-plan.json` validates an explicit owner plan and prints dependency batches. `asc-v05 run-goal --snapshot external-owner-request.json` executes it. The request must remain outside the candidate repository. Ordinary single-Goal `run` remains available; small changes do not require a multi-unit plan.
+`asc-v05 goal-plan owner-plan.json` validates an explicit owner plan and prints dependency batches. `asc-v05 run-goal --snapshot external-owner-request.json` executes it. The request must remain outside the candidate repository. Ordinary single-Goal `run --snapshot` remains available; small changes do not require a multi-unit plan.
 
 The run request retains the existing `repo`, `base`, `contract`, model, provider executable, verification assets and Draft delivery settings. Add:
 
@@ -80,7 +82,7 @@ A later-group failure is also covered by a regression: the first group remains i
 
 ## Failed-call accounting
 
-Failed unit controllers carry their newly produced diagnostic result into the Goal result, including calls, usage or null and actual stage events. A failure remains a rejected unit; diagnostic records never count as approval or successful review. Whole-Goal workflow failures retain their diagnostics too. `node report_workflow.mjs result.json` now aggregates successful and failed unit calls and whole-Goal calls once. Missing unit diagnostics in older files stay missing, not zero, and parallel unit durations are not added to Goal wall time. Provider-wide Agent enumeration remains uncertified, so `allAgentTotalTokens` remains null.
+Failed unit controllers carry their newly produced diagnostic result into the Goal result, including calls, usage or null and actual stage events. A failure remains a rejected unit; diagnostic records never count as approval or successful review. Whole-Goal workflow failures retain their diagnostics too. The source-checkout command `node v05/report_workflow.mjs result.json` (not included in the distribution) aggregates successful and failed unit calls and whole-Goal calls once. Missing unit diagnostics in older files stay missing, not zero, and parallel unit durations are not added to Goal wall time. Provider-wide Agent enumeration remains uncertified, so `allAgentTotalTokens` remains null.
 
 ## Multiple authorized Issues (evaluation)
 
@@ -461,7 +463,7 @@ declared calls have usage, but provider-wide all-Agent usage remains unknown.
 採用するのは成果引継ぎ、内容循環の検出と独立再評価、Host障害の誤修復防止、CI観測継続、明示全体予算の維持。6分・25秒・5分などの既定時間制限は追加しない。新たな制限の既定化には、実際に制限が作用する条件で、完走率と回復を保ちながら総費用が減る追加Evidenceを必要とする。
 
 
-### Host検証の依存資産と配布の区別
+### snapshot Host検証の依存資産と配布の区別
 
 ASC本体はv0.4ではコンパイル済みdist、v0.5では直接実行できるmjsを配布する。利用者にASC自身の開発依存やビルドを要求する問題ではない。同梱Codex Hostの不足は、利用先プロジェクトの検証で必要な依存資産を取り込めないことだった。
 

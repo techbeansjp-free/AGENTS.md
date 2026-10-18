@@ -66,7 +66,7 @@ owner-planは元repo外の通常fileとする。`schema: "asc-v05-cutover/v1"`�
 
 候補branchでownerが認めた設定差分を作る。旧Step用登録を除去し、新Skillは`project-assets --register-skill --apply`で相対参照の共有入口として登録する。Skill本文だけを別directoryへコピーすると相対リンクが壊れるため、入口・版指定・資料を含む配布資産一式を使う。利用者固有AGENTS規約・permissions・無関係なHookは保持する。追加・削除が必要ならstage後の通常のGit変更として扱う。
 
-設定差分をアプリ変更とは別commitにし、元要求・規約・実差分を独立レビューする。ownerが作成した候補には`review /absolute/owner-request.json`を使える。実装・修復・提出は行わないが、隔離検証と必要なowner承認commandは実行する。`.agents`・`.codex`の対象内容はReviewerへデータとして渡し、実入口として配置しない。通常実装の書込禁止は維持する。
+設定差分をアプリ変更とは別commitにし、元要求・規約・実差分を独立レビューする。明示選択のsnapshot経路では、ownerが作成した候補に`review --snapshot /absolute/owner-request.json`を使える。実装・修復・提出は行わないが、隔離検証と必要なowner承認commandは実行する。`.agents`・`.codex`の対象内容はReviewerへデータとして渡し、実入口として配置しない。通常実装の書込禁止は維持する。
 
 新しいowner requestで許可範囲・規約・検証方法・提出先を指定し、実テスト、独立レビュー、許可されたDraft PR/CIを確認する。旧CI成功や旧承認を新HEADへ流用しない。Git依存テストの`verificationGit`や資源予算の設定は[実行手順](USAGE.md)に従う。必要なHost設定・Skill発見の動作は利用Hostで別途確認する。
 

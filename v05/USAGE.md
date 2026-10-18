@@ -22,7 +22,7 @@ Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・
 
 初回導入用のnpmパッケージは `npm uninstall --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false agent-skill-chain` で削除できる。同梱本体は残り、通常起動は継続する。ASCを取り外す場合は配布manifestと実差分を確認して管理対象資産・Host登録だけを除去し、`project/`や利用者成果物を削除しない。`.agent-skill-chain/`全体を削除しない。
 
-任意の外部prefixを使う場合だけ`ASC_CLI`で明示する。外部prefixを上書きするとそれを参照する別worktreeへ影響するため、版別prefixを使う。同梱版がない旧配置のみnode_modulesを探索する。snapshot ControllerのHost実行ツールは候補外で管理する別の信頼境界を維持する。
+任意の外部prefixを使う場合だけ`ASC_CLI`で明示する。外部prefixを上書きするとそれを参照する別worktreeへ影響するため、版別prefixを使う。旧配置互換のため、同梱package.jsonが見つからない場合はnode_modulesを探索する。snapshot ControllerのHost実行ツールは候補外で管理する別の信頼境界を維持する。
 
 ## 標準: 現在のAIとプロジェクトの開発環境
 
@@ -348,7 +348,7 @@ LinuxのCodex CLI 0.153.4では、通信を遮断した`app-server`の`skills/li
 ## Mac・Windowsネイティブ対応の検証入口
 
 対応対象はmacOS（Apple Silicon・Intel）とWindows 10／11。VM・WSL2を必須にしない。
-現行Alphaの開発実行はまだLinux限定であり、以下はネイティブ実装を進めるための診断入口である。
+標準のcurrent-host経路はOS名で拒否しない。以下は、明示選択のsnapshot Codex Host経路でsandbox能力を確認する診断入口であり、標準のstartに必要な手順ではない。
 
 ```text
 agent-skill-chain probe-native <Codex実行ファイルの絶対パス>

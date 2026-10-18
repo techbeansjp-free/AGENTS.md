@@ -1,5 +1,7 @@
 # ADR 0001: v0.5.0をIntent・Risk・Evidence中心の正式版として準備する
 
+> 歴史的な設計判断の記録（2026-10-14〜15）。以下の未完了事項・公開権限・作業場所・Python prototypeに関する記述は当時の状態であり、現在の運用指示ではありません。現在の入口と配布方式は[利用手順](USAGE.md)、原則の改訂は[ADR 0002](ARCHITECTURE_DECISION_0002.md)、実測は[対象commit付きの受入記録](RELEASE_READINESS.json)を参照してください。過去の未完了項目を、この文書だけで現在も未実装または実証済みと判断しないでください。
+
 2026-10-14。状態: 方針承認済み、実装・受入未完了。ユーザーの「この方針で、v0.5.0をリリースできる状態にして」を根拠とする。公開・merge・releaseの実行は含まない。
 
 2026-10-15追補: 最新の簡素化原則と承認済み境界は[ADR 0002](ARCHITECTURE_DECISION_0002.md)を参照。受入未完了は継続する。
@@ -43,4 +45,4 @@ ownerが分類したauthorization/data-migration/public-contractでは、明示�
 
 ## Node実行本体（評価実装）
 
-Node標準ライブラリのControllerを追加した。固定Stepを導入せず、未実装ならimplementation、署名不足ならdesign-approval、現HEADの検証不足ならverify、その後independent-review/deliveryを選ぶ。署名はhost固定Ed25519公開鍵とContract/base/run scope/期限を照合する。実装Agent・Reviewerの実起動までNodeから接続したが、正式配布の受入完了ではない。Python版は比較・回帰の参照として保持する。最新の未完了事項はNODE_ENGINE_EVIDENCE.mdとRELEASE_READINESS.jsonを正本とする。
+Node標準ライブラリのControllerを追加した。固定Stepを導入せず、未実装ならimplementation、署名不足ならdesign-approval、現HEADの検証不足ならverify、その後independent-review/deliveryを選ぶ。署名はhost固定Ed25519公開鍵とContract/base/run scope/期限を照合する。実装Agent・Reviewerの実起動までNodeから接続したが、正式配布の受入完了ではない。Python版は比較・回帰の参照として保持する。当時の未完了事項はNODE_ENGINE_EVIDENCE.mdとRELEASE_READINESS.jsonへ記録した。前者は移植元の評価資料であり、このcheckout・配布物には含まれない。
