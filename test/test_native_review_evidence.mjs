@@ -1,0 +1,25 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {nativeReviewEvidence} from '../scripts/native-review-evidence.mjs';
+const head='a'.repeat(40);
+const record=(id,parent,text)=>[
+ {type:'session_meta',payload:{id,source:parent?{subagent:{thread_spawn:{parent_thread_id:parent,agent_path:'/root/independent_review'}}}:'exec'}},
+ {type:'event_msg',payload:{type:'task_started',turn_id:'turn'}},
+ {type:'event_msg',payload:{type:'token_count',info:{total_token_usage:{input_tokens:10,cached_input_tokens:2,output_tokens:1}}}},
+ {type:'response_item',payload:{type:'message',role:'assistant',content:[{type:'output_text',text}]}},
+ {type:'event_msg',payload:{type:'task_complete',turn_id:'turn'}},
+];
+const fixture=()=>{const p=record('p',null,'ready');p.splice(2,0,{type:'response_item',payload:{type:'function_call',name:'spawn_agent'}});return [p,record('r','p',`PASS ${head}\nNo findings.`)];};
+test('binds completed separate reviewer to exact candidate and accounts both contexts',()=>{const r=nativeReviewEvidence('p',head,fixture());assert.equal(r.review.id,'r');assert.equal(r.usage.observedProcessedTokens,22);});
+test('parent self-approval, stale, quoted, or rejected review cannot authorize delivery',()=>{
+ assert.throws(()=>nativeReviewEvidence('p',head,[record('p',null,`PASS ${head}`)]),/reviewer/);
+ for(const text of [`PASS ${'b'.repeat(40)}`,`Earlier review: PASS ${head}`,`FAIL ${head}`]){const f=fixture();f[1][3].payload.content[0].text=text;assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);}
+});
+test('unfinished, resumed, wrong-turn and forked review fail closed',()=>{
+ for(const change of [r=>r.pop(),r=>r.push({type:'event_msg',payload:{type:'task_started',turn_id:'next'}}),r=>r.at(-1).payload.turn_id='wrong',r=>r[0].payload.forked_from_id='p']){
+  const f=fixture();change(f[1]);assert.throws(()=>nativeReviewEvidence('p',head,f));
+ }
+});
+
+test('unobserved child cannot disappear from delivery accounting',()=>{const f=fixture();f[0].splice(2,0,{type:'response_item',payload:{type:'function_call',name:'spawn_agent'}});assert.throws(()=>nativeReviewEvidence('p',head,f),/inventory/);});
+
+test('rollout discovery covers local and UTC dates around midnight',async()=>{const {sessionDates}=await import('../scripts/native-delivery.mjs');const old=process.env.TZ;try{process.env.TZ='Asia/Tokyo';assert.deepEqual(new Set(sessionDates('2026-10-18T22:33:12Z','2026-10-18T22:35:00Z')),new Set(['2026/10/18','2026/10/19']));assert.throws(()=>sessionDates('invalid'),/Invalid/);}finally{if(old===undefined)delete process.env.TZ;else process.env.TZ=old;}});

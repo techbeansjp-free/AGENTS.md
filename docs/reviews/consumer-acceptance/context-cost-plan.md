@@ -155,3 +155,13 @@ PR #1606の再レビューで、集計器がHostのGit参照環境を引き継�
 `native-host-delivery-results.json`: 公開合成Issue #1の元要求を配布物と実worktreeへ渡し、Agentが修正・厳密な回帰テスト・commit・同一HEADの独立レビューまで実施した。Host所有の提出アダプターで[Draft PR #28](https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/28)を作成し、そのHEADに対応する既存CI（回帰テストと独立Hello oracle）が成功した。変更は合成の2ファイルだけで、試験側の実装修正・計画代行は0回。認証情報はAgentへ渡していない。
 
 ただし、この試行では評価側が独立ReviewerのHEADを確認し、提出アダプターを別途起動した。その引継ぎを無人の統合実行と偽らない。Agent実装・レビュー、提出・CI観測、引継ぎを含む実経過を分離して記録した。親子usageは取得したが、外側の評価進行役は欠測。単発の提出実証であり、完全な自律制御や複数試行の低コスト保証は未達。
+
+### 評価経路の自動引継ぎ
+
+`scripts/run-native-delivery-candidate.mjs --deliver`は公開合成repoのIssue #1に限定した評価入口。Agentの終了後、Host所有のrolloutから親子関係・全記録の最終turn完了・起動呼出し数と観測thread数・独立Reviewerの最終PASSとcommitを照合する。親の自己申告、古いHEAD、引用されたPASS、未終了・再開中のReviewer、欠測usage、欠けた子の記録は提出条件にしない。実テストと許可範囲を配布物で再検証した後、既存GithubアダプターでDraft PR/CIへ進む。評価用であり、利用者へ新しい固定工程や常設Agentを追加するものではない。
+
+最初の試行はUTC/ローカル日付の違いによりrolloutを発見できず、提出前に安全に停止した。日付解決を修正して保持済み成果から再開し、Draft PR #29とCI成功へ到達した（`native-auto-delivery-recovery.json`）。再実装・成果破棄なしだが評価driverの修正介入があるため、初回無介入成功とはしない。
+
+独立レビューで子の記録欠落とambient Git環境の混入を指摘され、起動数照合とHost Gitの環境分離で是正した。CIの固定期限はユーザーの方針に従い追加しない。無期限観測が続く場合は成功とは判定しない。レビュー照合の反例とローカル/UTC日付境界を5テストで確認した。
+
+修正後の新規試行（`native-auto-delivery-results.json`）は、元要求からAgent実装・独立レビュー・実検証・[Draft PR #30](https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/30)・CI成功まで89.85秒で完走した。提出への手動引継ぎ0、試験側実装修正0、評価driver失敗なし。これは小規模合成Issueの自動完走1件の証拠であり、性能改善の比較結果や複雑Goal全般の保証とはしない。
