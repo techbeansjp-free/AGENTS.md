@@ -16,7 +16,7 @@ const launcher=p=>path.join(p,'.agent-skill-chain/bin/asc.mjs');
 const cli=p=>path.join(p,'.agent-skill-chain/node_modules/agent-skill-chain/bin/asc-v05.mjs');
 const invoke=(entry,...args)=>JSON.parse(node([entry,...args]));
 const install=(dir,version)=>node([npm,'install','--prefix',path.join(dir,'.agent-skill-chain'),'--offline','--ignore-scripts','--no-audit','--no-fund','--no-save','--package-lock=false',`/work/packages/agent-skill-chain-${version}.tgz`]);
-const versionA='0.5.900-alpha.0',versionB='0.5.900-alpha.1';
+const [versionA,versionB]=JSON.parse(fs.readFileSync('/work/input-versions.json'));
 const check=(id,fn)=>{const start=performance.now();try{fn();results.push({id,status:'passed',seconds:(performance.now()-start)/1000});}catch(e){results.push({id,status:'failed',error:String(e)});}fs.writeFileSync('results.json',JSON.stringify({results,aiCalls:0,modelQualityEvaluated:false},null,2));console.log(JSON.stringify(results.at(-1)));};
 const tree=dir=>{const entries=[];const visit=(at,relative='')=>{for(const name of fs.readdirSync(at).sort()){const file=path.join(at,name),key=relative+name,st=fs.lstatSync(file);entries.push([key,st.mode,st.isSymbolicLink()?fs.readlinkSync(file):st.isDirectory()?'directory':createHash('sha256').update(fs.readFileSync(file)).digest('hex')]);if(st.isDirectory())visit(file,key+'/');}};visit(dir);return entries;};
 const project='/work/日本語 project';
@@ -115,6 +115,51 @@ check('C16 main checkout refusal does not block a subsequent valid worktree',()=
  const p=spawnSync(process.execPath,[launcher(repo),'start',repo],{encoding:'utf8'});assert.notEqual(p.status,0);assert.match(p.stderr,/worktree/);
  assert.equal(invoke(launcher(b),'start',b).execution,'current-host-worktree');
 });
+check('C18 interrupted asset write preserves owner files and recovers from recorded baseline',()=>{
+ const target='/work/recovery';git(repo,'worktree','add','-b','recovery',target);
+ const manifest=JSON.parse(fs.readFileSync(path.join(target,'.agent-skill-chain/distribution.json')));
+ const managed=[...Object.keys(manifest.files),'.agent-skill-chain/distribution.json'];
+ const old=new Map(managed.map(name=>[name,fs.readFileSync(path.join(target,name))]));
+ write(path.join(target,'AGENTS.md'),'owner edit during upgrade');
+ install(target,versionB);
+ write('/work/fault-bin/git',`#!/runtime/bin/node
+const fs=require('fs'),{spawnSync}=require('child_process'),args=process.argv.slice(2);
+const apply=args.includes('apply');if(apply)fs.writeFileSync('/work/fault-triggered','file-size fault');
+const result=spawnSync(apply?'/usr/bin/prlimit':'/usr/bin/git',apply?['--fsize=128','--','/usr/bin/git',...args]:args,{stdio:'inherit'});
+process.exit(result.status??125);
+`);fs.chmodSync('/work/fault-bin/git',0o755);
+ const rejected=spawnSync(process.execPath,[cli(target),'project-assets',target,'--apply'],{encoding:'utf8',env:{...process.env,PATH:'/work/fault-bin:'+process.env.PATH}});
+ assert.notEqual(rejected.status,0);assert.match(rejected.stderr,/Asset Git operation failed/);assert(fs.existsSync('/work/fault-triggered'));
+ assert.equal(fs.readFileSync(path.join(target,'AGENTS.md'),'utf8'),'owner edit during upgrade');
+ const partial=managed.filter(name=>!fs.existsSync(path.join(target,name))||!fs.readFileSync(path.join(target,name)).equals(old.get(name)));
+ assert(partial.length>0,'fault must interrupt actual managed writes');
+ // Recovery uses the trusted pre-update inventory, never the damaged manifest.
+ git(target,'restore','--source='+base,'--worktree','--',...managed);
+ assert.equal(fs.readFileSync(path.join(target,'AGENTS.md'),'utf8'),'owner edit during upgrade');
+ assert.equal(invoke(cli(target),'project-assets',target,'--apply').applied,true);
+ assert.equal(node([launcher(target),'--version']).trim(),versionB);
+ assert.equal(node([launcher(b),'--version']).trim(),versionA);
+});
+if(fs.existsSync('/work/tooling/pnpm-10.0.0.tgz'))check('C19 real pnpm workspace builds TypeScript packages and tests without copying dependencies',()=>{
+ const target='/work/pnpm-work';git(repo,'worktree','add','-b','pnpm-build',target);
+ fs.mkdirSync('/work/pnpm');run('tar',['-xf','/work/tooling/pnpm-10.0.0.tgz','-C','/work/pnpm']);
+ const pnpm='/work/pnpm/package/bin/pnpm.cjs';
+ write(path.join(target,'package.json'),JSON.stringify({name:'synthetic-workspace',private:true,packageManager:'pnpm@10.0.0',devDependencies:{typescript:'file:/work/tooling/typescript-5.9.3.tgz'}}));
+ write(path.join(target,'pnpm-workspace.yaml'),"packages:\n  - 'packages/*'\n");
+ write(path.join(target,'packages/shared/package.json'),JSON.stringify({name:'@fixture/shared',version:'1.0.0',main:'dist/index.js',types:'dist/index.d.ts',scripts:{build:'tsc index.ts --outDir dist --module commonjs --target es2020 --declaration'}}));
+ write(path.join(target,'packages/shared/index.ts'),'export const greeting = (name: string): string => `Hello ${name}`;');
+ write(path.join(target,'packages/app/package.json'),JSON.stringify({name:'@fixture/app',private:true,dependencies:{'@fixture/shared':'workspace:*'},scripts:{build:'tsc index.ts --outDir dist --module commonjs --target es2020'}}));
+ write(path.join(target,'packages/app/index.ts'),"import {greeting} from '@fixture/shared'; console.log(greeting('consumer'));");
+ node([pnpm,'install','--offline','--ignore-scripts'],target);
+ assert(fs.lstatSync(path.join(target,'packages/app/node_modules/@fixture/shared')).isSymbolicLink());
+ git(target,'add','package.json','pnpm-workspace.yaml','pnpm-lock.yaml','packages');git(target,'commit','-qm','synthetic TypeScript workspace');
+ const changed=git(target,'diff','--name-only',base,'HEAD').split('\n');
+ const commands=[[process.execPath,pnpm,'--filter','@fixture/shared','run','build'],[process.execPath,pnpm,'--filter','@fixture/app','run','build'],[process.execPath,'-e',"require('assert').equal(require('child_process').execFileSync(process.execPath,['packages/app/dist/index.js'],{encoding:'utf8'}),'Hello consumer\\n')"]];
+ write('/work/pnpm-owner.json',JSON.stringify({intent:'build and test linked workspace packages',allowedPaths:changed,commands}));
+ const result=invoke(launcher(target),'worktree-verify',target,base,'/work/pnpm-owner.json');assert.equal(result.passed,true);assert.equal(result.results.length,3);assert(result.results.every(r=>r.exit===0));
+ assert.equal(result.deliveryAuthorized,false);assert(fs.existsSync(path.join(target,'packages/app/dist/index.js')));
+});
+else{results.push({id:'C19 real pnpm workspace',status:'not-run',reason:'Optional fixed tooling tarballs not supplied'});fs.writeFileSync('results.json',JSON.stringify({results,aiCalls:0,modelQualityEvaluated:false},null,2));}
 check('C17 manifest-scoped manual removal preserves all user-owned files',()=>{
  const manifest=JSON.parse(fs.readFileSync(path.join(project,'.agent-skill-chain/distribution.json')));
  const edited='.agent-skill-chain/v05/USAGE.md';fs.appendFileSync(path.join(project,edited),'\nuser-owned amendment\n');const retained=[];

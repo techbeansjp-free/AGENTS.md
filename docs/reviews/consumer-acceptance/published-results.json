@@ -1,0 +1,101 @@
+{
+  "results": [
+    {
+      "id": "C01 offline install preserves existing project manifests",
+      "status": "passed",
+      "seconds": 0.540993537
+    },
+    {
+      "id": "C02 preview is read-only and non-Git deployment never initializes Git",
+      "status": "passed",
+      "seconds": 0.36271758900000006
+    },
+    {
+      "id": "C03 shared assets bind every file hash and contain no installer path",
+      "status": "passed",
+      "seconds": 0.0071345270000000485
+    },
+    {
+      "id": "C04 remove bootstrap dependencies; bundled runtime remains usable",
+      "status": "passed",
+      "seconds": 0.3463841460000001
+    },
+    {
+      "id": "C05 scoped and nested project rules are selected without exposing contents",
+      "status": "passed",
+      "seconds": 0.09568644200000018
+    },
+    {
+      "id": "C06 clone and two worktrees run bundled version without external installation",
+      "status": "passed",
+      "seconds": 0.630141877
+    },
+    {
+      "id": "C07 update one worktree without changing sibling or owner settings",
+      "status": "passed",
+      "seconds": 0.6883516229999997
+    },
+    {
+      "id": "C08 downgrade and repeated deployment are idempotent",
+      "status": "passed",
+      "seconds": 0.6943473739999999
+    },
+    {
+      "id": "C09 local asset conflict blocks whole update and retry succeeds after resolution",
+      "status": "passed",
+      "seconds": 0.6188503989999999
+    },
+    {
+      "id": "C10 non-Git umbrella selects sibling repositories independently",
+      "status": "passed",
+      "seconds": 0.30146017900000016
+    },
+    {
+      "id": "C11 build/test uses existing workspace dependency links and retains ignored output",
+      "status": "passed",
+      "seconds": 0.16954078500000014
+    },
+    {
+      "id": "C12 failed verification can be retried without poisoning sibling worktree",
+      "status": "passed",
+      "seconds": 0.43885357399999975
+    },
+    {
+      "id": "C13 scope violation refuses verification before running owner command",
+      "status": "passed",
+      "seconds": 0.11538311299999987
+    },
+    {
+      "id": "C14 test modifying tracked source cannot produce valid verification",
+      "status": "passed",
+      "seconds": 0.3181924730000001
+    },
+    {
+      "id": "C15 missing selected project rule stops rather than silently omitting it",
+      "status": "passed",
+      "seconds": 0.23159627
+    },
+    {
+      "id": "C16 main checkout refusal does not block a subsequent valid worktree",
+      "status": "passed",
+      "seconds": 0.21930678700000045
+    },
+    {
+      "id": "C18 interrupted asset write preserves owner files and recovers from recorded baseline",
+      "status": "passed",
+      "seconds": 1.1760120090000001
+    },
+    {
+      "id": "C19 real pnpm workspace builds TypeScript packages and tests without copying dependencies",
+      "status": "passed",
+      "seconds": 3.6053532669999995
+    },
+    {
+      "id": "C17 manifest-scoped manual removal preserves all user-owned files",
+      "status": "passed",
+      "seconds": 0.01002931499999977
+    }
+  ],
+  "aiCalls": 0,
+  "modelQualityEvaluated": false
+}
