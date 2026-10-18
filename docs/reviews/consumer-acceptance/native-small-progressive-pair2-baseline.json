@@ -1,0 +1,99 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "conditions": {
+    "intentSha256": "0764dc1fcf26421b837fd0d9e6197f72d213240949ace2503ece75a71d2df5d7",
+    "commands": [
+      [
+        "python3",
+        "-I",
+        "test_greeting.py"
+      ],
+      [
+        "python3",
+        "-I",
+        "-c",
+        "import sys; sys.path.insert(0, \".\"); from greeting import greeting; assert type(greeting()) is str and greeting() == \"Hello\""
+      ]
+    ]
+  },
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "2cffb54e816ec49a4e93433f2bf050c4f171f095",
+  "review": {
+    "id": "01a1514f-4976-7ab0-accf-ff362ac08334",
+    "head": "2cffb54e816ec49a4e93433f2bf050c4f171f095",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "rootId": "01a1514e-bd00-7673-bcd8-0a344efc6cec",
+    "observedThreads": 2,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 271421,
+      "cachedInputTokens": 231808,
+      "outputTokens": 4336
+    },
+    "observedProcessedTokens": 275757,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a1514e-bd00-7673-bcd8-0a344efc6cec",
+        "parent": null,
+        "usage": {
+          "input_tokens": 202997,
+          "cached_input_tokens": 184960,
+          "output_tokens": 3052
+        }
+      },
+      {
+        "id": "01a1514f-4976-7ab0-accf-ff362ac08334",
+        "parent": "01a1514e-bd00-7673-bcd8-0a344efc6cec",
+        "usage": {
+          "input_tokens": 68424,
+          "cached_input_tokens": 46848,
+          "output_tokens": 1284
+        }
+      }
+    ]
+  },
+  "implementationAndReviewSeconds": 70.390572343,
+  "deliverySeconds": 19.858269360000005,
+  "elapsedSeconds": 90.262,
+  "manualHandoffs": 0,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "2cffb54e816ec49a4e93433f2bf050c4f171f095",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/37",
+  "ci": {
+    "head": "2cffb54e816ec49a4e93433f2bf050c4f171f095",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39176012702",
+    "transportFailures": []
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Fresh-context simple change only; repair, multiple Issues and restart acceptance remain separate.",
+    "No merge or release."
+  ]
+}
