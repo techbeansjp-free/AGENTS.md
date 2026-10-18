@@ -1,0 +1,209 @@
+{
+  "schema": "asc-native-interruption-delivery/v1",
+  "scope": "Linux synthetic saved-edit interruption, confirmed whole-service stop, fresh-context continuation, fixed original/revision oracles, independent review and Draft PR CI. Single-writer checkpoint; not arbitrary concurrent interruption or a performance comparison.",
+  "packageSha256": "0fd386148a2011c3807ef0ca80313c3acbc557083684ac7c2b6ba00ab33b9edd",
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "mode": "--deliver",
+  "phase": "revision",
+  "head": "34cac398736c4fd34cfb52bf838453c747c5f549",
+  "base": "3ce9156658be89fa888bdc3d96426432c274ea1d",
+  "remoteBase": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "review": {
+    "id": "01a1515d-2291-7512-a8a8-a7ce746cb386",
+    "head": "34cac398736c4fd34cfb52bf838453c747c5f549",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "rootId": "01a1515c-5b99-7731-bb56-b15b0a357315",
+    "observedThreads": 2,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 634003,
+      "cachedInputTokens": 567808,
+      "outputTokens": 6739
+    },
+    "observedProcessedTokens": 640742,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a1515c-5b99-7731-bb56-b15b0a357315",
+        "parent": null,
+        "usage": {
+          "input_tokens": 418603,
+          "cached_input_tokens": 386304,
+          "output_tokens": 4365
+        }
+      },
+      {
+        "id": "01a1515d-2291-7512-a8a8-a7ce746cb386",
+        "parent": "01a1515c-5b99-7731-bb56-b15b0a357315",
+        "usage": {
+          "input_tokens": 215400,
+          "cached_input_tokens": 181504,
+          "output_tokens": 2374
+        }
+      }
+    ]
+  },
+  "verification": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "base": "3ce9156658be89fa888bdc3d96426432c274ea1d",
+    "head": "34cac398736c4fd34cfb52bf838453c747c5f549",
+    "contractSha256": "756443b562200f02a4645adff849bfc8caf5c091df00f3ef29ef1568b769eb84",
+    "intent": "Apply explicit currency revision preserving original security and stored replay records",
+    "results": [
+      {
+        "argv": [
+          "node",
+          "complex/oracle/reservation.mjs",
+          "complex",
+          "revised"
+        ],
+        "exit": 0,
+        "seconds": 0.092432109,
+        "stdoutSha256": "f22e884e14f39497781ba68bcce81a59dcb36df9bae743b06a73116819ffa070",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "node",
+          "complex/oracle/billing.mjs",
+          "complex",
+          "revised"
+        ],
+        "exit": 0,
+        "seconds": 0.08442843100000001,
+        "stdoutSha256": "725105094b95e1c3a80b245e062c9ad70d493fd3208c487d3128c45e5fe5096b",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "node",
+          "complex/oracle/integration.mjs",
+          "complex"
+        ],
+        "exit": 0,
+        "seconds": 0.08015129200000001,
+        "stdoutSha256": "8a3083818e0bd620f3d7f68645c22f644466e6ac693f7f6f7de704d724c27144",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "node",
+          "complex/oracle/unknown-keys.mjs",
+          "complex"
+        ],
+        "exit": 0,
+        "seconds": 0.055284424,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "node",
+          "complex/oracle/revision.mjs",
+          "complex/previous",
+          "complex"
+        ],
+        "exit": 0,
+        "seconds": 0.06404501299999998,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "passed": true,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  },
+  "implementationAndReviewSeconds": 128.349512969,
+  "driverImplementationEdits": 0,
+  "interruptedAttempt": {
+    "status": 255,
+    "signal": null,
+    "signalSent": true,
+    "interrupted": true,
+    "checkpoint": true,
+    "descendantBoundary": "Linux synthetic transient service; all processes stopped before handoff",
+    "stopped": true,
+    "seconds": 20.790331202999997,
+    "files": [
+      {
+        "name": "reservation/service.mjs",
+        "before": "b1d7e9c5aadbbdce81572d7d32a4814310cd16a544a925c2a6fd32d92bc13f49",
+        "after": "aec9ff3538854cc57675b2d4fbf8c73e4143e07deebd5fb901361d3ae43d688b"
+      },
+      {
+        "name": "billing/service.mjs",
+        "before": "641ab4b4ae65edf7837b77b5c7dbd0d5c76a0a536210e5a80a43c9602acc5002",
+        "after": "641ab4b4ae65edf7837b77b5c7dbd0d5c76a0a536210e5a80a43c9602acc5002"
+      }
+    ],
+    "usageComplete": false
+  },
+  "interruptedUsage": {
+    "complete": false,
+    "scope": "Last available cumulative observation; interruption may omit in-flight work. Never count as complete cost.",
+    "observation": {
+      "rootId": "01a1515c-0c8c-7640-a83b-1615b86ac6bc",
+      "observedThreads": 1,
+      "missingUsage": [],
+      "measured": {
+        "inputTokens": 35592,
+        "cachedInputTokens": 24448,
+        "outputTokens": 758
+      },
+      "observedProcessedTokens": 36350,
+      "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+      "calls": [
+        {
+          "id": "01a1515c-0c8c-7640-a83b-1615b86ac6bc",
+          "parent": null,
+          "usage": {
+            "input_tokens": 35592,
+            "cached_input_tokens": 24448,
+            "output_tokens": 758
+          }
+        }
+      ]
+    }
+  },
+  "usageScope": "Resumed parent and descendants only; interrupted attempt usage remains missing",
+  "totalProcessedTokens": null,
+  "resumedImplementationAndReviewSeconds": 107.559181766,
+  "pr": 39,
+  "complexCI": {
+    "head": "34cac398736c4fd34cfb52bf838453c747c5f549",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39177106263",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "34cac398736c4fd34cfb52bf838453c747c5f549",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39177106271",
+    "transportFailures": []
+  },
+  "deliverySeconds": 21.65151364,
+  "elapsedSeconds": 150.632,
+  "runtime": "Node 24.19.0",
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/39",
+  "manualHandoffs": 0,
+  "limitations": [
+    "Interrupted in-flight model usage is missing; totalProcessedTokens is null.",
+    "No evaluator implementation edits, repair, commit or integration; fixture/oracles and explicit interruption supplied by evaluator.",
+    "Fresh continuation uses preserved worktree files; this does not prove all saved changes must be retained when semantically incorrect.",
+    "One Linux fault-injection run; other OS interruption semantics and simultaneous worker failures are not proven."
+  ]
+}
