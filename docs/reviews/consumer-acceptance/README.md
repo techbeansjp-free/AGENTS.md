@@ -150,3 +150,10 @@ C20–C22は計約2.40秒の単発観測。意味的判断は事前定義したo
 C23は実配布候補CLIで標準worktreeを作り、directory・branch・base・実Git HEADと配布Skillを照合する。同名作成拒否、同Issue別slug分担、旧名での再開も確認。C01–C23すべて成功（naming-results/provenance.json）。C06などの任意名は既存/独自worktreeの互換性を試すための合成入力であり、新規作成例として推奨しない。過去の記録のpathも事実を保つため書き換えない。
 
 ローカルの実作業先はreflogの作成時刻と対応Issue1579に基づき `20261018_210640-1579-consumer-scenarios`、local branchは `test/1579-consumer-scenarios` へ変更。既存PR接続のためremote head名は維持。利用者の既存worktreeを無断改名せず、配布元Skillの改善を次の配布へ反映する。今回検査した利用者環境は隔離した合成プロジェクトであり、実利用者環境を一括変更していない。
+
+
+## Context・是正コストの追加調査
+
+[比較条件・判断](context-cost-plan.md)とsmall/repair/multi/handoffのJSONに、同一モデルの旧・新Skill各1試行を記録した。全ケースの要件・独立レビューは合格したが、時間・tokensの一貫した改善は未証明。小規模に固定のAgent階層・Context交代を要求しない。引継ぎと階層化はHostが選択する指示であり、自動実行機能を追加したわけではない。
+
+CodeRabbitの不正emailドメイン指摘は現行fixtureで再現した（POSTが400ではなく201）。ドメインラベルを検証する最小修正と拒否・許可境界を追加し、ネットワーク隔離された6操作シナリオを再実行して成功。最新fixtureの証拠は `domain-journey-results.json` / `domain-journey-provenance.json`。既存の外部Draft PR #27は旧fixtureの証拠であり、この修正を外部CIで検証済みとは扱わない。

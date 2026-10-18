@@ -1,0 +1,72 @@
+{
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "results": [
+    {
+      "variant": "baseline",
+      "status": 0,
+      "seconds": 36.512953606,
+      "usage": [
+        {
+          "input_tokens": 142683,
+          "cached_input_tokens": 114048,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1939,
+          "reasoning_output_tokens": 649
+        }
+      ],
+      "oracleExit": 0,
+      "events": 19,
+      "error": null,
+      "observedProcessedTokens": 144622,
+      "preservedOtherIssues": true,
+      "agentCalls": 1,
+      "newContextObserved": true,
+      "outputFilesSha256": {
+        "cart/total.mjs": "b17a85e67e6c3e73e09bd071f04572831ed207087993194362724acdf40b6424",
+        "test.mjs": "78e6394e0865b2f53cbb025c08ea73c8d995accea843c985ff882c095952122c"
+      }
+    },
+    {
+      "variant": "candidate",
+      "status": 0,
+      "seconds": 40.622449907000004,
+      "usage": [
+        {
+          "input_tokens": 144054,
+          "cached_input_tokens": 126592,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2082,
+          "reasoning_output_tokens": 637
+        }
+      ],
+      "oracleExit": 0,
+      "events": 22,
+      "error": null,
+      "observedProcessedTokens": 146136,
+      "preservedOtherIssues": true,
+      "agentCalls": 1,
+      "newContextObserved": true,
+      "outputFilesSha256": {
+        "cart/total.mjs": "b17a85e67e6c3e73e09bd071f04572831ed207087993194362724acdf40b6424",
+        "test.mjs": "8419aa384ff90abc7991cbf3a8f36411896dccc267d24f5d005ae934096d6264"
+      }
+    }
+  ],
+  "scenario": "fresh-context handoff of completed synthetic A/B/C to new Issue D",
+  "baselineCommit": "9f19ce4bd",
+  "candidateCommit": "7e8aaadd8",
+  "trialsPerVariant": 1,
+  "multiAgentEnabled": false,
+  "handoff": "Previous writer completed A/B/C and exited. This is a synthetic non-Git folder. Existing files are the preserved completed work; no other process is writing. Original requirements are in REQUIREMENTS.md. Previous node test.mjs passed before D; this is not verification of D and not independent review. Only cart/total.mjs and test.mjs may change for D. Preserve catalog/price.mjs and display/label.mjs. Recheck actual files and perform affected integration tests; independent review follows separately.\n",
+  "requirements": "A: price accepts only nonnegative safe integer cents; otherwise RangeError. B: total multiplies prices and positive safe integer quantities, rejects invalid quantity or unsafe line/accumulated totals; empty cart zero. C: label gives 1 item only for 1, n items otherwise for nonnegative integer n. D new: total must also reject a cart exceeding 1000 cents with RangeError. Exactly 1000 is allowed. A and C remain unchanged.\n",
+  "independentReview": "Separate reviewer checked common original A/B/C, both new outputs and requirements: only cart/test changed, A/C hashes unchanged, both node test.mjs exit 0, no findings. Reviewer usage/time missing.",
+  "scope": "harness transfers preserved files to new contexts; not automatic Host context rotation, hierarchical delegation, or comparison with resumed long-lived context",
+  "measurementLimitations": "single trial per variant; cached input uncontrolled; local unrelated checks may overlap; excludes independent reviewer time/usage",
+  "originalFilesSha256": {
+    "catalog/price.mjs": "bc21e9f78a3ee9b5961d0c65755959cbdf8d1f8496c27ba0a24732d13890a90a",
+    "cart/total.mjs": "ab1d992828efef9c89420444d70466bb354bf742c437f1ea2d631687c87654d0",
+    "display/label.mjs": "ee391213391f1f91b25011040d6ae708b2f5d4d0527d75b29fb24d955c3f9f83",
+    "test.mjs": "e5f2cd369caa24d4bf96d1edb5900980f52702755dd88c453d1dbb4c3de3f391"
+  }
+}
