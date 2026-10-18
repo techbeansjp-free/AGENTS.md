@@ -27,3 +27,17 @@ test('optional ancestor discovery permits a planned file-to-directory change',t=
  const f=fixture(t);f.write('src','old file');assert.deepEqual(projectContext(f.root,['src/new/file.ts']).references,[]);
  f.config([{path:'src/required.md'}]);assert.throws(()=>projectContext(f.root,['src/new/file.ts']),/ENOTDIR/);
 });
+
+test('shared ancestor rules are read once per selection and refreshed on the next call',t=>{
+ const f=fixture(t);f.write('src/AGENTS.md','shared contract');
+ const open=fs.openSync;let reads=0;
+ t.mock.method(fs,'openSync',function(file,...args){if(file===path.join(f.root,'src/AGENTS.md'))reads++;return open.call(fs,file,...args);});
+ const paths=Array.from({length:100},(_,i)=>`src/file${i}.ts`);
+ const first=projectContext(f.root,paths);assert.equal(reads,1);
+ f.write('src/AGENTS.md','changed contract');
+ const second=projectContext(f.root,paths);assert.equal(reads,2);assert.notEqual(first.digest,second.digest);
+});
+test('optional missing rule cache cannot waive a required manifest rule',t=>{
+ const f=fixture(t);f.config([{path:'src/AGENTS.md',appliesTo:['src']}]);
+ assert.throws(()=>projectContext(f.root,['src/a.ts','src/b.ts']),/ENOENT/);
+});
