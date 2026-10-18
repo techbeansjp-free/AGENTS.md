@@ -36,9 +36,10 @@ export function verifyWorktree(directory,base,ownerFile){
  if(state())throw Error('Commit intended changes before verification; preserve unrelated work separately');
  const names=execFileSync('git',['diff','--name-only','--no-renames','-z',baseHead,start.head],{cwd:repo,env:gitEnvironment(),maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
  if(names.some(p=>!contract.allowedPaths.includes(p)))throw Error('Changes exceed owner scope');
- const results=[];
+ // Owner-selected commands run in the current Host environment, unlike internal Git observations.
+ const verificationEnvironment={...process.env},results=[];
  for(const argv of contract.commands){
-  const began=performance.now(),p=spawnSync(argv[0],argv.slice(1),{cwd:repo,env:gitEnvironment(),encoding:'utf8',shell:false,maxBuffer:Infinity});
+  const began=performance.now(),p=spawnSync(argv[0],argv.slice(1),{cwd:repo,env:verificationEnvironment,encoding:'utf8',shell:false,maxBuffer:Infinity});
   results.push({argv,exit:p.status,seconds:(performance.now()-began)/1000,stdoutSha256:hash(p.stdout??''),stderrSha256:hash(p.stderr??''),...(p.error||p.status!==0?{error:p.error?.message??'Command failed',stdout:(p.stdout??'').slice(-4096),stderr:(p.stderr??'').slice(-4096)}:{})});
   if(git(repo,'rev-parse','HEAD')!==start.head||state())throw Error('Verification changed tracked source, HEAD or untracked outputs; result is invalid');
   if(hash(fs.readFileSync(owner))!==hash(bytes))throw Error('Owner contract changed during verification; result is invalid');

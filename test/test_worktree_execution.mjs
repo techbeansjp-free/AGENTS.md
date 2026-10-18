@@ -54,14 +54,24 @@ test('verification handles tracked and changed path lists larger than the defaul
  assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/scope/);
 });
 
-test('foreign Git environment cannot redirect worktree verification',t=>{
+test('foreign Git environment cannot redirect internal observations while commands inherit it',t=>{
  const f=fixture(t),saved={...process.env};
- f.contract.commands.push(['git','rev-parse','--show-toplevel']);f.save();
+ f.contract.commands.push([process.execPath,'-e',"const assert=require('node:assert/strict');assert.equal(process.env.GIT_DIR,process.argv[1]);assert.equal(process.env.GIT_OBJECT_DIRECTORY,process.argv[2]);",path.join(f.repo,'.git'),path.join(f.root,'missing-objects')]);f.save();
  try{
   process.env.GIT_DIR=path.join(f.repo,'.git');process.env.GIT_WORK_TREE=f.repo;process.env.GIT_INDEX_FILE=path.join(f.root,'wrong-index');
   process.env.GIT_OBJECT_DIRECTORY=path.join(f.root,'missing-objects');
   const result=verifyWorktree(f.work,f.base,f.owner);assert.equal(result.passed,true);
   assert.notEqual(result.head,f.base);assert.equal(fs.realpathSync.native(result.repo),fs.realpathSync.native(f.work));
   assert.equal(result.results[1].exit,0);
+ }finally{for(const key of Object.keys(process.env))if(!Object.hasOwn(saved,key))delete process.env[key];Object.assign(process.env,saved);}
+});
+
+test('verification preserves Host Git configuration without applying it to internal observations',t=>{
+ const f=fixture(t),saved={...process.env};
+ const code="const {execFileSync}=require('node:child_process');require('node:assert/strict').equal(execFileSync('git',['config','--get','asc.fixture'],{encoding:'utf8'}).trim(),'host-value');";
+ f.contract.commands=[[process.execPath,'-e',code]];f.save();
+ try{
+  process.env.GIT_CONFIG_COUNT='1';process.env.GIT_CONFIG_KEY_0='asc.fixture';process.env.GIT_CONFIG_VALUE_0='host-value';
+  assert.equal(verifyWorktree(f.work,f.base,f.owner).passed,true);
  }finally{for(const key of Object.keys(process.env))if(!Object.hasOwn(saved,key))delete process.env[key];Object.assign(process.env,saved);}
 });

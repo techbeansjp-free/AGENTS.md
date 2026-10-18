@@ -2,7 +2,7 @@
 
 ASCは、目的と受入条件、許可された変更範囲、既存規約を入力として、必要な実装・検証・独立レビューを選択します。固定Step列や工程ごとのAgent起動は要求しません。小規模変更は実装と独立Reviewerを基本とし、複雑なGoalでは依存関係に従ってWork Unitを実行・統合します。
 
-**v0.5系の正式配布版です。標準は利用中のAI Hostでの開発です。Git管理済みrepoでは専用worktreeを使います。** 公開済みv0.5.6とソースcheckoutの開発用基準版0.5.0は異なります。使用版は配布物の`package.json`と`--version`で確認してください。受入記録の未公開状態は記録内の`sourceCommit`時点の候補に関する履歴です。 [受入状態](RELEASE_READINESS.json)の`finalAcceptanceAudit`に対象commit、受入根拠、制限を記録しています。`capabilities.releaseReady`は製品のLinux受入を表し、現在のHostの隔離成立や公開承認ではありません。`host.releaseReady: false`はOS識別だけで個別環境の隔離を認定しないことを表し、snapshot経路のpreflightは引き続き必須です。
+**v0.5系の正式配布版です。標準は利用中のAI Hostでの開発です。Git管理済みrepoでは専用worktreeを使います。** 公開済みv0.5.7とソースcheckoutの開発用基準版0.5.0は異なります。使用版は配布物の`package.json`と`--version`で確認してください。受入記録の未公開状態は記録内の`sourceCommit`時点の候補に関する履歴です。 [受入状態](RELEASE_READINESS.json)の`finalAcceptanceAudit`に対象commit、受入根拠、制限を記録しています。`capabilities.releaseReady`は製品のLinux受入を表し、現在のHostの隔離成立や公開承認ではありません。`host.releaseReady: false`はOS識別だけで個別環境の隔離を認定しないことを表し、snapshot経路のpreflightは引き続き必須です。
 
 ## 導入と入口
 
@@ -11,7 +11,7 @@ ASCは、目的と受入条件、許可された変更範囲、既存規約を�
 Node.js 20以上を使用します。標準導入は[利用手順](USAGE.md#標準の導入先asc_cliは不要)に従い、固定tarballから`project-assets`で本体を`managed-runtime/`へ配置します。以下は任意の外部prefixへ導入する例です。npmのlifecycle scriptは実行しません。
 
 ```sh
-npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.6.tgz
+npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.7.tgz
 /absolute/asc-tools/node_modules/.bin/agent-skill-chain --version
 /absolute/asc-tools/node_modules/.bin/agent-skill-chain capabilities
 ```
