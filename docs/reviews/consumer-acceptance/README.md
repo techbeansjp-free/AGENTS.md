@@ -19,7 +19,7 @@
 | 検証の否定例 | 範囲外の変更、検証中のsource変更を成功扱いしない | C13/C14 成功 |
 | 削除 | manifest列挙の配布資産のみ撤去、利用者成果/規約を保持 | C17 成功。hash不一致の編集済み配布資料を保存。文書に従う手動撤去でありuninstall CLIの実装ではない |
 | 意味的実装・独立レビュー | 元要求から実装し、不足シナリオをReviewerが発見・是正 | J01–J06。親Hostが合成業務機能を実装、別Contextが未検査のemail反例を発見・是正。自動モデル起動のE2Eではない |
-| PR・CI・後始末 | 正しいbaseへ提出、CI遅延/失敗を扱い、merge後に利用者資産を保護 | 今回は外部通信を遮断しており未実施 |
+| PR・CI・後始末 | 正しいbaseへ提出、CI遅延/失敗を扱い、merge後に利用者資産を保護 | 外部提出は別のHost経路で合成PR #27へ到達、対象HEADのCI成功。merge後の整理は未実施（merge未承認） |
 | 複雑Goal | 契約変更・競合・中断後に必要な範囲だけ再計画 | 本CLI試験では未実施 |
 | 別OS/Host | Mac/Windows、Codex/Claude Codeの実利用 | 本記録はLinux CLIのみ。他OSのCIをこの試験の実施とみなさない |
 
@@ -104,3 +104,15 @@ node scripts/run-consumer-journey.mjs /absolute/browser-tooling
 単発観測はブラウザ6ケース2.200秒、CLI検証2.620秒、offline導入から検証まで3.648秒（pack時間を除く）。runner自身のモデル呼出しは0回だが、事前の親Host実装と独立レビューにはAIを使用している。総tokensとAI実装時間はこの計測に含まれず、費用削減やCodeRabbit同等性は未証明。少ない機構で具体的な不足を発見・修正できた一例として扱う。
 
 固定dummy headerは権限別操作を模擬するだけで、実認証・session・CSRF・tenant保証は対象外。合成アプリの外部PR/CI、複雑Goalの再計画、Mac/Windowsの実走をこの記録で完了扱いにしない。レビュー完了を自動認定するコードも追加していない。
+
+## 公開合成Draft PR・CIと失敗後の再開
+
+[合成PR #27](https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/27)へ提出し、HEAD `ce268b5e8887efc588e9f94fbb3ba619d6b793f1` の両CIが成功。配布CLIの検証HEADとPR HEADは一致する（`delivery-results.json`）。提出操作は認証を持つHost側で行い、networkを遮断したブラウザ試験と同じ隔離境界とは説明しない。
+
+server/page/requirementsは隔離ブラウザ試験の入力とbyte一致を確認。追加APIテストとworkflowは別Contextでレビューした。CIはAPIと既存greeting oracleに限定し、画面操作やserver再起動後の永続化はローカルJ01–J06の証拠を併用する。外部CIでブラウザを実施したとは扱わない。
+
+最初のCIでは既存合成fixtureの `Helo` が `Hello` oracleで失敗。既存oracleは変更せず、合成コードと弱い型だけのunit assertionを修正した。再レビュー・新commitのCLI検証・同じDraft PRへのpush・CI再観測で完走した。最初の失敗runも結果に残している。これはASC製品不具合でなく、既存fixtureの不具合からの通常開発復旧である。
+
+提出時にはHTTPS資格情報未設定とOAuth workflow scope不足が発生した。本体PRでも使用している既存のSSH認証で同じ承認済み合成repoへ提出した。Token scope・Host設定・CI検査の緩和は行っていない。
+
+公開差分は合成アプリ3ファイル、API試験1ファイル、PR workflow1ファイル、既存合成greeting修正2ファイルのみ。利用者コード・個人パス・認証情報・ASC導入資産・生ログを含めない。merge/releaseは実施していない。全開発wall timeと全Agent tokensは欠測であり、CI時間を開発総コストに代用しない。
