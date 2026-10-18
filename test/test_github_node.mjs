@@ -95,3 +95,23 @@ test('empty and partial job indexes are reobserved; all pages are required',asyn
  const result=await provider.observe(1,{timeout:1000,interval:0});assert.equal(Object.keys(result.checks).length,101);assert.equal(observations,3);assert.equal(calls.length,0);
  observations=0;await assert.rejects(provider.observe(1,{timeout:0}),/deadline/);
 });
+
+test('workflow ref suffix is accepted without weakening CI identity binding',async()=>{
+ const {provider,data}=setup();provider.expectedHead=head;
+ const good={id:10,head_sha:head,event:'pull_request',path:'.github/workflows/safety.yml@main',repository:{full_name:repository},pull_requests:[{number:1,head:{sha:head},base:{sha:base}}],status:'completed',conclusion:'success'};
+ let run=good,jobReads=0;
+ provider.api=route=>{
+  if(route.includes('/actions/runs?'))return {workflow_runs:[run]};
+  if(route.includes('/jobs?')){jobReads++;return {total_count:1,jobs:[{name:'check',status:'completed',conclusion:'success'}]};}
+  return data;
+ };
+ for(const suffix of ['', '@main', '@refs/heads/feature/topic', '@'+head]){
+  run={...good,path:'.github/workflows/safety.yml'+suffix};
+  assert.equal((await provider.observe(1,{timeout:0})).checks.check,'success');
+ }
+ for(const change of [{path:'.github/workflows/other.yml@main'},{path:null},{path:42},{head_sha:base},{event:'push'},{repository:{full_name:'foreign/repo'}},{pull_requests:[]},{pull_requests:[{number:2,head:{sha:head},base:{sha:base}}]},{pull_requests:[{number:1,head:{sha:base},base:{sha:base}}]},{pull_requests:[{number:1,head:{sha:head},base:{sha:head}}]}]){
+  run={...good,...change};jobReads=0;
+  await assert.rejects(provider.observe(1,{timeout:0}),/deadline/);
+  assert.equal(jobReads,0);
+ }
+});
