@@ -11,11 +11,11 @@ test('non-Git start is read-only and does not claim commit verification or deliv
 });
 test('non-Git project assets install and update idempotently without creating repository or touching owner files',t=>{
  const root=directory(t),project=path.join(root,'project'),pkg=path.join(root,'package');fs.mkdirSync(project);fs.mkdirSync(pkg);
- for(const name of ['v05','skills/asc','src/project-launcher.mjs','package.json'])fs.cpSync(name,path.join(pkg,name),{recursive:true});
+ for(const name of ['v05','skills','src','bin','migration_inspect.mjs','README.md','package.json'])fs.cpSync(name,path.join(pkg,name),{recursive:true});
  fs.mkdirSync(path.join(project,'.agent-skill-chain/project'),{recursive:true});fs.writeFileSync(path.join(project,'.agent-skill-chain/project/rules.md'),'owner');
  const options={packageRoot:pkg,apply:true,registerSkill:true};assert.equal(projectAssets(project,options).applied,true);assert(!fs.existsSync(path.join(project,'.git')));
  assert.equal(projectAssets(project,options).changes.length,0);
- fs.appendFileSync(path.join(pkg,'skills/asc/SKILL.md'),'\nUpdated\n');assert.equal(projectAssets(project,options).changes.length,1);
+ fs.appendFileSync(path.join(pkg,'skills/asc/SKILL.md'),'\nUpdated\n');assert.equal(projectAssets(project,options).changes.length,2);
  const asset=path.join(project,'.agent-skill-chain/skills/asc/SKILL.md');fs.appendFileSync(asset,'\nOwner edit\n');fs.appendFileSync(path.join(pkg,'skills/asc/SKILL.md'),'\nAnother update\n');assert.equal(projectAssets(project,options).applied,false);
  assert.equal(fs.readFileSync(path.join(project,'.agent-skill-chain/project/rules.md'),'utf8'),'owner');assert(!fs.existsSync(path.join(project,'.git')));
 });

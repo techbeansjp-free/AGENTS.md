@@ -6,7 +6,7 @@ v0.5.0を正式版として提供します。[GitHub Release](https://github.com
 
 ## 利用入口
 
-Release添付のtarballを、開発対象とは別のディレクトリへインストールします。ASC本体のビルドは不要です。通常のコマンド名は`agent-skill-chain`です。`asc-v05`も同じruntimeを呼び出します。旧コマンドへの暗黙の切り替えは行いません。
+Release添付のtarballから、[導入手順](v05/USAGE.md)の`project-assets`で実行本体を`.agent-skill-chain/managed-runtime/`へ配置します。Git共有時は本体もcommitし、clone・worktreeごとに同じ版を使います。ASC本体のビルドは不要です。通常のコマンド名は`agent-skill-chain`です。`asc-v05`も同じruntimeを呼び出します。旧コマンドへの暗黙の切り替えは行いません。
 
 ```sh
 agent-skill-chain --version

@@ -10,15 +10,19 @@ node .agent-skill-chain/node_modules/agent-skill-chain/bin/asc-v05.mjs project-a
 node .agent-skill-chain/bin/asc.mjs start .
 ```
 
-Git管理済みの対象では専用worktreeで実施する。Git未管理の対象や複数repoの親にも配置できる。標準入口は`.agent-skill-chain/node_modules/agent-skill-chain/`のCLIを自動解決し、`runtime.json`の版と照合する。`ASC_CLI`は未設定でよい。既に設定されている場合はその明示指定が優先されるため、標準配置へ切り替えるときは現在のHostで設定を解除する。
+Git管理済みの対象では専用worktreeで実施する。Git未管理の対象や複数repoの親にも配置できる。`project-assets`は**実行可能なASC本体一式**を`.agent-skill-chain/managed-runtime/`へ配置する。`bin/`、`src/`、Skill・実行に必要な資料を含み、利用者側のビルドやASC用依存installは不要（Nodeは必要）。`.mjs`はそのまま実行する配布形式であり、利用者アプリのビルド・テスト用依存とは別である。
 
-Gitを使う場合は`.agent-skill-chain/node_modules/`をignore対象にする。CLI本体をcommitする必要はない。共有するSkill・資料・`bin/asc.mjs`・`runtime.json`・`distribution.json`は維持する。上記のnpmオプションは利用者のpackage.jsonやlockfileを更新しない。
+標準入口は同梱本体を優先して`runtime.json`の版と照合する。`ASC_CLI`は不要。既に設定されている場合はその明示指定が優先されるので、標準配置へ切り替えるときは現在のHostで解除する。ホームディレクトリへ設定を追加する必要はない。
 
-更新・版指定・切戻しは、目的の版のtarballで同じ導入コマンドを実行し、そのCLIの`project-assets`で差分を確認してから`--apply`する。共有版とCLI版が違う間は共有入口が停止するため、更新直後の資産更新には上記の直接CLIを使う。利用者編集との競合は自動上書きしない。別環境でも同じ版を標準配置に導入すれば共有資産の再生成は不要。
+Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・資料・`bin/asc.mjs`・`runtime.json`・`distribution.json`をまとめてcommitする。これによりclone・新規worktreeでも同じ版が動く。初回配置に使った`.agent-skill-chain/node_modules/`だけはignoreでき、配置後は不要。上記npmオプションは利用者のpackage.jsonやlockfileを更新しない。
 
-CLI本体のみを削除する場合は `npm uninstall --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false agent-skill-chain`。共有資産・固有ルール・成果物は残る。再導入には同じ導入コマンドを使う。`.agent-skill-chain/`全体を削除しない。
+更新・版指定・切戻しは、目的のtarballを導入したCLIから`project-assets`の差分を確認し、`--apply`する。現在のworktreeの同梱本体と版指定を一緒に更新するため、他の作業中worktreeは旧版のまま動く。利用者の編集と競合したら一括停止し、無断上書きしない。配布資産の変更をcommitして共有し、他のworktreeでは必要な時に通常のGit操作で取り込む。実行中プロセスのhot updateは行わない。
 
-外部prefixを共用したい場合だけ、その環境の`ASC_CLI`にインストール済み`bin/asc-v05.mjs`を明示する。snapshot ControllerのHost実行ツールは候補外で管理するという別の信頼境界を維持する。この節は現在のHostで作業する標準経路の導入方法である。
+旧配布方式（v0.5.3以前）への切戻しは例外。旧CLIは同梱本体を残したまま配布記録から外すため、その後の新版導入が「記録外の既存ファイル」として停止し得る。旧版へ戻す前に配布資産をcommit（非Gitならバックアップ）する。再更新時は、その既知のcommitから**配布manifestに列挙された資産とdistribution.jsonだけ**を戻してから新版を適用する。現在の編集と差分を確認し、固有設定・利用者成果物を一括restoreしない。保存済みの配布状態がなければ既存本体を自動採用・削除せず個別に確認する。同梱方式同士の更新・切戻しは通常手順で行える。
+
+初回導入用のnpmパッケージは `npm uninstall --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false agent-skill-chain` で削除できる。同梱本体は残り、通常起動は継続する。ASCを取り外す場合は配布manifestと実差分を確認して管理対象資産・Host登録だけを除去し、`project/`や利用者成果物を削除しない。`.agent-skill-chain/`全体を削除しない。
+
+任意の外部prefixを使う場合だけ`ASC_CLI`で明示する。外部prefixを上書きするとそれを参照する別worktreeへ影響するため、版別prefixを使う。同梱版がない旧配置のみnode_modulesを探索する。snapshot ControllerのHost実行ツールは候補外で管理する別の信頼境界を維持する。
 
 ## 標準: 現在のAIとプロジェクトの開発環境
 
@@ -42,6 +46,26 @@ CI観測は既定では時間上限を持たず、対象PR・commitに拘束さ�
 正式リリース前の評価用。現在、要求からDraft PR/CIまで実証した実行環境はLinux。同梱のLinux Codex自動実行アダプターにはNode.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。これは全Host共通の必要条件ではない。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
 
 `agent-skill-chain --help`（別名`asc-v05 --help`）で開始・再開・移行の入口と、この手順書の配布先を確認できます。引数なしも案内のみを表示し、Agent起動やGit変更は行いません。
+
+## プロジェクト固有ルールの適用
+
+通常経路の`start`は、対象内の`AGENTS.md`、`CLAUDE.md`、`.agent-skill-chain/project/00_利用案内.md`、旧`project-policy.json`を存在する場合に参照として返す。`--path`を指定するとその祖先directoryの`AGENTS.md` / `CLAUDE.md`も確認する。本文や秘密情報をJSONへ展開せず、path・SHA256・byte数だけを返す。CLIは規約を実行せず、現在のHostと独立Reviewerが適用する。
+
+追加の固有規約は利用者所有の`.agent-skill-chain/project/context.json`へ登録できる。ASC更新はこの設定・参照文書を変更しない。
+
+```json
+{
+  "schema": "asc-project-context/v1",
+  "rules": [
+    {"path": ".agent-skill-chain/project/rules.md"},
+    {"path": "docs/ui.md", "appliesTo": ["src/frontend", "docs/ui.md"]}
+  ]
+}
+```
+
+pathはproject root相対、`appliesTo`はglobではなく完全一致またはdirectory prefix。省略した規約は常時対象。`start . --path src/frontend/page.tsx`のように変更予定・実差分のpathを複数指定できる。path省略時はmanifestの全scopeが候補になる。入れ子のAGENTS.md/CLAUDE.mdは全走査せず未探索noticeを出すため、編集対象確定後、実装前に全対象pathで再実行する。条件不一致の本文は読まない。設定不正、選択対象の欠落、symlink経由の参照は明示エラーになる。選択結果のdigestで内容変化を比較できるが、AIが読んだことや意味的遵守の証明ではない。
+
+新しい設定の登録は任意。既存のproject directoryに索引設定がなければnoticeを返し、Hostが適用規約を確認する。旧project-policyは解釈・移行対象として提示し、旧版の設定エンジンを暗黙実行しない。親の統合directoryの共通規約はHostが別途確認する。専用worktreeに存在しない未追跡の共通設定を自動コピーしない。追加Agent・モデル通信・全repo走査は行わず、設定の参照と必要なfileのhash計算だけを行う。
 
 ## マージ後の後始末
 
@@ -251,21 +275,20 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 ### 配布先と利用者の成果物
 
-現在の評価配布物は、開発対象のworktree外にある専用prefixへインストールする。以下は現在の配置であり、利用者プロジェクト全体をこの構造へ変更する指示ではない。
+配布tarballからproject-assetsで実行本体を配置する。標準の利用者側構成は次のとおり。
 
 ```text
-<host-prefix>/node_modules/agent-skill-chain/
-├── bin/                     CLI
-├── src/                     実行プログラム
-├── skills/asc/              配布Skill（Hostへの登録は別操作）
-└── v05/
-    ├── USAGE.md             利用案内
-    └── templates/specs/     基本6種と任意の詳細雛形
-
 <利用者プロジェクト>/
-├── .agent-skill-chain/project/  既存のプロジェクト固有ルール（保持）
-├── docs/specs/                 作成済み仕様書（既存配置があれば優先）
-└── .worktrees/                 Issue別の作業先
+├── .agent-skill-chain/
+│   ├── bin/asc.mjs          共有入口
+│   ├── managed-runtime/    実行可能なASC本体（bin/src/skills/資料）
+│   ├── runtime.json        同梱版の指定
+│   ├── distribution.json   配布資産の更新管理
+│   ├── skills/asc/          利用者向け入口Skill
+│   ├── templates/specs/    任意の仕様書雛形
+│   └── project/            利用者固有設定（保持）
+├── docs/specs/              利用者の仕様書（既存配置を優先）
+└── .worktrees/              Git管理時のIssue別作業先
 ```
 
 詳細雛形はAPI・データ・セキュリティ・運用などの記入項目が必要な場合だけ選ぶ。選んだ雛形を利用者の仕様書としてコピーした後は、その文書は利用者の成果物であり、ASCのパッケージ更新で上書き・再生成しない。雛形の更新と、作成済み仕様書の更新は別の作業である。

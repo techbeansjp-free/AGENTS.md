@@ -14,8 +14,11 @@ try {
   cli=fs.realpathSync(process.env.ASC_CLI);
   manifest=path.resolve(path.dirname(cli),'../package.json');
  }else{
-  try{manifest=createRequire(location).resolve('agent-skill-chain/package.json');}
-  catch{throw Error(`Install agent-skill-chain ${pin.version} locally under .agent-skill-chain/node_modules (npm install --prefix .agent-skill-chain --offline --ignore-scripts --no-save --package-lock=false <trusted-tarball>), or set ASC_CLI to that installed version's bin/asc-v05.mjs. No automatic download or fallback.`);}
+  try{
+   const bundled=fileURLToPath(new URL('../managed-runtime/package.json',import.meta.url));
+   manifest=fs.existsSync(bundled)?bundled:createRequire(location).resolve('agent-skill-chain/package.json');
+  }
+  catch{throw Error(`Install agent-skill-chain ${pin.version} project assets from the trusted distribution (project-assets --apply), or explicitly set ASC_CLI to that installed version's bin/asc-v05.mjs. No automatic download or fallback.`);}
   cli=path.join(path.dirname(manifest),'bin/asc-v05.mjs');
  }
  const pkg=JSON.parse(fs.readFileSync(manifest,'utf8'));

@@ -14,7 +14,7 @@ function fixture(t){
  fs.writeFileSync(path.join(repo,'app.txt'),'base');git('add','.');git('commit','-qm','base');
  const work=path.join(root,'work');git('worktree','add','-qb','task',work);
  const pkg=path.join(root,'package');fs.mkdirSync(pkg);
- for(const name of ['v05','skills/asc','src/project-launcher.mjs','package.json'])fs.cpSync(name,path.join(pkg,name),{recursive:true});
+ for(const name of ['v05','skills','src','bin','migration_inspect.mjs','README.md','package.json'])fs.cpSync(name,path.join(pkg,name),{recursive:true});
  const write=(name,value)=>{const file=path.join(work,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,value);};
  return {root,repo,work,pkg,write,git};
 }
@@ -29,7 +29,7 @@ test('project asset install/update preserves owner files, dirty siblings and ind
  assert.equal(projectAssets(f.work,options).changes.length,0);
  assert.equal(projectAssets(f.work,options).recordChanged,false);
  const shipped=path.join(f.pkg,'v05/templates/specs/01_要求定義.md');fs.appendFileSync(shipped,'\nUpdated template\n');
- const update=projectAssets(f.work,options);assert.deepEqual(update.changes.map(c=>[c.path,c.action]),[[asset,'update']]);
+ const update=projectAssets(f.work,options);assert.deepEqual(update.changes.map(c=>[c.path,c.action]),[[asset,'update'],['.agent-skill-chain/managed-runtime/v05/templates/specs/01_要求定義.md','update']]);
  assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);assert.equal(fs.readFileSync(path.join(f.work,asset),'utf8'),fs.readFileSync(shipped,'utf8'));
  for(const [name,value] of [['.agent-skill-chain/project/rules.md','Owner rule'],['docs/specs/API.md','Owner specification'],['.agent-skill-chain/templates/custom.md','Custom template'],['app.txt','Uncommitted app']])assert.equal(fs.readFileSync(path.join(f.work,name),'utf8'),value);
  assert.equal(fs.readFileSync(path.join(f.repo,'app.txt'),'utf8'),'Dirty sibling');assert.deepEqual(fs.readFileSync(path.join(f.repo,'.git/worktrees/work/index')),beforeIndex);
@@ -47,7 +47,8 @@ test('one edited or pre-existing asset blocks the entire update without overwrit
 test('removed distribution assets are retained, and malformed records cannot target owner paths',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,apply:true};projectAssets(f.work,options);
  fs.unlinkSync(path.join(f.pkg,'v05/templates/specs/01_要求定義.md'));
- const result=projectAssets(f.work,options);assert.equal(result.applied,true);assert.deepEqual(result.retained,[asset]);assert(fs.existsSync(path.join(f.work,asset)));
+ const manifestPath=path.join(f.pkg,'src/runtime-files.json'),manifest=JSON.parse(fs.readFileSync(manifestPath));fs.writeFileSync(manifestPath,JSON.stringify(manifest.filter(p=>p!=='v05/templates/specs/01_要求定義.md')));
+ const result=projectAssets(f.work,options);assert.equal(result.applied,true);assert.deepEqual(result.retained,['.agent-skill-chain/managed-runtime/v05/templates/specs/01_要求定義.md',asset]);assert(fs.existsSync(path.join(f.work,asset)));
  f.write('.agent-skill-chain/distribution.json',JSON.stringify({schema:'asc-project-assets/v1',files:{'../outside':'a'.repeat(64)}}));assert.throws(()=>projectAssets(f.work,options),/Unsafe source path/);
 });
 test('asset paths cannot traverse symlinks or overwrite hardlinked host files',t=>{
@@ -157,3 +158,23 @@ test('review Skill update reaches registered and project entries without alterin
  assert.equal(projectAssets(f.work,{packageRoot:f.pkg,apply:true}).applied,false);
  assert.equal(fs.readFileSync(path.join(f.work,name),'utf8'),old+'owner edit');
  });
+
+test('runtime inventory excludes unrelated local files and preserves modified runtime on update',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg,apply:true};fs.writeFileSync(path.join(f.pkg,'src/private-token.txt'),'synthetic secret');
+ projectAssets(f.work,options);assert(!fs.existsSync(path.join(f.work,'.agent-skill-chain/managed-runtime/src/private-token.txt')));
+ const entry='.agent-skill-chain/managed-runtime/src/project-context.mjs';f.write(entry,'owner modified runtime');fs.appendFileSync(path.join(f.pkg,'src/project-context.mjs'),'\n// new version\n');
+ const result=projectAssets(f.work,options);assert.equal(result.applied,false);assert(result.conflicts.includes(entry));assert.equal(fs.readFileSync(path.join(f.work,entry),'utf8'),'owner modified runtime');
+});
+
+test('legacy removal of runtime inventory fails closed and saved distribution restores future updates',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg,apply:true};f.write('.agent-skill-chain/project/rules.md','owner');projectAssets(f.work,options);
+ const record='.agent-skill-chain/distribution.json',saved=fs.readFileSync(path.join(f.work,record));const inventory=JSON.parse(saved);
+ const backup=new Map(Object.keys(inventory.files).map(p=>[p,fs.readFileSync(path.join(f.work,p))]));
+ for(const p of Object.keys(inventory.files))if(p.startsWith('.agent-skill-chain/managed-runtime/'))delete inventory.files[p];
+ f.write(record,JSON.stringify(inventory));
+ const pkg=JSON.parse(fs.readFileSync(path.join(f.pkg,'package.json')));pkg.version='0.5.99';fs.writeFileSync(path.join(f.pkg,'package.json'),JSON.stringify(pkg));
+ const rejected=projectAssets(f.work,options);assert.equal(rejected.applied,false);assert(rejected.conflicts.includes('.agent-skill-chain/managed-runtime/package.json'));
+ // Restore only known distribution assets from the pre-downgrade backup.
+ for(const [p,bytes] of backup)f.write(p,bytes);f.write(record,saved);
+ assert.equal(projectAssets(f.work,options).applied,true);assert.equal(fs.readFileSync(path.join(f.work,'.agent-skill-chain/project/rules.md'),'utf8'),'owner');
+});

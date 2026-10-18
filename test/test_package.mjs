@@ -45,12 +45,25 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const ordinary=path.join(root,'ordinary');fs.mkdirSync(ordinary);
  const ordinaryStart=JSON.parse(execFileSync(process.execPath,[cli,'start',ordinary],{encoding:'utf8'}));
  assert.equal(ordinaryStart.gitManaged,false);assert.equal(ordinaryStart.head,null);assert.equal(ordinaryStart.deliveryAuthorized,false);
+ // Consumer-owned configuration is discovered by the installed artifact, not source imports.
+ fs.mkdirSync(path.join(ordinary,'.agent-skill-chain/project'),{recursive:true});
+ const ownerConfig=JSON.stringify({schema:'asc-project-context/v1',rules:[{path:'.agent-skill-chain/project/rules.md',appliesTo:['src/ui']},{path:'missing-api-rule.md',appliesTo:['src/api']}]});
+ fs.writeFileSync(path.join(ordinary,'.agent-skill-chain/project/context.json'),ownerConfig);
+ fs.writeFileSync(path.join(ordinary,'.agent-skill-chain/project/rules.md'),'Synthetic owner UI contract');
+ const selected=JSON.parse(execFileSync(process.execPath,[cli,'start',ordinary,'--path','src/ui/view.ts'],{cwd:root,encoding:'utf8'}));
+ assert.equal(selected.context.references.length,1);assert(!JSON.stringify(selected).includes('Synthetic owner UI contract'));
+ const missingRule=spawnSync(process.execPath,[cli,'start',ordinary,'--path','src/api/server.ts'],{cwd:root,encoding:'utf8'});assert.equal(missingRule.status,1);
+ fs.writeFileSync(path.join(ordinary,'missing-api-rule.md'),'Synthetic API contract');
  const ordinaryAssets=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',ordinary,'--apply','--register-skill'],{encoding:'utf8'}));
- assert.equal(ordinaryAssets.applied,true);assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
+ assert.equal(fs.readFileSync(path.join(ordinary,'.agent-skill-chain/project/context.json'),'utf8'),ownerConfig);
+ assert.equal(ordinaryAssets.applied,true);
+ const assertRuntime=relative=>{for(const entry of fs.readdirSync(path.join(packageRoot,relative),{withFileTypes:true})){const name=relative+'/'+entry.name;if(entry.isDirectory())assertRuntime(name);else assert.deepEqual(fs.readFileSync(path.join(ordinary,'.agent-skill-chain/managed-runtime',name)),fs.readFileSync(path.join(packageRoot,name)),name);}};
+ assertRuntime('src');assertRuntime('bin');
+assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
  const inventory=JSON.parse(fs.readFileSync(path.join(ordinary,'.agent-skill-chain/distribution.json'))).files;
  for(const name of Object.keys(inventory)){
   const bytes=fs.readFileSync(path.join(ordinary,name),'utf8');assert(!bytes.includes(packageRoot));
-  if(name.endsWith('.md'))for(const match of bytes.matchAll(/\]\(([^)]+)\)/g)){
+  if(name.endsWith('.md')&&!name.includes('/managed-runtime/'))for(const match of bytes.matchAll(/\]\(([^)]+)\)/g)){
    const link=match[1].split('#')[0];if(!link||/^[a-z]+:/i.test(link))continue;
    assert(fs.existsSync(path.resolve(path.dirname(path.join(ordinary,name)),link)),`${name}: ${link}`);
   }
@@ -60,7 +73,7 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const sharedBefore=fs.readFileSync(path.join(moved,'.agent-skill-chain/distribution.json'));
  const portable=spawnSync(process.execPath,[launcher,'start',moved],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:cli}});
  assert.equal(portable.status,0,portable.stderr);assert.equal(JSON.parse(portable.stdout).repo,fs.realpathSync(moved));
- const absent=spawnSync(process.execPath,[launcher,'--version'],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:''}});assert.equal(absent.status,1);assert.match(absent.stderr,/Install agent-skill-chain/);
+ const absent=spawnSync(process.execPath,[launcher,'--version'],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:''}});assert.equal(absent.status,0,absent.stderr);
  const badPackage=path.join(root,'wrong-version');fs.mkdirSync(path.join(badPackage,'bin'),{recursive:true});
  fs.writeFileSync(path.join(badPackage,'package.json'),JSON.stringify({name:'agent-skill-chain',version:'99.0.0'}));
  const badCli=path.join(badPackage,'bin/asc-v05.mjs');fs.writeFileSync(badCli,"throw Error('must not execute')");
@@ -72,7 +85,7 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const local=spawnSync(process.execPath,[launcher,'--version'],{cwd:root,encoding:'utf8',env:{...process.env,ASC_CLI:''}});assert.equal(local.status,0,local.stderr);
  assert.deepEqual(fs.readFileSync(path.join(moved,'.agent-skill-chain/distribution.json')),sharedBefore);
  execFileSync(process.execPath,[npm,'uninstall','--prefix',localPrefix,'--offline','--ignore-scripts','--no-audit','--no-fund','--no-save','--package-lock=false','agent-skill-chain'],{stdio:'pipe'});
- assert.equal(spawnSync(process.execPath,[launcher,'--version'],{env:{...process.env,ASC_CLI:''}}).status,1);
+ assert.equal(spawnSync(process.execPath,[launcher,'--version'],{env:{...process.env,ASC_CLI:''}}).status,0);
  assert.deepEqual(fs.readFileSync(path.join(localPrefix,'distribution.json')),sharedBefore);
  installLocal();assert.equal(spawnSync(process.execPath,[launcher,'--version'],{env:{...process.env,ASC_CLI:''}}).status,0);
 

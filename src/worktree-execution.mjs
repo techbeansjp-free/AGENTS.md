@@ -1,4 +1,5 @@
 /** Current Host execution in the real worktree; no snapshot or provider launch. */
+import {projectContext} from './project-context.mjs';
 import fs from 'node:fs';import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -7,12 +8,13 @@ import {createHash} from 'node:crypto';
 import {projectLocation} from './project-location.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const git=(repo,...args)=>execFileSync('git',['-c','core.hooksPath=/dev/null',...args],{cwd:repo,encoding:'utf8'}).trim();
-export function startWorktree(directory){
+export function startWorktree(directory,paths=[]){
  const {repo,gitManaged}=projectLocation(directory);
- if(!gitManaged)return {schema:'asc-project-start/v1',repo,head:null,gitManaged:false,execution:'current-host-directory',snapshot:false,providerLaunch:false,
+ const context=projectContext(repo,paths);
+ if(!gitManaged)return {schema:'asc-project-start/v1',repo,head:null,gitManaged:false,context,execution:'current-host-directory',snapshot:false,providerLaunch:false,
   skill:fileURLToPath(new URL('../skills/asc/SKILL.md',import.meta.url)),
   obligations:['owner intent and permitted scope','project build and tests in this directory','independent context review of actual changes','complete without Git when no Git delivery is requested; Git setup only for explicitly requested commit-bound verification or PR delivery'],verified:false,deliveryAuthorized:false};
- return {schema:'asc-worktree/v1',repo,head:git(repo,'rev-parse','HEAD'),execution:'current-host-worktree',snapshot:false,providerLaunch:false,
+ return {schema:'asc-worktree/v1',repo,head:git(repo,'rev-parse','HEAD'),context,execution:'current-host-worktree',snapshot:false,providerLaunch:false,
   skill:fileURLToPath(new URL('../skills/asc/SKILL.md',import.meta.url)),
   obligations:['owner intent and permitted scope','project build and tests in this worktree','independent context review of actual diff','verified commit matches submitted PR and CI'],verified:false};
 }

@@ -1,0 +1,34 @@
+{
+  "schema": "asc-distribution-lifecycle/v1",
+  "passed": true,
+  "seconds": 5.671,
+  "isolation": "bubblewrap unshare-all; runtime/input read-only; private HOME/tmp; no host project or credentials mounted",
+  "oldSha256": "72e9dd852ecba464eec4ae80d8e4ca9c91bc3fbbf5739955e29d98935ca66239",
+  "candidateSha256": "e0aa8501c6d5c55af45e2c46704b1f6fe20a20b138a8ee9dbc0b4d8b78a201c9",
+  "oldVersion": "0.5.3",
+  "candidateVersion": "0.5.4-rc.0",
+  "checks": [
+    "host sentinel unreadable and host TCP listener unreachable",
+    "baseline tarball installed and legacy assets deployed",
+    "invalid update rejected; previous CLI and owner files preserved",
+    "candidate update, legacy asset migration and idempotent reapply",
+    "installed CLI selects owner rules, omits bodies, detects changes and preserves settings",
+    "owner-edited shared Skill blocks overwrite",
+    "explicit old-version rollback and asset rollback preserve user data; mismatched launcher refused",
+    "uninstall removes runtime, fails closed at shared entry, preserves shared assets and owner files",
+    "reinstall restores execution without regenerating shared assets",
+    "second non-Git environment uses identical shared assets with a different installation prefix"
+  ],
+  "startMeasurement": {
+    "samples": 5,
+    "baselineStartMs": 70.2869686,
+    "candidateStartMs": 73.7971598,
+    "contextOutputBytes": 673,
+    "modelTokens": "not measured; no model invocation"
+  },
+  "ownerFilesPreserved": true,
+  "indexPreserved": true,
+  "externalModelCalls": 0,
+  "deletionScope": "npm runtime uninstall; shared project assets intentionally retained, not an automatic project-asset remover",
+  "failureScope": "invalid archive before update; not disk-full, SIGKILL or power-loss atomicity"
+}

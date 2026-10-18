@@ -1,0 +1,37 @@
+{
+  "schema": "asc-distribution-lifecycle/v1",
+  "passed": true,
+  "seconds": 6.312,
+  "isolation": "bubblewrap unshare-all; runtime/input read-only; private HOME/tmp; no host project or credentials mounted",
+  "oldSha256": "6af9cd1de281b03058df83cbce2ccb718521c14f23c57de04b43f107d29b8fc8",
+  "candidateSha256": "1af9c31f16ae88866c6f051935b152b3cdf91ad7cf4e71daac4c315cfaf3d0e3",
+  "oldVersion": "0.5.4-rc.1",
+  "candidateVersion": "0.5.4-rc.3",
+  "checks": [
+    "host sentinel unreadable and host TCP listener unreachable",
+    "baseline tarball installed and legacy assets deployed",
+    "invalid update rejected; previous CLI and owner files preserved",
+    "updating one worktree keeps the other worktree running its pinned old version",
+    "candidate update, legacy asset migration and idempotent reapply",
+    "installed CLI selects owner rules, omits bodies, detects changes and preserves settings",
+    "committed runtime runs in fresh worktree and clone without npm install or ASC_CLI",
+    "owner-edited shared Skill blocks overwrite",
+    "explicit old-version rollback and asset rollback preserve user data; mismatched launcher refused",
+    "uninstall removes external npm runtime; explicit missing override refused; default bundled runtime and owner files remain usable",
+    "reinstall restores execution without regenerating shared assets",
+    "shared external prefix updates do not stop default bundled execution in another worktree",
+    "second non-Git environment uses identical shared assets with a different installation prefix"
+  ],
+  "startMeasurement": {
+    "samples": 5,
+    "baselineStartMs": 71.7092428,
+    "candidateStartMs": 70.31156080000001,
+    "contextOutputBytes": 673,
+    "modelTokens": "not measured; no model invocation"
+  },
+  "ownerFilesPreserved": true,
+  "indexPreserved": true,
+  "externalModelCalls": 0,
+  "deletionScope": "npm runtime uninstall; shared project assets intentionally retained, not an automatic project-asset remover",
+  "failureScope": "invalid archive before update; not disk-full, SIGKILL or power-loss atomicity"
+}
