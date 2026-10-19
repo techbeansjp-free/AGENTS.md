@@ -1,0 +1,8 @@
+{
+  "scenario": "Two synthetic worker worktrees; Git-resolved immutable HEADs integrated after one branch advances",
+  "bothWorkerChangesIntegrated": true,
+  "laterUnrelatedChangeExcluded": true,
+  "workerWorktreesUnmodified": true,
+  "newAgentCalls": 0,
+  "scope": "Deterministic Git mechanism only; not evidence of AI adherence or end-to-end performance improvement."
+}
