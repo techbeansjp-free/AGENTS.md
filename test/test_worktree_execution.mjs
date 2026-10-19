@@ -75,3 +75,24 @@ test('verification preserves Host Git configuration without applying it to inter
   assert.equal(verifyWorktree(f.work,f.base,f.owner).passed,true);
  }finally{for(const key of Object.keys(process.env))if(!Object.hasOwn(saved,key))delete process.env[key];Object.assign(process.env,saved);}
 });
+
+
+test('verification selects permitted path rules, discovers nested rules and ignores unrelated scope',t=>{
+ const f=fixture(t);
+ const write=(name,body)=>{const file=path.join(f.work,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,body);};
+ write('src/ui/view.cjs','module.exports=1;');
+ write('src/ui/AGENTS.md','UI contract');
+ write('rules/ui.md','UI rule');
+ write('rules/api.md','API rule');
+ write('.agent-skill-chain/project/context.json',JSON.stringify({schema:'asc-project-context/v1',rules:[{path:'rules/ui.md',appliesTo:['src/ui']},{path:'rules/api.md',appliesTo:['src/api']}]}));
+ f.git(f.work,'add','.');f.git(f.work,'commit','-qm','scoped contracts');const base=f.git(f.work,'rev-parse','HEAD');
+ write('src/ui/view.cjs','module.exports=2;');f.git(f.work,'commit','-qam','UI change');
+ f.contract.allowedPaths=['src/ui/view.cjs'];f.save();
+ const open=fs.openSync,reads=[];
+ t.mock.method(fs,'openSync',function(file,...args){if(typeof file==='string')reads.push(path.relative(f.work,file));return open.call(fs,file,...args);});
+ assert.equal(verifyWorktree(f.work,base,f.owner).passed,true);
+ assert.ok(reads.includes('src/ui/AGENTS.md'));assert.ok(reads.includes('rules/ui.md'));assert.ok(!reads.includes('rules/api.md'));
+ // A selected missing rule must still fail before running commands.
+ fs.unlinkSync(path.join(f.work,'rules/ui.md'));
+ assert.throws(()=>verifyWorktree(f.work,base,f.owner),/ENOENT/);
+});

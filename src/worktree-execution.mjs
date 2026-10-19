@@ -13,7 +13,9 @@ const gitEnvironment=()=>Object.fromEntries(Object.entries(process.env).filter((
 const gitMaxBuffer=16*1024*1024;
 const git=(repo,...args)=>execFileSync('git',['-c','core.hooksPath=/dev/null',...args],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',maxBuffer:gitMaxBuffer}).trim();
 export function startWorktree(directory,paths=[]){
- const {repo,gitManaged}=projectLocation(directory);
+ return describeProject(projectLocation(directory),paths);
+}
+function describeProject({repo,gitManaged},paths){
  const context=projectContext(repo,paths);
  if(!gitManaged)return {schema:'asc-project-start/v1',repo,head:null,gitManaged:false,context,execution:'current-host-directory',snapshot:false,providerLaunch:false,
   skill:fileURLToPath(new URL('../skills/asc/SKILL.md',import.meta.url)),
@@ -23,12 +25,14 @@ export function startWorktree(directory,paths=[]){
   obligations:['owner intent and permitted scope','project build and tests in this worktree','independent context review of actual diff','verified commit matches submitted PR and CI'],verified:false};
 }
 export function verifyWorktree(directory,base,ownerFile){
- const start=startWorktree(directory);
- if(start.gitManaged===false)throw Error('Git setup and dedicated worktree required for commit-bound verification');
- const repo=start.repo,owner=fs.realpathSync(ownerFile),rel=path.relative(repo,owner);
+ const location=projectLocation(directory);
+ if(location.gitManaged===false)throw Error('Git setup and dedicated worktree required for commit-bound verification');
+ const repo=location.repo,owner=fs.realpathSync(ownerFile),rel=path.relative(repo,owner);
  if(!rel||(!rel.startsWith('..'+path.sep)&&rel!=='..'&&!path.isAbsolute(rel)))throw Error('Owner contract must be outside worktree');
  const bytes=fs.readFileSync(owner),contract=JSON.parse(bytes);
  if(typeof contract.intent!=='string'||!contract.intent.trim()||!Array.isArray(contract.allowedPaths)||!contract.allowedPaths.length||contract.allowedPaths.some(p=>typeof p!=='string'||!p||path.isAbsolute(p)||p.split('/').some(s=>!s||s==='.'||s==='..'))||!Array.isArray(contract.commands)||!contract.commands.length||contract.commands.some(a=>!Array.isArray(a)||!a.length||!a[0]||a.some(v=>typeof v!=='string'||v.includes('\0'))))throw Error('Expected intent, exact allowedPaths and command argv arrays');
+ // Every accepted changed path must be in allowedPaths below; select its nested and scoped rules too.
+ const start=describeProject(location,contract.allowedPaths);
  const baseHead=git(repo,'rev-parse','--verify','--end-of-options',base+'^{commit}');git(repo,'merge-base','--is-ancestor',baseHead,start.head);
  const state=()=>{
   const entries=execFileSync('git',['ls-files','-v','-z'],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
