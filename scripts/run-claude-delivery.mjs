@@ -1,7 +1,7 @@
 /** Synthetic evaluation only. Fixed fixture; no implementation, planning or repair by this runner. */
 import fs from 'node:fs';import path from 'node:path';import {spawn,execFileSync} from 'node:child_process';import {randomUUID,createHash} from 'node:crypto';import {pathToFileURL} from 'node:url';import {performance} from 'node:perf_hooks';
 import {gitControlState,assertGitControlState} from './native-git-boundary.mjs';
-import {claudeUsage} from './claude-usage.mjs';import {claudeReviewEvidence} from './claude-review-evidence.mjs';
+import {claudeUsage,claudeSessionIds} from './claude-usage.mjs';import {claudeReviewEvidence} from './claude-review-evidence.mjs';
 const [tarball,claude,fixture,mode]=process.argv.slice(2);
 if(process.argv.length!==6||![tarball,claude,fixture].every(p=>p&&path.isAbsolute(p))||!['--deliver','--complex-deliver'].includes(mode))throw Error('Expected absolute tarball, Claude CLI, local synthetic fixture and --deliver or --complex-deliver');
 const complex=mode==='--complex-deliver',issue=complex?3:1,repository='adachi-tatsuru/asc-public-synthetic-eval-20261016',deliveryBase='c37e08e05abc46b5a26af131f134d42a3c8a3b80',base=complex?'d913e7b5cbde17acacc625c659ac8fc0146b6f45':deliveryBase,model=process.env.ASC_EVAL_MODEL,effort=process.env.ASC_EVAL_EFFORT;
@@ -44,7 +44,7 @@ try{
  if(reviewerMode==='registered'&&review.agentType!=='asc-reviewer')throw Error('Submitted HEAD was not reviewed by registered reviewer');
  if(fs.readFileSync(owner,'utf8')!==ownerBytes)throw Error('Owner contract changed during trial');
  const {verifyWorktree}=await import(pathToFileURL(path.join(pkg,'src/worktree-execution.mjs'))),verification=verifyWorktree(worktree,base,owner);if(!verification.passed||verification.head!==head)throw Error('Oracle mismatch');
- const dir=path.join(process.env.HOME,'.claude/projects',worktree.replace(/[^a-zA-Z0-9-]/g,'-')),ids=[session,...events.filter(e=>e.subtype==='task_started').map(e=>e.task_id)],transcripts=[];
+ const dir=path.join(process.env.HOME,'.claude/projects',worktree.replace(/[^a-zA-Z0-9-]/g,'-')),ids=claudeSessionIds(events,session),transcripts=[];
  for(const id of ids){const file=id===session?path.join(dir,session+'.jsonl'):path.join(dir,session,'subagents','agent-'+id+'.jsonl');if(fs.existsSync(file))transcripts.push({id,records:records(file)});}
  const usage=claudeUsage(transcripts,ids,result.modelUsage),data={...setup,run,head,review,verification,usage,modelUsage:result.modelUsage,implementationIntervention:0};fs.writeFileSync(path.join(root,'acceptance.json'),JSON.stringify(data,null,2));
  const {Github}=await import(pathToFileURL(path.join(pkg,'src/github.mjs'))),github=new Github({repository,issue,repo:worktree,branch,baseBranch:'main',base:deliveryBase,workflowPath:complex?'.github/workflows/complex.yml':'.github/workflows/test.yml',command:(argv,cwd)=>{const a=[...argv];if(a[0]==='gh'&&a[1]==='pr'&&a[2]==='create'){a[a.indexOf('--title')+1]=complex?'Synthetic Claude matched complex trial':'Synthetic Claude matched small trial';a[a.indexOf('--body')+1]=`Synthetic fixture only. Independent Claude review and exact oracle passed for ${head}. Draft only; no merge/release. Evaluation runner publishes; no evaluator implementation edits.`;}return command(a,cwd);}});

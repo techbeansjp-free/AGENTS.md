@@ -1,0 +1,126 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "reviewerMode": "generic",
+    "reviewerDefinitionSha256": null,
+    "skillBundleSha256": "dea38dbb44f9fbd93850ba14ee28d3f1ae3400406604c0786f2ae3b41d5bcd2d",
+    "version": "0.5.900-alpha.38",
+    "skillSha256": "95520b3943ec70f572b78f4c09beda10caada220a0c0181c3d0e2120849b2ac9",
+    "identitySha256": "b97b4bfaecbdc5c78de986b2cd4e4a79f499483e99c054b60c54323892a5841d"
+  },
+  "conditions": {
+    "runnerSha256": "9952128fc7df798f1674ee31c38de81257d289b82ab2a31c7e55fd258d62fcc2",
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "1395be80c4da057a261572e11324f1bb38c69ab16e87d076437ad64736d4e53f",
+    "intentSha256": "712b83bd0cdec6d5d3439878da31f02e08a50379fd6bf471539227cbbcd54f9f",
+    "commands": [
+      [
+        "python3",
+        "-I",
+        "test_greeting.py"
+      ],
+      [
+        "python3",
+        "-I",
+        "-c",
+        "import sys;sys.path.insert(0,\".\");from greeting import greeting;assert type(greeting()) is str and greeting()==\"Hello\""
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "66e109997f815b711704b104cbef295b280ef1fb",
+  "review": {
+    "taskId": "a6daffbe20bd6f6d1",
+    "agentType": "general-purpose",
+    "head": "66e109997f815b711704b104cbef295b280ef1fb",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 28,
+      "output_tokens": 5653,
+      "cache_read_input_tokens": 323354,
+      "cache_creation_input_tokens": 27122
+    },
+    "threads": [
+      {
+        "id": "ce4faec1-848e-490c-94d5-f201cb89c96f",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 4279,
+          "cache_read_input_tokens": 262384,
+          "cache_creation_input_tokens": 19240
+        }
+      },
+      {
+        "id": "a6daffbe20bd6f6d1",
+        "messageCount": 4,
+        "usage": {
+          "input_tokens": 8,
+          "output_tokens": 1374,
+          "cache_read_input_tokens": 60970,
+          "cache_creation_input_tokens": 7882
+        }
+      }
+    ],
+    "observedProcessedTokens": 356157,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 59.868517899,
+  "deliverySeconds": 21.544320071999994,
+  "elapsedSeconds": 81.528174694,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "66e109997f815b711704b104cbef295b280ef1fb",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/149",
+  "ci": {
+    "head": "66e109997f815b711704b104cbef295b280ef1fb",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39268665166",
+    "transportFailures": []
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Fresh-context simple change only; repair, multiple Issues and restart acceptance remain separate.",
+    "No merge or release."
+  ]
+}

@@ -31,3 +31,11 @@ export function claudeUsage(transcripts,expectedIds,modelUsage){
  const observedProcessedTokens=Object.values(totals).reduce((a,b)=>a+b,0);
  return {totals,threads,observedProcessedTokens,missingUsage,reconciledWithHostModelUsage,complete:missingUsage.length===0};
 }
+
+
+/** Repeated starts resume a Context; explicit local_bash tasks do not create one. */
+export function claudeSessionIds(events,rootId){
+ const ids=[rootId,...events.filter(e=>e.type==='system'&&e.subtype==='task_started'&&e.task_type!=='local_bash').map(e=>e.task_id)];
+ if(ids.some(id=>typeof id!=='string'||!id))throw Error('Missing Claude session identity');
+ return [...new Set(ids)];
+}

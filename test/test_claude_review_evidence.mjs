@@ -3,7 +3,7 @@ import {claudeReviewEvidence} from '../scripts/claude-review-evidence.mjs';
 const head='a'.repeat(40),start={type:'system',subtype:'task_started',task_id:'reviewer',description:'independent_review',spawn_depth:1},done={type:'system',subtype:'task_notification',task_id:'reviewer',status:'completed',summary:`PASS ${head}\nNo findings.`};
 test('Claude review accepts direct completed exact-HEAD reviewer',()=>assert.equal(claudeReviewEvidence([start,done],head).taskId,'reviewer'));
 test('Claude review rejects self-report, stale or conflicting verdict and uncompleted descendants',()=>{
- for(const events of [[done],[{...start,spawn_depth:2},done],[start,{...done,status:'failed'}],[start,{...done,summary:`PASS ${'b'.repeat(40)}`}],[start,done,{...done,summary:`FAIL ${head}`}],[start,{...done,summary:`quoted PASS ${head}`}],[start,done,done]])assert.throws(()=>claudeReviewEvidence(events,head),/unambiguous/);
+ for(const events of [[done],[{...start,spawn_depth:2},done],[start,{...done,status:'failed'}],[start,{...done,summary:`PASS ${'b'.repeat(40)}`}],[start,done,{...done,summary:`FAIL ${head}`}],[start,{...done,summary:`quoted PASS ${head}`}]])assert.throws(()=>claudeReviewEvidence(events,head),/unambiguous/);
 });
 
 test('abbreviated verdict requires unique Git resolution, not prefix matching',()=>{
@@ -23,3 +23,19 @@ test('inline-code verdict preserves exact identity and contradictory FAIL reject
 });
 
 test('review type belongs to the task that approved submitted HEAD',()=>{const registered={...start,task_id:'other',subagent_type:'asc-reviewer'};const actual={...start,subagent_type:'claude'};assert.equal(claudeReviewEvidence([registered,actual,done],head).agentType,'claude');assert.equal(claudeReviewEvidence([{...start,subagent_type:'asc-reviewer'},done],head).agentType,'asc-reviewer');});
+
+
+test('same reviewer may repeat notifications or correct its verdict without multiplying identities',()=>{
+ assert.equal(claudeReviewEvidence([start,done,done],head).taskId,'reviewer');
+ assert.equal(claudeReviewEvidence([start,{...done,summary:'No findings; verdict pending'},start,done],head).taskId,'reviewer');
+ assert.equal(claudeReviewEvidence([start,{...done,summary:'PASS '+head.slice(0,39)},start,done],head,()=>head).taskId,'reviewer');
+ for(const events of [
+  [start,done,{...start,task_id:'second'},{...done,task_id:'second'}],
+  [start,done,start],
+  [start,done,{...start,spawn_depth:2}],
+  [start,done,{...start,subagent_type:'different'}],
+  [start,done,{...done,status:'failed'}],
+  [start,done,{...done,summary:'Correction pending'}],
+  [start,{...done,summary:'FAIL '+head},start,done],
+ ])assert.throws(()=>claudeReviewEvidence(events,head),/unambiguous/);
+});

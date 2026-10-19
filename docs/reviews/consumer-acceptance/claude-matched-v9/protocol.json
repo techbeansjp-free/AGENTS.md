@@ -26,7 +26,7 @@
     "Both first two pairs worse in time and processed tokens: stop."
   ],
   "acceptance": "Existing summarizeNativePairs requirements unchanged: five pairs, all quality/measurement checks, both medians lower, neither observed maximum regressed.",
-  "results": "Not started; conditions fixed before execution.",
+  "results": "Stopped at run 3 by the predefined failure condition. Runs 1–2 completed; run 3 failed in the evaluator before verification and delivery. Saved-log diagnosis identifies repeated reviewer events; it does not convert the failed run into an accepted result. Remaining seven runs were not started; no performance acceptance.",
   "baselinePackageSha256": "cb05febc28dd15f087d2371dc1f3c50c4e7790111a37b91f7b0dd61fd9c93483",
   "candidatePackageSha256": "abc6528f01157b7328010094ea2323226944200c576a47be929741bfded80bd9",
   "baselineSkillBytes": 11055,

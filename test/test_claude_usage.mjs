@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {claudeUsage} from '../scripts/claude-usage.mjs';
+import {claudeUsage,claudeSessionIds} from '../scripts/claude-usage.mjs';
 const entry=(id,n)=>({type:'assistant',message:{id,stop_reason:'end_turn',usage:{input_tokens:n,output_tokens:n,cache_read_input_tokens:n,cache_creation_input_tokens:n}}});
 const models=n=>({synthetic:{inputTokens:n,outputTokens:n,cacheReadInputTokens:n,cacheCreationInputTokens:n}});
 test('Claude parent and reviewer streaming messages reconcile without double counting',()=>{
@@ -21,4 +21,13 @@ test('partial streamed usage cannot establish complete cost even if totals happe
  assert.ok(result.missingUsage.some(x=>x.message==='m1'&&x.reason==='terminal usage snapshot missing'));
  const final=entry('m1',5);
  assert.equal(claudeUsage([{id:'reviewer',records:[partial,final]}],['reviewer'],models(5)).complete,true);
+});
+
+
+test('usage identities deduplicate resumed agents but retain unknown tasks for missing-evidence detection',()=>{
+ const start={type:'system',subtype:'task_started',task_type:'local_agent',task_id:'reviewer'};
+ assert.deepEqual(claudeSessionIds([start,start,{...start,task_type:'local_bash',task_id:'shell'}],'parent'),['parent','reviewer']);
+ assert.deepEqual(claudeSessionIds([{...start,task_type:'unknown',task_id:'new-kind'}],'parent'),['parent','new-kind']);
+ assert.throws(()=>claudeSessionIds([{...start,task_id:null}],'parent'),/identity/);
+ assert.throws(()=>claudeSessionIds([],null),/identity/);
 });
