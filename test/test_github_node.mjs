@@ -115,3 +115,21 @@ test('workflow ref suffix is accepted without weakening CI identity binding',asy
   assert.equal(jobReads,0);
  }
 });
+
+
+test('new Draft binds the submitted commit without claiming synthetic or Controller verification',()=>{
+ const {provider,data}=setup(),calls=[];
+ provider.command=(argv)=>{
+  calls.push(argv);
+  if(argv[0]==='git')return argv[1]==='config'?'':head;
+  if(argv[1]==='pr'&&argv[2]==='list')return '[]';
+  if(argv[1]==='pr'&&argv[2]==='create')return 'https://github.com/'+repository+'/pull/1';
+  if(argv[1]==='api')return JSON.stringify(argv[2].includes('/git/ref/')?{object:{sha:base}}:data);
+  throw Error('Unexpected command');
+ };
+ assert.equal(provider.createDraft(head),1);
+ const submitted=calls.find(a=>a[1]==='pr'&&a[2]==='create');assert(submitted.includes('--draft'));
+ assert.equal(submitted[submitted.indexOf('--title')+1],'Changes for #1');
+ const body=submitted[submitted.indexOf('--body')+1];assert(body.includes(head));assert.doesNotMatch(body,/Isolated|Controller verification|independent fresh review/);
+ assert.equal(calls.filter(a=>a.includes('push')).length,1);
+});

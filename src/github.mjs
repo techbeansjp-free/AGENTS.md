@@ -51,7 +51,7 @@ export class Github {
       `git@github.com:${this.repository}.git`,`${head}:refs/heads/${this.branch}`],this.repo);
     demand(this.command(['git','rev-parse','HEAD'],this.repo)===head,'HEAD changed during push');
     const url=this.command(['gh','pr','create','--repo',this.repository,'--base',this.baseBranch,'--head',this.branch,'--draft',
-      '--title','Isolated v0.5 Node evaluation','--body',`Isolated evaluation for #${this.issue}. Controller verification and independent fresh review. Draft only; no merge or release.`]);
+      '--title',`Changes for #${this.issue}`,'--body',`Changes for #${this.issue}.\n\nSubmitted commit: ${head}\n\nDraft for review; no merge or release. Verification and review results must be assessed for this commit.`]);
     const match=url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)$/);
     demand(match && match[1]===this.repository,'Unexpected PR response');const pr=Number(match[2]);
     this.assertPr(this.api(`repos/${this.repository}/pulls/${pr}`));return pr;
