@@ -198,3 +198,21 @@ test('unlimited verification stops when its Controller is killed',{skip:!enabled
  for(let i=0;i<200&&fs.existsSync(dir);i++)await pause();
  assert.equal(fs.existsSync(dir),false,'orphan verification cgroup remains');
 });
+
+test('killed resource observer retains failure diagnostics and confirms cleanup',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
+ const {runBoundedVerification}=await import('../src/verification-resources.mjs');
+ let diagnostic;
+ assert.throws(()=>runBoundedVerification(['--',process.execPath,'-e','process.kill(process.ppid,"SIGKILL");setInterval(()=>{},1000)'],5000),error=>{
+  assert.match(error.message,/Bounded verification observer failed/);
+  diagnostic=error.verificationDiagnostic;
+  assert.equal(diagnostic.service.Result,'signal');
+  assert.equal(diagnostic.service.ExecMainStatus,'9');
+  assert.equal(diagnostic.cleanupConfirmed,true);
+  assert.equal(diagnostic.authority,'diagnostic only; no successful verification or approval');
+  return true;
+ });
+ if(diagnostic.service.ControlGroup)assert.equal(fs.existsSync(path.join('/sys/fs/cgroup',diagnostic.service.ControlGroup)),false);
+ const healthy=runBoundedVerification(['--',process.execPath,'-e','console.log("healthy")'],5000);
+ assert.equal(healthy.status,0);assert.equal(healthy.resourceBoundary.cleanupConfirmed,true);
+ assert.notEqual(healthy.resourceBoundary.unit,diagnostic.unit);
+});
