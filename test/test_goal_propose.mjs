@@ -34,3 +34,19 @@ test('a policy document digest cannot become an unsupplied shared-contract pin',
  assert.throws(()=>validateProposal(p,contract,{}),/invented contract pin/);
  p.goal.units[0].contracts={};assert.equal(validateProposal(p,contract,{}).status,'proposed');
 });
+
+
+test('proposal retries capacity once without repairing code or losing failure accounting',{skip:process.platform!=='linux'},async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-proposal-capacity-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const git=(...a)=>execFileSync('git',a,{cwd:root,encoding:'utf8',stdio:'pipe'}).trim();git('init','-q');git('config','user.name','Test');git('config','user.email','test@example.invalid');fs.writeFileSync(path.join(root,'search.js'),'before');git('add','.');git('commit','-qm','base');
+ const request={repo:root,base:git('rev-parse','HEAD'),contract},capacity=()=>Object.assign(Error('busy'),{code:'ASC_PROVIDER_CAPACITY'});
+ const clean=error=>{t.after(()=>fs.rmSync(error.proposalDiagnostic.root,{recursive:true,force:true}));return true;};
+ let count=0,initial;
+ const result=await proposeGoal(request,{agent:async options=>{count++;assert.equal(options.writable,false);if(count===1){initial=options;throw capacity();}assert.equal(options.workspace,initial.workspace);assert.equal(options.prompt,initial.prompt);return {answer:JSON.stringify(proposal()),context:'planner',seconds:0,usage:[]};}});
+ t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(count,2);assert.deepEqual(result.calls.map(c=>c.status),['failed','completed']);assert.equal(result.calls[0].code,'ASC_PROVIDER_CAPACITY');
+ count=0;await assert.rejects(proposeGoal(request,{agent:async()=>{count++;throw capacity();}}),error=>{clean(error);assert.equal(error.proposalDiagnostic.calls.length,2);return error.code==='ASC_PROVIDER_CAPACITY';});assert.equal(count,2);
+ count=0;await assert.rejects(proposeGoal({...request,budget:{maxAgentCalls:1}},{agent:async()=>{count++;throw capacity();}}),error=>{clean(error);return /budget/i.test(error.message);});assert.equal(count,1);
+ count=0;await assert.rejects(proposeGoal(request,{agent:async options=>{count++;fs.writeFileSync(path.join(options.workspace,'search.js'),'changed');throw capacity();}}),error=>{clean(error);assert.equal(error.proposalDiagnostic.calls.length,1);return /modified/.test(error.message);});assert.equal(count,1);
+ count=0;await assert.rejects(proposeGoal(request,{agent:async()=>{count++;throw Error('unclassified outage');}}),error=>{clean(error);return /unclassified/.test(error.message);});assert.equal(count,1);
+ assert.equal(git('status','--porcelain'),'');
+});

@@ -92,7 +92,7 @@ export async function restartGoal(input,options={}){
    if(proposal.status==='needs-owner')return save({...proposal,status:'owner-work-required',units:[],work:{work:'clarify',actor:'owner',questions:proposal.questions}});
    next=adoptProposal(next,proposal);
    next.unitCandidates=candidateReferences(prepared.previous,compileGoal(next.goal).plan);
-   const plannerContexts=proposal.calls.map(call=>call.context);demand(plannerContexts.every(c=>typeof c==='string'&&c),'Proposal context missing');
+   const plannerContexts=proposal.calls.filter(call=>!(call.status==='failed'&&call.code==='ASC_PROVIDER_CAPACITY'&&call.context===null)).map(call=>call.context);demand(plannerContexts.every(c=>typeof c==='string'&&c),'Proposal context missing');
    contexts=[...contexts,...plannerContexts];
   }
   return save(await runGoal(next,{...options,executionBudget:budget,priorContexts:contexts}));
