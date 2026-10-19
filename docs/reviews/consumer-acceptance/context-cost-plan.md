@@ -43,13 +43,13 @@ baselineは9f19ce4bd76a8e59eedd01adec8ec8a3a825fea7のSkill。候補との差は
 | --- | --- | --- |
 | 標準Hostと任意Controllerの責務分離 | 本文の実装照合、current-host実走 | Controllerの成功を標準Host全体へ流用しない |
 | 小規模の実装→レビュー→Draft PR/CI | `native-small-batched-summary.json`と各試行 | 五組の性能比較は不合格。新候補の小規模回帰は別途必要 |
-| 複雑な複数Issueの並列実装・統合 | `native-coordinator-scope-pilot.json`、PR69 | 現候補alpha.14が無介入完走。合成2サービスの範囲であり一般的な大規模保証ではない |
+| 複雑な複数Issueの並列実装・統合 | `native-coordinator-scope-pilot.json`、PR69 | alpha.14が無介入完走。合成2サービスの範囲であり一般的な大規模保証ではない |
 | 指摘修復・独立再レビュー | `native-input-boundary-pilot.json`、PR68と`native-review-turn-audit.json` | alpha.13で無介入修復・再レビュー。alpha.14では修復未発生のため同じ実証とは扱わない |
 | 共有契約変更・旧保存データの再利用 | `native-shared-contract-delivery.json`、PR32 | 単一の明示的JPY変更での実証 |
 | 競合からの回復 | `native-conflict-recovery.json`、PR61 | 明示的な事前故障注入。任意の競合を保証しない |
-| 中断時の並列成果保持 | `native-parallel-recovery-observation.json`、PR56 | 統合時中断のみ。並列書込み途中・全試行usageの完全性は未達 |
+| 中断時の並列成果保持 | `native-worker-write-recovery.json`、PR77 | alpha.15で別々のworkerの未commit成果を統合前に中断し、同一内容を復旧・レビュー・Draft/CIまで保持。中断区間usageは不完全。worker命名逸脱あり |
 | 同一進行役セッションでの継続 | `native-clean-same-session-continuation.json`、PR69→70 | alpha.14で無介入の共有契約変更・旧データ互換・独立レビュー・CIまで成功。任意長期の継続保証ではない |
-| 品質を保つ時間・tokens削減 | `native-coordinator-scope-pilot-summary.json` | alpha.14の単発は改善。既存control再利用であり五組の新規比較は未達。過去の不合格を置き換えない |
+| 品質を保つ時間・tokens削減 | `native-small-scope-summary.json`、`native-review-worktree-pilot.json` | alpha.14の新規2組は両方悪化し早期終了。alpha.15でレビューの余計なコピーは解消したが、時間・tokens双方の改善は未証明。五組の合格比較なし |
 
 全体目標は未完了。過去の成功は記録したcommit・条件に限る。以下は時系列の実験履歴であり、後から判明した欠陥や介入を無視して現在の合格判定に読み替えない。
 
