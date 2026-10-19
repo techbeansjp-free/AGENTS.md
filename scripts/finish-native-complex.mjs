@@ -15,7 +15,7 @@ const {verifyWorktree}=await import(pathToFileURL(path.join(root,'distribution/p
 const {Github}=await import(pathToFileURL(path.join(root,'distribution/package/src/github.mjs')));
 const owner=path.join(root,'owner.json');fs.writeFileSync(owner,JSON.stringify({intent:s.phase==='revision'?'Apply explicit currency revision preserving original security and stored replay records':'Complete both synthetic reservation and billing requirements; no revision phase yet',allowedPaths:['complex/reservation/service.mjs','complex/billing/service.mjs'],commands:[...['reservation','billing','integration','unknown-keys'].map(name=>[process.execPath,`complex/oracle/${name}.mjs`,'complex',...(s.phase==='revision'&&['reservation','billing'].includes(name)?['revised']:[])]),...(s.phase==='revision'?[[process.execPath,'complex/oracle/revision.mjs','complex/previous','complex']]:[])]}));
 const verification=verifyWorktree(s.worktree,s.base,owner);if(!verification.passed||verification.head!==proof.review.head)throw Error('Complex oracle or reviewed HEAD mismatch');
-const data={mode,phase:s.phase??'original',head,base:s.base,remoteBase:s.remoteBase,review:proof.review,usage:proof.usage,verification,implementationAndReviewSeconds:result.seconds,driverImplementationEdits:0};
+const data={mode,phase:s.phase??'original',head,base:s.base,remoteBase:s.remoteBase,review:proof.review,usage:proof.usage,verification,implementationAndReviewSeconds:result.seconds,driverImplementationEdits:0,manualHandoffs:0};
 const interruption=readInterruptionEvidence(root,s.interruptionRequired===true);
 if(interruption){
  const interrupted=interruption.checkpoint;
