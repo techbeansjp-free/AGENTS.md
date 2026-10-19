@@ -1,0 +1,34 @@
+{
+  "scope": "Core Skill compaction only; same runtime, references, model, fixture, owner contract and oracle. No registered reviewer.",
+  "sourceCommit": "10fdc41b5ef8fb9b38880d9e928f123647630993",
+  "runnerSha256": "9952128fc7df798f1674ee31c38de81257d289b82ab2a31c7e55fd258d62fcc2",
+  "driverSha256": "3bd6caff764be88f049da3d27aab7535f68e490e1c22d573b1a99036fb5d7867",
+  "baselineReviewer": "generic",
+  "candidateReviewer": "generic",
+  "model": "sonnet",
+  "effort": "medium",
+  "order": [
+    "B",
+    "C",
+    "C",
+    "B",
+    "B",
+    "C",
+    "C",
+    "B",
+    "B",
+    "C"
+  ],
+  "maximumPairs": 5,
+  "stopConditions": [
+    "Any failed run or incomplete usage: stop, retain and do not replace.",
+    "Condition mismatch: stop.",
+    "Both first two pairs worse in time and processed tokens: stop."
+  ],
+  "acceptance": "Existing summarizeNativePairs requirements unchanged: five pairs, all quality/measurement checks, both medians lower, neither observed maximum regressed.",
+  "results": "Not started; conditions fixed before execution.",
+  "baselinePackageSha256": "cb05febc28dd15f087d2371dc1f3c50c4e7790111a37b91f7b0dd61fd9c93483",
+  "candidatePackageSha256": "abc6528f01157b7328010094ea2323226944200c576a47be929741bfded80bd9",
+  "baselineSkillBytes": 11055,
+  "candidateSkillBytes": 8245
+}
