@@ -34,7 +34,18 @@ test('Claude export retains actual model and rejects incomplete or intervened ob
  write('setup.json',{repository:'adachi-tatsuru/asc-public-synthetic-eval-20261016',origin:root,worktree:root,runnerSha256:'a'.repeat(64),session:'test-session',base:'base',model:'alias',effort:'medium',cliVersion:'test'});write('git-controls.json',{});write('owner.json',{intent:'original'});
  const good={session:'test-session',implementationIntervention:0,run:{status:0,signal:null,seconds:1},totalSeconds:2,deliverySeconds:1,modelUsage:{actual:{inputTokens:1}},usage:{complete:true,reconciledWithHostModelUsage:true,observedProcessedTokens:1,missingUsage:[]},ci:{head:'head'},verification:{head:'head',passed:true,results:[{argv:['test'],exit:0}]},pr:1};
  const output=path.join(root,'out.json'),run=d=>{write('delivery.json',d);return spawnSync(process.execPath,[script,root,output,'--claude'],{encoding:'utf8'});};
- assert.equal(run(good).status,0);const data=JSON.parse(fs.readFileSync(output));assert.deepEqual(data.conditions.actualModels,['actual']);assert.equal(data.conditions.runnerSha256,'a'.repeat(64));assert.equal(data.elapsedSeconds,2);assert.equal(data.implementationAndReviewSeconds,1);assert.equal(data.manualHandoffs,0);
+ assert.equal(run(good).status,0);const data=JSON.parse(fs.readFileSync(output));assert.deepEqual(data.conditions.actualModels,['actual']);assert.equal(data.conditions.runnerSha256,'a'.repeat(64));assert.equal(data.elapsedSeconds,2);assert.equal(data.implementationAndReviewSeconds,1);assert.equal(data.manualHandoffs,0);assert.equal(data.evaluationCoverage.inHostVerification,null);
+ assert.notEqual(run({...good,inHostVerification:{head:'head'}}).status,0);
+ const verified={...good.verification,schema:'asc-worktree-verification/v1',repo:root,base:'base',contractSha256:'c'.repeat(64),contextSha256:'d'.repeat(64)};
+ const eventEvidence={toolUseId:'verify',head:'head',contractSha256:verified.contractSha256,checks:1,scope:'Observed coordinator Bash result; external oracle independently rechecked the same commit'};
+ fs.writeFileSync(path.join(root,'events.jsonl'),[
+  {message:{content:[{type:'tool_use',name:'Bash',id:'verify',input:{command:'node cli.mjs worktree-verify . base /owner.json'}}]}},
+  {message:{content:[{type:'tool_result',tool_use_id:'verify',content:JSON.stringify(verified)}]}}
+ ].map(JSON.stringify).join('\n'));
+ assert.equal(run({...good,verification:verified,inHostVerification:eventEvidence}).status,0);
+ assert.deepEqual(JSON.parse(fs.readFileSync(output)).evaluationCoverage.inHostVerification,eventEvidence);
+ assert.notEqual(run({...good,verification:verified,inHostVerification:{...eventEvidence,toolUseId:'invented'}}).status,0);
+
  for(const change of [d=>d.usage.complete=false,d=>d.usage.reconciledWithHostModelUsage=false,d=>d.implementationIntervention=1,d=>d.session='wrong',d=>d.run.status=1,d=>d.modelUsage.other={}]){const bad=structuredClone(good);change(bad);assert.notEqual(run(bad).status,0);}
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^GIT_/i.test(k)));
  const git=(...args)=>execFileSync('git',args,{cwd:root,env,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();

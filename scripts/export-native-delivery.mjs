@@ -1,5 +1,6 @@
 /** Export only synthetic observations, never rollout bodies or local install paths. */
 import fs from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';
+import {claudeVerificationEvidence} from './claude-verification-evidence.mjs';
 const [root,output,mode]=process.argv.slice(2);if(!root||!output||process.argv.length>5||(mode!==undefined&&!['--complex','--claude'].includes(mode)))throw Error('Expected run root, output path and optional --complex or --claude');
 const read=name=>JSON.parse(fs.readFileSync(path.join(root,name)));
 const setup=read('setup.json'),d=read(mode==='--complex'?'complex-delivery.json':'delivery.json');
@@ -39,7 +40,13 @@ const distribution={reviewerMode:setup.reviewerMode??'generic',reviewerDefinitio
 if(setup.repository!=='adachi-tatsuru/asc-public-synthetic-eval-20261016')throw Error('Not the authorized synthetic repository');
 const gitControls=read('git-controls.json');
 const pointerKey=path.relative(path.join(setup.origin,'.git'),path.join(setup.worktree,'.git'));
-const evaluationCoverage={hostWorktreePointerRecorded:Object.hasOwn(gitControls,pointerKey),scope:'Presence in the pre-execution record; older runs are not upgraded by export.'};
+let inHostVerification=null;
+if(mode==='--claude'&&d.inHostVerification){
+ const events=fs.readFileSync(path.join(root,'events.jsonl'),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+ inHostVerification=claudeVerificationEvidence(events,d.verification);
+ if(JSON.stringify(inHostVerification)!==JSON.stringify(d.inHostVerification))throw Error('In-Host verification evidence mismatch');
+}
+const evaluationCoverage={inHostVerification,hostWorktreePointerRecorded:Object.hasOwn(gitControls,pointerKey),scope:'Presence in the pre-execution record; older runs are not upgraded by export.'};
 // A manually resumed coordinator is not an uninterrupted autonomous observation.
 const recovered=fs.existsSync(path.join(root,'result.json'))&&Object.hasOwn(read('result.json'),'recovery');
 const manualHandoffs=recovered?Math.max(1,d.manualHandoffs??0):d.manualHandoffs;

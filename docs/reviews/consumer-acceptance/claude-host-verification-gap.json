@@ -44,5 +44,15 @@
     "execution": "Separate extracted distributions; real bwrap namespace, no source implementation import, synthetic dedicated worktree and out-of-repo owner contract.",
     "modelCalls": 0,
     "scope": "Linux mask regression only; not Claude model delivery, arbitrary Host support or whole-development performance acceptance."
+  },
+  "followupValidation": {
+    "version": "0.5.900-alpha.44",
+    "tarballSha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9",
+    "testSha256": "86b2d91b7fae3039de7ffa662b89f70f06643779c4edc534ea66e3bd25356c32",
+    "logSha256": "f34b17a22bd3aae074659c2abb597ab1aa379e87426fb2f090a7351b677755dd",
+    "exit": 0,
+    "modelCalls": 0,
+    "scope": "Extracted distribution in real Linux bwrap namespace; not live Claude delivery or performance evidence.",
+    "evaluationRegression": "Replaying alpha42 events now rejects missing successful in-Host verification, despite external oracle success. Historical exports retain null inHostVerification; they are not upgraded."
   }
 }
