@@ -16,6 +16,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 
 [2稼働担当の中断・新Context再開](claude-active-worker-interruption-result.json)では、両担当が完了通知前に別worktreeへ保存した状態で試験用serviceを中断し、全子終了後の新Contextで6 oracle・独立レビュー・合成Draft PR156まで到達した。保存した2ファイルは提出commitに同じbytesで保持されている。GitHubの2 CIは成功し、同一HEAD・PR・workflowの拘束付きで再観測した。元の監視処理はjobs APIの通信タイムアウトで終了しており、連続完走の成功には読み替えない。再観測でモデルは再起動していない。中断前の取得usageと再開分を分離し、終端集計欠測を残す。評価Hostが停止と再開を起動した単発観測であり、製品の自動再開や性能受入とは別である。
 
+[既存の複雑実走の呼出し分析](claude-complex-discovery-cost.json)では、alpha.40の進行役は最初の委譲前に18回Bashを呼び、実装・oracleも先読みしていた。tool IDで重複排除した全体は進行役Bash25回・Agent3回、配下Bash33回。これはモデル呼出し数や費用削減率ではない。調査担当を明記した既存指示だけでは先読み抑制を保証できず、同じ試行や同趣旨の指示追記を繰り返さない。次の改善対象はこの重複調査であり、権限確認・独立レビュー・統合検証を削減対象に混ぜない。
+
 主な利用HostとしてClaude Codeを評価する。上表はCodexの記録であり、Claude Codeの代用にしない。Claude Codeで確認した範囲は次のとおり。モデルは同HostのSonnetを使用し、Codexへ委譲していない。
 
 | Claude Code current-hostの実証 | 対象証拠 | 判定・限界 |
