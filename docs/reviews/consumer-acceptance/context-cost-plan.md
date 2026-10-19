@@ -560,3 +560,5 @@ Current Sol matched small cohort stopped at pair 3 baseline under the preregiste
 任意ControllerのCodex adapterで、実測したprovider終端`turn.failed`のcapacity応答を`ASC_PROVIDER_CAPACITY`へ分類する。通常のツール出力、認証・未対応モデル、終了確認失敗は対象外。実装中の当該エラーは既存の変更範囲検査・checkpoint保存後、同一内容につき一度だけ1秒待って継続する。内容が変化しない反復は停止しcheckpointを残す。これは開発全体の時間上限ではなく即時再呼出しを避ける間隔であり、最適な間隔の実測値ではない。ownerのAgent予算・時間予算は維持し、provider失敗をコード修復回数には加算しない。失敗usageは欠測として保持し、独立レビューと検証を省略しない。
 
 検証：provider分類とworkflow回帰43件成功、追加の範囲逸脱・Agent予算回帰1件成功。Git・隔離検証は実行したがAgent/providerは試験用代替である。current-host経路とHost adapterへのエラー伝達、実モデルの自動再開はまだ未確認。この修正を既存の手動復旧観測や性能比較の成功へ遡及適用しない。
+
+同日の追加修正：同梱Codex Hostはcapacityのみを呼出しID・操作に拘束した失敗応答として返し、Controller側で分類を維持する。既存のHost transport失敗・timeout・出力超過をcapacityへ読み替えない。Host/protocol関連16件と別プロセスHostの成果再開シナリオ1件が成功（実Git・実Node検証、モデルとGitHubは代替）。current-hostの進行役自体が停止した場合の再開はこのController接続では解決していない。

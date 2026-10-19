@@ -94,3 +94,30 @@ test('asynchronous Host failure retains bounded stderr and preserves output cap'
  fs.writeFileSync(f.script,"import fs from 'node:fs';fs.readFileSync(0);fs.writeSync(2,'x'.repeat(9*1024*1024));");
  await assert.rejects(hostExecution(f.c,f.configuration).agent({timeout:3000}),/Host output limit/);
 });
+
+test('only invocation-bound Agent capacity failures retain retry classification',async t=>{
+ const f=fixture(t);
+ for(const mode of ['bound','stale','wrong-operation','success','unknown']){
+  fs.writeFileSync(f.script,`import fs from 'node:fs';const q=JSON.parse(fs.readFileSync(0,'utf8'));process.stdout.write(JSON.stringify({schema:q.schema,id:${mode==='stale'?"'stale'":'q.id'},operation:${mode==='wrong-operation'?"'verify'":'q.operation'},error:{code:${mode==='unknown'?"'UNKNOWN'":"'ASC_PROVIDER_CAPACITY'"}}}));process.exitCode=${mode==='success'?0:1};`);
+  await assert.rejects(hostExecution(f.c,f.configuration).agent({timeout:3000}),e=>{
+   assert.equal(e.code,mode==='bound'?'ASC_PROVIDER_CAPACITY':undefined);return true;
+  });
+ }
+});
+
+test('Host capacity preserves partial implementation through real verification and independent review',async t=>{
+ const f=fixture(t);f.request.maxRepairs=0;
+ const original=fs.readFileSync(f.script,'utf8');
+ fs.writeFileSync(f.script,original.replace("const p=q.payload;if(p.writable)",`const p=q.payload;
+ if(p.writable&&fs.readFileSync(path.join(p.workspace,'code.txt'),'utf8')==='before'){
+  fs.writeFileSync(path.join(p.workspace,'code.txt'),'partial');
+  process.stdout.write(JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,error:{code:'ASC_PROVIDER_CAPACITY'}}));process.exit(1);
+ }
+ if(p.writable)`));
+ const result=await runWorkflow(f.request,{provider:{intent:()=>f.request.contract.intent,createDraft:()=>1,observe:()=>({head:f.git('rev-parse','HEAD'),draft:true,merged:false,boundToPr:true,checks:{test:'success'}})}});
+ t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));
+ assert.equal(result.status,'draft-ci-passed');assert.equal(result.repairs,0);
+ assert.deepEqual(result.calls.map(c=>c.status),['failed','completed','completed']);
+ assert.equal(result.calls[0].usage,null);assert.equal(result.events.filter(e=>e.type==='provider-retry').length,1);
+ assert.notEqual(result.calls[1].context,result.calls[2].context);
+});

@@ -20,7 +20,14 @@ for(const file of [args[1],config.executable,config.codexHome])if(contains(works
 if(/\.(cmd|bat)$/i.test(config.executable))throw Error('Use native executable or npm bin/codex.js');
 process.env.CODEX_HOME=config.codexHome;
 let result;
-if(q.operation==='agent')result=await runAgent({...p,executable:config.executable},runHostProcess);
+if(q.operation==='agent'){
+ try{result=await runAgent({...p,executable:config.executable},runHostProcess);}
+ catch(error){
+  if(error.code!=='ASC_PROVIDER_CAPACITY')throw error;
+  fs.writeSync(1,JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,error:{code:error.code}}));
+  process.exitCode=1;
+ }
+}
 else{
  if(p.contract?.verificationResourceProfile||p.contract?.verificationGit||Object.keys(p.contract?.verificationLimits??{}).some(k=>k!=='timeoutMilliseconds'))throw Error('Selected Host does not support requested asset, resource or Git contract');
  if(!Array.isArray(p.argv)||!p.argv.length||p.argv.some(v=>typeof v!=='string')||(p.timeout!==null&&(!Number.isSafeInteger(p.timeout)||p.timeout<=0||p.timeout>2147483647)))throw Error('Invalid verification request');
@@ -36,4 +43,4 @@ else{
   result=JSON.parse(response.stdout);
  }finally{fs.rmSync(runtime,{recursive:true,force:true});}
 }
-fs.writeSync(1,JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,result}));
+if(result!==undefined)fs.writeSync(1,JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,result}));

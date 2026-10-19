@@ -83,7 +83,7 @@ fs.writeSync(1,JSON.stringify({completed:true,read,write}));`;
       output=error.stdout??'';errors=error.stderr??'';
       // Preserve lifecycle/timeout authority; classify only otherwise untyped failures.
       const failure=providerFailure(output);
-      if(failure&&!error.code&&error.message.startsWith('Fresh Agent failed (exit='))Object.assign(error,failure);
+      if(failure&&(error.code==='ASC_PROVIDER_EXIT'||(!error.code&&error.message.startsWith('Fresh Agent failed (exit='))))Object.assign(error,failure);
       throw error;
     }
     finally {
