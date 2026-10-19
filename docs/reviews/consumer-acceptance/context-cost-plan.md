@@ -595,3 +595,7 @@ Claude同一sessionの指摘是正：284.250秒、HEAD `4394ed49d3a4fa1e1197f03e
 Claude競合・中断試験を開始。受入済み修正HEAD4394ed4から別worktreeに2つの誤ったvalidationコード変更を注入し、実cherry-pick競合を確認。Claudeがsourceを修正して保存した直後36.064秒で試験用process群へSIGINTを送り、全停止・保存後hashを確認。同一sessionを実ファイルから再開中。これは進行役1 writerの中断であり複数稼働workerの中断には代用しない。
 
 次の比較候補を固定：candidate alpha.20 SHA256 a09fb246613f3647c5d61eb0be0d0aaac5596a894898adfe88b1420b2879cc84、baseline alpha.21 SHA256 c56efd5aef98bf290e7e90a4a4e6d020037cf31dcfcac2774a5ef533243d1401。runtime全ファイル一致、差分はSkill4ファイルと版/identityのみ。baselineは凍結済みalpha.19のSkillを再利用。candidateのoffline install/CLI版一致成功。性能試行は未開始、旧alpha.18の結果と合算しない。
+
+Claude競合・保存後中断の復旧完了：再開126.067秒、HEAD `8b78cf2419ec389f3ee82ecd97782c58e24424e1`、独立PASS、6 oracle・合成Draft PR88・両CI成功。最終service内容は受入済み修正とbyte一致。中断前36.064秒と別記、欠測や評価runner介入を保持。
+
+Claude小規模対比較を実行前登録：alpha.21 baseline対alpha.20 candidate、5組順序BC/CB/BC/CB/BC、逐次実行、CLI2.1.282・Sonnet alias・effort medium固定（実modelUsageのmodel一致を別途確認）、base c37e08e05abc46b5a26af131f134d42a3c8a3b80、Issue1・exact Hello oracle・fresh独立Reviewer・Draft/CIを同一条件。runner `run-claude-delivery.mjs`は実装代行なし、起動から提出CIまで計時、親子全transcriptを照合。失敗・欠測があれば試行を置換せず停止。最初の2組が時間/tokens両方悪化なら費用節約のため停止し不合格。残りは従来の5組中央値/品質/最悪値基準を維持。Codex比較や過去Claude単発と合算しない。parserとusage反例5件・ESLint成功。runnerはこのcohortの前に固定した評価器であり製品CLIの自律実行機能とは区別する。
