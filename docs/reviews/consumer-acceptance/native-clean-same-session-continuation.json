@@ -1,0 +1,301 @@
+{
+  "base": "2c40477c98d938da0d32d25a2435423d2c556776",
+  "head": "0cf2b919e57c0180683caf761a02f0214c5fd786",
+  "review": {
+    "id": "01a152a0-8db7-76c2-8932-6ff1dd2443e8",
+    "head": "0cf2b919e57c0180683caf761a02f0214c5fd786",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "cacheWriteInput": {
+      "observedTokens": 0,
+      "totalTokens": 0,
+      "missingThreads": [],
+      "threads": [
+        {
+          "id": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+          "tokens": 0
+        },
+        {
+          "id": "01a15297-a38e-7c51-a118-9ee72e004ed1",
+          "tokens": 0
+        },
+        {
+          "id": "01a15297-b766-7682-9257-9e6ddab44dd0",
+          "tokens": 0
+        },
+        {
+          "id": "01a1529a-d8e6-72a0-9b92-6ec1cf455f0c",
+          "tokens": 0
+        },
+        {
+          "id": "01a1529e-85dd-7430-afec-6135a93670e1",
+          "tokens": 0
+        },
+        {
+          "id": "01a1529e-9ea7-7392-b7f8-4b6300a49b0b",
+          "tokens": 0
+        },
+        {
+          "id": "01a152a0-8db7-76c2-8932-6ff1dd2443e8",
+          "tokens": 0
+        }
+      ],
+      "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+    },
+    "rootId": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+    "observedThreads": 7,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 3611105,
+      "cachedInputTokens": 3384192,
+      "outputTokens": 49393
+    },
+    "observedProcessedTokens": 3660498,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+        "parent": null,
+        "usage": {
+          "input_tokens": 1567486,
+          "cached_input_tokens": 1508992,
+          "output_tokens": 10978
+        }
+      },
+      {
+        "id": "01a15297-a38e-7c51-a118-9ee72e004ed1",
+        "parent": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+        "usage": {
+          "input_tokens": 531778,
+          "cached_input_tokens": 500736,
+          "output_tokens": 11558
+        }
+      },
+      {
+        "id": "01a15297-b766-7682-9257-9e6ddab44dd0",
+        "parent": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+        "usage": {
+          "input_tokens": 333388,
+          "cached_input_tokens": 308480,
+          "output_tokens": 8953
+        }
+      },
+      {
+        "id": "01a1529a-d8e6-72a0-9b92-6ec1cf455f0c",
+        "parent": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+        "usage": {
+          "input_tokens": 262948,
+          "cached_input_tokens": 229120,
+          "output_tokens": 4902
+        }
+      },
+      {
+        "id": "01a1529e-85dd-7430-afec-6135a93670e1",
+        "parent": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+        "usage": {
+          "input_tokens": 271998,
+          "cached_input_tokens": 245504,
+          "output_tokens": 3736
+        }
+      },
+      {
+        "id": "01a1529e-9ea7-7392-b7f8-4b6300a49b0b",
+        "parent": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+        "usage": {
+          "input_tokens": 386346,
+          "cached_input_tokens": 361344,
+          "output_tokens": 4785
+        }
+      },
+      {
+        "id": "01a152a0-8db7-76c2-8932-6ff1dd2443e8",
+        "parent": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+        "usage": {
+          "input_tokens": 257161,
+          "cached_input_tokens": 230016,
+          "output_tokens": 4481
+        }
+      }
+    ]
+  },
+  "continuation": {
+    "rootId": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+    "previousHead": "592b8fd87f88a7930e1b65b63ad5eb8f655b0dbb",
+    "phaseUsage": {
+      "rootId": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+      "measured": {
+        "input_tokens": 1926437,
+        "cached_input_tokens": 1820416,
+        "output_tokens": 18599
+      },
+      "observedProcessedTokens": 1945036,
+      "missingUsage": [],
+      "threads": [
+        {
+          "id": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+          "usage": {
+            "input_tokens": 1010932,
+            "cached_input_tokens": 983552,
+            "output_tokens": 5597
+          }
+        },
+        {
+          "id": "01a15297-a38e-7c51-a118-9ee72e004ed1",
+          "usage": {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0
+          }
+        },
+        {
+          "id": "01a15297-b766-7682-9257-9e6ddab44dd0",
+          "usage": {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0
+          }
+        },
+        {
+          "id": "01a1529a-d8e6-72a0-9b92-6ec1cf455f0c",
+          "usage": {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0
+          }
+        },
+        {
+          "id": "01a1529e-85dd-7430-afec-6135a93670e1",
+          "usage": {
+            "input_tokens": 271998,
+            "cached_input_tokens": 245504,
+            "output_tokens": 3736
+          }
+        },
+        {
+          "id": "01a1529e-9ea7-7392-b7f8-4b6300a49b0b",
+          "usage": {
+            "input_tokens": 386346,
+            "cached_input_tokens": 361344,
+            "output_tokens": 4785
+          }
+        },
+        {
+          "id": "01a152a0-8db7-76c2-8932-6ff1dd2443e8",
+          "usage": {
+            "input_tokens": 257161,
+            "cached_input_tokens": 230016,
+            "output_tokens": 4481
+          }
+        }
+      ],
+      "cacheWriteInput": {
+        "observedTokens": 0,
+        "totalTokens": 0,
+        "threads": [
+          {
+            "id": "01a15297-0ca4-7ee0-beb4-1122a6d201b5",
+            "tokens": 0
+          },
+          {
+            "id": "01a15297-a38e-7c51-a118-9ee72e004ed1",
+            "tokens": 0
+          },
+          {
+            "id": "01a15297-b766-7682-9257-9e6ddab44dd0",
+            "tokens": 0
+          },
+          {
+            "id": "01a1529a-d8e6-72a0-9b92-6ec1cf455f0c",
+            "tokens": 0
+          },
+          {
+            "id": "01a1529e-85dd-7430-afec-6135a93670e1",
+            "tokens": 0
+          },
+          {
+            "id": "01a1529e-9ea7-7392-b7f8-4b6300a49b0b",
+            "tokens": 0
+          },
+          {
+            "id": "01a152a0-8db7-76c2-8932-6ff1dd2443e8",
+            "tokens": 0
+          }
+        ]
+      },
+      "scope": "Difference of Host cumulative observations for the same coordinator; includes new and resumed descendants. Missing/reset counters are not zero. Full trial totals use final cumulative usage, not sum of phase totals."
+    },
+    "scope": "Same coordinator session resumed for explicit shared-contract revision in a new worktree; usage is whole-session cumulative, phaseUsage is additional work only, and all timing fields describe this revision phase only. Do not compare phase time against cumulative tokens."
+  },
+  "implementationAndReviewSeconds": 288.054820858,
+  "deliverySeconds": 22.369089056,
+  "elapsedSeconds": 311.177,
+  "driverImplementationEdits": 0,
+  "manualHandoffs": 0,
+  "complexCI": {
+    "head": "0cf2b919e57c0180683caf761a02f0214c5fd786",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39204774008",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "0cf2b919e57c0180683caf761a02f0214c5fd786",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39204774028",
+    "transportFailures": []
+  },
+  "priorDriverFailure": null,
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/70",
+  "verification": {
+    "head": "0cf2b919e57c0180683caf761a02f0214c5fd786",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e02dfc624e3a7e7518077b25a20615d4c2f77a79350ac3d0e8285ad1a889d32e",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "1473af538922fb9e3e3e5148c567aeea0f1e2840484e7091404bee50c333cf3b",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "088cd29d57a92fd44dc99772c6f7de3d834e4f1cbeec59b0abec728ad10bd0e7",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "scope": "Same coordinator as original two-Issue PR69; explicit shared currency revision in another worktree. No evaluator implementation edits or handoffs. Cumulative usage includes original and continuation; phaseUsage measures added work only. Not a fresh performance pair or arbitrary long-running autonomy guarantee.",
+  "previousSourcePreserved": {
+    "head": "592b8fd87f88a7930e1b65b63ad5eb8f655b0dbb",
+    "unchanged": true,
+    "clean": true
+  }
+}

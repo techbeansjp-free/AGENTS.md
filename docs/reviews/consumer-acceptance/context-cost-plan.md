@@ -48,7 +48,7 @@ baselineは9f19ce4bd76a8e59eedd01adec8ec8a3a825fea7のSkill。候補との差は
 | 共有契約変更・旧保存データの再利用 | `native-shared-contract-delivery.json`、PR32 | 単一の明示的JPY変更での実証 |
 | 競合からの回復 | `native-conflict-recovery.json`、PR61 | 明示的な事前故障注入。任意の競合を保証しない |
 | 中断時の並列成果保持 | `native-parallel-recovery-observation.json`、PR56 | 統合時中断のみ。並列書込み途中・全試行usageの完全性は未達 |
-| 同一進行役セッションでの継続 | `native-same-session-continuation.json`、PR64 | 起動設定・計測器への介入あり。無介入の長期継続は未達 |
+| 同一進行役セッションでの継続 | `native-clean-same-session-continuation.json`、PR69→70 | alpha.14で無介入の共有契約変更・旧データ互換・独立レビュー・CIまで成功。任意長期の継続保証ではない |
 | 品質を保つ時間・tokens削減 | `native-coordinator-scope-pilot-summary.json` | alpha.14の単発は改善。既存control再利用であり五組の新規比較は未達。過去の不合格を置き換えない |
 
 全体目標は未完了。過去の成功は記録したcommit・条件に限る。以下は時系列の実験履歴であり、後から判明した欠陥や介入を無視して現在の合格判定に読み替えない。
@@ -455,3 +455,6 @@ Alpha.14 completed synthetic PR69 at `592b8fd87f88a7930e1b65b63ad5eb8f655b0dbb` 
 
 
 After the same-session run terminates, screen alpha.14 on the existing small greeting fixture before starting the expensive fresh complex cohort. Use the same model, requirements, exact-Hello oracle, independent review and automated Draft/CI path. Compare descriptively to the saved small baseline distribution; one observation is not acceptance. Do not overlap model trials when measuring elapsed-time comparisons. The alpha.14 Skill entry is 12,750 UTF-8 bytes versus alpha.6's 18,106 bytes; bytes alone do not establish token/time savings.
+
+
+The alpha.14 same-coordinator continuation completed PR70 at `0cf2b919e57c0180683caf761a02f0214c5fd786`: 311.177 seconds for the revision phase, 1,945,036 added processed tokens and 3,660,498 whole-session cumulative tokens. Six fixed checks, independent current-HEAD review and both CI workflows passed without evaluator implementation edits, handoffs or observer repair. The previous PR69 worktree remains clean at its accepted HEAD. `native-clean-same-session-continuation.json` separates phase and cumulative usage, with no missing reported usage. This proves this two-Issue original plus shared-currency follow-on in the same coordinator session, not arbitrary duration or cost superiority. The previous failed/intervened PR64 record remains unchanged.
