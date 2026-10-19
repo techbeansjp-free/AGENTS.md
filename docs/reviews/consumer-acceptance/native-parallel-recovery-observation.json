@@ -1,0 +1,73 @@
+{
+  "schema": "asc-parallel-recovery-observation/v1",
+  "trial": "asc-native-revision-MBwDv9",
+  "head": "4fdb1e75cca9d0cf2d4760bb456208488ee42d89",
+  "base": "467b350fdbef1e70124e2074321b57103ed5e363",
+  "workers": [
+    {
+      "role": "reservation",
+      "directory": "20261019_101257-9003-reservation-currency",
+      "branch": "refs/heads/test/9003-reservation-currency-worker",
+      "commit": "e8fb8266ec5aa8d2a623ebb51537fde51d69d837",
+      "changedPaths": [
+        "complex/reservation/service.mjs"
+      ],
+      "savedAndSubmittedSha256": "527c89cd08d10388b85c1ec36f80e6d2334871b95d04fe7b6c953e1a1c3b9204"
+    },
+    {
+      "role": "billing",
+      "directory": "20261019_101257-9003-billing-currency",
+      "branch": "refs/heads/test/9003-billing-currency-worker",
+      "commit": "505eb0263e0d4cfc3200c327f7794498375c4efe",
+      "changedPaths": [
+        "complex/billing/service.mjs"
+      ],
+      "savedAndSubmittedSha256": "20ee443f231b123dc03226018627dedba89547ef4f5d7563145c7c2c20debd49"
+    }
+  ],
+  "interruption": {
+    "seconds": 112.846466262,
+    "checkpoint": true,
+    "stopped": true,
+    "boundary": "Linux synthetic transient service; all processes stopped before handoff"
+  },
+  "resumedSeconds": 130.36751226299998,
+  "resumedObservedProcessedTokens": 465419,
+  "totalProcessedTokens": null,
+  "usageComplete": false,
+  "independentReview": {
+    "id": "01a151ba-b16b-74b0-8330-25da043a4e22",
+    "head": "4fdb1e75cca9d0cf2d4760bb456208488ee42d89",
+    "verdict": "PASS"
+  },
+  "verificationPassed": true,
+  "scope": "Parallel worker commits survive interruption at integration and match final submitted service bytes. Does not test interruption during concurrent worker writes.",
+  "namingPassed": false,
+  "namingFailure": "Evaluator seeded an underscore in branch slug and directory/branch mismatch; worker branches also differ from directory slug. Historical trial retained unchanged.",
+  "overallAcceptancePassed": false,
+  "pr": 56,
+  "complexCI": {
+    "head": "4fdb1e75cca9d0cf2d4760bb456208488ee42d89",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39184659883",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "4fdb1e75cca9d0cf2d4760bb456208488ee42d89",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39184659878",
+    "transportFailures": []
+  },
+  "elapsedSeconds": 271.701,
+  "interruptedObservedProcessedTokens": 734746
+}

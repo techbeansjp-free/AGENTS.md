@@ -47,7 +47,7 @@ execFileSync('git',['-c','commit.gpgsign=false','commit','-m','Prepare synthetic
 const base=git('rev-parse','HEAD');git('branch','develop',base);
 const now=new Date(),pad=n=>String(n).padStart(2,'0');
 const stamp=`${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-const branch='test/9000-native-'+stamp,worktree=path.join(origin,'.worktrees',stamp+'-9000-native-'+stamp);git('worktree','add','-b',branch,worktree,base);
+const slug='native-'+stamp.replace('_','-'),branch='test/9000-'+slug,worktree=path.join(origin,'.worktrees',stamp+'-9000-'+slug);git('worktree','add','-b',branch,worktree,base);
 const cli=path.join(pkg,'package','bin','asc-v05.mjs'),skill=path.join(pkg,'package','skills','asc','SKILL.md');
 const c=configuration({workspace:bootstrap,runtime,executable:fs.realpathSync(codex),writable:true});
 extendFixturePermissions(c.options,[pkg],[origin,path.join(origin,'.git')]);c.options=c.options.map(v=>v==='features.multi_agent=false'?'features.multi_agent=true':v);

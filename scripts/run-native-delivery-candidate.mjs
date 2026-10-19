@@ -18,7 +18,7 @@ const base=git('rev-parse','HEAD');
 const issue=JSON.parse(execFileSync('gh',['issue','view','1','--repo',repository,'--json','number,title,body'],{encoding:'utf8'}));
 const now=new Date(),pad=n=>String(n).padStart(2,'0');
 const stamp=`${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-const branch='fix/1-native-'+stamp,worktree=path.join(origin,'.worktrees',stamp+'-1-native-'+stamp);git('worktree','add','-b',branch,worktree,base);
+const slug='native-'+stamp.replace('_','-'),branch='fix/1-'+slug,worktree=path.join(origin,'.worktrees',stamp+'-1-'+slug);git('worktree','add','-b',branch,worktree,base);
 const cli=path.join(pkg,'package','bin','asc-v05.mjs'),skill=path.join(pkg,'package','skills','asc','SKILL.md');
 const c=configuration({workspace:bootstrap,runtime,executable:fs.realpathSync(codex),writable:true});
 extendFixturePermissions(c.options,[pkg],[origin,path.join(origin,'.git')]);c.options=c.options.map(v=>v==='features.multi_agent=false'?'features.multi_agent=true':v);
