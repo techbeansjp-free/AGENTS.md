@@ -1,0 +1,37 @@
+{
+  "pairs": 1,
+  "qualityPassed": true,
+  "measurementComplete": true,
+  "requiredPairs": 5,
+  "accepted": false,
+  "scope": "This fixed synthetic fixture and model only; no general autonomous-development guarantee.",
+  "baseline": {
+    "maxSeconds": 436.177,
+    "maxProcessedTokens": 2192739,
+    "medianSeconds": 436.177,
+    "medianProcessedTokens": 2192739
+  },
+  "candidate": {
+    "maxSeconds": 557.091,
+    "maxProcessedTokens": 3160960,
+    "medianSeconds": 557.091,
+    "medianProcessedTokens": 3160960
+  },
+  "pairedDifferences": [
+    {
+      "pair": 1,
+      "seconds": 120.91399999999999,
+      "processedTokens": 968221
+    }
+  ],
+  "pairsImprovingBoth": 0,
+  "worstCaseRegression": true,
+  "requiresWorstCaseAssessment": true,
+  "reusedControl": true,
+  "freshPairs": 0,
+  "observation": "Coordinator repaired billing accessor and exception normalization directly; bounded repair delegation was not exercised. No general causal comparison from reused single control.",
+  "postTrialReservationCounterexample": {
+    "head": "a90e9161a238dbf4c9215f7acb0bd45d623b3b9a",
+    "passed": true
+  }
+}
