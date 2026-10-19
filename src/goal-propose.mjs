@@ -52,7 +52,8 @@ export async function proposeGoal(input,{agent=runAgent,executionBudget,replanni
   let result;
   for(let attempt=0;;attempt++){
    budget.admit();
-   try{result=await agent({timeout:budget.agentTimeout(),workspace,logs,executable:request.codexExecutable,model:request.model,prompt,writable:false});break;}
+   const attemptLogs=attempt===0?logs:path.join(root,'retry-'+attempt+'-logs');if(attempt!==0)fs.mkdirSync(attemptLogs);
+   try{result=await agent({timeout:budget.agentTimeout(),workspace,logs:attemptLogs,executable:request.codexExecutable,model:request.model,prompt,writable:false});break;}
    catch(error){
     call={...call,status:'failed',error:String(error),...(error?.code?{code:error.code}:{})};
     if(error?.code!=='ASC_PROVIDER_CAPACITY'||attempt!==0)throw error;
