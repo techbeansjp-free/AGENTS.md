@@ -28,3 +28,9 @@ test('synthetic runner does not loop on capacity or retry other errors',async t=
   assert.equal(result.status,1);assert.equal(calls,message.startsWith('Selected')?2:1);
  }
 });
+
+test('invalid session identity cannot leave a successful delivery status',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-session-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ await assert.rejects(runNativeSession({root,c:{options:[],env:{}},worktree:root,model:'selected',effort:'medium',prompt:'synthetic',checkBoundary:()=>{}},{launch:()=>({binary:process.execPath,args:['-e',`process.stdin.resume();process.stdin.on('end',()=>console.log(JSON.stringify({type:'turn.completed'})))`]})}),/identity/);
+ const result=JSON.parse(fs.readFileSync(path.join(root,'result.json')));assert.equal(result.status,1);assert.equal(result.identityError,true);
+});

@@ -31,8 +31,8 @@ export async function runNativeSession({root,c,worktree,model,effort,prompt,chec
   const bound=ids.size===1&&typeof observed==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(observed)&&(!session||observed===session);
   attempts.push({...result,seconds:(performance.now()-began)/1000,sessionBound:bound});
   const save=()=>{const data={...result,seconds:(performance.now()-started)/1000,attempts,automaticResumes:attempt};fs.writeFileSync(path.join(root,'result.json'),JSON.stringify(data));return data;};
+  if(!bound){result={...result,status:1,identityError:true};save();throw Error('Native session identity missing or changed; no retry or delivery');}
   save();
-  if(!bound)throw Error('Native session identity missing or changed; no retry or delivery');
   session=observed;
   if(result.status===0||result.signal||attempt===1||!providerFailure(output))return save();
   checkBoundary();await wait(1000);
