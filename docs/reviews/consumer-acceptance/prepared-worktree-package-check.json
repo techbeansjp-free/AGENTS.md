@@ -1,0 +1,22 @@
+{
+  "packageVersion": "0.5.900-alpha.51",
+  "packageSha256": "089c2c76934dd6de95b6cc35f327520a615c2d38d2c00e6da3b08300c41901c7",
+  "scope": "Deterministic packaged CLI test only; not model behavior or performance acceptance.",
+  "isolation": {
+    "network": "unshared",
+    "userHome": "not mounted",
+    "sourceCheckout": "not mounted"
+  },
+  "result": {
+    "passed": true,
+    "sourceEditPreserved": true,
+    "returnedWorktreeUsable": true,
+    "packageVersion": "0.5.900-alpha.51"
+  },
+  "checkScriptSha256": "dda691a854760942480bb62d718f42026defb877bf9c27a250ccf5ebfa113879",
+  "changedSourceFilesFromAlpha49": [
+    "bin/asc-v05.mjs",
+    "skills/asc/references/workspace.md",
+    "v05/USAGE.md"
+  ]
+}
