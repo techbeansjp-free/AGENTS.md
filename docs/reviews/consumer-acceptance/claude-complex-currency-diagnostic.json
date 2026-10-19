@@ -1,0 +1,275 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "skillBundleSha256": "a8b51ce76b438ffb9e3f05790e359c57076de65e7c94629dd077b68c0b03ed3c",
+    "version": "0.5.900-alpha.28",
+    "skillSha256": "f5394095ec86a559ae576aa171573a53f6597733236d7852c4aabe99489badb2",
+    "identitySha256": "4e8e5a1adacf82b17c6adbe309dfc01bcd1c847716ae2ba17a0718d893a2f2b9"
+  },
+  "conditions": {
+    "scenario": "complex-two-issue-currency",
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "9c23ce07da5c7695f2e2e5922237bdff34c0b73e59eee9078c73fac02b24fa31",
+    "intentSha256": "50658bebc66ff5557e01700fd7c1d7f1cc39e6916a5e06a336c17db4a0931dce",
+    "commands": [
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/reservation.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/billing.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/integration.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/unknown-keys.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/accessors.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/revision.mjs",
+        "complex/previous",
+        "complex"
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "head": "d9f20a2abfdb5aba84a6284e48f989994a226a3c",
+  "review": {
+    "taskId": "abf2d77c3574d43cf",
+    "head": "d9f20a2abfdb5aba84a6284e48f989994a226a3c",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 154,
+      "output_tokens": 55333,
+      "cache_read_input_tokens": 3475013,
+      "cache_creation_input_tokens": 210227
+    },
+    "threads": [
+      {
+        "id": "6dd0271a-c259-43ec-a666-d1fd954e2b3b",
+        "messageCount": 37,
+        "usage": {
+          "input_tokens": 74,
+          "output_tokens": 26745,
+          "cache_read_input_tokens": 2453765,
+          "cache_creation_input_tokens": 85567
+        }
+      },
+      {
+        "id": "a911da27140129c30",
+        "messageCount": 5,
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 1153,
+          "cache_read_input_tokens": 75157,
+          "cache_creation_input_tokens": 23284
+        }
+      },
+      {
+        "id": "a308b5f98e9d33ba9",
+        "messageCount": 2,
+        "usage": {
+          "input_tokens": 4,
+          "output_tokens": 758,
+          "cache_read_input_tokens": 27075,
+          "cache_creation_input_tokens": 13172
+        }
+      },
+      {
+        "id": "a089469ad7610bb3f",
+        "messageCount": 13,
+        "usage": {
+          "input_tokens": 26,
+          "output_tokens": 11225,
+          "cache_read_input_tokens": 379590,
+          "cache_creation_input_tokens": 32004
+        }
+      },
+      {
+        "id": "a7a7377f3564d1946",
+        "messageCount": 12,
+        "usage": {
+          "input_tokens": 24,
+          "output_tokens": 7055,
+          "cache_read_input_tokens": 325836,
+          "cache_creation_input_tokens": 26332
+        }
+      },
+      {
+        "id": "abf2d77c3574d43cf",
+        "messageCount": 8,
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 8397,
+          "cache_read_input_tokens": 213590,
+          "cache_creation_input_tokens": 29868
+        }
+      }
+    ],
+    "observedProcessedTokens": 3740727,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 537.824470155,
+  "deliverySeconds": 30.328247027999954,
+  "elapsedSeconds": 568.651134156,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "d9f20a2abfdb5aba84a6284e48f989994a226a3c",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "f22e633243a8abf43a190a1fbd13d1b18a13856b446bbb88745e2b6dea8492a5",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "16f673a2625950e38d228d1d6ffc67103b89120942dac2454ce6d761564cc69c",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "ed9ef48b5d521c61db0c7ecb7e1b43ff39472f2803e4994c1af8675b0fa71b4e",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/128",
+  "ci": {
+    "head": "d9f20a2abfdb5aba84a6284e48f989994a226a3c",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex:complex": "success",
+      "greeting:test": "success"
+    }
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Two-Issue currency revision; worker topology and parallel execution require separate transcript evidence. Interruption and restart are not part of this observation.",
+    "No merge or release.",
+    "Diagnostic only; no matched baseline in this observation and no demonstrated performance improvement. Packaging/runtime unchanged during the run; later coordination rule correction not measured."
+  ],
+  "workerObservation": {
+    "eventsSha256": "0da6eb0b36910e7c5a8eab231a03e5ffe6fb750e4b8159d052f6f08c6cf79b4c",
+    "events": [
+      {
+        "eventIndex": 78,
+        "subtype": "task_started",
+        "task_id": "a911da27140129c30",
+        "description": "Implement Issue 9006 reservation currency revision"
+      },
+      {
+        "eventIndex": 96,
+        "subtype": "task_started",
+        "task_id": "a308b5f98e9d33ba9",
+        "description": "Implement Issue 9007 billing currency revision"
+      },
+      {
+        "eventIndex": 129,
+        "subtype": "task_notification",
+        "task_id": "a911da27140129c30",
+        "status": "stopped"
+      },
+      {
+        "eventIndex": 136,
+        "subtype": "task_notification",
+        "task_id": "a308b5f98e9d33ba9",
+        "status": "stopped"
+      },
+      {
+        "eventIndex": 147,
+        "subtype": "task_started",
+        "task_id": "a089469ad7610bb3f",
+        "description": "Implement Issue 9006 reservation currency revision"
+      },
+      {
+        "eventIndex": 163,
+        "subtype": "task_started",
+        "task_id": "a7a7377f3564d1946",
+        "description": "Implement Issue 9007 billing currency revision"
+      },
+      {
+        "eventIndex": 256,
+        "subtype": "task_notification",
+        "task_id": "a7a7377f3564d1946",
+        "status": "completed"
+      },
+      {
+        "eventIndex": 276,
+        "subtype": "task_notification",
+        "task_id": "a089469ad7610bb3f",
+        "status": "completed"
+      },
+      {
+        "eventIndex": 354,
+        "subtype": "task_started",
+        "task_id": "abf2d77c3574d43cf",
+        "description": "independent_review"
+      },
+      {
+        "eventIndex": 402,
+        "subtype": "task_notification",
+        "task_id": "abf2d77c3574d43cf",
+        "status": "completed"
+      }
+    ],
+    "interpretation": "Both replacement workers started before either completed. Initial two workers were stopped after the coordinator detected duplicate Host worktree creation. All five descendants, including stopped workers and independent reviewer, are included in usage. Event ordering establishes overlapping task lifetime, not simultaneous CPU execution.",
+    "observedFailure": "ASC-created worktrees were combined with Agent isolation:worktree, creating different workspaces. Coordinator stopped both workers and restarted them without that additional option.",
+    "productCorrectionCommit": "926464cc2",
+    "correctionAppliedDuringRun": false
+  }
+}
