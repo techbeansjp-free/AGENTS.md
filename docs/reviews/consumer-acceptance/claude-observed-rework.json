@@ -324,5 +324,21 @@
     "observation": "Coordinator issued two consecutive full base-to-head diff reads and reran python3 -I test_greeting.py -v after its successful pre-review invocation; no later source change appears in the saved coordinator tool calls.",
     "change": "Current-host Skill explicitly reuses valid checks after confirming commit, dirty changes and applicability; retains independent reviewer, required CI and rechecking uncertain impacts.",
     "validation": "Existing packaged Skill update scenario passes; model behavior and performance after this instruction are not measured. The fixed v4 cohort predates this instruction."
+  },
+  "v4PhaseAnalysis": {
+    "observations": {
+      "B": {
+        "medianModelSeconds": 73.63728723999999,
+        "medianDeliverySeconds": 20.420011176999992,
+        "medianParentProcessedTokens": 325623
+      },
+      "C": {
+        "medianModelSeconds": 78.169927937,
+        "medianDeliverySeconds": 21.49257889800001,
+        "medianParentProcessedTokens": 328685
+      }
+    },
+    "interpretation": "Smaller entry text alone did not establish lower coordinator usage or shorter execution. Do not attribute variation causally to Skill length or CI alone.",
+    "followup": "Workspace-specific instructions moved intact into a conditionally required reference. Normal continued-worktree entry shrinks from 11806 to 10291 UTF-8 bytes; this is input-size reduction, not measured runtime/token savings. New worktree, non-Git, multi-repository and restart paths must still read the reference."
   }
 }
