@@ -97,5 +97,17 @@
   ],
   "fixtureIsolation": "pinned-ancestry-only; empty init template; source fixture and known sibling synthetic trial roots denied by Host settings",
   "verificationObservation": "fixed read-only packaged verifier wrapper with framed real process result",
-  "supersedes": "Original compaction cohort terminated at pair 2 candidate; no observations carried over."
+  "supersedes": "Original compaction cohort terminated at pair 2 candidate; no observations carried over.",
+  "status": "terminated on first baseline infrastructure failure",
+  "failure": {
+    "stage": "first baseline",
+    "error": "Bash sandbox command exceeded OS argument size (E2BIG)",
+    "knownPriorTrialDenyPaths": 3157,
+    "processStatus": 143,
+    "seconds": 221.280423701,
+    "intervention": "Evaluator terminated the known trial and descendants after repeated identical infrastructure failure; no implementation intervention",
+    "candidateStarted": false,
+    "performanceAcceptance": false,
+    "followupDiagnostic": "claude-compact-boundary-diagnostic.json"
+  }
 }
