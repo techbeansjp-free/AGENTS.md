@@ -44,7 +44,8 @@
     "Stream contains multiple result events; final duration_ms is not whole-run wall time",
     "No shared-contract revision or interrupted-session recovery exercised",
     "No evaluator implementation edits; pre-run Git-control hash was not recorded",
-    "Host delivery script was authored after implementation; not packaged autonomous Claude delivery"
+    "Host delivery script was authored after implementation; not packaged autonomous Claude delivery",
+    "Post-review input-access exception counterexample violates stable VALIDATION error contract; correction and re-review required"
   ],
   "usage": {
     "totals": {
@@ -126,5 +127,18 @@
     }
   },
   "transcriptSpanSeconds": 532.591,
-  "timeScope": "Transcript timestamp span, not process wall measurement"
+  "timeScope": "Transcript timestamp span, not process wall measurement",
+  "additionalHoldout": {
+    "head": "a8ae6d11e9cbe46abf1b7f276982ff728c84064b",
+    "case": "Invalid mutation property getter must reject with stable VALIDATION; state and retry key preserved",
+    "expectedCode": "VALIDATION",
+    "observed": {
+      "code": null,
+      "message": "synthetic getter error"
+    },
+    "statePreserved": true,
+    "retryKeyPreserved": true,
+    "passed": false
+  },
+  "qualityAccepted": false
 }

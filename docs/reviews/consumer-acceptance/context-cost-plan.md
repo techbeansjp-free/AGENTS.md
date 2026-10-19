@@ -43,8 +43,8 @@ baselineは9f19ce4bd76a8e59eedd01adec8ec8a3a825fea7のSkill。候補との差は
 | 要求 | 現在の証拠 | 未達・限定 |
 | --- | --- | --- |
 | 標準Hostと任意Controllerの責務分離 | 本文の実装照合、current-host実走 | Controllerの成功を標準Host全体へ流用しない |
-| 小規模の実装→レビュー→Draft PR/CI | `native-small-batched-summary.json`と各試行 | 五組の性能比較は不合格。alpha.18はPR79で復旧完走したが手動再開あり。無介入の新規性能比較には使わない |
-| 複雑な複数Issueの並列実装・統合 | `native-coordinator-scope-pilot.json`、PR69 | alpha.14が無介入完走。alpha.18の2試行はprovider容量不足で未完了。合成2サービスの範囲であり一般的な大規模保証ではない |
+| 小規模の実装→レビュー→Draft PR/CI | Codex各試行、Claude `claude-small-delivery.json`・PR85 | Claudeの実装/レビュー成功・usage照合済み。Host提出scriptは評価者が実走後作成。五組の性能比較は未合格 |
+| 複雑な複数Issueの並列実装・統合 | Codex PR69/80、Claude `claude-complex-implementation.json`・PR86 | Claude2 Issue・統合・独立PASS・5 oracle・CI成功。ただし追加の入力取得例外反例に失敗し品質受入は未達。Codex80は手動復旧あり |
 | 指摘修復・独立再レビュー | `native-input-boundary-pilot.json`、PR68と`native-review-turn-audit.json` | alpha.13で無介入修復・再レビュー。alpha.14では修復未発生のため同じ実証とは扱わない |
 | 共有契約変更・旧保存データの再利用 | `native-shared-contract-delivery.json`、PR32 | 単一の明示的JPY変更での実証 |
 | 競合からの回復 | `native-conflict-recovery.json`、PR61 | 明示的な事前故障注入。任意の競合を保証しない |
@@ -583,3 +583,5 @@ Claude複雑2Issueの実走開始：固定base `b7a906256f6f0aa2705d2517e69f7d3a
 Claude複雑2Issueの実装・統合・独立レビューが完了。HEAD `a8ae6d11e9cbe46abf1b7f276982ff728c84064b`でHostが5 oracleを再実行し全成功、許可2ファイルのみ・clean treeを確認した。実装2 AgentとReviewer1 AgentはいずれもClaude。`claude-complex-implementation.json`に記録。複数resultイベントの末尾durationを全体時間に流用しない。配下usage照合、Draft/CI、契約変更・中断復旧、比較性能は未完了であり、この観測を全体受入へ読み替えない。
 
 Claude複雑初期契約は合成Draft PR #86・complex/test CI成功まで到達。親28message、予約19、請求10、Reviewer7をID重複排除し、4区分の合計3,131,529 tokensがHost modelUsageと一致。532.591秒はtranscript時刻範囲でありprocess全体実時間とは区別する。配布製品外のHost提出scriptを使った介入は残す。同じClaude sessionで共有通貨契約の後続変更を開始した。元成果の再実装は指示せず、immutable previous実装を移行oracle入力として準備し、改修前にcurrency assertion失敗を確認。評価者は製品実装を修正しない。
+
+Claude PR86の追加反例：`reserve`のquantity getterがthrowすると、要求するstable code `VALIDATION`ではなくcodeなしの例外が漏れる。inventoryと再試行キーは保持。独立ReviewerのPASSと5 oracle/CI成功だけではこの呼出し境界を保証できなかったためqualityAccepted=falseとした。評価者は実装を直さず、進行中の共有契約変更後に根拠付き指摘として渡して是正と再レビューを評価する。
