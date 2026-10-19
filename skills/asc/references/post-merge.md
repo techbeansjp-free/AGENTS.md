@@ -1,6 +1,6 @@
 ## マージ後の同期と整理
 
-許可されたmergeが完了したら、毎回、対象repoのPR状態と実際のマージ先branch・remoteを確認して同期と整理まで行う。`main`やdefault branchに固定しない。`develop`等へのPRならそのbranchが対象。PR作成までの依頼ではmergeせず、この処理はmerge確認後に限る。Git未管理の作業には適用しない。
+許可された提出PRのmergeが完了したら、毎回、対象repoのPR状態と実際のマージ先branch・remoteを確認して同期と整理まで行う。`main`やdefault branchに固定しない。`develop`等へのPRならそのbranchが対象。PR作成までの依頼ではmergeせず、この処理はmerge確認後に限る。開発途中のローカルmerge・cherry-pickは提出PRのmergeではなく、この同期・整理の契機にしない。Git未管理の作業には適用しない。
 
 対象remoteをfetchし、マージ先のlocal branchを使用するworktreeがcleanで他の作業に使用されていない場合だけfast-forwardで同期する。未commit変更・local固有commit・分岐・別作業があれば保持して理由を報告する。別worktreeでcheckout中のbranchを奪わず、強制reset・自動stash・rebaseで同期しない。localにマージ先branchがなければ取得したremote refを報告し、無関係なbranchを更新しない。
 
