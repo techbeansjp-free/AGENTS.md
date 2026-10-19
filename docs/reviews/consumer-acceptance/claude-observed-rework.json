@@ -317,5 +317,12 @@
     },
     "jointImprovement": false,
     "conclusion": "Candidate median model-process duration and processed tokens are both higher; no consistent improvement established. This analysis does not include the subsequent existing-test preservation Skill change."
+  },
+  "unchangedPostReviewRepetition": {
+    "sourceEventsSha256": "ed26e6d9a7188afddc22c2e9f908754edf4115d81178dafda2222c13af0261d9",
+    "syntheticPullRequest": 99,
+    "observation": "Coordinator issued two consecutive full base-to-head diff reads and reran python3 -I test_greeting.py -v after its successful pre-review invocation; no later source change appears in the saved coordinator tool calls.",
+    "change": "Current-host Skill explicitly reuses valid checks after confirming commit, dirty changes and applicability; retains independent reviewer, required CI and rechecking uncertain impacts.",
+    "validation": "Existing packaged Skill update scenario passes; model behavior and performance after this instruction are not measured. The fixed v4 cohort predates this instruction."
   }
 }
