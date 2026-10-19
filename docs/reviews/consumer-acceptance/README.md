@@ -20,7 +20,7 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 | 複雑な複数Issueの並列実装・統合 | [複雑Goal](claude-complex-implementation.json) | 分担・固定oracle・CIは成功したが、後続の反例で入力getter例外の見逃しを検出。初回品質合格に読み替えない |
 | 共有契約変更・修復・再レビュー | [契約変更](claude-shared-contract.json)、[修復](claude-review-repair.json) | 保存レコード互換性と具体的な反例を確認し、修復後に独立レビュー・CI成功。全usageに欠測あり |
 | 実Git競合・保存後中断・再開 | [中断再開](claude-conflict-interruption.json) | 同じHost sessionで保存済み成果から再開しCI成功。単一書込み担当のみ。停止・再開の起動は評価用Host処理 |
-| 時間・全Agent tokensの削減 | [比較v2](claude-matched-v2/summary.json)、[比較v3](claude-matched-v3-observer.json) | 評価器の表記解釈で停止。失敗を保持し、性能改善は未成立。保存イベントの再解釈を新しい成功試行には数えない |
+| 時間・全Agent tokensの削減 | [固定5組比較](claude-matched-v4/summary.json) | 全10試行で品質・usage完備・Draft PR/CI成功。tokens中央値371,761→362,078、時間中央値94.61→101.43秒で、両指標改善の受入は未達。比較v2/v3の停止記録も保持 |
 
 Hostごとの結果、任意snapshot Controllerの結果、評価者が計画・統合・修復した結果を合算しない。以下は以前からの導入・利用者操作調査の記録として残す。
 
