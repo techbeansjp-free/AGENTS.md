@@ -1,0 +1,22 @@
+{
+  "schema": "asc-observed-cost-cause/v1",
+  "scope": "Claude matched v3 synthetic greeting trials; descriptive observations, not causal performance proof",
+  "baseline": {
+    "head": "e8d978ac4cb15c8987fab36e2d05f82c9f2b0fd9",
+    "coordinatorBashCalls": 10,
+    "coordinatorAgentCalls": 1,
+    "coordinatorToolResultCharacters": 16178,
+    "processedTokens": 327369,
+    "behavior": "Read existing test, retain unittest and import setup, add exact regression"
+  },
+  "candidate": {
+    "head": "a28f044837ba515544a6d68347e568b557c95e2b",
+    "coordinatorBashCalls": 13,
+    "coordinatorAgentCalls": 1,
+    "coordinatorToolResultCharacters": 13746,
+    "processedTokens": 455180,
+    "behavior": "Overwrote existing test without reading it, lost isolated-python import setup, failed test then repaired import path; replaced unittest test structure"
+  },
+  "change": "Skill asks to inspect target and existing tests, preserve settings and regression checks, avoid unnecessary test-runner replacement",
+  "validation": "Existing captured events establish the observed rework. Behavioral effect of updated Skill is not yet measured. No new model trial run for this analysis."
+}
