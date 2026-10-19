@@ -4,7 +4,8 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
-export function workerCheckpointObserver({origin,integration,relativeFiles}){
+export function workerCheckpointObserver({origin,integration,relativeFiles,isWorkerActive}){
+ if(isWorkerActive!==undefined&&typeof isWorkerActive!=='function')throw Error('Expected worker lifecycle observer');
  const root=fs.realpathSync(origin),target=fs.realpathSync(integration);
  if(relativeFiles.length!==2||new Set(relativeFiles).size!==2)throw Error('Expected two distinct worker outputs');
  const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^GIT_/i.test(key)));
@@ -13,15 +14,19 @@ export function workerCheckpointObserver({origin,integration,relativeFiles}){
   if(path.isAbsolute(name)||name.split('/').some(p=>!p||p==='..'||p==='.')||name.includes('\\'))throw Error('Invalid worker output path');
   return hash(fs.readFileSync(path.join(target,name)));
  });
- return ()=>{
+ return ({afterStop=false,workspaces}={})=>{
+  if(afterStop&&(!Array.isArray(workspaces)||workspaces.length!==2||new Set(workspaces).size!==2))throw Error('Expected fixed stopped worker workspaces');
   if(relativeFiles.some((name,i)=>hash(fs.readFileSync(path.join(target,name)))!==baseline[i]))return [];
   const candidates=[[],[]];
   for(const field of git('worktree','list','--porcelain','-z').toString().split('\0')){
    if(!field.startsWith('worktree '))continue;
    const workspace=field.slice(9),relative=path.relative(path.join(root,'.worktrees'),workspace);
    if(!relative||relative.startsWith('..')||path.isAbsolute(relative)||workspace===target)continue;
+   if(afterStop&&!workspaces.includes(workspace))continue;
    if(!fs.existsSync(workspace))continue;
    if(fs.realpathSync(workspace)!==workspace)throw Error('Worker workspace must not traverse symlinks');
+   // Lifecycle is checked before signalling; after verified stop only saved bytes are checked.
+   if(!afterStop&&isWorkerActive&&isWorkerActive(workspace)!==true)continue;
    relativeFiles.forEach((name,i)=>{
     const file=path.join(workspace,name);
     if(!fs.existsSync(file))return;

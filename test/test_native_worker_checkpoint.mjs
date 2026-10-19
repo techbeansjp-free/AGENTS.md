@@ -13,6 +13,18 @@ test('worker checkpoint requires distinct registered worktrees and rejects linke
  const one=path.join(root,'.worktrees/one'),two=path.join(root,'.worktrees/two');git('worktree','add','--detach',one);git('worktree','add','--detach',two);
  for(const name of ['a','b'])fs.writeFileSync(path.join(one,name),'worker edit');assert.deepEqual(observe(),[]);
  fs.writeFileSync(path.join(two,'b'),'second edit');const records=observe();assert.equal(records.length,2);assert.notEqual(records[0].workspace,records[1].workspace);assert.ok(records.every(r=>r.before!==r.after));
+ const active=new Set([one]);
+ const activeOnly=workerCheckpointObserver({origin:root,integration,relativeFiles:['a','b'],isWorkerActive:workspace=>active.has(workspace)});
+ assert.deepEqual(activeOnly(),[],'one completed worker must not count as two interrupted workers');
+ active.add(two);assert.equal(activeOnly().length,2);active.clear();assert.deepEqual(activeOnly(),[]);
+ assert.equal(activeOnly({afterStop:true,workspaces:[one,two]}).length,2,'post-stop observation checks saved bytes, not ongoing execution');
+ assert.throws(()=>workerCheckpointObserver({origin:root,integration,relativeFiles:['a','b'],isWorkerActive:true}),/lifecycle/);
+ const third=path.join(root,'.worktrees/third');git('worktree','add','--detach',third);fs.writeFileSync(path.join(third,'a'),'third edit');
+ active.add(two);active.add(third);const fixed=activeOnly();assert.deepEqual(fixed.map(r=>r.workspace),[third,two]);active.clear();
+ assert.deepEqual(activeOnly({afterStop:true,workspaces:fixed.map(r=>r.workspace)}),fixed,'completed earlier worktree must not replace the pinned pair');
+ assert.throws(()=>activeOnly({afterStop:true}),/fixed stopped/);fs.writeFileSync(path.join(third,'a'),'original');
+
+
  await t.test('two saved workers survive actual process interruption',async sub=>{
   const managerEnv={PATH:'/usr/bin:/bin',XDG_RUNTIME_DIR:`/run/user/${process.getuid?.()}`,DBUS_SESSION_BUS_ADDRESS:`unix:path=/run/user/${process.getuid?.()}/bus`};
   if(process.platform!=='linux'||spawnSync('/usr/bin/systemctl',['--user','show','--property=Version'],{env:managerEnv}).status!==0){sub.skip('Linux user service required for fault injection');return;}
