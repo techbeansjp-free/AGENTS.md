@@ -20,5 +20,16 @@
     "scripts/claude-review-evidence.mjs": "460e64fe3daa2ba423c1cdffa366ccddd6e8a8955d222c4cdd01ec2b079498e9",
     "scripts/claude-usage.mjs": "d0c1b0714943a6f68aebf25fd6569143755292e226fb00033bd91a473a9cea79"
   },
-  "status": "not started"
+  "status": "Completed once; all six oracles, independent review, Draft PR154 and both CI workflows passed; full usage reconciled. No rerun.",
+  "result": "claude-complex-current.json",
+  "observations": {
+    "correctVerificationArgvHandedToWorkers": true,
+    "workerCommitsIntegratedWithoutPatchFiles": true,
+    "gitResolvedHeadVariablesUsed": false,
+    "coordinatorReadImplementationBeforeDelegation": true,
+    "seconds": 464.116156724,
+    "processedTokens": 2581661,
+    "performanceAccepted": false,
+    "limitation": "Single diagnostic; prior baseline is not a fresh matched pair. Observed fewer tokens but longer elapsed time than saved baseline. Skill instructions are not runtime enforcement."
+  }
 }

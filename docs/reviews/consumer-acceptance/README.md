@@ -27,6 +27,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 | 時間・全Agent tokensの削減 | [登録有無の固定5組v8](claude-matched-v8/summary.json)、[v7](claude-matched-v7/summary.json)、[v6](claude-matched-v6/summary.json) | v8は同一alpha.36の登録有無のみを比較。全10件品質・usage・PR/CI成功。時間中央値103.19→96.19秒、tokens中央値362,563→395,352、最大値も悪化し性能不合格。費用対効果が成立せず未公開の登録機能を取り下げた |
 | 取り下げた登録Reviewer候補の小規模Draft PR/CI | [配布・委譲](claude-registered-reviewer.json)、[提出まで](claude-registered-reviewer-delivery.json) | canonical手順を組み込んだ同一Reviewer定義を使用。提出HEADを承認したtaskの種別も照合。単発の実装・レビュー54.13秒、提出・CIを含め76.03秒・314,226 tokens、品質・全usage・PR136/CI成功。一般的な性能改善の証明ではない |
 
+[現行配布物の複雑2 Issue確認](claude-complex-current.json)は、修正した引継ぎ手順を含むalpha.39を1回実行し、Draft PR154・両CI・6 oracle・独立レビュー・全4 Contextのusage照合まで成功した（464.12秒、2,581,661 tokens）。外部から実装・計画・修復を代行していない。担当へ正しい検証argvが渡り、patch転記なしでcommitを統合した。一方、進行役は委譲前に実装・テストを広く読み、HEADをGitから変数へ固定する指示も使わなかった。[実行条件と限界](claude-complex-current-protocol.json)を保持する。保存済み対照よりtokensは少なく時間は長いが、同時期の対比較ではなく、性能合格やAIの手順遵守を保証しない。追加試行で置き換えない。
+
 [登録Reviewerの複雑2 Issue確認](claude-registered-reviewer-complex.json)は、進行役による互換性修復・6 oracle・独立レビュー・Draft PR137/両CIまで完走した（全体530.64秒）。観測tokensは2,811,301だがworkerの終端usageが1件欠け、Hostのoutput集計との差は1,180。別ストリームにも終端がなく、補間せず性能判定を未成立とした。再実走で置き換えない。
 
 [複雑ケースの修正後確認](claude-complex-currency-followup.json)はDraft PR130/両CI・全usage照合まで成功（561.82秒、2,891,961 tokens）。二重worker起動は解消したが、担当commitが返っても進行役はパッチを転記し、書出し先の拒否・再試行が残った。対照398.88秒/2,849,262を上回り、性能条件は未達。手順追記の効果を過大評価せず、追加cohortではなく保存ログから残るコストを分析する。
