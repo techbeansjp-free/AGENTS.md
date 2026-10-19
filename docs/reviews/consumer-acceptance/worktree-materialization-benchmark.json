@@ -1,0 +1,113 @@
+{
+  "schema": "asc-worktree-materialization-benchmark/v1",
+  "scope": "Deterministic worktree creation only; not AI workflow time or token acceptance",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "node": "v24.19.0",
+    "git": "git version 2.43.0"
+  },
+  "fixture": {
+    "head": "2792c8079f12f762a1a49f3f4580c2c4d56f0ccb",
+    "files": 2004,
+    "bytes": 14489030,
+    "sha256": "e02e0d9ef93f7d6e461c1095fa2d8552a4935fe1a868f8410c8ad25b1b84955d"
+  },
+  "isolation": {
+    "network": "unshared",
+    "home": "empty tmpfs",
+    "sourceCheckoutMounted": false
+  },
+  "order": "BC CB BC CB BC",
+  "runs": [
+    {
+      "pair": 1,
+      "side": "baseline",
+      "seconds": 4.172718004,
+      "validation": "passed"
+    },
+    {
+      "pair": 1,
+      "side": "candidate",
+      "seconds": 0.22428204800000004,
+      "validation": "passed"
+    },
+    {
+      "pair": 2,
+      "side": "candidate",
+      "seconds": 0.2248270419999999,
+      "validation": "passed"
+    },
+    {
+      "pair": 2,
+      "side": "baseline",
+      "seconds": 5.359424954,
+      "validation": "passed"
+    },
+    {
+      "pair": 3,
+      "side": "baseline",
+      "seconds": 5.364963125,
+      "validation": "passed"
+    },
+    {
+      "pair": 3,
+      "side": "candidate",
+      "seconds": 0.22435833300000013,
+      "validation": "passed"
+    },
+    {
+      "pair": 4,
+      "side": "candidate",
+      "seconds": 0.22895652899999913,
+      "validation": "passed"
+    },
+    {
+      "pair": 4,
+      "side": "baseline",
+      "seconds": 5.979963851000001,
+      "validation": "passed"
+    },
+    {
+      "pair": 5,
+      "side": "baseline",
+      "seconds": 5.890923657999999,
+      "validation": "passed"
+    },
+    {
+      "pair": 5,
+      "side": "candidate",
+      "seconds": 0.22811049999999886,
+      "validation": "passed"
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "medianSeconds": 5.364963125,
+      "maximumSeconds": 5.979963851000001
+    },
+    "candidate": {
+      "medianSeconds": 0.2248270419999999,
+      "maximumSeconds": 0.22895652899999913
+    }
+  },
+  "validation": "All bytes, executable mode, HEAD, clean worktree and original uncommitted owner edit verified outside timed interval",
+  "packages": {
+    "baseline": {
+      "version": "0.5.900-alpha.53",
+      "sha256": "4a7915a67785c767c1e433eb7d142291082b60ad796f4b296d069b931f7d2df5",
+      "published": false
+    },
+    "candidate": {
+      "version": "0.5.900-alpha.54",
+      "sha256": "0d351a582e6e12245ef19885743746e0a54af6b3478b7f1b1023d9ba8cdeb298",
+      "published": false
+    }
+  },
+  "sourceCommit": "19da5137",
+  "script": {
+    "file": "worktree-materialization-benchmark.mjs.txt",
+    "sha256": "f29cd2aa54e5df6f166e634f1cb053d44c755d175f45f3c8491d9f1624dca790"
+  },
+  "reproduction": "Run the attached JavaScript with Node inside a fresh network-unshared bubblewrap namespace. Mount extracted baseline package read-only at /baseline, candidate at /candidate, Node at /node and script at /bench.mjs; mount only a fresh writable synthetic directory at /workspace, tmpfs /tmp, /usr /lib /lib64 read-only, /dev and /proc. Clear the environment; HOME=/tmp PATH=/usr/bin:/bin. Invoke /node /bench.mjs from /workspace. No source checkout or user HOME is mounted."
+}
