@@ -60,3 +60,19 @@ test('fresh numbered re-review retains identity, exact HEAD and conflict checks'
  const rejected=record('old','p',`FAIL ${head}`);f.push(rejected);f[0].splice(2,0,{type:'response_item',payload:{type:'function_call',name:'spawn_agent'}});
  assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);
 });
+
+test('a completed re-review needs its own verdict, not a previous turn PASS',()=>{
+ const f=fixture();
+ f[1].push({type:'event_msg',payload:{type:'task_started',turn_id:'next'}},
+  {type:'event_msg',payload:{type:'task_complete',turn_id:'next'}});
+ assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);
+});
+
+test('re-review accepts a verdict inside the new turn but not after completion',()=>{
+ const f=fixture(),message={type:'response_item',payload:{type:'message',role:'assistant',content:[{type:'output_text',text:`PASS ${head}`}]}};
+ f[1].push({type:'event_msg',payload:{type:'task_started',turn_id:'next'}},
+  {type:'event_msg',payload:{type:'task_complete',turn_id:'next'}},structuredClone(message));
+ assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);
+ f[1].pop();f[1].splice(-1,0,message);
+ assert.equal(nativeReviewEvidence('p',head,f).review.id,'r');
+});

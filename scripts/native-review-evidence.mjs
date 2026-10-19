@@ -30,7 +30,8 @@ export function nativeReviewEvidence(rootId, head, rollouts) {
     if(meta.id===rootId)continue;
     const parent=meta.source?.subagent?.thread_spawn;
     if(parent?.parent_thread_id!==rootId||!/^\/root\/independent_review(?:_[1-9][0-9]*)?$/.test(parent.agent_path??'')||meta.forked_from_id)continue;
-    const final=events.filter(e=>e.type==='response_item'&&e.payload?.type==='message'&&e.payload.role==='assistant').at(-1)?.payload;
+    const currentTurn=events.slice(events.findLastIndex(e=>e.type==='event_msg'&&e.payload?.type==='task_started')+1,events.findLastIndex(e=>e.type==='event_msg'&&e.payload?.type==='task_complete'));
+    const final=currentTurn.filter(e=>e.type==='response_item'&&e.payload?.type==='message'&&e.payload.role==='assistant').at(-1)?.payload;
     const text=final?.content?.filter(c=>c.type==='output_text').map(c=>c.text).join('\n')??'';
     // Exact first line is deliberately required; quoted PASS or earlier approval does not count.
     const first=text.split('\n')[0].trim();
