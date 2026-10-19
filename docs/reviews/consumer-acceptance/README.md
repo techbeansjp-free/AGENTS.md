@@ -12,6 +12,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 | 時間と全Agent tokensの削減 | [対比較集計](native-small-progressive-summary.json) | 2組で両指標の改善は不成立。5組の受入条件は未達。欠測・失敗を除外して合格にしない |
 | 保存途中の中断から自律再開 | [中断再開](native-interruption-delivery.json) | Linuxの単一書込み担当で、保存後中断・全子終了・新Context継続からDraft PR/CIまで成功。複数worker同時中断や総tokensは未証明 |
 
+中断時の成果保護は、`test/test_native_worker_checkpoint.mjs`で2つの実子プロセスが別worktreeへ未完了の内容を保存した状態から確認した。試験専用serviceの中断後に両子プロセスの終了と保存内容を確認し、新プロセスがその内容を読み取って追記を完了、統合先が不変であることまで成功した（3テスト、skip 0）。これはLinuxの決定論的な成果保持・継続試験であり、2つのAI担当の自律的な再計画や性能改善の証明には読み替えない。
+
 主な利用HostとしてClaude Codeを評価する。上表はCodexの記録であり、Claude Codeの代用にしない。Claude Codeで確認した範囲は次のとおり。モデルは同HostのSonnetを使用し、Codexへ委譲していない。
 
 | Claude Code current-hostの実証 | 対象証拠 | 判定・限界 |

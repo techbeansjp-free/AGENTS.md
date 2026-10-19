@@ -17,9 +17,23 @@ test('worker checkpoint requires distinct registered worktrees and rejects linke
   const managerEnv={PATH:'/usr/bin:/bin',XDG_RUNTIME_DIR:`/run/user/${process.getuid?.()}`,DBUS_SESSION_BUS_ADDRESS:`unix:path=/run/user/${process.getuid?.()}/bus`};
   if(process.platform!=='linux'||spawnSync('/usr/bin/systemctl',['--user','show','--property=Version'],{env:managerEnv}).status!==0){sub.skip('Linux user service required for fault injection');return;}
   for(const workspace of [one,two])for(const name of ['a','b'])fs.writeFileSync(path.join(workspace,name),'original');
-  const code=`const fs=require('fs');setTimeout(()=>{fs.writeFileSync(${JSON.stringify(path.join(one,'a'))},'unfinished A');fs.writeFileSync(${JSON.stringify(path.join(two,'b'))},'unfinished B');},200);setInterval(()=>{},1000);`;
+  // Each child saves partial work and remains alive. Neither can finish before interruption.
+  const workers=[[path.join(one,'a'),'unfinished A'],[path.join(two,'b'),'unfinished B']];
+  const workerCode=`const fs=require('fs');fs.writeFileSync(process.argv[1]+'.pid',String(process.pid));fs.writeFileSync(process.argv[1],process.argv[2]);setInterval(()=>{},1000);`;
+  const code=`const {spawn}=require('child_process');for(const [file,text] of ${JSON.stringify(workers)})spawn(process.execPath,['-e',${JSON.stringify(workerCode)},file,text],{stdio:'inherit'});setInterval(()=>{},1000);`;
   const checkpoint=await interruptSavedAttempt({directory:path.join(root,'interrupted'),executable:process.execPath,argv:['-e',code],env,input:'',files:['a','b'].map(n=>path.join(integration,n)),observeWorkers:observe});
-  assert.equal(checkpoint.checkpoint,true);assert.equal(checkpoint.workerWorktrees.length,2);assert.equal(fs.readFileSync(path.join(integration,'a'),'utf8'),'original');assert.equal(fs.readFileSync(path.join(two,'b'),'utf8'),'unfinished B');
+  assert.equal(checkpoint.checkpoint,true);assert.equal(checkpoint.stopped,true);assert.equal(checkpoint.workerWorktrees.length,2);
+  for(const [file,partial] of workers){
+   assert.equal(fs.readFileSync(file,'utf8'),partial);
+   const pid=Number(fs.readFileSync(file+'.pid','utf8'));
+   assert.ok(Number.isSafeInteger(pid)&&pid>0);
+   assert.throws(()=>process.kill(pid,0),{code:'ESRCH'},'interrupted child must have exited before recovery');
+   // A fresh process reads saved work before completing it; no reset/reimplementation.
+   const recovered=spawnSync(process.execPath,['-e',`const fs=require('fs');const [file,expected]=process.argv.slice(1);if(fs.readFileSync(file,'utf8')!==expected)process.exit(2);fs.appendFileSync(file,'\\ncompleted');`,file,partial],{env});
+   assert.equal(recovered.status,0,recovered.stderr?.toString());
+   assert.equal(fs.readFileSync(file,'utf8'),partial+'\ncompleted');
+  }
+  for(const name of ['a','b'])assert.equal(fs.readFileSync(path.join(integration,name),'utf8'),'original','recovery must not change integration or sibling work');
  });
  fs.writeFileSync(path.join(integration,'b'),'integrated');assert.deepEqual(observe(),[]);fs.writeFileSync(path.join(integration,'b'),'original');
  fs.unlinkSync(path.join(two,'b'));fs.symlinkSync(path.join(root,'b'),path.join(two,'b'));assert.throws(observe,/non-symlink/);
