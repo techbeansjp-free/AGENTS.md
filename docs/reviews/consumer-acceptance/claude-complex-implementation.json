@@ -1,0 +1,130 @@
+{
+  "scope": "Claude current-host two-Issue implementation, independent review and synthetic Draft/CI; not comparative performance acceptance",
+  "cliVersion": "2.1.282",
+  "model": "claude-sonnet-5",
+  "base": "b7a906256f6f0aa2705d2517e69f7d3a6503ccff",
+  "head": "a8ae6d11e9cbe46abf1b7f276982ff728c84064b",
+  "distributionVersion": "0.5.900-alpha.18",
+  "workers": 2,
+  "independentReviewers": 1,
+  "review": {
+    "head": "a8ae6d11e9cbe46abf1b7f276982ff728c84064b",
+    "verdict": "PASS"
+  },
+  "hostRepeatedOracles": {
+    "reservation": 0,
+    "billing": 0,
+    "integration": 0,
+    "unknown-keys": 0,
+    "accessors": 0
+  },
+  "allowedChangedPaths": [
+    "complex/billing/service.mjs",
+    "complex/reservation/service.mjs"
+  ],
+  "workingTreeClean": true,
+  "hostReportedModelUsage": {
+    "claude-sonnet-5": {
+      "inputTokens": 128,
+      "outputTokens": 83387,
+      "cacheReadInputTokens": 2850288,
+      "cacheCreationInputTokens": 197726,
+      "webSearchRequests": 0,
+      "costUSD": 1.9982335999999996,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 48711,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "usageComplete": true,
+  "limitations": [
+    "Stream contains multiple result events; final duration_ms is not whole-run wall time",
+    "No shared-contract revision or interrupted-session recovery exercised",
+    "No evaluator implementation edits; pre-run Git-control hash was not recorded",
+    "Host delivery script was authored after implementation; not packaged autonomous Claude delivery"
+  ],
+  "usage": {
+    "totals": {
+      "input_tokens": 128,
+      "output_tokens": 83387,
+      "cache_read_input_tokens": 2850288,
+      "cache_creation_input_tokens": 197726
+    },
+    "threads": [
+      {
+        "id": "8829a26e-eeff-46df-890b-115572e0371d",
+        "messageCount": 28,
+        "usage": {
+          "input_tokens": 56,
+          "output_tokens": 17511,
+          "cache_read_input_tokens": 1541355,
+          "cache_creation_input_tokens": 66490
+        }
+      },
+      {
+        "id": "acc2c91e94967ee4e",
+        "messageCount": 19,
+        "usage": {
+          "input_tokens": 38,
+          "output_tokens": 30904,
+          "cache_read_input_tokens": 751332,
+          "cache_creation_input_tokens": 59861
+        }
+      },
+      {
+        "id": "a417af1f335ce3909",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 28021,
+          "cache_read_input_tokens": 383807,
+          "cache_creation_input_tokens": 46824
+        }
+      },
+      {
+        "id": "a2e7843419ddcf777",
+        "messageCount": 7,
+        "usage": {
+          "input_tokens": 14,
+          "output_tokens": 6951,
+          "cache_read_input_tokens": 173794,
+          "cache_creation_input_tokens": 24551
+        }
+      }
+    ],
+    "observedProcessedTokens": 3131529,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/86",
+  "ci": {
+    "complex": {
+      "head": "a8ae6d11e9cbe46abf1b7f276982ff728c84064b",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "complex": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39225060862",
+      "transportFailures": []
+    },
+    "greeting": {
+      "head": "a8ae6d11e9cbe46abf1b7f276982ff728c84064b",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "test": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39225060214",
+      "transportFailures": []
+    }
+  },
+  "transcriptSpanSeconds": 532.591,
+  "timeScope": "Transcript timestamp span, not process wall measurement"
+}

@@ -579,3 +579,7 @@ Claude小規模実走：配布alpha.18をClaude Code 2.1.282のSonnet進行役�
 Claude複雑2Issueの実走開始：固定base `b7a906256f6f0aa2705d2517e69f7d3a6503ccff`、配布alpha.18、Claude Code 2.1.282、Sonnet。予約9001と請求9002を同一進行役が別worktreeへbackground委譲したことを実イベントで確認。作業中のため成功・性能の判定は未実施。評価用`claude-usage.mjs`は明示した親・配下transcriptをmessage IDで重複排除し、HostのmodelUsageと照合する。欠測・配下欠落・不一致はcompleteにせず、2反例試験と既存小規模実走の4区分一致で確認した。
 
 独立レビュー中のcapacityも、対象が不変なら同じ検証結果を維持し、新しいReviewer呼出しだけを一度再試行する。実装・検証の再実行やコード修復予算消費はしない。対象変更・同じ対象での再失敗は停止。Controller/Host/provider分類の関連回帰57件が成功（レビュー回復と持続失敗を含む）。モデル実走で当該障害を再現した証明ではない。
+
+Claude複雑2Issueの実装・統合・独立レビューが完了。HEAD `a8ae6d11e9cbe46abf1b7f276982ff728c84064b`でHostが5 oracleを再実行し全成功、許可2ファイルのみ・clean treeを確認した。実装2 AgentとReviewer1 AgentはいずれもClaude。`claude-complex-implementation.json`に記録。複数resultイベントの末尾durationを全体時間に流用しない。配下usage照合、Draft/CI、契約変更・中断復旧、比較性能は未完了であり、この観測を全体受入へ読み替えない。
+
+Claude複雑初期契約は合成Draft PR #86・complex/test CI成功まで到達。親28message、予約19、請求10、Reviewer7をID重複排除し、4区分の合計3,131,529 tokensがHost modelUsageと一致。532.591秒はtranscript時刻範囲でありprocess全体実時間とは区別する。配布製品外のHost提出scriptを使った介入は残す。同じClaude sessionで共有通貨契約の後続変更を開始した。元成果の再実装は指示せず、immutable previous実装を移行oracle入力として準備し、改修前にcurrency assertion失敗を確認。評価者は製品実装を修正しない。
