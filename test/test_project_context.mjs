@@ -30,6 +30,7 @@ test('optional ancestor discovery permits a planned file-to-directory change',t=
 
 test('shared ancestor rules are read once per selection and refreshed on the next call',t=>{
  const f=fixture(t);f.write('src/AGENTS.md','shared contract');
+ f.config([{path:'src/AGENTS.md',appliesTo:['src']}]);
  const open=fs.openSync;let reads=0;
  t.mock.method(fs,'openSync',function(file,...args){if(file===path.join(f.root,'src/AGENTS.md'))reads++;return open.call(fs,file,...args);});
  const paths=Array.from({length:100},(_,i)=>`src/file${i}.ts`);

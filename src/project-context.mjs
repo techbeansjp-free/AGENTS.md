@@ -32,9 +32,10 @@ export function projectContext(root,paths=[]){
   const selected=!paths.length||!scope.length||paths.some(changed=>scope.some(prefix=>changed===prefix||changed.startsWith(prefix+'/')));
   if(!selected)return;
   // Cache only this invocation; required references must still reject missing files.
-  const key=JSON.stringify([p,optional]);
-  if(!observed.has(key))observed.set(key,read(root,p,optional));
-  const body=observed.get(key);if(body!==null)rules.set(p,{path:p,...body});
+  // Existing files have identical content regardless of optional/required discovery.
+  // Retry a missing optional lookup when the manifest makes that reference required.
+  if(!observed.has(p)||(observed.get(p)===null&&!optional))observed.set(p,read(root,p,optional));
+  const body=observed.get(p);if(body!==null)rules.set(p,{path:p,...body});
  };
  for(const p of ['AGENTS.md','CLAUDE.md','.agent-skill-chain/project/00_利用案内.md'])add(p,[],true);
  for(const changed of paths){
