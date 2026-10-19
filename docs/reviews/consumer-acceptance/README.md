@@ -22,8 +22,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 | 実Git競合・保存後中断・再開 | [中断再開](claude-conflict-interruption.json) | 同じHost sessionで保存済み成果から再開しCI成功。単一書込み担当のみ。停止・再開の起動は評価用Host処理 |
 | 2workerの保存成果から統合・再開 | [worker再開](claude-worker-recovery.json) | 両worktreeの中断時bytesを最終commitへ保持、独立レビュー・6 oracle・Draft PR104の両CI成功。4 Contextの取得usage照合成功。片方は停止前に完了済み、評価器修復を挟むため無中断性能には不使用 |
 | 複雑2 Issue・通貨契約変更の無介入実装 | [候補診断](claude-complex-currency-diagnostic.json)、[同条件の対照](claude-complex-currency-baseline.json) | 双方6 oracle・独立レビュー・Draft PR128/129両CI・全usage照合成功。候補568.65秒/3,740,727 tokens、対照398.88秒/2,849,262で改善不成立。候補の二重worktree起動とpatch転記失敗を既存Skillで是正。単発比較で性能保証とはしない |
-| 時間・全Agent tokensの削減 | [登録有無の固定5組v8](claude-matched-v8/summary.json)、[v7](claude-matched-v7/summary.json)、[v6](claude-matched-v6/summary.json) | v8は同一alpha.36の登録有無のみを比較。全10件品質・usage・PR/CI成功。時間中央値103.19→96.19秒、tokens中央値362,563→395,352、最大値も悪化し性能不合格。登録Reviewerを高速化の既定策とは扱わない |
-| 登録Reviewerから小規模Draft PR/CI | [配布・委譲](claude-registered-reviewer.json)、[提出まで](claude-registered-reviewer-delivery.json) | canonical手順を組み込んだ同一Reviewer定義を使用。提出HEADを承認したtaskの種別も照合。単発の実装・レビュー54.13秒、提出・CIを含め76.03秒・314,226 tokens、品質・全usage・PR136/CI成功。一般的な性能改善の証明ではない |
+| 時間・全Agent tokensの削減 | [登録有無の固定5組v8](claude-matched-v8/summary.json)、[v7](claude-matched-v7/summary.json)、[v6](claude-matched-v6/summary.json) | v8は同一alpha.36の登録有無のみを比較。全10件品質・usage・PR/CI成功。時間中央値103.19→96.19秒、tokens中央値362,563→395,352、最大値も悪化し性能不合格。費用対効果が成立せず未公開の登録機能を取り下げた |
+| 取り下げた登録Reviewer候補の小規模Draft PR/CI | [配布・委譲](claude-registered-reviewer.json)、[提出まで](claude-registered-reviewer-delivery.json) | canonical手順を組み込んだ同一Reviewer定義を使用。提出HEADを承認したtaskの種別も照合。単発の実装・レビュー54.13秒、提出・CIを含め76.03秒・314,226 tokens、品質・全usage・PR136/CI成功。一般的な性能改善の証明ではない |
 
 [登録Reviewerの複雑2 Issue確認](claude-registered-reviewer-complex.json)は、進行役による互換性修復・6 oracle・独立レビュー・Draft PR137/両CIまで完走した（全体530.64秒）。観測tokensは2,811,301だがworkerの終端usageが1件欠け、Hostのoutput集計との差は1,180。別ストリームにも終端がなく、補間せず性能判定を未成立とした。再実走で置き換えない。
 
@@ -40,6 +40,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 評価入力の不足も修正した（`bf4277c6`）：既知の検証argvを持つowner契約をAgent終了後ではなく起動前に読取り専用で渡し、終了後の内容一致を検査する。通信しない模擬Hostで起動時の6コマンド取得・書込み拒否設定・模擬実行の成功扱い拒否・未提出を確認した（モデル呼出し0）。これはsandbox強制の実証や性能合格ではない。従来の実走は契約提示条件が異なるので、新条件の比較試行へ混ぜない。
 
 Hostごとの結果、任意snapshot Controllerの結果、評価者が計画・統合・修復した結果を合算しない。以下は以前からの導入・利用者操作調査の記録として残す。
+
+登録Reviewerは比較後に配布実装から取り下げた。`--register-claude-reviewer`は現行CLIに含めず、別Contextの独立レビューと既存の手順参照は維持する。既存の利用者所有Agentファイルは削除しない。以下は取り下げた候補の実証記録であり、現行機能の案内ではない。
 
 登録Reviewerの提出確認では、配布物から生成する定義をClaudeの`--agents`へ渡した。プロジェクトの`.claude/agents/`からの検出・委譲は別の配布試験で確認している。二つの起動方法を同一の実走として扱わない。
 

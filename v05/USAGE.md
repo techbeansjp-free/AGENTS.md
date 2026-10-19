@@ -345,13 +345,6 @@ Linuxで2つの未公開v0.5候補を旧→新→旧とoffline導入し、配布
 
 追加対象は`.agents/skills/asc/SKILL.md`だけ。この短い入口は`.agent-skill-chain/skills/asc/SKILL.md`を相対参照するため、通常の配布資産更新後も新しい本文へ辿れる。既存の同名Skillが異なる内容なら競合として停止し、他Skill・ユーザー全体の設定・AGENTS.md・Hook・権限は変更しない。通常の更新で登録入口が`retained`に出ても、不要になったという意味ではない。
 
-Claude Codeでは任意の`--register-claude-reviewer`で`.claude/agents/asc-reviewer.md`を配置できる。`project-assets <project-directory> --register-claude-reviewer`で差分を確認し、`--apply`で反映する。既存の`--register-skill`とは独立した明示選択で、ユーザー全体の設定・Hook・権限設定は変更しない。既存の同名定義に利用者の変更があれば競合として保護する。
-
-このReviewerは既存の独立レビューを担当し、別の追加工程ではない。配布元`skills/asc/references/review.md`の本文を定義に含めるため、親が手順を転載したりReviewerがその手順ファイルだけを読む往復は不要。モデルは親から継承し、元要求・対象base/HEAD・差分参照・検証情報は依頼時に渡す。設定だけでレビュー精度や性能を保証したとは扱わない。Bashによる実検証はHostの権限内で行い、定義をOSレベルの書込み隔離とは説明しない。
-
-定義の更新にも`--register-claude-reviewer`を付ける。通常更新だけでは登録済み定義とその追跡hashを保持する。Claudeが定義を認識しない場合はHostの再読込み・再起動を確認し、未登録の他Hostでは従来の新規Contextへ手順参照を渡す方法を使う。[Claude Code公式のAgent定義](https://code.claude.com/docs/en/sub-agents#write-subagent-files)を参照。
-
-
 既存の旧ASC Skillを自動削除・無効化する機能ではない。旧入口を使っている場合は移行差分として確認する。配置後はHostの新しいセッションでSkillの認識と参照先を確認する。ファイル配置・リンク整合性の試験は、実Hostによる自動発見や実モデルでの実行成功とは区別する。
 
 LinuxのCodex CLI 0.153.4では、通信を遮断した`app-server`の`skills/list`で、この入口がrepoスコープの有効なSkillとして認識されることを確認した。同じHostプロセスから別の未登録worktreeを照会すると、そこにはASC Skillが現れない。これはローカル一覧取得の実測であり、IDE・Claudeでの認識や、モデルがSkillを選んで開発を完走することの実証ではない。対象commitと条件は`RELEASE_READINESS.json`の`projectSkillHostDiscovery`に記録する。

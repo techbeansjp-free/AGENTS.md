@@ -31,7 +31,7 @@ try {
     start:'start <project-directory> [--path <changed-path>]...\n作業場所・規約参照を確認します（非Gitも可、Agent起動なし）。',
     'worktree-create':'worktree-create <root> <issue> <type> <slug> <base>\n専用worktreeを作成します。type: feature|fix|refactor|test|docs|chore。baseは明示指定し、既存branch・作業場所は上書きしません。',
     'worktree-verify':'worktree-verify <worktree> <base> <owner-contract.json>\n現在のHost権限で検証します。repo外のowner契約にintent・allowedPaths・commands（argv配列の配列）を指定します。検証失敗はexit 2。',
-    'project-assets':'project-assets <project-directory> [--register-skill] [--register-claude-reviewer] [--apply]\n既定は差分表示のみ。--applyで未編集の配布資産を更新し、利用者の変更との競合は保護します。'
+    'project-assets':'project-assets <project-directory> [--register-skill] [--apply]\n既定は差分表示のみ。--applyで未編集の配布資産を更新し、利用者の変更との競合は保護します。'
   };
   if(Object.hasOwn(nativeHelp,command)&&args.length===1&&['--help','-h'].includes(args[0])){
     console.log(`使い方: asc-v05 ${nativeHelp[command]}\n詳細: ${fileURLToPath(new URL('../v05/USAGE.md',import.meta.url))}`);
@@ -64,7 +64,7 @@ try {
   --version                                配布版を表示
 
 導入・更新:
-  project-assets <project-directory> [--register-skill] [--register-claude-reviewer] [--apply]       配布資産の差分表示／未編集資産だけ更新
+  project-assets <project-directory> [--register-skill] [--apply]       配布資産の差分表示／未編集資産だけ更新
 
 移行:
   migration-inspect <root>                  旧設定と移行境界を確認
@@ -82,8 +82,8 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     const result=verifyWorktree(...args);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
   } else if(command==='probe-native'&&args.length===1){
     const result=await probeNativeSandbox(args[0]);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
-  } else if(command==='project-assets'&&args.length>=1&&args.length<=4&&args.slice(1).every(a=>['--apply','--register-skill','--register-claude-reviewer'].includes(a))&&new Set(args.slice(1)).size===args.length-1){
-    const result=projectAssets(args[0],{apply:args.includes('--apply'),registerSkill:args.includes('--register-skill'),registerClaudeReviewer:args.includes('--register-claude-reviewer')});console.log(JSON.stringify(result,null,2));if(result.conflicts.length)process.exitCode=2;
+  } else if(command==='project-assets'&&args.length>=1&&args.length<=3&&args.slice(1).every(a=>['--apply','--register-skill'].includes(a))&&new Set(args.slice(1)).size===args.length-1){
+    const result=projectAssets(args[0],{apply:args.includes('--apply'),registerSkill:args.includes('--register-skill')});console.log(JSON.stringify(result,null,2));if(result.conflicts.length)process.exitCode=2;
   } else if(command==='--version'&&args.length===0){
     const manifest=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
     if(typeof manifest.version!=='string'||!/^0\.5\.\d+(?:-[a-z0-9.-]+)?$/.test(manifest.version))throw Error('Invalid installed package version');

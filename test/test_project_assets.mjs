@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync,spawn} from 'node:child_process';
-import {projectAssets,claudeReviewerDefinition} from '../src/project-assets.mjs';
+import {projectAssets} from '../src/project-assets.mjs';
 function fixture(t){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-assets-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const repo=path.join(root,'repo');fs.mkdirSync(repo);
@@ -191,22 +191,4 @@ test('both distributed usage documents resolve templates and match recorded cont
   assert(bytes.toString().includes('MIGRATION_PLAN.md#migration-recovery'));
   assert(migration.includes('<a id="migration-recovery"></a>'));
  }
-});
-
-test('Claude reviewer registration is opt-in, carries canonical guidance and protects owner edits',t=>{
- const f=fixture(t),registration='.claude/agents/asc-reviewer.md',options={packageRoot:f.pkg};
- f.write('.claude/settings.json','{"owner":true}');f.write('.claude/agents/custom.md','Owner agent');
- projectAssets(f.work,{...options,apply:true});assert(!fs.existsSync(path.join(f.work,registration)));
- const preview=projectAssets(f.work,{...options,registerClaudeReviewer:true});assert.deepEqual(preview.changes.map(c=>c.path),[registration]);assert(!preview.applied);
- assert(projectAssets(f.work,{...options,registerClaudeReviewer:true,apply:true}).applied);
- const agent=()=>fs.readFileSync(path.join(f.work,registration),'utf8');
- const before=agent();assert(before.endsWith(claudeReviewerDefinition(f.pkg).prompt));assert(before.endsWith(fs.readFileSync(path.join(f.pkg,'skills/asc/references/review.md'),'utf8')));
- assert.match(before,/model: inherit/);assert.match(before,/disallowedTools: Write, Edit, Agent/);assert(!before.includes(f.pkg));
- fs.appendFileSync(path.join(f.pkg,'skills/asc/references/review.md'),'\nUpdated review contract\n');
- projectAssets(f.work,{...options,apply:true});assert.equal(agent(),before);
- assert.equal(projectAssets(f.work,options).recordChanged,false);
- assert(projectAssets(f.work,{...options,registerClaudeReviewer:true,apply:true}).applied);assert(agent().endsWith('Updated review contract\n'));
- f.write(registration,'Owner customization');
- const conflict=projectAssets(f.work,{...options,registerClaudeReviewer:true,apply:true});assert(!conflict.applied);assert.deepEqual(conflict.conflicts,[registration]);assert.equal(agent(),'Owner customization');
- assert.equal(fs.readFileSync(path.join(f.work,'.claude/settings.json'),'utf8'),'{"owner":true}');assert.equal(fs.readFileSync(path.join(f.work,'.claude/agents/custom.md'),'utf8'),'Owner agent');
 });
