@@ -1,0 +1,92 @@
+{
+  "schema": "asc-parent-phase-usage/v1",
+  "method": "Deduplicate authoritative parent transcript messages by ID and take maximum cumulative usage fields, as in claudeUsage. Reconcile exactly to existing complete all-context result. Phase boundaries are first native worker and first independent_review tool message.",
+  "limitations": [
+    "Phase attribution locates when tokens were processed, not which earlier content caused them.",
+    "workers-to-first-review includes dispatch, waiting, integration and any repair; review-and-finalization includes follow-up.",
+    "Cache tokens are processed tokens, not monetary cost.",
+    "Different diagnostic candidates are not a matched causal comparison; do not pool them with v3 baseline."
+  ],
+  "runs": [
+    {
+      "label": "opus-baseline",
+      "session": "9924cc3b-649d-4090-87b7-eee98bd9db67",
+      "transcriptSha256": "bc480714455bb7b041457980c2c3f4164f9acd5d2caf11b93bc54d1086d1c3a7",
+      "parentProcessedTokens": 338523,
+      "otherContextsProcessedTokens": 437783,
+      "allContextsProcessedTokens": 776306,
+      "phases": {
+        "before-first-worker": {
+          "messages": 3,
+          "usage": {
+            "input_tokens": 6,
+            "output_tokens": 648,
+            "cache_read_input_tokens": 31932,
+            "cache_creation_input_tokens": 22403
+          },
+          "processedTokens": 54989
+        },
+        "workers-to-first-review": {
+          "messages": 6,
+          "usage": {
+            "input_tokens": 16,
+            "output_tokens": 3117,
+            "cache_read_input_tokens": 158725,
+            "cache_creation_input_tokens": 10485
+          },
+          "processedTokens": 172343
+        },
+        "review-and-finalization": {
+          "messages": 3,
+          "usage": {
+            "input_tokens": 6,
+            "output_tokens": 2887,
+            "cache_read_input_tokens": 102517,
+            "cache_creation_input_tokens": 5781
+          },
+          "processedTokens": 111191
+        }
+      }
+    },
+    {
+      "label": "opus-candidate",
+      "session": "2d647d02-e851-44c4-8263-50410fdbfdf4",
+      "transcriptSha256": "169f09bf1d5a460c012e4f544aee1ebbefcfae0646a74a02695588f9c2ebd81a",
+      "parentProcessedTokens": 317655,
+      "otherContextsProcessedTokens": 601724,
+      "allContextsProcessedTokens": 919379,
+      "phases": {
+        "before-first-worker": {
+          "messages": 3,
+          "usage": {
+            "input_tokens": 6,
+            "output_tokens": 999,
+            "cache_read_input_tokens": 35132,
+            "cache_creation_input_tokens": 17287
+          },
+          "processedTokens": 53424
+        },
+        "workers-to-first-review": {
+          "messages": 5,
+          "usage": {
+            "input_tokens": 14,
+            "output_tokens": 3459,
+            "cache_read_input_tokens": 137420,
+            "cache_creation_input_tokens": 10550
+          },
+          "processedTokens": 151443
+        },
+        "review-and-finalization": {
+          "messages": 3,
+          "usage": {
+            "input_tokens": 6,
+            "output_tokens": 2978,
+            "cache_read_input_tokens": 104014,
+            "cache_creation_input_tokens": 5790
+          },
+          "processedTokens": 112788
+        }
+      }
+    }
+  ]
+}
