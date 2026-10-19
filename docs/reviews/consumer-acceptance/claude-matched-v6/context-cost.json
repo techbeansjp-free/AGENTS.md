@@ -1,0 +1,109 @@
+{
+  "scope": "Parent input/cache context sizes and distinct tool calls from saved v6 events, not a causal speed estimate. First context precedes Skill tool output; second may include other concurrent tool output.",
+  "observations": [
+    {
+      "trial": 1,
+      "variant": "B",
+      "initialParentContextTokens": 23092,
+      "secondParentContextTokens": 29960,
+      "parentMessages": 10,
+      "parentToolCalls": 10,
+      "eventsSha256": "1d4f1286683fe437c08654b8189c04333c956ba2802eeacf8173deddb15d545a"
+    },
+    {
+      "trial": 2,
+      "variant": "C",
+      "initialParentContextTokens": 23044,
+      "secondParentContextTokens": 28123,
+      "parentMessages": 10,
+      "parentToolCalls": 10,
+      "eventsSha256": "3a25ea43ed87ce142c41d676b05e7c8bc3fc026a55b847e8a5ce25b552383341"
+    },
+    {
+      "trial": 3,
+      "variant": "C",
+      "initialParentContextTokens": 23038,
+      "secondParentContextTokens": 27316,
+      "parentMessages": 11,
+      "parentToolCalls": 12,
+      "eventsSha256": "cc459857a16814a78696b317cec5c751ec0db91e739c9933693b4c0517c68fea"
+    },
+    {
+      "trial": 4,
+      "variant": "B",
+      "initialParentContextTokens": 23038,
+      "secondParentContextTokens": 29516,
+      "parentMessages": 13,
+      "parentToolCalls": 11,
+      "eventsSha256": "28009874959049dfb99d96daaa37f78bf96b541c6cbecde4557d822b0c21ac44"
+    },
+    {
+      "trial": 5,
+      "variant": "B",
+      "initialParentContextTokens": 23053,
+      "secondParentContextTokens": 30816,
+      "parentMessages": 11,
+      "parentToolCalls": 11,
+      "eventsSha256": "916adc88750d4a567ce8afbaed779d13e119719f082958ab28a513496c3c4e1d"
+    },
+    {
+      "trial": 6,
+      "variant": "C",
+      "initialParentContextTokens": 23074,
+      "secondParentContextTokens": 26966,
+      "parentMessages": 13,
+      "parentToolCalls": 12,
+      "eventsSha256": "4e1366ddd34c61d4b8240b0558682b1b1f5f518bc649a6c1759cf3ecb1b87c64"
+    },
+    {
+      "trial": 7,
+      "variant": "C",
+      "initialParentContextTokens": 23076,
+      "secondParentContextTokens": 27358,
+      "parentMessages": 9,
+      "parentToolCalls": 9,
+      "eventsSha256": "b6a86dd2bd1f08d0a7aa178489c7aaa036d4662af829e4944cdc9ba165ca1abf"
+    },
+    {
+      "trial": 8,
+      "variant": "B",
+      "initialParentContextTokens": 23063,
+      "secondParentContextTokens": 29537,
+      "parentMessages": 16,
+      "parentToolCalls": 14,
+      "eventsSha256": "db34f151b68aa34fc80b150a132a7dc4153cb53da9b7d1ca6fe11df9433bb643"
+    },
+    {
+      "trial": 9,
+      "variant": "B",
+      "initialParentContextTokens": 23075,
+      "secondParentContextTokens": 29935,
+      "parentMessages": 9,
+      "parentToolCalls": 9,
+      "eventsSha256": "7291574db6b71dded801160712f192fa5380cdc57bc2036ce311b90ff62ebaf9"
+    },
+    {
+      "trial": 10,
+      "variant": "C",
+      "initialParentContextTokens": 23054,
+      "secondParentContextTokens": 26968,
+      "parentMessages": 11,
+      "parentToolCalls": 11,
+      "eventsSha256": "cabcda5f84d0d8fd4097efaa39211e54689b2116f4bed54404a2a82802d30b36"
+    }
+  ],
+  "medians": {
+    "B": {
+      "initialParentContextTokens": 23063,
+      "secondParentContextTokens": 29935,
+      "parentMessages": 11,
+      "parentToolCalls": 11
+    },
+    "C": {
+      "initialParentContextTokens": 23054,
+      "secondParentContextTokens": 27316,
+      "parentMessages": 11,
+      "parentToolCalls": 11
+    }
+  }
+}

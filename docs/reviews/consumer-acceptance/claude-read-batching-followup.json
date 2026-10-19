@@ -1,0 +1,128 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "skillBundleSha256": "a8b51ce76b438ffb9e3f05790e359c57076de65e7c94629dd077b68c0b03ed3c",
+    "version": "0.5.900-alpha.28",
+    "skillSha256": "f5394095ec86a559ae576aa171573a53f6597733236d7852c4aabe99489badb2",
+    "identitySha256": "4e8e5a1adacf82b17c6adbe309dfc01bcd1c847716ae2ba17a0718d893a2f2b9"
+  },
+  "conditions": {
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "9c23ce07da5c7695f2e2e5922237bdff34c0b73e59eee9078c73fac02b24fa31",
+    "intentSha256": "712b83bd0cdec6d5d3439878da31f02e08a50379fd6bf471539227cbbcd54f9f",
+    "commands": [
+      [
+        "python3",
+        "-I",
+        "test_greeting.py"
+      ],
+      [
+        "python3",
+        "-I",
+        "-c",
+        "import sys;sys.path.insert(0,\".\");from greeting import greeting;assert type(greeting()) is str and greeting()==\"Hello\""
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "9bea86448139e93c5611f1114c2b531bbf411c97",
+  "review": {
+    "taskId": "a9ea3685f4352ea7a",
+    "head": "9bea86448139e93c5611f1114c2b531bbf411c97",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 30,
+      "output_tokens": 5237,
+      "cache_read_input_tokens": 380847,
+      "cache_creation_input_tokens": 31108
+    },
+    "threads": [
+      {
+        "id": "be84aa26-62e0-46d3-a0d0-480f714b8f06",
+        "messageCount": 11,
+        "usage": {
+          "input_tokens": 22,
+          "output_tokens": 3796,
+          "cache_read_input_tokens": 318387,
+          "cache_creation_input_tokens": 22653
+        }
+      },
+      {
+        "id": "a9ea3685f4352ea7a",
+        "messageCount": 4,
+        "usage": {
+          "input_tokens": 8,
+          "output_tokens": 1441,
+          "cache_read_input_tokens": 62460,
+          "cache_creation_input_tokens": 8455
+        }
+      }
+    ],
+    "observedProcessedTokens": 417222,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 58.34704284399999,
+  "deliverySeconds": 20.842340514999997,
+  "elapsedSeconds": 79.314813738,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "9bea86448139e93c5611f1114c2b531bbf411c97",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/127",
+  "ci": {
+    "head": "9bea86448139e93c5611f1114c2b531bbf411c97",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39246189965",
+    "transportFailures": []
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Fresh-context simple change only; repair, multiple Issues and restart acceptance remain separate.",
+    "No merge or release."
+  ],
+  "targetedObservation": {
+    "purpose": "Check observed read batching after instruction relocation; not a performance comparison",
+    "initialReadsStillSplit": true,
+    "coordinatorReadReviewProcedure": true,
+    "conclusion": "Instruction relocation did not reliably remove the observed redundant reads. Do not infer performance improvement from this single run."
+  }
+}
