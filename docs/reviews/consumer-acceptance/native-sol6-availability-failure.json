@@ -1,0 +1,18 @@
+{
+  "scope": "gpt-6-sol availability failure before implementation",
+  "model": "gpt-6-sol",
+  "effort": "medium",
+  "cliVersion": "0.153.4",
+  "authentication": "ChatGPT",
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 6.687581326
+  },
+  "errorStatus": 400,
+  "error": "The gpt-6-sol model is not supported when using Codex with a ChatGPT account.",
+  "metadataWarning": true,
+  "qualityAccepted": false,
+  "performanceAccepted": false,
+  "rootCause": "Unresolved: local model cache lists this model, but this invocation was rejected. Cache presence is not proof of account eligibility."
+}
