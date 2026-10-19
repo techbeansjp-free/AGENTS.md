@@ -601,3 +601,5 @@ Claude競合・保存後中断の復旧完了：再開126.067秒、HEAD `8b78cf2
 Claude小規模対比較を実行前登録：alpha.21 baseline対alpha.20 candidate、5組順序BC/CB/BC/CB/BC、逐次実行、CLI2.1.282・Sonnet alias・effort medium固定（実modelUsageのmodel一致を別途確認）、base c37e08e05abc46b5a26af131f134d42a3c8a3b80、Issue1・exact Hello oracle・fresh独立Reviewer・Draft/CIを同一条件。runner `run-claude-delivery.mjs`は実装代行なし、起動から提出CIまで計時、親子全transcriptを照合。失敗・欠測があれば試行を置換せず停止。最初の2組が時間/tokens両方悪化なら費用節約のため停止し不合格。残りは従来の5組中央値/品質/最悪値基準を維持。Codex比較や過去Claude単発と合算しない。parserとusage反例5件・ESLint成功。runnerはこのcohortの前に固定した評価器であり製品CLIの自律実行機能とは区別する。
 
 Claude対比較の最初のbaselineは53.661秒で実装・独立レビュー完了後、Git control検査で停止。差分は2つの空config.worktree追加だけで値変更なし。Agentによる改ざんと断定せず、失敗とusageを`claude-cohort-initial-failure.json`に保持し当該cohortを打切り。評価setupで2ファイルを事前作成してpinする修正を行い、値変更・削除を引き続き拒否する8回帰とlint成功。修正後は新cohortとしてBC/CB/BC/CB/BCを同じモデル/effort/fixture/5組/停止基準で開始する。旧失敗を成功側へ混ぜない。
+
+修正後Claude cohortのbaseline1はDraft PR89/CI成功、total130.346秒・598,233 processed tokens・全usage照合済み。`claude-cohort-v2-first-baseline.json`へ記録。固定runnerで残りC/CB/BC/CB/BCを逐次開始。実model/effort/CLI/base一致と全usageを毎回確認し、失敗・欠測・2組futilityで停止する。評価用runner以外の実装/計画/修復介入はしない。全組終了前の性能改善判定はしない。
