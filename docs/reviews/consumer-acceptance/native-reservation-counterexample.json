@@ -1,0 +1,20 @@
+{
+  "scope": "Post-trial oracle reproduces reviewer finding at original candidate and verifies native repair; frozen trial oracle unchanged.",
+  "oracleSha256": "05bebe9c24f8c17c528140cd972dffc6a5d630dea777b26d2b1f24167463a3f7",
+  "results": [
+    {
+      "head": "5aeda65c24e3479a4a19d7f92e44cb152673e04e",
+      "status": 1,
+      "passed": false,
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSha256": "99f6cda962408ec173ad52b28c5103e747ac75dd24172e059714c05ae023c0df"
+    },
+    {
+      "head": "9182d43a19bd13103c5f45f8c52e1a1ee7c0d1b7",
+      "status": 0,
+      "passed": true,
+      "stdoutSha256": "5883a534145705e0ec0034601b23a69dc4525d55db11b44989a4eb82fab465f7",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}
