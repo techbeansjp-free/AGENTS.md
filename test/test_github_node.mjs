@@ -133,3 +133,17 @@ test('new Draft binds the submitted commit without claiming synthetic or Control
  const body=submitted[submitted.indexOf('--body')+1];assert(body.includes(head));assert.doesNotMatch(body,/Isolated|Controller verification|independent fresh review/);
  assert.equal(calls.filter(a=>a.includes('push')).length,1);
 });
+
+ test('successful pending observations reset consecutive transport retry budget',async()=>{
+ const {provider,data,calls}=setup();provider.expectedHead=head;let observations=0;
+ provider.api=route=>{
+  if(route.includes('/actions/runs?')){
+   observations++;
+   if([1,3,5].includes(observations))throw Object.assign(Error('network'),{code:'ETIMEDOUT'});
+   return {workflow_runs:observations<6?[]:[{id:10,head_sha:head,event:'pull_request',path:'.github/workflows/safety.yml',repository:{full_name:repository},pull_requests:[{number:1,head:{sha:head},base:{sha:base}}],status:'completed',conclusion:'success',html_url:'fixture-run'}]};
+  }
+  return route.includes('/jobs?')?{total_count:1,jobs:[{name:'check',status:'completed',conclusion:'success'}]}:data;
+ };
+ const result=await provider.observe(1,{timeout:1000,interval:0});
+ assert.equal(result.checks.check,'success');assert.equal(result.transportFailures.length,3);assert.equal(observations,6);assert.equal(calls.length,0);
+});

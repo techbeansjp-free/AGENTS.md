@@ -1,6 +1,6 @@
 {
-  "scope": "Single synthetic two-active-Claude-worker interruption and fresh-context recovery; CI pending; not performance acceptance.",
-  "status": "ci-pending",
+  "scope": "Single synthetic two-active-Claude-worker interruption and fresh-context recovery; CI success confirmed by subsequent read-only observation; not performance acceptance.",
+  "status": "ci-confirmed-after-observer-failure",
   "protocol": "claude-active-worker-interruption-protocol.json",
   "head": "7bd46bece45d7b48736ed8ff1637a6c8ac02a5bb",
   "interruption": {
@@ -186,5 +186,40 @@
     "Fault injection and recovery invocation belong to evaluation Host, not automatic production resumption.",
     "Interrupted terminal model totals absent; observed usage is incomplete.",
     "No comparative performance acceptance, merge or release."
-  ]
+  ],
+  "originalObservation": {
+    "status": "failed",
+    "reason": "Transient GitHub jobs API timeout",
+    "seconds": 1938.9189728720003
+  },
+  "ciReobservation": {
+    "observedAt": "2026-10-19T17:07:19.151Z",
+    "scope": "Read-only observation after original watcher failure; no model rerun",
+    "results": [
+      {
+        "workflowPath": ".github/workflows/complex.yml",
+        "head": "7bd46bece45d7b48736ed8ff1637a6c8ac02a5bb",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39279854015",
+        "transportFailures": []
+      },
+      {
+        "workflowPath": ".github/workflows/test.yml",
+        "head": "7bd46bece45d7b48736ed8ff1637a6c8ac02a5bb",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39279853981",
+        "transportFailures": []
+      }
+    ]
+  }
 }

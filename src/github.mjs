@@ -60,6 +60,7 @@ export class Github {
     demand(timeout===null||(Number.isSafeInteger(timeout)&&timeout>=0),'Invalid CI observation timeout');
     demand(Number.isSafeInteger(interval)&&interval>=0,'Invalid CI observation interval');
     const started=Date.now(),deadline=timeout===null?Infinity:started+timeout,transportFailures=[];
+    let consecutiveTransportFailures=0;
     do {
       try {
       const data=this.api(`repos/${this.repository}/pulls/${pr}`);this.assertPr(data);
@@ -90,13 +91,15 @@ export class Github {
           }
         }
       }
+        consecutiveTransportFailures=0;
       } catch(error) {
         // Only retry read-only observation on known transport failures. Never
         // retry mutation, authentication, invalid JSON, CI or identity failures.
         const stderr=String(error?.stderr??'');
         const transient=['ETIMEDOUT','ECONNRESET','EAI_AGAIN'].includes(error?.code)||
           /dial tcp [^\n]*i\/o timeout|TLS handshake timeout|connection reset by peer|temporary failure in name resolution/i.test(stderr);
-        if(!transient||transportFailures.length>=2||Date.now()>=deadline)throw error;
+        if(!transient||consecutiveTransportFailures>=2||Date.now()>=deadline)throw error;
+        consecutiveTransportFailures++;
         transportFailures.push({reason:'transient-read-transport',elapsedMs:Date.now()-started});
       }
       if(Date.now()>=deadline)break;await sleep(Math.min(interval,deadline-Date.now()));
