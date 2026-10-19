@@ -1,0 +1,18 @@
+{
+  "scope": "One prospective diagnostic for duplicate worker worktree allocation; not performance acceptance",
+  "candidateVersion": "0.5.900-alpha.48",
+  "candidateSha256": "d66e675c2d1476cdd9cbdb72ddd37875247149105e4ed53aabaedd8bfb402105",
+  "controlVersion": "0.5.900-alpha.44",
+  "changedSourceFiles": [
+    "skills/asc/references/coordination.md"
+  ],
+  "fixture": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "model": "sonnet",
+  "effort": "medium",
+  "reviewerMode": "generic",
+  "runnerSha256": "305373591440d2d26f9c933673e63683e8fba4f038bbae9f0b48bde062f0fe4d",
+  "trials": 1,
+  "mechanism": "Prepared worker worktrees are used directly; no extra Host worktree allocation and restart caused by isolation option. Worker implementation, independent review and all six oracles still required.",
+  "stop": "Keep failures; no replacement trial. Do not start repeated comparisons unless mechanism and all quality evidence pass.",
+  "priorEvidence": "Saved baseline dmQAQD stopped two workers after redundant Host worktree allocation; current alpha44 prior Cy4INo had no redundant worker isolation. Historical observations are not randomized control evidence."
+}
