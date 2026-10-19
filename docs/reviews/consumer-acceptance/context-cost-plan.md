@@ -575,3 +575,5 @@ Claude主要環境の前提確認：`claude-session-continuity.json`は同一ses
 Codex合成評価runnerには同一sessionへのcapacity再開を最大一度だけ追加。モデル・権限・Git controlの対応を維持し、各attemptを別ログに残す。通常の認証失敗は再開せず、繰返すcapacityは終了する。評価補助であり配布製品のcurrent-host supervisorではない。再開試行のusage完全性が未確定な間はexportに欠測を追加し、旧比較条件とはrecoveryPolicyで分離する。合成プロセス試験とexport回帰3件成功。実モデルの自動復旧は未検証。
 
 Claude小規模実走：配布alpha.18をClaude Code 2.1.282のSonnet進行役で使用し、実装→実テスト→独立Claude ReviewerがPASS。Hostで差分・対象commitを再確認し、公開合成Draft PR #85とCI成功に到達した。126.456秒は実装・レビューのCLI計測、503,022 tokensは親13messageとReviewer4messageをID重複排除した入力・出力・cacheの延べ合計で、Host modelUsageと4区分すべて一致。請求額ではない。実装・計画への人手修正0。ただし公開用Hostスクリプトは実走後に評価者が作成したため、配布製品の完全自律Deliveryや比較性能の合格証拠にはしない。詳細は`claude-small-delivery.json`。複雑Goal・複数Issue・中断復旧は引き続き未受入。
+
+Claude複雑2Issueの実走開始：固定base `b7a906256f6f0aa2705d2517e69f7d3a6503ccff`、配布alpha.18、Claude Code 2.1.282、Sonnet。予約9001と請求9002を同一進行役が別worktreeへbackground委譲したことを実イベントで確認。作業中のため成功・性能の判定は未実施。評価用`claude-usage.mjs`は明示した親・配下transcriptをmessage IDで重複排除し、HostのmodelUsageと照合する。欠測・配下欠落・不一致はcompleteにせず、2反例試験と既存小規模実走の4区分一致で確認した。
