@@ -1,0 +1,113 @@
+{
+  "scope": "Interim diagnostic of seven completed v3 executions, not performance acceptance. Parent assistant events only (parent_tool_use_id absent); deduplicated by tool-use id.",
+  "limits": [
+    "Command mentions do not prove reading or compliance.",
+    "Tool counts are not token costs or causal attribution.",
+    "worktree-create command counts may include help queries.",
+    "No prompts, project data or local paths are published."
+  ],
+  "runs": [
+    {
+      "pair": 1,
+      "side": "baseline",
+      "eventsSha256": "153a994614a155baa7acd3626a639b5a683b54dd99aaafc86bb5a9dbe3163a0f",
+      "parentToolCalls": 34,
+      "parentToolCounts": {
+        "Bash": 31,
+        "Agent": 3
+      },
+      "agentWorktreeIsolationCalls": 0,
+      "bashCommandsMentioningCoordinationReference": 0,
+      "worktreeCreateCommands": 5,
+      "worktreeCreateDotWorktreesArgumentCommands": 2
+    },
+    {
+      "pair": 1,
+      "side": "candidate",
+      "eventsSha256": "2cb76d6df0e502af057f21dae41654aa214dcba66a9015afdbf5770f2b6765e3",
+      "parentToolCalls": 24,
+      "parentToolCounts": {
+        "Bash": 21,
+        "Agent": 3
+      },
+      "agentWorktreeIsolationCalls": 0,
+      "bashCommandsMentioningCoordinationReference": 1,
+      "worktreeCreateCommands": 3,
+      "worktreeCreateDotWorktreesArgumentCommands": 0
+    },
+    {
+      "pair": 2,
+      "side": "candidate",
+      "eventsSha256": "380bdcdb728d3d314733c2659180ecb9fc54a04dd414d74ff8fa722fd9dc5e1e",
+      "parentToolCalls": 26,
+      "parentToolCounts": {
+        "Bash": 19,
+        "Agent": 5,
+        "TaskStop": 2
+      },
+      "agentWorktreeIsolationCalls": 2,
+      "bashCommandsMentioningCoordinationReference": 0,
+      "worktreeCreateCommands": 4,
+      "worktreeCreateDotWorktreesArgumentCommands": 2
+    },
+    {
+      "pair": 2,
+      "side": "baseline",
+      "eventsSha256": "3c480a43e8f21a4843ef0b05d587ebccaf237fb0d860b4be00cf9ba7d02a3401",
+      "parentToolCalls": 21,
+      "parentToolCounts": {
+        "Bash": 18,
+        "Agent": 3
+      },
+      "agentWorktreeIsolationCalls": 0,
+      "bashCommandsMentioningCoordinationReference": 0,
+      "worktreeCreateCommands": 3,
+      "worktreeCreateDotWorktreesArgumentCommands": 0
+    },
+    {
+      "pair": 3,
+      "side": "baseline",
+      "eventsSha256": "bcd3e934aad77001da3b8b46b2eb1daaee3e08994a1d540e87fc530385debf37",
+      "parentToolCalls": 20,
+      "parentToolCounts": {
+        "Bash": 17,
+        "Agent": 3
+      },
+      "agentWorktreeIsolationCalls": 0,
+      "bashCommandsMentioningCoordinationReference": 0,
+      "worktreeCreateCommands": 2,
+      "worktreeCreateDotWorktreesArgumentCommands": 0
+    },
+    {
+      "pair": 3,
+      "side": "candidate",
+      "eventsSha256": "65cdb665a25ce757eba0fc034e86b022b049f331b4670a8748da30791b73050a",
+      "parentToolCalls": 31,
+      "parentToolCounts": {
+        "Bash": 21,
+        "Agent": 5,
+        "TaskStop": 2,
+        "SendMessage": 3
+      },
+      "agentWorktreeIsolationCalls": 2,
+      "bashCommandsMentioningCoordinationReference": 1,
+      "worktreeCreateCommands": 2,
+      "worktreeCreateDotWorktreesArgumentCommands": 0
+    },
+    {
+      "pair": 4,
+      "side": "candidate",
+      "eventsSha256": "1704155db67093772773b6c1e12b25cc00f8791d8f31aaa64df9c5fece820fcc",
+      "parentToolCalls": 26,
+      "parentToolCounts": {
+        "Bash": 22,
+        "Agent": 3,
+        "SendMessage": 1
+      },
+      "agentWorktreeIsolationCalls": 0,
+      "bashCommandsMentioningCoordinationReference": 0,
+      "worktreeCreateCommands": 4,
+      "worktreeCreateDotWorktreesArgumentCommands": 2
+    }
+  ]
+}
