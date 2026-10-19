@@ -1,0 +1,111 @@
+{
+  "scope": "Complex clean-mount current Sol trial; failed before final re-review and delivery",
+  "model": "gpt-6-sol",
+  "effort": "medium",
+  "cliVersion": "codex-cli 0.155.0-alpha.16.3",
+  "mountMode": "clean-linux",
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 584.90481664
+  },
+  "error": "Selected model is at capacity. Please try a different model.",
+  "lastHead": "86d485b6d93a4690944fe076fa0a04aad9e8cfa6",
+  "usage": {
+    "cacheWriteInput": {
+      "observedTokens": 0,
+      "totalTokens": 0,
+      "missingThreads": [],
+      "threads": [
+        {
+          "id": "01a15305-8f80-7261-b371-44885c9661ee",
+          "tokens": 0
+        },
+        {
+          "id": "01a15306-4b3e-78a2-a9fe-67176a1bec96",
+          "tokens": 0
+        },
+        {
+          "id": "01a15306-74bf-76b0-af78-308a5a4b3829",
+          "tokens": 0
+        },
+        {
+          "id": "01a15309-4532-7991-a6c7-4c4c0d9cc2f6",
+          "tokens": 0
+        },
+        {
+          "id": "01a1530b-9710-7cc1-a45a-47da2712d903",
+          "tokens": 0
+        }
+      ],
+      "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+    },
+    "rootId": "01a15305-8f80-7261-b371-44885c9661ee",
+    "observedThreads": 5,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 2778511,
+      "cachedInputTokens": 2620160,
+      "outputTokens": 30324
+    },
+    "observedProcessedTokens": 2808835,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a15305-8f80-7261-b371-44885c9661ee",
+        "parent": null,
+        "usage": {
+          "input_tokens": 1597612,
+          "cached_input_tokens": 1537408,
+          "output_tokens": 10403
+        }
+      },
+      {
+        "id": "01a15306-4b3e-78a2-a9fe-67176a1bec96",
+        "parent": "01a15305-8f80-7261-b371-44885c9661ee",
+        "usage": {
+          "input_tokens": 347457,
+          "cached_input_tokens": 313728,
+          "output_tokens": 5867
+        }
+      },
+      {
+        "id": "01a15306-74bf-76b0-af78-308a5a4b3829",
+        "parent": "01a15305-8f80-7261-b371-44885c9661ee",
+        "usage": {
+          "input_tokens": 268870,
+          "cached_input_tokens": 250624,
+          "output_tokens": 6572
+        }
+      },
+      {
+        "id": "01a15309-4532-7991-a6c7-4c4c0d9cc2f6",
+        "parent": "01a15305-8f80-7261-b371-44885c9661ee",
+        "usage": {
+          "input_tokens": 200724,
+          "cached_input_tokens": 179328,
+          "output_tokens": 3111
+        }
+      },
+      {
+        "id": "01a1530b-9710-7cc1-a45a-47da2712d903",
+        "parent": "01a15305-8f80-7261-b371-44885c9661ee",
+        "usage": {
+          "input_tokens": 363848,
+          "cached_input_tokens": 339072,
+          "output_tokens": 4371
+        }
+      }
+    ]
+  },
+  "usageComplete": false,
+  "qualityAccepted": false,
+  "performanceAccepted": false,
+  "manualImplementationEdits": 0,
+  "limitations": [
+    "Two Issues implemented and integrated; review findings repaired but final HEAD lacks completed review.",
+    "No Draft PR/CI completion.",
+    "Capacity message does not identify account quota, service capacity, or client root cause.",
+    "Partial observed usage is not a complete cost."
+  ]
+}
