@@ -27,7 +27,7 @@ fs.closeSync(out);fs.closeSync(err);fs.writeFileSync(path.join(root,'process-res
 try{
  const records=p=>fs.readFileSync(p,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse),events=records(path.join(root,'events.jsonl')),result=events.findLast(e=>e.type==='result');
  if(run.status!==0||run.signal||result?.is_error||result?.subtype!=='success'||result.session_id!==session)throw Error('Claude trial did not complete');
- assertGitControlState(origin,controls,[worktree]);const head=command(['git','rev-parse','HEAD'],worktree),review=claudeReviewEvidence(events,head);
+ assertGitControlState(origin,controls,[worktree]);const head=command(['git','rev-parse','HEAD'],worktree),review=claudeReviewEvidence(events,head,ref=>command(['git','rev-parse','--verify',ref+'^{commit}'],worktree));
  const owner=path.join(root,'owner.json');fs.writeFileSync(owner,JSON.stringify({intent,allowedPaths:['greeting.py','test_greeting.py'],commands:[['python3','-I','test_greeting.py'],['python3','-I','-c','import sys;sys.path.insert(0,".");from greeting import greeting;assert type(greeting()) is str and greeting()=="Hello"']]}));
  const {verifyWorktree}=await import(pathToFileURL(path.join(pkg,'src/worktree-execution.mjs'))),verification=verifyWorktree(worktree,base,owner);if(!verification.passed||verification.head!==head)throw Error('Oracle mismatch');
  const dir=path.join(process.env.HOME,'.claude/projects',worktree.replace(/[^a-zA-Z0-9-]/g,'-')),ids=[session,...events.filter(e=>e.subtype==='task_started').map(e=>e.task_id)],transcripts=[];

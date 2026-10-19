@@ -603,3 +603,5 @@ Claude小規模対比較を実行前登録：alpha.21 baseline対alpha.20 candid
 Claude対比較の最初のbaselineは53.661秒で実装・独立レビュー完了後、Git control検査で停止。差分は2つの空config.worktree追加だけで値変更なし。Agentによる改ざんと断定せず、失敗とusageを`claude-cohort-initial-failure.json`に保持し当該cohortを打切り。評価setupで2ファイルを事前作成してpinする修正を行い、値変更・削除を引き続き拒否する8回帰とlint成功。修正後は新cohortとしてBC/CB/BC/CB/BCを同じモデル/effort/fixture/5組/停止基準で開始する。旧失敗を成功側へ混ぜない。
 
 修正後Claude cohortのbaseline1はDraft PR89/CI成功、total130.346秒・598,233 processed tokens・全usage照合済み。`claude-cohort-v2-first-baseline.json`へ記録。固定runnerで残りC/CB/BC/CB/BCを逐次開始。実model/effort/CLI/base一致と全usageを毎回確認し、失敗・欠測・2組futilityで停止する。評価用runner以外の実装/計画/修復介入はしない。全組終了前の性能改善判定はしない。
+
+Claude cohort v2は4試行目baselineのレビューhash対応付けで停止。完走3試行はB130.346秒/598233 tokens、C97.408秒/396084、C86.566秒/284326。失敗BはReviewerがPASS 62ed2beと短縮hashで返し、評価器が拒否した。`claude-matched-v2/`へ全3成功と失敗・停止を記録し五組不合格。評価器は短縮hashをGitで一意にcommitへ解決し提出HEADと一致した場合だけ受理するよう修正。文字列prefix一致、曖昧hash、短縮FAILとの矛盾を受理しない。関連10回帰とlint成功。旧失敗や待機時間を隠して完走に変更せず、今後の比較とは条件を分ける。

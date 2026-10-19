@@ -1,0 +1,122 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "skillBundleSha256": "8cd0618e7bb1110ca0919b08ab59f5daf9a5cc47b2833eb7f119e37db11f663e",
+    "version": "0.5.900-alpha.20",
+    "skillSha256": "bb0002a4a5915af9c7a53de6dcef5cd124cb374e4a61f2a564f6d4406107ea9f",
+    "identitySha256": "0eb9e9cf99e529cab05ef83a8e5e69d7a46ab9eefde229e19e088dbf3331a4a2"
+  },
+  "conditions": {
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "32fa6afd315fa84b619bb3539bce22c1163c1ea0e1494781b82e82fd3034375c",
+    "intentSha256": "712b83bd0cdec6d5d3439878da31f02e08a50379fd6bf471539227cbbcd54f9f",
+    "commands": [
+      [
+        "python3",
+        "-I",
+        "test_greeting.py"
+      ],
+      [
+        "python3",
+        "-I",
+        "-c",
+        "import sys;sys.path.insert(0,\".\");from greeting import greeting;assert type(greeting()) is str and greeting()==\"Hello\""
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "a0661033e2d6515ba3632fa893274d99bf43b5d6",
+  "review": {
+    "taskId": "a85e894fc21830a44",
+    "head": "a0661033e2d6515ba3632fa893274d99bf43b5d6",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 22,
+      "output_tokens": 4386,
+      "cache_read_input_tokens": 254131,
+      "cache_creation_input_tokens": 25787
+    },
+    "threads": [
+      {
+        "id": "65987a38-f5c3-4e74-a177-574fd49d4fc7",
+        "messageCount": 8,
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 3288,
+          "cache_read_input_tokens": 212009,
+          "cache_creation_input_tokens": 19677
+        }
+      },
+      {
+        "id": "a85e894fc21830a44",
+        "messageCount": 3,
+        "usage": {
+          "input_tokens": 6,
+          "output_tokens": 1098,
+          "cache_read_input_tokens": 42122,
+          "cache_creation_input_tokens": 6110
+        }
+      }
+    ],
+    "observedProcessedTokens": 284326,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 65.40159679599999,
+  "deliverySeconds": 21.040610574000006,
+  "elapsedSeconds": 86.565929343,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "a0661033e2d6515ba3632fa893274d99bf43b5d6",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/91",
+  "ci": {
+    "head": "a0661033e2d6515ba3632fa893274d99bf43b5d6",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39228912273",
+    "transportFailures": []
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Fresh-context simple change only; repair, multiple Issues and restart acceptance remain separate.",
+    "No merge or release."
+  ]
+}

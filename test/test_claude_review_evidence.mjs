@@ -5,3 +5,12 @@ test('Claude review accepts direct completed exact-HEAD reviewer',()=>assert.equ
 test('Claude review rejects self-report, stale or conflicting verdict and uncompleted descendants',()=>{
  for(const events of [[done],[{...start,spawn_depth:2},done],[start,{...done,status:'failed'}],[start,{...done,summary:`PASS ${'b'.repeat(40)}`}],[start,done,{...done,summary:`FAIL ${head}`}],[start,{...done,summary:`quoted PASS ${head}`}],[start,done,done]])assert.throws(()=>claudeReviewEvidence(events,head),/unambiguous/);
 });
+
+test('abbreviated verdict requires unique Git resolution, not prefix matching',()=>{
+ const short={...done,summary:'PASS '+head.slice(0,7)};
+ assert.throws(()=>claudeReviewEvidence([start,short],head),/unambiguous/);
+ assert.equal(claudeReviewEvidence([start,short],head,ref=>{assert.equal(ref,head.slice(0,7));return head;}).head,head);
+ assert.throws(()=>claudeReviewEvidence([start,short],head,()=>{throw Error('ambiguous object');}),/ambiguous/);
+ assert.throws(()=>claudeReviewEvidence([start,short],head,()=> 'b'.repeat(40)),/unambiguous/);
+ assert.throws(()=>claudeReviewEvidence([start,done,{...done,summary:'FAIL '+head.slice(0,7)}],head,()=>head),/unambiguous/);
+});
