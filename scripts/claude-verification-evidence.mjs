@@ -13,6 +13,9 @@ export function claudeVerificationEvidence(events,expected){
    // Only the exact expected worktree suffix is accepted; arbitrary trailing output is not JSON.
    const suffix='\nShell cwd was reset to '+expected.repo;
    let content=item.content.endsWith(suffix)?item.content.slice(0,-suffix.length):item.content;
+   // A caller may print the immediately preceding command's shell status.
+   // Require both the exact shell idiom and zero status; do not strip arbitrary output.
+   if(/\n\s*echo ["']EXIT: \$\?["']\s*$/.test(calls.get(item.tool_use_id))&&content.endsWith('\nEXIT: 0'))content=content.slice(0,-8);
    // A batched Git identity observation may precede the JSON; accept only this target.
    if(content.startsWith(expected.head+'\n'))content=content.slice(expected.head.length+1);
    let value;try{value=JSON.parse(content);}catch{continue;}

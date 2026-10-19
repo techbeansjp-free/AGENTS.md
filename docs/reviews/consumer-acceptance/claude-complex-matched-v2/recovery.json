@@ -1,0 +1,185 @@
+{
+  "schema": "asc-complex-evaluator-recovery/v1",
+  "cohort": "claude-complex-matched-v2",
+  "status": "failed-cohort-same-head-recovered",
+  "head": "7270a802dd23816ccead4c09243b9e2487deadba",
+  "tarballSha256": "325798d5e09a221daa0a358e03984f568c3e2fd80292c39520bcecef9425d30a",
+  "originalFailure": {
+    "error": "Missing successful in-Host worktree verification for submitted HEAD and owner contract",
+    "seconds": 391.295508436
+  },
+  "run": {
+    "status": 0,
+    "signal": null,
+    "seconds": 390.75172231
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 116,
+      "output_tokens": 40937,
+      "cache_read_input_tokens": 2067845,
+      "cache_creation_input_tokens": 186430
+    },
+    "threads": [
+      {
+        "id": "e8e67b51-72bd-41a2-a09f-bda52e4b191d",
+        "messageCount": 23,
+        "usage": {
+          "input_tokens": 46,
+          "output_tokens": 15852,
+          "cache_read_input_tokens": 1093355,
+          "cache_creation_input_tokens": 59616
+        }
+      },
+      {
+        "id": "a1c4f69f02d138fdf",
+        "messageCount": 3,
+        "usage": {
+          "input_tokens": 6,
+          "output_tokens": 1435,
+          "cache_read_input_tokens": 37526,
+          "cache_creation_input_tokens": 22191
+        }
+      },
+      {
+        "id": "a8cfd04f6238c0026",
+        "messageCount": 1,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 443,
+          "cache_read_input_tokens": 10788,
+          "cache_creation_input_tokens": 5113
+        }
+      },
+      {
+        "id": "a61cc31c9b5949aef",
+        "messageCount": 12,
+        "usage": {
+          "input_tokens": 24,
+          "output_tokens": 8770,
+          "cache_read_input_tokens": 385188,
+          "cache_creation_input_tokens": 33039
+        }
+      },
+      {
+        "id": "a1f00fd58d3a4e512",
+        "messageCount": 11,
+        "usage": {
+          "input_tokens": 22,
+          "output_tokens": 6289,
+          "cache_read_input_tokens": 290134,
+          "cache_creation_input_tokens": 25273
+        }
+      },
+      {
+        "id": "af7fee862234b982b",
+        "messageCount": 8,
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 8148,
+          "cache_read_input_tokens": 250854,
+          "cache_creation_input_tokens": 41198
+        }
+      }
+    ],
+    "observedProcessedTokens": 2295328,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "review": {
+    "taskId": "af7fee862234b982b",
+    "agentType": "claude",
+    "head": "7270a802dd23816ccead4c09243b9e2487deadba",
+    "verdict": "PASS"
+  },
+  "inHostVerification": {
+    "toolUseId": "toolu_01AEXXbahsLk5ZAQ4D43c15Q",
+    "head": "7270a802dd23816ccead4c09243b9e2487deadba",
+    "contractSha256": "8a96eeeb9b5df0d8ea090750ace1fd0fe4a08ca1baf6546548c7feae09e7f1ec",
+    "checks": 6,
+    "scope": "Observed coordinator Bash result; external oracle independently rechecked the same commit"
+  },
+  "oracleResults": [
+    {
+      "argv": [
+        "node",
+        "complex/oracle/reservation.mjs",
+        "complex",
+        "revised"
+      ],
+      "exit": 0
+    },
+    {
+      "argv": [
+        "node",
+        "complex/oracle/billing.mjs",
+        "complex",
+        "revised"
+      ],
+      "exit": 0
+    },
+    {
+      "argv": [
+        "node",
+        "complex/oracle/integration.mjs",
+        "complex"
+      ],
+      "exit": 0
+    },
+    {
+      "argv": [
+        "node",
+        "complex/oracle/unknown-keys.mjs",
+        "complex"
+      ],
+      "exit": 0
+    },
+    {
+      "argv": [
+        "node",
+        "complex/oracle/accessors.mjs",
+        "complex",
+        "revised"
+      ],
+      "exit": 0
+    },
+    {
+      "argv": [
+        "node",
+        "complex/oracle/revision.mjs",
+        "complex/previous",
+        "complex"
+      ],
+      "exit": 0
+    }
+  ],
+  "pr": 167,
+  "ci": {
+    "head": "7270a802dd23816ccead4c09243b9e2487deadba",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39317040228",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "7270a802dd23816ccead4c09243b9e2487deadba",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39317040280",
+    "transportFailures": []
+  },
+  "modelRestarts": 0,
+  "implementationEditsByEvaluator": 0,
+  "performanceAcceptance": false,
+  "reason": "Exact JSON succeeded, but shell EXIT: 0 suffix was rejected by evaluator. Original failed cohort retained; no replacement trial. Same saved commit rechecked after parser correction.",
+  "verificationEvidenceScope": "Observed Bash tool result, not cryptographic attestation; independent external oracle rechecked same commit."
+}

@@ -22,3 +22,12 @@ test('accepts exact target HEAD line from batched Git observation only',()=>{
  for(const content of ['e'.repeat(40)+'\n'+body,'prefix\n'+body,prefix+prefix+body,prefix+JSON.stringify({...expected,head:'e'.repeat(40)})])assert.throws(()=>claudeVerificationEvidence([call,result(expected,{content})],expected),/Missing successful/);
  assert.throws(()=>claudeVerificationEvidence([call,result(expected,{content:prefix+body,is_error:true})],expected),/Missing successful/);
 });
+
+
+test('accepts immediate shell status suffix only with its matching command',()=>{
+ const statusCall=structuredClone(call);statusCall.message.content[0].input.command+=' 2>&1\necho "EXIT: $?"';
+ const body=JSON.stringify(expected),content=body+'\nEXIT: 0';
+ assert.equal(claudeVerificationEvidence([statusCall,result(expected,{content})],expected).head,expected.head);
+ assert.equal(claudeVerificationEvidence([statusCall,result(expected,{content:content+'\nShell cwd was reset to '+expected.repo})],expected).head,expected.head);
+ for(const events of [[call,result(expected,{content})],[statusCall,result(expected,{content:body+'\nEXIT: 1'})],[statusCall,result(expected,{content:content+'\nextra'})],[statusCall,result(expected,{content,is_error:true})],[statusCall,result({...expected,passed:false},{content:JSON.stringify({...expected,passed:false})+'\nEXIT: 0'})]])assert.throws(()=>claudeVerificationEvidence(events,expected),/Missing successful/);
+});
