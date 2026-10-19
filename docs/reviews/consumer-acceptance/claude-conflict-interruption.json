@@ -1,0 +1,40 @@
+{
+  "scope": "Claude same-session recovery from injected Git conflict and saved-work interruption; continuation pending",
+  "injection": {
+    "kind": "pre-launch synthetic fault injection",
+    "base": "4394ed49d3a4fa1e1197f03e1e2e0e88a92d5a32",
+    "left": "75aab2b941e5eed4f559510829321efce57bad7d",
+    "right": "d407fbb595eef1f3d410cada5c49b92be921d341",
+    "conflictingPaths": [
+      "complex/reservation/service.mjs"
+    ],
+    "gitConflictObserved": true,
+    "evaluatorResolution": false,
+    "scope": "Conflicting validation error-code faults after accepted shared-contract repair; no new business feature"
+  },
+  "checkpoint": {
+    "status": 255,
+    "signal": null,
+    "signalSent": true,
+    "interrupted": true,
+    "checkpoint": true,
+    "descendantBoundary": "Linux synthetic transient service; all processes stopped before handoff",
+    "stopped": true,
+    "seconds": 36.063517827000005,
+    "files": [
+      {
+        "name": "reservation/service.mjs",
+        "before": "4ee0f8f007dc73813cfd1cc08d0b92817b9ab8d7aef2cc83696765e5fa7ecdce",
+        "after": "230842c74306284e5d257e6147085105758ae022bbf1137690be7d525408fa35"
+      }
+    ],
+    "usageComplete": false
+  },
+  "qualityAccepted": false,
+  "limitations": [
+    "Interruption uses Linux evaluation-only transient service; not product OS requirement",
+    "Only coordinator was writing at interruption; does not prove two active-worker recovery",
+    "Interrupted usage incomplete; not comparative performance evidence",
+    "Resumed process is running; no final review or Draft/CI yet"
+  ]
+}
