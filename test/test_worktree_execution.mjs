@@ -88,8 +88,8 @@ test('verification selects permitted path rules, discovers nested rules and igno
  f.git(f.work,'add','.');f.git(f.work,'commit','-qm','scoped contracts');const base=f.git(f.work,'rev-parse','HEAD');
  write('src/ui/view.cjs','module.exports=2;');f.git(f.work,'commit','-qam','UI change');
  f.contract.allowedPaths=['src/ui/view.cjs'];f.save();
- const open=fs.openSync,reads=[];
- t.mock.method(fs,'openSync',function(file,...args){if(typeof file==='string')reads.push(path.relative(f.work,file).split(path.sep).join('/'));return open.call(fs,file,...args);});
+ const open=fs.openSync,reads=[],realWork=fs.realpathSync.native(f.work);
+ t.mock.method(fs,'openSync',function(file,...args){if(typeof file==='string')reads.push(path.relative(realWork,fs.realpathSync.native(file)).split(path.sep).join('/'));return open.call(fs,file,...args);});
  const verified=verifyWorktree(f.work,base,f.owner);assert.equal(verified.passed,true);assert.equal(verified.contextSha256,startWorktree(f.work,f.contract.allowedPaths).context.digest);
  assert.ok(reads.includes('src/ui/AGENTS.md'));assert.ok(reads.includes('rules/ui.md'));assert.ok(!reads.includes('rules/api.md'));
  // A selected missing rule must still fail before running commands.
