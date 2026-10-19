@@ -1,0 +1,28 @@
+{
+  "source": "claude-coordination-bundle-result.json",
+  "eventsSha256": "23ac3a1bc1267028c1ac4e30f3edd5de3c442e77feb32ab0e81ea71cc2901eb4",
+  "finding": "Inside Claude sandbox, worktree-verify rejected untracked read-only null protection masks. Independent review, six direct oracles and outer evaluator verification/CI succeeded. Outer success does not prove the in-sandbox CLI succeeded.",
+  "rootMessageUsage": {
+    "method": "Deduplicate message.id, maximum cumulative value per input/output/cache field; stage changes on first worker Agent call and independent_review call. Tool calls are not model turns.",
+    "preparation": {
+      "messages": 10,
+      "tokens": 454856,
+      "toolCalls": 21
+    },
+    "workersAndIntegration": {
+      "messages": 9,
+      "tokens": 703152,
+      "toolCalls": 9
+    },
+    "reviewAndDelivery": {
+      "messages": 3,
+      "tokens": 263687,
+      "toolCalls": 1
+    },
+    "total": 1421695,
+    "wholeTrialTokens": 2076645
+  },
+  "fixBoundary": "No automatic filename or mount trust. Only exact out-of-repo owner hostMaskedPaths, disjoint from change scope, may omit observed read-only null mounts from untracked status. Kernel mount identity must remain unchanged at command boundaries. Underlying hidden content is not verified.",
+  "validation": "Real bwrap namespace with unapproved/approved masks, writable mask, changed tracked source, unrelated untracked file, generated untracked file, symlink and scope-overlap cases. No model calls for this diagnostic.",
+  "performanceClaim": false
+}

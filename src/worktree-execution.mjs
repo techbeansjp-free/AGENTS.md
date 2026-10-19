@@ -6,6 +6,7 @@ import {execFileSync,spawnSync} from 'node:child_process';
 import {performance} from 'node:perf_hooks';
 import {createHash} from 'node:crypto';
 import {projectLocation} from './project-location.mjs';
+import {hostMaskedPaths} from './host-masked-paths.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const gitEnvironment=()=>Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.toUpperCase().startsWith('GIT_')));
 // These non-interactive commands have no stdin payload. Avoid an unnecessary
@@ -34,10 +35,16 @@ export function verifyWorktree(directory,base,ownerFile){
  // Every accepted changed path must be in allowedPaths below; select its nested and scoped rules too.
  const start=describeProject(location,contract.allowedPaths);
  const baseHead=git(repo,'rev-parse','--verify','--end-of-options',base+'^{commit}');git(repo,'merge-base','--is-ancestor',baseHead,start.head);
+ const permittedMasks=contract.hostMaskedPaths??[];
+ if(!Array.isArray(permittedMasks)||permittedMasks.some(p=>typeof p!=='string'||!p||path.isAbsolute(p)||p.split('/').some(s=>!s||s==='.'||s==='..')||contract.allowedPaths.some(a=>a===p||a.startsWith(p+'/')||p.startsWith(a+'/')))||new Set(permittedMasks).size!==permittedMasks.length)throw Error('Expected exact owner hostMaskedPaths outside change scope');
+ const masks=permittedMasks.length?hostMaskedPaths(repo):[],maskedNames=new Set(permittedMasks);
+ if(permittedMasks.some(name=>!masks.some(mask=>mask.path===name)))throw Error('Owner hostMaskedPaths must be read-only null mounts');
  const state=()=>{
   const entries=execFileSync('git',['ls-files','-v','-z'],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
   if(entries.some(e=>e[0]==='S'||e[0]===e[0].toLowerCase()))throw Error('Hidden index flags prevent verification of tracked source');
-  return git(repo,'status','--porcelain=v1','--untracked-files=all');
+  if(permittedMasks.length&&JSON.stringify(hostMaskedPaths(repo))!==JSON.stringify(masks))throw Error('Host protection mounts changed during verification; result is invalid');
+  const status=execFileSync('git',['status','--porcelain=v1','-z','--untracked-files=all'],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',maxBuffer:gitMaxBuffer});
+  return status.split('\0').filter(Boolean).filter(entry=>!(entry.startsWith('?? ')&&maskedNames.has(entry.slice(3)))).join('\0');
  };
  if(state())throw Error('Commit intended changes before verification; preserve unrelated work separately');
  const names=execFileSync('git',['diff','--name-only','--no-renames','-z',baseHead,start.head],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
@@ -53,5 +60,5 @@ export function verifyWorktree(directory,base,ownerFile){
   if(projectContext(repo,contract.allowedPaths).digest!==start.context.digest)throw Error('Project context changed during verification; result is invalid');
   if(p.error||p.status!==0)break;
  }
- return {schema:'asc-worktree-verification/v1',execution:'current-host-worktree',repo,base:baseHead,head:start.head,contractSha256:hash(bytes),contextSha256:start.context.digest,intent:contract.intent,results,passed:results.length===contract.commands.length&&results.every(r=>r.exit===0&&!r.error),independentReview:'required',deliveryAuthorized:false};
+ return {schema:'asc-worktree-verification/v1',execution:'current-host-worktree',repo,base:baseHead,head:start.head,contractSha256:hash(bytes),contextSha256:start.context.digest,intent:contract.intent,results,...(permittedMasks.length?{hostMaskedPaths:permittedMasks}:{}),passed:results.length===contract.commands.length&&results.every(r=>r.exit===0&&!r.error),independentReview:'required',deliveryAuthorized:false};
 }

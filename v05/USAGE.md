@@ -475,3 +475,9 @@ v0.4で開始した作業中worktreeは、明示的に移行するまで既存�
 Git管理予定がないプロジェクトも、要求・変更内容・実テスト・独立レビューに基づき完了できる。Git初期化やPRは必須ではない。commit拘束やPR提出は、Gitで提出する場合の追加条件である。
 
 Git未管理の親ディレクトリへASCを置き、配下の複数repoで共用できる。資産導入は指定した親だけを変更し、子repoを自動初期化・変更・commitしない。進行役は共通ルールと対象repoの固有ルールを読み、許可範囲・検証結果・Gitのbase/HEADをrepoごとに区別する。Git管理済みrepoでの実装には各repoの専用worktreeを使い、repo横断の要求には統合検証も行う。非Gitファイルも許可範囲内の検証対象にできるが、Git差分に含まれているとは記録しない。この案内は複数repoを単一トランザクションとして自動提出する機能を意味しない。
+
+### Hostが作る読取り専用のnull mask
+
+Linux Hostのsandboxが保護目的で作る読取り専用`/dev/null` mountをGitが未追跡ファイルと報告する場合、`worktree-verify`は既定では未追跡ファイルとして拒否する。例外が必要なら、ownerがrepo外の検証契約に`hostMaskedPaths`の完全一致相対path配列を明示する。例は`"hostMaskedPaths":[".claude/settings.json"]`。ファイル名やHost名だけで自動許可せず、実装Agentが自己承認して追加してはいけない。この指定はmountで隠された元のファイル内容を検証しないことへの許可であり、その内容の安全性を証明しない。
+
+指定先は実際の読取り専用null device mountであり、`allowedPaths`と重ならないことが必要。通常ファイル・symlink・書込み可能mountは許可しない。検証中のmount変更、tracked差分、新しい未追跡成果は引き続き拒否する。結果の`hostMaskedPaths`で対象を報告する。他OSでこの指定を流用せず、必要なHost境界を確認する。

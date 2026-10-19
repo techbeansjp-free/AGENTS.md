@@ -20,6 +20,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 
 [準備情報の同梱案の単発診断](claude-coordination-bundle-protocol.json)では、追加した`start --coordination`は正常に利用されたが、進行役は配布ガイドを再読し、実装とoracleも委譲前に読んだ。6 oracle・独立レビュー・合成Draft PR157・両CIは成功、全Contextの取得usageは2,076,645 tokens、全体360.54秒だった。過去の単発とは対比較せず性能改善とは判定しない。重複調査を減らす狙いが成立しなかったため、この追加オプションは取り下げた。同一試行を繰り返さず、原記録を保存する。
 
+[Host内検証の追加調査](claude-host-verification-gap.json)で、alpha.42はClaude sandbox内の`worktree-verify`が保護用null mountを未追跡として拒否し、外側の評価Hostによる検証だけが通っていたと分かった。最終PR/CI成功を、内側CLI成功の証拠として扱わない。
+
 主な利用HostとしてClaude Codeを評価する。上表はCodexの記録であり、Claude Codeの代用にしない。Claude Codeで確認した範囲は次のとおり。モデルは同HostのSonnetを使用し、Codexへ委譲していない。
 
 | Claude Code current-hostの実証 | 対象証拠 | 判定・限界 |

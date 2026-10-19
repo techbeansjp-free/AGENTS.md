@@ -30,6 +30,7 @@
   "src/goal-run.mjs",
   "src/goal-worker.mjs",
   "src/host-execution.mjs",
+  "src/host-masked-paths.mjs",
   "src/host-process.mjs",
   "src/host-verification-assets.mjs",
   "src/issue-run.mjs",
