@@ -1,3 +1,4 @@
+import {assertConflictFaultsRemoved} from './native-conflict-fixture.mjs';
 import {readInterruptionEvidence} from './native-interrupted-attempt.mjs';
 import {assertGitControlState} from './native-git-boundary.mjs';
 /** Finish a synthetic complex candidate only; no implementation or repair in this driver. */
@@ -16,6 +17,13 @@ const {Github}=await import(pathToFileURL(path.join(root,'distribution/package/s
 const owner=path.join(root,'owner.json');fs.writeFileSync(owner,JSON.stringify({intent:s.phase==='revision'?'Apply explicit currency revision preserving original security and stored replay records':'Complete both synthetic reservation and billing requirements; no revision phase yet',allowedPaths:['complex/reservation/service.mjs','complex/billing/service.mjs'],commands:[...['reservation','billing','integration','unknown-keys'].map(name=>[process.execPath,`complex/oracle/${name}.mjs`,'complex',...(s.phase==='revision'&&['reservation','billing'].includes(name)?['revised']:[])]),...(s.phase==='revision'?[[process.execPath,'complex/oracle/revision.mjs','complex/previous','complex']]:[])]}));
 const verification=verifyWorktree(s.worktree,s.base,owner);if(!verification.passed||verification.head!==proof.review.head)throw Error('Complex oracle or reviewed HEAD mismatch');
 const data={mode,phase:s.phase??'original',head,base:s.base,remoteBase:s.remoteBase,review:proof.review,usage:proof.usage,verification,implementationAndReviewSeconds:result.seconds,driverImplementationEdits:0,manualHandoffs:0};
+if(s.conflictInjected){
+ const injection=read('conflict-injection.json');
+ if(injection.base!==s.base||injection.gitConflictObserved!==true||injection.evaluatorResolution!==false)throw Error('Missing conflict injection evidence');
+ if(command(['git','diff','--name-only','--diff-filter=U'],s.worktree))throw Error('Unresolved conflict');
+ assertConflictFaultsRemoved(command(['git','show',head+':complex/reservation/service.mjs'],s.worktree));
+ data.conflictRecovery={injection,injectedFaultsRemoved:true,verifiedAtHead:head,scope:'Injected validation-code conflict plus explicit revision; not arbitrary conflict recovery.'};
+}
 if(s.parallelInterruptionRequested)data.parallelInterruptionCoverage={requested:true,verified:false,requiredEvidence:'Observe distinct worker worktrees, preserved commits and integration before interruption; a successful resumed delivery alone does not prove this scenario.'};
 const interruption=readInterruptionEvidence(root,s.interruptionRequired===true);
 if(interruption){
