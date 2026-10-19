@@ -1,0 +1,48 @@
+{
+  "scope": "Prospective complex two-Issue shared currency-contract comparison, not general performance or v0.4 comparison",
+  "baseline": {
+    "version": "0.5.900-alpha.47",
+    "sha256": "325798d5e09a221daa0a358e03984f568c3e2fd80292c39520bcecef9425d30a",
+    "skillOrigin": "Frozen alpha.21 entrypoint, with common current reference files and runtime"
+  },
+  "candidate": {
+    "version": "0.5.900-alpha.44",
+    "sha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9"
+  },
+  "changedSourceFiles": [
+    "skills/asc/SKILL.md"
+  ],
+  "fixture": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "model": "sonnet",
+  "effort": "medium",
+  "reviewerMode": "generic",
+  "pairs": 5,
+  "order": [
+    [
+      "baseline",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "baseline"
+    ],
+    [
+      "baseline",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "baseline"
+    ],
+    [
+      "baseline",
+      "candidate"
+    ]
+  ],
+  "earlyStop": "Stop on execution or quality failure; after two complete pairs stop if candidate median time and tokens are both no better. Preserve all attempts.",
+  "acceptance": "All six inner and outer oracles; independent submitted-HEAD review; both Draft PR workflows; complete parent and descendant usage; both medians lower and neither maximum worse. No evaluator implementation or planning.",
+  "comparisonLimits": "Estimates effect of the accumulated entrypoint changes with common current runtime/reference assets. Does not compare complete historical releases. Prior observations not pooled.",
+  "runnerSha256": "305373591440d2d26f9c933673e63683e8fba4f038bbae9f0b48bde062f0fe4d",
+  "status": "stopped after first baseline evaluator failure; no replacement trials",
+  "result": "claude-complex-matched-failure.json"
+}

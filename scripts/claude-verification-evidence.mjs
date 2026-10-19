@@ -12,7 +12,9 @@ export function claudeVerificationEvidence(events,expected){
    // Claude may append its own cwd-reset notification after a successful command.
    // Only the exact expected worktree suffix is accepted; arbitrary trailing output is not JSON.
    const suffix='\nShell cwd was reset to '+expected.repo;
-   const content=item.content.endsWith(suffix)?item.content.slice(0,-suffix.length):item.content;
+   let content=item.content.endsWith(suffix)?item.content.slice(0,-suffix.length):item.content;
+   // A batched Git identity observation may precede the JSON; accept only this target.
+   if(content.startsWith(expected.head+'\n'))content=content.slice(expected.head.length+1);
    let value;try{value=JSON.parse(content);}catch{continue;}
    if(value.schema!=='asc-worktree-verification/v1'||value.passed!==true||value.repo!==expected.repo||value.base!==expected.base||value.head!==expected.head||value.contractSha256!==expected.contractSha256||value.contextSha256!==expected.contextSha256)continue;
    if(!Array.isArray(value.results)||value.results.length!==expected.results.length||value.results.some((result,index)=>result.exit!==0||result.error||JSON.stringify(result.argv)!==JSON.stringify(expected.results[index].argv)))continue;

@@ -15,3 +15,10 @@ test('accepts exact Host cwd-reset suffix without accepting arbitrary trailing o
  for(const content of [body+'\nother output',body+'\nShell cwd was reset to /other',body+suffix+'\nExit code 1',body+suffix+'\n'+body])assert.throws(()=>claudeVerificationEvidence([call,result(expected,{content})],expected),/Missing successful/);
  assert.throws(()=>claudeVerificationEvidence([call,result(expected,{content:body+suffix,is_error:true})],expected),/Missing successful/);
 });
+
+test('accepts exact target HEAD line from batched Git observation only',()=>{
+ const body=JSON.stringify(expected),prefix=expected.head+'\n';
+ for(const content of [prefix+body,prefix+body+'\nShell cwd was reset to '+expected.repo])assert.equal(claudeVerificationEvidence([call,result(expected,{content})],expected).head,expected.head);
+ for(const content of ['e'.repeat(40)+'\n'+body,'prefix\n'+body,prefix+prefix+body,prefix+JSON.stringify({...expected,head:'e'.repeat(40)})])assert.throws(()=>claudeVerificationEvidence([call,result(expected,{content})],expected),/Missing successful/);
+ assert.throws(()=>claudeVerificationEvidence([call,result(expected,{content:prefix+body,is_error:true})],expected),/Missing successful/);
+});
