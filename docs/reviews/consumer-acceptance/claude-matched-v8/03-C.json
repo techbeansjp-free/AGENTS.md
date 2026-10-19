@@ -1,0 +1,126 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "reviewerMode": "registered",
+    "reviewerDefinitionSha256": "345d7a8a922186af540b4b4ab3484ca8cd85737fae27a824862a93bea934159a",
+    "skillBundleSha256": "17c7735686a2ac1500e507a98b3088c16aec8c186b25f3e51b29988ab8272afa",
+    "version": "0.5.900-alpha.36",
+    "skillSha256": "8668c24d8dc7ef8f5108b5577fa386315ae51e7c5b42fa4e43621ad27590a116",
+    "identitySha256": "b3ba82d33f97155429c3f3afe3a5f490e32a05b23b668d0e1ac28d35abe79a99"
+  },
+  "conditions": {
+    "runnerSha256": "9952128fc7df798f1674ee31c38de81257d289b82ab2a31c7e55fd258d62fcc2",
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "030d39551d2de85f2b12dc91719b47dabba6d1f2042d6ccbde8e45b419cf39ac",
+    "intentSha256": "712b83bd0cdec6d5d3439878da31f02e08a50379fd6bf471539227cbbcd54f9f",
+    "commands": [
+      [
+        "python3",
+        "-I",
+        "test_greeting.py"
+      ],
+      [
+        "python3",
+        "-I",
+        "-c",
+        "import sys;sys.path.insert(0,\".\");from greeting import greeting;assert type(greeting()) is str and greeting()==\"Hello\""
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "5dc1e40be39c25606894f6c46c8e33c1e1fa7696",
+  "review": {
+    "taskId": "a7f798f04c8fce634",
+    "agentType": "asc-reviewer",
+    "head": "5dc1e40be39c25606894f6c46c8e33c1e1fa7696",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 32,
+      "output_tokens": 6290,
+      "cache_read_input_tokens": 364316,
+      "cache_creation_input_tokens": 30254
+    },
+    "threads": [
+      {
+        "id": "efa830fd-4611-4959-b22c-88bc468d5b9c",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 3766,
+          "cache_read_input_tokens": 273822,
+          "cache_creation_input_tokens": 21119
+        }
+      },
+      {
+        "id": "a7f798f04c8fce634",
+        "messageCount": 6,
+        "usage": {
+          "input_tokens": 12,
+          "output_tokens": 2524,
+          "cache_read_input_tokens": 90494,
+          "cache_creation_input_tokens": 9135
+        }
+      }
+    ],
+    "observedProcessedTokens": 400892,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 99.52410787800001,
+  "deliverySeconds": 20.219962386,
+  "elapsedSeconds": 119.853224284,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "5dc1e40be39c25606894f6c46c8e33c1e1fa7696",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/140",
+  "ci": {
+    "head": "5dc1e40be39c25606894f6c46c8e33c1e1fa7696",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39262152467",
+    "transportFailures": []
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Fresh-context simple change only; repair, multiple Issues and restart acceptance remain separate.",
+    "No merge or release."
+  ]
+}

@@ -22,7 +22,7 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 | 実Git競合・保存後中断・再開 | [中断再開](claude-conflict-interruption.json) | 同じHost sessionで保存済み成果から再開しCI成功。単一書込み担当のみ。停止・再開の起動は評価用Host処理 |
 | 2workerの保存成果から統合・再開 | [worker再開](claude-worker-recovery.json) | 両worktreeの中断時bytesを最終commitへ保持、独立レビュー・6 oracle・Draft PR104の両CI成功。4 Contextの取得usage照合成功。片方は停止前に完了済み、評価器修復を挟むため無中断性能には不使用 |
 | 複雑2 Issue・通貨契約変更の無介入実装 | [候補診断](claude-complex-currency-diagnostic.json)、[同条件の対照](claude-complex-currency-baseline.json) | 双方6 oracle・独立レビュー・Draft PR128/129両CI・全usage照合成功。候補568.65秒/3,740,727 tokens、対照398.88秒/2,849,262で改善不成立。候補の二重worktree起動とpatch転記失敗を既存Skillで是正。単発比較で性能保証とはしない |
-| 時間・全Agent tokensの削減 | [直近v7](claude-matched-v7/summary.json)、[v6](claude-matched-v6/summary.json)、[v5](claude-matched-v5/summary.json)、[v4](claude-matched-v4/summary.json) | v7は事前の無効性停止条件に達し2組4試行で終了。全件品質・usage・Draft PR/CI成功だが時間中央値80.86→101.93秒、tokens中央値336,190→385,953で改善不成立。5組完了とは扱わない |
+| 時間・全Agent tokensの削減 | [登録有無の固定5組v8](claude-matched-v8/summary.json)、[v7](claude-matched-v7/summary.json)、[v6](claude-matched-v6/summary.json) | v8は同一alpha.36の登録有無のみを比較。全10件品質・usage・PR/CI成功。時間中央値103.19→96.19秒、tokens中央値362,563→395,352、最大値も悪化し性能不合格。登録Reviewerを高速化の既定策とは扱わない |
 | 登録Reviewerから小規模Draft PR/CI | [配布・委譲](claude-registered-reviewer.json)、[提出まで](claude-registered-reviewer-delivery.json) | canonical手順を組み込んだ同一Reviewer定義を使用。提出HEADを承認したtaskの種別も照合。単発の実装・レビュー54.13秒、提出・CIを含め76.03秒・314,226 tokens、品質・全usage・PR136/CI成功。一般的な性能改善の証明ではない |
 
 [登録Reviewerの複雑2 Issue確認](claude-registered-reviewer-complex.json)は、進行役による互換性修復・6 oracle・独立レビュー・Draft PR137/両CIまで完走した（全体530.64秒）。観測tokensは2,811,301だがworkerの終端usageが1件欠け、Hostのoutput集計との差は1,180。別ストリームにも終端がなく、補間せず性能判定を未成立とした。再実走で置き換えない。
