@@ -1,10 +1,11 @@
 /** Evaluation observation, not a cryptographic attestation of Host execution. */
-export function claudeVerificationEvidence(events,expected){
+import {capturedVerification} from './claude-verification-capture.mjs';
+export function claudeVerificationEvidence(events,expected,capture){
  const calls=new Map();let observed;
  for(const event of events){
   if(event.parent_tool_use_id)continue;
   for(const item of event.message?.content??[]){
-   if(item.type==='tool_use'&&item.name==='Bash'&&typeof item.input?.command==='string'&&/\bworktree-verify\b/.test(item.input.command))calls.set(item.id,item.input.command);
+   if(item.type==='tool_use'&&item.name==='Bash'&&typeof item.input?.command==='string'&&(capture?item.input.command.includes(capture.command):/\bworktree-verify\b/.test(item.input.command)))calls.set(item.id,item.input.command);
    if(item.type!=='tool_result'||!calls.has(item.tool_use_id))continue;
    // A later failure invalidates an earlier success; coordinator prose is never evidence.
    observed=undefined;
@@ -12,7 +13,8 @@ export function claudeVerificationEvidence(events,expected){
    // Claude may append its own cwd-reset notification after a successful command.
    // Only the exact expected worktree suffix is accepted; arbitrary trailing output is not JSON.
    const suffix='\nShell cwd was reset to '+expected.repo;
-   let content=item.content.endsWith(suffix)?item.content.slice(0,-suffix.length):item.content;
+   let content=capture?capturedVerification(item.content,capture.marker):(item.content.endsWith(suffix)?item.content.slice(0,-suffix.length):item.content);
+   if(content===null)continue;
    // A caller may print the immediately preceding command's shell status.
    // Require both the exact shell idiom and zero status; do not strip arbitrary output.
    const status=calls.get(item.tool_use_id).match(/(?:\n|;)[ \t]*echo "(EXIT: |exit[= ])\$\?"[ \t]*$/);

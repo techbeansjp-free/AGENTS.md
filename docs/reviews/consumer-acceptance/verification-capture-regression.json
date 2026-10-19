@@ -1,0 +1,35 @@
+{
+  "scope": "Isolated saved synthetic worktree capture regression; no new Agent calls, no retroactive performance or delivery acceptance",
+  "network": "unshared",
+  "source": "read-only",
+  "home": "temporary",
+  "head": "47db07683c0aa84a5f29c0728b8841a4ab0d94cf",
+  "checks": 6,
+  "passed": true,
+  "commands": [
+    {
+      "exit": 0,
+      "seconds": 0.071785164
+    },
+    {
+      "exit": 0,
+      "seconds": 0.075943705
+    },
+    {
+      "exit": 0,
+      "seconds": 0.06348650699999996
+    },
+    {
+      "exit": 0,
+      "seconds": 0.04363805400000001
+    },
+    {
+      "exit": 0,
+      "seconds": 0.04149881299999998
+    },
+    {
+      "exit": 0,
+      "seconds": 0.04855819500000001
+    }
+  ]
+}

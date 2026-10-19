@@ -48,6 +48,17 @@ test('Claude export retains actual model and rejects incomplete or intervened ob
  assert.equal(run({...good,verification:verified,inHostVerification:eventEvidence}).status,0);
  assert.deepEqual(JSON.parse(fs.readFileSync(output)).evaluationCoverage.inHostVerification,eventEvidence);
  assert.notEqual(run({...good,verification:verified,inHostVerification:{...eventEvidence,toolUseId:'invented'}}).status,0);
+ const priorSetup=JSON.parse(fs.readFileSync(path.join(root,'setup.json'))),capture={command:'node /synthetic/capture.mjs',marker:'1'.repeat(32)};
+ write('setup.json',{...priorSetup,verificationCapture:capture});
+ fs.writeFileSync(path.join(root,'events.jsonl'),[
+  {message:{content:[{type:'tool_use',name:'Bash',id:'verify',input:{command:capture.command}}]}},
+  {message:{content:[{type:'tool_result',tool_use_id:'verify',content:`noise\nASC_VERIFY_${capture.marker}_BEGIN\n${JSON.stringify({status:0,error:null,stdout:JSON.stringify(verified),stderr:''})}\nASC_VERIFY_${capture.marker}_END\nmore noise`}]}}
+ ].map(JSON.stringify).join('\n'));
+ assert.equal(run({...good,verification:verified,inHostVerification:eventEvidence}).status,0);
+ assert.deepEqual(JSON.parse(fs.readFileSync(output)).evaluationCoverage.inHostVerification,eventEvidence);
+ write('setup.json',priorSetup);
+ assert.notEqual(run({...good,verification:verified,inHostVerification:eventEvidence}).status,0);
+
 
  for(const change of [d=>d.usage.complete=false,d=>d.usage.reconciledWithHostModelUsage=false,d=>d.implementationIntervention=1,d=>d.session='wrong',d=>d.run.status=1,d=>d.modelUsage.other={}]){const bad=structuredClone(good);change(bad);assert.notEqual(run(bad).status,0);}
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^GIT_/i.test(k)));

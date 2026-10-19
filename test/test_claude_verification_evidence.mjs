@@ -53,3 +53,28 @@ test('accepts space-separated immediate status with exact matching zero only',()
  const literal=structuredClone(call);literal.message.content[0].input.command+='; echo "exit 0"';
  assert.throws(()=>claudeVerificationEvidence([literal,result(expected,{content:body+'\nexit 0'})],expected),/Missing successful/);
 });
+
+test('framed verification ignores shell chatter but not failed, duplicate or stale results',()=>{
+ const capture={command:'node /synthetic/capture-verification.mjs',marker:'1'.repeat(32)};
+ const frame=(value,status=0)=>`\nASC_VERIFY_${capture.marker}_BEGIN\n${JSON.stringify({status,error:null,stdout:JSON.stringify(value),stderr:''})}\nASC_VERIFY_${capture.marker}_END\n`;
+ const framedCall=structuredClone(call);framedCall.message.content[0].input.command='git status --short; '+capture.command+'; echo "exit $?"';
+ const content='?? .claude/\n'+expected.head+frame(expected)+'exit 0';
+ assert.equal(claudeVerificationEvidence([framedCall,result(expected,{content})],expected,capture).head,expected.head);
+ for(const bad of [frame(expected,1),frame({...expected,head:'e'.repeat(40)}),frame(expected)+frame(expected),content.replace(capture.marker,'2'.repeat(32))])assert.throws(()=>claudeVerificationEvidence([framedCall,result(expected,{content:bad})],expected,capture),/Missing successful/);
+ assert.throws(()=>claudeVerificationEvidence([framedCall,result(expected,{content,is_error:true})],expected,capture),/Missing successful/);
+ assert.throws(()=>claudeVerificationEvidence([call,result(expected,{content})],expected,capture),/Missing successful/);
+ assert.throws(()=>claudeVerificationEvidence([framedCall,result(expected,{content}),result(expected,{content:frame(expected,1)})],expected,capture),/Missing successful/);
+});
+
+test('capture executes fixed verifier and preserves its failure instead of shell status',async t=>{
+ const fs=await import('node:fs'),os=await import('node:os'),path=await import('node:path');
+ const {spawnSync}=await import('node:child_process');
+ const {verificationCaptureSource,capturedVerification}=await import('../scripts/claude-verification-capture.mjs');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-capture-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const cli=path.join(root,'cli.mjs'),wrapper=path.join(root,'capture.mjs'),marker='3'.repeat(32);
+ fs.writeFileSync(wrapper,verificationCaptureSource({cli,repo:'/synthetic/repo',base:expected.base,owner:'/synthetic/owner',marker}));
+ fs.writeFileSync(cli,`import assert from 'node:assert/strict';assert.deepEqual(process.argv.slice(2),${JSON.stringify(['worktree-verify','/synthetic/repo',expected.base,'/synthetic/owner'])});console.log(${JSON.stringify(JSON.stringify(expected))});`);
+ const good=spawnSync(process.execPath,[wrapper],{encoding:'utf8'});assert.equal(good.status,0);assert.deepEqual(JSON.parse(capturedVerification(good.stdout,marker)),expected);
+ fs.appendFileSync(cli,'process.exitCode=7;');
+ const bad=spawnSync(process.execPath,[wrapper],{encoding:'utf8'});assert.equal(bad.status,1);assert.equal(capturedVerification(bad.stdout,marker),null);
+});

@@ -43,7 +43,7 @@ const pointerKey=path.relative(path.join(setup.origin,'.git'),path.join(setup.wo
 let inHostVerification=null;
 if(mode==='--claude'&&d.inHostVerification){
  const events=fs.readFileSync(path.join(root,'events.jsonl'),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
- inHostVerification=claudeVerificationEvidence(events,d.verification);
+ inHostVerification=claudeVerificationEvidence(events,d.verification,setup.verificationCapture);
  if(JSON.stringify(inHostVerification)!==JSON.stringify(d.inHostVerification))throw Error('In-Host verification evidence mismatch');
 }
 const evaluationCoverage={inHostVerification,hostWorktreePointerRecorded:Object.hasOwn(gitControls,pointerKey),scope:'Presence in the pre-execution record; older runs are not upgraded by export.'};
