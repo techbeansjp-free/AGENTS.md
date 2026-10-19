@@ -21,3 +21,10 @@ test('Claude performance acceptance requires observed in-Host verification of ev
  summary=summarizeNativePairs(pairs);assert.equal(summary.inHostVerificationComplete,true);assert.equal(summary.accepted,true);
  pairs[0].candidate.evaluationCoverage.inHostVerification.head='stale';assert.equal(summarizeNativePairs(pairs).accepted,false);
 });
+
+test('explicit incomplete or estimated measurements cannot pass despite numeric totals',()=>{
+ for(const mutate of [r=>r.usage.complete=false,r=>r.usage.reconciledWithHostModelUsage=false,r=>r.elapsedTimeIsEstimate=true,r=>r.elapsedComparisonEligible=false]){
+  const p=fixture();mutate(p[0].candidate);const result=summarizeNativePairs(p);
+  assert.equal(result.measurementComplete,false);assert.equal(result.accepted,false);assert.equal(result.candidate,undefined);
+ }
+});

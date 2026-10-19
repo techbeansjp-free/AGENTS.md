@@ -799,3 +799,9 @@ Role inspection of alpha.56 shows reservation worker 547,733 tokens/18 messages,
 評価runnerの`totalSeconds`は従来、故障注入後の再開から計測しており、中断前の実行を含まなかった。初回実行の直前からCI確認までへ変更し、fixture準備を含まない範囲を`timingScope`で明記した。過去の記録を新しい測定範囲へ読み替えない。中断途中のterminal usageが欠ける場合の不完全判定は維持する。
 
 評価プログラムの修正待ちを含む推定時間は、exportのJSONと標準出力の両方で`elapsedSeconds:null`、`elapsedSecondsEstimate`、`elapsedComparisonEligible:false`として分離する。回帰試験と保存済みOpus両試行の再exportで確認し、元の失敗記録・検証・CIを保持した。新しい実走や利用者データの送信は行っていない。
+
+### 比較集計で明示的な欠測・推定を拒否
+
+数値の秒数・tokensと空のmissingUsageが残った記録に、`usage.complete:false`、`reconciledWithHostModelUsage:false`、`elapsedTimeIsEstimate:true`、`elapsedComparisonEligible:false`のいずれかが付いていても、旧集計器は測定完了と受理する反例を再現した。これらの明示フラグを拒否し、性能集計値も生成しないよう修正。関連12試験、Lint、独立レビューを通過した。未記録の古いフィールドを推定で補完したり、過去の失敗cohortを合格へ変更したりしない。
+
+保存済み小規模v4を現行集計器で再計算すると性能は引き続き不合格で、現行のin-Host観測要件も満たさない。旧summaryのqualityPassedは当時の評価器の範囲であり、現行受入を満たすとの意味には使わない。
