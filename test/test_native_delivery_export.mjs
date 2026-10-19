@@ -16,6 +16,9 @@ test('complex export binds original intent and both CI runs without upgrading mi
   write('complex-delivery.json',delivery);fs.writeFileSync(path.join(worktree,'complex/REQUIREMENTS.md'),'changed after run');
   const output=path.join(root,'out.json');const run=()=>spawnSync(process.execPath,[script,root,output,'--complex'],{env:{...env,GIT_DIR:'/nonexistent'},encoding:'utf8'});
   let p=run();assert.equal(p.status,0,p.stderr);const result=JSON.parse(fs.readFileSync(output));assert.equal(result.conditions.intentSha256,hash('original requirements'));assert.deepEqual(result.conditions.commands,[[`absolute-path-sha256:${hash(process.execPath)}`,'relative-test.mjs']]);assert.equal(JSON.stringify(result).includes(process.execPath),false);assert.deepEqual(result.ci.checks,{'complex:test':'success','greeting:test':'success'});assert.equal(result.manualHandoffs,undefined);assert.equal(result.usage.observedProcessedTokens,null);assert.equal(result.evaluationCoverage.hostWorktreePointerRecorded,false);
+  write('result.json',{status:0,recovery:{previousStatus:1}});write('complex-delivery.json',{...delivery,manualHandoffs:0});
+  p=run();assert.equal(p.status,0,p.stderr);assert.equal(JSON.parse(fs.readFileSync(output)).manualHandoffs,1);assert.equal(JSON.parse(fs.readFileSync(output)).recovered,true);
+  fs.unlinkSync(path.join(root,'result.json'));
   for(const change of [d=>d.greetingCI={...ci,head:'wrong'},d=>d.complexCI={...ci,checks:{}},d=>d.phase='revision',d=>d.interruptedAttempt={seconds:1}]){const bad=structuredClone(delivery);change(bad);write('complex-delivery.json',bad);assert.notEqual(run().status,0);}
   write('complex-delivery.json',{...delivery,greetingCI:{...ci,checks:{test:'failure'}}});p=run();assert.equal(p.status,0,p.stderr);assert.equal(JSON.parse(fs.readFileSync(output)).ci.checks['greeting:test'],'failure');
  }finally{fs.rmSync(root,{recursive:true,force:true});}
