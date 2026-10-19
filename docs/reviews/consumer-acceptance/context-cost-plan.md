@@ -500,3 +500,5 @@ Matched control alpha.19 SHA256 `fa3b85bad1ff3bb26b6f0859f0d0bc3950a50e856380498
 
 
 The separately identified alpha.18 retry also ended before work with the same provider capacity error (15.281 seconds). Preserve it as `native-conditional-pilot-capacity-retry.json`; do not issue further immediate identical model calls or claim candidate quality/performance. Current PR commit ff21ba22 Linux CI completed successfully along with Host/worktree platform checks. CodeRabbit status says Review paused, so the badge is not a fresh review.
+
+The new worker-write driver now explicitly requires the checkpoint scope, two distinct worker directories, both expected changed-file hashes and their equality with submitted commit blobs. A resumed PASS alone cannot satisfy this scenario. Changed bytes are not declared equivalent without additional evidence. Historical older integration-interruption runs are not retroactively upgraded. 34 focused usage/review/pair/Git/interruption tests and ESLint passed, with no skips. A read-only audit of PR77's existing checkpoint and committed blobs passed in `native-worker-write-recovery-audit.json`; no additional model call was used.

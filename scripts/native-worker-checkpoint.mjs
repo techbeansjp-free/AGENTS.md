@@ -34,3 +34,23 @@ export function workerCheckpointObserver({origin,integration,relativeFiles}){
   return [];
  };
 }
+
+/** Scope-specific acceptance; legitimate later repairs need separate evidence. */
+export function workerRecoveryEvidence(checkpoint,finalFiles){
+ const names=['reservation/service.mjs','billing/service.mjs'];
+ const valid=checkpoint?.checkpoint===true&&checkpoint.stopped===true&&checkpoint.interrupted===true&&checkpoint.signalSent===true
+  &&checkpoint.checkpointScope==='two distinct worker worktrees before integration'
+  &&Array.isArray(checkpoint.workerWorktrees)&&checkpoint.workerWorktrees.length===2&&new Set(checkpoint.workerWorktrees).size===2
+  &&checkpoint.workerWorktrees.every(name=>typeof name==='string'&&name!==''&&path.basename(name)===name)
+  &&Array.isArray(checkpoint.files)&&checkpoint.files.length===2;
+ if(!valid)throw Error('Missing distinct worker-write interruption evidence');
+ const files=names.map(name=>{
+  const records=checkpoint.files.filter(f=>f.name===name),bytes=finalFiles.get(name);
+  if(records.length!==1||!Buffer.isBuffer(bytes))throw Error('Missing saved worker output');
+  const {before,after}=records[0];
+  if(!/^[a-f0-9]{64}$/.test(before)||!/^[a-f0-9]{64}$/.test(after)||before===after)throw Error('Invalid saved worker hash');
+  return {name,checkpointSha256:after,finalSha256:hash(bytes)};
+ });
+ return {requested:true,verified:files.every(f=>f.checkpointSha256===f.finalSha256),files,
+  scope:'Exact two worker outputs preserved into submitted commit; not arbitrary interruption or repaired-output equivalence.'};
+}

@@ -25,3 +25,14 @@ test('worker checkpoint requires distinct registered worktrees and rejects linke
  fs.unlinkSync(path.join(two,'b'));fs.symlinkSync(path.join(root,'b'),path.join(two,'b'));assert.throws(observe,/non-symlink/);
  assert.throws(()=>workerCheckpointObserver({origin:root,integration,relativeFiles:['../a','b']}),/Invalid/);
 });
+
+test('recovery requires distinct pre-integration workers and exact final saved bytes',async()=>{
+ const {createHash}=await import('node:crypto');const {workerRecoveryEvidence}=await import('../scripts/native-worker-checkpoint.mjs');
+ const hash=s=>createHash('sha256').update(s).digest('hex');
+ const names=['reservation/service.mjs','billing/service.mjs'];
+ const checkpoint={checkpoint:true,stopped:true,interrupted:true,signalSent:true,checkpointScope:'two distinct worker worktrees before integration',workerWorktrees:['worker-a','worker-b'],files:names.map(name=>({name,before:hash('old'),after:hash(name)}))};
+ const files=new Map(names.map(name=>[name,Buffer.from(name)]));
+ assert.equal(workerRecoveryEvidence(checkpoint,files).verified,true);
+ for(const patch of [{stopped:false},{workerWorktrees:['same','same']},{checkpointScope:'integration edit'},{files:[checkpoint.files[0],checkpoint.files[0]]}])assert.throws(()=>workerRecoveryEvidence({...checkpoint,...patch},files));
+ const changed=new Map(files);changed.set(names[0],Buffer.from('replacement'));assert.equal(workerRecoveryEvidence(checkpoint,changed).verified,false);
+});

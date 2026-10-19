@@ -1,3 +1,4 @@
+import {workerRecoveryEvidence} from './native-worker-checkpoint.mjs';
 import {nativePhaseUsage} from './native-host-usage.mjs';
 import {assertConflictFaultsRemoved} from './native-conflict-fixture.mjs';
 import {readInterruptionEvidence} from './native-interrupted-attempt.mjs';
@@ -33,6 +34,11 @@ if(s.parallelInterruptionRequested)data.parallelInterruptionCoverage={requested:
 const interruption=readInterruptionEvidence(root,s.interruptionRequired===true);
 if(interruption){
  const interrupted=interruption.checkpoint;
+ if(s.workerWriteInterruptionRequired){
+  const files=new Map(['reservation/service.mjs','billing/service.mjs'].map(name=>[name,execFileSync('git',['show',`${head}:complex/${name}`],{cwd:s.worktree,env,maxBuffer:16*1024*1024})]));
+  data.parallelInterruptionCoverage=workerRecoveryEvidence(interrupted,files);
+  if(!data.parallelInterruptionCoverage.verified)throw Error('Saved worker outputs differ from submitted commit');
+ }
  Object.assign(data,{interruptedAttempt:interrupted,interruptedUsage:interruption.usage,usageScope:'Resumed parent and descendants only; interrupted attempt usage remains missing',totalProcessedTokens:null,resumedImplementationAndReviewSeconds:result.seconds,implementationAndReviewSeconds:result.seconds+interrupted.seconds});
 }
 fs.writeFileSync(path.join(root,'complex-verification.json'),JSON.stringify(data,null,2));console.log(JSON.stringify({head,passed:true,tokens:proof.usage.observedProcessedTokens}));
