@@ -1,0 +1,15 @@
+{
+  "phase": "pre-delivery-observation",
+  "error": "Expected one session identity",
+  "cause": "A nested worker review inherited paginated context, retaining an ancestor session_meta before its own event boundary.",
+  "agentExit": 0,
+  "implementationAndReviewSeconds": 397.101367468,
+  "base": "84725593643bedc793b3ae2ff4ba68062e9ff243",
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "observedThreads": 5,
+  "completeUsage": null,
+  "delivered": false,
+  "accepted": false,
+  "implementationRerun": false
+}

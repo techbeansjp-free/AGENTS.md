@@ -29,3 +29,11 @@ test('a repaired commit can supersede old findings, but a current conflicting ve
  assert.equal(nativeReviewEvidence('p',head,f).review.head,head);
  old[3].payload.content[0].text=`FAIL ${head}`;assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);
 });
+
+test('counts a paginated helper once but never accepts its inherited-context review',()=>{
+ const f=fixture();f[0].splice(2,0,{type:'response_item',payload:{type:'function_call',name:'spawn_agent'}});
+ const helper=record('h','p',`PASS ${head}`),meta={...helper[0].payload,forked_from_id:'p',history_mode:'paginated',subagent_history_start_ordinal:1+f[0].length};
+ const fork=[{type:'session_meta',payload:meta},...structuredClone(f[0]),{type:'event_msg',payload:{type:'thread_settings_applied',thread_id:'h'}},...helper.slice(1),{type:'token_usage_record',payload:{thread_id:'h',thread_token_usage:helper[2].payload.info.total_token_usage}}];
+ f.push(fork);const result=nativeReviewEvidence('p',head,f);assert.equal(result.usage.observedProcessedTokens,33);assert.equal(result.review.id,'r');
+ f.splice(1,1);f[0].splice(2,1);assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);
+});

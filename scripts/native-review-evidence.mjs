@@ -1,8 +1,9 @@
 /** Evaluation-only acceptance of Host-owned synthetic rollouts, never model-supplied files. */
-import {summarizeNativeUsage} from './native-host-usage.mjs';
+import {summarizeNativeUsage,ownNativeEvents} from './native-host-usage.mjs';
 export function nativeReviewEvidence(rootId, head, rollouts) {
   if (!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(head)) throw Error('Invalid candidate HEAD');
   const usage=summarizeNativeUsage(rootId,rollouts);
+  rollouts=rollouts.map(ownNativeEvents);
   if(usage.missingUsage.length)throw Error('Incomplete usage');
   const spawnCalls=rollouts.flat().filter(e=>e.type==='response_item'&&['function_call','custom_tool_call'].includes(e.payload?.type)&&/(?:^|__)spawn_agent$/.test(e.payload.name??''));
   if(spawnCalls.length!==rollouts.length-1)throw Error('Descendant inventory does not match spawn calls');
