@@ -1,0 +1,20 @@
+{
+  "scope": "Single alpha.15 synthetic small diagnostic; behavior observation is not causal performance proof or a fresh pair.",
+  "pr": 76,
+  "seconds": 138.008,
+  "processedTokens": 286779,
+  "coordinator": {
+    "observedToolCalls": 8,
+    "processedTokens": 193029
+  },
+  "reviewer": {
+    "observedToolCalls": 4,
+    "processedTokens": 93750,
+    "reviewOnlySnapshotObserved": false,
+    "existingWorktreeTestsObserved": true,
+    "noBytecodeOptionObservedForExactOracle": true
+  },
+  "accepted": false,
+  "freshPairs": 0,
+  "reason": "Time and tokens improvement together is not demonstrated; no five fresh pairs."
+}
