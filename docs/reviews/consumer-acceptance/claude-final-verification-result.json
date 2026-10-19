@@ -1,0 +1,133 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "inHostVerification": {
+      "toolUseId": "toolu_01Dyy6mRhRT2z6BEm6P6hw8r",
+      "head": "b455c310600601f1430852d87ab9ef212067440c",
+      "contractSha256": "0e8b2c3a2b3757fa826dcaaa03a97bb6f09af62c0dc6e22ddc7660889416e132",
+      "checks": 2,
+      "scope": "Observed coordinator Bash result; external oracle independently rechecked the same commit"
+    },
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "reviewerMode": "generic",
+    "reviewerDefinitionSha256": null,
+    "skillBundleSha256": "20559e508a6f7ad033267208884e7db2036daade32723e457ca3aea0713a8098",
+    "version": "0.5.900-alpha.46",
+    "skillSha256": "f45e802916fe8c1525f6112309db89c1329cad62dfcdf6957b69c4ecd44871e7",
+    "identitySha256": "23ba4384e0f730edcf5d298f6ef241e8157fc0f8503251c4b3f92118a1f51f3b"
+  },
+  "conditions": {
+    "runnerSha256": "305373591440d2d26f9c933673e63683e8fba4f038bbae9f0b48bde062f0fe4d",
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "e4a7881d3bc2ee5cd7072d916aed49273ef3274c2d07ba40fdf2d51789b72401",
+    "intentSha256": "712b83bd0cdec6d5d3439878da31f02e08a50379fd6bf471539227cbbcd54f9f",
+    "commands": [
+      [
+        "python3",
+        "-I",
+        "test_greeting.py"
+      ],
+      [
+        "python3",
+        "-I",
+        "-c",
+        "import sys;sys.path.insert(0,\".\");from greeting import greeting;assert type(greeting()) is str and greeting()==\"Hello\""
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "b455c310600601f1430852d87ab9ef212067440c",
+  "review": {
+    "taskId": "a3927b37a6b984f4e",
+    "agentType": "general-purpose",
+    "head": "b455c310600601f1430852d87ab9ef212067440c",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 30,
+      "output_tokens": 5976,
+      "cache_read_input_tokens": 371747,
+      "cache_creation_input_tokens": 46127
+    },
+    "threads": [
+      {
+        "id": "4b4e2533-2d2f-40c8-9391-4fb1ecfb57bd",
+        "messageCount": 11,
+        "usage": {
+          "input_tokens": 22,
+          "output_tokens": 4391,
+          "cache_read_input_tokens": 312371,
+          "cache_creation_input_tokens": 22999
+        }
+      },
+      {
+        "id": "a3927b37a6b984f4e",
+        "messageCount": 4,
+        "usage": {
+          "input_tokens": 8,
+          "output_tokens": 1585,
+          "cache_read_input_tokens": 59376,
+          "cache_creation_input_tokens": 23128
+        }
+      }
+    ],
+    "observedProcessedTokens": 423880,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 86.792637685,
+  "deliverySeconds": 20.66040087099999,
+  "elapsedSeconds": 107.586573467,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "b455c310600601f1430852d87ab9ef212067440c",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/165",
+  "ci": {
+    "head": "b455c310600601f1430852d87ab9ef212067440c",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39313168883",
+    "transportFailures": []
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Fresh-context simple change only; repair, multiple Issues and restart acceptance remain separate.",
+    "No merge or release."
+  ]
+}
