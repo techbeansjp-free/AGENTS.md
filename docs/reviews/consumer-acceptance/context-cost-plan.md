@@ -376,3 +376,9 @@ The unchanged candidate series will not be extended after the already-running pa
 
 
 Pair 3 baseline completed native repair and independent re-review at `69e1284cea60812eb6c7d9c016df86329b1440ff`, Draft PR63 and both CI workflows, in 577.031 seconds / 2,107,730 processed tokens. The additional accessor oracle passes this repaired baseline and fails the other five saved original runs. Oracle review strengthened the observation to inspect `get` persistence before reporting a negative stored amount, and to confirm zero stored rows after rejection plus one row after same-key retry. All six observations were rechecked. No evaluator fixed the service source. The same baseline coordinator is now the input to the continued-session revision trial; it is not relabeled as an improved-candidate performance run.
+
+
+The first same-session revision attempt failed before any source edit: resume selected `:read-only` rather than the requested named restricted profile. The Agent reported denied patch/temp writes and no reviewer; the final observer rejected the subsequent aborted turn rather than publishing. `native-continuation-launch-failure.json` preserves the failure. This is not a successful continuation, and process exit 0 is not acceptance. The proposed driver correction moves config overrides into resume's own option list; an isolated synthetic write/denied-read probe must verify it before a continuation retry.
+
+
+The minimal resume probe confirmed the correction: placing the same `-c` permission overrides after `resume` selected `asc_minimal_agent`, permitted the workspace write, denied the outside dummy read, retained root-deny and restricted network. The first developer trial remains failed. This permission probe does not prove the full revised development task or establish performance.
