@@ -54,5 +54,103 @@
     "modelCalls": 0,
     "scope": "Extracted distribution in real Linux bwrap namespace; not live Claude delivery or performance evidence.",
     "evaluationRegression": "Replaying alpha42 events now rejects missing successful in-Host verification, despite external oracle success. Historical exports retain null inHostVerification; they are not upgraded."
+  },
+  "liveDiagnostic": {
+    "version": "0.5.900-alpha.44",
+    "tarballSha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9",
+    "runnerSha256": "d67c9d2398090a0006f0dbad480351da2d57f5e0c76b05664c0c3f626658cd2c",
+    "eventsSha256": "62551c5418904937bda03f2ea4bd19a64694ba05b8566f9aae59cad517d82c91",
+    "status": "failed",
+    "model": "sonnet",
+    "effort": "medium",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "process": {
+      "status": 0,
+      "signal": null,
+      "seconds": 100.60117958400001
+    },
+    "failure": {
+      "error": "Missing successful in-Host worktree verification for submitted HEAD and owner contract",
+      "seconds": 100.73129581900001
+    },
+    "usage": {
+      "totals": {
+        "input_tokens": 34,
+        "output_tokens": 6648,
+        "cache_read_input_tokens": 447418,
+        "cache_creation_input_tokens": 43313
+      },
+      "threads": [
+        {
+          "id": "ede3d698-2532-4e36-9d46-8833332383ed",
+          "messageCount": 14,
+          "usage": {
+            "input_tokens": 28,
+            "output_tokens": 5542,
+            "cache_read_input_tokens": 413942,
+            "cache_creation_input_tokens": 24232
+          }
+        },
+        {
+          "id": "adb3b095759397bc9",
+          "messageCount": 3,
+          "usage": {
+            "input_tokens": 6,
+            "output_tokens": 1106,
+            "cache_read_input_tokens": 33476,
+            "cache_creation_input_tokens": 19081
+          }
+        }
+      ],
+      "observedProcessedTokens": 497413,
+      "missingUsage": [],
+      "reconciledWithHostModelUsage": true,
+      "complete": true
+    },
+    "reason": "Ten additional exact Claude protection mounts were not authorized in the synthetic owner contract. Agent preserved the boundary and evaluation rejected outer-only success.",
+    "submitted": false,
+    "implementationIntervention": 0,
+    "nextAction": "Include observed exact protection paths in future synthetic owner contracts; never exempt ordinary files. Do not relabel this failure as success.",
+    "performanceClaim": false,
+    "setupFailure": {
+      "stage": "before model startup",
+      "reason": "Small-run clone required a local main branch absent in the fixed synthetic fixture.",
+      "modelCalls": 0,
+      "fix": "Clone local fixture then checkout the existing pinned base; remote restriction unchanged."
+    },
+    "isolatedReplay": {
+      "scope": "Separate clone of the saved synthetic commit, corrected external owner contract, 23 real read-only null mounts; no model invocation. Does not upgrade the failed live trial.",
+      "head": "4a41999153d0ec5e58a799cf9d3e2498636e66c6",
+      "passed": true,
+      "checks": 2,
+      "observedMasks": [
+        ".bash_profile",
+        ".bashrc",
+        ".claude/agents",
+        ".claude/commands",
+        ".claude/hooks",
+        ".claude/launch.json",
+        ".claude/loop.md",
+        ".claude/output-styles",
+        ".claude/routines",
+        ".claude/scheduled_tasks.json",
+        ".claude/settings.json",
+        ".claude/settings.local.json",
+        ".claude/skills",
+        ".claude/workflows",
+        ".gitconfig",
+        ".gitmodules",
+        ".idea",
+        ".mcp.json",
+        ".profile",
+        ".ripgreprc",
+        ".vscode",
+        ".zprofile",
+        ".zshrc"
+      ],
+      "stdoutSha256": "5aa32b30cc33d9802d66d2c80e14572657593c02e4f24c6bb7a474e1c187bcaa",
+      "protectedUnderlyingAssetsUnchanged": true,
+      "modelCalls": 0
+    }
   }
 }
