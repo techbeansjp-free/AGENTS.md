@@ -83,7 +83,7 @@ pathはproject root相対、`appliesTo`はglobではなく完全一致またはd
 
 例: `git worktree add -b fix/123-login-message .worktrees/20261015_143000-123-login-message <base>`。専用作業先の絶対pathを`repo`に指定する。名前が衝突したら別slugを選び、既存branchの強制reset・worktree上書きを行わない。必要に応じてownerがmerge/rebaseでbase変更を取り込み、更新した要求で検証・reviewを再実行する。実装中のCLIは自動fetch・stash・reset・base更新を行わない。マージ後のHostによる同期・整理は下記の契約に従う。
 
-命名は作成時の標準であり、安全性の証拠ではない。既存worktreeの改名や時刻の鮮度を再開条件にしない。`asc-v05 worktree-create <root> <issue> <type> <slug> <base>`で標準名の作業先を作成できる。checkout filterやhookを実行せず、既存branch/pathは上書きしない。途中失敗した作業先は調査用に保持する。独自規約の作業先はownerが作成して`run`へ渡せる。実行時は名前ではなくGitの実体、変更範囲、ContractとEvidenceを検証する。独自規約や過去の名前だけを理由に正常な作業を一律拒否しない。
+命名は作成時の標準であり、安全性の証拠ではない。既存worktreeの改名や時刻の鮮度を再開条件にしない。`asc-v05 worktree-create <repo-root> <issue> <type> <slug> <base>`で標準名の作業先を作成できる。`repo-root`は既存Git checkoutのrootを指定する。作成先の親`.worktrees`はCLIがその配下に用意するため、引数に`.worktrees`自体を渡さない。checkout filterやhookを実行せず、既存branch/pathは上書きしない。途中失敗した作業先は調査用に保持する。独自規約の作業先はownerが作成して`run`へ渡せる。実行時は名前ではなくGitの実体、変更範囲、ContractとEvidenceを検証する。独自規約や過去の名前だけを理由に正常な作業を一律拒否しない。
 
 移行や隔離実験の独立cloneを使う場合だけ、外部owner入力へ`"workspaceMode": "isolated-clone"`を明記する。未指定はworktree、未知値とrepo配下のサブディレクトリは拒否する。これはGit上の作業場所の確認であり、同時編集者がいないことの証明ではない。cloneの独立した準備はowner責務で、共有object storageの有無まではこの検査で判定しない。従来のclean状態・差分検査は継続する。内部APIを直接使うhost integrationは専用作業場所を自ら用意する。
 
