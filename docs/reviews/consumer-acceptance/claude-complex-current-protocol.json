@@ -1,0 +1,24 @@
+{
+  "scope": "One diagnostic of current distribution after command and immutable-commit handoff corrections; no performance acceptance or replacement of earlier failures.",
+  "sourceCommit": "c44a69014",
+  "packageSha256": "31114d80e1e496a9f4ab93c8eefbbc170f52a4dc2c2aa482a52b650157e4be57",
+  "fixtureCommit": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "model": "sonnet",
+  "effort": "medium",
+  "reviewerMode": "generic",
+  "maximumRuns": 1,
+  "checks": [
+    "six fixed oracles including accessors and saved-record replay",
+    "independent exact-HEAD review",
+    "permitted paths and Git controls unchanged",
+    "synthetic Draft PR and both CI workflows",
+    "all Context usage reconciliation",
+    "inspect actual command handoff and commit integration; do not infer adherence from final CI"
+  ],
+  "inputHashes": {
+    "scripts/run-claude-delivery.mjs": "01db231bf76757b30e41b4fb83f17d235b369e2ee1339cb4e971aa9361e3670b",
+    "scripts/claude-review-evidence.mjs": "460e64fe3daa2ba423c1cdffa366ccddd6e8a8955d222c4cdd01ec2b079498e9",
+    "scripts/claude-usage.mjs": "d0c1b0714943a6f68aebf25fd6569143755292e226fb00033bd91a473a9cea79"
+  },
+  "status": "not started"
+}
