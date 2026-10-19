@@ -89,7 +89,8 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     if(typeof manifest.version!=='string'||!/^0\.5\.\d+(?:-[a-z0-9.-]+)?$/.test(manifest.version))throw Error('Invalid installed package version');
     console.log(manifest.version);
   } else if(command==='worktree-create'&&args.length===5){
-    console.log(JSON.stringify(createWorktree(args[0],{issue:Number(args[1]),type:args[2],slug:args[3],base:args[4]}),null,2));
+    const created=createWorktree(args[0],{issue:Number(args[1]),type:args[2],slug:args[3],base:args[4]});
+    console.log(JSON.stringify({...created,notice:'Worktree already created. Use repo as the worker working directory and verify its branch. Do not also request automatic worktree creation when starting that worker (for example Claude Code isolation: "worktree").'},null,2));
   } else if(command==='goal-plan' && args.length===1){
     console.log(JSON.stringify(compileGoal(JSON.parse(fs.readFileSync(args[0]))),null,2));
   } else if(command==='assets-inspect' && args.length===1){
