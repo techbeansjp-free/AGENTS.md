@@ -1,0 +1,25 @@
+{
+  "schema": "asc-evaluation-observer-correction/v1",
+  "cohort": "claude-matched-v3",
+  "accepted": false,
+  "completed": false,
+  "stopReason": "Candidate observer rejected an inline-code independent PASS; original stopped run retained, no replacement",
+  "baseline": {
+    "pr": 92,
+    "seconds": 87.83372277000001,
+    "processedTokens": 327369
+  },
+  "candidate": {
+    "head": "a28f044837ba515544a6d68347e568b557c95e2b",
+    "originalExit": 1,
+    "originalError": "No unambiguous completed independent review of submitted HEAD",
+    "secondsUntilFailure": 95.295196327,
+    "reprocessedReview": {
+      "taskId": "ad67d8820169d9e18",
+      "head": "a28f044837ba515544a6d68347e568b557c95e2b",
+      "verdict": "PASS"
+    },
+    "delivered": false
+  },
+  "scope": "Offline replay of stored reviewer events only; no new model calls, no CI or performance success inferred"
+}

@@ -25,3 +25,15 @@ test('complex export binds original intent and both CI runs without upgrading mi
   write('complex-delivery.json',{...delivery,greetingCI:{...ci,checks:{test:'failure'}}});p=run();assert.equal(p.status,0,p.stderr);assert.equal(JSON.parse(fs.readFileSync(output)).ci.checks['greeting:test'],'failure');
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('Claude export retains actual model and rejects incomplete or intervened observations',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-claude-export-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const pkg=path.join(root,'distribution/package');fs.mkdirSync(path.join(pkg,'skills/asc'),{recursive:true});
+ fs.writeFileSync(path.join(pkg,'skills/asc/SKILL.md'),'synthetic');fs.writeFileSync(path.join(pkg,'package.json'),'{"version":"0.5.900-alpha.20"}');fs.writeFileSync(path.join(pkg,'release-identity.json'),JSON.stringify({sourceFiles:{'skills/asc/SKILL.md':hash('synthetic')}}));
+ const write=(name,value)=>fs.writeFileSync(path.join(root,name),JSON.stringify(value));
+ write('setup.json',{repository:'adachi-tatsuru/asc-public-synthetic-eval-20261016',origin:root,worktree:root,session:'test-session',base:'base',model:'alias',effort:'medium',cliVersion:'test'});write('git-controls.json',{});write('owner.json',{intent:'original'});
+ const good={session:'test-session',implementationIntervention:0,run:{status:0,signal:null,seconds:1},totalSeconds:2,deliverySeconds:1,modelUsage:{actual:{inputTokens:1}},usage:{complete:true,reconciledWithHostModelUsage:true,observedProcessedTokens:1,missingUsage:[]},ci:{head:'head'},verification:{head:'head',passed:true,results:[{argv:['test'],exit:0}]},pr:1};
+ const output=path.join(root,'out.json'),run=d=>{write('delivery.json',d);return spawnSync(process.execPath,[script,root,output,'--claude'],{encoding:'utf8'});};
+ assert.equal(run(good).status,0);const data=JSON.parse(fs.readFileSync(output));assert.deepEqual(data.conditions.actualModels,['actual']);assert.equal(data.elapsedSeconds,2);assert.equal(data.implementationAndReviewSeconds,1);assert.equal(data.manualHandoffs,0);
+ for(const change of [d=>d.usage.complete=false,d=>d.usage.reconciledWithHostModelUsage=false,d=>d.implementationIntervention=1,d=>d.session='wrong',d=>d.run.status=1,d=>d.modelUsage.other={}]){const bad=structuredClone(good);change(bad);assert.notEqual(run(bad).status,0);}
+});

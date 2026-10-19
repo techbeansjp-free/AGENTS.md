@@ -14,3 +14,10 @@ test('abbreviated verdict requires unique Git resolution, not prefix matching',(
  assert.throws(()=>claudeReviewEvidence([start,short],head,()=> 'b'.repeat(40)),/unambiguous/);
  assert.throws(()=>claudeReviewEvidence([start,done,{...done,summary:'FAIL '+head.slice(0,7)}],head,()=>head),/unambiguous/);
 });
+
+test('inline-code verdict preserves exact identity and contradictory FAIL rejection',()=>{
+ const wrapped={...done,summary:'`PASS '+head+'`'};
+ assert.equal(claudeReviewEvidence([start,wrapped],head).head,head);
+ for(const summary of ['`PASS '+head,'PASS '+head+'`','prefix `PASS '+head+'`','`PASS '+head+'` suffix','`PASS '+ 'b'.repeat(40)+'`'])assert.throws(()=>claudeReviewEvidence([start,{...done,summary}],head),/unambiguous/);
+ assert.throws(()=>claudeReviewEvidence([start,wrapped,{...done,summary:'`FAIL '+head+'`'}],head),/unambiguous/);
+});

@@ -4,7 +4,8 @@ export function claudeReviewEvidence(events,head,resolveCommit){
  const started=events.filter(e=>e.type==='system'&&e.subtype==='task_started'&&e.description==='independent_review'&&e.spawn_depth===1);
  const verdicts=started.flatMap(start=>events.filter(e=>e.type==='system'&&e.subtype==='task_notification'&&e.task_id===start.task_id).map(e=>({start,event:e})));
  const refersToHead=(text,verdict)=>typeof text==='string'&&text.split('\n').some(line=>{
-  const match=/^(PASS|FAIL) ([a-f0-9]{7,64})$/.exec(line.trim());if(!match||match[1]!==verdict)return false;
+  const trimmed=line.trim(),plain=trimmed.startsWith('`')&&trimmed.endsWith('`')?trimmed.slice(1,-1):trimmed;
+  const match=/^(PASS|FAIL) ([a-f0-9]{7,64})$/.exec(plain);if(!match||match[1]!==verdict)return false;
   if(match[2]===head)return true;
   // Never infer identity from a shared prefix: Git must resolve it uniquely.
   return typeof resolveCommit==='function'&&resolveCommit(match[2])===head;
