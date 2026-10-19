@@ -238,3 +238,11 @@ C23は実配布候補CLIで標準worktreeを作り、directory・branch・base�
 CodeRabbitの不正emailドメイン指摘は現行fixtureで再現した（POSTが400ではなく201）。ドメインラベルを検証する最小修正と拒否・許可境界を追加し、ネットワーク隔離された6操作シナリオを再実行して成功。最新fixtureの証拠は `domain-journey-results.json` / `domain-journey-provenance.json`。既存の外部Draft PR #27は旧fixtureの証拠であり、この修正を外部CIで検証済みとは扱わない。
 
 複雑な予約・請求Issueの実モデル比較、共有契約変更、実Git競合、実装中断と別Context継続、レビュー指摘からの修復は [context-cost-plan.md](context-cost-plan.md) と `context-complex-results.json` に記録。固定の合成要求・直接管理するworkerによる試験であり、任意Goalの自律分解や全体費用削減の証明ではない。Claude Codeの入れ子・停止の限定観測は `claude-descendant-capability.json` を参照。
+
+## Host内検証付きの実中断・復旧（alpha.44）
+
+[保存した結果](claude-host-mask-interruption-delivery.json)では、予約・請求の別worktreeで変更中の2担当を停止し、全子プロセス停止後に評価器が新しいClaude Contextを起動した。予約の保存済みbytesは提出時まで一致し、請求は復旧後に修正された。元要求・契約変更に対する6 oracle、提出HEADへの独立レビュー、Host内検証と外側の再検証、合成Draft PR164の2つのCIが成功した。
+
+初回評価は、成功した検証JSONの末尾にClaudeが付けるcwd復帰通知を解析できず停止した。この失敗を保存し、通知が期待するworktreeと完全一致する場合だけ処理する最小修正後、モデルを再実行せず同じHEADを再評価・提出した。任意の末尾出力、別path、失敗したtool結果は引き続き拒否する。
+
+中断まで160.53秒、復旧Host273.12秒。診断を含む総経過時間と中断側の最終usageは欠測であり、性能比較に含めない。これは評価器によるHost再起動からの復旧であり、製品がHostを自動復活させる機能の証明ではない。

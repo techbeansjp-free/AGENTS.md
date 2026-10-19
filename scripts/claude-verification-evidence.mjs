@@ -9,7 +9,11 @@ export function claudeVerificationEvidence(events,expected){
    // A later failure invalidates an earlier success; coordinator prose is never evidence.
    observed=undefined;
    if(item.is_error||typeof item.content!=='string')continue;
-   let value;try{value=JSON.parse(item.content);}catch{continue;}
+   // Claude may append its own cwd-reset notification after a successful command.
+   // Only the exact expected worktree suffix is accepted; arbitrary trailing output is not JSON.
+   const suffix='\nShell cwd was reset to '+expected.repo;
+   const content=item.content.endsWith(suffix)?item.content.slice(0,-suffix.length):item.content;
+   let value;try{value=JSON.parse(content);}catch{continue;}
    if(value.schema!=='asc-worktree-verification/v1'||value.passed!==true||value.repo!==expected.repo||value.base!==expected.base||value.head!==expected.head||value.contractSha256!==expected.contractSha256||value.contextSha256!==expected.contextSha256)continue;
    if(!Array.isArray(value.results)||value.results.length!==expected.results.length||value.results.some((result,index)=>result.exit!==0||result.error||JSON.stringify(result.argv)!==JSON.stringify(expected.results[index].argv)))continue;
    observed={toolUseId:item.tool_use_id,head:value.head,contractSha256:value.contractSha256,checks:value.results.length,scope:'Observed coordinator Bash result; external oracle independently rechecked the same commit'};

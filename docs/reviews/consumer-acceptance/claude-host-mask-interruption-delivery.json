@@ -1,0 +1,157 @@
+{
+  "scope": "Single synthetic two-worker interruption, evaluator-launched fresh Host recovery, same-commit delivery after parser correction. Not autonomous Host resurrection or performance acceptance.",
+  "status": "delivered-after-evaluator-parser-failure",
+  "packageSha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9",
+  "model": "sonnet",
+  "effort": "medium",
+  "cliVersion": "2.1.282 (Claude Code)",
+  "head": "45fa8f6ba09538b7091fbef0c3fb96ce31e251b1",
+  "interruption": {
+    "status": 255,
+    "signal": null,
+    "signalSent": true,
+    "interrupted": true,
+    "checkpoint": true,
+    "descendantBoundary": "Linux synthetic transient service; all processes stopped before handoff",
+    "stopped": true,
+    "seconds": 160.533650709,
+    "files": [
+      {
+        "name": "reservation/service.mjs",
+        "before": "7c32b115d9ae8c4a1e5b02c1217daf73c7bc1f06713f33c3e8e914efd72d228c",
+        "after": "29553445ba710b20fa4925706536c76d37b24c6199cba9af982f720591b34bb8"
+      },
+      {
+        "name": "billing/service.mjs",
+        "before": "4685899b5e32d5b30f013cd7d44fa681d9e6413f069e1fb2aef7c85af621024e",
+        "after": "eac0ccdac9c32c905eb84c53e9bf1d54cfb35a7bdcada2f629e5250e20175651"
+      }
+    ],
+    "usageComplete": false,
+    "checkpointScope": "two distinct worker worktrees before integration",
+    "workerWorktrees": [
+      "20261020_042524-9006-reservation-currency",
+      "20261020_042525-9007-billing-currency"
+    ]
+  },
+  "savedOutputs": [
+    {
+      "name": "reservation/service.mjs",
+      "before": "7c32b115d9ae8c4a1e5b02c1217daf73c7bc1f06713f33c3e8e914efd72d228c",
+      "after": "29553445ba710b20fa4925706536c76d37b24c6199cba9af982f720591b34bb8",
+      "submittedSha256": "29553445ba710b20fa4925706536c76d37b24c6199cba9af982f720591b34bb8",
+      "exactSavedBytesPreserved": true
+    },
+    {
+      "name": "billing/service.mjs",
+      "before": "4685899b5e32d5b30f013cd7d44fa681d9e6413f069e1fb2aef7c85af621024e",
+      "after": "eac0ccdac9c32c905eb84c53e9bf1d54cfb35a7bdcada2f629e5250e20175651",
+      "submittedSha256": "8d801355f7824d3c84720e19e257c8a2cb5c8f571b9a68e2cb3e08e4312bc539",
+      "exactSavedBytesPreserved": false
+    }
+  ],
+  "review": {
+    "taskId": "a70e1167e0838dc2b",
+    "agentType": "general-purpose",
+    "head": "45fa8f6ba09538b7091fbef0c3fb96ce31e251b1",
+    "verdict": "PASS"
+  },
+  "inHostVerification": {
+    "toolUseId": "toolu_01E1eK1zwEbb5wrZmQJeJgec",
+    "head": "45fa8f6ba09538b7091fbef0c3fb96ce31e251b1",
+    "contractSha256": "8a96eeeb9b5df0d8ea090750ace1fd0fe4a08ca1baf6546548c7feae09e7f1ec",
+    "checks": 6,
+    "scope": "Observed coordinator Bash result; external oracle independently rechecked the same commit"
+  },
+  "verification": {
+    "head": "45fa8f6ba09538b7091fbef0c3fb96ce31e251b1",
+    "contractSha256": "8a96eeeb9b5df0d8ea090750ace1fd0fe4a08ca1baf6546548c7feae09e7f1ec",
+    "contextSha256": "8a2fba7a7c7a3160a1f94aa0582598dd0c032ca89877847cf41c3ff33f963de4",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "5a4cdcf5e614a8e5f7b880e9f5002f8e8634b25624965eab36d8f2e14b812382",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "d8651b9a3ef9c91026685774148a65dc308991eb50c604552200b912167231dd",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "c5143dc6fcb35d0af65c44eac01b41000e13f53323bdc27b2683589e43bdc757",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "delivery": {
+    "url": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/164",
+    "ci": {
+      "head": "45fa8f6ba09538b7091fbef0c3fb96ce31e251b1",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "complex": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39312479033",
+      "transportFailures": []
+    },
+    "greetingCI": {
+      "head": "45fa8f6ba09538b7091fbef0c3fb96ce31e251b1",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "test": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39312479066",
+      "transportFailures": []
+    }
+  },
+  "measurement": {
+    "interruptedSeconds": 160.533650709,
+    "recoverySeconds": 273.11772452100007,
+    "deliveryContinuationSeconds": 22.357,
+    "wallTimeIncludingDiagnosis": null,
+    "recoveryObservedTokens": 1338877,
+    "complete": false,
+    "reason": "Interrupted Host has no terminal model totals; recovery cost alone is not total cost"
+  },
+  "originalFailure": {
+    "message": "Missing successful in-Host worktree verification for submitted HEAD and owner contract",
+    "cause": "Successful JSON was followed by an exact Host cwd-reset notification",
+    "retained": true
+  },
+  "reevaluation": {
+    "modelRestarts": 0,
+    "implementationEdits": 0,
+    "acceptedSuffix": "Exact expected repo only; failed tool results and arbitrary trailing output remain rejected"
+  },
+  "provenance": {
+    "setup.json": "f6a018fbc17cdeb38100dd9f5dd4b442e191c02e334b833eaf48b519d0810b05",
+    "events.jsonl": "99a5831d18f1cfde05cc0bff43efc69da68fe0d0ea79202148e4aab448c43c14",
+    "failure.json": "0fa9df80fc899d1a72f8ee840a8faca427d038093865eaaad0b804d0b4d58949",
+    "reevaluation.json": "a0b31850a8994ab68e72554f7700aec0925814202f09227fde701d945db1a25a",
+    "recovered-delivery.json": "ed144dbf1cee2546e0266fb6228f765a549885b4efefeae3bfbeff960392db4d",
+    "usage.json": "5c79882bf02932a2f6432f654e0a0623301e219bac9f43ad4a8e5b1be634ea63",
+    "interrupted-attempt/result.json": "c18b5f303dbc68ac20f5ff835623c77bbc8eae951ab35da83b1b43e2f68cfe29"
+  }
+}
