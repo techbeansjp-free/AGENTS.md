@@ -1,0 +1,573 @@
+{
+  "scriptSha256": "a7d95ae08576be498cf959488d41dfaf729932846c14537ab850d717d396ff39",
+  "reports": [
+    {
+      "label": "small-baseline-1",
+      "packageSha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9",
+      "usageComplete": true,
+      "provenance": {
+        "ebcc594f-0819-46ba-b791-0b8a8b9ecde7": "20d6ab2fc175a55dbda68b7bd38fdef54a7ab6051f8e7675085a5919207ce3e4",
+        "a03c51b50d9f89475": "9ee22b927d6768964fae2418d0e8aff38faa108523a2f355ae10f6192eb2c8c8"
+      },
+      "scope": "Serialized tool input/result UTF-8 bytes by explicit transcript. Not tokens, billing, semantic duplication or causal performance evidence. Repeated observations of one tool ID count once; repeated executions retain distinct IDs.",
+      "threads": [
+        {
+          "id": "ebcc594f-0819-46ba-b791-0b8a8b9ecde7",
+          "tools": {
+            "Bash": {
+              "calls": 11,
+              "inputBytes": 2606,
+              "resultBytes": 21743,
+              "failedResults": 0,
+              "missingResults": 0
+            },
+            "Agent": {
+              "calls": 1,
+              "inputBytes": 3297,
+              "resultBytes": 2657,
+              "failedResults": 0,
+              "missingResults": 0
+            }
+          },
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": [
+            {
+              "toolId": "toolu_01Q6wTSWkhvgMuUQFtJkZYNE",
+              "name": "Bash",
+              "bytes": 11105,
+              "sha256": "586eab3fde0ec0011e9f522dabf84b778cb98027fa2dafa3d75df95fff1e433c",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_015vfSTgty2hDcbKnKXNrzAG",
+              "name": "Bash",
+              "bytes": 4641,
+              "sha256": "0ab9542407a208d500e2aee1108a0a277d8c7ee87314f3b80ed4846eaca2e7bd",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01Y25tKThGYXitJ9TWZRfa1N",
+              "name": "Agent",
+              "bytes": 2657,
+              "sha256": "948a552fed3784ec295a4d6e9509ff09568b9cc2bdd37721dda92f5d95429528",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01CyZPECwEhhbxSBDe8xToxX",
+              "name": "Bash",
+              "bytes": 2051,
+              "sha256": "7554b27cd21cfd5f0e0bc4e61cd5e8f44e671a6f3f294cde184820da8f165bbb",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01Qgt734cKiHYSwuLxMe4dtk",
+              "name": "Bash",
+              "bytes": 956,
+              "sha256": "ae3be13701e1b2239f47534345b39e05d154f34b6b78cce50a607aab0923eb3a",
+              "failed": false
+            }
+          ]
+        },
+        {
+          "id": "a03c51b50d9f89475",
+          "tools": {
+            "Bash": {
+              "calls": 3,
+              "inputBytes": 786,
+              "resultBytes": 8653,
+              "failedResults": 1,
+              "missingResults": 0
+            }
+          },
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": [
+            {
+              "toolId": "toolu_0128fTGvPArfvtAjtRf3zPQZ",
+              "name": "Bash",
+              "bytes": 4641,
+              "sha256": "0ab9542407a208d500e2aee1108a0a277d8c7ee87314f3b80ed4846eaca2e7bd",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01J5EtrgLC6fydqYWWrqyRpv",
+              "name": "Bash",
+              "bytes": 3703,
+              "sha256": "38f76fda6ae1163c18ab6240cc9fba020c25bef44832cef1953f4222e89da213",
+              "failed": true
+            },
+            {
+              "toolId": "toolu_01PCBSjyknGCub8X9LdBEpFS",
+              "name": "Bash",
+              "bytes": 309,
+              "sha256": "537b0592574f0e40fbc553c45ca8bf00db7ddaca3c330a6a30adf5b54c8e24ea",
+              "failed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "small-baseline-2",
+      "packageSha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9",
+      "usageComplete": true,
+      "provenance": {
+        "3e6100b4-0426-480d-831f-57724fcdb8b9": "ef2d159b3b26a499b70c532293460d2ced1c8589583dc191fa4ba340d2be9930",
+        "a1346481faf58fad3": "cb9311f9c94289d28e668c6c9cc48023741af442c1ee74a5650abc0545136484"
+      },
+      "scope": "Serialized tool input/result UTF-8 bytes by explicit transcript. Not tokens, billing, semantic duplication or causal performance evidence. Repeated observations of one tool ID count once; repeated executions retain distinct IDs.",
+      "threads": [
+        {
+          "id": "3e6100b4-0426-480d-831f-57724fcdb8b9",
+          "tools": {
+            "Bash": {
+              "calls": 8,
+              "inputBytes": 2375,
+              "resultBytes": 22848,
+              "failedResults": 0,
+              "missingResults": 0
+            },
+            "Agent": {
+              "calls": 1,
+              "inputBytes": 2520,
+              "resultBytes": 2435,
+              "failedResults": 0,
+              "missingResults": 0
+            }
+          },
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": [
+            {
+              "toolId": "toolu_019PVMFHq7jFRrZLgv4NLsTX",
+              "name": "Bash",
+              "bytes": 13459,
+              "sha256": "7c57bc20417d20176ab23d62bc8914b67031c682df575e58c4be798e05c4e097",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01TsoJEDhj3nBhGffzycygh4",
+              "name": "Bash",
+              "bytes": 4641,
+              "sha256": "0ab9542407a208d500e2aee1108a0a277d8c7ee87314f3b80ed4846eaca2e7bd",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_0156XyyzqxRRJe8u32ygtVJ6",
+              "name": "Agent",
+              "bytes": 2435,
+              "sha256": "24658b190c1951bccec90221429e1423733af1525661e779bd8d21479416a8e3",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01XnEZKmigMg6WpvTXU1TnGL",
+              "name": "Bash",
+              "bytes": 2052,
+              "sha256": "3a12bc75c9c8615993bf82071695d70dc3a566b308403f64eaf49198773fa893",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01Ar74rF9DNSGHYJGgHRgEjw",
+              "name": "Bash",
+              "bytes": 1483,
+              "sha256": "700b01b5900fcf592d26fe0628458eb56616f1f5d381aaba6897dbb47dc72f2e",
+              "failed": false
+            }
+          ]
+        },
+        {
+          "id": "a1346481faf58fad3",
+          "tools": {
+            "Bash": {
+              "calls": 5,
+              "inputBytes": 1239,
+              "resultBytes": 6916,
+              "failedResults": 0,
+              "missingResults": 0
+            }
+          },
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": [
+            {
+              "toolId": "toolu_01H4xmrTkSwBb6BVA9uhQQdE",
+              "name": "Bash",
+              "bytes": 4641,
+              "sha256": "0ab9542407a208d500e2aee1108a0a277d8c7ee87314f3b80ed4846eaca2e7bd",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01EhBTf4V8zu4mhzVKCzrRei",
+              "name": "Bash",
+              "bytes": 1260,
+              "sha256": "75f887db10f9f63426b8498f08b6da63e71c2c2341e22462a76c97d96bf65619",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01B6bsaYiv3VmgcBmWvdgtkr",
+              "name": "Bash",
+              "bytes": 841,
+              "sha256": "c4fec5060982b48c0b829ddb4b0c54dbb0d37f7787f4024d5e364f95102fb3ab",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01Gi2rGiiziC97tk2T7i8a3M",
+              "name": "Bash",
+              "bytes": 148,
+              "sha256": "96a2277255247deef1f2bdebe5f47ab3fc06dffadcddb666d498c6b9aa9b5621",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01G3Ddw3ixnRB3Nd1ojNexDh",
+              "name": "Bash",
+              "bytes": 26,
+              "sha256": "61df9678c0819ae4b80a858b9f92013b293a9a1e313265227ab147baf3c4ce10",
+              "failed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "complex",
+      "packageSha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9",
+      "usageComplete": true,
+      "provenance": {
+        "b15ca740-50d0-41ea-9a62-25699e1bfe29": "48aa31afb9346b249797d234911132bbbc23a71503edae4edefa20dd9bf4e018",
+        "a0fed38596410ad0a": "177be8415f54718aa08fa9f66fc8853c4a2f65632585422c49008f9db6e54982",
+        "a2e1e89ae527897c6": "1a0bb405804a5f5afcbed20da7467807c40461707413540f2a120a12c2da4728",
+        "aadc6e74264694608": "9b095049f49141858661fad6b54881ef46a6ddcadc488d59fb4b905b2fe6f0be",
+        "a641db7b8610306da": "e1b55870239e92c7f723a60644561abb1d8d2e97f324166c870cc29c0c437821"
+      },
+      "scope": "Serialized tool input/result UTF-8 bytes by explicit transcript. Not tokens, billing, semantic duplication or causal performance evidence. Repeated observations of one tool ID count once; repeated executions retain distinct IDs.",
+      "threads": [
+        {
+          "id": "b15ca740-50d0-41ea-9a62-25699e1bfe29",
+          "tools": {
+            "Bash": {
+              "calls": 19,
+              "inputBytes": 4274,
+              "resultBytes": 71877,
+              "failedResults": 0,
+              "missingResults": 0
+            },
+            "Agent": {
+              "calls": 4,
+              "inputBytes": 13539,
+              "resultBytes": 6138,
+              "failedResults": 0,
+              "missingResults": 0
+            }
+          },
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": [
+            {
+              "toolId": "toolu_01M2pYEWTQN5bpTTQ43x41UT",
+              "name": "Bash",
+              "bytes": 14725,
+              "sha256": "78375ad4f4901891e9c585f512b10a269de0b36a8931a4edf4ddf57b1b6f45a5",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01UNYgKHAhruQUAGXxjmwMAH",
+              "name": "Bash",
+              "bytes": 11105,
+              "sha256": "586eab3fde0ec0011e9f522dabf84b778cb98027fa2dafa3d75df95fff1e433c",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01Q4jH8KXoC8Z85uaYoHAH6k",
+              "name": "Bash",
+              "bytes": 11066,
+              "sha256": "f028d72aed70a7060f44f1d4eb036ecc9f6b1ba52f79c20942a3b8712817c28c",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01V3zukiwkf8GPyHEtQXqmZZ",
+              "name": "Bash",
+              "bytes": 7208,
+              "sha256": "1eb8ab63803c4fee8bb11f5f108566a277017e99d1b2d1b03c2154ac6f774452",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01Auv8M5VzmK9ffSdSe4Wqum",
+              "name": "Bash",
+              "bytes": 4641,
+              "sha256": "0ab9542407a208d500e2aee1108a0a277d8c7ee87314f3b80ed4846eaca2e7bd",
+              "failed": false
+            }
+          ]
+        },
+        {
+          "id": "a0fed38596410ad0a",
+          "tools": {},
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": []
+        },
+        {
+          "id": "a2e1e89ae527897c6",
+          "tools": {
+            "Bash": {
+              "calls": 13,
+              "inputBytes": 7066,
+              "resultBytes": 27832,
+              "failedResults": 0,
+              "missingResults": 0
+            }
+          },
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": [
+            {
+              "toolId": "toolu_015uNqTFd2xWDZaUvZRvhPFw",
+              "name": "Bash",
+              "bytes": 12216,
+              "sha256": "c80f69a7625fbc45960026f1da0c91a19abba98f3ad865688e000a0452b13036",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01QZ2tEgm8uCsgihfmxq3Hia",
+              "name": "Bash",
+              "bytes": 5906,
+              "sha256": "7f70bf47e9ed531abcf8f4b2265833a6160a471038f753bd60f6cbb413325a17",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01Cmc8eH7MWhUJDSzvW5LRH7",
+              "name": "Bash",
+              "bytes": 2016,
+              "sha256": "ff31bdbc4e2cbdb4165a1addedeb97a6c84932097979e6d91adfd0253240b75e",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01QppAzsduetaGw3c15x6xvS",
+              "name": "Bash",
+              "bytes": 1840,
+              "sha256": "cdf93a139051e273108be0fd9fc8934286b789483a9dc03d11ed9d1374720020",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01DsadqSJ3FWtTxZPevaVWGc",
+              "name": "Bash",
+              "bytes": 1548,
+              "sha256": "60153e27555fe1d86260b3a4876f010892cb740122ea1f52578cd14ea2bcdfe2",
+              "failed": false
+            }
+          ]
+        },
+        {
+          "id": "aadc6e74264694608",
+          "tools": {
+            "Bash": {
+              "calls": 13,
+              "inputBytes": 6425,
+              "resultBytes": 19796,
+              "failedResults": 0,
+              "missingResults": 0
+            }
+          },
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": [
+            {
+              "toolId": "toolu_01DCgYhfNqSktG1D9qHZLHAF",
+              "name": "Bash",
+              "bytes": 10859,
+              "sha256": "018a92a594832a93b8597bc0a81fc4dcf171c62c9d945f8ff032da30dbe85026",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_015o4ktsZtJn6xvAvXuatnyg",
+              "name": "Bash",
+              "bytes": 1723,
+              "sha256": "13ad9bb8cf52aedec858cc80b620c199a1ac6132bfe6bf43fd5e9810a107a2e6",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01K9sonvtQh9EX3NYj3AErbi",
+              "name": "Bash",
+              "bytes": 1420,
+              "sha256": "5c125d246681e03d407ee7326f3938ca6e53f4b37830dbd26677db7c88a679c2",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01HKd4qzbPLqWYq84K8WxZ31",
+              "name": "Bash",
+              "bytes": 1367,
+              "sha256": "3a9452f76b4d4e76973dfa9cd7ed1c0cafdd2da87406c3832c9b176613ba2394",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01TcKwZUVu4r5KgQizLsPMYX",
+              "name": "Bash",
+              "bytes": 1282,
+              "sha256": "f2e46f9d287282a6aa367452a4db0fcb12c388bf53604c7a5d9f1163dbc403bd",
+              "failed": false
+            }
+          ]
+        },
+        {
+          "id": "a641db7b8610306da",
+          "tools": {
+            "Bash": {
+              "calls": 10,
+              "inputBytes": 1128,
+              "resultBytes": 30790,
+              "failedResults": 2,
+              "missingResults": 0
+            }
+          },
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": [
+            {
+              "toolId": "toolu_017RrvXhV4WirkrZd7KmZpHY",
+              "name": "Bash",
+              "bytes": 10375,
+              "sha256": "ed0b11666a408324a521f31924d231820dc225d19efb70c965921b8e163cacfa",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01DmqKavPaJv1LNpf2raLGgu",
+              "name": "Bash",
+              "bytes": 7570,
+              "sha256": "f5a7224bd41ae8e7bc766542b2e98523d04939b2d88fa475b1fae31585a6dae3",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01TQcKmKzufYg8FCQciawRhb",
+              "name": "Bash",
+              "bytes": 5906,
+              "sha256": "7f70bf47e9ed531abcf8f4b2265833a6160a471038f753bd60f6cbb413325a17",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01AA5S7UB5hr4cX3PaawWtbi",
+              "name": "Bash",
+              "bytes": 3240,
+              "sha256": "e42aa9b2dbcce816859d382ba566bf29f334cd39618964fb747287e6170f0313",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01KGgU8gfxNovcmZz1VcTzRo",
+              "name": "Bash",
+              "bytes": 1745,
+              "sha256": "b0513749918552de64ab791da9d43d4820887c8243eccd16ecd2b3187b9f12a7",
+              "failed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "withdrawn-dedup-candidate",
+      "packageSha256": "3dfc04506646536d57188a87e1f61ec22a023410ff260cc341049ea3c9f4661e",
+      "usageComplete": true,
+      "provenance": {
+        "4b4e2533-2d2f-40c8-9391-4fb1ecfb57bd": "7c6e6adfe31f449e78f9e84db6a0eeb6487f0b6371ea77e13dc1b16d3329eb97",
+        "a3927b37a6b984f4e": "6aca55b904eed861482107f206a64d24feab1b681c553a9d1acdeb21a0d54c53"
+      },
+      "scope": "Serialized tool input/result UTF-8 bytes by explicit transcript. Not tokens, billing, semantic duplication or causal performance evidence. Repeated observations of one tool ID count once; repeated executions retain distinct IDs.",
+      "threads": [
+        {
+          "id": "4b4e2533-2d2f-40c8-9391-4fb1ecfb57bd",
+          "tools": {
+            "Bash": {
+              "calls": 8,
+              "inputBytes": 1921,
+              "resultBytes": 17615,
+              "failedResults": 0,
+              "missingResults": 0
+            },
+            "Agent": {
+              "calls": 2,
+              "inputBytes": 4755,
+              "resultBytes": 2912,
+              "failedResults": 1,
+              "missingResults": 0
+            }
+          },
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": [
+            {
+              "toolId": "toolu_01YGjWx3qpqyiMTzwe7HoJAZ",
+              "name": "Bash",
+              "bytes": 12715,
+              "sha256": "39c67e05f68e510283586583b17e79165ac0c8c0896ce68a5a8df0e78d4b0afe",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01XpAVd2UwPyRwJdSjTbsPS3",
+              "name": "Agent",
+              "bytes": 2813,
+              "sha256": "09aa4006bba19c071bfa51908265374abc6e3ff72f9893e13530c539609830b8",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01Dyy6mRhRT2z6BEm6P6hw8r",
+              "name": "Bash",
+              "bytes": 2051,
+              "sha256": "4afdfe28e23e0c743f8ce18356ffef3b4daa1c5c94af9ac3cf24cfeb335babfa",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_01MxNpmf6e6xbP8irHJLiJhG",
+              "name": "Bash",
+              "bytes": 1109,
+              "sha256": "1dce8f46ffce60cce458890445c533c22b5459b521fc7fec4b3d8ffa245b0f5b",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_016ezGH4ypkKdMBMqjzB4cQG",
+              "name": "Bash",
+              "bytes": 648,
+              "sha256": "e6d44e32850df6a3064fe6fe0cb3e42ebf704b917356fd39abbb1fbf0976b4d1",
+              "failed": false
+            }
+          ]
+        },
+        {
+          "id": "a3927b37a6b984f4e",
+          "tools": {
+            "Bash": {
+              "calls": 3,
+              "inputBytes": 1059,
+              "resultBytes": 18522,
+              "failedResults": 0,
+              "missingResults": 0
+            }
+          },
+          "unmatchedResultIds": [],
+          "repeatedExactCalls": [],
+          "largestResults": [
+            {
+              "toolId": "toolu_013aGfzoYunN2GFNoPUec147",
+              "name": "Bash",
+              "bytes": 16951,
+              "sha256": "cbe9668f71e03e2d5c25b01553d8826145cd7026168b96dc1a6327a146b5f6c0",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_016JrsQmMcimj8qo2cwoDWEV",
+              "name": "Bash",
+              "bytes": 1417,
+              "sha256": "4e528f4c227ca10699f5ad4d97c873ef2e62eea65ed0a6d17d236f38ded91799",
+              "failed": false
+            },
+            {
+              "toolId": "toolu_016tMd5SpPZFiaSCMG8wq2Vc",
+              "name": "Bash",
+              "bytes": 154,
+              "sha256": "2865da0b95c2adc19a242e019ad9155e72127978466510a036f482ddf0a3afb6",
+              "failed": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
