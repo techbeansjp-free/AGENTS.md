@@ -4,6 +4,8 @@
 
 PR #1606の現在の完了条件は[自律完走・品質・費用の受入条件](context-cost-plan.md#再設定した目標と完了条件進行中)を正本とする。下記C01–C23/J01–J06の導入・操作調査だけでは完了しない。性能改善と中断・再開を含む自律完走の目標は進行中である。
 
+[Claude内側検証を含む小規模実走](claude-host-mask-small-delivery.json)は、alpha.44の配布物と外部owner契約で、実装・内側`worktree-verify`・独立レビュー・外側再検証・合成Draft PR158/CIまで98.23秒、387,811 processed tokensで完走した。全参加Agentのusageを取得・Host集計と照合済み。単発の合成ケースであり、性能改善や複雑Goalの保証ではない。先行する保護パス許可不足の失敗は[別記録](claude-host-verification-gap.json)に残す。性能集計でもClaudeの内側検証が欠測なら合格にしない。
+
 | Codex current-hostの実証 | 対象証拠 | 判定・限界 |
 |---|---|---|
 | 小規模の元要求からDraft PR/CI | [自動完走](native-auto-delivery-results.json) | 無介入の合成1件。任意Issueの保証ではない |

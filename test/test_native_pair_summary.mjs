@@ -13,3 +13,11 @@ test('CLI changes or missing version cannot establish matched acceptance',()=>{c
 test('reviewer treatment is fixed within each comparison side',()=>{const p=fixture();for(const pair of p)pair.candidate.distribution.reviewerMode='registered';p[1].candidate.distribution.reviewerMode='generic';assert.throws(()=>summarizeNativePairs(p),/Reviewer variant/);});
 
 test('registered review acceptance requires the selected reviewer type',()=>{const p=fixture();for(const pair of p){pair.candidate.distribution.reviewerMode='registered';pair.candidate.review.agentType='asc-reviewer';}assert(summarizeNativePairs(p).accepted);p[0].candidate.review.agentType='claude';assert(!summarizeNativePairs(p).accepted);const q=fixture();q[0].baseline.review.agentType='asc-reviewer';assert(!summarizeNativePairs(q).accepted);});
+
+test('Claude performance acceptance requires observed in-Host verification of every submitted head',()=>{
+ const pairs=fixture();for(const pair of pairs)for(const side of ['baseline','candidate'])pair[side].conditions.host='claude';
+ let summary=summarizeNativePairs(pairs);assert.equal(summary.inHostVerificationComplete,false);assert.equal(summary.accepted,false);
+ for(const pair of pairs)for(const side of ['baseline','candidate']){const r=pair[side];r.evaluationCoverage={inHostVerification:{head:r.head,checks:r.conditions.commands.length}};}
+ summary=summarizeNativePairs(pairs);assert.equal(summary.inHostVerificationComplete,true);assert.equal(summary.accepted,true);
+ pairs[0].candidate.evaluationCoverage.inHostVerification.head='stale';assert.equal(summarizeNativePairs(pairs).accepted,false);
+});
