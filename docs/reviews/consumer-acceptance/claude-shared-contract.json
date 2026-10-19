@@ -1,0 +1,108 @@
+{
+  "scope": "Same Claude coordinator shared-contract revision before subsequent review-finding repair",
+  "head": "8185b6e17b024ea02d990ca81cfcccb48ec3903e",
+  "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "previousHead": "a8ae6d11e9cbe46abf1b7f276982ff728c84064b",
+  "process": {
+    "exit": 0,
+    "seconds": 283.0276488370728
+  },
+  "review": {
+    "taskId": "ac974e9b08a4c3951",
+    "verdict": "PASS",
+    "head": "8185b6e17b024ea02d990ca81cfcccb48ec3903e"
+  },
+  "oracles": {
+    "reservation": 0,
+    "billing": 0,
+    "accessors": 0,
+    "integration": 0,
+    "unknown-keys": 0,
+    "revision": 0
+  },
+  "usage": {
+    "cumulative": {
+      "totals": {
+        "input_tokens": 168,
+        "output_tokens": 108464,
+        "cache_read_input_tokens": 4310181,
+        "cache_creation_input_tokens": 277973
+      },
+      "threads": [
+        {
+          "id": "8829a26e-eeff-46df-890b-115572e0371d",
+          "messageCount": 40,
+          "usage": {
+            "input_tokens": 80,
+            "output_tokens": 38893,
+            "cache_read_input_tokens": 2817698,
+            "cache_creation_input_tokens": 109072
+          }
+        },
+        {
+          "id": "acc2c91e94967ee4e",
+          "messageCount": 19,
+          "usage": {
+            "input_tokens": 38,
+            "output_tokens": 30904,
+            "cache_read_input_tokens": 751332,
+            "cache_creation_input_tokens": 59861
+          }
+        },
+        {
+          "id": "a417af1f335ce3909",
+          "messageCount": 10,
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 28021,
+            "cache_read_input_tokens": 383807,
+            "cache_creation_input_tokens": 46824
+          }
+        },
+        {
+          "id": "a2e7843419ddcf777",
+          "messageCount": 7,
+          "usage": {
+            "input_tokens": 14,
+            "output_tokens": 6951,
+            "cache_read_input_tokens": 173794,
+            "cache_creation_input_tokens": 24551
+          }
+        },
+        {
+          "id": "ac974e9b08a4c3951",
+          "messageCount": 8,
+          "usage": {
+            "input_tokens": 16,
+            "output_tokens": 3695,
+            "cache_read_input_tokens": 183550,
+            "cache_creation_input_tokens": 37665
+          }
+        }
+      ],
+      "observedProcessedTokens": 4696786,
+      "missingUsage": [
+        {
+          "reason": "Host modelUsage absent or does not reconcile"
+        }
+      ],
+      "reconciledWithHostModelUsage": false,
+      "complete": false
+    },
+    "phaseDelta": {
+      "input_tokens": 40,
+      "output_tokens": 25077,
+      "cache_read_input_tokens": 1459893,
+      "cache_creation_input_tokens": 80247
+    },
+    "phaseProcessedTokens": 1565257,
+    "scope": "Cumulative transcripts frozen before repair; phase delta from preceding complete observation"
+  },
+  "qualityAccepted": false,
+  "limitations": [
+    "Existing additional input-error finding remains until repair and independent re-review",
+    "Cumulative Host modelUsage does not reconcile: output token discrepancy retained, not zero-filled",
+    "No revision Draft/CI yet; repair follows on same worktree",
+    "No evaluator implementation edits; fixture includes immutable previous sources and updated CI"
+  ]
+}
