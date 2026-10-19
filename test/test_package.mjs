@@ -33,6 +33,14 @@ test('packed Node distribution runs without source checkout, Python or dependenc
   const help=spawnSync(process.execPath,[cli,...args],{cwd:root,encoding:'utf8'});
   assert.equal(help.status,0);assert.equal(help.stderr,'');assert.match(help.stdout,/run-adaptive/);assert.match(help.stdout,/USAGE\.md/);
  }
+ const helpDirectory=path.join(root,'help-only');fs.mkdirSync(helpDirectory);
+ for(const command of ['start','worktree-create','worktree-verify','project-assets'])for(const flag of ['--help','-h']){
+  const result=spawnSync(process.execPath,[cli,command,flag],{cwd:helpDirectory,encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);assert.equal(result.stderr,'');
+  assert(result.stdout.includes('asc-v05 '+command+' '));assert(result.stdout.includes(path.join(packageRoot,'v05/USAGE.md')));
+  assert(!result.stdout.includes('run-adaptive'),'Command help should not require the full command catalogue');
+ }
+ assert.deepEqual(fs.readdirSync(helpDirectory),[],'Help must not create project or Git assets');
  const extraHelp=spawnSync(process.execPath,[cli,'--help','ignored'],{cwd:root,encoding:'utf8'});assert.equal(extraHelp.status,1);
  const extraVersion=spawnSync(process.execPath,[cli,'--version','ignored'],{cwd:root,encoding:'utf8'});assert.equal(extraVersion.status,1);
  const result=JSON.parse(execFileSync(process.execPath,[cli,'capabilities'],{cwd:root,encoding:'utf8'}));

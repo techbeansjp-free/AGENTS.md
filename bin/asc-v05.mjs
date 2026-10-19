@@ -27,7 +27,15 @@ try {
     if(args[0]!=='--snapshot')throw Error('Snapshot execution requires explicit --snapshot selection. Standard: start <project-directory>, then use the current AI Host and existing project tools.');
     args.shift();
   }
-  if((command===undefined||command==='--help'||command==='-h')&&args.length===0){
+  const nativeHelp={
+    start:'start <project-directory> [--path <changed-path>]...\n作業場所・規約参照を確認します（非Gitも可、Agent起動なし）。',
+    'worktree-create':'worktree-create <root> <issue> <type> <slug> <base>\n専用worktreeを作成します。type: feature|fix|refactor|test|docs|chore。baseは明示指定し、既存branch・作業場所は上書きしません。',
+    'worktree-verify':'worktree-verify <worktree> <base> <owner-contract.json>\n現在のHost権限で検証します。repo外のowner契約にintent・allowedPaths・commands（argv配列の配列）を指定します。検証失敗はexit 2。',
+    'project-assets':'project-assets <project-directory> [--register-skill] [--apply]\n既定は差分表示のみ。--applyで未編集の配布資産を更新し、利用者の変更との競合は保護します。'
+  };
+  if(Object.hasOwn(nativeHelp,command)&&args.length===1&&['--help','-h'].includes(args[0])){
+    console.log(`使い方: asc-v05 ${nativeHelp[command]}\n詳細: ${fileURLToPath(new URL('../v05/USAGE.md',import.meta.url))}`);
+  } else if((command===undefined||command==='--help'||command==='-h')&&args.length===0){
     console.log(`ASC v0.5 — Goal・契約・Evidenceに基づく開発ハーネス
 
 使い方: agent-skill-chain <command> [arguments]
