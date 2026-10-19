@@ -45,3 +45,9 @@ parent_tool_use_idのない親assistant messageをmessage.idで重複排除す�
 Skill quick_validateは環境にPyYAMLがなく未実行（ModuleNotFoundError）。新たな依存導入やHost設定変更は行っていない。配布物の既存検査と独立レビューを用い、validator成功とは記録しない。
 
 変更後の実配布検査: `TMPDIR=/var/tmp node --test --test-name-pattern='packed Node distribution runs' test/test_package.mjs` が1件成功（5.53秒）。source checkout・Python・外部依存なしの導入先で確認。これはモデルの往復数や性能の試験ではない。
+
+### 読取り案内修正後の限定確認
+
+alpha.32の単発確認は[記録](../claude-review-batching-followup.json)を参照。77.965秒・356,932 tokens、独立レビュー・oracle・合成PR135/CIは成功した。しかし親のReviewer依頼からreview.md参照が欠落し、Reviewerも同手順を読まなかったため、behavioralAcceptanceはfalse。v7へ混ぜず、速度改善の証拠にしない。
+
+前修正の「使う」は明示的な読取り指示より弱いため、依頼へ所在と読取り指示を必ず含める表現へ修正した。同一tool呼出しでの取得可は維持。独立レビューで具体的欠陥なし。前回の配布実走検査は配布構造について引き続き適用できるが、この文言のモデル遵守を証明するものではない。追加の同型cohortは開始していない。
