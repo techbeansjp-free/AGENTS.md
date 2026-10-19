@@ -1,0 +1,343 @@
+{
+  "schema": "asc-delegation-call-diagnostic/v1",
+  "source": "claude-unreached-verification-result.json",
+  "sourceSession": "f04677ba-d74f-4ac9-b8bc-bbee637e5156",
+  "scope": "One completed synthetic run; call counts are not token savings or causal attribution",
+  "threads": [
+    {
+      "id": "f04677ba-d74f-4ac9-b8bc-bbee637e5156",
+      "messageCount": 20,
+      "usage": {
+        "input_tokens": 40,
+        "output_tokens": 10845,
+        "cache_read_input_tokens": 808382,
+        "cache_creation_input_tokens": 43976
+      }
+    },
+    {
+      "id": "abdbbf06b2aaba52e",
+      "messageCount": 11,
+      "usage": {
+        "input_tokens": 22,
+        "output_tokens": 9069,
+        "cache_read_input_tokens": 371336,
+        "cache_creation_input_tokens": 50670
+      }
+    },
+    {
+      "id": "a80104e752a9e8c8a",
+      "messageCount": 16,
+      "usage": {
+        "input_tokens": 32,
+        "output_tokens": 8835,
+        "cache_read_input_tokens": 494766,
+        "cache_creation_input_tokens": 32378
+      }
+    },
+    {
+      "id": "a453317b4a3162b12",
+      "messageCount": 10,
+      "usage": {
+        "input_tokens": 20,
+        "output_tokens": 9135,
+        "cache_read_input_tokens": 293133,
+        "cache_creation_input_tokens": 32125
+      }
+    }
+  ],
+  "groups": [
+    [
+      {
+        "tool": "Bash",
+        "description": "Read ASC skill documentation"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read owner contract"
+      },
+      {
+        "tool": "Bash",
+        "description": "Locate and read REQUIREMENTS.md"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read independent review procedure reference"
+      },
+      {
+        "tool": "Bash",
+        "description": "Show ASC CLI top-level help"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read REVISION.md and check worktree state"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run ASC start to confirm workspace and conventions"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run ASC start from inside current worktree"
+      },
+      {
+        "tool": "Bash",
+        "description": "Check worktree-create usage"
+      },
+      {
+        "tool": "Bash",
+        "description": "Create worktree for Issue 9006 reservation"
+      },
+      {
+        "tool": "Bash",
+        "description": "Create worktree for Issue 9007 billing"
+      },
+      {
+        "tool": "Agent",
+        "description": "Implement reservation currency revision"
+      },
+      {
+        "tool": "Agent",
+        "description": "Implement billing currency revision"
+      },
+      {
+        "tool": "Bash",
+        "description": "No-op placeholder, awaiting background notification"
+      },
+      {
+        "tool": "Bash",
+        "description": "Check main worktree state and locate worker commits"
+      },
+      {
+        "tool": "Bash",
+        "description": "Cherry-pick both worker commits into integration branch"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run all six oracle checks"
+      },
+      {
+        "tool": "Bash",
+        "description": "Confirm current state before review"
+      },
+      {
+        "tool": "Bash",
+        "description": "Get full HEAD hash and diff for reviewer"
+      },
+      {
+        "tool": "Agent",
+        "description": "independent_review"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run required worktree-verify against owner contract"
+      }
+    ],
+    [
+      {
+        "tool": "Bash",
+        "description": "Check if target worktree directory exists"
+      },
+      {
+        "tool": "Bash",
+        "description": "Check worktree git status and branch"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read REQUIREMENTS.md"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read REVISION.md"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read current reservation service.mjs"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read reservation oracle"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read accessors oracle"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read revision oracle"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read integration oracle"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read unknown-keys oracle"
+      },
+      {
+        "tool": "Bash",
+        "description": "List and read previous reservation records"
+      },
+      {
+        "tool": "Bash",
+        "description": "Apply currency patch to reservation service.mjs"
+      },
+      {
+        "tool": "Bash",
+        "description": "Check TMPDIR env var"
+      },
+      {
+        "tool": "Bash",
+        "description": "Apply currency patch to reservation service.mjs"
+      },
+      {
+        "tool": "Bash",
+        "description": "Show diff of reservation service.mjs"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run reservation oracle (revised)"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run accessors oracle (revised)"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run integration oracle"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run unknown-keys oracle"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run revision oracle"
+      },
+      {
+        "tool": "Bash",
+        "description": "Stage, commit the reservation service change"
+      },
+      {
+        "tool": "Bash",
+        "description": "Confirm clean tree and re-verify reservation oracle"
+      }
+    ],
+    [
+      {
+        "tool": "Bash",
+        "description": "Check worktree status and git log"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read requirements and revision docs"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read current billing service implementation"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read billing oracle test"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read revision and integration oracles"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read accessors and unknown-keys oracles"
+      },
+      {
+        "tool": "Bash",
+        "description": "Apply currency validation patch to billing service"
+      },
+      {
+        "tool": "Bash",
+        "description": "Review patched issue method for canonicalInput handling"
+      },
+      {
+        "tool": "Bash",
+        "description": "Check node version and previous dir"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run billing oracle in revised mode"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run accessors and unknown-keys oracles"
+      },
+      {
+        "tool": "Bash",
+        "description": "Check if reservation service has currency support"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run integration and revision oracles"
+      },
+      {
+        "tool": "Bash",
+        "description": "Review diff stat and stage billing change"
+      },
+      {
+        "tool": "Bash",
+        "description": "Commit billing currency validation change"
+      }
+    ],
+    [
+      {
+        "tool": "Bash",
+        "description": "Read review procedure"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read requirements"
+      },
+      {
+        "tool": "Bash",
+        "description": "Read revision"
+      },
+      {
+        "tool": "Bash",
+        "description": "Show full diff"
+      },
+      {
+        "tool": "Bash",
+        "description": "View full billing service"
+      },
+      {
+        "tool": "Bash",
+        "description": "View full reservation service"
+      },
+      {
+        "tool": "Bash",
+        "description": "Diff previous implementations against current"
+      },
+      {
+        "tool": "Bash",
+        "description": "List oracle tests"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run all oracle test suites"
+      },
+      {
+        "tool": "Bash",
+        "description": "Check exit codes of unknown-keys and accessors oracle scripts"
+      },
+      {
+        "tool": "Bash",
+        "description": "Peek at revision oracle test content"
+      },
+      {
+        "tool": "Bash",
+        "description": "Run extra independent currency validation / idempotency-key-not-consumed checks"
+      },
+      {
+        "tool": "Bash",
+        "description": "Rerun fixed extra checks for currency validation and idempotency key non-consumption"
+      }
+    ]
+  ],
+  "observation": "Reservation worker separately reads known requirement, revision, service and oracle paths. Delegation does not include parent batching guidance. Reviewer already has its own batching guidance: this is not proof that instructions enforce behavior."
+}
