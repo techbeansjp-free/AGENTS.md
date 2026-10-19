@@ -1,0 +1,25 @@
+{
+  "scope": "One synthetic Claude two-active-worker interruption and fresh-context recovery diagnostic; not a performance pair.",
+  "maximumRuns": 1,
+  "packageVersion": "0.5.900-alpha.41",
+  "packageSha256": "d52f09a87fb3886057144d642d107f97f15e8bd0d027794322c60a535192c70d",
+  "runnerSha256": "3ee039225f0654741bd82833dcfa80eb09778fb1a4a6b793b375608be7bc539b",
+  "model": "sonnet",
+  "effort": "medium",
+  "fixtureBase": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "mode": "--complex-interrupt-deliver",
+  "checks": [
+    "two direct Host tasks explicitly assigned distinct worktrees, no terminal task state observed when both saved changes",
+    "exclusive synthetic service interruption and descendant shutdown before recovery",
+    "unchanged original requirements and revision, preserved worktrees, no evaluator implementation or planning edits",
+    "fresh-context continuation, six original oracles, independent review, Draft PR and both CI",
+    "all known interrupted and recovery Context usage retained, incomplete terminal totals not reported as complete"
+  ],
+  "failurePolicy": "Keep failed checkpoint or recovery. No unchanged rerun; no fallback to ordinary completion.",
+  "limitations": [
+    "Host task liveness is an observed lifecycle state, not proof that every source edit was unfinished.",
+    "Fault injection and recovery invocation are evaluation Host actions; not automatic production recovery.",
+    "No terminal model totals for interrupted attempt: whole-run cost remains incomplete."
+  ],
+  "status": "not started"
+}

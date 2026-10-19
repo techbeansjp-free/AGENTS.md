@@ -7,8 +7,8 @@ test('synthetic interruption preserves edits, stops setsid children, and rejects
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-native-interrupt-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const file=path.join(root,'service.mjs'),beat=path.join(root,'heartbeat');fs.writeFileSync(file,'original');
  const worker=`const fs=require('fs');setInterval(()=>fs.appendFileSync(${JSON.stringify(beat)},'x'),10);`;
- const code=`const fs=require('fs');require('child_process').spawn(process.execPath,['-e',${JSON.stringify(worker)}],{detached:true,stdio:'ignore'});setTimeout(()=>fs.writeFileSync(${JSON.stringify(file)},'saved unfinished work'),200);setInterval(()=>{},1000);`;
- const result=await interruptSavedAttempt({directory:path.join(root,'interrupted'),executable:process.execPath,argv:['-e',code],env,input:'',files:[file]});
+ const code=`if(process.cwd()!==${JSON.stringify(root)})process.exit(9);const fs=require('fs');require('child_process').spawn(process.execPath,['-e',${JSON.stringify(worker)}],{detached:true,stdio:'ignore'});setTimeout(()=>fs.writeFileSync(${JSON.stringify(file)},'saved unfinished work'),200);setInterval(()=>{},1000);`;
+ const result=await interruptSavedAttempt({directory:path.join(root,'interrupted'),executable:process.execPath,argv:['-e',code],env,input:'',files:[file],cwd:root});
  assert.equal(result.checkpoint,true);assert.equal(result.stopped,true);assert.equal(fs.readFileSync(file,'utf8'),'saved unfinished work');const before=fs.readFileSync(beat,'utf8');await setTimeout(100);assert.equal(fs.readFileSync(beat,'utf8'),before);
  await assert.rejects(interruptSavedAttempt({directory:path.join(root,'early'),executable:process.execPath,argv:['-e','process.exit(0)'],env,input:'',files:[file]}),/No verified/);
  assert.equal(JSON.parse(fs.readFileSync(path.join(root,'early/result.json'))).checkpoint,false);

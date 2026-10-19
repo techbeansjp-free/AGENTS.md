@@ -3,15 +3,15 @@ import {setInterval,clearInterval} from 'node:timers';
 import fs from 'node:fs';import path from 'node:path';import {spawn,spawnSync} from 'node:child_process';import {randomUUID,createHash} from 'node:crypto';import {fileURLToPath} from 'node:url';import {performance} from 'node:perf_hooks';
 const supervisor=fileURLToPath(new URL('../src/agent-lifecycle-supervisor.mjs',import.meta.url));
 const digest=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-export async function interruptSavedAttempt({directory,executable,argv,env,input,files,observeWorkers}){
- if(process.platform!=='linux'||!files.length)throw Error('Synthetic interruption requires Linux and explicit files');
+export async function interruptSavedAttempt({directory,executable,argv,env,input,files,observeWorkers,cwd='/'}){
+ if(process.platform!=='linux'||!files.length||!path.isAbsolute(cwd))throw Error('Synthetic interruption requires Linux and explicit files');
  fs.mkdirSync(directory);let before=files.map(digest),observed=[];const unit=`asc-agent-${randomUUID()}.service`;
  const managerEnv={PATH:'/usr/bin:/bin',XDG_RUNTIME_DIR:`/run/user/${process.getuid()}`,DBUS_SESSION_BUS_ADDRESS:`unix:path=/run/user/${process.getuid()}/bus`};
  const control=(...args)=>spawnSync('/usr/bin/systemctl',['--user',...args],{env:managerEnv,encoding:'utf8',timeout:5000,maxBuffer:65536});
  const probe=control('show','--property=Version');if(probe.status!==0||probe.error)throw Error('Synthetic interruption service unavailable');
  const out=fs.openSync(path.join(directory,'events.jsonl'),'w'),err=fs.openSync(path.join(directory,'stderr'),'w'),started=performance.now();
  return new Promise((resolve,reject)=>{
-  const child=spawn('/usr/bin/systemd-run',['--user','--quiet','--wait','--pipe',`--unit=${unit}`,'--service-type=oneshot','--working-directory=/','--property=KillMode=control-group','--property=ExitType=main','--property=Restart=no','--property=TimeoutStartSec=infinity','--property=TimeoutStopSec=1s',process.execPath,supervisor],{env:managerEnv,stdio:['pipe',out,err]});
+  const child=spawn('/usr/bin/systemd-run',['--user','--quiet','--wait','--pipe',`--unit=${unit}`,'--service-type=oneshot',`--working-directory=${cwd}`,'--property=KillMode=control-group','--property=ExitType=main','--property=Restart=no','--property=TimeoutStartSec=infinity','--property=TimeoutStopSec=1s',process.execPath,supervisor],{env:managerEnv,stdio:['pipe',out,err]});
   let signalSent=false,cgroup='',pollError;
   child.stdin.on('error',e=>{if(!signalSent)pollError=e;});
   child.stdin.write(JSON.stringify({executable,argv,env,input})+'\n');
