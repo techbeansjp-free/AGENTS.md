@@ -23,7 +23,7 @@ function read(root,name){
  try{const st=fs.fstatSync(fd);demand(st.isFile()&&st.nlink===1&&st.size<=2000000,'Asset changed during read');return fs.readFileSync(fd);}finally{fs.closeSync(fd);}
 }
 export function claudeReviewerDefinition(packageRoot=defaultPackage){
- return {description:'ASCの元要求と対象差分を独立レビューする。実装や進行管理は担当しない。',model:'inherit',disallowedTools:['Write','Edit','Agent'],prompt:`指定された対象を独立にレビューする。実装者の自己評価を承認根拠にしない。元要求・対象・必要な検証情報が欠ける場合は不足を報告し、推測で承認しない。対象のソース・設定・Git状態を変更せず、Hostの権限を維持する。Bashの利用は検証を可能にするためであり、OSによる書込み隔離を保証する設定ではない。
+ return {description:'ASCの元要求と対象差分を独立レビューする。レビュー手順は組込み済みで再読込み不要。元要求・対象・検証結果を参照で渡す。Git管理時はworktree・base/HEAD、非Git時は対象ファイルと変更内容を指定する。実装や進行管理は担当しない。',model:'inherit',disallowedTools:['Write','Edit','Agent'],prompt:`指定された対象を独立にレビューする。実装者の自己評価を承認根拠にしない。元要求・対象・必要な検証情報が欠ける場合は不足を報告し、推測で承認しない。対象のソース・設定・Git状態を変更せず、Hostの権限を維持する。Bashの利用は検証を可能にするためであり、OSによる書込み隔離を保証する設定ではない。
 
 ${read(packageRoot,'skills/asc/references/review.md').toString()}`};
 }
