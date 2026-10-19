@@ -39,7 +39,11 @@ jobs:
           node complex/oracle/integration.mjs complex
           node complex/oracle/unknown-keys.mjs complex
 `);
-git('add','complex','greeting.py','.github/workflows/complex.yml');git('commit','-m','Prepare synthetic complex acceptance fixture');
+git('add','complex','greeting.py','.github/workflows/complex.yml');
+// Identical fixture trees and parent must yield the same comparison base;
+// only this evaluator-owned preparation commit has a fixed timestamp.
+execFileSync('git',['-c','commit.gpgsign=false','commit','-m','Prepare synthetic complex acceptance fixture'],{
+ cwd:origin,env:{...env,GIT_AUTHOR_DATE:'2000-01-01T00:00:00Z',GIT_COMMITTER_DATE:'2000-01-01T00:00:00Z'},stdio:['ignore','pipe','pipe']});
 const base=git('rev-parse','HEAD');git('branch','develop',base);
 const now=new Date(),pad=n=>String(n).padStart(2,'0');
 const stamp=`${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
