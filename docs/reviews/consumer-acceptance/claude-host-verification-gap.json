@@ -24,5 +24,25 @@
   },
   "fixBoundary": "No automatic filename or mount trust. Only exact out-of-repo owner hostMaskedPaths, disjoint from change scope, may omit observed read-only null mounts from untracked status. Kernel mount identity must remain unchanged at command boundaries. Underlying hidden content is not verified.",
   "validation": "Real bwrap namespace with unapproved/approved masks, writable mask, changed tracked source, unrelated untracked file, generated untracked file, symlink and scope-overlap cases. No model calls for this diagnostic.",
-  "performanceClaim": false
+  "performanceClaim": false,
+  "distributionRegression": {
+    "test": "test/test_host_masked_paths.mjs",
+    "sameTestSha256": "b5173feb847366f97dc3ff5c618b7123658fe2207867607dbbfdd596b1020883",
+    "baseline": {
+      "version": "0.5.900-alpha.42",
+      "tarballSha256": "890e9572c94879ed0aac3c755431dd2cf7e4ebc72714499a7157015bdf573df5",
+      "exit": 1,
+      "reason": "Commit intended changes before verification; preserve unrelated work separately",
+      "logSha256": "363cee4770975093d29c72480126a9e8c5fbac86acfa5ae881a7e9d1aae075b5"
+    },
+    "candidate": {
+      "version": "0.5.900-alpha.43",
+      "tarballSha256": "9314308411f945c5df72ded3a437b86f2c2846d0307c7a7470ff59f8aefb8717",
+      "exit": 0,
+      "logSha256": "88587239924d1d37acf1ade0335fa8db34eb22fbbc816f9611a9bebd138816fd"
+    },
+    "execution": "Separate extracted distributions; real bwrap namespace, no source implementation import, synthetic dedicated worktree and out-of-repo owner contract.",
+    "modelCalls": 0,
+    "scope": "Linux mask regression only; not Claude model delivery, arbitrary Host support or whole-development performance acceptance."
+  }
 }
