@@ -1,0 +1,44 @@
+{
+  "scope": "Diagnostic of all three stopped v9 runs; no new model execution. Stream messages and tool IDs are deduplicated. Parent input includes cache; these counts are not reconciled full-session usage and do not replace recorded totals. Different behavior across trials is observational, not causal proof.",
+  "runs": [
+    {
+      "side": "B",
+      "run": "iwHfXl",
+      "eventsSha256": "bcf379d39f24e974ce3af340423010d89c6a1652467336e456beb6da40623616",
+      "parentUniqueMessagesObservedInStream": 12,
+      "parentFirstInputTokens": 23140,
+      "parentMaximumInputTokens": 35564,
+      "parentUniqueToolCalls": 11,
+      "parentReviewReferenceReadCalls": 1,
+      "parentSendMessageCalls": 0
+    },
+    {
+      "side": "C",
+      "run": "JVJQi6",
+      "eventsSha256": "1c98804c04fa15d847fd9b74c1ef5c9ed51db95a9df6ecf354118d7f4be006d6",
+      "parentUniqueMessagesObservedInStream": 10,
+      "parentFirstInputTokens": 23137,
+      "parentMaximumInputTokens": 32461,
+      "parentUniqueToolCalls": 10,
+      "parentReviewReferenceReadCalls": 0,
+      "parentSendMessageCalls": 0
+    },
+    {
+      "side": "C",
+      "run": "4KIhY3",
+      "eventsSha256": "44cc0f4a9761f4e85478ead76caef38a18f492c33f8f90ee41ddc02a0a160cf0",
+      "parentUniqueMessagesObservedInStream": 12,
+      "parentFirstInputTokens": 23151,
+      "parentMaximumInputTokens": 36453,
+      "parentUniqueToolCalls": 13,
+      "parentReviewReferenceReadCalls": 1,
+      "parentSendMessageCalls": 1
+    }
+  ],
+  "findings": [
+    "All parents begin with approximately 23k input tokens before reading the Skill; Skill byte reduction cannot remove this existing Host/prompt context.",
+    "Parent pre-reading of the reviewer reference occurred in baseline and failed candidate, but not the completed candidate. Existing Skill already tells the parent not to pre-read unless needed for implementation.",
+    "Failed candidate required a SendMessage correction of the reviewer commit spelling. Latest evaluator fix accepts uniquely resolved abbreviations but does not permit stale or unfinished reviews.",
+    "Do not add another generic batching instruction: the existing Skill already supplies it. A later experiment must isolate an executable change rather than repeat these trials until they pass."
+  ]
+}
