@@ -1,0 +1,336 @@
+{
+  "schema": "asc-parent-phase-usage/v1",
+  "method": "Deduplicate authoritative parent transcript messages by ID and take maximum cumulative usage fields, as in claudeUsage. Reconcile exactly to existing complete all-context result. Phase boundaries are first native worker and first independent_review tool message.",
+  "limitations": [
+    "Phase attribution locates when tokens were processed, not which earlier content caused them.",
+    "workers-to-first-review includes dispatch, waiting, integration and any repair; review-and-finalization includes follow-up.",
+    "Cache tokens are processed tokens, not monetary cost.",
+    "Different diagnostic candidates are not a matched causal comparison; do not pool them with v3 baseline."
+  ],
+  "runs": [
+    {
+      "label": "v3-baseline-01",
+      "session": "ab802f36-e795-4d10-ae48-4dd5dacddf21",
+      "transcriptSha256": "b3714f52123b0bbfa86d28427d7da243b1060a8ee9c496adabedc8ff17a3f7b6",
+      "parentProcessedTokens": 1871928,
+      "otherContextsProcessedTokens": 613346,
+      "allContextsProcessedTokens": 2485274,
+      "phases": {
+        "before-first-worker": {
+          "messages": 13,
+          "usage": {
+            "input_tokens": 26,
+            "output_tokens": 4878,
+            "cache_read_input_tokens": 448274,
+            "cache_creation_input_tokens": 41815
+          },
+          "processedTokens": 494993
+        },
+        "workers-to-first-review": {
+          "messages": 14,
+          "usage": {
+            "input_tokens": 28,
+            "output_tokens": 11898,
+            "cache_read_input_tokens": 997897,
+            "cache_creation_input_tokens": 25824
+          },
+          "processedTokens": 1035647
+        },
+        "review-and-finalization": {
+          "messages": 4,
+          "usage": {
+            "input_tokens": 8,
+            "output_tokens": 3036,
+            "cache_read_input_tokens": 331249,
+            "cache_creation_input_tokens": 6995
+          },
+          "processedTokens": 341288
+        }
+      }
+    },
+    {
+      "label": "v3-baseline-02",
+      "session": "da0db4bf-88e2-4dd9-8d5b-8f4bf56e61f8",
+      "transcriptSha256": "03e18c1003bacefb4c66e35309c2d741a0105f01f492d732490df41de6604603",
+      "parentProcessedTokens": 854496,
+      "otherContextsProcessedTokens": 829134,
+      "allContextsProcessedTokens": 1683630,
+      "phases": {
+        "before-first-worker": {
+          "messages": 6,
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 2771,
+            "cache_read_input_tokens": 184762,
+            "cache_creation_input_tokens": 33000
+          },
+          "processedTokens": 220545
+        },
+        "workers-to-first-review": {
+          "messages": 7,
+          "usage": {
+            "input_tokens": 14,
+            "output_tokens": 5058,
+            "cache_read_input_tokens": 363405,
+            "cache_creation_input_tokens": 11335
+          },
+          "processedTokens": 379812
+        },
+        "review-and-finalization": {
+          "messages": 4,
+          "usage": {
+            "input_tokens": 8,
+            "output_tokens": 2984,
+            "cache_read_input_tokens": 242622,
+            "cache_creation_input_tokens": 8525
+          },
+          "processedTokens": 254139
+        }
+      }
+    },
+    {
+      "label": "v3-baseline-03",
+      "session": "27ffe337-a277-4486-a3d3-ce504f1a7656",
+      "transcriptSha256": "7faab3f04d831dde1699ae90539e1e78349346263ec3908c9975b03b87488bd0",
+      "parentProcessedTokens": 953456,
+      "otherContextsProcessedTokens": 1050254,
+      "allContextsProcessedTokens": 2003710,
+      "phases": {
+        "before-first-worker": {
+          "messages": 7,
+          "usage": {
+            "input_tokens": 14,
+            "output_tokens": 3037,
+            "cache_read_input_tokens": 227369,
+            "cache_creation_input_tokens": 32133
+          },
+          "processedTokens": 262553
+        },
+        "workers-to-first-review": {
+          "messages": 9,
+          "usage": {
+            "input_tokens": 18,
+            "output_tokens": 5344,
+            "cache_read_input_tokens": 478151,
+            "cache_creation_input_tokens": 13387
+          },
+          "processedTokens": 496900
+        },
+        "review-and-finalization": {
+          "messages": 3,
+          "usage": {
+            "input_tokens": 6,
+            "output_tokens": 3111,
+            "cache_read_input_tokens": 183338,
+            "cache_creation_input_tokens": 7548
+          },
+          "processedTokens": 194003
+        }
+      }
+    },
+    {
+      "label": "v3-baseline-04",
+      "session": "851a0e09-0756-4d3e-abcb-675f502d3e5c",
+      "transcriptSha256": "93a1401a3c43820c601bd6237cd73010eda8833230e37745a958e1e8a9eeac43",
+      "parentProcessedTokens": 884350,
+      "otherContextsProcessedTokens": 835047,
+      "allContextsProcessedTokens": 1719397,
+      "phases": {
+        "before-first-worker": {
+          "messages": 5,
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 2942,
+            "cache_read_input_tokens": 139678,
+            "cache_creation_input_tokens": 26252
+          },
+          "processedTokens": 168882
+        },
+        "workers-to-first-review": {
+          "messages": 10,
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 5380,
+            "cache_read_input_tokens": 468592,
+            "cache_creation_input_tokens": 12140
+          },
+          "processedTokens": 486132
+        },
+        "review-and-finalization": {
+          "messages": 4,
+          "usage": {
+            "input_tokens": 8,
+            "output_tokens": 3092,
+            "cache_read_input_tokens": 218103,
+            "cache_creation_input_tokens": 8133
+          },
+          "processedTokens": 229336
+        }
+      }
+    },
+    {
+      "label": "v3-baseline-05",
+      "session": "b190b9db-db77-420e-b931-31496398a2b2",
+      "transcriptSha256": "26a58edaeab30b2de0bab1ddf68ea4114415c591b1020679478870a88de6cfdf",
+      "parentProcessedTokens": 1514076,
+      "otherContextsProcessedTokens": 893159,
+      "allContextsProcessedTokens": 2407235,
+      "phases": {
+        "before-first-worker": {
+          "messages": 13,
+          "usage": {
+            "input_tokens": 26,
+            "output_tokens": 9860,
+            "cache_read_input_tokens": 541738,
+            "cache_creation_input_tokens": 51438
+          },
+          "processedTokens": 603062
+        },
+        "workers-to-first-review": {
+          "messages": 7,
+          "usage": {
+            "input_tokens": 14,
+            "output_tokens": 4275,
+            "cache_read_input_tokens": 490129,
+            "cache_creation_input_tokens": 10461
+          },
+          "processedTokens": 504879
+        },
+        "review-and-finalization": {
+          "messages": 5,
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 3155,
+            "cache_read_input_tokens": 394292,
+            "cache_creation_input_tokens": 8678
+          },
+          "processedTokens": 406135
+        }
+      }
+    },
+    {
+      "label": "alpha53",
+      "session": "f04677ba-d74f-4ac9-b8bc-bbee637e5156",
+      "transcriptSha256": "1997773523016d4e1dd9cab0f2fa500a025014e529cb3705b906822b89e227af",
+      "parentProcessedTokens": 863243,
+      "otherContextsProcessedTokens": 1301521,
+      "allContextsProcessedTokens": 2164764,
+      "phases": {
+        "before-first-worker": {
+          "messages": 7,
+          "usage": {
+            "input_tokens": 14,
+            "output_tokens": 2743,
+            "cache_read_input_tokens": 207510,
+            "cache_creation_input_tokens": 24036
+          },
+          "processedTokens": 234303
+        },
+        "workers-to-first-review": {
+          "messages": 9,
+          "usage": {
+            "input_tokens": 18,
+            "output_tokens": 4902,
+            "cache_read_input_tokens": 393040,
+            "cache_creation_input_tokens": 11570
+          },
+          "processedTokens": 409530
+        },
+        "review-and-finalization": {
+          "messages": 4,
+          "usage": {
+            "input_tokens": 8,
+            "output_tokens": 3200,
+            "cache_read_input_tokens": 207832,
+            "cache_creation_input_tokens": 8370
+          },
+          "processedTokens": 219410
+        }
+      }
+    },
+    {
+      "label": "alpha55-native",
+      "session": "790deea7-6e05-4392-a8fe-544ee8defa1a",
+      "transcriptSha256": "a5889664d0c574d3d1363e578e44c6f7395d0c128e45cfeaaeff18bbc102e41b",
+      "parentProcessedTokens": 1291047,
+      "otherContextsProcessedTokens": 1072356,
+      "allContextsProcessedTokens": 2363403,
+      "phases": {
+        "before-first-worker": {
+          "messages": 9,
+          "usage": {
+            "input_tokens": 18,
+            "output_tokens": 3698,
+            "cache_read_input_tokens": 293880,
+            "cache_creation_input_tokens": 34084
+          },
+          "processedTokens": 331680
+        },
+        "workers-to-first-review": {
+          "messages": 12,
+          "usage": {
+            "input_tokens": 24,
+            "output_tokens": 5379,
+            "cache_read_input_tokens": 667302,
+            "cache_creation_input_tokens": 15210
+          },
+          "processedTokens": 687915
+        },
+        "review-and-finalization": {
+          "messages": 4,
+          "usage": {
+            "input_tokens": 8,
+            "output_tokens": 2693,
+            "cache_read_input_tokens": 260972,
+            "cache_creation_input_tokens": 7779
+          },
+          "processedTokens": 271452
+        }
+      }
+    },
+    {
+      "label": "alpha56",
+      "session": "c0190a7b-9318-49d7-9e2c-9a200a8fc844",
+      "transcriptSha256": "539d60a68679a0bec94354c54f89ae5eb507f24b8392308def38d115d4da228d",
+      "parentProcessedTokens": 1203389,
+      "otherContextsProcessedTokens": 1329764,
+      "allContextsProcessedTokens": 2533153,
+      "phases": {
+        "before-first-worker": {
+          "messages": 6,
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 2584,
+            "cache_read_input_tokens": 171962,
+            "cache_creation_input_tokens": 27934
+          },
+          "processedTokens": 202492
+        },
+        "workers-to-first-review": {
+          "messages": 14,
+          "usage": {
+            "input_tokens": 28,
+            "output_tokens": 7558,
+            "cache_read_input_tokens": 710502,
+            "cache_creation_input_tokens": 20071
+          },
+          "processedTokens": 738159
+        },
+        "review-and-finalization": {
+          "messages": 4,
+          "usage": {
+            "input_tokens": 8,
+            "output_tokens": 3045,
+            "cache_read_input_tokens": 252751,
+            "cache_creation_input_tokens": 6934
+          },
+          "processedTokens": 262738
+        }
+      }
+    }
+  ],
+  "analysisScript": {
+    "file": "claude-parent-phase-analysis.py.txt",
+    "sha256": "10691c6f6378edfc8847a3051e5e911bbf4038caae17178f7e025f0c79bc9267"
+  }
+}
