@@ -793,3 +793,9 @@ Role inspection of alpha.56 shows reservation worker 547,733 tokens/18 messages,
 追加のAI実走なしで、同じauthoritative transcript集計器をOpus両側へ適用し、`claude-opus-phase-usage.json`に保存した。進行役は338,523→317,655 tokens、その他Contextは437,783→601,724 tokensだった。従って、この組の総量増加を親Contextの膨張だけで説明できない。候補担当は適用される実装指針を読み、結合検査の未到達条件について追加確認している。これらの品質確認を単に無駄と扱わない。
 
 `coordination.md`では二重に記載していた準備済みworktreeの扱いを統合し、委譲情報・検証・成果受渡しを整理した。元要求、権限、未到達条件の扱い、未commit成果の保持、HEAD照合、孫の観測限界、1セッション複数Issueを維持する。意味の保持を独立レビューし、配布・更新・設定保護・並列worktreeの14試験は成功。本文サイズ減少を実行時tokensや時間の改善率に読み替えない。全体の性能受入は未達。
+
+### 中断・評価復旧の時間範囲の修正
+
+評価runnerの`totalSeconds`は従来、故障注入後の再開から計測しており、中断前の実行を含まなかった。初回実行の直前からCI確認までへ変更し、fixture準備を含まない範囲を`timingScope`で明記した。過去の記録を新しい測定範囲へ読み替えない。中断途中のterminal usageが欠ける場合の不完全判定は維持する。
+
+評価プログラムの修正待ちを含む推定時間は、exportのJSONと標準出力の両方で`elapsedSeconds:null`、`elapsedSecondsEstimate`、`elapsedComparisonEligible:false`として分離する。回帰試験と保存済みOpus両試行の再exportで確認し、元の失敗記録・検証・CIを保持した。新しい実走や利用者データの送信は行っていない。
