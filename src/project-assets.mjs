@@ -22,7 +22,7 @@ function read(root,name){
  const fd=fs.openSync(cursor,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
  try{const st=fs.fstatSync(fd);demand(st.isFile()&&st.nlink===1&&st.size<=2000000,'Asset changed during read');return fs.readFileSync(fd);}finally{fs.closeSync(fd);}
 }
-function catalog(packageRoot,registerSkill){
+function catalog(packageRoot,registerSkill,registerClaudeReviewer){
  const assets=new Map(),templates='v05/templates/specs';
  const visit=relative=>{
   const directory=path.join(packageRoot,relative);demand(fs.lstatSync(directory).isDirectory()&&!fs.lstatSync(directory).isSymbolicLink(),'Unsafe template directory');
@@ -62,15 +62,25 @@ description: ASCで許可された開発・再開・独立レビューを実行�
 
 [プロジェクトのASC Skill](../../../.agent-skill-chain/skills/asc/SKILL.md)を読み、指定されたGoalと権限の範囲で実行する。入口が欠落していれば導入状態を確認し、旧WorkflowやPATH上の別版へ推測で切り替えない。Skillの登録は外部操作や権限拡張の承認ではない。
 `));
+ if(registerClaudeReviewer)assets.set('.claude/agents/asc-reviewer.md',Buffer.from(`---
+name: asc-reviewer
+description: ASCの元要求と対象差分を独立レビューする。実装や進行管理は担当しない。
+model: inherit
+disallowedTools: Write, Edit, Agent
+---
+
+指定された対象を独立にレビューする。実装者の自己評価を承認根拠にしない。元要求・対象・必要な検証情報が欠ける場合は不足を報告し、推測で承認しない。対象のソース・設定・Git状態を変更せず、Hostの権限を維持する。Bashの利用は検証を可能にするためであり、OSによる書込み隔離を保証する設定ではない。
+
+${read(packageRoot,'skills/asc/references/review.md').toString()}`));
  demand(assets.size<=256&&[...assets.values()].every(v=>Buffer.isBuffer(v)),'Invalid distribution assets');return assets;
 }
 function git(repo,args,input){
  const result=spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','core.attributesFile=/dev/null',...args],{cwd:repo,input,encoding:null,maxBuffer:16000000,timeout:20000,env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_ATTR_NOSYSTEM:'1',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'}});
  demand(!result.error&&result.status===0,'Asset Git operation failed; inspect worktree before retry');return result.stdout;
 }
-export function projectAssets(directory,{apply=false,registerSkill=false,packageRoot=defaultPackage}={}){
+export function projectAssets(directory,{apply=false,registerSkill=false,registerClaudeReviewer=false,packageRoot=defaultPackage}={}){
  const {repo}=projectLocation(directory);packageRoot=fs.realpathSync(packageRoot);
- const assets=catalog(packageRoot,registerSkill),priorBytes=read(repo,record);
+ const assets=catalog(packageRoot,registerSkill,registerClaudeReviewer),priorBytes=read(repo,record);
  let previous={};
  if(priorBytes){
   const parsed=JSON.parse(priorBytes);demand(parsed.schema==='asc-project-assets/v1'&&parsed.files&&typeof parsed.files==='object'&&!Array.isArray(parsed.files),'Invalid distribution record');
@@ -80,8 +90,9 @@ export function projectAssets(directory,{apply=false,registerSkill=false,package
  const changes=[],conflicts=[],before=new Map(),files={};
  // A normal package update preserves the explicitly installed Host entry and its
  // preimage, without gaining permission to rewrite it.
- const registration='.agents/skills/asc/SKILL.md';
- if(!registerSkill&&Object.hasOwn(previous,registration))files[registration]=previous[registration];
+ for(const [registration,selected] of [['.agents/skills/asc/SKILL.md',registerSkill],['.claude/agents/asc-reviewer.md',registerClaudeReviewer]]){
+  if(!selected&&Object.hasOwn(previous,registration))files[registration]=previous[registration];
+ }
  for(const [name,bytes] of assets){
   const current=read(repo,name),actual=current===null?null:hash(current),next=hash(bytes);before.set(name,current);files[name]=next;
   if(actual===next)continue;

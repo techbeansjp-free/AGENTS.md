@@ -1,0 +1,54 @@
+{
+  "scope": "Explicit Claude reviewer registration from unpublished distribution into synthetic non-Git project; selected top-level reviewer, not parent-to-subagent E2E or performance comparison.",
+  "packageVersion": "0.5.900-alpha.33",
+  "packageSha256": "e16c193badb819a122bdfc32a6a5952f4e5b23ad0305749cd05c8a65aecdde1e",
+  "cliVersion": "2.1.282 (Claude Code)",
+  "model": "claude-sonnet-5",
+  "effort": "medium",
+  "selectedAgent": "asc-reviewer",
+  "discovered": true,
+  "registrationSha256": "e55d430a419bc71c263f1d7b958527cdebc620dc3a17eda88bd98cd7c9f3aefe",
+  "canonicalProcedureSha256": "392bf24c86440b6a99c9b79191bbef9eb243a44d5a5ad113777032c9cc925e20",
+  "canonicalProcedureIncluded": true,
+  "sourceSha256": "163fa14c7a1c49234bfef8f697289ea68a3c7aa08fb254ee0861d8c772fdb7ff",
+  "testSha256": "65e6f45852dd1a7329cd4d0d452dcce6515bd1cb799c7598724363cc995aefe3",
+  "commands": [
+    "ls -la && echo ---SUM--- && cat sum.mjs && echo ---TEST--- && cat test.mjs",
+    "node test.mjs; echo \"exit:$?\"\nnode -e 'import(\"./sum.mjs\").then(m=>console.log(\"sum(2,1)=\",m.sum(2,1),\"sum(0,0)=\",m.sum(0,0),\"sum(-1,5)=\",m.sum(-1,5)))'"
+  ],
+  "result": {
+    "status": 0,
+    "seconds": 26.484504021937028,
+    "sourceUnchanged": true
+  },
+  "usage": {
+    "input_tokens": 6,
+    "output_tokens": 1747,
+    "cache_read_input_tokens": 19599,
+    "cache_creation_input_tokens": 10639
+  },
+  "processedTokens": 31991,
+  "findings": [
+    "Arithmetic sum requirement contradicted by subtraction; reproduced sum(2,1)=1 instead of 3.",
+    "Existing type-only test passes despite incorrect arithmetic result."
+  ],
+  "verdict": "reject",
+  "testSourceUnchanged": true,
+  "procedureFileReadToolCalls": 0,
+  "boundary": {
+    "sandboxEnabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "networkAllowedDomains": [],
+    "settingSources": "project",
+    "userSettingsChanged": false
+  },
+  "limitations": [
+    "Known synthetic defect only; no recall or precision guarantee.",
+    "This trial selects the registered definition directly; a coordinator choosing it remains to be tested.",
+    "No Draft PR or delivery in this narrow reviewer trial.",
+    "Sandbox configuration recorded; this is not a fresh OS isolation audit.",
+    "No comparison with previous different fixtures or contexts."
+  ],
+  "officialReference": "https://code.claude.com/docs/en/sub-agents#write-subagent-files"
+}
