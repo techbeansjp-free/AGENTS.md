@@ -19,8 +19,8 @@ export function ownNativeEvents(events){
  const own=events.slice(index),usage=own.filter(e=>e.type==='token_usage_record');
  if(!usage.length||usage.some(e=>e.payload?.thread_id!==meta.id))throw new Error('Missing own-thread usage identity');
  const cumulative=own.filter(e=>e.type==='event_msg'&&e.payload?.type==='token_count').at(-1)?.payload?.info?.total_token_usage;
- const bound=usage.at(-1).payload.thread_token_usage;
- if(!cumulative||!bound||['input_tokens','cached_input_tokens','output_tokens','cache_write_input_tokens'].some(k=>cumulative[k]!==bound[k]))throw new Error('Own-thread usage mismatch');
+ const bound=usage.at(-1).payload;
+ if(!cumulative||![bound.turn_token_usage,bound.thread_token_usage].some(counter=>counter&&['input_tokens','cached_input_tokens','output_tokens','cache_write_input_tokens'].every(k=>cumulative[k]===counter[k])))throw new Error('Own-thread usage mismatch');
  return [events[0],...own];
 }
 export function summarizeNativeUsage(rootId, rollouts) {
@@ -33,7 +33,24 @@ export function summarizeNativeUsage(rootId, rollouts) {
     if (!meta?.id || threads.has(meta.id)) throw new Error('Duplicate or missing session identity');
     const parent = meta.source?.subagent?.thread_spawn?.parent_thread_id ?? null;
     const counts = events.filter(e => e.type === 'event_msg' && e.payload?.type === 'token_count');
-    const usage = counts.at(-1)?.payload?.info?.total_token_usage;
+    const latest = counts.at(-1)?.payload?.info?.total_token_usage;
+    const records=events.filter(e=>e.type==='token_usage_record');
+    if(records.some(e=>e.payload?.thread_id!==meta.id))throw Error('Foreign usage identity');
+    const seen={};
+    for(const record of records){
+     const counters=record.payload.thread_token_usage;
+     for(const k of ['input_tokens','cached_input_tokens','output_tokens','cache_write_input_tokens']){
+      const value=counters?.[k];
+      if(seen[k]!==undefined&&(value===undefined||!Number.isSafeInteger(value)||value<seen[k]))throw Error('Non-monotonic thread usage');
+      if(Number.isSafeInteger(value)&&value>=0)seen[k]=value;
+     }
+    }
+    const bound=records.at(-1)?.payload;
+    const turn=bound?.turn_token_usage??bound?.thread_token_usage;
+    if(bound&&(!latest||![turn,bound.thread_token_usage].some(counter=>counter&&['input_tokens','cached_input_tokens','output_tokens','cache_write_input_tokens'].every(k=>latest[k]===counter[k]))))throw Error('Usage counter mismatch');
+    // token_count resets on resume; the provider-bound thread counter spans turns.
+    const usage = bound?bound.thread_token_usage:latest;
+    if(bound&&(!usage||['input_tokens','cached_input_tokens','output_tokens'].some(k=>!Number.isSafeInteger(turn[k])||turn[k]<0||usage[k]<turn[k])))throw Error('Invalid thread usage');
     const fields = ['input_tokens', 'cached_input_tokens', 'output_tokens'];
     const valid = usage && fields.every(k => Number.isSafeInteger(usage[k]) && usage[k] >= 0)
       && usage.cached_input_tokens <= usage.input_tokens;

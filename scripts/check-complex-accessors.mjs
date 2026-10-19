@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 const source=process.argv[2];
-if(!source||process.argv.length!==3)throw Error('Expected synthetic complex source directory');
+const revised=process.argv[3]==='revised';
+if(!source||process.argv.length>4||(process.argv[3]!==undefined&&!revised))throw Error('Expected synthetic complex source directory');
 const {BillingService}=await import(pathToFileURL(path.resolve(source,'billing/service.mjs')));
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'asc-accessor-oracle-'));
 let service;
@@ -14,7 +15,7 @@ try{
  const actor={tenant:'alpha',role:'admin'};
  let reads=0;
  const event={id:'accessor-reservation',tenant:'alpha',sku:'seat',quantity:1,
-  get amountCents(){return ++reads<=2?50:-1;},status:'reserved',version:1};
+  get amountCents(){return ++reads<=2?50:-1;},status:'reserved',version:1,...(revised?{currency:'JPY'}:{})};
  let result,error;
  try{result=service.issue(actor,{key:'accessor-issue',event});}catch(e){error=e;}
  if(error){

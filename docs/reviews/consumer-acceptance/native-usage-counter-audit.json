@@ -1,0 +1,53 @@
+{
+  "scope": "Recomputed from existing synthetic logs without rerunning models. Explicit provider thread totals replace ambiguous token_count counters; prior performance records remain historical.",
+  "records": [
+    {
+      "record": "docs/reviews/consumer-acceptance/native-complex-bounded-pair1-candidate.json",
+      "head": "6cb460267f3f39784fb856eb3faf6cbc22a57ca3",
+      "previousTokens": 1431284,
+      "recomputedTokens": 1431284,
+      "unchanged": true,
+      "frozenBeforeContinuation": false
+    },
+    {
+      "record": "docs/reviews/consumer-acceptance/native-complex-bounded-pair1-baseline.json",
+      "head": "b7950f1e1955681445338c0cafa024daca31e73e",
+      "previousTokens": 1773793,
+      "recomputedTokens": 1773793,
+      "unchanged": true,
+      "frozenBeforeContinuation": false
+    },
+    {
+      "record": "docs/reviews/consumer-acceptance/native-complex-bounded-pair2-baseline.json",
+      "head": "1225f07ac59797438b649a2fd21b5849d9f53388",
+      "previousTokens": 2226305,
+      "recomputedTokens": 2226305,
+      "unchanged": true,
+      "frozenBeforeContinuation": false
+    },
+    {
+      "record": "docs/reviews/consumer-acceptance/native-complex-bounded-pair2-candidate.json",
+      "head": "7ff3b8c28a6a6dd568eff1e86fce79e5fac49012",
+      "previousTokens": 1605279,
+      "recomputedTokens": 1605279,
+      "unchanged": true,
+      "frozenBeforeContinuation": false
+    },
+    {
+      "record": "docs/reviews/consumer-acceptance/native-complex-bounded-pair3-candidate.json",
+      "head": "d7a4d6fb463dba29818877fd30983132cb2c09d5",
+      "previousTokens": 1989080,
+      "recomputedTokens": 1989080,
+      "unchanged": true,
+      "frozenBeforeContinuation": false
+    },
+    {
+      "record": "docs/reviews/consumer-acceptance/native-complex-bounded-pair3-baseline.json",
+      "head": "69e1284cea60812eb6c7d9c016df86329b1440ff",
+      "previousTokens": 2107730,
+      "recomputedTokens": 2107730,
+      "unchanged": true,
+      "frozenBeforeContinuation": true
+    }
+  ]
+}

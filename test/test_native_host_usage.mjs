@@ -83,3 +83,19 @@ test('continued measurement rejects lost known counters but preserves originally
  assert.equal(nativePhaseUsage('p',before,[record('p',null,withWrites(8))]).cacheWriteInput.totalTokens,3);
  assert.equal(nativePhaseUsage('p',[record('p',null,count(30,10,3))],before).cacheWriteInput.totalTokens,null);
 });
+
+
+test('resumed provider records use thread totals instead of reset turn totals',async()=>{
+ const {nativePhaseUsage}=await import('../scripts/native-host-usage.mjs');
+ const bound=(id,turn,total)=>({type:'token_usage_record',payload:{thread_id:id,turn_token_usage:turn.payload.info.total_token_usage,thread_token_usage:total.payload.info.total_token_usage}});
+ const first=count(100,80,10),last=count(20,10,2),total=count(120,90,12);
+ assert.throws(()=>summarizeNativeUsage('p',[record('p',null,bound('p',first,first),first,bound('p',last,last),last)]),/Non-monotonic thread/);
+ const before=[record('p',null,bound('p',first,first),first)];
+ const after=[record('p',null,bound('p',first,first),first,bound('p',last,total),last)];
+ assert.equal(summarizeNativeUsage('p',after).observedProcessedTokens,132);
+ assert.equal(summarizeNativeUsage('p',[record('p',null,bound('p',last,total),total)]).observedProcessedTokens,132);
+ assert.equal(nativePhaseUsage('p',before,after).observedProcessedTokens,22);
+ for(const bad of [bound('foreign',last,total),bound('p',first,total),bound('p',last,count(10,5,1))])assert.throws(()=>summarizeNativeUsage('p',[record('p',null,bad,last)]));
+ const fork=forked();fork[4].payload.turn_token_usage=fork[4].payload.thread_token_usage;fork[4].payload.thread_token_usage=total.payload.info.total_token_usage;
+ assert.equal(summarizeNativeUsage('p',[record('p',null,first),fork]).observedProcessedTokens,242);
+});

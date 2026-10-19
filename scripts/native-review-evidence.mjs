@@ -5,8 +5,20 @@ export function nativeReviewEvidence(rootId, head, rollouts) {
   const usage=summarizeNativeUsage(rootId,rollouts);
   rollouts=rollouts.map(ownNativeEvents);
   if(usage.missingUsage.length)throw Error('Incomplete usage');
-  const spawnCalls=rollouts.flat().filter(e=>e.type==='response_item'&&['function_call','custom_tool_call'].includes(e.payload?.type)&&/(?:^|__)spawn_agent$/.test(e.payload.name??''));
-  if(spawnCalls.length!==rollouts.length-1)throw Error('Descendant inventory does not match spawn calls');
+  const identities=rollouts.map(es=>es[0].payload);
+  let successfulOrUnresolvedSpawns=0;
+  for(const events of rollouts){
+    const own=events[0].payload,ownPath=own.id===rootId?'/root':own.source?.subagent?.thread_spawn?.agent_path;
+    for(const e of events.filter(e=>e.type==='response_item'&&['function_call','custom_tool_call'].includes(e.payload?.type)&&/(?:^|__)spawn_agent$/.test(e.payload.name??''))){
+      const call=e.payload;let args;try{args=JSON.parse(call.arguments);}catch{args=null;}
+      const requested=ownPath&&/^[a-z0-9_]+$/.test(args?.task_name??'')?ownPath+'/'+args.task_name:null;
+      const outputs=events.filter(e=>e.type==='response_item'&&e.payload?.type==='function_call_output'&&e.payload.call_id===call.call_id);
+      const duplicate=requested&&outputs.length===1&&outputs[0].payload.output===`agent path \`${requested}\` already exists`
+        &&identities.some(m=>m.source?.subagent?.thread_spawn?.agent_path===requested&&m.source.subagent.thread_spawn.parent_thread_id===own.id);
+      if(!duplicate)successfulOrUnresolvedSpawns++;
+    }
+  }
+  if(successfulOrUnresolvedSpawns!==rollouts.length-1)throw Error('Descendant inventory does not match spawn calls');
   const reviewers=[];let rejectedCurrent=false;
   for(const events of rollouts){
     const meta=events.find(e=>e.type==='session_meta').payload;

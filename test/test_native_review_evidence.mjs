@@ -37,3 +37,14 @@ test('counts a paginated helper once but never accepts its inherited-context rev
  f.push(fork);const result=nativeReviewEvidence('p',head,f);assert.equal(result.usage.observedProcessedTokens,33);assert.equal(result.review.id,'r');
  f.splice(1,1);f[0].splice(2,1);assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);
 });
+
+
+test('known duplicate-name refusal is not a new descendant, unknown or unbound refusal is not ignored',()=>{
+ const f=fixture();
+ f[0].splice(2,0,{type:'response_item',payload:{type:'function_call',name:'spawn_agent',call_id:'duplicate',arguments:JSON.stringify({task_name:'independent_review'})}},{type:'response_item',payload:{type:'function_call_output',call_id:'duplicate',output:'agent path `/root/independent_review` already exists'}});
+ assert.equal(nativeReviewEvidence('p',head,f).review.id,'r');
+ f[0][3].payload.output='agent path `/root/unknown` already exists';
+ assert.throws(()=>nativeReviewEvidence('p',head,f),/inventory/);
+ f[0][3].payload.output='agent path `/root/independent_review` already exists';f[0][3].payload.call_id='other';
+ assert.throws(()=>nativeReviewEvidence('p',head,f),/inventory/);
+});
