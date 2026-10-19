@@ -271,5 +271,31 @@
     "observedFailure": "ASC-created worktrees were combined with Agent isolation:worktree, creating different workspaces. Coordinator stopped both workers and restarted them without that additional option.",
     "productCorrectionCommit": "926464cc2",
     "correctionAppliedDuringRun": false
+  },
+  "coordinatorCost": {
+    "method": "Completed transcript usage deduplicated by message id, phase assigned by first matching parent event. Includes cache reads; not monetary cost. Phase boundaries are task events, not causal attribution.",
+    "phases": [
+      {
+        "phase": "before-first-worker",
+        "messages": 15,
+        "processedTokens": 714483
+      },
+      {
+        "phase": "workers-and-restart",
+        "messages": 5,
+        "processedTokens": 350993
+      },
+      {
+        "phase": "integration-before-review",
+        "messages": 15,
+        "processedTokens": 1304432
+      },
+      {
+        "phase": "review-and-final",
+        "messages": 2,
+        "processedTokens": 196243
+      }
+    ],
+    "integrationFinding": "Integration required a backward-compatible billing idempotency comparison fix performed by the trial coordinator, followed by six-oracle rerun and independent review. This phase is not entirely redundant work. It also included a rejected patch output location and a failed patch command before the successful edit. No evaluator source edits were made."
   }
 }
