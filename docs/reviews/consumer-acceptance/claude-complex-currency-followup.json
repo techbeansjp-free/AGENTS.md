@@ -227,5 +227,15 @@
     "commitHandoffObserved": true,
     "commitIntegrationObserved": false,
     "finding": "Both workers returned commits, but coordinator read full diffs and exported patches. First patch output location was denied; retry used TMPDIR. Integrated billing required a legacy idempotency compatibility correction. Independent review and six oracle checks passed. No evaluator implementation edits."
+  },
+  "retrospectiveCostComparison": {
+    "baselineArtifact": "claude-complex-currency-baseline.json",
+    "baselineParentTokens": 1728246,
+    "followupParentTokens": 1668724,
+    "baselineDescendantTokens": 1121016,
+    "followupDescendantTokens": 1223237,
+    "baselineParentMessages": 28,
+    "followupParentMessages": 30,
+    "interpretation": "Parent processed tokens decreased while total tokens and elapsed time increased. One run per condition; this does not establish a causal effect or performance acceptance. Subsequent runner change exposes the same verification argv before model execution; old observations must not be mixed with that input condition."
   }
 }
