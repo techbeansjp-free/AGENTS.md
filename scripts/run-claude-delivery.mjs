@@ -13,6 +13,8 @@ if(command(['git','remote','get-url','origin'],fixture)!==`git@github.com:${repo
 command(['tar','-xzf',tarball,'-C',distribution]);command(['git','clone','--no-local','--single-branch','--branch','main',fixture,origin]);
 const git=(...args)=>command(['git',...args],origin);git('checkout','--detach',base);git('remote','set-url','origin',`git@github.com:${repository}.git`);git('config','user.name','Synthetic Tester');git('config','user.email','test@example.invalid');
 const stamp=command(['date','+%Y%m%d_%H%M%S']),slug='claude-'+session.slice(0,8),branch='fix/1-'+slug,worktree=path.join(origin,'.worktrees',stamp+'-1-'+slug);git('worktree','add','-b',branch,worktree,base);
+// Pin the empty files observed after Claude startup too; do not exempt later mutations.
+for(const file of [path.join(origin,'.git/config.worktree'),path.join(command(['git','rev-parse','--absolute-git-dir'],worktree),'config.worktree')])fs.writeFileSync(file,'',{flag:'wx'});
 const controls=gitControlState(origin,[worktree]),pkg=path.join(distribution,'package'),settings=path.join(root,'settings.json'),cliVersion=command([claude,'--version']);
 fs.writeFileSync(settings,JSON.stringify({disableAllHooks:true,sandbox:{enabled:true,failIfUnavailable:true,allowUnsandboxedCommands:false,autoAllowBashIfSandboxed:true,filesystem:{allowWrite:[origin],denyRead:[path.join(process.env.HOME,'Projects'),path.join(process.env.HOME,'.ssh'),path.join(process.env.HOME,'.codex'),path.join(process.env.HOME,'.claude')],denyWrite:[distribution]},network:{allowedDomains:[]}}}));
 const intent='Change greeting() from Helo to Hello. Add an exact regression test. Preserve the string-returning API. Only greeting.py and test_greeting.py may change.';

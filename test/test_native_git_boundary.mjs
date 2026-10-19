@@ -22,3 +22,12 @@ test('Host pins the worktree pointer and administration without blocking unused 
  const other=path.join(root,'.git/worktrees/other');fs.mkdirSync(other);fs.writeFileSync(path.join(other,'commondir'),'../..');fs.writeFileSync(path.join(other,'gitdir'),'/unused/.git');assert.doesNotThrow(()=>assertGitControlState(root,original,[worktree]));
  fs.unlinkSync(pointer);fs.symlinkSync(gitdir,pointer);assert.throws(()=>assertGitControlState(root,original,[worktree]),/Unsafe/);
 });
+
+test('precreated empty worktree configuration is pinned rather than ignored',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-empty-config-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const admin=path.join(root,'.git/worktrees/current');fs.mkdirSync(admin,{recursive:true});
+ const files=[path.join(root,'.git/config.worktree'),path.join(admin,'config.worktree')];
+ for(const file of files)fs.writeFileSync(file,'',{flag:'wx'});
+ const baseline=gitControlState(root);assert.doesNotThrow(()=>assertGitControlState(root,baseline));
+ for(const file of files){fs.writeFileSync(file,'[core]\n fsmonitor = injected\n');assert.throws(()=>assertGitControlState(root,baseline),/changed/);fs.writeFileSync(file,'');fs.unlinkSync(file);assert.throws(()=>assertGitControlState(root,baseline),/changed/);fs.writeFileSync(file,'');}
+});

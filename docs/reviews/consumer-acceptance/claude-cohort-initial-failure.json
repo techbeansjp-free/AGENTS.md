@@ -1,0 +1,55 @@
+{
+  "scope": "Aborted first Claude comparison cohort; retained failure, not a completed pair",
+  "variant": "baseline alpha.21",
+  "run": {
+    "status": 0,
+    "signal": null,
+    "seconds": 53.661062596
+  },
+  "failure": {
+    "error": "Agent changed Git configuration or hooks; Host inspection refused",
+    "seconds": 53.664157713
+  },
+  "review": {
+    "taskId": "a9115258cf09d2c79",
+    "head": "15158ef54218afb8bc0feb850621c525c65a5560",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 22,
+      "output_tokens": 4636,
+      "cache_read_input_tokens": 258235,
+      "cache_creation_input_tokens": 52297
+    },
+    "threads": [
+      {
+        "id": "0e639d50-d734-48a6-bd2a-0b8d8b116ee0",
+        "messageCount": 9,
+        "usage": {
+          "input_tokens": 18,
+          "output_tokens": 3766,
+          "cache_read_input_tokens": 242917,
+          "cache_creation_input_tokens": 35175
+        }
+      },
+      {
+        "id": "a9115258cf09d2c79",
+        "messageCount": 2,
+        "usage": {
+          "input_tokens": 4,
+          "output_tokens": 870,
+          "cache_read_input_tokens": 15318,
+          "cache_creation_input_tokens": 17122
+        }
+      }
+    ],
+    "observedProcessedTokens": 315190,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "deliveryCompleted": false,
+  "observation": "Two previously absent config.worktree files became empty files; no Git value change observed. Attribution to Agent implementation is unproven.",
+  "nextCondition": "Precreate and pin both empty config.worktree files before Host launch, maintain mutation/deletion rejection; old failed attempt excluded from new cohort but retained here"
+}

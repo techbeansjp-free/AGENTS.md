@@ -22,4 +22,4 @@ export function gitControlState(origin,worktrees=[]){
  }
  return Object.fromEntries(Object.entries(state).sort(([a],[b])=>a.localeCompare(b)));
 }
-export function assertGitControlState(origin,expected,worktrees=[]){if(!expected||JSON.stringify(gitControlState(origin,worktrees))!==JSON.stringify(expected))throw Error('Agent changed Git configuration or hooks; Host inspection refused');}
+export function assertGitControlState(origin,expected,worktrees=[]){if(!expected||JSON.stringify(gitControlState(origin,worktrees))!==JSON.stringify(expected))throw Error('Git control state changed; Host inspection refused');}
