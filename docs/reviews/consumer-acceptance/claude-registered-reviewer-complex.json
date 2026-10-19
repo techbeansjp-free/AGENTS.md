@@ -144,5 +144,11 @@
   "observations": [
     "Two direct Claude implementation workers completed; integration oracle found old-record replay incompatibility and coordinator repaired it without evaluator code edits.",
     "The final approver used asc-reviewer. Its request referenced the real diff instead of pasting it, but unnecessarily requested rereading the already embedded review procedure."
-  ]
+  ],
+  "delegationFinding": {
+    "billingRequestSha256": "d37ae39e7f8fdd993b2fb638f248aa3ded6073c36e6bfaa7b256bb71fb2d83c5",
+    "observed": "Coordinator supplied original document references but its detailed summary omitted old-record compatibility and explicitly excluded revision.mjs as another worker responsibility. The integration oracle later detected the omission.",
+    "change": "Existing coordination guidance now preserves shared acceptance obligations and records integration-dependent verification as pending rather than dropping responsibility.",
+    "validationScope": "Instruction correction from actual failure evidence; no claim that wording deterministically enforces behavior or proves a performance improvement."
+  }
 }
