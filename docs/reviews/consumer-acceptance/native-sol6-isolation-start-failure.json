@@ -1,0 +1,15 @@
+{
+  "model": "gpt-6-sol",
+  "cliVersion": "0.155.0-alpha.16.3",
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 0.35990133700000027
+  },
+  "error": "fs sandbox helper: error building bubblewrap command: mountinfo path is not absolute",
+  "phase": "thread/start before Agent work",
+  "qualityAccepted": false,
+  "performanceAccepted": false,
+  "tokens": null,
+  "scope": "READY-only read-only probe succeeded; custom filesystem sandbox start failed. No isolation bypass."
+}

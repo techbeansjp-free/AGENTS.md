@@ -5,6 +5,7 @@ export function summarizeNativePairs(pairs){
  assert(Array.isArray(pairs)&&pairs.length>0,'Explicit pairs required');
  const records=pairs.flatMap(p=>[p.baseline,p.candidate]);
  const conditions=records[0]?.conditions;
+ assert(typeof conditions?.cliVersion==='string'&&conditions.cliVersion.trim(),'Recorded CLI version required');
  assert(conditions?.runtimeSha256&&conditions?.intentSha256&&conditions?.commands?.length,'Measured conditions required');
  for(const side of ['baseline','candidate']){
   const skill=pairs[0][side]?.distribution?.skillBundleSha256;
