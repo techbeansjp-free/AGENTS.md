@@ -37,8 +37,7 @@ export function verifyWorktree(directory,base,ownerFile){
  const baseHead=git(repo,'rev-parse','--verify','--end-of-options',base+'^{commit}');git(repo,'merge-base','--is-ancestor',baseHead,start.head);
  const permittedMasks=contract.hostMaskedPaths??[];
  if(!Array.isArray(permittedMasks)||permittedMasks.some(p=>typeof p!=='string'||!p||path.isAbsolute(p)||p.split('/').some(s=>!s||s==='.'||s==='..')||contract.allowedPaths.some(a=>a===p||a.startsWith(p+'/')||p.startsWith(a+'/')))||new Set(permittedMasks).size!==permittedMasks.length)throw Error('Expected exact owner hostMaskedPaths outside change scope');
- const masks=permittedMasks.length?hostMaskedPaths(repo):[],maskedNames=new Set(permittedMasks);
- if(permittedMasks.some(name=>!masks.some(mask=>mask.path===name)))throw Error('Owner hostMaskedPaths must be read-only null mounts');
+ const masks=permittedMasks.length?hostMaskedPaths(repo):[],maskedNames=new Set(masks.filter(mask=>permittedMasks.includes(mask.path)).map(mask=>mask.path));
  const state=()=>{
   const entries=execFileSync('git',['ls-files','-v','-z'],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
   if(entries.some(e=>e[0]==='S'||e[0]===e[0].toLowerCase()))throw Error('Hidden index flags prevent verification of tracked source');
@@ -69,5 +68,5 @@ export function verifyWorktree(directory,base,ownerFile){
   if(projectContext(repo,contract.allowedPaths).digest!==start.context.digest)throw Error('Project context changed during verification; result is invalid');
   if(p.error||p.status!==0)break;
  }
- return {schema:'asc-worktree-verification/v1',execution:'current-host-worktree',repo,base:baseHead,head:start.head,contractSha256:hash(bytes),contextSha256:start.context.digest,intent:contract.intent,results,...(permittedMasks.length?{hostMaskedPaths:permittedMasks}:{}),passed:results.length===contract.commands.length&&results.every(r=>r.exit===0&&!r.error),independentReview:'required',deliveryAuthorized:false};
+ return {schema:'asc-worktree-verification/v1',execution:'current-host-worktree',repo,base:baseHead,head:start.head,contractSha256:hash(bytes),contextSha256:start.context.digest,intent:contract.intent,results,...(maskedNames.size?{hostMaskedPaths:[...maskedNames]}:{}),passed:results.length===contract.commands.length&&results.every(r=>r.exit===0&&!r.error),independentReview:'required',deliveryAuthorized:false};
 }

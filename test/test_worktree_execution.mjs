@@ -97,3 +97,10 @@ test('verification invalidates ignored project rules changed by a command',t=>{
  assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/Project context changed/);
  assert.equal(fs.readFileSync(path.join(f.work,'AGENTS.md'),'utf8'),'Changed local requirement','must stop before the next command can restore the rule');
 });
+
+test('owner mask permission does not require masks outside the sandbox or exempt ordinary files',t=>{
+ const f=fixture(t);f.contract.hostMaskedPaths=['.claude/settings.json'];f.save();
+ const plain=verifyWorktree(f.work,f.base,f.owner);assert.equal(plain.passed,true);assert.equal(plain.hostMaskedPaths,undefined);
+ fs.mkdirSync(path.join(f.work,'.claude'));fs.writeFileSync(path.join(f.work,'.claude/settings.json'),'uncommitted owner settings');
+ assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/Commit intended changes/);
+});

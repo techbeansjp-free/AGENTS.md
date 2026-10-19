@@ -480,4 +480,4 @@ Git未管理の親ディレクトリへASCを置き、配下の複数repoで共�
 
 Linux Hostのsandboxが保護目的で作る読取り専用`/dev/null` mountをGitが未追跡ファイルと報告する場合、`worktree-verify`は既定では`ASC_HOST_MASK_APPROVAL_REQUIRED`で拒否する。ソース修復や同じ入力の再実行では解消しない。例外が必要なら、ownerがrepo外の検証契約に`hostMaskedPaths`の完全一致相対path配列を明示する。例は`"hostMaskedPaths":[".claude/settings.json"]`。ファイル名やHost名だけで自動許可せず、実装Agentが自己承認して追加してはいけない。この指定はmountで隠された元のファイル内容を検証しないことへの許可であり、その内容の安全性を証明しない。
 
-指定先は実際の読取り専用null device mountであり、`allowedPaths`と重ならないことが必要。通常ファイル・symlink・書込み可能mountは許可しない。検証中のmount変更、tracked差分、新しい未追跡成果は引き続き拒否する。結果の`hostMaskedPaths`で対象を報告する。他OSでこの指定を流用せず、必要なHost境界を確認する。
+指定は除外の許可であってmountの存在要求ではない。指定先が実際の読取り専用null device mountで、`allowedPaths`と重ならない場合だけ除外する。通常環境で対象が存在しない場合も同じ契約を使える。通常ファイル・symlink・書込み可能mountを除外しない。検証中のmount変更、tracked差分、新しい未追跡成果は引き続き拒否する。結果の`hostMaskedPaths`で対象を報告する。他OSでこの指定を流用せず、必要なHost境界を確認する。

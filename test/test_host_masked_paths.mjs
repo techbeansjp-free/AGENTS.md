@@ -15,9 +15,9 @@ test('read-only null protection mounts do not make a clean worktree dirty; real 
  assert.equal(fs.readFileSync(masked,'utf8'),'host-only'); // underlying Host asset was never changed
  f.contract.hostMaskedPaths=['feature.cjs'];f.save();const overlap=run();assert.notEqual(overlap.status,0);assert.match(overlap.stderr,/outside change scope/);
  f.contract.hostMaskedPaths=['.claude/settings.json'];f.save();
- const writable=run('--bind');assert.notEqual(writable.status,0);assert.match(writable.stderr,/read-only null mounts/);
+ const writable=run('--bind');assert.notEqual(writable.status,0);assert.match(writable.stderr,/Commit intended changes/);
  fs.writeFileSync(path.join(f.work,'other.txt'),'uncommitted');const other=run();assert.notEqual(other.status,0);assert.match(other.stderr,/Commit intended changes/);fs.unlinkSync(path.join(f.work,'other.txt'));
  fs.writeFileSync(path.join(f.work,'feature.cjs'),'module.exports=99;');const tracked=run();assert.notEqual(tracked.status,0);assert.match(tracked.stderr,/Commit intended changes/);f.git(f.work,'checkout','--','feature.cjs');
  f.contract.commands.push([process.execPath,'-e',"require('fs').writeFileSync('new.txt','new')"]);f.save();const generated=run();assert.notEqual(generated.status,0);assert.match(generated.stderr,/Verification changed/);fs.unlinkSync(path.join(f.work,'new.txt'));
- fs.unlinkSync(masked);fs.symlinkSync('/dev/null',masked);assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/read-only null mounts/);
+ fs.unlinkSync(masked);fs.symlinkSync('/dev/null',masked);assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/Commit intended changes/);
 });
