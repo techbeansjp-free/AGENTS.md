@@ -36,4 +36,14 @@ test('Claude export retains actual model and rejects incomplete or intervened ob
  const output=path.join(root,'out.json'),run=d=>{write('delivery.json',d);return spawnSync(process.execPath,[script,root,output,'--claude'],{encoding:'utf8'});};
  assert.equal(run(good).status,0);const data=JSON.parse(fs.readFileSync(output));assert.deepEqual(data.conditions.actualModels,['actual']);assert.equal(data.elapsedSeconds,2);assert.equal(data.implementationAndReviewSeconds,1);assert.equal(data.manualHandoffs,0);
  for(const change of [d=>d.usage.complete=false,d=>d.usage.reconciledWithHostModelUsage=false,d=>d.implementationIntervention=1,d=>d.session='wrong',d=>d.run.status=1,d=>d.modelUsage.other={}]){const bad=structuredClone(good);change(bad);assert.notEqual(run(bad).status,0);}
+ const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^GIT_/i.test(k)));
+ const git=(...args)=>execFileSync('git',args,{cwd:root,env,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+ fs.mkdirSync(path.join(root,'complex'));fs.writeFileSync(path.join(root,'complex/REQUIREMENTS.md'),'requirements');fs.writeFileSync(path.join(root,'complex/REVISION.md'),'revision');
+ git('init');git('add','complex');git('-c','user.name=Synthetic','-c','user.email=synthetic@example.invalid','-c','commit.gpgsign=false','commit','-m','fixture');const base=git('rev-parse','HEAD');
+ const setup=JSON.parse(fs.readFileSync(path.join(root,'setup.json')));write('setup.json',{...setup,base,scenario:'complex-two-issue-currency'});
+ const ci={head:base,draft:true,merged:false,boundToPr:true,checks:{test:'success'}};
+ const complex={...good,head:base,ci,greetingCI:ci};assert.equal(run(complex).status,0);
+ const exported=JSON.parse(fs.readFileSync(output));assert.equal(exported.conditions.intentSha256,hash(JSON.stringify(['original','requirements','revision'])));assert.deepEqual(exported.ci.checks,{'complex:test':'success','greeting:test':'success'});
+ for(const change of [d=>delete d.greetingCI,d=>d.greetingCI={...ci,head:'wrong'},d=>d.greetingCI={...ci,checks:{}}]){const bad=structuredClone(complex);change(bad);assert.notEqual(run(bad).status,0);}
+
 });
