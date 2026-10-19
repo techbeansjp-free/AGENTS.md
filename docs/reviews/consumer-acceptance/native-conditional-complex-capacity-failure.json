@@ -1,0 +1,87 @@
+{
+  "scope": "Partial complex applicability diagnostic; implementation/review/CI not completed",
+  "candidateSha256": "f15007634e4000c220e18a287546b82f76d8d479348b2d2e3c85fb3b9804e390",
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 87.27791194999999
+  },
+  "error": "Selected model is at capacity. Please try a different model.",
+  "usage": {
+    "cacheWriteInput": {
+      "observedTokens": 0,
+      "totalTokens": null,
+      "missingThreads": [
+        "01a152d5-20ad-7623-9175-c5f9a6bcb6fa",
+        "01a152d5-52b2-7f82-b4fb-6c3cdc92aa2b"
+      ],
+      "threads": [
+        {
+          "id": "01a152d4-0deb-7f92-9689-0f14d4c0b1c8",
+          "tokens": 0
+        },
+        {
+          "id": "01a152d5-20ad-7623-9175-c5f9a6bcb6fa",
+          "tokens": null
+        },
+        {
+          "id": "01a152d5-52b2-7f82-b4fb-6c3cdc92aa2b",
+          "tokens": null
+        }
+      ],
+      "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+    },
+    "rootId": "01a152d4-0deb-7f92-9689-0f14d4c0b1c8",
+    "observedThreads": 3,
+    "missingUsage": [
+      "01a152d5-20ad-7623-9175-c5f9a6bcb6fa",
+      "01a152d5-52b2-7f82-b4fb-6c3cdc92aa2b"
+    ],
+    "measured": {
+      "inputTokens": 139545,
+      "cachedInputTokens": 124416,
+      "outputTokens": 2258
+    },
+    "observedProcessedTokens": null,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a152d4-0deb-7f92-9689-0f14d4c0b1c8",
+        "parent": null,
+        "usage": {
+          "input_tokens": 139545,
+          "cached_input_tokens": 124416,
+          "output_tokens": 2258
+        }
+      },
+      {
+        "id": "01a152d5-20ad-7623-9175-c5f9a6bcb6fa",
+        "parent": "01a152d4-0deb-7f92-9689-0f14d4c0b1c8",
+        "usage": null
+      },
+      {
+        "id": "01a152d5-52b2-7f82-b4fb-6c3cdc92aa2b",
+        "parent": "01a152d4-0deb-7f92-9689-0f14d4c0b1c8",
+        "usage": null
+      }
+    ]
+  },
+  "usageComplete": false,
+  "implementationReferenceRead": true,
+  "worktrees": [
+    {
+      "directory": "20261019_152356-9001-reservation",
+      "branch": "feature/9001-reservation",
+      "issue": 9001,
+      "base": "b7a906256f6f0aa2705d2517e69f7d3a6503ccff"
+    },
+    {
+      "directory": "20261019_152407-9002-billing",
+      "branch": "feature/9002-billing",
+      "issue": 9002,
+      "base": "b7a906256f6f0aa2705d2517e69f7d3a6503ccff"
+    }
+  ],
+  "qualityAccepted": false,
+  "performanceAccepted": false
+}
