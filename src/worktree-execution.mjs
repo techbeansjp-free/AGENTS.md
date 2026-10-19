@@ -49,7 +49,9 @@ export function verifyWorktree(directory,base,ownerFile){
   results.push({argv,exit:p.status,seconds:(performance.now()-began)/1000,stdoutSha256:hash(p.stdout??''),stderrSha256:hash(p.stderr??''),...(p.error||p.status!==0?{error:p.error?.message??'Command failed',stdout:(p.stdout??'').slice(-4096),stderr:(p.stderr??'').slice(-4096)}:{})});
   if(git(repo,'rev-parse','HEAD')!==start.head||state())throw Error('Verification changed tracked source, HEAD or untracked outputs; result is invalid');
   if(hash(fs.readFileSync(owner))!==hash(bytes))throw Error('Owner contract changed during verification; result is invalid');
+  // Git status cannot observe ignored/local rules; bind each command boundary too.
+  if(projectContext(repo,contract.allowedPaths).digest!==start.context.digest)throw Error('Project context changed during verification; result is invalid');
   if(p.error||p.status!==0)break;
  }
- return {schema:'asc-worktree-verification/v1',execution:'current-host-worktree',repo,base:baseHead,head:start.head,contractSha256:hash(bytes),intent:contract.intent,results,passed:results.length===contract.commands.length&&results.every(r=>r.exit===0&&!r.error),independentReview:'required',deliveryAuthorized:false};
+ return {schema:'asc-worktree-verification/v1',execution:'current-host-worktree',repo,base:baseHead,head:start.head,contractSha256:hash(bytes),contextSha256:start.context.digest,intent:contract.intent,results,passed:results.length===contract.commands.length&&results.every(r=>r.exit===0&&!r.error),independentReview:'required',deliveryAuthorized:false};
 }

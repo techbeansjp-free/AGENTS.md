@@ -30,7 +30,7 @@ Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・
 
 `asc-v05 start <project-directory>` で作業場所を確認し、現在のAIがその場所で通常の実装・ビルド・テストを行う。Git管理済みrepoの場合は専用worktreeが必要。Git未管理のフォルダー（Git管理予定がないプロジェクトや複数repoの親を含む）でも開始でき、Git初期化やworktree作成は不要。pnpmの既存workspace・store・symlinkをそのまま使い、ASC向けの依存コピーやhash登録は行わない。依存が未導入ならプロジェクトのlockfileと現在のHost権限に従って導入する。worktree間の共有依存を無断で変更しない。
 
-検証の機械記録が必要なら `worktree-verify <worktree> <base> <owner-contract.json>` を使用できる。ownerファイルはworktree外に置き、`{"intent":"目的","allowedPaths":["src/file.ts"],"commands":[["pnpm","test"],["pnpm","build"]]}` のように指定する。変更をcommitしてから実行する。テストは現在のHost権限・環境変数で実際のworktree内に実行される（ASC独自sandboxではない）。現在のHostで許可されたコマンドだけ指定する。Windowsで.cmdを介する場合はHostが通常使うNodeとCLI scriptのargvなど、shellを必要としない実行入口を指定する。
+検証の機械記録が必要なら `worktree-verify <worktree> <base> <owner-contract.json>` を使用できる。ownerファイルはworktree外に置き、`{"intent":"目的","allowedPaths":["src/file.ts"],"commands":[["pnpm","test"],["pnpm","build"]]}` のように指定する。変更をcommitしてから実行する。規約は`allowedPaths`に対応するものを選び、各検証コマンド終了時に内容が変わっていないことを照合する。結果の`contextSha256`はこの選択規約のdigestであり、規約の意味的な遵守や独立レビューの代わりにはならない。テストは現在のHost権限・環境変数で実際のworktree内に実行される（ASC独自sandboxではない）。現在のHostで許可されたコマンドだけ指定する。Windowsで.cmdを介する場合はHostが通常使うNodeとCLI scriptのargvなど、shellを必要としない実行入口を指定する。
 
 内部のGit観測は継承した`GIT_*`を除外して指定worktreeを確認する。owner指定の検証コマンドは現在のHost環境（`GIT_*`を含む）を引き継ぐため、Git設定や認証設定を無言で失わない。検証コマンドの対象・意味はownerが定めるものであり、任意のコマンドがそのworktreeだけを検査したことまではCLIは保証しない。
 

@@ -89,10 +89,20 @@ test('verification selects permitted path rules, discovers nested rules and igno
  write('src/ui/view.cjs','module.exports=2;');f.git(f.work,'commit','-qam','UI change');
  f.contract.allowedPaths=['src/ui/view.cjs'];f.save();
  const open=fs.openSync,reads=[];
- t.mock.method(fs,'openSync',function(file,...args){if(typeof file==='string')reads.push(path.relative(f.work,file));return open.call(fs,file,...args);});
- assert.equal(verifyWorktree(f.work,base,f.owner).passed,true);
+ t.mock.method(fs,'openSync',function(file,...args){if(typeof file==='string')reads.push(path.relative(f.work,file).split(path.sep).join('/'));return open.call(fs,file,...args);});
+ const verified=verifyWorktree(f.work,base,f.owner);assert.equal(verified.passed,true);assert.equal(verified.contextSha256,startWorktree(f.work,f.contract.allowedPaths).context.digest);
  assert.ok(reads.includes('src/ui/AGENTS.md'));assert.ok(reads.includes('rules/ui.md'));assert.ok(!reads.includes('rules/api.md'));
  // A selected missing rule must still fail before running commands.
  fs.unlinkSync(path.join(f.work,'rules/ui.md'));
  assert.throws(()=>verifyWorktree(f.work,base,f.owner),/ENOENT/);
+});
+
+test('verification invalidates ignored project rules changed by a command',t=>{
+ const f=fixture(t);
+ fs.appendFileSync(path.join(f.work,'.gitignore'),'AGENTS.md\n');f.git(f.work,'commit','-qam','local owner rule may remain untracked');
+ fs.writeFileSync(path.join(f.work,'AGENTS.md'),'Original local requirement');
+ f.contract.allowedPaths.push('.gitignore');
+ f.contract.commands=[[process.execPath,'-e',"require('fs').writeFileSync('AGENTS.md','Changed local requirement')"],[process.execPath,'-e',"require('fs').writeFileSync('AGENTS.md','Original local requirement')"]];f.save();
+ assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/Project context changed/);
+ assert.equal(fs.readFileSync(path.join(f.work,'AGENTS.md'),'utf8'),'Changed local requirement','must stop before the next command can restore the rule');
 });
