@@ -21,7 +21,7 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 | 共有契約変更・修復・再レビュー | [契約変更](claude-shared-contract.json)、[修復](claude-review-repair.json) | 保存レコード互換性と具体的な反例を確認し、修復後に独立レビュー・CI成功。全usageに欠測あり |
 | 実Git競合・保存後中断・再開 | [中断再開](claude-conflict-interruption.json) | 同じHost sessionで保存済み成果から再開しCI成功。単一書込み担当のみ。停止・再開の起動は評価用Host処理 |
 | 2workerの保存成果から統合・再開 | [worker再開](claude-worker-recovery.json) | 両worktreeの中断時bytesを最終commitへ保持、独立レビュー・6 oracle・Draft PR104の両CI成功。4 Contextの取得usage照合成功。片方は停止前に完了済み、評価器修復を挟むため無中断性能には不使用 |
-| 時間・全Agent tokensの削減 | [最新固定5組](claude-matched-v5/summary.json)、[前回](claude-matched-v4/summary.json) | 最新10試行は全件品質・usage完備・Draft PR/CI成功。時間中央値99.87→90.62秒、tokens中央値400,826→389,947。ただしReviewerの不要な別worktree作成・コピー再試行で最悪値が悪化し受入未達。全試行を保持 |
+| 時間・全Agent tokensの削減 | [最新固定5組](claude-matched-v6/summary.json)、[前回v5](claude-matched-v5/summary.json)、[v4](claude-matched-v4/summary.json) | 最新10試行は全件品質・usage完備・Draft PR/CI成功。時間中央値80.75→113.53秒、tokens中央値394,530→395,875で削減不成立。過去の結果や単発追試を混ぜず全試行を保持 |
 
 直近の原因別確認では、[同じworktreeへのレビュー依頼](claude-review-worktree-followup.json)が87.55秒・327,707 tokensでDraft PR115/CIまで完走した。別worktree作成は起きなかったが、レビュー手順の参照が依頼から欠落したため、依頼項目を整理した。この1件を固定比較の代替や性能改善の証明にはしない。 続く[依頼項目整理後の確認](claude-review-handoff-followup.json)では、手順参照の受け渡しと実読取り、同じworktreeでの独立レビュー、Draft PR116/CIまでを109.65秒・366,035 tokensで確認した。両記録を保持し、後者だけを選んで性能合格とはしない。
 
