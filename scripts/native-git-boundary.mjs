@@ -22,4 +22,10 @@ export function gitControlState(origin,worktrees=[]){
  }
  return Object.fromEntries(Object.entries(state).sort(([a],[b])=>a.localeCompare(b)));
 }
-export function assertGitControlState(origin,expected,worktrees=[]){if(!expected||JSON.stringify(gitControlState(origin,worktrees))!==JSON.stringify(expected))throw Error('Git control state changed; Host inspection refused');}
+export function assertGitControlState(origin,expected,worktrees=[]){
+ const current=gitControlState(origin,worktrees),empty=createHash('sha256').update('').digest('hex');
+ // Claude may materialize an absent worker config. Empty adds no Git settings;
+ // existing records (including empty ones), hooks and nonempty additions stay pinned.
+ for(const [name,digest] of Object.entries(current))if(expected&&!Object.hasOwn(expected,name)&&/^worktrees[\\/]([^\\/]+)[\\/]config\.worktree$/.test(name)&&digest===empty)delete current[name];
+ if(!expected||JSON.stringify(current)!==JSON.stringify(expected))throw Error('Git control state changed; Host inspection refused');
+}

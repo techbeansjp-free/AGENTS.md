@@ -31,3 +31,13 @@ test('precreated empty worktree configuration is pinned rather than ignored',t=>
  const baseline=gitControlState(root);assert.doesNotThrow(()=>assertGitControlState(root,baseline));
  for(const file of files){fs.writeFileSync(file,'[core]\n fsmonitor = injected\n');assert.throws(()=>assertGitControlState(root,baseline),/changed/);fs.writeFileSync(file,'');fs.unlinkSync(file);assert.throws(()=>assertGitControlState(root,baseline),/changed/);fs.writeFileSync(file,'');}
 });
+
+test('only newly materialized empty worker configs are neutral',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-new-empty-config-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const admin=path.join(root,'.git/worktrees/worker');fs.mkdirSync(admin,{recursive:true});
+ const original=gitControlState(root),file=path.join(admin,'config.worktree');
+ fs.writeFileSync(file,'');assert.doesNotThrow(()=>assertGitControlState(root,original));
+ fs.writeFileSync(file,'[core]\n fsmonitor = injected\n');assert.throws(()=>assertGitControlState(root,original),/changed/);
+ fs.unlinkSync(file);const outside=path.join(root,'empty');fs.writeFileSync(outside,'');fs.symlinkSync(outside,file);assert.throws(()=>assertGitControlState(root,original),/Unsafe/);fs.unlinkSync(file);
+ fs.writeFileSync(path.join(root,'.git/config.worktree'),'');assert.throws(()=>assertGitControlState(root,original),/changed/);
+});
