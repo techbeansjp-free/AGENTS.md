@@ -1,0 +1,8 @@
+{
+  "scope": "Evaluation parser only; recorded before candidate execution. Original frozen protocol remains unchanged.",
+  "reason": "Accept exact immediate double-quoted shell exit-status suffix with successful JSON, retaining HEAD, owner contract and result checks.",
+  "parserSha256": "f94902b1027d586178ebf439a0d010f1db844b2629e47536c64db1254a2db1db",
+  "application": "Same parser applied to saved baseline and subsequent candidate. No model restart, prompt/oracle/package changes or discarded failure.",
+  "baselineNormalWallTimeEligible": false,
+  "validation": "Seven parser tests pass; independent read-only review found no concrete defect."
+}

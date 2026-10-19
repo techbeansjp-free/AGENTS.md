@@ -31,3 +31,16 @@ test('accepts immediate shell status suffix only with its matching command',()=>
  assert.equal(claudeVerificationEvidence([statusCall,result(expected,{content:content+'\nShell cwd was reset to '+expected.repo})],expected).head,expected.head);
  for(const events of [[call,result(expected,{content})],[statusCall,result(expected,{content:body+'\nEXIT: 1'})],[statusCall,result(expected,{content:content+'\nextra'})],[statusCall,result(expected,{content,is_error:true})],[statusCall,result({...expected,passed:false},{content:JSON.stringify({...expected,passed:false})+'\nEXIT: 0'})]])assert.throws(()=>claudeVerificationEvidence(events,expected),/Missing successful/);
 });
+
+
+test('accepts same-line immediate exit status but rejects mismatches and literal status',()=>{
+ const body=JSON.stringify(expected),statusCall=structuredClone(call);
+ statusCall.message.content[0].input.command+='; echo "exit=$?"';
+ assert.equal(claudeVerificationEvidence([statusCall,result(expected,{content:body+'\nexit=0'})],expected).head,expected.head);
+ for(const suffix of ['\nexit=1','\nEXIT: 0','\nexit=0\nextra'])assert.throws(()=>claudeVerificationEvidence([statusCall,result(expected,{content:body+suffix})],expected),/Missing successful/);
+ for(const ending of ['; echo "exit=0"',"; echo 'exit=$?'",'; echo "exit=$?"; echo extra']){
+  const other=structuredClone(call);other.message.content[0].input.command+=ending;
+  assert.throws(()=>claudeVerificationEvidence([other,result(expected,{content:body+'\nexit=0'})],expected),/Missing successful/);
+ }
+ assert.throws(()=>claudeVerificationEvidence([statusCall,result(expected,{content:body+'\nexit=0',is_error:true})],expected),/Missing successful/);
+});
