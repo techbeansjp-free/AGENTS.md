@@ -83,6 +83,11 @@
       "observedProcessedTokens": 4696786,
       "missingUsage": [
         {
+          "id": "ac974e9b08a4c3951",
+          "message": "msg_011CgBJym8me39LZvFpMcGAH",
+          "reason": "terminal usage snapshot missing"
+        },
+        {
           "reason": "Host modelUsage absent or does not reconcile"
         }
       ],
