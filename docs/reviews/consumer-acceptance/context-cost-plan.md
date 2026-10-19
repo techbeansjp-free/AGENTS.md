@@ -37,7 +37,23 @@ baselineは9f19ce4bd76a8e59eedd01adec8ec8a3a825fea7のSkill。候補との差は
 
 時間は準備・実装・レビュー・是正を区別する。usageはproviderの定義を記録し、cache等の部分集合を重複加算しない。読込みの重複は同一内容の再取得と変更後の必要な取得を区別する。欠測はnull/未取得とし、ゼロ補完しない。非公開の会話全文をEvidenceへ保存しない。
 
-## 現在の証拠
+## 現在の受入状況（後述の履歴と区別）
+
+| 要求 | 現在の証拠 | 未達・限定 |
+| --- | --- | --- |
+| 標準Hostと任意Controllerの責務分離 | 本文の実装照合、current-host実走 | Controllerの成功を標準Host全体へ流用しない |
+| 小規模の実装→レビュー→Draft PR/CI | `native-small-batched-summary.json`と各試行 | 五組の性能比較は不合格。新候補の小規模回帰は別途必要 |
+| 複雑な複数Issueの並列実装・統合 | `native-quality-pilot-baseline.json`、PR66 | 合成2サービスでの実証。一般的な大規模開発の保証ではない |
+| 指摘修復・独立再レビュー | `native-quality-pilot-candidate.json`、修正前後の`native-reservation-counterexample.json` | PR65は計測器修正介入あり。無介入成功には数えない |
+| 共有契約変更・旧保存データの再利用 | `native-shared-contract-delivery.json`、PR32 | 単一の明示的JPY変更での実証 |
+| 競合からの回復 | `native-conflict-recovery.json`、PR61 | 明示的な事前故障注入。任意の競合を保証しない |
+| 中断時の並列成果保持 | `native-parallel-recovery-observation.json`、PR56 | 統合時中断のみ。並列書込み途中・全試行usageの完全性は未達 |
+| 同一進行役セッションでの継続 | `native-same-session-continuation.json`、PR64 | 起動設定・計測器への介入あり。無介入の長期継続は未達 |
+| 品質を保つ時間・tokens削減 | `native-quality-pilot-summary.json` | 不合格。alpha.12診断中。再利用controlを五組の新規比較に数えない |
+
+全体目標は未完了。過去の成功は記録したcommit・条件に限る。以下は時系列の実験履歴であり、後から判明した欠陥や介入を無視して現在の合格判定に読み替えない。
+
+## 初期段階の証拠（履歴）
 
 - Skillの構文検査: 成功。動作・性能の証明ではない。
 - 別Contextの独立設計レビュー: 具体的な矛盾・品質後退の指摘なし。性能比較ではない。
