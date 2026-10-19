@@ -577,3 +577,5 @@ Codex合成評価runnerには同一sessionへのcapacity再開を最大一度だ
 Claude小規模実走：配布alpha.18をClaude Code 2.1.282のSonnet進行役で使用し、実装→実テスト→独立Claude ReviewerがPASS。Hostで差分・対象commitを再確認し、公開合成Draft PR #85とCI成功に到達した。126.456秒は実装・レビューのCLI計測、503,022 tokensは親13messageとReviewer4messageをID重複排除した入力・出力・cacheの延べ合計で、Host modelUsageと4区分すべて一致。請求額ではない。実装・計画への人手修正0。ただし公開用Hostスクリプトは実走後に評価者が作成したため、配布製品の完全自律Deliveryや比較性能の合格証拠にはしない。詳細は`claude-small-delivery.json`。複雑Goal・複数Issue・中断復旧は引き続き未受入。
 
 Claude複雑2Issueの実走開始：固定base `b7a906256f6f0aa2705d2517e69f7d3a6503ccff`、配布alpha.18、Claude Code 2.1.282、Sonnet。予約9001と請求9002を同一進行役が別worktreeへbackground委譲したことを実イベントで確認。作業中のため成功・性能の判定は未実施。評価用`claude-usage.mjs`は明示した親・配下transcriptをmessage IDで重複排除し、HostのmodelUsageと照合する。欠測・配下欠落・不一致はcompleteにせず、2反例試験と既存小規模実走の4区分一致で確認した。
+
+独立レビュー中のcapacityも、対象が不変なら同じ検証結果を維持し、新しいReviewer呼出しだけを一度再試行する。実装・検証の再実行やコード修復予算消費はしない。対象変更・同じ対象での再失敗は停止。Controller/Host/provider分類の関連回帰57件が成功（レビュー回復と持続失敗を含む）。モデル実走で当該障害を再現した証明ではない。

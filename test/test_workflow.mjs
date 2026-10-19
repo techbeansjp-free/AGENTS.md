@@ -510,3 +510,17 @@ test('capacity recovery cannot expand scope or renew Agent admission',{skip:!ena
   assert.equal(calls,1);assert.equal(f.creates(),0);assert.equal(f.git('rev-parse','HEAD'),f.request.base);
  }
 });
+
+test('review capacity retries only independent review without reimplementation or revalidation',{skip:!enabled},async t=>{
+ for(const persistent of [false,true]){
+  const f=fixture(t);f.request.maxRepairs=0;let workers=0,reviews=0;
+  const execution=runWorkflow(f.request,{provider:f.provider,agent:async({workspace,writable})=>{
+   if(writable){workers++;fs.writeFileSync(path.join(workspace,'code.txt'),'after');return {context:'implementer',seconds:0,usage:[]};}
+   reviews++;if(persistent||reviews===1)throw Object.assign(Error('capacity'),{code:'ASC_PROVIDER_CAPACITY'});
+   return {context:'independent-reviewer',seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};
+  }});
+  if(persistent)await assert.rejects(execution,error=>{t.after(()=>fs.rmSync(error.workflowDiagnostic.root,{recursive:true,force:true}));assert.equal(error.code,'ASC_PROVIDER_CAPACITY');assert.equal(f.creates(),0);return true;});
+  else{const result=await execution;t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(result.status,'draft-ci-passed');assert.equal(result.controllerEvents.filter(e=>e.operation==='verify').length,1);assert.equal(result.repairs,0);}
+  assert.equal(workers,1);assert.equal(reviews,2);
+ }
+});
