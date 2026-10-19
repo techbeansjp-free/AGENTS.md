@@ -25,6 +25,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 | 時間・全Agent tokensの削減 | [直近v7](claude-matched-v7/summary.json)、[v6](claude-matched-v6/summary.json)、[v5](claude-matched-v5/summary.json)、[v4](claude-matched-v4/summary.json) | v7は事前の無効性停止条件に達し2組4試行で終了。全件品質・usage・Draft PR/CI成功だが時間中央値80.86→101.93秒、tokens中央値336,190→385,953で改善不成立。5組完了とは扱わない |
 | 登録Reviewerから小規模Draft PR/CI | [配布・委譲](claude-registered-reviewer.json)、[提出まで](claude-registered-reviewer-delivery.json) | canonical手順を組み込んだ同一Reviewer定義を使用。提出HEADを承認したtaskの種別も照合。単発の実装・レビュー54.13秒、提出・CIを含め76.03秒・314,226 tokens、品質・全usage・PR136/CI成功。一般的な性能改善の証明ではない |
 
+[登録Reviewerの複雑2 Issue確認](claude-registered-reviewer-complex.json)は、進行役による互換性修復・6 oracle・独立レビュー・Draft PR137/両CIまで完走した（全体530.64秒）。観測tokensは2,811,301だがworkerの終端usageが1件欠け、Hostのoutput集計との差は1,180。別ストリームにも終端がなく、補間せず性能判定を未成立とした。再実走で置き換えない。
+
 [複雑ケースの修正後確認](claude-complex-currency-followup.json)はDraft PR130/両CI・全usage照合まで成功（561.82秒、2,891,961 tokens）。二重worker起動は解消したが、担当commitが返っても進行役はパッチを転記し、書出し先の拒否・再試行が残った。対照398.88秒/2,849,262を上回り、性能条件は未達。手順追記の効果を過大評価せず、追加cohortではなく保存ログから残るコストを分析する。
 
 直近の原因別確認では、[同じworktreeへのレビュー依頼](claude-review-worktree-followup.json)が87.55秒・327,707 tokensでDraft PR115/CIまで完走した。別worktree作成は起きなかったが、レビュー手順の参照が依頼から欠落したため、依頼項目を整理した。この1件を固定比較の代替や性能改善の証明にはしない。 続く[依頼項目整理後の確認](claude-review-handoff-followup.json)では、手順参照の受け渡しと実読取り、同じworktreeでの独立レビュー、Draft PR116/CIまでを109.65秒・366,035 tokensで確認した。両記録を保持し、後者だけを選んで性能合格とはしない。 [読取り規則の配置変更後](claude-read-batching-followup.json)も品質・提出は成功したが、狙った一括化は徹底されなかった。追加の固定比較を繰り返さず、保存ログの呼出し内訳から改善対象を再検討する。
