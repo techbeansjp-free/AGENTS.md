@@ -605,3 +605,5 @@ Claude対比較の最初のbaselineは53.661秒で実装・独立レビュー完
 修正後Claude cohortのbaseline1はDraft PR89/CI成功、total130.346秒・598,233 processed tokens・全usage照合済み。`claude-cohort-v2-first-baseline.json`へ記録。固定runnerで残りC/CB/BC/CB/BCを逐次開始。実model/effort/CLI/base一致と全usageを毎回確認し、失敗・欠測・2組futilityで停止する。評価用runner以外の実装/計画/修復介入はしない。全組終了前の性能改善判定はしない。
 
 Claude cohort v2は4試行目baselineのレビューhash対応付けで停止。完走3試行はB130.346秒/598233 tokens、C97.408秒/396084、C86.566秒/284326。失敗BはReviewerがPASS 62ed2beと短縮hashで返し、評価器が拒否した。`claude-matched-v2/`へ全3成功と失敗・停止を記録し五組不合格。評価器は短縮hashをGitで一意にcommitへ解決し提出HEADと一致した場合だけ受理するよう修正。文字列prefix一致、曖昧hash、短縮FAILとの矛盾を受理しない。関連10回帰とlint成功。旧失敗や待機時間を隠して完走に変更せず、今後の比較とは条件を分ける。
+
+再実行前登録：短縮hashの一意Git解決を含む固定評価器でClaude cohort v3を新規10試行BC/CB/BC/CB/BCとして実施する。パッケージalpha21/20、Sonnet medium、CLI2.1.282、同一fixture/同一oracle、逐次、欠測/失敗/2組futility停止、5組の同一合格基準は維持。v1/v2の停止を消さず、v3へ旧成功試行を移植しない。これは評価器欠陥修正後の別条件であり旧失敗を取り替えた同一cohortとは説明しない。
