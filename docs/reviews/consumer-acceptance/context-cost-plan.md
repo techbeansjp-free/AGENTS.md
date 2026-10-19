@@ -263,3 +263,12 @@ The default-/tmp package-test failure was subsequently traced to an existing `/t
 
 
 The first alpha.8 pair completed: candidate PR44 82.214 seconds / 242,069 tokens; baseline PR45 125.114 seconds / 335,269 tokens. Both passed quality with complete observed final usage. This single candidate-first pair improves both metrics but is not accepted under the five-pair criterion; the next pair reverses order. A bounded independent code review found no concrete defect in Skill-bundle provenance, worst-case rejection or batching instructions. No model comparison was performed by that reviewer.
+
+
+### New CodeRabbit findings and second batching pair
+
+The second pair ran baseline first: PR46 162.754 seconds / 354,721 tokens, candidate PR47 135.699 seconds / 303,393 tokens. Both passed exact-HEAD tests, independent review and CI with complete observed usage. Two-pair medians are baseline 143.934 seconds / 344,995 tokens and candidate 108.9565 seconds / 272,731 tokens. Five pairs remain the acceptance requirement; these two are not a general performance guarantee.
+
+A subsequent CodeRabbit finding exposed missing worktree Git-pointer protection in the synthetic evaluator. The guard now pins each explicitly Host-used worktree's `.git` pointer and corresponding `commondir`/`gitdir` bytes before Agent execution and compares the same list before Host Git use. It rejects pointer symlinks/redirects, missing files and changed administration. Other worker worktrees can still be created: only Host-used pointers are pinned, while all config.worktree files and common config/hooks remain monitored. The two batching pairs above used the older guard loaded when their processes started; they must not be described as having the new protection, and old baselines are not retroactively regenerated.
+
+The user-management fixture also now rejects email local parts above 64 bytes and tests both 64-byte acceptance and 65-byte rejection. Two Git-boundary tests and changed-file lint passed. The network-isolated installed-package browser journey passed all six scenarios, including direct API validation and authorization, stale edit recovery, connection failure and restart persistence. This is a deterministic fixture check, not an AI autonomous-development trial. Independent read-only review found no concrete defect in either fix.

@@ -32,7 +32,7 @@ export async function rolloutsFor(rootId, began){
 export async function finishNativeDelivery(root){
  const s=JSON.parse(fs.readFileSync(path.join(root,'setup.json'))),result=JSON.parse(fs.readFileSync(path.join(root,'result.json')));
  if(s.repository!=='adachi-tatsuru/asc-public-synthetic-eval-20261016'||s.issue.number!==1||result.status!==0)throw Error('Synthetic delivery scope or Agent status invalid');
- assertGitControlState(s.origin,JSON.parse(fs.readFileSync(path.join(root,'git-controls.json'))));
+ assertGitControlState(s.origin,JSON.parse(fs.readFileSync(path.join(root,'git-controls.json'))),[s.worktree]);
  const started=performance.now();
  const gitEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^GIT_/i.test(key)));
  const command=(argv,cwd)=>execFileSync(argv[0],argv.slice(1),{cwd,env:argv[0]==='git'?gitEnv:process.env,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:4*1024*1024}).trim();

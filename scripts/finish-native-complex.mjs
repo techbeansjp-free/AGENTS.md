@@ -6,7 +6,7 @@ import {rolloutsFor} from './native-delivery.mjs';import {nativeReviewEvidence} 
 const [root,mode]=process.argv.slice(2);if(!root||!['--verify','--deliver'].includes(mode))throw Error('Expected run root and explicit --verify or --deliver');
 const read=name=>JSON.parse(fs.readFileSync(path.join(root,name))),s=read('setup.json'),result=read('result.json');
 if(s.repository!=='adachi-tatsuru/asc-public-synthetic-eval-20261016'||result.status!==0)throw Error('Invalid synthetic run');
-assertGitControlState(s.origin,JSON.parse(fs.readFileSync(path.join(root,'git-controls.json'))));
+assertGitControlState(s.origin,JSON.parse(fs.readFileSync(path.join(root,'git-controls.json'))),[s.worktree]);
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^GIT_/i.test(key)));
 const command=(argv,cwd)=>execFileSync(argv[0],argv.slice(1),{cwd,env,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:16*1024*1024}).trim();
 const head=command(['git','rev-parse','HEAD'],s.worktree),events=fs.readFileSync(path.join(root,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse),rootId=events.find(e=>e.type==='thread.started')?.thread_id;

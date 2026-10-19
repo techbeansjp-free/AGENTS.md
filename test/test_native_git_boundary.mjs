@@ -10,3 +10,15 @@ test('synthetic Host rejects changed config/hooks and linked controls before exe
  fs.writeFileSync(path.join(git,'worktrees','new','config.worktree'),'untrusted');assert.throws(()=>assertGitControlState(root,baseline),/changed/);fs.unlinkSync(path.join(git,'worktrees','new','config.worktree'));
  fs.unlinkSync(config);fs.symlinkSync(path.join(root,'missing'),config);assert.throws(()=>gitControlState(root),/Unsafe/);
 });
+
+test('Host pins the worktree pointer and administration without blocking unused worktrees',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-git-pointer-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const admin=path.join(root,'.git/worktrees/current'),worktree=path.join(root,'.worktrees/current');fs.mkdirSync(admin,{recursive:true});fs.mkdirSync(worktree,{recursive:true});
+ const pointer=path.join(worktree,'.git'),common=path.join(admin,'commondir'),gitdir=path.join(admin,'gitdir');
+ fs.writeFileSync(pointer,`gitdir: ${admin}\n`);fs.writeFileSync(common,'../..\n');fs.writeFileSync(gitdir,pointer+'\n');
+ const original=gitControlState(root,[worktree]);assert.doesNotThrow(()=>assertGitControlState(root,original,[worktree]));
+ for(const file of [pointer,common,gitdir]){const bytes=fs.readFileSync(file);fs.writeFileSync(file,'redirected');assert.throws(()=>assertGitControlState(root,original,[worktree]));fs.writeFileSync(file,bytes);}
+ assert.throws(()=>assertGitControlState(root,original),/changed/);
+ const other=path.join(root,'.git/worktrees/other');fs.mkdirSync(other);fs.writeFileSync(path.join(other,'commondir'),'../..');fs.writeFileSync(path.join(other,'gitdir'),'/unused/.git');assert.doesNotThrow(()=>assertGitControlState(root,original,[worktree]));
+ fs.unlinkSync(pointer);fs.symlinkSync(gitdir,pointer);assert.throws(()=>assertGitControlState(root,original,[worktree]),/Unsafe/);
+});
