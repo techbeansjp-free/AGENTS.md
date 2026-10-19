@@ -1,0 +1,51 @@
+{
+  "scope": "Saved synthetic logs only. Output bytes are not tokens; no causal latency attribution or model rerun.",
+  "records": [
+    {
+      "variant": "baseline",
+      "implementationAndReviewSeconds": 97.20933529,
+      "deliverySeconds": 19.99659197899999,
+      "threads": [
+        {
+          "role": "coordinator",
+          "observedModelResponses": 11,
+          "maxResponseInputTokens": 25668,
+          "observedToolCalls": 10,
+          "toolOutputBytes": 24851,
+          "processedTokens": 252734
+        },
+        {
+          "role": "/root/independent_review",
+          "observedModelResponses": 3,
+          "maxResponseInputTokens": 17167,
+          "observedToolCalls": 2,
+          "toolOutputBytes": 1826,
+          "processedTokens": 50628
+        }
+      ]
+    },
+    {
+      "variant": "candidate",
+      "implementationAndReviewSeconds": 200.111841552,
+      "deliverySeconds": 21.51725346400001,
+      "threads": [
+        {
+          "role": "coordinator",
+          "observedModelResponses": 12,
+          "maxResponseInputTokens": 26214,
+          "observedToolCalls": 11,
+          "toolOutputBytes": 22961,
+          "processedTokens": 271372
+        },
+        {
+          "role": "/root/independent_review",
+          "observedModelResponses": 9,
+          "maxResponseInputTokens": 22085,
+          "observedToolCalls": 8,
+          "toolOutputBytes": 8065,
+          "processedTokens": 178774
+        }
+      ]
+    }
+  ]
+}
