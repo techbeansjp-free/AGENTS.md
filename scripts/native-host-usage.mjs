@@ -5,7 +5,7 @@ export function ownNativeEvents(events){
  const metas=events.filter(e=>e.type==='session_meta');
  if(metas.length===1){
   const m=metas[0].payload;
-  if(m?.forked_from_id||m?.history_mode==='paginated'||m?.subagent_history_start_ordinal!==undefined)throw new Error('Ambiguous inherited session identity');
+  if(m?.forked_from_id||m?.subagent_history_start_ordinal!==undefined)throw new Error('Ambiguous inherited session identity');
   return events;
  }
  const meta=events[0]?.type==='session_meta'?events[0].payload:null;

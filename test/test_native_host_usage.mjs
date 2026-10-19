@@ -53,3 +53,8 @@ test('ambiguous fork boundaries and foreign or mismatched usage remain rejected'
   const r=structuredClone(forked());mutate(r);assert.throws(()=>ownNativeEvents(r));
  }
 });
+
+test('paginated storage mode alone does not imply inherited context',()=>{
+ const r=record('p',null,count(30,10,3));r[0].payload.history_mode='paginated';
+ assert.equal(summarizeNativeUsage('p',[r]).observedProcessedTokens,33);
+});

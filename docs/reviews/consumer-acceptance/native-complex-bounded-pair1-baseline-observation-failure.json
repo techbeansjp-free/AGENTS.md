@@ -11,5 +11,6 @@
   "completeUsage": null,
   "delivered": false,
   "accepted": false,
-  "implementationRerun": false
+  "implementationRerun": false,
+  "observerRepairRegression": "Initial observer fix also rejected ordinary non-fork paginated storage; corrected after saved-log validation, without model rerun."
 }
