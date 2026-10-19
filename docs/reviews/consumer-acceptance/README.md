@@ -215,6 +215,8 @@ C23は実配布候補CLIで標準worktreeを作り、directory・branch・base�
 ローカルの実作業先はreflogの作成時刻と対応Issue1579に基づき `20261018_210640-1579-consumer-scenarios`、local branchは `test/1579-consumer-scenarios` へ変更。既存PR接続のためremote head名は維持。利用者の既存worktreeを無断改名せず、配布元Skillの改善を次の配布へ反映する。今回検査した利用者環境は隔離した合成プロジェクトであり、実利用者環境を一括変更していない。
 
 
+責務の説明を明確にしたalpha.40の[単発診断](claude-discovery-owner-result.json)は、2担当の完了・統合・6 oracle・独立レビュー・Draft PR155・両CI・全Contextのusage照合まで成功した（417.72秒、1,935,011 tokens）。ただし、進行役は委譲前に実装と6 oracleを読み、報告されたhashを直接cherry-pickしており、重複調査抑制とGitで取得したHEAD変数の利用は確認できなかった。[事前条件と観測](claude-discovery-owner-protocol.json)を保持する。前回単発値より時間・tokensは小さいが、対比較ではなく因果的な性能改善や指示の強制を証明しない。事前に定めた1回で終了し、成功値が出るまで再試行しない。
+
 ## Context・是正コストの追加調査
 
 [比較条件・判断](context-cost-plan.md)とsmall/repair/multi/handoffのJSONに、同一モデルの旧・新Skill各1試行を記録した。全ケースの要件・独立レビューは合格したが、時間・tokensの一貫した改善は未証明。小規模に固定のAgent階層・Context交代を要求しない。引継ぎと階層化はHostが選択する指示であり、自動実行機能を追加したわけではない。
