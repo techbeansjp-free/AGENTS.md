@@ -21,5 +21,66 @@
     },
     "delivered": false
   },
-  "scope": "Offline replay of stored reviewer events only; no new model calls, no CI or performance success inferred"
+  "scope": "Offline replay of stored reviewer events only; no new model calls, no CI or performance success inferred",
+  "recovery": {
+    "head": "a28f044837ba515544a6d68347e568b557c95e2b",
+    "pr": 93,
+    "ci": {
+      "head": "a28f044837ba515544a6d68347e568b557c95e2b",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "test": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39230280236",
+      "transportFailures": []
+    },
+    "verificationPassed": true,
+    "review": {
+      "taskId": "ad67d8820169d9e18",
+      "head": "a28f044837ba515544a6d68347e568b557c95e2b",
+      "verdict": "PASS"
+    },
+    "usage": {
+      "totals": {
+        "input_tokens": 32,
+        "output_tokens": 6573,
+        "cache_read_input_tokens": 418874,
+        "cache_creation_input_tokens": 29701
+      },
+      "threads": [
+        {
+          "id": "fd90ad01-0f66-4164-ba61-00d4b7e899ec",
+          "messageCount": 14,
+          "usage": {
+            "input_tokens": 28,
+            "output_tokens": 5431,
+            "cache_read_input_tokens": 392665,
+            "cache_creation_input_tokens": 23399
+          }
+        },
+        {
+          "id": "ad67d8820169d9e18",
+          "messageCount": 2,
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 1142,
+            "cache_read_input_tokens": 26209,
+            "cache_creation_input_tokens": 6302
+          }
+        }
+      ],
+      "observedProcessedTokens": 455180,
+      "missingUsage": [],
+      "reconciledWithHostModelUsage": true,
+      "complete": true
+    },
+    "implementationIntervention": 0,
+    "observerCorrection": true,
+    "modelRerun": false,
+    "eligibleForUninterruptedPerformanceComparison": false,
+    "originalFailureRetained": true,
+    "recoverySeconds": 20.945298790000002
+  }
 }

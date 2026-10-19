@@ -4,7 +4,7 @@
 
 PR #1606の現在の完了条件は[自律完走・品質・費用の受入条件](context-cost-plan.md#再設定した目標と完了条件進行中)を正本とする。下記C01–C23/J01–J06の導入・操作調査だけでは完了しない。性能改善と中断・再開を含む自律完走の目標は進行中である。
 
-| 現行current-hostの実証 | 対象証拠 | 判定・限界 |
+| Codex current-hostの実証 | 対象証拠 | 判定・限界 |
 |---|---|---|
 | 小規模の元要求からDraft PR/CI | [自動完走](native-auto-delivery-results.json) | 無介入の合成1件。任意Issueの保証ではない |
 | 複雑な予約・請求Issueの分担・統合 | [複雑Goal](native-complex-delivery.json) | 実装・修復・独立レビュー・固定oracle・Draft PR/CI成功。4 Contextのusage取得 |
@@ -12,7 +12,17 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 | 時間と全Agent tokensの削減 | [対比較集計](native-small-progressive-summary.json) | 2組で両指標の改善は不成立。5組の受入条件は未達。欠測・失敗を除外して合格にしない |
 | 保存途中の中断から自律再開 | [中断再開](native-interruption-delivery.json) | Linuxの単一書込み担当で、保存後中断・全子終了・新Context継続からDraft PR/CIまで成功。複数worker同時中断や総tokensは未証明 |
 
-Claude Codeの結果、任意snapshot Controllerの結果、評価者が計画・統合・修復した結果を、このcurrent-hostの自律実績へ合算しない。以下は以前からの導入・利用者操作調査の記録として残す。
+主な利用HostとしてClaude Codeを評価する。上表はCodexの記録であり、Claude Codeの代用にしない。Claude Codeで確認した範囲は次のとおり。モデルは同HostのSonnetを使用し、Codexへ委譲していない。
+
+| Claude Code current-hostの実証 | 対象証拠 | 判定・限界 |
+|---|---|---|
+| 小規模実装・独立レビュー・Draft PR/CI | [小規模](claude-small-delivery.json) | 成功。提出は評価用Host処理。製品単体の全自動提出を意味しない |
+| 複雑な複数Issueの並列実装・統合 | [複雑Goal](claude-complex-implementation.json) | 分担・固定oracle・CIは成功したが、後続の反例で入力getter例外の見逃しを検出。初回品質合格に読み替えない |
+| 共有契約変更・修復・再レビュー | [契約変更](claude-shared-contract.json)、[修復](claude-review-repair.json) | 保存レコード互換性と具体的な反例を確認し、修復後に独立レビュー・CI成功。全usageに欠測あり |
+| 実Git競合・保存後中断・再開 | [中断再開](claude-conflict-interruption.json) | 同じHost sessionで保存済み成果から再開しCI成功。単一書込み担当のみ。停止・再開の起動は評価用Host処理 |
+| 時間・全Agent tokensの削減 | [比較v2](claude-matched-v2/summary.json)、[比較v3](claude-matched-v3-observer.json) | 評価器の表記解釈で停止。失敗を保持し、性能改善は未成立。保存イベントの再解釈を新しい成功試行には数えない |
+
+Hostごとの結果、任意snapshot Controllerの結果、評価者が計画・統合・修復した結果を合算しない。以下は以前からの導入・利用者操作調査の記録として残す。
 
 ## 導入・利用者操作調査の範囲
 
