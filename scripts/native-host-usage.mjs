@@ -1,6 +1,6 @@
 /** Evaluation only: explicit synthetic rollout records; never exports prompts or code. */
 export function summarizeNativeUsage(rootId, rollouts) {
-  const threads = new Map();
+  const threads = new Map(), cacheWrites = [];
   for (const events of rollouts) {
     const metas = events.filter(e => e.type === 'session_meta');
     if (metas.length !== 1) throw new Error('Expected one session identity');
@@ -12,6 +12,8 @@ export function summarizeNativeUsage(rootId, rollouts) {
     const fields = ['input_tokens', 'cached_input_tokens', 'output_tokens'];
     const valid = usage && fields.every(k => Number.isSafeInteger(usage[k]) && usage[k] >= 0)
       && usage.cached_input_tokens <= usage.input_tokens;
+    const writes=usage?.cache_write_input_tokens;
+    cacheWrites.push({id:meta.id,tokens:valid&&Number.isSafeInteger(writes)&&writes>=0?writes:null});
     threads.set(meta.id, {id: meta.id, parent, usage: valid ? Object.fromEntries(fields.map(k => [k, usage[k]])) : null});
   }
   if (!threads.has(rootId)) throw new Error('Root session missing');
@@ -30,7 +32,10 @@ export function summarizeNativeUsage(rootId, rollouts) {
     outputTokens: sum.outputTokens + t.usage.output_tokens,
   }), {inputTokens: 0, cachedInputTokens: 0, outputTokens: 0});
   if (!Object.values(measured).every(Number.isSafeInteger) || !Number.isSafeInteger(measured.inputTokens + measured.outputTokens)) throw new Error('Aggregated usage exceeds safe integer range');
-  return {rootId, observedThreads: calls.length, missingUsage: missing, measured,
+  const missingCacheWrites=cacheWrites.filter(t=>t.tokens===null).map(t=>t.id);
+  const observedCacheWrites=cacheWrites.reduce((sum,t)=>sum+(t.tokens??0),0);
+  if(!Number.isSafeInteger(observedCacheWrites))throw new Error('Aggregated cache writes exceed safe integer range');
+  return {cacheWriteInput:{observedTokens:observedCacheWrites,totalTokens:missingCacheWrites.length?null:observedCacheWrites,missingThreads:missingCacheWrites,threads:cacheWrites,scope:'Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost.'},rootId, observedThreads: calls.length, missingUsage: missing, measured,
     observedProcessedTokens: missing.length ? null : measured.inputTokens + measured.outputTokens,
     scope: 'Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.', calls};
 }

@@ -23,3 +23,14 @@ test('rejects unsafe totals even when each thread value is valid', () => {
  assert.throws(()=>summarizeNativeUsage('p',[record('p',null,count(Number.MAX_SAFE_INTEGER,0,0)),record('c','p',count(2,0,0))]),/safe integer/);
  assert.throws(()=>summarizeNativeUsage('p',[record('p',null,count(Number.MAX_SAFE_INTEGER,0,1))]),/safe integer/);
 });
+
+const withWrites=(writes)=>{const e=count(30,10,3);e.payload.info.total_token_usage.cache_write_input_tokens=writes;return e;};
+test('cache writes retain observed zero, missing fields and final cumulative values without inflating processed tokens',()=>{
+ const complete=summarizeNativeUsage('p',[record('p',null,withWrites(2),withWrites(7)),record('c','p',withWrites(0))]);
+ assert.equal(complete.cacheWriteInput.totalTokens,7);assert.deepEqual(complete.cacheWriteInput.missingThreads,[]);assert.equal(complete.observedProcessedTokens,66);
+ for(const counts of [[count(30,10,3)],[withWrites(-1)],[withWrites(1.5)],[]]){
+  const partial=summarizeNativeUsage('p',[record('p',null,withWrites(7)),record('c','p',...counts)]);
+  assert.equal(partial.cacheWriteInput.totalTokens,null);assert.equal(partial.cacheWriteInput.observedTokens,7);assert.deepEqual(partial.cacheWriteInput.missingThreads,['c']);
+ }
+ assert.throws(()=>summarizeNativeUsage('p',[record('p',null,withWrites(Number.MAX_SAFE_INTEGER)),record('c','p',withWrites(1))]),/safe integer/);
+});
