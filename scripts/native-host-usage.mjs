@@ -64,3 +64,36 @@ export function summarizeNativeUsage(rootId, rollouts) {
     observedProcessedTokens: missing.length ? null : measured.inputTokens + measured.outputTokens,
     scope: 'Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.', calls};
 }
+
+/** A continued coordinator retains cumulative counters; subtract each retained thread once. */
+export function nativePhaseUsage(rootId, beforeRollouts, afterRollouts) {
+ const before=summarizeNativeUsage(rootId,beforeRollouts),after=summarizeNativeUsage(rootId,afterRollouts);
+ const previous=new Map(before.calls.map(t=>[t.id,t])),current=new Map(after.calls.map(t=>[t.id,t]));
+ for(const [id,t] of previous)if(!current.has(id)||current.get(id).parent!==t.parent)throw Error('Phase thread inventory changed');
+ const fields=['input_tokens','cached_input_tokens','output_tokens'];
+ const differences=after.calls.map(t=>{
+  const old=previous.get(t.id);
+  if(old?.usage&&!t.usage)throw Error('Phase usage counter disappeared');
+  if(!t.usage||(old&&!old.usage))return {id:t.id,usage:null};
+  const usage=Object.fromEntries(fields.map(k=>[k,t.usage[k]-(old?.usage[k]??0)]));
+  if(Object.values(usage).some(n=>!Number.isSafeInteger(n)||n<0)||usage.cached_input_tokens>usage.input_tokens)throw Error('Non-monotonic phase usage');
+  return {id:t.id,usage};
+ });
+ const missing=differences.filter(t=>!t.usage).map(t=>t.id);
+ const measured=differences.reduce((sum,t)=>Object.fromEntries(fields.map(k=>[k,sum[k]+(t.usage?.[k]??0)])),Object.fromEntries(fields.map(k=>[k,0])));
+ const total=measured.input_tokens+measured.output_tokens;
+ if(!Object.values(measured).every(Number.isSafeInteger)||!Number.isSafeInteger(total))throw Error('Unsafe phase usage total');
+ const writes=new Map(before.cacheWriteInput.threads.map(t=>[t.id,t.tokens]));
+ const cache=after.cacheWriteInput.threads.map(t=>{
+  const old=writes.get(t.id);
+  if(old!==undefined&&old!==null&&t.tokens===null)throw Error('Phase cache write counter disappeared');
+  const tokens=t.tokens===null||(writes.has(t.id)&&old===null)?null:t.tokens-(old??0);
+  if(tokens!==null&&(!Number.isSafeInteger(tokens)||tokens<0))throw Error('Non-monotonic phase cache writes');
+  return {id:t.id,tokens};
+ });
+ const observed=cache.reduce((n,t)=>n+(t.tokens??0),0);
+ if(!Number.isSafeInteger(observed))throw Error('Unsafe phase cache writes');
+ return {rootId,measured,observedProcessedTokens:missing.length?null:total,missingUsage:missing,threads:differences,
+  cacheWriteInput:{observedTokens:observed,totalTokens:cache.some(t=>t.tokens===null)?null:observed,threads:cache},
+  scope:'Difference of Host cumulative observations for the same coordinator; includes new and resumed descendants. Missing/reset counters are not zero. Full trial totals use final cumulative usage, not sum of phase totals.'};
+}

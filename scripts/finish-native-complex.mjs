@@ -1,3 +1,4 @@
+import {nativePhaseUsage} from './native-host-usage.mjs';
 import {assertConflictFaultsRemoved} from './native-conflict-fixture.mjs';
 import {readInterruptionEvidence} from './native-interrupted-attempt.mjs';
 import {assertGitControlState} from './native-git-boundary.mjs';
@@ -11,12 +12,15 @@ assertGitControlState(s.origin,JSON.parse(fs.readFileSync(path.join(root,'git-co
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^GIT_/i.test(key)));
 const command=(argv,cwd)=>execFileSync(argv[0],argv.slice(1),{cwd,env,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:16*1024*1024}).trim();
 const head=command(['git','rev-parse','HEAD'],s.worktree),events=fs.readFileSync(path.join(root,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse),rootId=events.find(e=>e.type==='thread.started')?.thread_id;
-const proof=nativeReviewEvidence(rootId,head,await rolloutsFor(rootId,s.startedAt));
+if(s.continuedRoot&&rootId!==s.continuedRoot)throw Error('Coordinator session changed');
+const rollouts=await rolloutsFor(rootId,s.observationStartedAt??s.startedAt);
+const proof=nativeReviewEvidence(rootId,head,rollouts);
 const {verifyWorktree}=await import(pathToFileURL(path.join(root,'distribution/package/src/worktree-execution.mjs')));
 const {Github}=await import(pathToFileURL(path.join(root,'distribution/package/src/github.mjs')));
 const owner=path.join(root,'owner.json');fs.writeFileSync(owner,JSON.stringify({intent:s.phase==='revision'?'Apply explicit currency revision preserving original security and stored replay records':'Complete both synthetic reservation and billing requirements; no revision phase yet',allowedPaths:['complex/reservation/service.mjs','complex/billing/service.mjs'],commands:[...['reservation','billing','integration','unknown-keys'].map(name=>[process.execPath,`complex/oracle/${name}.mjs`,'complex',...(s.phase==='revision'&&['reservation','billing'].includes(name)?['revised']:[])]),...(s.phase==='revision'?[[process.execPath,'complex/oracle/revision.mjs','complex/previous','complex']]:[])]}));
 const verification=verifyWorktree(s.worktree,s.base,owner);if(!verification.passed||verification.head!==proof.review.head)throw Error('Complex oracle or reviewed HEAD mismatch');
 const data={mode,phase:s.phase??'original',head,base:s.base,remoteBase:s.remoteBase,review:proof.review,usage:proof.usage,verification,implementationAndReviewSeconds:result.seconds,driverImplementationEdits:0,manualHandoffs:0};
+if(s.continuedRoot)data.continuation={rootId,previousHead:s.previousHead,phaseUsage:nativePhaseUsage(rootId,read('before-rollouts.json'),rollouts),scope:'Same coordinator session resumed for explicit shared-contract revision in a new worktree; usage is whole-session cumulative, phaseUsage is additional work only, and all timing fields describe this revision phase only. Do not compare phase time against cumulative tokens.'};
 if(s.conflictInjected){
  const injection=read('conflict-injection.json');
  if(injection.base!==s.base||injection.gitConflictObserved!==true||injection.evaluatorResolution!==false)throw Error('Missing conflict injection evidence');

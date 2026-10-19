@@ -58,3 +58,28 @@ test('paginated storage mode alone does not imply inherited context',()=>{
  const r=record('p',null,count(30,10,3));r[0].payload.history_mode='paginated';
  assert.equal(summarizeNativeUsage('p',[r]).observedProcessedTokens,33);
 });
+
+test('continued multi-Issue coordinator counts only new work and retains old workers',async()=>{
+ const {nativePhaseUsage}=await import('../scripts/native-host-usage.mjs');
+ const before=[record('p',null,count(30,10,3)),record('old','p',count(20,15,4))];
+ const after=[record('p',null,count(60,30,5)),record('old','p',count(20,15,4)),record('new','p',count(10,5,2))];
+ const r=nativePhaseUsage('p',before,after);
+ assert.equal(r.observedProcessedTokens,44);assert.equal(r.measured.cached_input_tokens,25);
+ assert.equal(r.threads.find(t=>t.id==='old').usage.input_tokens,0);
+ assert.equal(r.cacheWriteInput.totalTokens,null);
+ assert.throws(()=>nativePhaseUsage('p',before,after.filter(t=>t[0].payload.id!=='old')),/inventory/);
+ assert.throws(()=>nativePhaseUsage('p',before,[record('p',null,count(1,0,0)),after[1]]),/Non-monotonic/);
+ const missing=nativePhaseUsage('p',[record('p')],[record('p',null,count(60,30,5))]);
+ assert.equal(missing.observedProcessedTokens,null);assert.deepEqual(missing.missingUsage,['p']);
+});
+
+
+test('continued measurement rejects lost known counters but preserves originally missing cache data',async()=>{
+ const {nativePhaseUsage}=await import('../scripts/native-host-usage.mjs');
+ const before=[record('p',null,withWrites(5))];
+ assert.throws(()=>nativePhaseUsage('p',before,[record('p')]),/counter disappeared/);
+ assert.throws(()=>nativePhaseUsage('p',before,[record('p',null,count(30,10,3))]),/cache write counter disappeared/);
+ assert.throws(()=>nativePhaseUsage('p',before,[record('p',null,withWrites(4))]),/Non-monotonic/);
+ assert.equal(nativePhaseUsage('p',before,[record('p',null,withWrites(8))]).cacheWriteInput.totalTokens,3);
+ assert.equal(nativePhaseUsage('p',[record('p',null,count(30,10,3))],before).cacheWriteInput.totalTokens,null);
+});

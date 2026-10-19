@@ -359,3 +359,10 @@ Pair 2 completed cleanly in both arms: baseline PR59 473.972 seconds / 2,226,305
 
 
 The live trial completed synthetic Draft PR61 at `6381de214d47d2a5c188427eb2d575fb752576ef`, with both exact-HEAD CI workflows and fresh independent review passing. `native-conflict-recovery.json` records 217.998 seconds total, 706,430 observed processed tokens across two threads, five successful revision/integration/security/legacy-replay checks, zero evaluator implementation repairs and zero manual handoffs after the explicit pre-launch fault injection. The submitted source contains neither injected invalid error code and Git has no unresolved conflict. This proves recovery for this injected conflict plus revision only; arbitrary conflicts, long-lived parallel sessions and performance superiority remain unproven.
+
+
+### Same-coordinator continuation measurement preparation
+
+The original complex fixture runs two Issues in one coordinator session, but revision/restart trials currently create a fresh parent. They do not establish continued multi-Issue work in the same conversation. The next continuation scenario will reuse the completed synthetic parent session explicitly, apply the existing shared-contract revision in another worktree, preserve earlier work and require current-HEAD independent review and fixed oracles before Draft delivery. Plan/delegation/implementation remain Agent-owned. This is not yet executed.
+
+The installed Codex 0.153.4 `exec resume --help` supports an explicit session ID; [official non-interactive documentation](https://learn.chatgpt.com/docs/non-interactive-mode#resume-a-non-interactive-session) likewise documents this path. A new parent with copied summary cannot count as the same session. Before reusing the parent, save its completed thread inventory and cumulative counters; after continuation, count each thread once, retain newly spawned descendants, and calculate phase deltas separately from final whole-session totals. Missing or reset counters cannot become zero. `nativePhaseUsage` prepares this measurement only; it does not prove continuation or performance.
