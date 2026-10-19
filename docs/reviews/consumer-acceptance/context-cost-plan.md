@@ -7,6 +7,7 @@
 以前の「レビュー可能なPR」の完了判定を撤回する。以下を満たすまで、本目標を完了にしない。過去の試験は個別の根拠として残し、人手の統合・修復を自律成功へ読み替えない。
 
 - 主対象は標準current-host/worktree経路。ownerの元要求、許可範囲、必要な依存と検証環境から開始する。別Hostを強制せず、CodexとClaude Codeの結果を分ける。
+- 主要な利用環境はClaude Code。Claude進行役→Claude委譲で小規模・複雑な複数Issue・復旧・Draft PR/CIを受入対象とする。Codex専用試験をClaudeの成立証拠に代用しない。モデルは利用者指定を優先し、比較時は実モデルIDとeffortを記録する。Claudeの子・孫管理は版ごとの実測で判断し、未確認機能を前提にしない。
 - 小規模・指摘修復・複雑な並列Issue・共有契約変更・競合・中断再開を対象にする。必要な判断、実装、独立レビュー、是正、統合を実Hostで行い、許可済み合成repoのDraft PRと対象commitのCI成功まで追う。
 - 実装・計画・競合解消を評価driverが代行した場合は介入として失敗/未達を記録する。自動継続に必要な仕様質問は記録し、事前確定済みの合成要求ではownerへの追加判断なしを合格条件とする。権限の追加を勝手に認めない。
 - 固定oracle、未公開の反例、元要求からの独立レビューを全て満たし、未解決の契約違反がないこと。変更範囲、依存Issueの成果、再開時の保存内容、提出commitを確認する。
@@ -568,3 +569,7 @@ Current Sol matched small cohort stopped at pair 3 baseline under the preregiste
 `run-native-delivery-candidate.mjs`はCodex進行役を起動し、そのprocess終了後に結果を書いて終了する。capacity後の自動resumeは実装されていない。従って今回の実走停止を、任意Controllerの修正のみで解消したとは扱えない。current-hostは利用者が起動したHostの中でSkillを実行する経路であり、Skill自身は停止済みの進行役を起動できない。既存Hostのresume機能を使う外側の起動主体との接続が必要。
 
 [OpenAI公式non-interactive資料](https://learn.chatgpt.com/docs/non-interactive-mode)（2026-10-19確認）は`codex exec resume <SESSION_ID>`を示している。これは再開APIの存在の根拠であり、capacityから自動復旧する保証ではない。複数Issueが並走するため`--last`での対象推定は使わず、対象session・worktree・権限を保持して再開する必要がある。既存手動復旧観測を自動復旧実績へ書き換えない。
+
+Claude主要環境の前提確認：`claude-session-continuity.json`は同一session IDの2turn、`claude-sandbox-probe.json`はClaude Bashから正常書込みと外部dummy拒否を実測。最初のBash拒否も除外せず記録した。通信、並列Issue、子Agent境界、PR/CIの証拠には代用しない。
+
+Codex合成評価runnerには同一sessionへのcapacity再開を最大一度だけ追加。モデル・権限・Git controlの対応を維持し、各attemptを別ログに残す。通常の認証失敗は再開せず、繰返すcapacityは終了する。評価補助であり配布製品のcurrent-host supervisorではない。再開試行のusage完全性が未確定な間はexportに欠測を追加し、旧比較条件とはrecoveryPolicyで分離する。合成プロセス試験とexport回帰3件成功。実モデルの自動復旧は未検証。
