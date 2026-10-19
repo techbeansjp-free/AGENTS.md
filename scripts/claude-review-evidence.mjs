@@ -12,5 +12,5 @@ export function claudeReviewEvidence(events,head,resolveCommit){
  });
  const matching=verdicts.filter(({event})=>refersToHead(event.summary,'PASS'));
  if(matching.length!==1||matching[0].event.status!=='completed'||verdicts.some(({event})=>refersToHead(event.summary,'FAIL')))throw Error('No unambiguous completed independent review of submitted HEAD');
- return {taskId:matching[0].start.task_id,head,verdict:'PASS'};
+ return {taskId:matching[0].start.task_id,agentType:matching[0].start.subagent_type??null,head,verdict:'PASS'};
 }

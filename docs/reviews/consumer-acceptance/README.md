@@ -22,13 +22,14 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 | 実Git競合・保存後中断・再開 | [中断再開](claude-conflict-interruption.json) | 同じHost sessionで保存済み成果から再開しCI成功。単一書込み担当のみ。停止・再開の起動は評価用Host処理 |
 | 2workerの保存成果から統合・再開 | [worker再開](claude-worker-recovery.json) | 両worktreeの中断時bytesを最終commitへ保持、独立レビュー・6 oracle・Draft PR104の両CI成功。4 Contextの取得usage照合成功。片方は停止前に完了済み、評価器修復を挟むため無中断性能には不使用 |
 | 複雑2 Issue・通貨契約変更の無介入実装 | [候補診断](claude-complex-currency-diagnostic.json)、[同条件の対照](claude-complex-currency-baseline.json) | 双方6 oracle・独立レビュー・Draft PR128/129両CI・全usage照合成功。候補568.65秒/3,740,727 tokens、対照398.88秒/2,849,262で改善不成立。候補の二重worktree起動とpatch転記失敗を既存Skillで是正。単発比較で性能保証とはしない |
-| 時間・全Agent tokensの削減 | [最新固定5組](claude-matched-v6/summary.json)、[前回v5](claude-matched-v5/summary.json)、[v4](claude-matched-v4/summary.json) | 最新10試行は全件品質・usage完備・Draft PR/CI成功。時間中央値80.75→113.53秒、tokens中央値394,530→395,875で削減不成立。過去の結果や単発追試を混ぜず全試行を保持 |
+| 時間・全Agent tokensの削減 | [直近v7](claude-matched-v7/summary.json)、[v6](claude-matched-v6/summary.json)、[v5](claude-matched-v5/summary.json)、[v4](claude-matched-v4/summary.json) | v7は事前の無効性停止条件に達し2組4試行で終了。全件品質・usage・Draft PR/CI成功だが時間中央値80.86→101.93秒、tokens中央値336,190→385,953で改善不成立。5組完了とは扱わない |
+| 登録Reviewerから小規模Draft PR/CI | [配布・委譲](claude-registered-reviewer.json)、[提出まで](claude-registered-reviewer-delivery.json) | canonical手順を組み込んだ同一Reviewer定義を使用。提出HEADを承認したtaskの種別も照合。単発の実装・レビュー54.13秒、提出・CIを含め76.03秒・314,226 tokens、品質・全usage・PR136/CI成功。一般的な性能改善の証明ではない |
 
 [複雑ケースの修正後確認](claude-complex-currency-followup.json)はDraft PR130/両CI・全usage照合まで成功（561.82秒、2,891,961 tokens）。二重worker起動は解消したが、担当commitが返っても進行役はパッチを転記し、書出し先の拒否・再試行が残った。対照398.88秒/2,849,262を上回り、性能条件は未達。手順追記の効果を過大評価せず、追加cohortではなく保存ログから残るコストを分析する。
 
 直近の原因別確認では、[同じworktreeへのレビュー依頼](claude-review-worktree-followup.json)が87.55秒・327,707 tokensでDraft PR115/CIまで完走した。別worktree作成は起きなかったが、レビュー手順の参照が依頼から欠落したため、依頼項目を整理した。この1件を固定比較の代替や性能改善の証明にはしない。 続く[依頼項目整理後の確認](claude-review-handoff-followup.json)では、手順参照の受け渡しと実読取り、同じworktreeでの独立レビュー、Draft PR116/CIまでを109.65秒・366,035 tokensで確認した。両記録を保持し、後者だけを選んで性能合格とはしない。 [読取り規則の配置変更後](claude-read-batching-followup.json)も品質・提出は成功したが、狙った一括化は徹底されなかった。追加の固定比較を繰り返さず、保存ログの呼出し内訳から改善対象を再検討する。
 
-次の比較に備えた未公開固定artifactは候補alpha.30（SHA256 `a3fd341a65b486fe2ea0219627fc13e46e458304006c2afaa8598a354de8eb05`）と対照alpha.31（`ec96cc97194160af501ed3aafd776a2ea9ff4eb49eadcf193eb1ddb59a1b66c6`）。両者は現行runtimeが同一で、対照のSkillだけalpha.25の内容に戻した。新条件の実走は未開始。
+次の比較に備えた未公開固定artifactは候補alpha.30（SHA256 `a3fd341a65b486fe2ea0219627fc13e46e458304006c2afaa8598a354de8eb05`）と対照alpha.31（`ec96cc97194160af501ed3aafd776a2ea9ff4eb49eadcf193eb1ddb59a1b66c6`）。両者は現行runtimeが同一で、対照のSkillだけalpha.25の内容に戻した。v7として実走済みで、上表のとおり性能改善は不成立。結果を保持し、同条件の追加試行は打ち切った。
 
 一般的な仮想設計問題だけをclaude-opus-advisorへ1回read-only諮問した（コード・PR情報・実測値は送信していない）。既存Git/テストの再利用、固定した比較条件、未達結果保持を採用する。全作業でcommitする案は権限と未commit成果保護のため採用せず、助言を性能・安全性の証明とは扱わない。先の非公開PR情報送信の拒否とは入力範囲が異なり、その承認待ちを解除したものではない。
 
@@ -37,6 +38,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 評価入力の不足も修正した（`bf4277c6`）：既知の検証argvを持つowner契約をAgent終了後ではなく起動前に読取り専用で渡し、終了後の内容一致を検査する。通信しない模擬Hostで起動時の6コマンド取得・書込み拒否設定・模擬実行の成功扱い拒否・未提出を確認した（モデル呼出し0）。これはsandbox強制の実証や性能合格ではない。従来の実走は契約提示条件が異なるので、新条件の比較試行へ混ぜない。
 
 Hostごとの結果、任意snapshot Controllerの結果、評価者が計画・統合・修復した結果を合算しない。以下は以前からの導入・利用者操作調査の記録として残す。
+
+登録Reviewerの提出確認では、配布物から生成する定義をClaudeの`--agents`へ渡した。プロジェクトの`.claude/agents/`からの検出・委譲は別の配布試験で確認している。二つの起動方法を同一の実走として扱わない。
 
 ## 導入・利用者操作調査の範囲
 

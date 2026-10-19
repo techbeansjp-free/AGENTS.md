@@ -22,6 +22,11 @@ function read(root,name){
  const fd=fs.openSync(cursor,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
  try{const st=fs.fstatSync(fd);demand(st.isFile()&&st.nlink===1&&st.size<=2000000,'Asset changed during read');return fs.readFileSync(fd);}finally{fs.closeSync(fd);}
 }
+export function claudeReviewerDefinition(packageRoot=defaultPackage){
+ return {description:'ASCの元要求と対象差分を独立レビューする。実装や進行管理は担当しない。',model:'inherit',disallowedTools:['Write','Edit','Agent'],prompt:`指定された対象を独立にレビューする。実装者の自己評価を承認根拠にしない。元要求・対象・必要な検証情報が欠ける場合は不足を報告し、推測で承認しない。対象のソース・設定・Git状態を変更せず、Hostの権限を維持する。Bashの利用は検証を可能にするためであり、OSによる書込み隔離を保証する設定ではない。
+
+${read(packageRoot,'skills/asc/references/review.md').toString()}`};
+}
 function catalog(packageRoot,registerSkill,registerClaudeReviewer){
  const assets=new Map(),templates='v05/templates/specs';
  const visit=relative=>{
@@ -62,16 +67,17 @@ description: ASCで許可された開発・再開・独立レビューを実行�
 
 [プロジェクトのASC Skill](../../../.agent-skill-chain/skills/asc/SKILL.md)を読み、指定されたGoalと権限の範囲で実行する。入口が欠落していれば導入状態を確認し、旧WorkflowやPATH上の別版へ推測で切り替えない。Skillの登録は外部操作や権限拡張の承認ではない。
 `));
- if(registerClaudeReviewer)assets.set('.claude/agents/asc-reviewer.md',Buffer.from(`---
+ if(registerClaudeReviewer){
+  const definition=claudeReviewerDefinition(packageRoot);
+  assets.set('.claude/agents/asc-reviewer.md',Buffer.from(`---
 name: asc-reviewer
-description: ASCの元要求と対象差分を独立レビューする。実装や進行管理は担当しない。
-model: inherit
-disallowedTools: Write, Edit, Agent
+description: ${definition.description}
+model: ${definition.model}
+disallowedTools: ${definition.disallowedTools.join(', ')}
 ---
 
-指定された対象を独立にレビューする。実装者の自己評価を承認根拠にしない。元要求・対象・必要な検証情報が欠ける場合は不足を報告し、推測で承認しない。対象のソース・設定・Git状態を変更せず、Hostの権限を維持する。Bashの利用は検証を可能にするためであり、OSによる書込み隔離を保証する設定ではない。
-
-${read(packageRoot,'skills/asc/references/review.md').toString()}`));
+${definition.prompt}`));
+ }
  demand(assets.size<=256&&[...assets.values()].every(v=>Buffer.isBuffer(v)),'Invalid distribution assets');return assets;
 }
 function git(repo,args,input){

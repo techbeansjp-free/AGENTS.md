@@ -44,6 +44,11 @@ test('Claude export retains actual model and rejects incomplete or intervened ob
  const ci={head:base,draft:true,merged:false,boundToPr:true,checks:{test:'success'}};
  const complex={...good,head:base,ci,greetingCI:ci};assert.equal(run(complex).status,0);
  const exported=JSON.parse(fs.readFileSync(output));assert.equal(exported.conditions.intentSha256,hash(JSON.stringify(['original','requirements','revision'])));assert.deepEqual(exported.ci.checks,{'complex:test':'success','greeting:test':'success'});
+ write('setup.json',{...setup,base,scenario:'complex-two-issue-currency',reviewerMode:'registered',reviewerDefinitionSha256:'b'.repeat(64)});
+ for(const agentType of [undefined,'claude'])assert.notEqual(run({...complex,review:{agentType}}).status,0);
+ assert.equal(run({...complex,review:{agentType:'asc-reviewer'}}).status,0);
+ write('setup.json',{...setup,base,scenario:'complex-two-issue-currency',reviewerMode:'generic'});
+ assert.notEqual(run({...complex,review:{agentType:'asc-reviewer'}}).status,0);
  for(const change of [d=>delete d.greetingCI,d=>d.greetingCI={...ci,head:'wrong'},d=>d.greetingCI={...ci,checks:{}}]){const bad=structuredClone(complex);change(bad);assert.notEqual(run(bad).status,0);}
 
 });

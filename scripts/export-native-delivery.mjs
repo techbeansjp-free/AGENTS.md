@@ -3,7 +3,11 @@ import fs from 'node:fs';import path from 'node:path';import {createHash} from '
 const [root,output,mode]=process.argv.slice(2);if(!root||!output||process.argv.length>5||(mode!==undefined&&!['--complex','--claude'].includes(mode)))throw Error('Expected run root, output path and optional --complex or --claude');
 const read=name=>JSON.parse(fs.readFileSync(path.join(root,name)));
 const setup=read('setup.json'),d=read(mode==='--complex'?'complex-delivery.json':'delivery.json');
+if(setup.reviewerMode!==undefined&&!['generic','registered'].includes(setup.reviewerMode))throw Error('Invalid reviewer mode');
+if(setup.reviewerMode==='registered'&&!/^[a-f0-9]{64}$/.test(setup.reviewerDefinitionSha256))throw Error('Missing reviewer definition identity');
 if(setup.runnerSha256!==undefined&&!/^[a-f0-9]{64}$/.test(setup.runnerSha256))throw Error('Invalid runner identity');
+if(setup.reviewerMode==='registered'&&d.review?.agentType!=='asc-reviewer')throw Error('Registered reviewer evidence mismatch');
+if(setup.reviewerMode==='generic'&&d.review?.agentType==='asc-reviewer')throw Error('Generic reviewer evidence mismatch');
 let ci=d.ci,intent=setup.issue?.body;
 if(mode==='--claude'){
  if(d.implementationIntervention!==0||d.run?.status!==0||d.run.signal||d.session!==setup.session)throw Error('Incomplete or intervened Claude trial');
@@ -30,7 +34,7 @@ const files=Object.entries(identity.sourceFiles).sort(([a],[b])=>a.localeCompare
 for(const [name,expected] of files){if(path.isAbsolute(name)||name.split('/').some(part=>part==='..'||!part))throw Error('Invalid distribution path');if(sha(fs.readFileSync(path.join(packageRoot,name)))!==expected)throw Error('Distribution identity mismatch');}
 const runtimeSha256=sha(JSON.stringify(files.filter(([name])=>!name.startsWith('skills/asc/'))));
 const skillBundleSha256=sha(JSON.stringify(files.filter(([name])=>name.startsWith('skills/asc/'))));
-const distribution={skillBundleSha256,version:JSON.parse(fs.readFileSync(path.join(packageRoot,'package.json'))).version,skillSha256:sha(fs.readFileSync(path.join(packageRoot,'skills/asc/SKILL.md'))),identitySha256:sha(fs.readFileSync(path.join(packageRoot,'release-identity.json')))};
+const distribution={reviewerMode:setup.reviewerMode??'generic',reviewerDefinitionSha256:setup.reviewerDefinitionSha256??null,skillBundleSha256,version:JSON.parse(fs.readFileSync(path.join(packageRoot,'package.json'))).version,skillSha256:sha(fs.readFileSync(path.join(packageRoot,'skills/asc/SKILL.md'))),identitySha256:sha(fs.readFileSync(path.join(packageRoot,'release-identity.json')))};
 
 if(setup.repository!=='adachi-tatsuru/asc-public-synthetic-eval-20261016')throw Error('Not the authorized synthetic repository');
 const gitControls=read('git-controls.json');

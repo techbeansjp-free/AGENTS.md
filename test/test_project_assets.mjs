@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync,spawn} from 'node:child_process';
-import {projectAssets} from '../src/project-assets.mjs';
+import {projectAssets,claudeReviewerDefinition} from '../src/project-assets.mjs';
 function fixture(t){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-assets-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const repo=path.join(root,'repo');fs.mkdirSync(repo);
@@ -200,7 +200,7 @@ test('Claude reviewer registration is opt-in, carries canonical guidance and pro
  const preview=projectAssets(f.work,{...options,registerClaudeReviewer:true});assert.deepEqual(preview.changes.map(c=>c.path),[registration]);assert(!preview.applied);
  assert(projectAssets(f.work,{...options,registerClaudeReviewer:true,apply:true}).applied);
  const agent=()=>fs.readFileSync(path.join(f.work,registration),'utf8');
- const before=agent();assert(before.endsWith(fs.readFileSync(path.join(f.pkg,'skills/asc/references/review.md'),'utf8')));
+ const before=agent();assert(before.endsWith(claudeReviewerDefinition(f.pkg).prompt));assert(before.endsWith(fs.readFileSync(path.join(f.pkg,'skills/asc/references/review.md'),'utf8')));
  assert.match(before,/model: inherit/);assert.match(before,/disallowedTools: Write, Edit, Agent/);assert(!before.includes(f.pkg));
  fs.appendFileSync(path.join(f.pkg,'skills/asc/references/review.md'),'\nUpdated review contract\n');
  projectAssets(f.work,{...options,apply:true});assert.equal(agent(),before);

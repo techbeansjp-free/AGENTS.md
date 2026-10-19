@@ -9,3 +9,7 @@ test('better medians do not automatically accept a worse outlier',()=>{const p=f
 test('paired regressions remain visible even when aggregate medians improve',()=>{const p=fixture();p[0].candidate.elapsedSeconds=110;p[0].candidate.usage.observedProcessedTokens=1100;const r=summarizeNativePairs(p);assert.equal(r.pairsImprovingBoth,4);assert.deepEqual(r.pairedDifferences[0],{pair:1,seconds:10,processedTokens:100});assert.equal(r.candidate.medianSeconds,80);});
 
 test('CLI changes or missing version cannot establish matched acceptance',()=>{const p=fixture();p[0].candidate.conditions.cliVersion='other-cli';assert.throws(()=>summarizeNativePairs(p));for(const pair of p)for(const side of ['baseline','candidate'])delete pair[side].conditions.cliVersion;assert.throws(()=>summarizeNativePairs(p),/CLI version/);});
+
+test('reviewer treatment is fixed within each comparison side',()=>{const p=fixture();for(const pair of p)pair.candidate.distribution.reviewerMode='registered';p[1].candidate.distribution.reviewerMode='generic';assert.throws(()=>summarizeNativePairs(p),/Reviewer variant/);});
+
+test('registered review acceptance requires the selected reviewer type',()=>{const p=fixture();for(const pair of p){pair.candidate.distribution.reviewerMode='registered';pair.candidate.review.agentType='asc-reviewer';}assert(summarizeNativePairs(p).accepted);p[0].candidate.review.agentType='claude';assert(!summarizeNativePairs(p).accepted);const q=fixture();q[0].baseline.review.agentType='asc-reviewer';assert(!summarizeNativePairs(q).accepted);});

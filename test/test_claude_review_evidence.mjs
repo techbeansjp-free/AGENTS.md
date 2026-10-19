@@ -21,3 +21,5 @@ test('inline-code verdict preserves exact identity and contradictory FAIL reject
  for(const summary of ['`PASS '+head,'PASS '+head+'`','prefix `PASS '+head+'`','`PASS '+head+'` suffix','`PASS '+ 'b'.repeat(40)+'`'])assert.throws(()=>claudeReviewEvidence([start,{...done,summary}],head),/unambiguous/);
  assert.throws(()=>claudeReviewEvidence([start,wrapped,{...done,summary:'`FAIL '+head+'`'}],head),/unambiguous/);
 });
+
+test('review type belongs to the task that approved submitted HEAD',()=>{const registered={...start,task_id:'other',subagent_type:'asc-reviewer'};const actual={...start,subagent_type:'claude'};assert.equal(claudeReviewEvidence([registered,actual,done],head).agentType,'claude');assert.equal(claudeReviewEvidence([{...start,subagent_type:'asc-reviewer'},done],head).agentType,'asc-reviewer');});
