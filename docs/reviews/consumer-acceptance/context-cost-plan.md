@@ -611,3 +611,21 @@ Claude対比較の最初のbaselineは53.661秒で実装・独立レビュー完
 Claude cohort v2は4試行目baselineのレビューhash対応付けで停止。完走3試行はB130.346秒/598233 tokens、C97.408秒/396084、C86.566秒/284326。失敗BはReviewerがPASS 62ed2beと短縮hashで返し、評価器が拒否した。`claude-matched-v2/`へ全3成功と失敗・停止を記録し五組不合格。評価器は短縮hashをGitで一意にcommitへ解決し提出HEADと一致した場合だけ受理するよう修正。文字列prefix一致、曖昧hash、短縮FAILとの矛盾を受理しない。関連10回帰とlint成功。旧失敗や待機時間を隠して完走に変更せず、今後の比較とは条件を分ける。
 
 再実行前登録：短縮hashの一意Git解決を含む固定評価器でClaude cohort v3を新規10試行BC/CB/BC/CB/BCとして実施する。パッケージalpha21/20、Sonnet medium、CLI2.1.282、同一fixture/同一oracle、逐次、欠測/失敗/2組futility停止、5組の同一合格基準は維持。v1/v2の停止を消さず、v3へ旧成功試行を移植しない。これは評価器欠陥修正後の別条件であり旧失敗を取り替えた同一cohortとは説明しない。
+
+### Fable consultation: prefer information preparation over a new dispatcher
+
+The owner explicitly authorized Fable consultation and the detailed prompt. Claude CLI returned `success` using `claude-fable-5-1` with tools disabled. The detailed answer used the approved prompt unchanged. The consultation is architectural advice, not implementation, independent code verification or performance acceptance.
+
+Fable recommends consolidating delegation facts and workspace preparation into one deterministic operation rather than introducing a dispatcher. The useful hypothesis is that a ready-to-use reference bundle may remove redundant discovery more effectively than another prohibition. Requirements interpretation and decomposition remain Host work; original requirements, scopes, exact test argv and review procedure references must remain accessible. The bundle must not invent acceptance criteria from filenames or oracle comments, hide necessary project rules, or imply authority to create worktrees or publish.
+
+The implementation direction is to inspect reuse of existing `start`, `worktree-create`, project-context selection and workspace guidance before adding a command. No mandatory handoff document, fixed Step sequence, provider switch, snapshot or new Agent is justified by the present evidence. The current Host remains responsible for native delegation. Programmatic scheduling is not selected: `compileGoal` validates supplied plans but cannot invoke the parent's native Agent tool, while `runGoal` currently depends on snapshot execution.
+
+Corrections to the adviser’s reasoning:
+
+- The recorded 18 Bash tool calls are not necessarily 18 model turns. Neither bytes-times-calls nor tool counts alone establish token savings.
+- Alpha.39/40 single observations do not establish that discovery ownership caused any reduction; alpha.40 still pre-read implementation and oracles.
+- The previous registered-reviewer and compaction comparisons remain failed against their preregistered acceptance criteria. A statistical lack of superiority cannot retroactively change their acceptance outcome.
+- Three pairs and a tolerance threshold do not by themselves prove noninferiority. Do not drop user-visible time from acceptance or replace the goal of lower time/tokens with merely fewer preparation calls.
+- A preparation helper cannot guarantee the Host will stop further reading. Any benefit remains a hypothesis until tested, and generic advice about hiding handoff files from reviewers is not adopted; reviewers still need original contracts and factual references.
+
+Before another live trial, a concrete candidate must demonstrate deterministic preservation of owner requirements, paths, verification argv and project contracts, including ordinary/non-Git/multi-repository cases as applicable. A finite diagnostic should then test whether it actually reduces predelegation discovery without losing quality. Only a prospectively fixed same-fixture/model/oracle comparison can support end-to-end performance acceptance; no reruns until a favorable outcome and no changes to historical failures. Current performance acceptance remains unmet.
