@@ -805,3 +805,7 @@ Role inspection of alpha.56 shows reservation worker 547,733 tokens/18 messages,
 数値の秒数・tokensと空のmissingUsageが残った記録に、`usage.complete:false`、`reconciledWithHostModelUsage:false`、`elapsedTimeIsEstimate:true`、`elapsedComparisonEligible:false`のいずれかが付いていても、旧集計器は測定完了と受理する反例を再現した。これらの明示フラグを拒否し、性能集計値も生成しないよう修正。関連12試験、Lint、独立レビューを通過した。未記録の古いフィールドを推定で補完したり、過去の失敗cohortを合格へ変更したりしない。
 
 保存済み小規模v4を現行集計器で再計算すると性能は引き続き不合格で、現行のin-Host観測要件も満たさない。旧summaryのqualityPassedは当時の評価器の範囲であり、現行受入を満たすとの意味には使わない。
+
+### 共通Skillの表現整理と実配布確認
+
+共通Skillの冗長な説明を短縮し、独立レビューで元の適用条件・権限・実テスト・レビュー・モデル選択の保証を照合した。配布更新の14試験は成功。配布時の説明置換に使われる文は保持する。最初のalpha58検査は、意図的に変換されるCLIパスまで元Skillとの完全一致を要求した検査側の誤りで失敗し、併せて説明置換のanchor欠落を発見した。anchorを戻したalpha59をネットワーク・利用者HOME・source checkoutなしのbwrap環境へ導入し、全source hash、consumer向けランチャー/案内、全参照一致、実起動version、ownerファイル保持を確認した。結果と検査scriptは`concise-skill-package-check.*`。これは配布・指示量の改善であり、時間/tokensの性能受入ではない。
