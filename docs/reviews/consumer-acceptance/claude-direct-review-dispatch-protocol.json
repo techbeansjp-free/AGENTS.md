@@ -43,5 +43,6 @@
   "acceptance": "All quality oracles, independent review, in-Host verification and Draft CI pass; complete participant usage; both medians improve; no worse maxima per existing paired acceptance. All attempts retained.",
   "hypothesis": "Role/type clarification avoids unsupported or placeholder reviewer launches; added prompt length must not worsen small-task total cost.",
   "priorDiagnosticUsedAsPairedEvidence": false,
-  "status": "planned"
+  "status": "stopped after two pairs; candidate withdrawn",
+  "result": "claude-direct-review-dispatch-summary.json"
 }

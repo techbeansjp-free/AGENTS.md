@@ -8,6 +8,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 
 [同じ経路の複雑実走](claude-host-mask-complex-delivery.json)は、予約・請求の別worktreeでの2 Issue実装、統合、JPY共有契約変更・旧保存データ互換を含む6 oracle、最終HEADの内側検証、独立PASS、合成Draft PR159の2 CIまで340.94秒、1,785,104 processed tokensで完走した。全参加Agentのusage照合済み、評価者による実装修正なし。開始時の不要な確認用Agent1本も費用に含む。中断・再開の実証ではなく、過去試行とowner契約・runnerが異なるため性能改善率を算出しない。
 
+[不要なレビュワー起動を避ける短い指示の比較](claude-direct-review-dispatch-summary.json)は、事前固定した2対時の中止条件に該当した。内側検証・独立レビュー・CI・完全usageは全4試行で成立したが、中央値はbaseline 103.21秒/426,137.5 tokensに対し候補114.84秒/465,700.5 tokensで、両指標が悪化した。候補段落を撤回し、残る3対は実行しない。全試行を保持し、単発の改善やAgent数のみで採用しない。
+
 | Codex current-hostの実証 | 対象証拠 | 判定・限界 |
 |---|---|---|
 | 小規模の元要求からDraft PR/CI | [自動完走](native-auto-delivery-results.json) | 無介入の合成1件。任意Issueの保証ではない |
