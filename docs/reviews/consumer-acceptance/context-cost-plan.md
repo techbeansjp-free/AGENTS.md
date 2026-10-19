@@ -382,3 +382,11 @@ The first same-session revision attempt failed before any source edit: resume se
 
 
 The minimal resume probe confirmed the correction: placing the same `-c` permission overrides after `resume` selected `asc_minimal_agent`, permitted the workspace write, denied the outside dummy read, retained root-deny and restricted network. The first developer trial remains failed. This permission probe does not prove the full revised development task or establish performance.
+
+### Quality-corrected complex cohort (registered before execution)
+
+The previous three-pair cohort remains rejected: its additional accessor counterexample exposed missed quality defects. A new cohort uses the same two-Issue requirements plus the immutable accessor oracle for BOTH variants. Baseline remains alpha.6; candidate alpha.11 adds bounded-context guidance and the reviewer trace from validated input to persisted effect. Candidate tarball SHA256 is `25f88250d7fcb0e5c02a1694617c2ae0113d3ed1601b767f5ba2a2b28baa9d4c`. Runtime, original requirements, additional oracle, model (`gpt-5.6-sol`, medium), Host and delivery checks must match within each pair. New fixture commits are not pooled with earlier results.
+
+Run candidate then baseline for pair 1, alternate order thereafter, with five paired trials required for acceptance. Both elapsed-time and processed-token medians must improve, with quality failures, interventions, missing usage and worst cases reported. Stop this candidate cohort on a confirmed quality defect or a clear negative pilot rather than repeat a known bad variant. A stopped cohort is not accepted and is not silently replaced by selected successful runs. The evaluator does not implement or repair service code. All results reach the authorized synthetic Draft PR and exact-HEAD CI path, or retain the failure. No production release is implied.
+
+The same-session continuation separately reached synthetic PR64 with both CI workflows passing. It required driver repairs and is therefore not clean autonomous acceptance. `native-same-session-continuation.json` preserves the intervention, elapsed delay, cumulative usage and phase-only usage. `native-usage-counter-audit.json` confirms the six previous original-run totals were unchanged by the resumed-thread accounting correction.
