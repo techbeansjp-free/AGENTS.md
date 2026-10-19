@@ -44,3 +44,12 @@ test('accepts same-line immediate exit status but rejects mismatches and literal
  }
  assert.throws(()=>claudeVerificationEvidence([statusCall,result(expected,{content:body+'\nexit=0',is_error:true})],expected),/Missing successful/);
 });
+
+test('accepts space-separated immediate status with exact matching zero only',()=>{
+ const body=JSON.stringify(expected),statusCall=structuredClone(call);
+ statusCall.message.content[0].input.command+='; echo "exit $?"';
+ assert.equal(claudeVerificationEvidence([statusCall,result(expected,{content:body+'\nexit 0'})],expected).head,expected.head);
+ for(const suffix of ['\nexit 1','\nexit=0','\nexit 0\nextra'])assert.throws(()=>claudeVerificationEvidence([statusCall,result(expected,{content:body+suffix})],expected),/Missing successful/);
+ const literal=structuredClone(call);literal.message.content[0].input.command+='; echo "exit 0"';
+ assert.throws(()=>claudeVerificationEvidence([literal,result(expected,{content:body+'\nexit 0'})],expected),/Missing successful/);
+});

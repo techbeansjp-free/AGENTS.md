@@ -1,0 +1,18 @@
+{
+  "scope": "One Opus-medium diagnostic pair; not acceptance and not pooled with Sonnet.",
+  "baseline": {
+    "modelSeconds": 213.035077578,
+    "processedTokens": 776306,
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/183"
+  },
+  "candidate": {
+    "modelSeconds": 195.445325505,
+    "processedTokens": 919379,
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/184"
+  },
+  "quality": "Both six checks, independent review, Draft PR and two CI workflows passed; no evaluator implementation changes.",
+  "elapsedComparisonEligible": false,
+  "reason": "Both observers required suffix parsing repair; original failures retained.",
+  "performanceAccepted": false,
+  "conclusion": "Candidate model phase was shorter but processed tokens increased. One pair does not establish superiority. Do not repeat unchanged candidate to select favorable results."
+}

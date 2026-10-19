@@ -4,5 +4,11 @@
   "parserSha256": "f94902b1027d586178ebf439a0d010f1db844b2629e47536c64db1254a2db1db",
   "application": "Same parser applied to saved baseline and subsequent candidate. No model restart, prompt/oracle/package changes or discarded failure.",
   "baselineNormalWallTimeEligible": false,
-  "validation": "Seven parser tests pass; independent read-only review found no concrete defect."
+  "validation": "Seven parser tests pass; independent read-only review found no concrete defect.",
+  "postCandidateAmendment": {
+    "reason": "Candidate used immediate echo \"exit $?\" rather than echo \"exit=$?\". Added exact space separator; no implementation/model restart.",
+    "parserSha256": "0256ae6ff59922856b23da75b9965264dc49899baf2823bebe061eab7855e5a5",
+    "validation": "Eight tests pass; independent read-only review found no concrete defect.",
+    "candidateNormalWallTimeEligible": false
+  }
 }

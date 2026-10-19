@@ -15,7 +15,7 @@ export function claudeVerificationEvidence(events,expected){
    let content=item.content.endsWith(suffix)?item.content.slice(0,-suffix.length):item.content;
    // A caller may print the immediately preceding command's shell status.
    // Require both the exact shell idiom and zero status; do not strip arbitrary output.
-   const status=calls.get(item.tool_use_id).match(/(?:\n|;)[ \t]*echo "(EXIT: |exit=)\$\?"[ \t]*$/);
+   const status=calls.get(item.tool_use_id).match(/(?:\n|;)[ \t]*echo "(EXIT: |exit[= ])\$\?"[ \t]*$/);
    if(status&&content.endsWith(`\n${status[1]}0`))content=content.slice(0,-(status[1].length+2));
    // A batched Git identity observation may precede the JSON; accept only this target.
    if(content.startsWith(expected.head+'\n'))content=content.slice(expected.head.length+1);

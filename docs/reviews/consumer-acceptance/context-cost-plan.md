@@ -779,3 +779,11 @@ Further wording accumulation and unchanged-candidate reruns are not justified by
 For alpha.56, parent processing before the first worker was 202,492 tokens; baseline five-run median was 262,553. Parent processing from worker dispatch to the first reviewer was 738,159 versus baseline median 496,900; child contexts total 1,329,764 versus baseline median 835,047. These are cross-run diagnostic partitions, not matched causal savings or monetary costs. Phase labels locate processing time in the workflow, not the origin of reread context; dispatch-to-review includes waiting, integration and repair.
 
 Role inspection of alpha.56 shows reservation worker 547,733 tokens/18 messages, billing 379,096/14, reviewer 402,935/13. Baseline pair 4 was reservation 351,518/11, billing 350,448/13, reviewer 133,081/5. This does not establish that any required review work is waste; compare actual related-path investigation and repeated verification before removing anything. It does reject treating parent preparation alone as an adequate explanation for total cost. No new AI execution, product rule or acceptance change was introduced for this analysis.
+
+## Opus同条件の限定診断
+
+`claude-opus-stratum-protocol.json`の1組は両側とも6検査、独立レビュー、合成Draft PR、2種類のCIを完了した。基準側のモデル実行213.035秒・776,306 processed tokensに対し、候補側は195.445秒・919,379 tokens。時間とtokensの同時改善は成立していない。Sonnetの既存比較へ混ぜず、モデルの優劣や金銭コスト削減を結論にしない。
+
+両側で成功した検証JSON末尾のshell終了値を評価側が解釈できず停止した。即時の`echo`と表示値の一致に限定した読取り修正を8件のテストと独立レビューで確認し、保存済みHEADを再検証して提出した。モデル再実行・評価側の実装修正はゼロ。失敗記録と復旧を残し、復旧待ちを含む総時間は通常の性能比較から除外した。詳細は`claude-opus-stratum-amendment.json`と`claude-opus-stratum-result.json`。
+
+同じ候補の実走を繰り返して好結果を選ばない。次の判断には保存済みContext別の処理量と必要作業を使い、品質上必要なレビュー・検証を削らず、追加の高価な比較には具体的な改善差分を必要とする。目標は未完了のままである。
