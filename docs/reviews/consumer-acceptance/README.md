@@ -24,6 +24,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 | 複雑2 Issue・通貨契約変更の無介入実装 | [候補診断](claude-complex-currency-diagnostic.json)、[同条件の対照](claude-complex-currency-baseline.json) | 双方6 oracle・独立レビュー・Draft PR128/129両CI・全usage照合成功。候補568.65秒/3,740,727 tokens、対照398.88秒/2,849,262で改善不成立。候補の二重worktree起動とpatch転記失敗を既存Skillで是正。単発比較で性能保証とはしない |
 | 時間・全Agent tokensの削減 | [最新固定5組](claude-matched-v6/summary.json)、[前回v5](claude-matched-v5/summary.json)、[v4](claude-matched-v4/summary.json) | 最新10試行は全件品質・usage完備・Draft PR/CI成功。時間中央値80.75→113.53秒、tokens中央値394,530→395,875で削減不成立。過去の結果や単発追試を混ぜず全試行を保持 |
 
+[複雑ケースの修正後確認](claude-complex-currency-followup.json)はDraft PR130/両CI・全usage照合まで成功（561.82秒、2,891,961 tokens）。二重worker起動は解消したが、担当commitが返っても進行役はパッチを転記し、書出し先の拒否・再試行が残った。対照398.88秒/2,849,262を上回り、性能条件は未達。手順追記の効果を過大評価せず、追加cohortではなく保存ログから残るコストを分析する。
+
 直近の原因別確認では、[同じworktreeへのレビュー依頼](claude-review-worktree-followup.json)が87.55秒・327,707 tokensでDraft PR115/CIまで完走した。別worktree作成は起きなかったが、レビュー手順の参照が依頼から欠落したため、依頼項目を整理した。この1件を固定比較の代替や性能改善の証明にはしない。 続く[依頼項目整理後の確認](claude-review-handoff-followup.json)では、手順参照の受け渡しと実読取り、同じworktreeでの独立レビュー、Draft PR116/CIまでを109.65秒・366,035 tokensで確認した。両記録を保持し、後者だけを選んで性能合格とはしない。 [読取り規則の配置変更後](claude-read-batching-followup.json)も品質・提出は成功したが、狙った一括化は徹底されなかった。追加の固定比較を繰り返さず、保存ログの呼出し内訳から改善対象を再検討する。
 
 Hostごとの結果、任意snapshot Controllerの結果、評価者が計画・統合・修復した結果を合算しない。以下は以前からの導入・利用者操作調査の記録として残す。
