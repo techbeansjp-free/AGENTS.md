@@ -42,3 +42,12 @@ test('optional missing rule cache cannot waive a required manifest rule',t=>{
  const f=fixture(t);f.config([{path:'src/AGENTS.md',appliesTo:['src']}]);
  assert.throws(()=>projectContext(f.root,['src/a.ts','src/b.ts']),/ENOENT/);
 });
+
+test('manifest and legacy discovery share one read without losing legacy notice or freshness',t=>{
+ const f=fixture(t),legacy='.agent-skill-chain/project-policy.json';f.write(legacy,'{}');f.config([{path:legacy}]);
+ const open=fs.openSync;let reads=0;
+ t.mock.method(fs,'openSync',function(file,...args){if(file===path.join(f.root,legacy))reads++;return open.call(fs,file,...args);});
+ const first=projectContext(f.root,['src/a.ts']);assert.equal(reads,1);assert.equal(first.references.filter(r=>r.path===legacy).length,1);assert(first.notices.some(n=>n.startsWith('Legacy')));
+ f.write(legacy,'{"changed":true}');const next=projectContext(f.root,['src/a.ts']);assert.equal(reads,2);assert.notEqual(first.digest,next.digest);
+ fs.rmSync(path.join(f.root,legacy));assert.throws(()=>projectContext(f.root,['src/a.ts']),/ENOENT/);
+});

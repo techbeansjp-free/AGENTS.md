@@ -51,8 +51,7 @@ export function projectContext(root,paths=[]){
   }
  }
  // Legacy configuration is an input to interpret, not an automatically executed policy engine.
- const legacy='.agent-skill-chain/project-policy.json';const old=read(root,legacy,true);
- if(old)rules.set(legacy,{path:legacy,...old});
+ const legacy='.agent-skill-chain/project-policy.json';add(legacy,[],true);const old=observed.get(legacy);
  const projectDir=path.join(root,'.agent-skill-chain/project');
  const references=[...rules.values()];
  return {schema:'asc-project-context-selection/v1',selection:paths.length?'path-prefix':'all-manifest-scopes',paths,
