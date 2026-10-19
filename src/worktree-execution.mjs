@@ -46,7 +46,16 @@ export function verifyWorktree(directory,base,ownerFile){
   const status=execFileSync('git',['status','--porcelain=v1','-z','--untracked-files=all'],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',maxBuffer:gitMaxBuffer});
   return status.split('\0').filter(Boolean).filter(entry=>!(entry.startsWith('?? ')&&maskedNames.has(entry.slice(3)))).join('\0');
  };
- if(state())throw Error('Commit intended changes before verification; preserve unrelated work separately');
+ const initialState=state();
+ if(initialState){
+  const untracked=new Set(initialState.split('\0').filter(entry=>entry.startsWith('?? ')).map(entry=>entry.slice(3)));
+  const unapproved=(permittedMasks.length?masks:untracked.size?hostMaskedPaths(repo):[]).filter(mask=>untracked.has(mask.path)&&!maskedNames.has(mask.path));
+  if(unapproved.length){
+   const error=Error('ASC_HOST_MASK_APPROVAL_REQUIRED: Untracked read-only null mounts '+JSON.stringify(unapproved.map(mask=>mask.path))+'. Source repair cannot resolve this. Owner must explicitly authorize exact hostMaskedPaths in the external verification contract; do not self-authorize, remove protection, or discard files. Other uncommitted changes still require inspection.');
+   error.code='ASC_HOST_MASK_APPROVAL_REQUIRED';throw error;
+  }
+  throw Error('Commit intended changes before verification; preserve unrelated work separately');
+ }
  const names=execFileSync('git',['diff','--name-only','--no-renames','-z',baseHead,start.head],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
  if(names.some(p=>!contract.allowedPaths.includes(p)))throw Error('Changes exceed owner scope');
  // Owner-selected commands run in the current Host environment, unlike internal Git observations.

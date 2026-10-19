@@ -9,7 +9,7 @@ test('read-only null protection mounts do not make a clean worktree dirty; real 
  const f=fixture(t),masked=path.join(f.work,'.claude/settings.json');fs.mkdirSync(path.dirname(masked));fs.writeFileSync(masked,'host-only');
  const module=implementation.href;
  const run=(bind='--ro-bind',target=masked)=>spawnSync('bwrap',['--ro-bind','/','/','--dev-bind','/dev','/dev','--bind',f.root,f.root,'--proc','/proc',bind,'/dev/null',target,'--',process.execPath,'--input-type=module','-e',`import {verifyWorktree} from ${JSON.stringify(module)}; console.log(JSON.stringify(verifyWorktree(...process.argv.slice(1))))`,f.work,f.base,f.owner],{encoding:'utf8'});
- const unapproved=run();assert.notEqual(unapproved.status,0);assert.match(unapproved.stderr,/Commit intended changes/);
+ const unapproved=run();assert.notEqual(unapproved.status,0);assert.match(unapproved.stderr,/ASC_HOST_MASK_APPROVAL_REQUIRED/);assert.match(unapproved.stderr,/Source repair cannot resolve this/);assert.match(unapproved.stderr,/do not self-authorize/);
  f.contract.hostMaskedPaths=['.claude/settings.json'];f.save();
  const ok=run();assert.equal(ok.status,0,ok.stderr);const result=JSON.parse(ok.stdout);assert.equal(result.passed,true);assert.deepEqual(result.hostMaskedPaths,['.claude/settings.json']);
  assert.equal(fs.readFileSync(masked,'utf8'),'host-only'); // underlying Host asset was never changed
