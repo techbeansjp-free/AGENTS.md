@@ -1,0 +1,48 @@
+{
+  "scope": "One diagnostic of opt-in bundled coordination preparation; not performance acceptance.",
+  "sourceCommit": "369b4aeef",
+  "packageSha256": "890e9572c94879ed0aac3c755431dd2cf7e4ebc72714499a7157015bdf573df5",
+  "model": "sonnet",
+  "effort": "medium",
+  "reviewerMode": "generic",
+  "scenario": "complex-two-issue-currency",
+  "fixtureCommit": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "maximumRuns": 1,
+  "runnerSha256": "3ee039225f0654741bd82833dcfa80eb09778fb1a4a6b793b375608be7bc539b",
+  "checks": [
+    "six unchanged quality oracles, independent review, Draft PR and both CI",
+    "complete usage across participant contexts; missing data is not zero",
+    "whether coordinator uses start --coordination without evaluator instruction to force it",
+    "unique Bash tool calls before first worker; not model turns",
+    "source and oracle reads before delegation, duplicate packaged guide reads",
+    "wall time and tokens reported without causal inference from prior single trials"
+  ],
+  "stopRule": "Do not repeat this diagnostic if bundle is unused or duplicate discovery remains; inspect cause first. No evaluator implementation or planning intervention.",
+  "status": "completed; quality passed; duplicate discovery remained; candidate withdrawn",
+  "result": "claude-coordination-bundle-result.json",
+  "observations": {
+    "eventsSha256": "23ac3a1bc1267028c1ac4e30f3edd5de3c442e77feb32ab0e81ea71cc2901eb4",
+    "uniqueToolCalls": {
+      "coordinator:Bash": 28,
+      "coordinator:Agent": 3,
+      "delegated:Bash": 28
+    },
+    "predelegationBashCalls": 21,
+    "bundleUsed": true,
+    "bundleOutputComplete": true,
+    "workspaceAndCoordinationGuidesReadAgain": true,
+    "coordinatorReadSourcesAndOraclesBeforeDelegation": true,
+    "allSixOraclesIndependentReviewAndBothCI": true,
+    "usageComplete": true,
+    "elapsedSeconds": 360.540673553,
+    "observedProcessedTokens": 2076645,
+    "performanceAcceptance": false,
+    "additionalRuns": 0
+  },
+  "decision": "Withdraw opt-in bundle and its new API/docs/tests: intended duplicate-reading reduction was not observed. Do not repeat identical trials or infer causal speed improvement from historic single observations. Original successful evidence and Fable advice remain recorded.",
+  "limitations": [
+    "Tests only bundling packaged guidance and argv templates in start; does not implement automatic workspace preparation or complete delegation facts.",
+    "Cannot infer that all deterministic preparation or Fable proposals are ineffective.",
+    "Single historical comparisons are not causal performance estimates."
+  ]
+}

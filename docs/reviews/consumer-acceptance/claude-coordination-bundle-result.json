@@ -1,0 +1,189 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "reviewerMode": "generic",
+    "reviewerDefinitionSha256": null,
+    "skillBundleSha256": "44d6f4e7e1b390e054640190876b6f4427b59175310f4235c33a694a397f891d",
+    "version": "0.5.900-alpha.42",
+    "skillSha256": "50030f4793037133deb7a27e45bbd5846853987c7dae73140df3c7bf239938fb",
+    "identitySha256": "a54fb98e7f0a637c98c31397a98047091589e6eaa84d7dfbd82af020057671d1"
+  },
+  "conditions": {
+    "runnerSha256": "3ee039225f0654741bd82833dcfa80eb09778fb1a4a6b793b375608be7bc539b",
+    "scenario": "complex-two-issue-currency",
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "410794432b71faa6e5b12cf078e504bfc0c711ad84374c3495c79afe697086e8",
+    "intentSha256": "50658bebc66ff5557e01700fd7c1d7f1cc39e6916a5e06a336c17db4a0931dce",
+    "commands": [
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/reservation.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/billing.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/integration.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/unknown-keys.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/accessors.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/revision.mjs",
+        "complex/previous",
+        "complex"
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "head": "4f13c10f320757c7cfb3d4f3d3bbb1135b44c4e2",
+  "review": {
+    "taskId": "a20d5477c7fb32c9a",
+    "agentType": "claude",
+    "head": "4f13c10f320757c7cfb3d4f3d3bbb1135b44c4e2",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 92,
+      "output_tokens": 33256,
+      "cache_read_input_tokens": 1876219,
+      "cache_creation_input_tokens": 167078
+    },
+    "threads": [
+      {
+        "id": "e5eb5977-f992-4ec2-8cfc-5058871dc004",
+        "messageCount": 22,
+        "usage": {
+          "input_tokens": 44,
+          "output_tokens": 17861,
+          "cache_read_input_tokens": 1314998,
+          "cache_creation_input_tokens": 88792
+        }
+      },
+      {
+        "id": "a0d90939b5605c1f3",
+        "messageCount": 8,
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 6071,
+          "cache_read_input_tokens": 177083,
+          "cache_creation_input_tokens": 32622
+        }
+      },
+      {
+        "id": "ad6501ff343362ae0",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 4927,
+          "cache_read_input_tokens": 234365,
+          "cache_creation_input_tokens": 20487
+        }
+      },
+      {
+        "id": "a20d5477c7fb32c9a",
+        "messageCount": 6,
+        "usage": {
+          "input_tokens": 12,
+          "output_tokens": 4397,
+          "cache_read_input_tokens": 149773,
+          "cache_creation_input_tokens": 25177
+        }
+      }
+    ],
+    "observedProcessedTokens": 2076645,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 331.27082397199996,
+  "deliverySeconds": 28.75952452799998,
+  "elapsedSeconds": 360.540673553,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "4f13c10f320757c7cfb3d4f3d3bbb1135b44c4e2",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e23e70f1a89ba7d713da7023311d8a90677131b7734071b30ff14ec88f58f1d0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "55e560576d9e8951160783e1288647fc2839e0c9f6d859e0f8952f1a7b5c4bf1",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "694750e2f4a817ecdf2c2beff68b8f512f4dc63ff56cd30c568ba59344fe3a79",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/157",
+  "ci": {
+    "head": "4f13c10f320757c7cfb3d4f3d3bbb1135b44c4e2",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex:complex": "success",
+      "greeting:test": "success"
+    }
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Two-Issue currency revision; worker topology and parallel execution require separate transcript evidence. Interruption and restart are not part of this observation.",
+    "No merge or release."
+  ]
+}
