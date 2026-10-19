@@ -48,3 +48,15 @@ test('known duplicate-name refusal is not a new descendant, unknown or unbound r
  f[0][3].payload.output='agent path `/root/independent_review` already exists';f[0][3].payload.call_id='other';
  assert.throws(()=>nativeReviewEvidence('p',head,f),/inventory/);
 });
+
+
+test('fresh numbered re-review retains identity, exact HEAD and conflict checks',()=>{
+ const f=fixture();f[1][0].payload.source.subagent.thread_spawn.agent_path='/root/independent_review_2';
+ assert.equal(nativeReviewEvidence('p',head,f).review.id,'r');
+ for(const name of ['/root/worker_independent_review','/root/worker/independent_review_2','/root/independent_review_2_other']){
+  f[1][0].payload.source.subagent.thread_spawn.agent_path=name;assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);
+ }
+ f[1][0].payload.source.subagent.thread_spawn.agent_path='/root/independent_review_2';
+ const rejected=record('old','p',`FAIL ${head}`);f.push(rejected);f[0].splice(2,0,{type:'response_item',payload:{type:'function_call',name:'spawn_agent'}});
+ assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);
+});

@@ -29,7 +29,7 @@ export function nativeReviewEvidence(rootId, head, rollouts) {
     if(!started?.turn_id||last.turn_id!==started.turn_id)throw Error('Completion does not match current turn');
     if(meta.id===rootId)continue;
     const parent=meta.source?.subagent?.thread_spawn;
-    if(parent?.parent_thread_id!==rootId||!parent.agent_path?.endsWith('/independent_review')||meta.forked_from_id)continue;
+    if(parent?.parent_thread_id!==rootId||!/^\/root\/independent_review(?:_[1-9][0-9]*)?$/.test(parent.agent_path??'')||meta.forked_from_id)continue;
     const final=events.filter(e=>e.type==='response_item'&&e.payload?.type==='message'&&e.payload.role==='assistant').at(-1)?.payload;
     const text=final?.content?.filter(c=>c.type==='output_text').map(c=>c.text).join('\n')??'';
     // Exact first line is deliberately required; quoted PASS or earlier approval does not count.
