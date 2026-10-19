@@ -76,3 +76,11 @@ test('re-review accepts a verdict inside the new turn but not after completion',
  f[1].pop();f[1].splice(-1,0,message);
  assert.equal(nativeReviewEvidence('p',head,f).review.id,'r');
 });
+
+test('named recheck retains fresh-context and exact-HEAD requirements',()=>{
+ const f=fixture();f[1][0].payload.source.subagent.thread_spawn.agent_path='/root/independent_review_recheck';
+ assert.equal(nativeReviewEvidence('p',head,f).review.id,'r');
+ f[1][0].payload.forked_from_id='p';assert.throws(()=>nativeReviewEvidence('p',head,f),/Ambiguous inherited session identity|did not approve/);
+ delete f[1][0].payload.forked_from_id;assert.throws(()=>nativeReviewEvidence('p','b'.repeat(40),f),/did not approve/);
+ f[1][0].payload.source.subagent.thread_spawn.agent_path='/root/worker/independent_review_recheck';assert.throws(()=>nativeReviewEvidence('p',head,f),/did not approve/);
+});
