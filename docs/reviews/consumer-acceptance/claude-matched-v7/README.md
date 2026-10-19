@@ -28,3 +28,20 @@ parent_tool_use_idのない親assistant messageをmessage.idで重複排除す�
 候補2件目では、Reviewerへ渡す手順を親も先読みし、既に読んだソースを再確認し、commit後に差分を再読込みしている。既存Skillには重複読取りを避ける指示があるが、指示の存在は実行保証ではない。追加の同種指示や再試行を重ねる前に、レビューの必要情報量と実際の親・子のContext費用を分けて判断する。レビューの必要な独立確認を削って数値を合わせない。
 
 今回確認した契約の事前提供と個別helpの修正は利用性の改善であり、全体の性能改善が証明されたとは説明しない。
+
+### 親・Reviewer別の照合済みusage
+
+| 試行 | 親message数 | 親処理tokens | Reviewer message数 | Reviewer処理tokens |
+|---|---:|---:|---:|---:|
+| B1 | 9 | 284,272 | 3 | 50,189 |
+| C1 | 10 | 306,816 | 4 | 73,858 |
+| C2 | 11 | 339,480 | 3 | 51,752 |
+| B2 | 9 | 287,642 | 3 | 50,277 |
+
+全体の合計は各runの照合済みusageに一致する。Skill本文は対照18,106 bytes、候補10,859 bytes。文書量は減ったが往復回数が増え、処理tokens削減にはつながらなかった。
+
+この結果を受け、Reviewerへ手順を「最初に読む」と指示する表現を修正。既知の手順・要求・Git状態・差分を同じtool呼出しで取得できるようにし、各取得の成否と結果依存の後続調査は維持した。独立read-onlyレビューで具体的欠陥なし。これは追加往復を避けるための仮説修正であり、v7の不合格を合格へ変更するものではない。
+
+Skill quick_validateは環境にPyYAMLがなく未実行（ModuleNotFoundError）。新たな依存導入やHost設定変更は行っていない。配布物の既存検査と独立レビューを用い、validator成功とは記録しない。
+
+変更後の実配布検査: `TMPDIR=/var/tmp node --test --test-name-pattern='packed Node distribution runs' test/test_package.mjs` が1件成功（5.53秒）。source checkout・Python・外部依存なしの導入先で確認。これはモデルの往復数や性能の試験ではない。
