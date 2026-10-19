@@ -31,5 +31,12 @@
   ],
   "pairsImprovingBoth": 2,
   "worstCaseRegression": false,
-  "requiresWorstCaseAssessment": false
+  "requiresWorstCaseAssessment": false,
+  "stoppedAt": {
+    "pair": 3,
+    "side": "baseline",
+    "reason": "Selected model is at capacity. Please try a different model."
+  },
+  "attemptedRuns": 5,
+  "completedRuns": 4
 }

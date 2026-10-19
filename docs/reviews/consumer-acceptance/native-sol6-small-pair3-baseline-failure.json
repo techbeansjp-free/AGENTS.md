@@ -1,0 +1,51 @@
+{
+  "status": 1,
+  "signal": null,
+  "error": "Selected model is at capacity. Please try a different model.",
+  "runRecorded": true,
+  "model": "gpt-6-sol",
+  "qualityAccepted": false,
+  "performanceAccepted": false,
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 28.662923699
+  },
+  "usage": {
+    "cacheWriteInput": {
+      "observedTokens": 0,
+      "totalTokens": 0,
+      "missingThreads": [],
+      "threads": [
+        {
+          "id": "01a1531d-a527-7b43-aa3b-4867def3e360",
+          "tokens": 0
+        }
+      ],
+      "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+    },
+    "rootId": "01a1531d-a527-7b43-aa3b-4867def3e360",
+    "observedThreads": 1,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 56330,
+      "cachedInputTokens": 44160,
+      "outputTokens": 633
+    },
+    "observedProcessedTokens": 56963,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a1531d-a527-7b43-aa3b-4867def3e360",
+        "parent": null,
+        "usage": {
+          "input_tokens": 56330,
+          "cached_input_tokens": 44160,
+          "output_tokens": 633
+        }
+      }
+    ]
+  },
+  "usageComplete": false,
+  "scope": "Original failed observation retained; no replacement, no complete cost assumption."
+}
