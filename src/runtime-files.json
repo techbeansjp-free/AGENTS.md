@@ -41,6 +41,7 @@
   "src/project-launcher.mjs",
   "src/project-location.mjs",
   "src/restricted-agent.mjs",
+  "src/provider-failure.mjs",
   "src/review-result.mjs",
   "src/snapshot.mjs",
   "src/source-limits.mjs",

@@ -562,3 +562,9 @@ Current Sol matched small cohort stopped at pair 3 baseline under the preregiste
 検証：provider分類とworkflow回帰43件成功、追加の範囲逸脱・Agent予算回帰1件成功。Git・隔離検証は実行したがAgent/providerは試験用代替である。current-host経路とHost adapterへのエラー伝達、実モデルの自動再開はまだ未確認。この修正を既存の手動復旧観測や性能比較の成功へ遡及適用しない。
 
 同日の追加修正：同梱Codex Hostはcapacityのみを呼出しID・操作に拘束した失敗応答として返し、Controller側で分類を維持する。既存のHost transport失敗・timeout・出力超過をcapacityへ読み替えない。Host/protocol関連16件と別プロセスHostの成果再開シナリオ1件が成功（実Git・実Node検証、モデルとGitHubは代替）。current-hostの進行役自体が停止した場合の再開はこのController接続では解決していない。
+
+#### current-host進行役の再開境界
+
+`run-native-delivery-candidate.mjs`はCodex進行役を起動し、そのprocess終了後に結果を書いて終了する。capacity後の自動resumeは実装されていない。従って今回の実走停止を、任意Controllerの修正のみで解消したとは扱えない。current-hostは利用者が起動したHostの中でSkillを実行する経路であり、Skill自身は停止済みの進行役を起動できない。既存Hostのresume機能を使う外側の起動主体との接続が必要。
+
+[OpenAI公式non-interactive資料](https://learn.chatgpt.com/docs/non-interactive-mode)（2026-10-19確認）は`codex exec resume <SESSION_ID>`を示している。これは再開APIの存在の根拠であり、capacityから自動復旧する保証ではない。複数Issueが並走するため`--last`での対象推定は使わず、対象session・worktree・権限を保持して再開する必要がある。既存手動復旧観測を自動復旧実績へ書き換えない。
