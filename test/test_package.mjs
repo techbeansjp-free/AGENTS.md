@@ -34,6 +34,11 @@ test('packed Node distribution runs without source checkout, Python or dependenc
   assert.equal(help.status,0);assert.equal(help.stderr,'');assert.match(help.stdout,/run-adaptive/);assert.match(help.stdout,/USAGE\.md/);
  }
  const helpDirectory=path.join(root,'help-only');fs.mkdirSync(helpDirectory);
+ const prepared=JSON.parse(execFileSync(process.execPath,[cli,'start',helpDirectory,'--coordination'],{cwd:helpDirectory,encoding:'utf8'}));
+ for(const guide of prepared.coordination.guidance){assert(guide.path.startsWith(packageRoot+path.sep));assert.equal(guide.text,fs.readFileSync(guide.path,'utf8'));}
+ assert(prepared.coordination.reviewerGuide.startsWith(packageRoot+path.sep));
+ assert.deepEqual(fs.readdirSync(helpDirectory),[]);
+
  for(const command of ['start','worktree-create','worktree-verify','project-assets'])for(const flag of ['--help','-h']){
   const result=spawnSync(process.execPath,[cli,command,flag],{cwd:helpDirectory,encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);assert.equal(result.stderr,'');

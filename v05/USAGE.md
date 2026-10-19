@@ -51,6 +51,12 @@ CI観測は既定では時間上限を持たず、対象PR・commitに拘束さ�
 
 `agent-skill-chain --help`（別名`asc-v05 --help`）で開始・再開・移行の入口と、この手順書の配布先を確認できます。引数なしも案内のみを表示し、Agent起動やGit変更は行いません。
 
+## 複数Issueの調整準備
+
+`start <project-directory> --coordination`は、通常の作業場所・規約参照に加え、配布物の作業場所／調整手順の本文とhash、Reviewer手順の所在、worktree作成・検証のargvテンプレートを一度に返す。`--path`も併用できる。小規模変更では通常の`start`のままでよい。
+
+これは読取り専用の準備情報であり、Agent起動・worktree作成・Git変更・実検証は行わない。要件・テストをファイル名から推測せず、プロジェクト規約の本文も展開しない。元要求・受入条件・許可範囲・必要な規約をHostが確認する。コマンドの`<...>`は未確定の引数で、実行許可ではない。Git未管理フォルダーでも取得できるが、Git操作を要求しない。複数repoでは各対象の情報を取得し、親の結果を子repoの規約として流用しない。これだけで性能改善や委譲の正しさを保証しない。
+
 ## プロジェクト固有ルールの適用
 
 通常経路の`start`は、対象内の`AGENTS.md`、`CLAUDE.md`、`.agent-skill-chain/project/00_利用案内.md`、旧`project-policy.json`を存在する場合に参照として返す。`--path`を指定するとその祖先directoryの`AGENTS.md` / `CLAUDE.md`も確認する。本文や秘密情報をJSONへ展開せず、path・SHA256・byte数だけを返す。CLIは規約を実行せず、現在のHostと独立Reviewerが適用する。

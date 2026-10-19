@@ -56,7 +56,7 @@ UI・API・業務ルール・永続化・入力境界を変更する場合は、
 
 ## 複数IssueとContextの引継ぎ
 
-複数Issue、並列worktree、Context交代・中断再開、PR後の修復では[調整と引継ぎ](references/coordination.md)を読む。担当範囲・依存関係・終了状態を確認し、未commit成果を保持する。親会話全文や別Issueのログを複製しない。
+複数Issueの調整を始めるときは`start <project-directory> --coordination`で作業場所・規約参照・作業場所と調整の手順・CLIのargv例をまとめて取得できる。出力された手順本文を確認したら同じファイルを読み直さず、元要求・受入条件と適用規約を確認して編集担当へ委譲する。実装・テスト本文はこの出力には含まれず、編集担当が調査する。Context交代・中断再開、PR後の修復も[調整と引継ぎ](references/coordination.md)を適用する。担当範囲・依存関係・終了状態を確認し、未commit成果を保持する。親会話全文や別Issueのログを複製しない。
 
 ## サブエージェントのモデル選択
 

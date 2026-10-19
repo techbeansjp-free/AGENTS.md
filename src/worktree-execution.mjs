@@ -12,8 +12,25 @@ const gitEnvironment=()=>Object.fromEntries(Object.entries(process.env).filter((
 // stdin socket/pipe, which restricted Hosts can reject even after child success.
 const gitMaxBuffer=16*1024*1024;
 const git=(repo,...args)=>execFileSync('git',['-c','core.hooksPath=/dev/null',...args],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',maxBuffer:gitMaxBuffer}).trim();
-export function startWorktree(directory,paths=[]){
- return describeProject(projectLocation(directory),paths);
+export function startWorktree(directory,paths=[],{coordination=false}={}){
+ if(typeof coordination!=='boolean')throw Error('Expected boolean coordination option');
+ const result=describeProject(projectLocation(directory),paths);
+ if(coordination){
+  const cli=fileURLToPath(new URL('../bin/asc-v05.mjs',import.meta.url));
+  result.coordination={
+   guidance:['workspace','coordination'].map(name=>{
+    const file=fileURLToPath(new URL(`../skills/asc/references/${name}.md`,import.meta.url)),bytes=fs.readFileSync(file);
+    return {path:file,sha256:hash(bytes),text:bytes.toString('utf8')};
+   }),
+   reviewerGuide:fileURLToPath(new URL('../skills/asc/references/review.md',import.meta.url)),
+   commandTemplates:{
+    createWorktree:[process.execPath,cli,'worktree-create','<root>','<issue>','<type>','<slug>','<base>'],
+    verifyWorktree:[process.execPath,cli,'worktree-verify','<worktree>','<base>','<owner-contract.json>']
+   },
+   authority:'Preparation only. Resolve owner intent, scope, dependencies and project rules before delegation. Command templates are not authorization. No source/test bodies, Agent launch, worktree creation or verification performed.'
+  };
+ }
+ return result;
 }
 function describeProject({repo,gitManaged},paths){
  const context=projectContext(repo,paths);
