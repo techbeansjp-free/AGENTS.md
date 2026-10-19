@@ -1,5 +1,9 @@
 {
   "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": false,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
   "distribution": {
     "skillBundleSha256": "9cafcfbd410f423ebe3319132d206a1506219ad57b01f82dc2b3d4466b7c7779",
     "version": "0.5.900-alpha.6",

@@ -277,3 +277,17 @@ The user-management fixture also now rejects email local parts above 64 bytes an
 Pair 3 candidate completed with the new pinned-worktree guard: Draft PR48, CI success, 116.780 seconds and 279,052 processed tokens. Baseline is pending. This is the first batching-series candidate with the new pre/post pointer check; previous observations retain their earlier coverage limitation.
 
 For forthcoming complex paired trials, only the evaluator-owned preparation commit uses fixed author/committer dates and disabled signing. Identical source trees, parent and identities therefore yield the same base commit rather than differing solely by execution time. Agent commits retain ordinary dates. Two disposable repositories produced identical preparation hashes, and changed-script lint passed. This check does not establish complex performance; it prevents an avoidable condition mismatch before those runs.
+
+
+Pair 3 baseline PR49 finished in 91.790 seconds / 275,048 tokens, faster and slightly smaller than its candidate. Both passed the strengthened pointer guard and quality checks. Across three pairs, medians are baseline 125.114 seconds / 335,269 tokens and candidate 116.780 seconds / 279,052 tokens. The unfavorable pair is retained; acceptance remains false with only three pairs.
+
+Exported batching records now identify whether the Host worktree pointer was present in the original pre-execution Git-control record. Assertions confirm false for pairs 1–2 and true for pair 3 and the next baseline; no record was reconstructed to upgrade past protection. Pair 4 baseline PR50 finished in 76.832 seconds / 255,062 tokens; its candidate is in progress. These observations also show substantial timing variability.
+
+
+### Completed batching series: rejected performance hypothesis
+
+All five predeclared alternating pairs completed (synthetic Draft PR44–53), with all fixed tests, exact-HEAD independent reviews and CI successful, no evaluator implementation/manual handoff, and no missing final per-thread usage. Candidate elapsed median was 116.780 seconds versus baseline 102.571; candidate processed-token median was 303,393 versus baseline 275,048. Only two of five pairs improved both. Worst observed values were lower for the candidate, but both medians worsened, so `accepted:false`. Neither extra repetitions nor omission of the unfavorable last three pairs will be used to reverse this result.
+
+The candidate combines progressive references, fresh-context instructions and independent-check batching; this experiment does not isolate the causal effect of the last sentence. These instructions remain quality/coordination guidance, not a demonstrated speed optimization. Their small-case overhead must not be concealed by a claim based on the first two pairs. Small-case performance acceptance is unresolved. The next investigation targets actual complex multi-Issue coordination and repeated-context costs rather than adding more fixed gates or Agent roles.
+
+All pair-specific deltas are exported. Earlier pairs retain their pre-pointer-guard limitation; later pairs record the pre-execution pointer binding. Export identity and paired-regression reporting tests passed (five tests), with changed-script lint successful. The full objective is not complete.

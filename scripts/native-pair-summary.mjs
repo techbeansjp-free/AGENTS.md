@@ -23,6 +23,8 @@ export function summarizeNativePairs(pairs){
  const result={pairs:pairs.length,qualityPassed,measurementComplete:usable,requiredPairs:5,accepted:false,scope:'This fixed synthetic fixture and model only; no general autonomous-development guarantee.'};
  if(usable){
   for(const side of ['baseline','candidate'])result[side]={maxSeconds:Math.max(...pairs.map(p=>p[side].elapsedSeconds)),maxProcessedTokens:Math.max(...pairs.map(p=>p[side].usage.observedProcessedTokens)),medianSeconds:median(pairs.map(p=>p[side].elapsedSeconds)),medianProcessedTokens:median(pairs.map(p=>p[side].usage.observedProcessedTokens))};
+  result.pairedDifferences=pairs.map((p,index)=>({pair:index+1,seconds:p.candidate.elapsedSeconds-p.baseline.elapsedSeconds,processedTokens:p.candidate.usage.observedProcessedTokens-p.baseline.usage.observedProcessedTokens}));
+  result.pairsImprovingBoth=result.pairedDifferences.filter(p=>p.seconds<0&&p.processedTokens<0).length;
   result.worstCaseRegression=result.candidate.maxSeconds>result.baseline.maxSeconds||result.candidate.maxProcessedTokens>result.baseline.maxProcessedTokens;
   result.requiresWorstCaseAssessment=result.worstCaseRegression;
   result.accepted=!result.worstCaseRegression&&pairs.length>=5&&qualityPassed&&result.candidate.medianSeconds<result.baseline.medianSeconds&&result.candidate.medianProcessedTokens<result.baseline.medianProcessedTokens;
