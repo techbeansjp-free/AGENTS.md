@@ -3,9 +3,9 @@ import {setInterval,clearInterval} from 'node:timers';
 import fs from 'node:fs';import path from 'node:path';import {spawn,spawnSync} from 'node:child_process';import {randomUUID,createHash} from 'node:crypto';import {fileURLToPath} from 'node:url';import {performance} from 'node:perf_hooks';
 const supervisor=fileURLToPath(new URL('../src/agent-lifecycle-supervisor.mjs',import.meta.url));
 const digest=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-export async function interruptSavedAttempt({directory,executable,argv,env,input,files}){
+export async function interruptSavedAttempt({directory,executable,argv,env,input,files,observeWorkers}){
  if(process.platform!=='linux'||!files.length)throw Error('Synthetic interruption requires Linux and explicit files');
- fs.mkdirSync(directory);const before=files.map(digest),unit=`asc-agent-${randomUUID()}.service`;
+ fs.mkdirSync(directory);let before=files.map(digest),observed=[];const unit=`asc-agent-${randomUUID()}.service`;
  const managerEnv={PATH:'/usr/bin:/bin',XDG_RUNTIME_DIR:`/run/user/${process.getuid()}`,DBUS_SESSION_BUS_ADDRESS:`unix:path=/run/user/${process.getuid()}/bus`};
  const control=(...args)=>spawnSync('/usr/bin/systemctl',['--user',...args],{env:managerEnv,encoding:'utf8',timeout:5000,maxBuffer:65536});
  const probe=control('show','--property=Version');if(probe.status!==0||probe.error)throw Error('Synthetic interruption service unavailable');
@@ -18,7 +18,10 @@ export async function interruptSavedAttempt({directory,executable,argv,env,input
   const timer=setInterval(()=>{
    if(signalSent||pollError)return;
    try{
-    if(files.every((f,i)=>digest(f)===before[i]))return;
+    if(observeWorkers){
+     observed=observeWorkers();if(observed.length!==2)return;
+     files=observed.map(r=>r.file);before=observed.map(r=>r.before);
+    }else if(files.every((f,i)=>digest(f)===before[i]))return;
     const group=control('show',unit,'--property=ControlGroup','--value');cgroup=group.stdout.trim();
     if(group.status!==0||!cgroup.startsWith('/')||path.basename(cgroup)!==unit)throw Error('Interruption cgroup identity missing');
     const killed=control('kill','--kill-whom=all','--signal=SIGINT',unit);if(killed.status!==0||killed.error)throw Error('Interruption signal failed');signalSent=true;
@@ -32,9 +35,9 @@ export async function interruptSavedAttempt({directory,executable,argv,env,input
    const stop=control('stop',unit);control('reset-failed',unit);
    const state=control('show',unit,'--property=ActiveState','--property=SubState');
    const stopped=!stop.error&&!state.error&&state.status===0&&/^ActiveState=inactive$/m.test(state.stdout)&&/^SubState=dead$/m.test(state.stdout)&&cgroup!==''&&!fs.existsSync(path.join('/sys/fs/cgroup',cgroup));
-   let after;try{after=files.map(digest);}catch(e){pollError=e;}
-   const checkpoint=!pollError&&signalSent&&interrupted&&stopped&&after?.some((h,i)=>h!==before[i]);
-   const result={status,signal,signalSent,interrupted,checkpoint:Boolean(checkpoint),descendantBoundary:'Linux synthetic transient service; all processes stopped before handoff',stopped,seconds:(performance.now()-started)/1000,files:files.map((f,i)=>({name:path.basename(path.dirname(f))+'/'+path.basename(f),before:before[i],after:after?.[i]??null})),usageComplete:false,...(pollError?{error:pollError.message}:{})};
+   let after;try{after=files.map(digest);if(observeWorkers){const saved=observeWorkers();if(saved.length!==2||saved.some((r,i)=>r.file!==files[i]||r.after!==after[i]))throw Error('Worker checkpoint changed or integrated before stop');}}catch(e){pollError=e;}
+   const checkpoint=!pollError&&signalSent&&interrupted&&stopped&&after?.some((h,i)=>h!==before[i])&&(!observeWorkers||after.every((h,i)=>h!==before[i]));
+   const result={status,signal,signalSent,interrupted,checkpoint:Boolean(checkpoint),descendantBoundary:'Linux synthetic transient service; all processes stopped before handoff',stopped,seconds:(performance.now()-started)/1000,files:files.map((f,i)=>({name:path.basename(path.dirname(f))+'/'+path.basename(f),before:before[i],after:after?.[i]??null})),usageComplete:false,...(observeWorkers?{checkpointScope:'two distinct worker worktrees before integration',workerWorktrees:observed.map(r=>path.basename(r.workspace))}:{}),...(pollError?{error:pollError.message}:{})};
    fs.writeFileSync(path.join(directory,'result.json'),JSON.stringify(result,null,2));
    if(!checkpoint)reject(Object.assign(Error('No verified saved-work interruption checkpoint'),{result}));else resolve(result);
   });
