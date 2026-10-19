@@ -1,4 +1,5 @@
 import {performance} from 'node:perf_hooks';
+import {providerFailure} from './provider-failure.mjs';
 import {assertExecutionHost} from './execution-host.mjs';
 /** Codex sandbox adapter; lifecycle supplied by the trusted execution backend. */
 import fs from 'node:fs';
@@ -78,7 +79,13 @@ fs.writeSync(1,JSON.stringify({completed:true,read,write}));`;
     try {
       const result=await processRunner(c.binary,argv,{env:c.env,input:prompt,timeout:remainingDeadline(deadline)});
       output=result.stdout;errors=result.stderr;
-    } catch(error) {output=error.stdout??'';errors=error.stderr??'';throw error;}
+    } catch(error) {
+      output=error.stdout??'';errors=error.stderr??'';
+      // Preserve lifecycle/timeout authority; classify only otherwise untyped failures.
+      const failure=providerFailure(output);
+      if(failure&&!error.code&&error.message.startsWith('Fresh Agent failed (exit='))Object.assign(error,failure);
+      throw error;
+    }
     finally {
       fs.writeFileSync(path.join(logRoot,'agent.jsonl'),output);
       fs.writeFileSync(path.join(logRoot,'agent.stderr'),errors);

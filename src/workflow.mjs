@@ -1,6 +1,7 @@
 import {digest,hash} from './controller.mjs';
 import {hostExecution} from './host-execution.mjs';
 import {performance} from 'node:perf_hooks';
+import {setTimeout as delay} from 'node:timers/promises';
 import {importUnitCandidate} from './unit-candidate.mjs';
 import {reviewSchema,parseReview,reviewDiagnostics,reviewDiagnosticContext} from './review-result.mjs';
 import {createExecutionBudget} from './execution-budget.mjs';
@@ -53,7 +54,7 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-v05-run-')),calls=[],events=[];
  const started=performance.now();let repairs=0,workOverride,failure,candidateAttempted=false,approvalWithoutProgress=false;
  let continuation,reassessing=false;
- const interruptionStates=new Set();
+ const interruptionStates=new Set(),capacityStates=new Set();
  const outputFiles=space=>new Map(c.contract.allowedPaths.map(name=>{try{return [name,readSnapshotFile(space,name)];}catch(error){if(error.code==='ENOENT')return [name,null];throw error;}}));
  const outputDigest=files=>digest([...files].map(([name,bytes])=>[name,bytes===null?null:hash(bytes)]).sort(([a],[b])=>a.localeCompare(b)));
  const writeOutput=(files,space)=>{for(const [name,bytes] of files){const file=path.join(space,name);if(bytes===null){fs.rmSync(file,{force:true});continue;}fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);}};
@@ -156,6 +157,16 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
       fs.mkdirSync(checkpoint);writeOutput(files,checkpoint);
       Object.assign(interruptedCandidate,{checkpoint,fingerprint,deleted:[...files].filter(([,bytes])=>bytes===null).map(([name])=>name)});
       emit('interrupted-candidate',interruptedCandidate);
+      const capacity=error?.code==='ASC_PROVIDER_CAPACITY';
+      // A provider outage is not a code repair. One retry per content state
+      // permits a transient pre-work failure, but never spins on unchanged work.
+      if(capacity&&!capacityStates.has(fingerprint)){
+       capacityStates.add(fingerprint);budget.check();
+       emit('provider-retry',{code:error.code,checkpoint,fingerprint,delayMilliseconds:1000});
+       await delay(1000);budget.check();
+       continuation={target,files,checkpoint};failure={kind:'provider-capacity',instructions:'Continue preserved unverified work. Provider availability failure is not a code defect. Do not recreate completed changes; all verification and review obligations remain.'};
+       workOverride=work;continue;
+      }
       const recoverable=['ASC_AGENT_TIMEOUT','ASC_CONTEXT_EXHAUSTED'].includes(error?.code);
       if(recoverable&&repairs<limit&&fingerprint!==startingOutput&&!interruptionStates.has(fingerprint)){
        interruptionStates.add(startingOutput);interruptionStates.add(fingerprint);
@@ -163,6 +174,7 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
        continuation={target,files,checkpoint};failure={kind:'interrupted-implementation',message:String(error),instructions:'Continue from the preserved unverified files. Inspect and finish remaining acceptance criteria; do not recreate completed changes. Full verification and independent review still follow.'};
        workOverride={work:'repair',actor:'fresh-worker'};continue;
       }
+      if(capacity)emit('provider-retry-stalled',{code:error.code,fingerprint,checkpoint});
       if(recoverable)emit('recovery-stalled',{reason:'Interrupted invocation produced no new content',fingerprint});
      }catch(preservationError){interruptedCandidate.preservationError=String(preservationError);emit('interrupted-candidate',interruptedCandidate);}
      const interruptedError=error instanceof Error?error:Error(String(error));
@@ -231,5 +243,5 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
    }
    return save({status:'owner-work-required',root,work,approvalBinding:c.binding(),calls,events,allAgentTotalTokens:null});
   }
- }catch(error){emit('blocked',{error:String(error),artifact:path.join(root,'result.json')});const diagnostic=save({status:'blocked',root,...(error.interruptedCandidate?{interruptedCandidate:error.interruptedCandidate}:{}),error:String(error),wallSeconds:(performance.now()-started)/1000,calls,events,controllerEvents:c.events,repairs,allAgentTotalTokens:null});const failure=new Error(error instanceof Error?error.message:String(error),{cause:error});if(error?.code==='ASC_VERIFICATION_OUTPUT_LIMIT')failure.code=error.code;failure.workflowDiagnostic=diagnostic;throw failure;}
+ }catch(error){emit('blocked',{error:String(error),artifact:path.join(root,'result.json')});const diagnostic=save({status:'blocked',root,...(error.interruptedCandidate?{interruptedCandidate:error.interruptedCandidate}:{}),error:String(error),wallSeconds:(performance.now()-started)/1000,calls,events,controllerEvents:c.events,repairs,allAgentTotalTokens:null});const failure=new Error(error instanceof Error?error.message:String(error),{cause:error});if(['ASC_VERIFICATION_OUTPUT_LIMIT','ASC_PROVIDER_CAPACITY'].includes(error?.code))failure.code=error.code;failure.workflowDiagnostic=diagnostic;throw failure;}
 }
