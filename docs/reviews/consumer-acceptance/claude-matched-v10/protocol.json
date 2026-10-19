@@ -26,7 +26,7 @@
     "Both first two pairs worse in time and processed tokens: stop."
   ],
   "acceptance": "Existing summarizeNativePairs requirements unchanged: five pairs, all quality/measurement checks, both medians lower, neither observed maximum regressed.",
-  "results": "Not started. New fixed cohort after evaluator correction; v9 remains failed and is not pooled, resumed or replaced.",
+  "results": "Stopped after four completed runs by predeclared two-pair futility: candidate worse in both time and processed tokens in both pairs. All four passed quality, usage and delivery. Six runs not started. Performance acceptance failed; compact core Skill withdrawn.",
   "baselinePackageSha256": "cb05febc28dd15f087d2371dc1f3c50c4e7790111a37b91f7b0dd61fd9c93483",
   "candidatePackageSha256": "abc6528f01157b7328010094ea2323226944200c576a47be929741bfded80bd9",
   "baselineSkillBytes": 11055,
