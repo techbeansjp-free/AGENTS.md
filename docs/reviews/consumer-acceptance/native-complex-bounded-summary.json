@@ -1,5 +1,5 @@
 {
-  "pairs": 1,
+  "pairs": 2,
   "qualityPassed": false,
   "measurementComplete": true,
   "requiredPairs": 5,
@@ -7,28 +7,33 @@
   "scope": "This fixed synthetic fixture and model only; no general autonomous-development guarantee.",
   "baseline": {
     "maxSeconds": 749.158,
-    "maxProcessedTokens": 1773793,
-    "medianSeconds": 749.158,
-    "medianProcessedTokens": 1773793
+    "maxProcessedTokens": 2226305,
+    "medianSeconds": 611.565,
+    "medianProcessedTokens": 2000049
   },
   "candidate": {
-    "maxSeconds": 332.431,
-    "maxProcessedTokens": 1431284,
-    "medianSeconds": 332.431,
-    "medianProcessedTokens": 1431284
+    "maxSeconds": 435.087,
+    "maxProcessedTokens": 1605279,
+    "medianSeconds": 383.759,
+    "medianProcessedTokens": 1518281.5
   },
   "pairedDifferences": [
     {
       "pair": 1,
       "seconds": -416.72700000000003,
       "processedTokens": -342509
+    },
+    {
+      "pair": 2,
+      "seconds": -38.88499999999999,
+      "processedTokens": -621026
     }
   ],
-  "pairsImprovingBoth": 1,
+  "pairsImprovingBoth": 2,
   "worstCaseRegression": false,
   "requiresWorstCaseAssessment": false,
   "limitations": [
-    "Baseline elapsed time includes observation failure, repair and delayed delivery; this pair cannot establish a clean performance improvement.",
-    "No new model execution was used to recover baseline delivery."
+    "Pair 1 retains observer failure and delayed delivery. Do not use its elapsed time to claim speedup.",
+    "Pair 2 is the first clean pair after observer repair; one clean pair is insufficient."
   ]
 }
