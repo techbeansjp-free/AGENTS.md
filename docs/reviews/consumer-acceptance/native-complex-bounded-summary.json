@@ -1,5 +1,5 @@
 {
-  "pairs": 2,
+  "pairs": 3,
   "qualityPassed": false,
   "measurementComplete": true,
   "requiredPairs": 5,
@@ -8,14 +8,14 @@
   "baseline": {
     "maxSeconds": 749.158,
     "maxProcessedTokens": 2226305,
-    "medianSeconds": 611.565,
-    "medianProcessedTokens": 2000049
+    "medianSeconds": 577.031,
+    "medianProcessedTokens": 2107730
   },
   "candidate": {
     "maxSeconds": 435.087,
-    "maxProcessedTokens": 1605279,
-    "medianSeconds": 383.759,
-    "medianProcessedTokens": 1518281.5
+    "maxProcessedTokens": 1989080,
+    "medianSeconds": 388.879,
+    "medianProcessedTokens": 1605279
   },
   "pairedDifferences": [
     {
@@ -27,13 +27,23 @@
       "pair": 2,
       "seconds": -38.88499999999999,
       "processedTokens": -621026
+    },
+    {
+      "pair": 3,
+      "seconds": -188.15199999999993,
+      "processedTokens": -118650
     }
   ],
-  "pairsImprovingBoth": 2,
+  "pairsImprovingBoth": 3,
   "worstCaseRegression": false,
   "requiresWorstCaseAssessment": false,
   "limitations": [
     "Pair 1 retains observer failure and delayed delivery. Do not use its elapsed time to claim speedup.",
     "Pair 2 is the first clean pair after observer repair; one clean pair is insufficient."
-  ]
+  ],
+  "postTrialQuality": {
+    "passed": false,
+    "evidence": "native-accessor-counterexample.json",
+    "reason": "Unvalidated negative billing amount persisted in every completed candidate run; fixed oracles did not cover it."
+  }
 }
