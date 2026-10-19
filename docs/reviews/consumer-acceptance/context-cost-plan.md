@@ -42,8 +42,8 @@ baselineは9f19ce4bd76a8e59eedd01adec8ec8a3a825fea7のSkill。候補との差は
 | 要求 | 現在の証拠 | 未達・限定 |
 | --- | --- | --- |
 | 標準Hostと任意Controllerの責務分離 | 本文の実装照合、current-host実走 | Controllerの成功を標準Host全体へ流用しない |
-| 小規模の実装→レビュー→Draft PR/CI | `native-small-batched-summary.json`と各試行 | 五組の性能比較は不合格。新候補の小規模回帰は別途必要 |
-| 複雑な複数Issueの並列実装・統合 | `native-coordinator-scope-pilot.json`、PR69 | alpha.14が無介入完走。合成2サービスの範囲であり一般的な大規模保証ではない |
+| 小規模の実装→レビュー→Draft PR/CI | `native-small-batched-summary.json`と各試行 | 五組の性能比較は不合格。alpha.18はPR79で復旧完走したが手動再開あり。無介入の新規性能比較には使わない |
+| 複雑な複数Issueの並列実装・統合 | `native-coordinator-scope-pilot.json`、PR69 | alpha.14が無介入完走。alpha.18の2試行はprovider容量不足で未完了。合成2サービスの範囲であり一般的な大規模保証ではない |
 | 指摘修復・独立再レビュー | `native-input-boundary-pilot.json`、PR68と`native-review-turn-audit.json` | alpha.13で無介入修復・再レビュー。alpha.14では修復未発生のため同じ実証とは扱わない |
 | 共有契約変更・旧保存データの再利用 | `native-shared-contract-delivery.json`、PR32 | 単一の明示的JPY変更での実証 |
 | 競合からの回復 | `native-conflict-recovery.json`、PR61 | 明示的な事前故障注入。任意の競合を保証しない |
@@ -524,3 +524,5 @@ With actual resumed model work now succeeding, run one separately identified fre
 The exporter now treats recorded coordinator recovery as at least one manual handoff, even when the delivery driver retained its default zero. Six export/pair-summary tests and ESLint pass. This prevents later re-export from silently presenting this recovery as uninterrupted autonomy; no product execution behavior or performance threshold changed.
 
 The fresh complex retry again ended with provider capacity failure after 232.908 seconds. Partial worker work remains saved; no Draft/CI or full-quality acceptance. Two invalid multi-operation patch attempts were also observed, but the terminal error was capacity. Total tokens remain unasserted. Do not repeat unchanged expensive trials or reinterpret this as a performance success.
+
+Latest failed complex retry: all four selected coordinator/descendant rollouts have terminal events. One descendant has missing usage, so total processed tokens remain null; last observations are retained without upgrading incomplete usage. Current PR has no unresolved non-outdated inline review threads, but CodeRabbit reports Review paused, not a fresh review.
