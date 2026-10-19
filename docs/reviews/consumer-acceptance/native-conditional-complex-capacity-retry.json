@@ -1,0 +1,19 @@
+{
+  "scope": "Fresh complex applicability retry after successful small recovery; incomplete",
+  "candidateSha256": "f15007634e4000c220e18a287546b82f76d8d479348b2d2e3c85fb3b9804e390",
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 232.90814197900002
+  },
+  "error": "Selected model is at capacity. Please try a different model.",
+  "usageComplete": false,
+  "totalTokens": null,
+  "qualityAccepted": false,
+  "performanceAccepted": false,
+  "limitations": [
+    "No Draft PR or CI completion; partial worker work retained.",
+    "Two invalid multi-operation patch attempts observed before capacity failure; not established as terminal cause.",
+    "No performance comparison or zero-cost assumption."
+  ]
+}
