@@ -14,6 +14,8 @@ PR #1606の現在の完了条件は[自律完走・品質・費用の受入条�
 
 中断時の成果保護は、`test/test_native_worker_checkpoint.mjs`で2つの実子プロセスが別worktreeへ未完了の内容を保存した状態から確認した。試験専用serviceの中断後に両子プロセスの終了と保存内容を確認し、新プロセスがその内容を読み取って追記を完了、統合先が不変であることまで成功した（3テスト、skip 0）。これはLinuxの決定論的な成果保持・継続試験であり、2つのAI担当の自律的な再計画や性能改善の証明には読み替えない。
 
+[2稼働担当の中断・新Context再開](claude-active-worker-interruption-result.json)では、両担当が完了通知前に別worktreeへ保存した状態で試験用serviceを中断し、全子終了後の新Contextで6 oracle・独立レビュー・合成Draft PR156まで到達した。保存した2ファイルは提出commitに同じbytesで保持されている。GitHubの2 CIはrunner割当て待ちであり、現時点ではCIまでの成功としない。中断前の取得usageと再開分を分離し、終端集計欠測を残す。評価Hostが停止と再開を起動した単発観測であり、製品の自動再開や性能受入とは別である。
+
 主な利用HostとしてClaude Codeを評価する。上表はCodexの記録であり、Claude Codeの代用にしない。Claude Codeで確認した範囲は次のとおり。モデルは同HostのSonnetを使用し、Codexへ委譲していない。
 
 | Claude Code current-hostの実証 | 対象証拠 | 判定・限界 |

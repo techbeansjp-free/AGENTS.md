@@ -1,0 +1,190 @@
+{
+  "scope": "Single synthetic two-active-Claude-worker interruption and fresh-context recovery; CI pending; not performance acceptance.",
+  "status": "ci-pending",
+  "protocol": "claude-active-worker-interruption-protocol.json",
+  "head": "7bd46bece45d7b48736ed8ff1637a6c8ac02a5bb",
+  "interruption": {
+    "checkpoint": true,
+    "stopped": true,
+    "interrupted": true,
+    "signalSent": true,
+    "seconds": 146.15152827,
+    "workerWorktrees": [
+      "20261020_003244-9006-currency-reservation",
+      "20261020_003246-9007-currency-billing"
+    ]
+  },
+  "savedOutputs": [
+    {
+      "name": "reservation/service.mjs",
+      "before": "7c32b115d9ae8c4a1e5b02c1217daf73c7bc1f06713f33c3e8e914efd72d228c",
+      "after": "29553445ba710b20fa4925706536c76d37b24c6199cba9af982f720591b34bb8",
+      "submittedSha256": "29553445ba710b20fa4925706536c76d37b24c6199cba9af982f720591b34bb8",
+      "exactSavedBytesPreserved": true
+    },
+    {
+      "name": "billing/service.mjs",
+      "before": "4685899b5e32d5b30f013cd7d44fa681d9e6413f069e1fb2aef7c85af621024e",
+      "after": "bef1fdb9738b9cfd7cc5004ef84341cfdef71042eab964b678768e97aea7b959",
+      "submittedSha256": "bef1fdb9738b9cfd7cc5004ef84341cfdef71042eab964b678768e97aea7b959",
+      "exactSavedBytesPreserved": true
+    }
+  ],
+  "review": {
+    "taskId": "ad8c9d1adcf06b2ac",
+    "agentType": "claude",
+    "head": "7bd46bece45d7b48736ed8ff1637a6c8ac02a5bb",
+    "verdict": "PASS"
+  },
+  "verification": {
+    "head": "7bd46bece45d7b48736ed8ff1637a6c8ac02a5bb",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "8b47e1f73b7dd5128b9b19658a99d047cda0cb35dcb8df16ae5953319203efa6",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "813607a742f36bead9e172a80c0e2aab7ae38a48b125614209fe61a08f67271e",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "1087b204c5fb2956a0821563028bb7d0981c92186ac776da46185cd470762078",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "interruptedUsage": {
+    "totals": {
+      "input_tokens": 68,
+      "output_tokens": 22379,
+      "cache_read_input_tokens": 951346,
+      "cache_creation_input_tokens": 103564
+    },
+    "threads": [
+      {
+        "id": "29c571ae-6579-4893-9955-a206c4e41965",
+        "messageCount": 8,
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 5709,
+          "cache_read_input_tokens": 266322,
+          "cache_creation_input_tokens": 35717
+        }
+      },
+      {
+        "id": "ad4c6c338077d732d",
+        "messageCount": 16,
+        "usage": {
+          "input_tokens": 32,
+          "output_tokens": 8466,
+          "cache_read_input_tokens": 445215,
+          "cache_creation_input_tokens": 45209
+        }
+      },
+      {
+        "id": "a4b792ae553c21404",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 8204,
+          "cache_read_input_tokens": 239809,
+          "cache_creation_input_tokens": 22638
+        }
+      }
+    ],
+    "observedProcessedTokens": 1077357,
+    "missingUsage": [
+      {
+        "reason": "Host modelUsage absent or does not reconcile"
+      }
+    ],
+    "reconciledWithHostModelUsage": false,
+    "complete": false
+  },
+  "recoveryUsage": {
+    "totals": {
+      "input_tokens": 104,
+      "output_tokens": 37317,
+      "cache_read_input_tokens": 1996815,
+      "cache_creation_input_tokens": 125802
+    },
+    "threads": [
+      {
+        "id": "c60b5a01-4d7f-4618-a819-606b7cb21938",
+        "messageCount": 26,
+        "usage": {
+          "input_tokens": 52,
+          "output_tokens": 18687,
+          "cache_read_input_tokens": 1395570,
+          "cache_creation_input_tokens": 55905
+        }
+      },
+      {
+        "id": "accd442ef78597445",
+        "messageCount": 8,
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 6914,
+          "cache_read_input_tokens": 181724,
+          "cache_creation_input_tokens": 24137
+        }
+      },
+      {
+        "id": "a16db9387a3d9df8d",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 6533,
+          "cache_read_input_tokens": 231962,
+          "cache_creation_input_tokens": 22276
+        }
+      },
+      {
+        "id": "ad8c9d1adcf06b2ac",
+        "messageCount": 8,
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 5183,
+          "cache_read_input_tokens": 187559,
+          "cache_creation_input_tokens": 23484
+        }
+      }
+    ],
+    "observedProcessedTokens": 2160038,
+    "missingUsage": [
+      {
+        "reason": "Interrupted attempt lacks terminal model totals; recovery usage alone is not total cost"
+      }
+    ],
+    "reconciledWithHostModelUsage": true,
+    "complete": false
+  },
+  "observedWholeAttemptTokens": 3237395,
+  "recoveryImplementationAndReviewSeconds": 372.08694745099996,
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/156",
+  "limitations": [
+    "Both tasks were active without terminal events at interruption; this does not imply both code changes were incomplete.",
+    "Fault injection and recovery invocation belong to evaluation Host, not automatic production resumption.",
+    "Interrupted terminal model totals absent; observed usage is incomplete.",
+    "No comparative performance acceptance, merge or release."
+  ]
+}

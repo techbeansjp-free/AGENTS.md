@@ -21,5 +21,6 @@
     "Fault injection and recovery invocation are evaluation Host actions; not automatic production recovery.",
     "No terminal model totals for interrupted attempt: whole-run cost remains incomplete."
   ],
-  "status": "not started"
+  "status": "checkpoint and fresh-context recovery passed; CI pending",
+  "result": "claude-active-worker-interruption-result.json"
 }
