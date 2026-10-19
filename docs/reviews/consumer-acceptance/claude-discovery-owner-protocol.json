@@ -1,0 +1,22 @@
+{
+  "scope": "Single diagnostic of editing-worker discovery ownership. No fixed-pair performance acceptance; preserve prior result and do not replace failures.",
+  "sourceCommit": "ffe816077",
+  "packageSha256": "351bf59544de5836eeed48e5bfa92569d64d2cf935c997075f9d6d47519876c8",
+  "packageDifferenceFromAlpha39": [
+    "package/package.json",
+    "package/release-identity.json",
+    "package/skills/asc/SKILL.md",
+    "package/skills/asc/references/coordination.md"
+  ],
+  "model": "sonnet",
+  "effort": "medium",
+  "maximumRuns": 1,
+  "checks": [
+    "same six oracles, independent review, Draft PR and both CI",
+    "complete usage for all contexts",
+    "inspect parent source/test reading before worker delegation",
+    "preserve original requirements and worker inspection obligation"
+  ],
+  "status": "not started",
+  "runnerSha256": "01db231bf76757b30e41b4fb83f17d235b369e2ee1339cb4e971aa9361e3670b"
+}
