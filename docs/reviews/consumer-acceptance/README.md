@@ -2,6 +2,8 @@
 
 ## 現在の目標と未達事項
 
+受入判定では、評価Hostによる故障注入・fresh Host起動と、評価者による実装・計画・競合解消の代行を区別する。前者だけを理由に新しい自動復活daemonを完了条件へ追加しない。[alpha.44の2worker再開](claude-host-mask-interruption-delivery.json)では、全子停止後のClaudeが保存成果を確認し、必要な修正・統合・独立レビュー・内外6検証を実行し、同HEADのDraft PR164/両CIまで到達した。評価器の出力解析修正を挟んだため連続runner完走とは扱わないが、再開後の開発判断を評価者が代行した記録はない。中断前の終端usageと診断を含む総経過時間は欠測であり、総費用の性能受入には使用しない。
+
 PR #1606の現在の完了条件は[自律完走・品質・費用の受入条件](context-cost-plan.md#再設定した目標と完了条件進行中)を正本とする。下記C01–C23/J01–J06の導入・操作調査だけでは完了しない。性能改善と中断・再開を含む自律完走の目標は進行中である。
 
 [Claude内側検証を含む小規模実走](claude-host-mask-small-delivery.json)は、alpha.44の配布物と外部owner契約で、実装・内側`worktree-verify`・独立レビュー・外側再検証・合成Draft PR158/CIまで98.23秒、387,811 processed tokensで完走した。全参加Agentのusageを取得・Host集計と照合済み。単発の合成ケースであり、性能改善や複雑Goalの保証ではない。先行する保護パス許可不足の失敗は[別記録](claude-host-verification-gap.json)に残す。性能集計でもClaudeの内側検証が欠測なら合格にしない。
