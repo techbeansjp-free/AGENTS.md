@@ -10,7 +10,7 @@ export function validateDelegation(request){
  demand(policy?.mode==='within-owner-contract','Explicit owner decomposition delegation required');
  demand(!request.goal&&!request.unitRequests&&!request.unitCandidates,'Delegation cannot override an existing unit plan');
  if(policy.unitTestArgv!==undefined)demand(Array.isArray(policy.unitTestArgv)&&policy.unitTestArgv.length>0&&policy.unitTestArgv.every(v=>typeof v==='string'&&v&&!v.includes('\0')),'Explicit owner unit baseline command required');
- demand(Array.isArray(policy.unitChecks)&&policy.unitChecks.length>0&&policy.unitChecks.length<=64,'Owner unit verification rules required');
+ demand(Array.isArray(policy.unitChecks)&&policy.unitChecks.length>0,'Owner unit verification rules required');
  for(const rule of policy.unitChecks){
   demand(Array.isArray(rule.paths)&&rule.paths.length>0&&rule.paths.every(p=>request.contract.allowedPaths.includes(p)),'Verification rule exceeds owner scope');rule.paths.forEach(safeName);
   demand(Array.isArray(rule.argvs)&&rule.argvs.length>0&&rule.argvs.every(a=>Array.isArray(a)&&a.length&&a.every(v=>typeof v==='string'&&v&&!v.includes('\0'))),'Explicit owner verification commands required');

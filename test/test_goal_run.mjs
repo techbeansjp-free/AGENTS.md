@@ -769,3 +769,11 @@ test('restart rejects missing Goal and malformed reused proposals before cloning
  const proposal={binding,status:'proposed',goal:f.request.goal};fs.writeFileSync(resultFile,JSON.stringify({units:[],proposal}));
  const prepared=prepareGoalRestart(request);assert.equal(prepared.request.goal.units.length,3);
 });
+
+test('restart accepts more than 64 prior results without inheriting completion',t=>{
+ const f=fixture(t),root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-large-restart-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const resultFile=path.join(root,'prior.json'),directory=path.join(root,'work');
+ fs.writeFileSync(resultFile,JSON.stringify({units:Array.from({length:65},(_,i)=>({id:'old-'+i,result:{status:'draft-ci-passed'}}))}));
+ const prepared=prepareGoalRestart({...f.request,restart:{directory,resultFile}});
+ assert.deepEqual(prepared.request.unitCandidates,{});assert.match(prepared.authority,/new verification and review/);
+});

@@ -20,3 +20,13 @@ test('removed constructor unit is reported and cannot be mistaken for an inherit
  assert.deepEqual(change.removed,['constructor']);assert.deepEqual(change.affected,[]);
  assert.deepEqual(affectedUnits(after,before).affected,['constructor']);
 });
+
+test('large owner Goal retains dependencies and conflict rejection above 64 units',()=>{
+ const p={schema:'asc-goal/v1',intent:'Large independent work',units:Array.from({length:65},(_,i)=>({id:'unit-'+i,intent:'Part '+i,criteria:['Part complete'],dependsOn:[],readPaths:[],writePaths:['part-'+i+'.js'],contracts:{}}))};
+ p.units.push({id:'integration',intent:'Integrate all',criteria:['Whole feature works'],dependsOn:p.units.map(u=>u.id),readPaths:p.units.flatMap(u=>u.writePaths),writePaths:['integration.js'],contracts:{}});
+ const result=compileGoal(p);assert.equal(result.batches[0].length,65);assert.deepEqual(result.batches[1],['integration']);
+ assert.deepEqual(affectedUnits(p,p,['part-64.js']).affected,['integration','unit-64']);
+ p.units[64].writePaths=['part-0.js'];assert.throws(()=>compileGoal(p),/explicit dependency/);
+ p.units[64].dependsOn=['unit-0'];assert.doesNotThrow(()=>compileGoal(p));
+ p.units[0].dependsOn=['unit-64'];assert.throws(()=>compileGoal(p),/Cyclic/);
+});
