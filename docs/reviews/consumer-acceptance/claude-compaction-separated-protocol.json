@@ -99,11 +99,25 @@
   "fixtureIsolation": "pinned-ancestry-only; empty init template; source fixture and known sibling synthetic trial roots denied by Host settings",
   "verificationObservation": "fixed read-only packaged verifier wrapper with framed real process result",
   "supersedes": "Original compaction cohort terminated at pair 2 candidate; no observations carried over.",
-  "status": "registered before first trial",
+  "status": "terminated on first baseline observation failure",
   "prerequisite": {
     "officialSandboxRuntime": "@anthropic-ai/sandbox-runtime@0.0.80",
     "directSyntheticProbe": "passed current read/write and historical read denial",
     "claudeCLIEnforcement": "Not established by standalone runtime probe; preserve actual Host failures as failures",
     "noAdditionalEvaluatorFeatures": true
+  },
+  "failure": {
+    "phase": "first baseline, before publication",
+    "modelProcessSeconds": 191.48095743300001,
+    "modelProcessExit": 0,
+    "captureCommandExitObserved": 0,
+    "missing": "Complete in-Host verification JSON was redirected to a file and only its tail was emitted into the tool transcript",
+    "independentReviewObserved": true,
+    "externalOraclesPassed": true,
+    "draftPRCreated": false,
+    "candidateStarted": false,
+    "performanceAccepted": false,
+    "implementationIntervention": 0,
+    "retry": false
   }
 }
