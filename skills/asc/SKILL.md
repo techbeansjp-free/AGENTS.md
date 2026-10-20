@@ -25,7 +25,7 @@ Goalと許可範囲に従い、Claude CodeではClaude Code、CodexではCodex�
 
 実装担当は変更前に対象箇所と関連する既存テストを確認し、設定・回帰条件を維持して必要な差分を加える。小変更でテスト全体や実行方式を作り直さず、変更が必要なら元の検査条件を保持したか確認する。現在のHostで、確認済み作業場所とプロジェクトの依存・検証コマンドを使い実テストを行う。依存導入はlockfileとHost権限に従う。依存が必要なのに空のsnapshotを使い、CIへ先送りして合格扱いにしない。
 
-ビルド・テストにsnapshotやハッシュ付き依存コピーを用意しない。既存のpnpm workspace・store・リンクはプロジェクトの通常の方法で使う。任意の `worktree-verify <worktree> <base> <owner-contract.json>` はcommit済み変更の許可範囲と、現在のHostで実行した検証結果を対応付ける。成功だけで独立レビューや提出権限を成立させない。
+ビルド・テストにsnapshotやハッシュ付き依存コピーを用意しない。既存のpnpm workspace・store・リンクはプロジェクトの通常の方法で使う。任意の `worktree-verify <worktree> <base> <owner-contract.json>` はcommit済み変更の許可範囲と、現在のHostで実行した検証結果を対応付ける。結果が長い場合は`--output <worktree外の新規ファイル>`で全文を保存し、短い要約と保存先を引き継げる。成功だけで独立レビューや提出権限を成立させない。
 
 ## 独立レビューと提出
 
