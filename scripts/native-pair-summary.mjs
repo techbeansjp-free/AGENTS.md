@@ -6,12 +6,16 @@ export function summarizeNativePairs(pairs){
  const records=pairs.flatMap(p=>[p.baseline,p.candidate]);
  const conditions=records[0]?.conditions;
  assert(typeof conditions?.cliVersion==='string'&&conditions.cliVersion.trim(),'Recorded CLI version required');
- assert(conditions?.runtimeSha256&&conditions?.intentSha256&&conditions?.commands?.length,'Measured conditions required');
+ assert((conditions?.comparisonScope==='distribution'||conditions?.runtimeSha256)&&conditions?.intentSha256&&conditions?.commands?.length,'Measured conditions required');
  for(const side of ['baseline','candidate']){
   const skill=pairs[0][side]?.distribution?.skillBundleSha256;
   assert(skill,'Distribution Skill identity required');
   for(const pair of pairs)assert.equal(pair[side]?.distribution?.skillBundleSha256,skill,'Variant changed during comparison');
   for(const pair of pairs)for(const key of ['reviewerMode','reviewerDefinitionSha256'])assert.equal(pair[side]?.distribution?.[key],pairs[0][side]?.distribution?.[key],'Reviewer variant changed during comparison');
+ }
+ if(conditions.comparisonScope==='distribution')for(const side of ['baseline','candidate']){
+  const runtime=pairs[0][side].distribution?.runtimeSha256;assert(/^[a-f0-9]{64}$/.test(runtime),'Distribution runtime identity required');
+  for(const pair of pairs)assert.equal(pair[side].distribution.runtimeSha256,runtime,'Distribution runtime changed during comparison');
  }
  const heads=new Set();
  for(const r of records){
@@ -23,8 +27,13 @@ export function summarizeNativePairs(pairs){
  const complete=r=>r.elapsedTimeIsEstimate!==true&&r.elapsedComparisonEligible!==false&&r.usage?.complete!==false&&r.usage?.reconciledWithHostModelUsage!==false&&Number.isFinite(r.elapsedSeconds)&&r.elapsedSeconds>0&&Number.isSafeInteger(r.usage?.observedProcessedTokens)&&r.usage.observedProcessedTokens>0&&Array.isArray(r.usage.missingUsage)&&r.usage.missingUsage.length===0;
  const inHostVerificationComplete=records.every(r=>r.conditions.host!=='claude'||(r.evaluationCoverage?.inHostVerification?.head===r.head&&r.evaluationCoverage.inHostVerification.checks===conditions.commands.length));
  const fixtureIsolationComplete=records.every(r=>r.conditions.fixtureTransfer==='pinned-ancestry-only');
- const usable=records.every(complete),qualityPassed=records.every(quality)&&inHostVerificationComplete;
- const result={pairs:pairs.length,qualityPassed,inHostVerificationComplete,measurementComplete:usable,fixtureIsolationComplete,requiredPairs:5,accepted:false,scope:'This fixed synthetic fixture and model only; no general autonomous-development guarantee.'};
+ const browserVerificationComplete=records.every(r=>{
+  if(r.conditions.scenario!=='complex-two-issue-system')return true;
+  const expected=r.conditions.browserVerification,b=r.evaluationCoverage?.browserVerification;
+  return expected?.transport==='fixed-isolated-mcp/v1'&&Number.isSafeInteger(expected.timeoutMilliseconds)&&expected.timeoutMilliseconds>0&&b?.passed===true&&b.head===r.head&&b.exit===0&&b.error===null&&b.signal===null&&b.inHostObservation?.head===r.head&&typeof b.inHostObservation.toolUseId==='string'&&['oracleSha256','driverSha256'].every(k=>/^[a-f0-9]{64}$/.test(expected[k])&&b[k]===expected[k]&&b.inHostObservation[k]===expected[k]);
+ });
+ const usable=records.every(complete),qualityPassed=records.every(quality)&&inHostVerificationComplete&&browserVerificationComplete;
+ const result={pairs:pairs.length,qualityPassed,inHostVerificationComplete,browserVerificationComplete,measurementComplete:usable,fixtureIsolationComplete,requiredPairs:5,accepted:false,scope:'This fixed synthetic fixture and model only; no general autonomous-development guarantee.'};
  if(usable){
   for(const side of ['baseline','candidate'])result[side]={maxSeconds:Math.max(...pairs.map(p=>p[side].elapsedSeconds)),maxProcessedTokens:Math.max(...pairs.map(p=>p[side].usage.observedProcessedTokens)),medianSeconds:median(pairs.map(p=>p[side].elapsedSeconds)),medianProcessedTokens:median(pairs.map(p=>p[side].usage.observedProcessedTokens))};
   result.pairedDifferences=pairs.map((p,index)=>({pair:index+1,seconds:p.candidate.elapsedSeconds-p.baseline.elapsedSeconds,processedTokens:p.candidate.usage.observedProcessedTokens-p.baseline.usage.observedProcessedTokens}));

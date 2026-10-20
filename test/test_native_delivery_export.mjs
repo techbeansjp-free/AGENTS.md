@@ -76,9 +76,21 @@ test('Claude export retains actual model and rejects incomplete or intervened ob
  const setup=JSON.parse(fs.readFileSync(path.join(root,'setup.json')));write('setup.json',{...setup,base,scenario:'complex-two-issue-currency'});
  const ci={head:base,draft:true,merged:false,boundToPr:true,checks:{test:'success'}};
  const complex={...good,head:base,ci,greetingCI:ci};assert.equal(run(complex).status,0);
- write('setup.json',{...setup,base,scenario:'complex-two-issue-system'});assert.equal(run(complex).status,0);
- const system=JSON.parse(fs.readFileSync(output));assert.equal(system.conditions.scenario,'complex-two-issue-system');assert.equal(system.conditions.intentSha256,hash(JSON.stringify(['original','requirements','system journeys'])));assert.deepEqual(system.ci.checks,{'complex:test':'success','greeting:test':'success'});
+ write('setup.json',{...setup,base,scenario:'complex-two-issue-system'});assert.notEqual(run(complex).status,0);
  assert.notEqual(run({...complex,greetingCI:undefined}).status,0);
+ const browserConfig={transport:'fixed-isolated-mcp/v1',oracleSha256:'b'.repeat(64),driverSha256:'c'.repeat(64),timeoutMilliseconds:60000};
+ const observation={toolUseId:'browser',head:base,oracleSha256:browserConfig.oracleSha256,driverSha256:browserConfig.driverSha256};
+ const browser={schema:'asc-evaluation-browser/v1',head:base,oracleSha256:browserConfig.oracleSha256,driverSha256:browserConfig.driverSha256,passed:true,exit:0,error:null,signal:null,inHostObservation:observation};
+ write('setup.json',{...setup,base,scenario:'complex-two-issue-system',browserVerification:browserConfig});
+ fs.writeFileSync(path.join(root,'events.jsonl'),[
+  {message:{content:[{type:'tool_use',name:'mcp__asc_browser__verify_browser',id:'browser',input:{head:base}}]}},
+  {message:{content:[{type:'tool_result',tool_use_id:'browser',content:[{type:'text',text:JSON.stringify(browser)}]}]}}
+ ].map(JSON.stringify).join('\n'));
+ assert.equal(run({...complex,browserVerification:browser}).status,0);
+ assert.deepEqual(JSON.parse(fs.readFileSync(output)).evaluationCoverage.browserVerification,browser);
+ const system=JSON.parse(fs.readFileSync(output));assert.equal(system.conditions.scenario,'complex-two-issue-system');assert.equal(system.conditions.intentSha256,hash(JSON.stringify(['original','requirements','system journeys'])));assert.deepEqual(system.conditions.browserVerification,browserConfig);
+ for(const value of [undefined,{...browser,passed:false},{...browser,head:'wrong'},{...browser,inHostObservation:{...observation,toolUseId:'invented'}},{...browser,driverSha256:'wrong'}])assert.notEqual(run({...complex,browserVerification:value}).status,0);
+
  write('setup.json',{...setup,base,scenario:'complex-two-issue-currency'});assert.equal(run(complex).status,0);
  const exported=JSON.parse(fs.readFileSync(output));assert.equal(exported.conditions.intentSha256,hash(JSON.stringify(['original','requirements','revision'])));assert.deepEqual(exported.ci.checks,{'complex:test':'success','greeting:test':'success'});
  write('setup.json',{...setup,base,scenario:'complex-two-issue-currency',reviewerMode:'registered',reviewerDefinitionSha256:'b'.repeat(64)});

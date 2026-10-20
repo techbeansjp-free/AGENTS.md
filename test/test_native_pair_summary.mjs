@@ -43,3 +43,21 @@ test('verification transport must match, including unrecorded historical runs',(
   assert.throws(()=>summarizeNativePairs(pairs),/Comparison conditions differ/);
  }
 });
+
+test('whole-distribution comparison fixes each runtime independently without pretending they match',()=>{
+ const pairs=fixture();for(const pair of pairs)for(const side of ['baseline','candidate']){const r=pair[side];delete r.conditions.runtimeSha256;r.conditions.comparisonScope='distribution';r.distribution.runtimeSha256=(side==='baseline'?'a':'b').repeat(64);}
+ assert.equal(summarizeNativePairs(pairs).accepted,true);
+ pairs[1].candidate.distribution.runtimeSha256='c'.repeat(64);assert.throws(()=>summarizeNativePairs(pairs),/runtime changed/);
+});
+test('system comparison requires browser success and identical browser conditions',()=>{
+ const pairs=fixture();const config={transport:'fixed-isolated-mcp/v1',oracleSha256:'a'.repeat(64),driverSha256:'b'.repeat(64),timeoutMilliseconds:60000};
+ for(const pair of pairs)for(const side of ['baseline','candidate']){
+  const r=pair[side];r.conditions.scenario='complex-two-issue-system';r.conditions.browserVerification={...config};
+  r.evaluationCoverage={browserVerification:{head:r.head,passed:true,exit:0,error:null,signal:null,oracleSha256:config.oracleSha256,driverSha256:config.driverSha256,inHostObservation:{toolUseId:'browser',head:r.head,oracleSha256:config.oracleSha256,driverSha256:config.driverSha256}}};
+ }
+ assert.equal(summarizeNativePairs(pairs).accepted,true);
+ for(const change of [r=>delete r.evaluationCoverage.browserVerification,r=>r.evaluationCoverage.browserVerification.head='stale',r=>r.evaluationCoverage.browserVerification.passed=false,r=>r.evaluationCoverage.browserVerification.inHostObservation.head='stale']){const changed=structuredClone(pairs);change(changed[0].candidate);assert.equal(summarizeNativePairs(changed).accepted,false);}
+ for(const key of ['oracleSha256','driverSha256','timeoutMilliseconds']){const changed=structuredClone(pairs);changed[0].candidate.conditions.browserVerification[key]='different';assert.throws(()=>summarizeNativePairs(changed),/conditions differ/);}
+ for(const pair of pairs)for(const side of ['baseline','candidate'])delete pair[side].conditions.browserVerification;
+ assert.equal(summarizeNativePairs(pairs).accepted,false);
+});
