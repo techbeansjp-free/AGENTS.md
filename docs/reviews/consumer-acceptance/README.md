@@ -4,7 +4,13 @@
 
 最新の比較基盤では、過去試行のbranch/object混入を防ぐため、空Git templateで固定fixtureの祖先だけを転送する。従来の全体cloneによる試行は観測済みの検証結果を保持するが、独立した初期状態からの性能合格には使用しない（[転送検証](pinned-fixture-transfer.json)）。検証JSONが他のシェル出力に混ざる問題も、固定CLIの実行結果を区切って取得する方式へ変更し、[隔離回帰試験](verification-capture-regression.json)で確認した。
 
-[新しい固定条件](claude-compaction-clean-protocol.json)の比較は、最初のbaselineで隔離設定の引数長エラー（E2BIG）が発生したため中止した。candidateは開始していない。[親ディレクトリ禁止・現在領域再許可の診断](claude-compact-boundary-diagnostic.json)も起動に失敗し、その案は撤回した。[履歴と現在領域を別配置にする案](claude-separated-boundary-diagnostic.json)は、最初はClaudeの週間利用上限（429）でモデル実行前に停止した。その後、実体パス検査と評価器の別領域配置を実装し、隔離環境の4回帰テストと独立コードレビューを通過した。[上限解除後の診断](claude-separated-boundary-restored.json)ではモデルがツール実行を見送ったため、実Claude sandboxでの読取り境界はまだ未検証。過去の中断した比較から成功例を転用しない。性能改善は引き続き未達。下記の過去実走は記載された範囲の観測であり、新しいfixture分離や計測経路を確認済みという意味ではない。
+達成済みと未確認を分けて判断する。下記の小規模PR158・複雑PR159には、実装・独立レビュー・内外検証・Draft PR/CIまでの完走実績がある。これらを「完走未達」として取り消さない。一方、同条件比較で開発全体の時間とtokensがともに改善したという性能受入は未達である。局所処理の高速化や単発の速い結果から、全体の改善率を算出しない。
+
+[別領域配置での複雑実走](claude-separated-recovered-delivery.json)でもPR187・両CI成功まで到達した。ただし検証結果の全文が会話へ出ず、保存済み結果の回収と提出に人手が介入したため、連続runnerの無介入完走・性能比較の合格には数えない。実装のやり直しはしていない。対応として本体の`worktree-verify --output`に結果保存と短い要約を追加した。過去に停止した比較をこの修正で合格へ書き換えない。
+
+[保存機能接続後の複雑実走](claude-saved-verification-delivery.json)は、alpha.60で予約・請求の2 Issue、共有JPY契約・旧データ互換、内外6検証、最終HEADの独立PASSからDraft PR188・両CIまで191.78秒で完走した。実装・計画・結果回収の人手介入なし。全4 Contextの875,676 processed tokensをHost集計と照合済み。途中のパッチ・作業場所エラーも同じ実走内で解消した。これは結果回収修正後の無介入完走の観測であり、単発のため性能改善率や中断再開の保証には使用しない。
+
+過去の比較停止理由と診断は、[固定条件](claude-compaction-clean-protocol.json)、[親禁止・再許可案の撤回](claude-compact-boundary-diagnostic.json)、[別領域配置の診断](claude-separated-boundary-restored.json)に保持する。週間利用上限は解除済みであり、現在の停止理由とはしない。
 
 受入判定では、評価Hostによる故障注入・fresh Host起動と、評価者による実装・計画・競合解消の代行を区別する。前者だけを理由に新しい自動復活daemonを完了条件へ追加しない。[alpha.44の2worker再開](claude-host-mask-interruption-delivery.json)では、全子停止後のClaudeが保存成果を確認し、必要な修正・統合・独立レビュー・内外6検証を実行し、同HEADのDraft PR164/両CIまで到達した。評価器の出力解析修正を挟んだため連続runner完走とは扱わないが、再開後の開発判断を評価者が代行した記録はない。中断前の終端usageと診断を含む総経過時間は欠測であり、総費用の性能受入には使用しない。
 
