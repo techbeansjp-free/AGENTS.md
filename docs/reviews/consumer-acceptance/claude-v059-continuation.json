@@ -1,0 +1,54 @@
+{
+  "scope": "Latest released v0.5.9 same coordinator, initial two services then explicit currency revision; bounded functional continuation, not large-Issue performance acceptance",
+  "baseline": "v0.5.9",
+  "session": "1b33aadb-7c45-4385-9899-ff86b15ab825",
+  "initialHead": "9f97ff9749090b2a71fc9c9ad0b9dc9aa5ec7691",
+  "revisionBase": "20aabd7199a8537203d29530e504b3d6b474a9fb",
+  "head": "4dda2ab98758edd6151847643b7379fd2c3884fa",
+  "syntheticPR": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/204",
+  "phaseModelSeconds": 187.383362616,
+  "wholeSessionProcessedTokens": 2135622,
+  "initialProcessedTokens": 948496,
+  "phaseProcessedTokens": 1187126,
+  "usageComplete": true,
+  "reconciledWithHostModelUsage": true,
+  "totals": {
+    "input_tokens": 146,
+    "output_tokens": 56134,
+    "cache_read_input_tokens": 1873950,
+    "cache_creation_input_tokens": 205392
+  },
+  "checks": 6,
+  "review": {
+    "task": "a6fbb87d90e0a0c52",
+    "verdict": "PASS",
+    "head": "4dda2ab98758edd6151847643b7379fd2c3884fa"
+  },
+  "implementationIntervention": 0,
+  "modelReruns": 0,
+  "observationRecovery": {
+    "required": true,
+    "reason": "Original streaming observation lacked full result; offline recovery needed. Original failure retained.",
+    "capturedFileSha256": "43f3797a293591e8a42c537f68e52f395baa22da00fdf3c9c23742a55f3dd279"
+  },
+  "normalPerformanceComparisonEligible": false,
+  "ci": {
+    "head": "4dda2ab98758edd6151847643b7379fd2c3884fa",
+    "event": "pull_request",
+    "complex": {
+      "run": 39363916034,
+      "conclusion": "success"
+    },
+    "test": {
+      "run": 39363916061,
+      "conclusion": "success"
+    },
+    "draft": true,
+    "merged": false
+  },
+  "limitations": [
+    "Two service implementation files; does not represent sustained large UI/API/DB development",
+    "Observation recovery required; do not pool this elapsed time with normal paired trials",
+    "No candidate comparison completed for same-session continuation"
+  ]
+}
