@@ -32,8 +32,8 @@ export function claudeVerificationEvidence(events,expected,capture){
      value=JSON.parse(bytes);
     }
    }catch{continue;}
-   if(value.schema!=='asc-worktree-verification/v1'||value.passed!==true||value.repo!==expected.repo||value.base!==expected.base||value.head!==expected.head||value.contractSha256!==expected.contractSha256||value.contextSha256!==expected.contextSha256)continue;
-   if(!Array.isArray(value.results)||value.results.length!==expected.results.length||value.results.some((result,index)=>result.exit!==0||result.error||JSON.stringify(result.argv)!==JSON.stringify(expected.results[index].argv)))continue;
+   if(value.schema!==(capture?.projectCommands?'asc-evaluation-project-tests/v1':'asc-worktree-verification/v1')||value.passed!==true||value.repo!==expected.repo||value.base!==expected.base||value.head!==expected.head||value.contractSha256!==expected.contractSha256||(!capture?.projectCommands&&value.contextSha256!==expected.contextSha256))continue;
+   if(!Array.isArray(value.results)||value.results.length!==expected.results.length||value.results.some((result,index)=>result.exit!==0||result.error||result.signal||JSON.stringify(result.argv)!==JSON.stringify(expected.results[index].argv)))continue;
    observed={toolUseId:item.tool_use_id,head:value.head,contractSha256:value.contractSha256,checks:value.results.length,scope:'Observed coordinator Bash result; external oracle independently rechecked the same commit'};
   }
  }

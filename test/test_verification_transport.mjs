@@ -37,5 +37,17 @@ test('inline transport uses existing CLI contract and still rejects failed verif
 });
 test('unknown verification transport is rejected before trial or model startup',()=>{
  const p=spawnSync(process.execPath,['scripts/run-claude-delivery.mjs','/unused-package','/unused-claude','/unused-fixture','--deliver'],{encoding:'utf8',env:{...process.env,ASC_EVAL_MODEL:'opus',ASC_EVAL_EFFORT:'medium',ASC_EVAL_VERIFICATION_TRANSPORT:'unknown'}});
- assert.equal(p.status,1);assert.match(p.stderr,/Expected explicit saved or inline verification transport/);
+ assert.equal(p.status,1);assert.match(p.stderr,/Expected saved, inline or project verification transport/);
+});
+
+test('project command transport binds real execution without requiring product CLI',async t=>{
+ const f=fixture(t),wrapper=path.join(f.root,'project.mjs'),capture={command:`node ${wrapper}`,marker:'6'.repeat(32),projectCommands:true};
+ const {verifyWorktree}=await import('../src/worktree-execution.mjs');
+ fs.writeFileSync(wrapper,verificationCaptureSource({cli:'/absent-product-cli',projectObserver:new URL('../scripts/project-verification-observation.mjs',import.meta.url).href,repo:f.work,base:f.base,owner:f.owner,...capture}));
+ const p=spawnSync(process.execPath,[wrapper],{encoding:'utf8'});assert.equal(p.status,0,p.stderr);
+ const expected=verifyWorktree(f.work,f.base,f.owner);
+ const events=[{message:{content:[{type:'tool_use',id:'v',name:'Bash',input:{command:capture.command}}]}},{message:{content:[{type:'tool_result',tool_use_id:'v',content:p.stdout}]}}];
+ assert.equal(claudeVerificationEvidence(events,expected,capture).head,expected.head);
+ assert.throws(()=>claudeVerificationEvidence(events,expected,{...capture,projectCommands:false}),/Missing successful/);
+ for(const change of [{head:'0'.repeat(40)},{contractSha256:'0'.repeat(64)},{results:[]}])assert.throws(()=>claudeVerificationEvidence(events,{...expected,...change},capture),/Missing successful/);
 });
