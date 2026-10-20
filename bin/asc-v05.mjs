@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {saveVerification} from '../src/verification-output.mjs';
 import {startWorktree,verifyWorktree} from '../src/worktree-execution.mjs';
 import {projectAssets} from '../src/project-assets.mjs';
 import {restartGoal} from '../src/goal-restart.mjs';
@@ -30,7 +31,7 @@ try {
   const nativeHelp={
     start:'start <project-directory> [--path <changed-path>]...\n作業場所・規約参照を確認します（非Gitも可、Agent起動なし）。',
     'worktree-create':'worktree-create <repo-root> <issue> <type> <slug> <base>\n既存Git checkoutのrootを指定します（.worktrees自体ではありません）。その配下の.worktreesへ専用worktreeを作成します。type: feature|fix|refactor|test|docs|chore。baseは明示指定し、既存branch・作業場所は上書きしません。',
-    'worktree-verify':'worktree-verify <worktree> <base> <owner-contract.json>\n現在のHost権限で検証します。repo外のowner契約にintent・allowedPaths・commands（argv配列の配列）を指定します。検証失敗はexit 2。',
+    'worktree-verify':'worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>]\n現在のHost権限で検証します。repo外のowner契約にintent・allowedPaths・commands（argv配列の配列）を指定します。検証失敗はexit 2。',
     'project-assets':'project-assets <project-directory> [--register-skill] [--apply]\n既定は差分表示のみ。--applyで未編集の配布資産を更新し、利用者の変更との競合は保護します。'
   };
   if(Object.hasOwn(nativeHelp,command)&&args.length===1&&['--help','-h'].includes(args[0])){
@@ -42,7 +43,7 @@ try {
 
 標準（利用中のAI・既存の開発環境）:
   start <project-directory> [--path <changed-path>]... 作業場所と必要な責務を確認（非Gitも可・Agent起動なし）
-  worktree-verify <worktree> <base> <owner-contract.json>
+  worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>]
       現在のHost権限で既存ビルド・テストを実行し対象commitへ対応付け
 
   worktree-create <repo-root> <issue> <type> <slug> <base>
@@ -78,8 +79,10 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
   } else if(command==='start'&&args.length>=1){
     const paths=[];for(let i=1;i<args.length;i+=2){if(args[i]!=='--path'||!args[i+1])throw Error('Expected --path <changed-path>');paths.push(args[i+1]);}
     console.log(JSON.stringify(startWorktree(args[0],paths),null,2));
-  } else if(command==='worktree-verify'&&args.length===3){
-    const result=verifyWorktree(...args);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
+  } else if(command==='worktree-verify'&&(args.length===3||(args.length===5&&args[3]==='--output'))){
+    const run=()=>verifyWorktree(...args.slice(0,3));
+    const result=args.length===5?saveVerification(args[0],args[4],run):run();
+    console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
   } else if(command==='probe-native'&&args.length===1){
     const result=await probeNativeSandbox(args[0]);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
   } else if(command==='project-assets'&&args.length>=1&&args.length<=3&&args.slice(1).every(a=>['--apply','--register-skill'].includes(a))&&new Set(args.slice(1)).size===args.length-1){
@@ -150,7 +153,7 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
       defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','worktree-verify','probe-native','project-assets','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
       execution:'current-host-worktree',executionBackends:['current-host-worktree','current-host-directory','owner-selected-host','linux-runner'],host:executionHost(),legacyFallback:false}));
   } else {
-    throw Error('Usage: asc-v05 --version | start <project-directory> | worktree-verify <worktree> <base> <owner-contract.json> | worktree-create <repo-root> <issue> <type> <slug> <base> | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');
+    throw Error('Usage: asc-v05 --version | start <project-directory> | worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>] | worktree-create <repo-root> <issue> <type> <slug> <base> | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');
   }
 } catch (e) {
   // Preserve existing controller observations without turning a failed run into success.

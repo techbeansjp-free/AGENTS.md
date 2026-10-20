@@ -52,6 +52,7 @@
   "src/verification-git.mjs",
   "src/verification-resources.mjs",
   "src/workflow.mjs",
+  "src/verification-output.mjs",
   "src/worktree-execution.mjs",
   "migration_inspect.mjs",
   "skills/asc/SKILL.md",

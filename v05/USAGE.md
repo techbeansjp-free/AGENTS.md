@@ -32,6 +32,8 @@ Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・
 
 検証の機械記録が必要なら `worktree-verify <worktree> <base> <owner-contract.json>` を使用できる。ownerファイルはworktree外に置き、`{"intent":"目的","allowedPaths":["src/file.ts"],"commands":[["pnpm","test"],["pnpm","build"]]}` のように指定する。変更をcommitしてから実行する。規約は`allowedPaths`に対応するものを選び、各検証コマンド終了時に内容が変わっていないことを照合する。結果の`contextSha256`はこの選択規約のdigestであり、規約の意味的な遵守や独立レビューの代わりにはならない。テストは現在のHost権限・環境変数で実際のworktree内に実行される（ASC独自sandboxではない）。現在のHostで許可されたコマンドだけ指定する。Windowsで.cmdを介する場合はHostが通常使うNodeとCLI scriptのargvなど、shellを必要としない実行入口を指定する。
 
+結果全文を会話へ取り込まず保存する場合は `worktree-verify <worktree> <base> <owner-contract.json> --output <external-result.json>` を使用する。既存と同じ結果JSONをworktree外の新規ファイルへ保存し、標準出力には保存先・SHA256・対象commit・合否・検証数を返す。親ディレクトリは事前に作成し、既存ファイルは上書きしない。検証不合格も保存してexit 2、実行エラーはexit 1となる。`--output`なしの形式は変更しない。これは結果の受け渡しであり、署名や独立レビューの代替ではない。
+
 内部のGit観測は継承した`GIT_*`を除外して指定worktreeを確認する。owner指定の検証コマンドは現在のHost環境（`GIT_*`を含む）を引き継ぐため、Git設定や認証設定を無言で失わない。検証コマンドの対象・意味はownerが定めるものであり、任意のコマンドがそのworktreeだけを検査したことまではCLIは保証しない。
 
 この結果は要求・対象commit・コマンド・結果の対応であり、独立レビューやDeliveryの承認ではない。テストがtracked source・HEAD・非ignore出力を変えたら無効として停止する。ignoreされたbuild出力や依存資産は保持し、全量走査しない。依存・設定環境の変更後は必要な再検証を行う。元要求・実Git差分とプロジェクト契約を別Contextでレビューし、提出commit一致とPR/CIを確認する。
