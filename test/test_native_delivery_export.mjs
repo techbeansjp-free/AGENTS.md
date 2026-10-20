@@ -71,11 +71,15 @@ test('Claude export retains actual model and rejects incomplete or intervened ob
  for(const change of [d=>d.usage.complete=false,d=>d.usage.reconciledWithHostModelUsage=false,d=>d.implementationIntervention=1,d=>d.session='wrong',d=>d.run.status=1,d=>d.modelUsage.other={}]){const bad=structuredClone(good);change(bad);assert.notEqual(run(bad).status,0);}
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^GIT_/i.test(k)));
  const git=(...args)=>execFileSync('git',args,{cwd:root,env,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
- fs.mkdirSync(path.join(root,'complex'));fs.writeFileSync(path.join(root,'complex/REQUIREMENTS.md'),'requirements');fs.writeFileSync(path.join(root,'complex/REVISION.md'),'revision');
+ fs.mkdirSync(path.join(root,'complex'));fs.writeFileSync(path.join(root,'complex/REQUIREMENTS.md'),'requirements');fs.writeFileSync(path.join(root,'complex/REVISION.md'),'revision');fs.writeFileSync(path.join(root,'complex/SYSTEM_REQUIREMENTS.md'),'system journeys');
  git('init');git('add','complex');git('-c','user.name=Synthetic','-c','user.email=synthetic@example.invalid','-c','commit.gpgsign=false','commit','-m','fixture');const base=git('rev-parse','HEAD');
  const setup=JSON.parse(fs.readFileSync(path.join(root,'setup.json')));write('setup.json',{...setup,base,scenario:'complex-two-issue-currency'});
  const ci={head:base,draft:true,merged:false,boundToPr:true,checks:{test:'success'}};
  const complex={...good,head:base,ci,greetingCI:ci};assert.equal(run(complex).status,0);
+ write('setup.json',{...setup,base,scenario:'complex-two-issue-system'});assert.equal(run(complex).status,0);
+ const system=JSON.parse(fs.readFileSync(output));assert.equal(system.conditions.scenario,'complex-two-issue-system');assert.equal(system.conditions.intentSha256,hash(JSON.stringify(['original','requirements','system journeys'])));assert.deepEqual(system.ci.checks,{'complex:test':'success','greeting:test':'success'});
+ assert.notEqual(run({...complex,greetingCI:undefined}).status,0);
+ write('setup.json',{...setup,base,scenario:'complex-two-issue-currency'});assert.equal(run(complex).status,0);
  const exported=JSON.parse(fs.readFileSync(output));assert.equal(exported.conditions.intentSha256,hash(JSON.stringify(['original','requirements','revision'])));assert.deepEqual(exported.ci.checks,{'complex:test':'success','greeting:test':'success'});
  write('setup.json',{...setup,base,scenario:'complex-two-issue-currency',reviewerMode:'registered',reviewerDefinitionSha256:'b'.repeat(64)});
  for(const agentType of [undefined,'claude'])assert.notEqual(run({...complex,review:{agentType}}).status,0);
