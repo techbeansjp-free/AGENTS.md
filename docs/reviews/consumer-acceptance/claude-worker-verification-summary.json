@@ -1,0 +1,584 @@
+{
+  "protocol": "claude-worker-verification-resumed-protocol.json",
+  "scope": "Fixed complex two-Issue fixture, Claude opus medium, five pairs; not general performance guarantee",
+  "status": "complete-performance-not-established",
+  "quality": {
+    "baseline": {
+      "passed": 5,
+      "failed": 0
+    },
+    "candidate": {
+      "passed": 5,
+      "failed": 0
+    }
+  },
+  "summary": {
+    "baseline": {
+      "seconds": {
+        "median": 209.33223017899996,
+        "mean": 212.9926574882,
+        "min": 176.465501712,
+        "max": 245.063144882
+      },
+      "tokens": {
+        "median": 853426,
+        "mean": 842331.6,
+        "min": 721688,
+        "max": 925100
+      }
+    },
+    "candidate": {
+      "seconds": {
+        "median": 210.884368685,
+        "mean": 208.1729419782,
+        "min": 174.202143804,
+        "max": 253.436140312
+      },
+      "tokens": {
+        "median": 846343,
+        "mean": 870758.6,
+        "min": 724241,
+        "max": 1128666
+      }
+    }
+  },
+  "medianChangePercent": {
+    "seconds": 0.7414713466114664,
+    "tokens": -0.829948935232816
+  },
+  "decision": "Both lower medians not met. Do not repeat this cohort to seek a favorable result. Retain all ten attempts.",
+  "limits": [
+    "Cache observed, not controlled.",
+    "Five pairs do not establish statistical superiority.",
+    "Prior stopped cohort and recovered PR189 excluded; see claude-worker-verification-stopped.json.",
+    "Interrupted runs and older functional evidence are not pooled into performance totals."
+  ],
+  "rows": [
+    {
+      "pair": 1,
+      "variant": "baseline",
+      "head": "d590ae4ac2c604525cb2cf463085a94fd6ea731d",
+      "pr": 190,
+      "packageSha256": "35e5b8a3110e0837d43fe9e63828bfe304d06aaaff97b42109995d61eabe39f4",
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "effort": "medium",
+      "seconds": 245.063144882,
+      "executionSeconds": 220.568033277,
+      "deliverySeconds": 23.979950335,
+      "tokens": 853426,
+      "usage": {
+        "input_tokens": 70,
+        "output_tokens": 21211,
+        "cache_read_input_tokens": 715393,
+        "cache_creation_input_tokens": 116752
+      },
+      "contexts": 4,
+      "messages": 33,
+      "qualityPassed": true,
+      "innerChecks": 6,
+      "externalChecks": 6,
+      "independentReview": "PASS",
+      "ci": {
+        "head": "d590ae4ac2c604525cb2cf463085a94fd6ea731d",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39349745947",
+        "transportFailures": []
+      },
+      "greetingCI": {
+        "head": "d590ae4ac2c604525cb2cf463085a94fd6ea731d",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39349745964",
+        "transportFailures": []
+      },
+      "implementationIntervention": 0,
+      "usageComplete": true,
+      "sourceSha256": "2f9f4c2d9b98a257c0d5bbd0fce4bc7cae1cff15151d8baba55f80cf8206e151"
+    },
+    {
+      "pair": 1,
+      "variant": "candidate",
+      "head": "76c818e94de719a8ddf46785b17c19ffc1f52960",
+      "pr": 191,
+      "packageSha256": "c7fa571ba554871f6692d3b901b667003b83ead0f7affdad47743c04a15432da",
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "effort": "medium",
+      "seconds": 174.202143804,
+      "executionSeconds": 151.601538306,
+      "deliverySeconds": 22.061017112000002,
+      "tokens": 724241,
+      "usage": {
+        "input_tokens": 66,
+        "output_tokens": 20881,
+        "cache_read_input_tokens": 600705,
+        "cache_creation_input_tokens": 102589
+      },
+      "contexts": 4,
+      "messages": 31,
+      "qualityPassed": true,
+      "innerChecks": 6,
+      "externalChecks": 6,
+      "independentReview": "PASS",
+      "ci": {
+        "head": "76c818e94de719a8ddf46785b17c19ffc1f52960",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39350031512",
+        "transportFailures": []
+      },
+      "greetingCI": {
+        "head": "76c818e94de719a8ddf46785b17c19ffc1f52960",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39350031430",
+        "transportFailures": []
+      },
+      "implementationIntervention": 0,
+      "usageComplete": true,
+      "sourceSha256": "fee96f724f108588d681ebd69e499fcfa2a01bedbd349e6ccee7d8cbb1b446d1"
+    },
+    {
+      "pair": 2,
+      "variant": "candidate",
+      "head": "e3da99dce5752c614893be6ba4b5f17b3a9a6a1c",
+      "pr": 192,
+      "packageSha256": "c7fa571ba554871f6692d3b901b667003b83ead0f7affdad47743c04a15432da",
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "effort": "medium",
+      "seconds": 253.436140312,
+      "executionSeconds": 224.744941168,
+      "deliverySeconds": 28.170009566000022,
+      "tokens": 856084,
+      "usage": {
+        "input_tokens": 72,
+        "output_tokens": 22958,
+        "cache_read_input_tokens": 723481,
+        "cache_creation_input_tokens": 109573
+      },
+      "contexts": 4,
+      "messages": 34,
+      "qualityPassed": true,
+      "innerChecks": 6,
+      "externalChecks": 6,
+      "independentReview": "PASS",
+      "ci": {
+        "head": "e3da99dce5752c614893be6ba4b5f17b3a9a6a1c",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39350432696",
+        "transportFailures": []
+      },
+      "greetingCI": {
+        "head": "e3da99dce5752c614893be6ba4b5f17b3a9a6a1c",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39350432365",
+        "transportFailures": []
+      },
+      "implementationIntervention": 0,
+      "usageComplete": true,
+      "sourceSha256": "d7c4bf7e7f86c61b61b0407be6f2944347fb6e1d1bdc3563a7a79318f2f68a07"
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "head": "c692f63302b09db63e049fa15e4aba135308d745",
+      "pr": 193,
+      "packageSha256": "35e5b8a3110e0837d43fe9e63828bfe304d06aaaff97b42109995d61eabe39f4",
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "effort": "medium",
+      "seconds": 230.86147194699998,
+      "executionSeconds": 184.456976392,
+      "deliverySeconds": 45.877624981000004,
+      "tokens": 925100,
+      "usage": {
+        "input_tokens": 76,
+        "output_tokens": 22413,
+        "cache_read_input_tokens": 790392,
+        "cache_creation_input_tokens": 112219
+      },
+      "contexts": 4,
+      "messages": 36,
+      "qualityPassed": true,
+      "innerChecks": 6,
+      "externalChecks": 6,
+      "independentReview": "PASS",
+      "ci": {
+        "head": "c692f63302b09db63e049fa15e4aba135308d745",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39350771378",
+        "transportFailures": [
+          {
+            "reason": "transient-read-transport",
+            "elapsedMs": 30489
+          }
+        ]
+      },
+      "greetingCI": {
+        "head": "c692f63302b09db63e049fa15e4aba135308d745",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39350771387",
+        "transportFailures": []
+      },
+      "implementationIntervention": 0,
+      "usageComplete": true,
+      "sourceSha256": "6658914954951fe38376748a1d007d29fce1fbc7ee683d652e74c35eac16a377"
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "head": "22d32ef1a08cf9db126387bf06378e6f2daacd88",
+      "pr": 194,
+      "packageSha256": "35e5b8a3110e0837d43fe9e63828bfe304d06aaaff97b42109995d61eabe39f4",
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "effort": "medium",
+      "seconds": 203.24093872100002,
+      "executionSeconds": 179.85823496999998,
+      "deliverySeconds": 22.873543972999993,
+      "tokens": 851284,
+      "usage": {
+        "input_tokens": 74,
+        "output_tokens": 21266,
+        "cache_read_input_tokens": 729353,
+        "cache_creation_input_tokens": 100591
+      },
+      "contexts": 4,
+      "messages": 35,
+      "qualityPassed": true,
+      "innerChecks": 6,
+      "externalChecks": 6,
+      "independentReview": "PASS",
+      "ci": {
+        "head": "22d32ef1a08cf9db126387bf06378e6f2daacd88",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39351143661",
+        "transportFailures": []
+      },
+      "greetingCI": {
+        "head": "22d32ef1a08cf9db126387bf06378e6f2daacd88",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39351143599",
+        "transportFailures": []
+      },
+      "implementationIntervention": 0,
+      "usageComplete": true,
+      "sourceSha256": "828abf8e29cf5ea5f3f30e3739bf54b16ec441d92116899cdd4f85a005621029"
+    },
+    {
+      "pair": 3,
+      "variant": "candidate",
+      "head": "0283481ac00ea4f8344e3970d4de5842da6f0e67",
+      "pr": 195,
+      "packageSha256": "c7fa571ba554871f6692d3b901b667003b83ead0f7affdad47743c04a15432da",
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "effort": "medium",
+      "seconds": 174.21395103999998,
+      "executionSeconds": 151.655841481,
+      "deliverySeconds": 22.03223920500002,
+      "tokens": 846343,
+      "usage": {
+        "input_tokens": 72,
+        "output_tokens": 20751,
+        "cache_read_input_tokens": 723756,
+        "cache_creation_input_tokens": 101764
+      },
+      "contexts": 4,
+      "messages": 34,
+      "qualityPassed": true,
+      "innerChecks": 6,
+      "externalChecks": 6,
+      "independentReview": "PASS",
+      "ci": {
+        "head": "0283481ac00ea4f8344e3970d4de5842da6f0e67",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39351424890",
+        "transportFailures": []
+      },
+      "greetingCI": {
+        "head": "0283481ac00ea4f8344e3970d4de5842da6f0e67",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39351424978",
+        "transportFailures": []
+      },
+      "implementationIntervention": 0,
+      "usageComplete": true,
+      "sourceSha256": "2c0d439d1153b8fe9ef02b53ddedf89ce7cb45c07d33ac7bccfa6ae267e709b5"
+    },
+    {
+      "pair": 4,
+      "variant": "candidate",
+      "head": "8e77bc21203212f68ba3ded1fff42d7099de9a0f",
+      "pr": 196,
+      "packageSha256": "c7fa571ba554871f6692d3b901b667003b83ead0f7affdad47743c04a15432da",
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "effort": "medium",
+      "seconds": 210.884368685,
+      "executionSeconds": 188.40995300799997,
+      "deliverySeconds": 21.946613344000014,
+      "tokens": 798459,
+      "usage": {
+        "input_tokens": 66,
+        "output_tokens": 21776,
+        "cache_read_input_tokens": 668800,
+        "cache_creation_input_tokens": 107817
+      },
+      "contexts": 4,
+      "messages": 31,
+      "qualityPassed": true,
+      "innerChecks": 6,
+      "externalChecks": 6,
+      "independentReview": "PASS",
+      "ci": {
+        "head": "8e77bc21203212f68ba3ded1fff42d7099de9a0f",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39351757949",
+        "transportFailures": []
+      },
+      "greetingCI": {
+        "head": "8e77bc21203212f68ba3ded1fff42d7099de9a0f",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39351758013",
+        "transportFailures": []
+      },
+      "implementationIntervention": 0,
+      "usageComplete": true,
+      "sourceSha256": "a614409907723f33482e87ecfb2816e25bbf8affb4bfce7a60c2be1421c3d148"
+    },
+    {
+      "pair": 4,
+      "variant": "baseline",
+      "head": "3569caa960bedf1c8c15ebd4e7024fd4b7e8de65",
+      "pr": 197,
+      "packageSha256": "35e5b8a3110e0837d43fe9e63828bfe304d06aaaff97b42109995d61eabe39f4",
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "effort": "medium",
+      "seconds": 209.33223017899996,
+      "executionSeconds": 186.407170617,
+      "deliverySeconds": 22.412935074999986,
+      "tokens": 860160,
+      "usage": {
+        "input_tokens": 70,
+        "output_tokens": 24948,
+        "cache_read_input_tokens": 722289,
+        "cache_creation_input_tokens": 112853
+      },
+      "contexts": 4,
+      "messages": 33,
+      "qualityPassed": true,
+      "innerChecks": 6,
+      "externalChecks": 6,
+      "independentReview": "PASS",
+      "ci": {
+        "head": "3569caa960bedf1c8c15ebd4e7024fd4b7e8de65",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39352088343",
+        "transportFailures": []
+      },
+      "greetingCI": {
+        "head": "3569caa960bedf1c8c15ebd4e7024fd4b7e8de65",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39352088340",
+        "transportFailures": []
+      },
+      "implementationIntervention": 0,
+      "usageComplete": true,
+      "sourceSha256": "45f9a41892f8a776bb5c47be54a2cc3bb8e90c8013e1b809790e8093c329c140"
+    },
+    {
+      "pair": 5,
+      "variant": "baseline",
+      "head": "b644cf743116921a63fee7907d8080c0bd76f47f",
+      "pr": 198,
+      "packageSha256": "35e5b8a3110e0837d43fe9e63828bfe304d06aaaff97b42109995d61eabe39f4",
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "effort": "medium",
+      "seconds": 176.465501712,
+      "executionSeconds": 153.03496678399998,
+      "deliverySeconds": 22.87828835300001,
+      "tokens": 721688,
+      "usage": {
+        "input_tokens": 62,
+        "output_tokens": 21359,
+        "cache_read_input_tokens": 597170,
+        "cache_creation_input_tokens": 103097
+      },
+      "contexts": 4,
+      "messages": 29,
+      "qualityPassed": true,
+      "innerChecks": 6,
+      "externalChecks": 6,
+      "independentReview": "PASS",
+      "ci": {
+        "head": "b644cf743116921a63fee7907d8080c0bd76f47f",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39352367576",
+        "transportFailures": []
+      },
+      "greetingCI": {
+        "head": "b644cf743116921a63fee7907d8080c0bd76f47f",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39352367571",
+        "transportFailures": []
+      },
+      "implementationIntervention": 0,
+      "usageComplete": true,
+      "sourceSha256": "350d669edff02249421021cf290ad321382c18f6c7e24387b27ddddcf4c1235a"
+    },
+    {
+      "pair": 5,
+      "variant": "candidate",
+      "head": "440de231b0403fef38e547f414da21a63843744f",
+      "pr": 199,
+      "packageSha256": "c7fa571ba554871f6692d3b901b667003b83ead0f7affdad47743c04a15432da",
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "effort": "medium",
+      "seconds": 228.12810605,
+      "executionSeconds": 205.59169036499998,
+      "deliverySeconds": 22.014205512999993,
+      "tokens": 1128666,
+      "usage": {
+        "input_tokens": 84,
+        "output_tokens": 28186,
+        "cache_read_input_tokens": 972108,
+        "cache_creation_input_tokens": 128288
+      },
+      "contexts": 4,
+      "messages": 40,
+      "qualityPassed": true,
+      "innerChecks": 6,
+      "externalChecks": 6,
+      "independentReview": "PASS",
+      "ci": {
+        "head": "440de231b0403fef38e547f414da21a63843744f",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39352721532",
+        "transportFailures": []
+      },
+      "greetingCI": {
+        "head": "440de231b0403fef38e547f414da21a63843744f",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "test": "success"
+        },
+        "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39352721524",
+        "transportFailures": []
+      },
+      "implementationIntervention": 0,
+      "usageComplete": true,
+      "sourceSha256": "fb736f6701a858db6d8a0ac753c82a7452f4341381f96c62dbd58acabaff4bd3"
+    }
+  ],
+  "candidateDisposition": "Coordination paragraph restored to baseline; retain independently validated product fixes."
+}
