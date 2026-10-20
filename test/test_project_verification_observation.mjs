@@ -23,3 +23,14 @@ test('already dirty tracked source cannot change behind the same status marker',
  f.contract.commands=[[process.execPath,'-e',"require('fs').writeFileSync('feature.cjs','module.exports=44;')"]];f.save();
  assert.throws(()=>observeProjectVerification({repo:f.work,base:f.base,owner:f.owner}),/target or owner changed/);
 });
+
+test('failed commands expose bounded diagnostics without expanding successful output',t=>{
+ const f=worktreeFixture(t);
+ f.contract.commands=[[process.execPath,'-e',"process.stdout.write('success detail')"]];f.save();
+ assert.equal(observeProjectVerification({repo:f.work,base:f.base,owner:f.owner}).results[0].diagnostic,undefined);
+ f.contract.commands=[[process.execPath,'-e',"process.stdout.write('x'.repeat(9000));process.stderr.write('y'.repeat(9000)+'socket denied');process.exit(1)"]];f.save();
+ const r=observeProjectVerification({repo:f.work,base:f.base,owner:f.owner});
+ assert.equal(r.passed,false);assert.equal(r.results[0].exit,1);
+ const d=r.results[0].diagnostic;assert.equal(d.stdout.length,4096);assert.equal(d.stderr.length,4096);
+ assert.ok(d.stderr.endsWith('socket denied'));assert.match(d.authority,/Untrusted/);
+});
