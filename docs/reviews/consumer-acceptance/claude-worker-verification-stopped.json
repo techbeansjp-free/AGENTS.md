@@ -72,5 +72,102 @@
   "recovery": "Read existing events and file after line-boundary parser correction; six checks and hashes matched; no model or implementation rerun",
   "prCreated": false,
   "performanceAccepted": false,
-  "resultIntervention": true
+  "resultIntervention": true,
+  "recoveredDelivery": {
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/189",
+    "head": "099bd9cc9c7f0474ecec821f9a886cd21e547065",
+    "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+    "review": {
+      "taskId": "a72b810b501adfb19",
+      "agentType": "general-purpose",
+      "head": "099bd9cc9c7f0474ecec821f9a886cd21e547065",
+      "verdict": "PASS"
+    },
+    "inHostVerification": {
+      "toolUseId": "toolu_012kDnvwQBuBUHBz3tKNbCWp",
+      "head": "099bd9cc9c7f0474ecec821f9a886cd21e547065",
+      "contractSha256": "8a96eeeb9b5df0d8ea090750ace1fd0fe4a08ca1baf6546548c7feae09e7f1ec",
+      "checks": 6,
+      "scope": "Observed coordinator Bash result; external oracle independently rechecked the same commit"
+    },
+    "usage": {
+      "totals": {
+        "input_tokens": 78,
+        "output_tokens": 21534,
+        "cache_read_input_tokens": 799350,
+        "cache_creation_input_tokens": 112754
+      },
+      "threads": [
+        {
+          "id": "d7b53b22-ac62-479a-8d87-d100013f940f",
+          "messageCount": 13,
+          "usage": {
+            "input_tokens": 30,
+            "output_tokens": 7337,
+            "cache_read_input_tokens": 351693,
+            "cache_creation_input_tokens": 35383
+          }
+        },
+        {
+          "id": "a60166f8d2bc62bf9",
+          "messageCount": 9,
+          "usage": {
+            "input_tokens": 18,
+            "output_tokens": 5085,
+            "cache_read_input_tokens": 176589,
+            "cache_creation_input_tokens": 31247
+          }
+        },
+        {
+          "id": "aa7ea800ef38bbe76",
+          "messageCount": 8,
+          "usage": {
+            "input_tokens": 16,
+            "output_tokens": 4649,
+            "cache_read_input_tokens": 146865,
+            "cache_creation_input_tokens": 21811
+          }
+        },
+        {
+          "id": "a72b810b501adfb19",
+          "messageCount": 7,
+          "usage": {
+            "input_tokens": 14,
+            "output_tokens": 4463,
+            "cache_read_input_tokens": 124203,
+            "cache_creation_input_tokens": 24313
+          }
+        }
+      ],
+      "observedProcessedTokens": 933716,
+      "missingUsage": [],
+      "reconciledWithHostModelUsage": true,
+      "complete": true
+    },
+    "ci": {
+      "head": "099bd9cc9c7f0474ecec821f9a886cd21e547065",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "complex": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39349201616",
+      "transportFailures": []
+    },
+    "greetingCI": {
+      "head": "099bd9cc9c7f0474ecec821f9a886cd21e547065",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "test": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39349201592",
+      "transportFailures": []
+    },
+    "resultRecoveryIntervention": true,
+    "implementationIntervention": 0,
+    "performanceAccepted": false
+  }
 }
