@@ -716,5 +716,80 @@
       ],
       "conclusion": "No agent proliferation or endless loop observed. These observations do not prove that adding another instruction improves performance."
     }
+  },
+  "verificationPayloadObservation": {
+    "scope": "Existing successful result JSON payloads in PR190–199; excludes framing, other tool outputs, prompts and later reads.",
+    "method": "Read framed summary from existing coordinator events; read saved JSON; verify SHA256, HEAD and check count. No new model invocation.",
+    "rows": [
+      {
+        "pr": 190,
+        "successfulResults": 1,
+        "fullJsonBytes": 3889,
+        "observedSummaryJsonBytes": 783
+      },
+      {
+        "pr": 191,
+        "successfulResults": 1,
+        "fullJsonBytes": 3888,
+        "observedSummaryJsonBytes": 783
+      },
+      {
+        "pr": 192,
+        "successfulResults": 1,
+        "fullJsonBytes": 3882,
+        "observedSummaryJsonBytes": 783
+      },
+      {
+        "pr": 193,
+        "successfulResults": 1,
+        "fullJsonBytes": 3889,
+        "observedSummaryJsonBytes": 783
+      },
+      {
+        "pr": 194,
+        "successfulResults": 1,
+        "fullJsonBytes": 3871,
+        "observedSummaryJsonBytes": 783
+      },
+      {
+        "pr": 195,
+        "successfulResults": 1,
+        "fullJsonBytes": 3889,
+        "observedSummaryJsonBytes": 783
+      },
+      {
+        "pr": 196,
+        "successfulResults": 1,
+        "fullJsonBytes": 3881,
+        "observedSummaryJsonBytes": 783
+      },
+      {
+        "pr": 197,
+        "successfulResults": 1,
+        "fullJsonBytes": 3898,
+        "observedSummaryJsonBytes": 783
+      },
+      {
+        "pr": 198,
+        "successfulResults": 1,
+        "fullJsonBytes": 3897,
+        "observedSummaryJsonBytes": 783
+      },
+      {
+        "pr": 199,
+        "successfulResults": 1,
+        "fullJsonBytes": 3898,
+        "observedSummaryJsonBytes": 783
+      }
+    ],
+    "totalFullJsonBytes": 38882,
+    "totalObservedSummaryJsonBytes": 7830,
+    "jsonPayloadReductionPercent": 79.86214700889872,
+    "limits": [
+      "Both compared Skill variants already used saved summaries; this does not explain their performance difference.",
+      "Full JSON size is the corresponding saved payload that inline CLI would print, not a separately observed baseline model run.",
+      "Bytes are not tokens. No claim of whole-session token reduction or elapsed-time improvement.",
+      "Approximately 3 KB per run is too small to explain large whole-development cost changes."
+    ]
   }
 }
