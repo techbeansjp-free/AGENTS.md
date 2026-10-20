@@ -35,6 +35,14 @@ test('Claude export retains actual model and rejects incomplete or intervened ob
  const good={session:'test-session',implementationIntervention:0,run:{status:0,signal:null,seconds:1},totalSeconds:2,deliverySeconds:1,modelUsage:{actual:{inputTokens:1}},usage:{complete:true,reconciledWithHostModelUsage:true,observedProcessedTokens:1,missingUsage:[]},ci:{head:'head'},verification:{head:'head',passed:true,results:[{argv:['test'],exit:0}]},pr:1};
  const output=path.join(root,'out.json'),run=d=>{write('delivery.json',d);return spawnSync(process.execPath,[script,root,output,'--claude'],{encoding:'utf8'});};
  assert.equal(run(good).status,0);const data=JSON.parse(fs.readFileSync(output));assert.deepEqual(data.conditions.actualModels,['actual']);assert.equal(data.conditions.runnerSha256,'a'.repeat(64));assert.equal(data.elapsedSeconds,2);assert.equal(data.implementationAndReviewSeconds,1);assert.equal(data.manualHandoffs,0);assert.equal(data.evaluationCoverage.inHostVerification,null);
+ assert.equal(data.conditions.verificationTransport,'unrecorded');
+ const transportSetup=JSON.parse(fs.readFileSync(path.join(root,'setup.json')));
+ for(const verificationTransport of ['inline','saved']){
+  write('setup.json',{...transportSetup,verificationTransport});assert.equal(run(good).status,0);
+  assert.equal(JSON.parse(fs.readFileSync(output)).conditions.verificationTransport,verificationTransport);
+ }
+ write('setup.json',{...transportSetup,verificationTransport:'invalid'});assert.notEqual(run(good).status,0);
+ write('setup.json',transportSetup);
  const estimateRun=run({...good,elapsedTimeIsEstimate:true});assert.equal(estimateRun.status,0);
  const estimateLog=JSON.parse(estimateRun.stdout);assert.equal(estimateLog.elapsedSeconds,null);assert.equal(estimateLog.elapsedSecondsEstimate,2);assert.equal(estimateLog.elapsedComparisonEligible,false);
  const estimated=JSON.parse(fs.readFileSync(output));assert.equal(estimated.elapsedSeconds,null);assert.equal(estimated.elapsedSecondsEstimate,2);assert.equal(estimated.elapsedComparisonEligible,false);assert.equal(estimated.elapsedTimeIsEstimate,true);

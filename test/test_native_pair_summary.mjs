@@ -33,3 +33,13 @@ test('prior observations without isolated fixture transfer are not performance a
  const pairs=fixture();for(const pair of pairs)for(const side of ['baseline','candidate'])delete pair[side].conditions.fixtureTransfer;
  const summary=summarizeNativePairs(pairs);assert.equal(summary.fixtureIsolationComplete,false);assert.equal(summary.accepted,false);
 });
+
+test('verification transport must match, including unrecorded historical runs',()=>{
+ const pairs=fixture();
+ for(const pair of pairs)for(const side of ['baseline','candidate'])pair[side].conditions.verificationTransport='inline';
+ assert.equal(summarizeNativePairs(pairs).accepted,true);
+ for(const transport of ['saved','unrecorded']){
+  pairs[0].candidate.conditions.verificationTransport=transport;
+  assert.throws(()=>summarizeNativePairs(pairs),/Comparison conditions differ/);
+ }
+});
