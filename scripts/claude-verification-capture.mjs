@@ -1,8 +1,11 @@
 /** Evaluation-only framing. Does not implement, repair or approve project changes. */
-export function verificationCaptureSource({cli,repo,base,owner,marker}){
+export function verificationCaptureSource({cli,repo,base,owner,marker,output}){
  if(!/^[a-f0-9]{32}$/.test(marker))throw Error('Invalid verification capture marker');
  return `import {spawnSync} from 'node:child_process';
-const p=spawnSync(process.execPath,${JSON.stringify([cli,'worktree-verify',repo,base,owner])},{encoding:'utf8',maxBuffer:16*1024*1024});
+import {randomUUID} from 'node:crypto';
+const argv=${JSON.stringify([cli,'worktree-verify',repo,base,owner])};
+${output?`argv.push('--output',${JSON.stringify(output)}+'-'+randomUUID()+'.json');`:''}
+const p=spawnSync(process.execPath,argv,{encoding:'utf8',maxBuffer:16*1024*1024});
 const result={status:p.status,error:p.error?.code??null,stdout:p.stdout??'',stderr:p.stderr??''};
 process.stdout.write('\\nASC_VERIFY_${marker}_BEGIN\\n'+JSON.stringify(result)+'\\nASC_VERIFY_${marker}_END\\n');
 process.exitCode=p.error||p.status!==0?1:0;

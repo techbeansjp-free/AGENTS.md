@@ -1,4 +1,6 @@
 /** Evaluation observation, not a cryptographic attestation of Host execution. */
+import fs from 'node:fs';
+import {createHash} from 'node:crypto';
 import {capturedVerification} from './claude-verification-capture.mjs';
 export function claudeVerificationEvidence(events,expected,capture){
  const calls=new Map();let observed;
@@ -21,7 +23,15 @@ export function claudeVerificationEvidence(events,expected,capture){
    if(status&&content.endsWith(`\n${status[1]}0`))content=content.slice(0,-(status[1].length+2));
    // A batched Git identity observation may precede the JSON; accept only this target.
    if(content.startsWith(expected.head+'\n'))content=content.slice(expected.head.length+1);
-   let value;try{value=JSON.parse(content);}catch{continue;}
+   let value;try{
+    value=JSON.parse(content);
+    if(capture?.output){
+     if(value.schema!=='asc-worktree-verification-summary/v1'||typeof value.output!=='string'||!value.output.startsWith(capture.output+'-')||! /^[a-f0-9-]{36}\.json$/.test(value.output.slice(capture.output.length+1))||value.passed!==true)continue;
+     const bytes=fs.readFileSync(value.output);
+     if(createHash('sha256').update(bytes).digest('hex')!==value.sha256)continue;
+     value=JSON.parse(bytes);
+    }
+   }catch{continue;}
    if(value.schema!=='asc-worktree-verification/v1'||value.passed!==true||value.repo!==expected.repo||value.base!==expected.base||value.head!==expected.head||value.contractSha256!==expected.contractSha256||value.contextSha256!==expected.contextSha256)continue;
    if(!Array.isArray(value.results)||value.results.length!==expected.results.length||value.results.some((result,index)=>result.exit!==0||result.error||JSON.stringify(result.argv)!==JSON.stringify(expected.results[index].argv)))continue;
    observed={toolUseId:item.tool_use_id,head:value.head,contractSha256:value.contractSha256,checks:value.results.length,scope:'Observed coordinator Bash result; external oracle independently rechecked the same commit'};
