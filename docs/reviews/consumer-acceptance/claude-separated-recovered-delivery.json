@@ -1,0 +1,59 @@
+{
+  "scope": "Recovered synthetic two-Issue development delivery, not uninterrupted performance acceptance",
+  "head": "9eac2e01a043ef002d3ca129af93d94974769dc5",
+  "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/187",
+  "model": "opus",
+  "effort": "medium",
+  "implementationAndReviewSeconds": 191.48095743300001,
+  "checks": 6,
+  "allChecksPassed": true,
+  "independentReview": {
+    "taskId": "a680a310ecc1aa32a",
+    "agentType": "general-purpose",
+    "head": "9eac2e01a043ef002d3ca129af93d94974769dc5",
+    "verdict": "PASS"
+  },
+  "usageTotals": {
+    "input_tokens": 78,
+    "output_tokens": 26019,
+    "cache_read_input_tokens": 833754,
+    "cache_creation_input_tokens": 117542
+  },
+  "usageComplete": false,
+  "usageReconciled": false,
+  "recovery": {
+    "observerIntervention": true,
+    "implementationEdits": 0,
+    "performanceAccepted": false,
+    "captureSha256": "a5c209250ccc8efc04f7706d9a19e3817c7f5b386ecba8c97fd8ef4a37687435"
+  },
+  "complexCI": {
+    "head": "9eac2e01a043ef002d3ca129af93d94974769dc5",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39346879170",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "9eac2e01a043ef002d3ca129af93d94974769dc5",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39346879226",
+    "transportFailures": []
+  },
+  "limitations": [
+    "Original runner failed before publication when the Agent printed only the tail of full saved verification output.",
+    "Saved output was recovered outside the original runner; unchanged target and all six checks were confirmed before submission.",
+    "No additional model or implementation work during recovery. Observer intervention excludes this observation from uninterrupted comparison.",
+    "Elapsed recovery time is not represented by model execution seconds."
+  ]
+}
