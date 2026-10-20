@@ -60,6 +60,8 @@ test('framed verification ignores shell chatter but not failed, duplicate or sta
  const framedCall=structuredClone(call);framedCall.message.content[0].input.command='git status --short; '+capture.command+'; echo "exit $?"';
  const content='?? .claude/\n'+expected.head+frame(expected)+'exit 0';
  assert.equal(claudeVerificationEvidence([framedCall,result(expected,{content})],expected,capture).head,expected.head);
+ assert.equal(claudeVerificationEvidence([framedCall,result(expected,{content:frame(expected).trimStart()})],expected,capture).head,expected.head);
+ assert.throws(()=>claudeVerificationEvidence([framedCall,result(expected,{content:'prefix'+frame(expected).trimStart()})],expected,capture),/Missing successful/);
  for(const bad of [frame(expected,1),frame({...expected,head:'e'.repeat(40)}),frame(expected)+frame(expected),content.replace(capture.marker,'2'.repeat(32))])assert.throws(()=>claudeVerificationEvidence([framedCall,result(expected,{content:bad})],expected,capture),/Missing successful/);
  assert.throws(()=>claudeVerificationEvidence([framedCall,result(expected,{content,is_error:true})],expected,capture),/Missing successful/);
  assert.throws(()=>claudeVerificationEvidence([call,result(expected,{content})],expected,capture),/Missing successful/);

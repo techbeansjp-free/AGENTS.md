@@ -12,6 +12,8 @@ process.exitCode=p.error||p.status!==0?1:0;
 `;
 }
 export function capturedVerification(content,marker){
+ // Hosts may trim the leading newline; keep marker matching at a line boundary.
+ content='\n'+content;
  const begin=`\nASC_VERIFY_${marker}_BEGIN\n`,end=`\nASC_VERIFY_${marker}_END`;
  if(content.split(begin).length!==2||content.split(end).length!==2)return null;
  const start=content.indexOf(begin)+begin.length,stop=content.indexOf(end);
