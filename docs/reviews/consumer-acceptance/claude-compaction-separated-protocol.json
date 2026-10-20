@@ -1,0 +1,109 @@
+{
+  "scope": "Separate-storage comparison of existing alpha57/alpha59 product guidance; prior terminated cohorts excluded",
+  "baseline": {
+    "version": "0.5.900-alpha.57",
+    "sha256": "075698477884821c3019d2dca91d86ec2302632cb1440c1ddff0435f2bba65c5"
+  },
+  "candidate": {
+    "version": "0.5.900-alpha.59",
+    "sha256": "615e2f1aa1e75a49fa34efba2f9b2503bb4d05b7448a983b38c790a51011d103"
+  },
+  "changedSourceFiles": [
+    "skills/asc/SKILL.md",
+    "skills/asc/references/coordination.md"
+  ],
+  "fixture": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "model": "opus",
+  "effort": "medium",
+  "reviewerMode": "generic",
+  "pairs": 5,
+  "order": [
+    [
+      "baseline",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "baseline"
+    ],
+    [
+      "baseline",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "baseline"
+    ],
+    [
+      "baseline",
+      "candidate"
+    ]
+  ],
+  "earlyStop": "Stop on execution, quality or measurement failure; after two complete pairs stop if candidate median time and tokens are both no better. Preserve all attempts; no restart for favorable sample.",
+  "acceptance": "All six inner/external oracles, independent submitted-HEAD review, both Draft PR workflows, complete parent and child usage; both medians lower, neither maximum worse; zero evaluator implementation/planning.",
+  "evaluationFiles": {
+    "scripts/check-complex-accessors.mjs": "03ea61d044fb108fed5a509e10f15fdf30f9a0551339f4dbafb8a390a72f1e8c",
+    "scripts/check-complex-pagination.mjs": "629e7c0079bacb43887f24b5d88a5cf6daf46445953e37f42a5b2fafa02dc12a",
+    "scripts/check-release-package.mjs": "958190175cb2507c2167a9268c5372e9e0453f8a3ef577910b85e74d08ca9263",
+    "scripts/check-reservation-accessors.mjs": "05bebe9c24f8c17c528140cd972dffc6a5d630dea777b26d2b1f24167463a3f7",
+    "scripts/claude-review-evidence.mjs": "460e64fe3daa2ba423c1cdffa366ccddd6e8a8955d222c4cdd01ec2b079498e9",
+    "scripts/claude-tool-observations.mjs": "a7d95ae08576be498cf959488d41dfaf729932846c14537ab850d717d396ff39",
+    "scripts/claude-usage.mjs": "d0c1b0714943a6f68aebf25fd6569143755292e226fb00033bd91a473a9cea79",
+    "scripts/claude-verification-evidence.mjs": "d7654421d1e971c5e1e9fd5e66f594af5abba64101d1ee271d68582f47319096",
+    "scripts/claude-worker-lifecycle.mjs": "76ce17bf1f563e16168a02d22b43168f7787264242f3c0f4a27ce2077896c33a",
+    "scripts/complex-permissions.mjs": "dc42816cb2a4f9af05785f512f1abb69cbffa67292e5807aca258210e182daa8",
+    "scripts/consumer-journey.mjs": "8cf0563b03782780dad1de3c91c17257ba3f54bf17704131459af2c131d4eef3",
+    "scripts/consumer-scenarios.mjs": "cc84283d4ed178c92f0071a8c466093b0a9dd2a1095ec285bf3e5461d828f2f1",
+    "scripts/export-native-delivery.mjs": "77cadaf66b1d108ad35d66d9028ef4ee75eb7d5644f4de9b69d74f81425f4964",
+    "scripts/finish-native-complex.mjs": "03769c1a809dab9d4e58292ac4c99de20e0cf3320c9ee99305e431dd4182d13d",
+    "scripts/integrate-complex-context.mjs": "e4ac2e5b96ac32314735649df67df1ef8315be0c30c331855a11a5136f920ad8",
+    "scripts/interrupt-complex-context.mjs": "4653092faba58c3ecb68408531a4dcc8c9ab6bd2fe754fb3877fee0875e10754",
+    "scripts/interruption-evidence.mjs": "b438e1123025e5e5dfc60c3ab0338a7297a009da336025bf239c6b008936fdbe",
+    "scripts/native-conflict-fixture.mjs": "6a338dec8a3b3396db6ac01ca4c3af212738565ae0acd7ce6bb42a614b99d16b",
+    "scripts/native-delivery.mjs": "5766363f4e337118476f4c269b6113ad754d8d04288882d718ee240094d67049",
+    "scripts/native-evaluation-launch.mjs": "f859fd769634bb233d3ba27ea54b7b82a4fee38e014eb298eefe678d1ae08468",
+    "scripts/native-git-boundary.mjs": "aaef9d949abee829881db7fde3706ec0bc08ac8a50902b1d4eefb353b805f3ea",
+    "scripts/native-host-usage.mjs": "4119fc0edce913fd37ecd5b6d04eb75c69e325fc597e76603198a4ce750cb4c7",
+    "scripts/native-interrupted-attempt.mjs": "c7110e4bbc4557a0e0c563419c47bb34f53d0cce747667b1472ff52631c8c882",
+    "scripts/native-model-conditions.mjs": "ffcab3eebae1ca9484bae7448855854f3b10118f92273629d1f49ffe7a096a63",
+    "scripts/native-pair-summary.mjs": "0ed6f290a1d1db27e1b64963268b0b920581832418edec61f0410bed4ce17415",
+    "scripts/native-review-evidence.mjs": "1fd868ee8fa2b94299f0d00df3a2d777552ccb57ad281ee2cc08b06b24b83a5c",
+    "scripts/native-session-run.mjs": "228e98664afb823ef1f743f44d03ebbdaeee87702b3447eab09c23af59c7f0a1",
+    "scripts/native-worker-checkpoint.mjs": "cf10a7654a10a1aa53e56c17771efde2e37cbf4105cfde0604307fd841d8922f",
+    "scripts/pack-candidate.mjs": "e107fb0626531bbb43856d1f9d21cf2df0973eed127455d61619472cdfb265f3",
+    "scripts/prepare-complex-context.mjs": "090b51cad9986adccc83be12767d014b924724e028b7451c2231c2dd91f7d104",
+    "scripts/prepare-complex-revision.mjs": "5f1a9008a3f20b0b6d2d7738080a4e99d8b29955970b9a959a081eaa42ca16cf",
+    "scripts/prepare-review-scenarios.mjs": "5533d71b0bf994a999745df262302af0fe4cbfc890972f1c9c7dc8a671f4088d",
+    "scripts/release.mjs": "a062c3153c40676fb456de0c0b015be95673b175a8223f13830d252ac5054d12",
+    "scripts/repair-complex-context.mjs": "2ec0d5bb45bdfad0d2a04c4173f28de7ae4cc7860993c9cc3506e2f4cc7f85c2",
+    "scripts/review-complex-context.mjs": "3286a26c340fc7170ed13754418ebdf76c4bd06049eb8c1824fd01bbe3a2eb90",
+    "scripts/run-claude-delivery.mjs": "b9ed5e656b321aa024d3ce0f84279fef4a56c83133a1f1bf3c22360a6d587c57",
+    "scripts/run-complex-context.mjs": "0cf22795fc8068d2cfe8c283667224a211a650f63751cc9e73be25edc64e3b8f",
+    "scripts/run-consumer-journey.mjs": "38c49b92c3e1db4e1b40c65ca3681ea9618fa364180482ef8fa59120c6655852",
+    "scripts/run-consumer-scenarios.mjs": "64aad9cbade517c7402fa2bb0d8afb6cffaa7d0043def1c3f381b032c698c626",
+    "scripts/run-native-complex-candidate.mjs": "2591bc4e9db1611dad706b9f12c9998d0cd709a6bda29174acefb92210768ba1",
+    "scripts/run-native-delivery-candidate.mjs": "116ea877d7169e762815c8cd7c81c65416afee30f95003d51a9c0c0609d80f5e",
+    "scripts/run-native-host-pilot.mjs": "be00fec82190b6c520182ed8fdb844f824e0cbd4da34fa7c0f6441b1c16b855b",
+    "scripts/run-native-revision.mjs": "7edc1e32be4ab31033b7b9de0ab685485c37b5febd980c3ce38d34f42aa36044",
+    "scripts/summarize-complex-context.mjs": "19cb7000a57873637e6dc61760c11388c3cbd49ca7d85628c2a8f3b098a119dc",
+    "scripts/native-fixture-repository.mjs": "d0bd17ae235b19c247d18bc813be061fab15ed65697a84f28fc7fe1b3fda1af1",
+    "scripts/claude-verification-capture.mjs": "938a872697fc42cba33699504233ea6e098233650aef7789e9eee99e1002c346",
+    "scripts/claude-evaluation-settings.mjs": "d98fbbf42af3ec91e09144e982e3c1cb1eaa6ad562efe3fbdec3aba903f3ed57"
+  },
+  "limits": [
+    "Only this synthetic fixture, model and fixed artifacts.",
+    "No pooling earlier diagnostic runs, including earlier Opus observer failures.",
+    "No mid-cohort edits. Cache measured but not controlled.",
+    "Coordinator-native child delegation only; fixed safety boundary preserved."
+  ],
+  "fixtureIsolation": "pinned-ancestry-only; empty init template; source fixture and known sibling synthetic trial roots denied by Host settings",
+  "verificationObservation": "fixed read-only packaged verifier wrapper with framed real process result",
+  "supersedes": "Original compaction cohort terminated at pair 2 candidate; no observations carried over.",
+  "status": "registered before first trial",
+  "prerequisite": {
+    "officialSandboxRuntime": "@anthropic-ai/sandbox-runtime@0.0.80",
+    "directSyntheticProbe": "passed current read/write and historical read denial",
+    "claudeCLIEnforcement": "Not established by standalone runtime probe; preserve actual Host failures as failures",
+    "noAdditionalEvaluatorFeatures": true
+  }
+}
