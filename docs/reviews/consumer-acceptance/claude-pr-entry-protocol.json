@@ -46,5 +46,12 @@
   "stop": "Stop on quality, execution or missing measurement failure; retain failed attempt. No replacement runs or retries to seek a favorable result.",
   "report": "All six inner and external oracles, fresh exact-HEAD independent review, both synthetic PR CI, all-context input/cache/output usage. Report paired values, medians, ranges and interventions; small differences do not prove superiority.",
   "runnerSha256": "da471a474a00553dfe50fe9f5814efbc9dd14d2b4e50077518bd76b5bf4a9ab1",
-  "status": "prepared-not-run"
+  "status": "stopped-after-two-pairs-priority-corrected",
+  "baselineRelease": {
+    "tag": "v0.5.9",
+    "commit": "8fd353a8fce7a46076190190f4ac1bf5621ab7bb",
+    "confirmedLatestAndMainOn": "2026-10-20"
+  },
+  "acceptanceScope": "Component experiment only. Both packages use the candidate runtime. Do not report these results as a full latest-v0.5.9 versus PR #1606 comparison, or as a v0.4 comparison. Product comparison baseline is the latest released v0.5.9 distribution; preserve any baseline execution failure instead of silently substituting the candidate runtime.",
+  "stopReason": "User clarified primary acceptance is sustained concurrent complex large Issues, not short component comparisons. Preserve four completed runs; do not complete remaining six or present two pairs as the planned five-pair acceptance."
 }
