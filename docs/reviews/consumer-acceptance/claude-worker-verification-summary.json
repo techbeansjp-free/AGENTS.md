@@ -580,5 +580,141 @@
       "sourceSha256": "fb736f6701a858db6d8a0ac753c82a7452f4341381f96c62dbd58acabaff4bd3"
     }
   ],
-  "candidateDisposition": "Coordination paragraph restored to baseline; retain independently validated product fixes."
+  "candidateDisposition": "Coordination paragraph restored to baseline; retain independently validated product fixes.",
+  "savedLogDiagnostic": {
+    "method": "Tool calls and results deduplicated by tool-use ID. Character counts are not token counts or causal performance estimates. No model reruns.",
+    "rows": [
+      {
+        "pair": 1,
+        "variant": "baseline",
+        "pr": 190,
+        "toolCalls": 32,
+        "byTool": {
+          "Bash": 29,
+          "Agent": 3
+        },
+        "toolOutputCharacters": 147636,
+        "largestToolOutputCharacters": 18123
+      },
+      {
+        "pair": 1,
+        "variant": "candidate",
+        "pr": 191,
+        "toolCalls": 27,
+        "byTool": {
+          "Bash": 24,
+          "Agent": 3
+        },
+        "toolOutputCharacters": 132160,
+        "largestToolOutputCharacters": 16771
+      },
+      {
+        "pair": 2,
+        "variant": "candidate",
+        "pr": 192,
+        "toolCalls": 32,
+        "byTool": {
+          "Bash": 29,
+          "Agent": 3
+        },
+        "toolOutputCharacters": 142039,
+        "largestToolOutputCharacters": 18059
+      },
+      {
+        "pair": 2,
+        "variant": "baseline",
+        "pr": 193,
+        "toolCalls": 32,
+        "byTool": {
+          "Bash": 29,
+          "Agent": 3
+        },
+        "toolOutputCharacters": 149221,
+        "largestToolOutputCharacters": 18128
+      },
+      {
+        "pair": 3,
+        "variant": "baseline",
+        "pr": 194,
+        "toolCalls": 31,
+        "byTool": {
+          "Bash": 28,
+          "Agent": 3
+        },
+        "toolOutputCharacters": 119430,
+        "largestToolOutputCharacters": 12406
+      },
+      {
+        "pair": 3,
+        "variant": "candidate",
+        "pr": 195,
+        "toolCalls": 31,
+        "byTool": {
+          "Bash": 28,
+          "Agent": 3
+        },
+        "toolOutputCharacters": 126042,
+        "largestToolOutputCharacters": 18128
+      },
+      {
+        "pair": 4,
+        "variant": "candidate",
+        "pr": 196,
+        "toolCalls": 30,
+        "byTool": {
+          "Bash": 27,
+          "Agent": 3
+        },
+        "toolOutputCharacters": 137929,
+        "largestToolOutputCharacters": 21778
+      },
+      {
+        "pair": 4,
+        "variant": "baseline",
+        "pr": 197,
+        "toolCalls": 32,
+        "byTool": {
+          "Bash": 29,
+          "Agent": 3
+        },
+        "toolOutputCharacters": 142849,
+        "largestToolOutputCharacters": 16766
+      },
+      {
+        "pair": 5,
+        "variant": "baseline",
+        "pr": 198,
+        "toolCalls": 29,
+        "byTool": {
+          "Bash": 26,
+          "Agent": 3
+        },
+        "toolOutputCharacters": 129622,
+        "largestToolOutputCharacters": 15038
+      },
+      {
+        "pair": 5,
+        "variant": "candidate",
+        "pr": 199,
+        "toolCalls": 37,
+        "byTool": {
+          "Bash": 34,
+          "Agent": 3
+        },
+        "toolOutputCharacters": 164765,
+        "largestToolOutputCharacters": 18063
+      }
+    ],
+    "largestCandidateObservation": {
+      "pr": 199,
+      "contexts": 4,
+      "implementationIntervention": 0,
+      "observedExtraWork": [
+        "Coordinator repeated integration to add commit attribution.",
+        "Reviewer reran tests after pipeline output filtering failed to preserve the tested process exit status.",
+        "Reviewer reread source after combined file read included a nonexistent glob and incomplete output."
+      ],
+      "conclusion": "No agent proliferation or endless loop observed. These observations do not prove that adding another instruction improves performance."
+    }
+  }
 }
