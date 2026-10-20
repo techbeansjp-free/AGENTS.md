@@ -865,3 +865,11 @@ Export records the fixture-transfer mode. Pair acceptance refuses older records 
 比較基準は最新公開v0.5.9の固定配布物とする。小規模は回帰確認に留める。主評価は同じ複雑な要求群について、複数worktree、同一進行役セッション、実装後の仕様変更・修復・再レビューまで含め、全参加者のusageと全Issueの完了時間・品質を比較する。生成行数を増やしただけのfixtureや短い2ファイル変更を、大規模性能の代替証拠にしない。PR作成前後を分けて記録し、進行役の共有コストを特定Issueへ恣意的に割り当てない。
 
 `claude-v059-initial-delivery.json`は初期2サービスの完走記録であり、大規模性能の合格証明ではない。既存の同一セッションを次要求へ再利用する準備では、元ownerのhash、observer、設定、HEAD、clean状態を照合し、実装bytesを変更せずpreviousへ保持する。通信なし・Host読取り専用・private tmpの隔離環境で、入力不整合時の無変更と正常な準備の2試験が成功した。実試験の準備はbase `20aabd7199a8537203d29530e504b3d6b474a9fb`まで完了。継続モデル実行・候補との比較はまだ未実施であり、性能受入は未完了。
+
+### 画面・HTTP境界を含む次の受入ケース（未実走）
+
+`test/fixtures/complex-issues/SYSTEM_REQUIREMENTS.md`は既存予約・請求の契約を維持して、二つのvertical Issueに画面、HTTP、永続化の責務を追加する。既存consumer-user-managementは用意済み実装の配布検証であり、AIによる複雑Issue実装の証拠には使わない。予約から請求・支払・返金・取消・再読込みまでを実画面で確認し、直接HTTPで権限・入力・冪等性・再起動保持も確認する。
+
+新oracleのLint・構文検査は成功。HTTPサーバー未実装の現状では、通信分離・Host読取り専用・private tmpの環境で起動失敗を検出した。これは負の確認だけで、正常系oracleの妥当性や製品の完走・性能を証明しない。ブラウザ正常系と追加の異常操作、継続変更、対比較は未実施。実装解答を評価側から提供しない。
+
+同一セッション初期2サービス→currency改訂の限定結果は`claude-v059-continuation.json`。実検証6件、独立レビュー、同HEADの合成Draft PR204の両CIが成功したが、保存ログからの観測復旧を要したため通常時間比較には使用しない。大規模評価の代わりにはしない。
