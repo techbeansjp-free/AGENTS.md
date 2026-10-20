@@ -857,3 +857,11 @@ Offline inspection found that the Claude runner used a full local clone, retaini
 The runner now initializes with an empty Git template and fetches only the pinned fixture commit ancestry, without tags or other branches. A regression with a Host template containing `objects/info/alternates` failed before the empty-template fix and passed afterward; previous answer commits and blobs cannot be read. The actual synthetic source had six references; the prepared repository had zero references, no alternates, and all six commit objects were ancestors of the fixed base (`pinned-fixture-transfer.json`). Existing sibling synthetic trial directories and the source fixture are also placed in the Claude read-denial settings; runtime enforcement of this new configuration still requires the next Host run and is not inferred from the Git test.
 
 Export records the fixture-transfer mode. Pair acceptance refuses older records without isolated pinned-ancestry transfer, even if numeric performance improves. Fourteen related tests and lint passed. This correction is evaluation infrastructure; it does not prove product performance improvement. No new external-model run was made for this investigation.
+
+### 2026-10-20: 主評価を大規模Issueの同時継続へ限定
+
+利用者の計測では、小規模5件は1時間以内にPRへ到達している。今回の主問題は、同一進行役が複数の複雑Issueを継続し、実装・仕様変更・PR後の是正を扱う際の長寿命Contextと総コストである。並行実行そのものの因果効果はこの観測では確定していない。1セッション1Issueへの変更は解決策としない。
+
+比較基準は最新公開v0.5.9の固定配布物とする。小規模は回帰確認に留める。主評価は同じ複雑な要求群について、複数worktree、同一進行役セッション、実装後の仕様変更・修復・再レビューまで含め、全参加者のusageと全Issueの完了時間・品質を比較する。生成行数を増やしただけのfixtureや短い2ファイル変更を、大規模性能の代替証拠にしない。PR作成前後を分けて記録し、進行役の共有コストを特定Issueへ恣意的に割り当てない。
+
+`claude-v059-initial-delivery.json`は初期2サービスの完走記録であり、大規模性能の合格証明ではない。既存の同一セッションを次要求へ再利用する準備では、元ownerのhash、observer、設定、HEAD、clean状態を照合し、実装bytesを変更せずpreviousへ保持する。通信なし・Host読取り専用・private tmpの隔離環境で、入力不整合時の無変更と正常な準備の2試験が成功した。実試験の準備はbase `20aabd7199a8537203d29530e504b3d6b474a9fb`まで完了。継続モデル実行・候補との比較はまだ未実施であり、性能受入は未完了。
