@@ -15,16 +15,17 @@ try{
  await page.goto(origin);
  const contains=async(selector,text)=>page.waitForFunction(([s,t])=>globalThis.document.querySelector(s)?.textContent.includes(t),[selector,text]);
  for(let i=1;i<=3;i++){
-  await page.locator('#sku').fill('seat');await page.locator('#quantity').fill('1');const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/reservations');await page.locator('#reserve').click();assert.equal((await response).status(),201);await page.waitForFunction(n=>globalThis.document.querySelectorAll('#reservations [data-id]').length===Math.min(n,2),i);await contains('#reservation-pagination',String(i));
+  await page.locator('#sku').fill('seat');await page.locator('#quantity').fill('1');const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/reservations');await page.locator('#reserve').click();assert.equal((await response).status(),201);await page.waitForFunction(n=>globalThis.document.querySelectorAll('#reservations [data-id]').length===Math.min(n,2),i);const listed=await context.request.get(origin+'/api/reservations');assert.equal((await listed.json()).total,i);
  }
- await page.locator('#reservation-next').click();await page.waitForFunction(()=>globalThis.document.querySelectorAll('#reservations [data-id]').length===1);
+ const firstPage=await page.locator('#reservation-pagination').textContent();assert.ok(firstPage?.trim());assert.ok((await page.locator('#invoice-pagination').innerText()).trim());await page.locator('#reservation-next').click();await page.waitForFunction(old=>{const text=globalThis.document.querySelector('#reservation-pagination')?.textContent;return text?.trim()&&text!==old;},firstPage);await page.waitForFunction(()=>globalThis.document.querySelectorAll('#reservations [data-id]').length===1);
  const row=page.locator('#reservations [data-id]').first(),id=await row.getAttribute('data-id');assert.ok(id);
- await row.getByRole('button',{name:'Invoice',exact:true}).click();await page.waitForFunction(()=>globalThis.document.querySelectorAll('#invoices [data-id]').length===1);
- const invoice=page.locator('#invoices [data-id]').first();
- await invoice.getByRole('button',{name:'Pay',exact:true}).click();await contains('#invoices','paid');
- await invoice.getByRole('button',{name:'Refund',exact:true}).click();await contains('#invoices','refunded');
+ const issuedResponse=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/invoices');await row.getByRole('button',{name:'Invoice',exact:true}).click();const issued=await issuedResponse;assert.equal(issued.status(),201);const issuedBody=await issued.json();assert.equal(issuedBody.reservationId,id);await page.waitForFunction(()=>globalThis.document.querySelectorAll('#invoices [data-id]').length===1);
+ const invoice=page.locator('#invoices [data-id]').first();assert.equal(await invoice.getAttribute('data-id'),issuedBody.id);
+ const invoicePath='/api/invoices/'+encodeURIComponent(issuedBody.id);
+ const paying=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===invoicePath+'/pay');await invoice.getByRole('button',{name:'Pay',exact:true}).click();const paid=await paying;assert.equal(paid.status(),200);assert.equal((await paid.json()).status,'paid');await contains('#invoices','paid');
+ const refunding=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===invoicePath+'/refund');await invoice.getByRole('button',{name:'Refund',exact:true}).click();const refunded=await refunding;assert.equal(refunded.status(),200);assert.equal((await refunded.json()).status,'refunded');await contains('#invoices','refunded');
  await row.getByRole('button',{name:'Cancel',exact:true}).click();await contains('#reservations','canceled');
- await page.reload();await contains('#invoices','refunded');await page.locator('#reservation-next').click();await contains('#reservations','canceled');
+ await page.reload();await contains('#invoices','refunded');const persisted=await context.request.get(origin+invoicePath);assert.equal(persisted.status(),200);assert.equal((await persisted.json()).status,'refunded');await page.locator('#reservation-next').click();await contains('#reservations','canceled');
  // Invalid SKU is a server rejection; fields must remain correctable.
  await page.locator('#sku').fill('missing');await page.locator('#quantity').fill('1');const rejected=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/reservations');await page.locator('#reserve').click();const failed=await rejected;assert.equal(failed.status(),404);await contains('#message',(await failed.json()).message);assert.equal(await page.locator('#sku').inputValue(),'missing');
  const inventory=await context.request.get(origin+'/api/inventory?sku=seat');assert.equal((await inventory.json()).available,8);

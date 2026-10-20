@@ -44,7 +44,12 @@ if(system){
  const toolsSource='/tmp/asc-browser-tools';
  const manifest=JSON.parse(fs.readFileSync(path.join(toolsSource,'node_modules/playwright-core/package.json')));
  if(manifest.name!=='playwright-core'||manifest.version!=='1.56.1')throw Error('Pinned browser driver required');
- fs.cpSync(toolsSource,tools,{recursive:true});
+ const driver=path.join(toolsSource,'node_modules/playwright-core');
+ const digest=base=>{const entries=[];const walk=directory=>{for(const name of fs.readdirSync(directory).sort()){const file=path.join(directory,name),stat=fs.lstatSync(file);if(stat.isDirectory())walk(file);else if(stat.isFile())entries.push([path.relative(base,file),createHash('sha256').update(fs.readFileSync(file)).digest('hex')]);else throw Error('Nonregular browser driver asset');}};walk(base);return createHash('sha256').update(JSON.stringify(entries)).digest('hex');};
+ const pinned='9a8376e2bca8e78dddbb3a54759d9adfcd860826d698f15d54966a9d9bc57556';
+ if(digest(driver)!==pinned)throw Error('Pinned browser driver bytes changed');
+ fs.mkdirSync(path.join(tools,'node_modules'),{recursive:true});const copied=path.join(tools,'node_modules/playwright-core');fs.cpSync(driver,copied,{recursive:true});
+ if(digest(copied)!==pinned)throw Error('Copied browser driver bytes changed');
  commands.push([process.execPath,'complex/oracle/http.mjs','complex'],[process.execPath,'complex/oracle/browser.mjs','complex',path.join(tools,'node_modules/playwright-core/index.mjs')]);
 }
 // Synthetic fixture only: exact protected settings paths, never implementation paths.

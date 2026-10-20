@@ -873,3 +873,11 @@ Export records the fixture-transfer mode. Pair acceptance refuses older records 
 新oracleのLint・構文検査は成功。HTTPサーバー未実装の現状では、通信分離・Host読取り専用・private tmpの環境で起動失敗を検出した。これは負の確認だけで、正常系oracleの妥当性や製品の完走・性能を証明しない。ブラウザ正常系と追加の異常操作、継続変更、対比較は未実施。実装解答を評価側から提供しない。
 
 同一セッション初期2サービス→currency改訂の限定結果は`claude-v059-continuation.json`。実検証6件、独立レビュー、同HEADの合成Draft PR204の両CIが成功したが、保存ログからの観測復旧を要したため通常時間比較には使用しない。大規模評価の代わりにはしない。
+
+### System pilot: 実装後のHostブラウザ制約を確認
+
+`claude-v059-system-pilot.json`は最新v0.5.9による画面/HTTP/永続化の2 Issue実装。約940秒、3,939,512 processed tokens（usage整合済み）。独立レビューで検出したinvoice再試行の不具合を進行役が修正し、新Contextの再レビューを受けた。実装への評価側介入なし。
+
+6つのservice/HTTPコマンドは成功したが、Claude sandbox内のChromeがsocket作成を拒否され、browserコマンドが失敗。元契約の自律完走・PR提出成功とは判定しない。成果を保持し、資格情報なし・通信分離・読取り専用ソースの別bwrap環境で強化したbrowser oracleを実行すると成功した。これは切り分け結果であり、元失敗や時間範囲を上書きしない。次の比較を始める前に、両版で同じブラウザ実行責務と権限境界を固定する必要がある。
+
+検査の独立レビューを受け、Invoice/Pay/Refundの実HTTP応答・対象ID・reload後GETを追加し、総件数のDOM配置を決め打ちしないページ表示検査へ修正。driverは必要packageだけをコピーし、コピー前後で固定hashを照合する。既存試験を新しいoracle条件の合格へ読み替えない。
