@@ -1,0 +1,45 @@
+"""Offline synthetic-only diagnostic. Never estimates missing usage from streamed output."""
+import json, pathlib, sys, hashlib
+FIELDS=('input_tokens','output_tokens','cache_read_input_tokens','cache_creation_input_tokens')
+def analyze(label, root):
+    root=pathlib.Path(root)
+    setup=json.loads((root/'setup.json').read_text())
+    assert setup['repository']=='adachi-tatsuru/asc-public-synthetic-eval-20261016'
+    usage=json.loads((root/'usage.json').read_text())['usage']
+    assert usage['complete'] and usage['reconciledWithHostModelUsage']
+    parent=next(t for t in usage['threads'] if t['id']==setup['session'])
+    directory=''.join(c if c.isascii() and c.isalnum() else '-' for c in setup['worktree'])
+    transcript=pathlib.Path.home()/'.claude/projects'/directory/(setup['session']+'.jsonl')
+    messages={}; terminal=set(); tools={}
+    for line in transcript.read_text().splitlines():
+        record=json.loads(line)
+        if record.get('type')!='assistant':continue
+        assert record['sessionId']==setup['session']
+        m=record['message']; mid=m['id']; u=m['usage']
+        assert all(type(u.get(k)) is int and u[k]>=0 for k in FIELDS)
+        row=messages.setdefault(mid,dict.fromkeys(FIELDS,0))
+        for k in FIELDS:row[k]=max(row[k],u[k])
+        if m.get('stop_reason'):terminal.add(mid)
+        bucket=tools.setdefault(mid,{})
+        for c in m.get('content',[]):
+            if c.get('type')=='tool_use':bucket[c['id']]=c
+    assert set(messages)<=terminal
+    totals={k:sum(m[k] for m in messages.values()) for k in FIELDS}
+    assert totals==parent['usage']
+    order=list(messages); worker=[]; review=[]
+    for index,mid in enumerate(order):
+        for t in tools[mid].values():
+            if t['name'] not in ('Agent','Task'):continue
+            (review if t.get('input',{}).get('description')=='independent_review' else worker).append(index)
+    assert worker and review and min(worker)<min(review)
+    phases={name:{'messages':0,'usage':dict.fromkeys(FIELDS,0)} for name in ('before-first-worker','workers-to-first-review','review-and-finalization')}
+    for index,mid in enumerate(order):
+        phase='before-first-worker' if index<min(worker) else 'workers-to-first-review' if index<min(review) else 'review-and-finalization'
+        row=phases[phase];row['messages']+=1
+        for k in FIELDS:row['usage'][k]+=messages[mid][k]
+    for row in phases.values():row['processedTokens']=sum(row['usage'].values())
+    assert sum(row['processedTokens']for row in phases.values())==sum(parent['usage'].values())
+    return {'label':label,'session':setup['session'],'transcriptSha256':hashlib.sha256(transcript.read_bytes()).hexdigest(),'parentProcessedTokens':sum(parent['usage'].values()),'otherContextsProcessedTokens':usage['observedProcessedTokens']-sum(parent['usage'].values()),'allContextsProcessedTokens':usage['observedProcessedTokens'],'phases':phases}
+if __name__=='__main__':
+    runs=[analyze(*item.split('=',1))for item in sys.argv[1:]]
+    print(json.dumps({'schema':'asc-parent-phase-usage/v1','method':'Deduplicate authoritative parent transcript messages by ID and take maximum cumulative usage fields, as in claudeUsage. Reconcile exactly to existing complete all-context result. Phase boundaries are first native worker and first independent_review tool message.','limitations':['Phase attribution locates when tokens were processed, not which earlier content caused them.','workers-to-first-review includes dispatch, waiting, integration and any repair; review-and-finalization includes follow-up.','Cache tokens are processed tokens, not monetary cost.','Different diagnostic candidates are not a matched causal comparison; do not pool them with v3 baseline.'],'runs':runs},indent=2))

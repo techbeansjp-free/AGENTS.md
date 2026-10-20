@@ -1,0 +1,33 @@
+{
+  "scope": "gpt-6-sol availability failure before implementation",
+  "model": "gpt-6-sol",
+  "effort": "medium",
+  "cliVersion": "0.153.4",
+  "authentication": "ChatGPT",
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 6.687581326
+  },
+  "errorStatus": 400,
+  "error": "The gpt-6-sol model is not supported when using Codex with a ChatGPT account.",
+  "metadataWarning": true,
+  "qualityAccepted": false,
+  "performanceAccepted": false,
+  "rootCause": "Unresolved: local model cache lists this model, but this invocation was rejected. Cache presence is not proof of account eligibility.",
+  "followup": {
+    "cliVersion": "0.155.0-alpha.16.3",
+    "source": "existing VS Code bundled CLI",
+    "model": "gpt-6-sol",
+    "effort": "medium",
+    "authentication": "same ChatGPT authentication",
+    "workspace": "empty disposable directory",
+    "sandbox": "read-only",
+    "toolsUsed": false,
+    "result": "READY",
+    "exit": 0,
+    "inputTokens": 15764,
+    "outputTokens": 5,
+    "interpretation": "Availability succeeds with newer CLI; old invocation rejection does not establish account-wide unavailability. Sustained fixture completion remains unproven."
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "accepted": false,
+  "freshPairs": 0,
+  "reusedControl": true,
+  "baselinePr": 66,
+  "candidatePr": 69,
+  "baselineSeconds": 436.177,
+  "candidateSeconds": 405.051,
+  "baselineTokens": 2192739,
+  "candidateTokens": 1715462,
+  "secondsDifference": -31.126000000000033,
+  "tokensDifference": -477277,
+  "scope": "Promising diagnostic only. Fresh alternating paired trials and continuation/recovery acceptance remain required."
+}

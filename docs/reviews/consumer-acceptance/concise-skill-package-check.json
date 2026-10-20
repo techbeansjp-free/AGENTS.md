@@ -1,0 +1,20 @@
+{
+  "packageVersion": "0.5.900-alpha.59",
+  "packageSha256": "615e2f1aa1e75a49fa34efba2f9b2503bb4d05b7448a983b38c790a51011d103",
+  "isolation": {
+    "network": "unshared",
+    "userHome": "not mounted",
+    "sourceCheckout": "not mounted"
+  },
+  "scope": "Offline packaged asset installation and launch only; not model performance acceptance.",
+  "result": {
+    "passed": true,
+    "version": "0.5.900-alpha.59",
+    "ownerFilePreserved": true,
+    "consumerLauncherAndGuidance": true,
+    "allReferencesMatch": true,
+    "allSourceHashesMatch": true
+  },
+  "checkScriptSha256": "723e3324012473bb80133f0084318e2238470d5ec6568c06c81ec196ae1bb9f6",
+  "priorCheck": "alpha58 exact source/installed Skill comparison failed because launcher paths intentionally transform; inspection also found wording replacement anchor removed by compression. Restored anchor before alpha59. No failed check counted as passed."
+}

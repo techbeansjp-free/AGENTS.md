@@ -51,7 +51,7 @@ export class Github {
       `git@github.com:${this.repository}.git`,`${head}:refs/heads/${this.branch}`],this.repo);
     demand(this.command(['git','rev-parse','HEAD'],this.repo)===head,'HEAD changed during push');
     const url=this.command(['gh','pr','create','--repo',this.repository,'--base',this.baseBranch,'--head',this.branch,'--draft',
-      '--title','Isolated v0.5 Node evaluation','--body',`Isolated evaluation for #${this.issue}. Controller verification and independent fresh review. Draft only; no merge or release.`]);
+      '--title',`Changes for #${this.issue}`,'--body',`Changes for #${this.issue}.\n\nSubmitted commit: ${head}\n\nDraft for review; no merge or release. Verification and review results must be assessed for this commit.`]);
     const match=url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)$/);
     demand(match && match[1]===this.repository,'Unexpected PR response');const pr=Number(match[2]);
     this.assertPr(this.api(`repos/${this.repository}/pulls/${pr}`));return pr;
@@ -60,6 +60,7 @@ export class Github {
     demand(timeout===null||(Number.isSafeInteger(timeout)&&timeout>=0),'Invalid CI observation timeout');
     demand(Number.isSafeInteger(interval)&&interval>=0,'Invalid CI observation interval');
     const started=Date.now(),deadline=timeout===null?Infinity:started+timeout,transportFailures=[];
+    let consecutiveTransportFailures=0;
     do {
       try {
       const data=this.api(`repos/${this.repository}/pulls/${pr}`);this.assertPr(data);
@@ -90,13 +91,15 @@ export class Github {
           }
         }
       }
+        consecutiveTransportFailures=0;
       } catch(error) {
         // Only retry read-only observation on known transport failures. Never
         // retry mutation, authentication, invalid JSON, CI or identity failures.
         const stderr=String(error?.stderr??'');
         const transient=['ETIMEDOUT','ECONNRESET','EAI_AGAIN'].includes(error?.code)||
           /dial tcp [^\n]*i\/o timeout|TLS handshake timeout|connection reset by peer|temporary failure in name resolution/i.test(stderr);
-        if(!transient||transportFailures.length>=2||Date.now()>=deadline)throw error;
+        if(!transient||consecutiveTransportFailures>=2||Date.now()>=deadline)throw error;
+        consecutiveTransportFailures++;
         transportFailures.push({reason:'transient-read-transport',elapsedMs:Date.now()-started});
       }
       if(Date.now()>=deadline)break;await sleep(Math.min(interval,deadline-Date.now()));

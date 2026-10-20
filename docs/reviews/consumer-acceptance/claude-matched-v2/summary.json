@@ -1,0 +1,53 @@
+{
+  "scope": "Stopped Claude small matched cohort; no five-pair acceptance",
+  "order": [
+    "B",
+    "C",
+    "C",
+    "B",
+    "B",
+    "C",
+    "C",
+    "B",
+    "B",
+    "C"
+  ],
+  "runnerSha256": "dea3bca0b5117a99500cc1fd0146d3d7dc5d23efec7eba49bf9341d5381ea0f6",
+  "accepted": false,
+  "stopReason": "failed or incomplete measurement; no replacement",
+  "runs": [
+    {
+      "index": 1,
+      "variant": "B",
+      "status": 0,
+      "record": "run-1.json"
+    },
+    {
+      "index": 2,
+      "variant": "C",
+      "status": 0,
+      "record": "run-2.json"
+    },
+    {
+      "index": 3,
+      "variant": "C",
+      "status": 0,
+      "record": "run-3.json"
+    },
+    {
+      "index": 4,
+      "variant": "B",
+      "status": 1,
+      "failure": {
+        "error": "No unambiguous completed independent review of submitted HEAD",
+        "seconds": 64.556077929
+      },
+      "process": {
+        "status": 0,
+        "signal": null,
+        "seconds": 64.55061129399999
+      },
+      "interpretation": "Reviewer returned short Git commit; original evaluator required full hash. No delivery occurred. Original failure retained; later evaluator correction is not a successful trial."
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "pairs": 5,
+  "qualityPassed": true,
+  "measurementComplete": true,
+  "requiredPairs": 5,
+  "accepted": false,
+  "scope": "This fixed synthetic fixture and model only; no general autonomous-development guarantee.",
+  "baseline": {
+    "maxSeconds": 114.19597238200001,
+    "maxProcessedTokens": 453289,
+    "medianSeconds": 94.607729482,
+    "medianProcessedTokens": 371761
+  },
+  "candidate": {
+    "maxSeconds": 104.624679589,
+    "maxProcessedTokens": 415268,
+    "medianSeconds": 101.42998695399999,
+    "medianProcessedTokens": 362078
+  },
+  "pairedDifferences": [
+    {
+      "pair": 1,
+      "seconds": 6.340619074000003,
+      "processedTokens": 40872
+    },
+    {
+      "pair": 2,
+      "seconds": -15.765807832000007,
+      "processedTokens": -111557
+    },
+    {
+      "pair": 3,
+      "seconds": 20.972310120999992,
+      "processedTokens": 57245
+    },
+    {
+      "pair": 4,
+      "seconds": 6.82225747199999,
+      "processedTokens": -21677
+    },
+    {
+      "pair": 5,
+      "seconds": -23.728172469,
+      "processedTokens": -17600
+    }
+  ],
+  "pairsImprovingBoth": 2,
+  "worstCaseRegression": false,
+  "requiresWorstCaseAssessment": false,
+  "runnerSha256": "761f4747fd761129cb8aa41430ef461d66f6fbadb7cba63c30de4e4a99162760"
+}

@@ -136,6 +136,23 @@ test('standard worktree creation preserves source edits and never repurposes bra
 });
 
 
+
+test('worktree batch materialization preserves binary bytes, empty files and executable modes',t=>{
+ const f=fixture(t),expected=new Map();
+ for(let i=0;i<100;i++){const name=`nested/file-${i}.bin`,bytes=Buffer.from([0,10,13,255,i]);expected.set(name,bytes);fs.mkdirSync(path.join(f.source,'nested'),{recursive:true});fs.writeFileSync(path.join(f.source,name),bytes);}
+ expected.set('empty',Buffer.alloc(0));expected.set('run.sh',Buffer.from('#!/bin/sh\nexit 0\n'));
+ expected.set('large.bin',Buffer.alloc(12_000_001,193));
+ for(const [name,bytes] of expected)fs.writeFileSync(path.join(f.source,name),bytes);
+ f.git('add','.');f.git('update-index','--chmod=+x','run.sh');f.git('commit','-qm','mixed materialization');
+ const original=Controller.prototype.gitInput,requests=[];
+ Controller.prototype.gitInput=function(input,...args){if(args[0]==='cat-file')requests.push(args);return original.call(this,input,...args);};
+ let created;try{created=createWorktree(f.source,{issue:9009,type:'test',slug:'mixed-blobs'});}finally{Controller.prototype.gitInput=original;}
+ for(const [name,bytes] of expected)assert.deepEqual(fs.readFileSync(path.join(created.repo,name)),bytes,name);
+ if(process.platform!=='win32')assert(fs.statSync(path.join(created.repo,'run.sh')).mode&0o111);
+ assert(requests.length>0&&requests.length<10,'small-file Git reads must not grow one process per file');
+ assert.equal(execFileSync('git',['-C',created.repo,'diff','--name-only','HEAD'],{encoding:'utf8'}),'');
+});
+
 test('worktree creation does not execute source filters or accept an aliased parent',{skip:process.platform==='win32'},t=>{
  const f=fixture(t),marker=path.join(f.root,'executed');
  fs.writeFileSync(path.join(f.source,'.gitattributes'),'AGENTS.md filter=trap\n');f.git('add','.gitattributes');f.git('commit','-qm','filter declaration');

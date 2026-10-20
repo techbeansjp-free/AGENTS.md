@@ -1,0 +1,56 @@
+{
+  "head": "9182d43a19bd13103c5f45f8c52e1a1ee7c0d1b7",
+  "scope": "Synthetic candidate pilot only; provider-bound counts. Tool output bytes are not tokens. Includes failed review and repair, not outer evaluator work. No causal performance claim.",
+  "threads": [
+    {
+      "id": "01a1526a-4714-7550-be39-7a6e3b259929",
+      "role": "coordinator",
+      "observedModelResponses": 40,
+      "maxResponseInputTokens": 53492,
+      "toolOutputBytes": 92114,
+      "maxToolOutputBytes": 12546,
+      "processedTokens": 1505932,
+      "observedToolCalls": 39
+    },
+    {
+      "id": "01a1526a-e751-73a1-9166-e217abc57e86",
+      "role": "reservation_9001",
+      "observedModelResponses": 8,
+      "maxResponseInputTokens": 30046,
+      "toolOutputBytes": 23345,
+      "maxToolOutputBytes": 10435,
+      "processedTokens": 197412,
+      "observedToolCalls": 7
+    },
+    {
+      "id": "01a1526a-f8bf-7bb2-bf93-5b72770f6924",
+      "role": "billing_9002",
+      "observedModelResponses": 9,
+      "maxResponseInputTokens": 27244,
+      "toolOutputBytes": 9816,
+      "maxToolOutputBytes": 6227,
+      "processedTokens": 221268,
+      "observedToolCalls": 8
+    },
+    {
+      "id": "01a1526d-bb56-7b40-854c-a8f452b53faf",
+      "role": "independent_review",
+      "observedModelResponses": 7,
+      "maxResponseInputTokens": 34616,
+      "toolOutputBytes": 61352,
+      "maxToolOutputBytes": 24439,
+      "processedTokens": 189229,
+      "observedToolCalls": 6
+    },
+    {
+      "id": "01a15270-1feb-7823-a0a9-032e5a4d0d6b",
+      "role": "independent_review_2",
+      "observedModelResponses": 8,
+      "maxResponseInputTokens": 37775,
+      "toolOutputBytes": 64931,
+      "maxToolOutputBytes": 21421,
+      "processedTokens": 236019,
+      "observedToolCalls": 7
+    }
+  ]
+}

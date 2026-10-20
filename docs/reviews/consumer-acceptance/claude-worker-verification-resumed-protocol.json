@@ -1,0 +1,16 @@
+{
+  "parentProtocol": "claude-worker-verification-protocol.json",
+  "status": "New cohort after leading-newline normalization; prior stopped cohort excluded",
+  "unchanged": [
+    "baseline/candidate packages",
+    "fixture",
+    "model/effort",
+    "order",
+    "quality oracle",
+    "early stop",
+    "acceptance"
+  ],
+  "observerSha256": "695c5336d3c6bc7d7a4895a154a3536196eda9c597e0f7a1f3c5d5f7aee246b0",
+  "priorCohort": "claude-worker-verification-stopped.json",
+  "priorRecoveryIsNotPerformanceAcceptance": true
+}

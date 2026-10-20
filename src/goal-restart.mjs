@@ -49,7 +49,7 @@ export function prepareGoalRestart(input){
  const source=c.observeTarget({allowEmpty:true});
  const fd=fs.openSync(restart.resultFile,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0));let previous;
  try{const stat=fs.fstatSync(fd);demand(stat.isFile()&&stat.nlink===1&&stat.size<=16*1024*1024,'Unsafe restart result');previous=JSON.parse(fs.readFileSync(fd));}finally{fs.closeSync(fd);}
- demand(Array.isArray(previous.units)&&previous.units.length<=64,'Prior unit results required');
+ demand(Array.isArray(previous.units),'Prior unit results required');
  // Reject invalid saved input before creating a destination that blocks retry.
  const priorIds=new Set();
  for(const unit of previous.units){
@@ -92,7 +92,7 @@ export async function restartGoal(input,options={}){
    if(proposal.status==='needs-owner')return save({...proposal,status:'owner-work-required',units:[],work:{work:'clarify',actor:'owner',questions:proposal.questions}});
    next=adoptProposal(next,proposal);
    next.unitCandidates=candidateReferences(prepared.previous,compileGoal(next.goal).plan);
-   const plannerContexts=proposal.calls.map(call=>call.context);demand(plannerContexts.every(c=>typeof c==='string'&&c),'Proposal context missing');
+   const plannerContexts=proposal.calls.filter(call=>!(call.status==='failed'&&call.code==='ASC_PROVIDER_CAPACITY'&&call.context===null)).map(call=>call.context);demand(plannerContexts.every(c=>typeof c==='string'&&c),'Proposal context missing');
    contexts=[...contexts,...plannerContexts];
   }
   return save(await runGoal(next,{...options,executionBudget:budget,priorContexts:contexts}));

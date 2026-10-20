@@ -1,0 +1,153 @@
+{
+  "scope": "Three diagnostic pilots, not controlled performance comparison or PR/CI acceptance. Same model gpt-5.6-sol medium. First two intentionally retained failures; final distribution fixes stdin pipes. Review verdict and usage are observed; benchmark driver setup and external evaluation cost excluded.",
+  "trials": [
+    {
+      "stage": "original boundary",
+      "status": 0,
+      "signal": null,
+      "seconds": 97.789374662,
+      "base": "9b1aa185023f0055b6215bfb604b079fb06beecc",
+      "head": "9b1aa185023f0055b6215bfb604b079fb06beecc",
+      "changedPaths": "greeting.mjs",
+      "clean": false,
+      "startPassed": false,
+      "reviewPassed": true,
+      "localCommitCreated": false,
+      "driverImplementationEdits": 0,
+      "publication": false,
+      "usage": {
+        "rootId": "01a15115-d4fb-77d1-9714-1a3342225493",
+        "observedThreads": 2,
+        "missingUsage": [],
+        "measured": {
+          "inputTokens": 376902,
+          "cachedInputTokens": 342656,
+          "outputTokens": 6691
+        },
+        "observedProcessedTokens": 383593,
+        "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+        "calls": [
+          {
+            "id": "01a15115-d4fb-77d1-9714-1a3342225493",
+            "parent": null,
+            "usage": {
+              "input_tokens": 310837,
+              "cached_input_tokens": 280064,
+              "output_tokens": 5665
+            }
+          },
+          {
+            "id": "01a15116-41a1-7e01-8236-ae06875f52de",
+            "parent": "01a15115-d4fb-77d1-9714-1a3342225493",
+            "usage": {
+              "input_tokens": 66065,
+              "cached_input_tokens": 62592,
+              "output_tokens": 1026
+            }
+          }
+        ]
+      },
+      "postRunVerification": null
+    },
+    {
+      "stage": "explicit synthetic Git grant",
+      "status": 0,
+      "signal": null,
+      "seconds": 63.952105474999996,
+      "base": "08be0f6da799f777740b2c88cc7adc865e4bf315",
+      "head": "3a27a7fe49884d275d0be92236fd0da61176f804",
+      "changedPaths": "greeting.mjs",
+      "clean": true,
+      "startPassed": false,
+      "reviewPassed": true,
+      "localCommitCreated": true,
+      "driverImplementationEdits": 0,
+      "publication": false,
+      "usage": {
+        "rootId": "01a1511a-9bb4-7003-b2c0-44aa22d173ef",
+        "observedThreads": 2,
+        "missingUsage": [],
+        "measured": {
+          "inputTokens": 312185,
+          "cachedInputTokens": 281472,
+          "outputTokens": 3552
+        },
+        "observedProcessedTokens": 315737,
+        "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+        "calls": [
+          {
+            "id": "01a1511a-9bb4-7003-b2c0-44aa22d173ef",
+            "parent": null,
+            "usage": {
+              "input_tokens": 227768,
+              "cached_input_tokens": 201344,
+              "output_tokens": 2092
+            }
+          },
+          {
+            "id": "01a1511b-0d82-79d2-b910-8a7961626c65",
+            "parent": "01a1511a-9bb4-7003-b2c0-44aa22d173ef",
+            "usage": {
+              "input_tokens": 84417,
+              "cached_input_tokens": 80128,
+              "output_tokens": 1460
+            }
+          }
+        ]
+      },
+      "postRunVerification": null
+    },
+    {
+      "stage": "stdin fix and explicit synthetic Git grant",
+      "status": 0,
+      "signal": null,
+      "seconds": 60.839024466999994,
+      "base": "7f9f39576ba1865be04870f1bba8c83af103e28e",
+      "head": "f616662f66067251aeb47fdf2db2bb5910aaefff",
+      "changedPaths": "greeting.mjs",
+      "clean": true,
+      "startPassed": true,
+      "reviewPassed": true,
+      "localCommitCreated": true,
+      "driverImplementationEdits": 0,
+      "publication": false,
+      "usage": {
+        "rootId": "01a1511c-3dfc-72a3-93af-8f406b66a781",
+        "observedThreads": 2,
+        "missingUsage": [],
+        "measured": {
+          "inputTokens": 272438,
+          "cachedInputTokens": 242048,
+          "outputTokens": 3533
+        },
+        "observedProcessedTokens": 275971,
+        "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+        "calls": [
+          {
+            "id": "01a1511c-3dfc-72a3-93af-8f406b66a781",
+            "parent": null,
+            "usage": {
+              "input_tokens": 205553,
+              "cached_input_tokens": 178816,
+              "output_tokens": 2400
+            }
+          },
+          {
+            "id": "01a1511c-9ea7-7b32-9716-3ae16d97679f",
+            "parent": "01a1511c-3dfc-72a3-93af-8f406b66a781",
+            "usage": {
+              "input_tokens": 66885,
+              "cached_input_tokens": 63232,
+              "output_tokens": 1133
+            }
+          }
+        ]
+      },
+      "postRunVerification": {
+        "head": "f616662f66067251aeb47fdf2db2bb5910aaefff",
+        "passed": true,
+        "exit": 0
+      }
+    }
+  ]
+}

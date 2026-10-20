@@ -1,0 +1,72 @@
+{
+  "scope": "Claude Code 2.1.282 Bash filesystem synthetic probe only",
+  "passed": true,
+  "workspaceWrite": true,
+  "externalDummyUnchanged": true,
+  "toolResult": "PASS",
+  "settings": {
+    "sandboxEnabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "allowedTool": "Bash(python3 *)",
+    "model": "sonnet"
+  },
+  "initialAttempt": "dontAsk denied Bash before execution; not isolation evidence",
+  "durationMilliseconds": 7279,
+  "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 3305,
+    "cache_read_input_tokens": 29314,
+    "output_tokens": 420,
+    "output_tokens_details": {
+      "thinking_tokens": 0
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 3305,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 73,
+        "cache_read_input_tokens": 16112,
+        "cache_creation_input_tokens": 395,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 395
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-sonnet-5": {
+      "inputTokens": 4,
+      "outputTokens": 420,
+      "cacheReadInputTokens": 29314,
+      "cacheCreationInputTokens": 3305,
+      "webSearchRequests": 0,
+      "costUSD": 0.0232908,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "transcriptSha256": "b7f63c70f694dcca39cf79e670a90c9163151047434f693cd92115c15db11d0c",
+  "limitations": [
+    "Network not probed",
+    "Subagents not probed",
+    "Not complex Issue, Draft PR, CI or performance acceptance"
+  ],
+  "reference": "https://code.claude.com/docs/en/sandboxing"
+}

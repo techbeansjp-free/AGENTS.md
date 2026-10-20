@@ -1,0 +1,152 @@
+{
+  "source": "claude-native-child-result.json",
+  "scope": "Diagnostic, not causal performance evidence",
+  "parentCalls": [
+    {
+      "tool": "Bash",
+      "description": "Read packaged ASC skill documentation"
+    },
+    {
+      "tool": "Bash",
+      "description": "Read owner contract JSON"
+    },
+    {
+      "tool": "Bash",
+      "description": "Read requirements and revision docs"
+    },
+    {
+      "tool": "Bash",
+      "description": "List complex directory structure"
+    },
+    {
+      "tool": "Bash",
+      "description": "Show ASC CLI help"
+    },
+    {
+      "tool": "Bash",
+      "description": "List existing worktrees"
+    },
+    {
+      "tool": "Bash",
+      "description": "Show ASC CLI help using absolute path"
+    },
+    {
+      "tool": "Bash",
+      "description": "Run ASC start command to check context and notices"
+    },
+    {
+      "tool": "Bash",
+      "description": "Read reservation oracle"
+    },
+    {
+      "tool": "Bash",
+      "description": "Read billing oracle"
+    },
+    {
+      "tool": "Bash",
+      "description": "Read remaining oracle files"
+    },
+    {
+      "tool": "Bash",
+      "description": "Check file sizes"
+    },
+    {
+      "tool": "Bash",
+      "description": "Diff previous vs current service files"
+    },
+    {
+      "tool": "Bash",
+      "description": "Run baseline (non-revised) oracle checks"
+    },
+    {
+      "tool": "Bash",
+      "description": "Create worktree for Issue 9006 reservation"
+    },
+    {
+      "tool": "Bash",
+      "description": "Create worktree for Issue 9007 billing"
+    },
+    {
+      "tool": "Agent",
+      "description": "Issue 9006 reservation currency revision"
+    },
+    {
+      "tool": "Agent",
+      "description": "Issue 9007 billing currency revision"
+    },
+    {
+      "tool": "Bash",
+      "description": "no-op placeholder"
+    },
+    {
+      "tool": "Bash",
+      "description": "placeholder, no polling"
+    },
+    {
+      "tool": "Bash",
+      "description": "Check coordinator worktree status before integration"
+    },
+    {
+      "tool": "Bash",
+      "description": "Cherry-pick reservation currency commit"
+    },
+    {
+      "tool": "Bash",
+      "description": "Cherry-pick billing currency commit"
+    },
+    {
+      "tool": "Bash",
+      "description": "Run full oracle suite on integrated tree"
+    },
+    {
+      "tool": "Bash",
+      "description": "Show full diff vs base for review package"
+    },
+    {
+      "tool": "Bash",
+      "description": "Confirm final HEAD commit"
+    },
+    {
+      "tool": "Bash",
+      "description": "Read the review reference doc"
+    },
+    {
+      "tool": "Agent",
+      "description": "independent_review"
+    },
+    {
+      "tool": "Bash",
+      "description": "Run required worktree-verify check against owner contract"
+    }
+  ],
+  "threads": [
+    {
+      "id": "790deea7-6e05-4392-a8fe-544ee8defa1a",
+      "messages": 25,
+      "processedTokens": 1291047
+    },
+    {
+      "id": "aa6b7ee67e83f0703",
+      "messages": 12,
+      "processedTokens": 419561
+    },
+    {
+      "id": "a97ad9c6dabb4e9d9",
+      "messages": 13,
+      "processedTokens": 441267
+    },
+    {
+      "id": "a65a01f50ad1126a3",
+      "messages": 8,
+      "processedTokens": 211528
+    }
+  ],
+  "observations": [
+    "Native parent-to-child delegation worked; no separate CLI workers were launched.",
+    "Parent did not read coordination reference; new batching delegation instruction was not transmitted to workers.",
+    "Parent read oracle files and previous/current service diff before delegation, and ran baseline non-revised checks.",
+    "Parent issued two no-op waiting calls.",
+    "Performance effect of transmitting batching is not established, because that behavior was not adopted."
+  ],
+  "nextAction": "Investigate why current-host entry/reference selection does not reliably apply existing delegation guidance before adding more instructions or rerunning unchanged packages."
+}

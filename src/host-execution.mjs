@@ -32,7 +32,11 @@ export function hostExecution(controller,configuration,authorityRoots=[]){
   const id=randomUUID(),message={schema:'asc-host-execution/v1',id,operation,payload,authorityRoots:roots};
   const input=JSON.stringify(message)+'\n';demand(Buffer.byteLength(input)<=8*1024*1024,'Host request limit exceeded');
   const decode=(code,stdout,stderr='')=>{
-   if(code!==0)throw Object.assign(Error(`Host execution failed (exit=${code})`),{hostStderr:String(stderr).slice(-8192)});
+   if(code!==0){
+    let failure;try{failure=JSON.parse(stdout);}catch{ /* Ordinary transport failure. */ }
+    const capacity=operation==='agent'&&code===1&&failure?.schema===message.schema&&failure.id===id&&failure.operation===operation&&failure.result===undefined&&failure.error?.code==='ASC_PROVIDER_CAPACITY';
+    throw Object.assign(Error(`Host execution failed (exit=${code})`),{hostStderr:String(stderr).slice(-8192),...(capacity?{code:'ASC_PROVIDER_CAPACITY'}:{})});
+   }
    let response;try{response=JSON.parse(stdout);}catch{throw Error('Host response missing or invalid');}
    demand(response?.schema===message.schema&&response.id===id&&response.operation===operation,'Host response binding mismatch');
    demand(response.result&&typeof response.result==='object','Host result missing');return response.result;

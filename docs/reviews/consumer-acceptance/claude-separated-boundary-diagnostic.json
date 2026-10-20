@@ -1,0 +1,23 @@
+{
+  "scope": "Separate current root from historical temporary trees; evaluation-only diagnostic",
+  "status": "not executed: provider weekly usage limit",
+  "apiErrorStatus": 429,
+  "terminalReason": "api_error",
+  "reportedReset": "2026-10-21 10:00 Asia/Tokyo",
+  "process": {
+    "status": 1,
+    "seconds": 1.894582049921155
+  },
+  "modelUsage": {},
+  "sandboxVerified": false,
+  "retryPerformed": false,
+  "fallbackPerformed": false,
+  "implementationStatus": "Unwired helper withdrawn after review. Two deterministic tests passed locally and in read-only network-disabled bwrap, but covered settings shape only, not actual Claude enforcement.",
+  "reviewFinding": "Lexical path separation does not establish realpath separation in presence of symlinks. No runtime integration or authority change was made.",
+  "requiredBeforeAdoption": [
+    "Validate actual path identities and overlap, including symlink ancestors",
+    "Observe current workspace accessible and historical fixture/trial content denied using the actual Claude sandbox",
+    "Confirm protected Host paths and ordinary sandbox startup both work",
+    "Freeze a new comparison protocol; do not resume or pool terminated cohort"
+  ]
+}

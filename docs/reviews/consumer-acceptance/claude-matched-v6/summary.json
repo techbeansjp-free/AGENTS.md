@@ -1,0 +1,50 @@
+{
+  "pairs": 5,
+  "qualityPassed": true,
+  "measurementComplete": true,
+  "requiredPairs": 5,
+  "accepted": false,
+  "scope": "This fixed synthetic fixture and model only; no general autonomous-development guarantee.",
+  "baseline": {
+    "maxSeconds": 88.85136496400001,
+    "maxProcessedTokens": 572224,
+    "medianSeconds": 80.749264379,
+    "medianProcessedTokens": 394530
+  },
+  "candidate": {
+    "maxSeconds": 121.18653212299999,
+    "maxProcessedTokens": 472662,
+    "medianSeconds": 113.52519094899999,
+    "medianProcessedTokens": 395875
+  },
+  "pairedDifferences": [
+    {
+      "pair": 1,
+      "seconds": 19.306032618000003,
+      "processedTokens": -30856
+    },
+    {
+      "pair": 2,
+      "seconds": 32.775926569999996,
+      "processedTokens": -49191
+    },
+    {
+      "pair": 3,
+      "seconds": 32.42466679599998,
+      "processedTokens": 78132
+    },
+    {
+      "pair": 4,
+      "seconds": -13.333037058000002,
+      "processedTokens": -245864
+    },
+    {
+      "pair": 5,
+      "seconds": 54.06462451099999,
+      "processedTokens": 78821
+    }
+  ],
+  "pairsImprovingBoth": 1,
+  "worstCaseRegression": true,
+  "requiresWorstCaseAssessment": true
+}

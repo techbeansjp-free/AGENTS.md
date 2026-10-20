@@ -1,0 +1,205 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "skillBundleSha256": "cfb462f9b0b4ada30bd97574712c0fe080849be9954bec19146679e7a0c8b5ab",
+    "version": "0.5.900-alpha.18",
+    "skillSha256": "bb0002a4a5915af9c7a53de6dcef5cd124cb374e4a61f2a564f6d4406107ea9f",
+    "identitySha256": "276ab0b40c2590122b6f976e8f3a259e68f4aa7bb7d3d3fc48cd63d94bd4b23b"
+  },
+  "conditions": {
+    "mountMode": "clean-linux",
+    "cliVersion": "codex-cli 0.155.0-alpha.16.3",
+    "runtimeSha256": "e1dbfc1d471ab3df87184484aca0ffe94af544993bbba7a7ee2e5505d59c0a4a",
+    "intentSha256": "493aa3abf420a91a8dd5aca431e4829b52d1418aa5cd5364309fdf5e65eb9156",
+    "commands": [
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/reservation.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/billing.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/integration.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/unknown-keys.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/accessors.mjs",
+        "complex"
+      ]
+    ]
+  },
+  "model": "gpt-6-sol",
+  "effort": "medium",
+  "base": "b7a906256f6f0aa2705d2517e69f7d3a6503ccff",
+  "head": "86d485b6d93a4690944fe076fa0a04aad9e8cfa6",
+  "review": {
+    "id": "01a1530b-9710-7cc1-a45a-47da2712d903",
+    "head": "86d485b6d93a4690944fe076fa0a04aad9e8cfa6",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "cacheWriteInput": {
+      "observedTokens": 0,
+      "totalTokens": 0,
+      "missingThreads": [],
+      "threads": [
+        {
+          "id": "01a15305-8f80-7261-b371-44885c9661ee",
+          "tokens": 0
+        },
+        {
+          "id": "01a15306-4b3e-78a2-a9fe-67176a1bec96",
+          "tokens": 0
+        },
+        {
+          "id": "01a15306-74bf-76b0-af78-308a5a4b3829",
+          "tokens": 0
+        },
+        {
+          "id": "01a15309-4532-7991-a6c7-4c4c0d9cc2f6",
+          "tokens": 0
+        },
+        {
+          "id": "01a1530b-9710-7cc1-a45a-47da2712d903",
+          "tokens": 0
+        }
+      ],
+      "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+    },
+    "rootId": "01a15305-8f80-7261-b371-44885c9661ee",
+    "observedThreads": 5,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 3246946,
+      "cachedInputTokens": 3077120,
+      "outputTokens": 33206
+    },
+    "observedProcessedTokens": 3280152,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a15305-8f80-7261-b371-44885c9661ee",
+        "parent": null,
+        "usage": {
+          "input_tokens": 1950711,
+          "cached_input_tokens": 1883264,
+          "output_tokens": 11909
+        }
+      },
+      {
+        "id": "01a15306-4b3e-78a2-a9fe-67176a1bec96",
+        "parent": "01a15305-8f80-7261-b371-44885c9661ee",
+        "usage": {
+          "input_tokens": 347457,
+          "cached_input_tokens": 313728,
+          "output_tokens": 5867
+        }
+      },
+      {
+        "id": "01a15306-74bf-76b0-af78-308a5a4b3829",
+        "parent": "01a15305-8f80-7261-b371-44885c9661ee",
+        "usage": {
+          "input_tokens": 268870,
+          "cached_input_tokens": 250624,
+          "output_tokens": 6572
+        }
+      },
+      {
+        "id": "01a15309-4532-7991-a6c7-4c4c0d9cc2f6",
+        "parent": "01a15305-8f80-7261-b371-44885c9661ee",
+        "usage": {
+          "input_tokens": 200724,
+          "cached_input_tokens": 179328,
+          "output_tokens": 3111
+        }
+      },
+      {
+        "id": "01a1530b-9710-7cc1-a45a-47da2712d903",
+        "parent": "01a15305-8f80-7261-b371-44885c9661ee",
+        "usage": {
+          "input_tokens": 479184,
+          "cached_input_tokens": 450176,
+          "output_tokens": 5747
+        }
+      }
+    ]
+  },
+  "implementationAndReviewSeconds": 676.1298166400001,
+  "deliverySeconds": 23.910894554000002,
+  "elapsedSeconds": 956.475,
+  "manualHandoffs": 1,
+  "recovered": true,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "86d485b6d93a4690944fe076fa0a04aad9e8cfa6",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "1e7072d19c06d6833efa318e4760d0a297a0e9ecc6c518b8de752860ff8340bf",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "899f7ec2df76dffd6fb2e3aed54cb7706882a4feaa9c30120e52632e0abf53d6",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "befb76fa9987fff2b1543092a2d34b7f9ba77851de3e3eb9d4d9ff9a1799b800",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/80",
+  "ci": {
+    "head": "86d485b6d93a4690944fe076fa0a04aad9e8cfa6",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex:complex": "success",
+      "greeting:test": "success"
+    }
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Original complex requirements only; revision, repair and restart acceptance remain separate.",
+    "No merge or release.",
+    "Recovered run with post-observation evaluator naming correction, not fresh autonomous performance acceptance."
+  ],
+  "recovery": {
+    "sameCoordinator": true,
+    "previousStatus": 1,
+    "originalSeconds": 584.90481664,
+    "resumedSeconds": 91.225,
+    "evaluatorIntervention": "Explicit resumption after capacity failure; evaluation-only re-review name recognition corrected after observing valid direct non-forked reviewer PASS.",
+    "performanceEligible": false
+  }
+}

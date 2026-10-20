@@ -1,0 +1,44 @@
+{
+  "scenario": "Synthetic parent asks one fresh-context child for a fixed acknowledgement. No development or performance comparison.",
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "seconds": 10.841872418000001,
+  "status": "observed",
+  "tools": [
+    [
+      "spawn_agent",
+      "wait_agent"
+    ],
+    []
+  ],
+  "rootId": "01a15112-1da6-74e1-a705-e58a694453bd",
+  "observedThreads": 2,
+  "missingUsage": [],
+  "measured": {
+    "inputTokens": 62481,
+    "cachedInputTokens": 49152,
+    "outputTokens": 136
+  },
+  "observedProcessedTokens": 62617,
+  "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+  "calls": [
+    {
+      "id": "01a15112-1da6-74e1-a705-e58a694453bd",
+      "parent": null,
+      "usage": {
+        "input_tokens": 46954,
+        "cached_input_tokens": 34944,
+        "output_tokens": 129
+      }
+    },
+    {
+      "id": "01a15112-2f30-7e32-a90b-a48468eabb78",
+      "parent": "01a15112-1da6-74e1-a705-e58a694453bd",
+      "usage": {
+        "input_tokens": 15527,
+        "cached_input_tokens": 14208,
+        "output_tokens": 7
+      }
+    }
+  ]
+}

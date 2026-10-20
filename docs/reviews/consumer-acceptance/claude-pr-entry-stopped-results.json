@@ -1,0 +1,250 @@
+{
+  "status": "stopped-after-user-scope-correction",
+  "scope": "Skill entry comparison on identical candidate runtime; not full v0.5.9 comparison or sustained large-Issue acceptance.",
+  "protocol": "claude-pr-entry-protocol.json",
+  "reason": "Primary problem is sustained concurrent large complex Issues including subsequent repairs. Four completed observations are preserved; remaining six were not started.",
+  "plannedPairs": 5,
+  "completedPairs": 2,
+  "observations": [
+    {
+      "pair": 1,
+      "variant": "baseline",
+      "elapsedSeconds": 227.27079451199998,
+      "processedTokens": 891487,
+      "usageComplete": true,
+      "head": "6d8b3ffdb0ce3064a470b617f4a6c7d5f84b561f",
+      "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/200",
+      "checks": [
+        {
+          "exit": 0,
+          "stdoutSha256": "d66a9c7eb377ff69668cea8abb4b6858a7c100811bea15c64b55e75310556428",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "28580840efc8193efaeffbfb59006cee34b64a05777daaca08f3aa5d52707554",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "59ec34611f6478c41e1134f2f6f43aed7902afe8c6e66c3f8b91a3e2cabd1bb5",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "review": {
+        "taskId": "a400084904c4600f3",
+        "agentType": "general-purpose",
+        "head": "6d8b3ffdb0ce3064a470b617f4a6c7d5f84b561f",
+        "verdict": "PASS"
+      },
+      "ci": {
+        "head": "6d8b3ffdb0ce3064a470b617f4a6c7d5f84b561f",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex:complex": "success",
+          "greeting:test": "success"
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "variant": "candidate",
+      "elapsedSeconds": 189.654415234,
+      "processedTokens": 880111,
+      "usageComplete": true,
+      "head": "410b8cc3b6187c581a29d70f97a76353b697bac0",
+      "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/201",
+      "checks": [
+        {
+          "exit": 0,
+          "stdoutSha256": "01192e30fa9f4e72c3b3b112aa3424e393aaf72cfc70af250622baec56b293e5",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "e72271cabf2f44764f6890986bca4b06e34c329d5fce86c2233f2fe25eaa5d07",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "a1c5543eeaa9dacda59a39e66e1fdee5c6c6493da94ce34ee443033dfe1c6a9d",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "review": {
+        "taskId": "a9ae9dddc823f53ab",
+        "agentType": "claude",
+        "head": "410b8cc3b6187c581a29d70f97a76353b697bac0",
+        "verdict": "PASS"
+      },
+      "ci": {
+        "head": "410b8cc3b6187c581a29d70f97a76353b697bac0",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex:complex": "success",
+          "greeting:test": "success"
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "variant": "candidate",
+      "elapsedSeconds": 182.271427125,
+      "processedTokens": 832860,
+      "usageComplete": true,
+      "head": "a04defccf411e665aa15250296e5d6391c70b459",
+      "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/202",
+      "checks": [
+        {
+          "exit": 0,
+          "stdoutSha256": "c7b96d60fbd9e7ace4ae8b0ae6c81b793dae8b243b4189e9d9a6ec55b7bcf9af",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "e7a98dfbf7801d751af72002595af71b62fb7d5db5891a29f139964601daf31e",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "dac60a20845f89c6ff7f1ddaab055b4cc3c57e880f6723d53f5b603cdbcdb7cf",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "review": {
+        "taskId": "a311b7248abc18e36",
+        "agentType": "general-purpose",
+        "head": "a04defccf411e665aa15250296e5d6391c70b459",
+        "verdict": "PASS"
+      },
+      "ci": {
+        "head": "a04defccf411e665aa15250296e5d6391c70b459",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex:complex": "success",
+          "greeting:test": "success"
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "elapsedSeconds": 186.766798091,
+      "processedTokens": 921071,
+      "usageComplete": true,
+      "head": "13e84fd1822c0ea74e73be4a97969375522f89a1",
+      "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/203",
+      "checks": [
+        {
+          "exit": 0,
+          "stdoutSha256": "4abe89a96defb21b846978ebd3856165996005349b0605a2b260757ea215ab5c",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "a7707afe65be12959aa078d784979b3716a72135698711cf1c976bf63ca0e993",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "7ae4aae28f6d96b93d71baddd12d67f0a73ba00daf028337267757d8d86abc25",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "exit": 0,
+          "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "review": {
+        "taskId": "afd3e8d216f079789",
+        "agentType": "general-purpose",
+        "head": "13e84fd1822c0ea74e73be4a97969375522f89a1",
+        "verdict": "PASS"
+      },
+      "ci": {
+        "head": "13e84fd1822c0ea74e73be4a97969375522f89a1",
+        "draft": true,
+        "merged": false,
+        "boundToPr": true,
+        "checks": {
+          "complex:complex": "success",
+          "greeting:test": "success"
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "No five-pair acceptance conclusion.",
+    "A short currency revision does not reproduce long-lived multi-Issue contexts.",
+    "No further trials to obtain favorable measurements."
+  ],
+  "latestReleaseBaseline": {
+    "version": "0.5.9",
+    "sourceCommit": "8fd353a8fce7a46076190190f4ac1bf5621ab7bb",
+    "asset": "agent-skill-chain-0.5.9.tgz",
+    "sha256": "66d0964e861571ff2163c7ca634c9eada3b786e4196cd2590aad526b92dd9360",
+    "verification": "Release SHA256SUMS matched; packaged CLI --version returned 0.5.9. Downloaded unmodified release, not a candidate-runtime substitute."
+  }
+}

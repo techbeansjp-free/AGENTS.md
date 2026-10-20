@@ -1,0 +1,22 @@
+{
+  "pairs": 2,
+  "qualityPassed": true,
+  "measurementComplete": true,
+  "requiredPairs": 5,
+  "accepted": false,
+  "scope": "This fixed synthetic fixture and model only; no general autonomous-development guarantee.",
+  "baseline": {
+    "maxSeconds": 94.829,
+    "maxProcessedTokens": 327020,
+    "medianSeconds": 88.334,
+    "medianProcessedTokens": 314621
+  },
+  "candidate": {
+    "maxSeconds": 105.081,
+    "maxProcessedTokens": 277829,
+    "medianSeconds": 101.4545,
+    "medianProcessedTokens": 276963
+  },
+  "worstCaseRegression": true,
+  "requiresWorstCaseAssessment": true
+}

@@ -1,0 +1,37 @@
+{
+  "results": [
+    {
+      "id": "J01 list-create-pagination-edit-cancel-delete-reload",
+      "status": "passed",
+      "seconds": 0.6310352149999999
+    },
+    {
+      "id": "J02 invalid-and-duplicate-input-recovers-without-losing-fields",
+      "status": "passed",
+      "seconds": 0.30091252399999985
+    },
+    {
+      "id": "J03 direct-api-validation-and-authorization",
+      "status": "passed",
+      "seconds": 0.1304010790000002
+    },
+    {
+      "id": "J04 stale-edit-rejection-and-user-recovery",
+      "status": "passed",
+      "seconds": 0.17690207899999996
+    },
+    {
+      "id": "J05 connection-failure-keeps-input-for-retry",
+      "status": "passed",
+      "seconds": 0.15666353700000035
+    },
+    {
+      "id": "J06 persistence-after-server-restart",
+      "status": "passed",
+      "seconds": 0.10257875299999977
+    }
+  ],
+  "seconds": 2.34681007,
+  "browser": "154.0.8037.97",
+  "claims": "synthetic business journey; dummy sessions, not authentication audit"
+}

@@ -1,0 +1,154 @@
+{
+  "schema": "asc-native-complex-delivery/v1",
+  "scope": "original reservation/billing requirements, concurrent worktrees, integration repair, independent fresh review, Draft PR and both CI jobs; excludes revision/interruption/restart and performance comparison",
+  "packageSha256": "b213187206b6ffc09762ca904467860269f9929652063258fbde83c51836f02d",
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "mode": "--deliver",
+  "head": "ab902f4b0674970fbc663fcf4254ec8c3f6f52e0",
+  "base": "6e3540e7ec96874e518d839f9517d9c1b69e28a6",
+  "remoteBase": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "review": {
+    "id": "01a15138-8616-79a2-86e5-9c2923924f91",
+    "head": "ab902f4b0674970fbc663fcf4254ec8c3f6f52e0",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "rootId": "01a15135-b14b-71f1-a773-981273e33c9c",
+    "observedThreads": 4,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 2741415,
+      "cachedInputTokens": 2580480,
+      "outputTokens": 39871
+    },
+    "observedProcessedTokens": 2781286,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a15135-b14b-71f1-a773-981273e33c9c",
+        "parent": null,
+        "usage": {
+          "input_tokens": 971302,
+          "cached_input_tokens": 923776,
+          "output_tokens": 8224
+        }
+      },
+      {
+        "id": "01a15136-00d0-7060-a076-e1c46316f256",
+        "parent": "01a15135-b14b-71f1-a773-981273e33c9c",
+        "usage": {
+          "input_tokens": 469646,
+          "cached_input_tokens": 432128,
+          "output_tokens": 9841
+        }
+      },
+      {
+        "id": "01a15136-0f88-7a23-bb4e-4f2c8cef1f40",
+        "parent": "01a15135-b14b-71f1-a773-981273e33c9c",
+        "usage": {
+          "input_tokens": 364349,
+          "cached_input_tokens": 337280,
+          "output_tokens": 10750
+        }
+      },
+      {
+        "id": "01a15138-8616-79a2-86e5-9c2923924f91",
+        "parent": "01a15135-b14b-71f1-a773-981273e33c9c",
+        "usage": {
+          "input_tokens": 936118,
+          "cached_input_tokens": 887296,
+          "output_tokens": 11056
+        }
+      }
+    ]
+  },
+  "verification": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "base": "6e3540e7ec96874e518d839f9517d9c1b69e28a6",
+    "head": "ab902f4b0674970fbc663fcf4254ec8c3f6f52e0",
+    "contractSha256": "7bc964ece0ea59ad2ed89cc1d2159a301ce21c17a06c240a3779b6cccd537116",
+    "intent": "Complete both synthetic reservation and billing requirements; no revision phase yet",
+    "results": [
+      {
+        "argv": [
+          "node",
+          "complex/oracle/reservation.mjs",
+          "complex"
+        ],
+        "exit": 0,
+        "seconds": 0.09171693400000001,
+        "stdoutSha256": "fa90abbaee9f088ea84dd03ab1733a19aaccd549985ca51cf5037948a8dd32aa",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "node",
+          "complex/oracle/billing.mjs",
+          "complex"
+        ],
+        "exit": 0,
+        "seconds": 0.08732479199999997,
+        "stdoutSha256": "30d46240e5368c0d92a611f7943dea433139bcdf482a4f3ee04c9e2a1a5b2e5d",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "node",
+          "complex/oracle/integration.mjs",
+          "complex"
+        ],
+        "exit": 0,
+        "seconds": 0.07970545200000004,
+        "stdoutSha256": "260784c5a892b22345064d265e21589e18904d7ae087ef063d96b95b31c20f7e",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "node",
+          "complex/oracle/unknown-keys.mjs",
+          "complex"
+        ],
+        "exit": 0,
+        "seconds": 0.054214969999999994,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "passed": true,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  },
+  "implementationAndReviewSeconds": 389.446794467,
+  "driverImplementationEdits": 0,
+  "pr": 31,
+  "complexCI": {
+    "head": "ab902f4b0674970fbc663fcf4254ec8c3f6f52e0",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39174435472",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "ab902f4b0674970fbc663fcf4254ec8c3f6f52e0",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39174435404",
+    "transportFailures": []
+  },
+  "deliverySeconds": 22.398268311,
+  "elapsedSeconds": 412.361,
+  "prUrl": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/31",
+  "manualHandoffs": 0,
+  "performanceImprovementProven": false,
+  "commandNormalization": "Node executable path replaced by node; actual version v24.19.0"
+}

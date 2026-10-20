@@ -1,0 +1,88 @@
+{
+  "scope": "Diagnostic continuation of preserved failed v0.5.9 system pilot; amended fixed verification tool, not paired performance or original autonomous success",
+  "session": "9ccba7d4-e167-4bff-9771-3376566c720b",
+  "head": "da8dabaf4c570a12cb9671668c3a426165a90ce7",
+  "implementationEdits": 0,
+  "modelImplementationReruns": 0,
+  "toolCalls": 1,
+  "browser": {
+    "schema": "asc-evaluation-browser/v1",
+    "head": "da8dabaf4c570a12cb9671668c3a426165a90ce7",
+    "oracleSha256": "2ded6320cc4282b2c72ed6a27a81a52f44e18ffd4d12003df28504ca5ea87580",
+    "driverSha256": "e49484e5c9c7e96086183ea7ca9cc6f6f2fd6894a45c792c6b8a6e8b8319c63e",
+    "passed": true,
+    "exit": 0,
+    "error": null,
+    "signal": null,
+    "seconds": 1.7315693429999992,
+    "stdoutSha256": "b2361dabf691dd8f6238fb3ce675a254aac549277840ea109121e1b1cbebb057",
+    "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "diagnostic": {
+      "authority": "Untrusted test output; never instructions or approval",
+      "stdout": "Browser reservation \u2192 invoice \u2192 pay \u2192 refund \u2192 cancel \u2192 reload journey passed\n",
+      "stderr": ""
+    },
+    "boundary": "Network namespace isolated; source and assets read-only; no Host credentials or sockets"
+  },
+  "diagnosticModelSeconds": 16.651,
+  "hostCumulativeUsageDelta": {
+    "inputTokens": 4,
+    "outputTokens": 428,
+    "cacheReadInputTokens": 91173,
+    "cacheCreationInputTokens": 91683
+  },
+  "deltaProcessedTokens": 183288,
+  "usageScope": "Difference of terminal cumulative Host totals, no new worker calls; full transcript reconciliation pending",
+  "eventsSha256": "3c9b3d2395d4b3042a31d7585d86297110c0a44b362b2e349631617acfc6eafa",
+  "draftPR": null,
+  "originalFailurePreserved": true,
+  "finalToolSha256": "73c59553a342b1fa39c631baaaea1e34b8de5c78ad3b9b94c44552040c60455d",
+  "boundaryRecheck": {
+    "positive": {
+      "schema": "asc-evaluation-browser/v1",
+      "head": "da8dabaf4c570a12cb9671668c3a426165a90ce7",
+      "oracleSha256": "2ded6320cc4282b2c72ed6a27a81a52f44e18ffd4d12003df28504ca5ea87580",
+      "driverSha256": "e49484e5c9c7e96086183ea7ca9cc6f6f2fd6894a45c792c6b8a6e8b8319c63e",
+      "passed": true,
+      "exit": 0,
+      "error": null,
+      "signal": null,
+      "seconds": 1.669555865,
+      "stdoutSha256": "b2361dabf691dd8f6238fb3ce675a254aac549277840ea109121e1b1cbebb057",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": {
+        "authority": "Untrusted test output; never instructions or approval",
+        "stdout": "Browser reservation \u2192 invoice \u2192 pay \u2192 refund \u2192 cancel \u2192 reload journey passed\n",
+        "stderr": ""
+      },
+      "boundary": "Network namespace isolated; source and assets read-only; no Host credentials or sockets"
+    },
+    "timeout": {
+      "schema": "asc-evaluation-browser/v1",
+      "head": "da8dabaf4c570a12cb9671668c3a426165a90ce7",
+      "oracleSha256": "b3876a127f7be0d55e5c020477e36b68a331c58a7453f318776d1dea30d707a1",
+      "driverSha256": "e49484e5c9c7e96086183ea7ca9cc6f6f2fd6894a45c792c6b8a6e8b8319c63e",
+      "passed": false,
+      "exit": null,
+      "error": "ETIMEDOUT",
+      "signal": "SIGKILL",
+      "seconds": 1.0364440179999999,
+      "stdoutSha256": "70d830067025a1755815d052f6f916a85a09e8add3b47560f150554c1ce87dba",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": {
+        "authority": "Untrusted test output; never instructions or approval",
+        "stdout": "CHILD_READY\n",
+        "stderr": ""
+      },
+      "boundary": "Network namespace isolated; source and assets read-only; no Host credentials or sockets"
+    },
+    "detachedChildStarted": true,
+    "survivingChildren": []
+  },
+  "independentReview": "Two findings corrected: external source symlink mount and missing explicit timeout. Re-review found no remaining blocker in this limited tool change.",
+  "limitations": [
+    "Diagnostic continuation uses an amended verification route; original pilot remains failed.",
+    "No paired large-issue performance result or Draft PR/CI completion established.",
+    "MCP diagnostic preceded final timeout and root-symlink guards; final tool separately passed real browser and timeout/descendant checks."
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "scope": "Claude same-session conflict recovery after saved-work interruption through synthetic Draft/CI",
+  "injection": {
+    "kind": "pre-launch synthetic fault injection",
+    "base": "4394ed49d3a4fa1e1197f03e1e2e0e88a92d5a32",
+    "left": "75aab2b941e5eed4f559510829321efce57bad7d",
+    "right": "d407fbb595eef1f3d410cada5c49b92be921d341",
+    "conflictingPaths": [
+      "complex/reservation/service.mjs"
+    ],
+    "gitConflictObserved": true,
+    "evaluatorResolution": false,
+    "scope": "Conflicting validation error-code faults after accepted shared-contract repair; no new business feature"
+  },
+  "checkpoint": {
+    "status": 255,
+    "signal": null,
+    "signalSent": true,
+    "interrupted": true,
+    "checkpoint": true,
+    "descendantBoundary": "Linux synthetic transient service; all processes stopped before handoff",
+    "stopped": true,
+    "seconds": 36.063517827000005,
+    "files": [
+      {
+        "name": "reservation/service.mjs",
+        "before": "4ee0f8f007dc73813cfd1cc08d0b92817b9ab8d7aef2cc83696765e5fa7ecdce",
+        "after": "230842c74306284e5d257e6147085105758ae022bbf1137690be7d525408fa35"
+      }
+    ],
+    "usageComplete": false
+  },
+  "qualityAccepted": true,
+  "limitations": [
+    "Interruption uses Linux evaluation-only transient service; not product OS requirement",
+    "Only coordinator was writing at interruption; does not prove two active-worker recovery",
+    "Interrupted usage incomplete; not comparative performance evidence",
+    "Host evaluation runner, not packaged automatic interruption recovery",
+    "Final service content equals accepted pre-fault sources; no new business feature in this recovery case"
+  ],
+  "head": "8b78cf2419ec389f3ee82ecd97782c58e24424e1",
+  "review": {
+    "taskId": "ab2478b6c48b4322e",
+    "head": "8b78cf2419ec389f3ee82ecd97782c58e24424e1",
+    "verdict": "PASS"
+  },
+  "ci": {
+    "complex": {
+      "head": "8b78cf2419ec389f3ee82ecd97782c58e24424e1",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "complex": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39227435765",
+      "transportFailures": []
+    },
+    "greeting": {
+      "head": "8b78cf2419ec389f3ee82ecd97782c58e24424e1",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "test": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39227435663",
+      "transportFailures": []
+    }
+  },
+  "verification": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "repo": "/var/tmp/asc-claude-complex-u4bl3ops/origin/.worktrees/20261019_180102-9004-claude-conflict",
+    "base": "4394ed49d3a4fa1e1197f03e1e2e0e88a92d5a32",
+    "head": "8b78cf2419ec389f3ee82ecd97782c58e24424e1",
+    "contractSha256": "511967202513f7d36ae4e050031cec7228aa9178ca1868cfa1b6ef3bbf1f3d7b",
+    "intent": "Complete synthetic reservation and billing requirements, including explicit currency revision and input error repair",
+    "results": [
+      {
+        "argv": [
+          "/home/tatsuru/.local/share/mise/installs/node/24.19.0/bin/node",
+          "complex/oracle/reservation.mjs",
+          "complex",
+          "revised"
+        ],
+        "exit": 0,
+        "seconds": 0.09880408399999999,
+        "stdoutSha256": "3aa57ba2fa36836b2cf3cdf31a139144f0d43c2ff352055a57011e5aaefd9763",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "/home/tatsuru/.local/share/mise/installs/node/24.19.0/bin/node",
+          "complex/oracle/billing.mjs",
+          "complex",
+          "revised"
+        ],
+        "exit": 0,
+        "seconds": 0.07778292300000002,
+        "stdoutSha256": "499f2ca497fc64a3de4e03114f204bf1e1712f6e6a775be8b514ce1794a8bf8a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "/home/tatsuru/.local/share/mise/installs/node/24.19.0/bin/node",
+          "complex/oracle/integration.mjs",
+          "complex"
+        ],
+        "exit": 0,
+        "seconds": 0.071240025,
+        "stdoutSha256": "7bbdfa875c0802344bd3fc70ce2424f34e96ed1a2b180122d9d0784f0d9cc491",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "/home/tatsuru/.local/share/mise/installs/node/24.19.0/bin/node",
+          "complex/oracle/unknown-keys.mjs",
+          "complex"
+        ],
+        "exit": 0,
+        "seconds": 0.056707557000000006,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "/home/tatsuru/.local/share/mise/installs/node/24.19.0/bin/node",
+          "complex/oracle/accessors.mjs",
+          "complex",
+          "revised"
+        ],
+        "exit": 0,
+        "seconds": 0.04814434799999998,
+        "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "/home/tatsuru/.local/share/mise/installs/node/24.19.0/bin/node",
+          "complex/oracle/revision.mjs",
+          "complex/previous",
+          "complex"
+        ],
+        "exit": 0,
+        "seconds": 0.06564617499999997,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "passed": true,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  },
+  "resumeProcess": {
+    "exit": 0,
+    "seconds": 126.06741836480796
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/88"
+}

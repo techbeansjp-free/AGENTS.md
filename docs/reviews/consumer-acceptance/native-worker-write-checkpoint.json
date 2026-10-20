@@ -1,0 +1,35 @@
+{
+  "scope": "Worker-write interruption checkpoint only; resumed delivery still running",
+  "candidateSha256": "ecba8b89cc697fe55a9072ee0f592654af16a08b813e86d38746a8ff233dbdfa",
+  "previousHead": "592b8fd87f88a7930e1b65b63ad5eb8f655b0dbb",
+  "checkpoint": {
+    "status": 255,
+    "signal": null,
+    "signalSent": true,
+    "interrupted": true,
+    "checkpoint": true,
+    "descendantBoundary": "Linux synthetic transient service; all processes stopped before handoff",
+    "stopped": true,
+    "seconds": 172.491328705,
+    "files": [
+      {
+        "name": "reservation/service.mjs",
+        "before": "f1f7b28b14cc58315e5192610015a729cc63b4441559e9296d63be2848dd2163",
+        "after": "c3f1c9962bb350a696ee3307e9ae89f4fbfded43efb8b39e181463a77c6ceaf0"
+      },
+      {
+        "name": "billing/service.mjs",
+        "before": "2d184b3efc16cbbf0347455a77220a79ebcbebf9544af2990272ffa3e56d3e46",
+        "after": "b69715605fb95c933fb235693db120d3fc059d9600c5cc414e7c79a9ffe87459"
+      }
+    ],
+    "usageComplete": false,
+    "checkpointScope": "two distinct worker worktrees before integration",
+    "workerWorktrees": [
+      "9003-reservation-worker",
+      "9003-billing-worker"
+    ]
+  },
+  "knownDeviation": "Worker directory names omit the required local timestamp. Do not count full naming-contract acceptance.",
+  "performanceAccepted": false
+}

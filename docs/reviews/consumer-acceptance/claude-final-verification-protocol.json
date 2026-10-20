@@ -1,0 +1,19 @@
+{
+  "scope": "One prospective diagnostic of final verification duplication; not performance acceptance",
+  "baselineSha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9",
+  "candidateSha256": "3dfc04506646536d57188a87e1f61ec22a023410ff260cc341049ea3c9f4661e",
+  "changedSourceFiles": [
+    "skills/asc/SKILL.md"
+  ],
+  "fixture": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "model": "sonnet",
+  "effort": "medium",
+  "reviewerMode": "generic",
+  "runs": 1,
+  "hypothesis": "Use final commit-bound worktree-verify as the implementation final test instead of separately running the same owner commands for recording. Development checks and reviewer independent tests remain allowed.",
+  "acceptance": "Exact regression, two owner oracles, independent review, inner verification and Draft CI; no evaluator implementation edits; inspect parent duplicate command execution; record all usage and failures.",
+  "nextAction": "If duplicate execution remains, withdraw rather than repeat the same diagnostic. If removed, register fresh paired performance comparison; this diagnostic is never pooled into it.",
+  "status": "completed; candidate withdrawn",
+  "result": "claude-final-verification-result.json",
+  "observed": "Parent ran both owner test commands before commit, then worktree-verify after commit. The additional guidance did not remove duplicate execution. Quality and complete usage passed; no performance comparison started."
+}

@@ -5,7 +5,7 @@ const overlap=(a,b)=>{a=a.toLowerCase();b=b.toLowerCase();return a===b||a.starts
 export function compileGoal(input){
  const plan=structuredClone(input);
  demand(plan?.schema==='asc-goal/v1'&&typeof plan.intent==='string'&&plan.intent.trim(),'Goal intent missing');
- demand(Array.isArray(plan.units)&&plan.units.length>0&&plan.units.length<=64,'Goal requires 1..64 units');
+ demand(Array.isArray(plan.units)&&plan.units.length>0,'Goal requires at least one unit');
  const units=new Map();
  for(const u of plan.units){
   demand(u&&typeof u.id==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(u.id)&&!units.has(u.id),'Invalid or duplicate unit id');

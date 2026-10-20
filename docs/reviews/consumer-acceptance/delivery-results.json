@@ -1,0 +1,83 @@
+{
+  "scope": "current-host packaged CLI, synthetic application; browser isolated locally, external CI API subset and original greeting oracle",
+  "verification": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "repo": "/tmp/asc-consumer-delivery-worktree",
+    "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+    "head": "ce268b5e8887efc588e9f94fbb3ba619d6b793f1",
+    "contractSha256": "d3d76fa32021fe11d67bfc39b3eb7299133ddc07e7c59dc0ff671192aca83d61",
+    "intent": "Publish reviewed synthetic user-management journey for consumer acceptance; no production authentication claim",
+    "results": [
+      {
+        "argv": [
+          "node",
+          "--test",
+          "consumer-user-management/test.mjs"
+        ],
+        "exit": 0,
+        "seconds": 0.28106024100000004,
+        "stdoutSha256": "f5201c03bbe4246edab692e499f858f82248f33c21ce2370b5c27f19125b7d99",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "python3",
+          "-I",
+          "test_greeting.py"
+        ],
+        "exit": 0,
+        "seconds": 0.07743516699999999,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "fb184ea57734512b1f088f9181209901b9cd46df3eb7eaa2500ea9e48dde20b5"
+      }
+    ],
+    "passed": true,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  },
+  "pullRequest": {
+    "baseRefName": "main",
+    "headRefOid": "ce268b5e8887efc588e9f94fbb3ba619d6b793f1",
+    "isDraft": true,
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-18T12:41:48Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39128350821/job/117678151714",
+        "name": "api",
+        "startedAt": "2026-10-18T12:41:39Z",
+        "status": "COMPLETED",
+        "workflowName": "Synthetic consumer API checks"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-18T12:41:42Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39128350819/job/117678151495",
+        "name": "test",
+        "startedAt": "2026-10-18T12:41:38Z",
+        "status": "COMPLETED",
+        "workflowName": "Synthetic fixture"
+      }
+    ],
+    "url": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/27"
+  },
+  "failedTrial": {
+    "head": "56fca0331cb78a531571e64b8c922c06eeb2d13c",
+    "failedRun": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39128249036",
+    "cause": "Pre-existing dummy greeting Helo failed unchanged Hello oracle",
+    "apiRun": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39128249090",
+    "repair": "Change dummy greeting to Hello, strengthen unit expectation; separate-context review and new commit verification"
+  },
+  "submissionFailures": [
+    "HTTPS remote had no credential helper",
+    "OAuth credential lacked workflow scope; used existing authenticated SSH without changing token scope or Host settings"
+  ],
+  "publication": "7 newly authored or synthetic fixture paths only; no consumer code or raw logs",
+  "mergePerformed": false,
+  "releasePerformed": false,
+  "allAgentTotalTokens": null,
+  "endToEndDevelopmentSeconds": null
+}

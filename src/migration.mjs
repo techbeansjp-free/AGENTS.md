@@ -1,15 +1,16 @@
 /** Non-destructive evaluation transition. Legacy source and approvals stay untouched. */
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {spawnSync} from 'node:child_process';
 import {inspectMigration} from '../migration_inspect.mjs';import {Controller,safeName,hash} from './controller.mjs';
+import {SOURCE_BATCH_BYTES} from './source-limits.mjs';
 const manifestName='transition.json',manifestByteLimit=16*1024*1024;
 function demand(ok,message){if(!ok)throw Error(message);}
 const contains=(a,b)=>{const r=path.relative(a,b);return !r || (!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
 function git(root,...args){return gitOutput(root,args);}
-function gitOutput(root,args,output='pipe'){
+function gitOutput(root,args,output='pipe',input){
  const nul=process.platform==='win32'?'NUL':'/dev/null';
  const p=spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${nul}`,'-c','uploadpack.packObjectsHook=',
  '-c','core.alternateRefsCommand=','-c','protocol.allow=never','-c','protocol.file.allow=always',...args],
- {cwd:root,stdio:['ignore',output,'pipe'],env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:nul,GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'},timeout:120000,maxBuffer:16*1024*1024});
+ {cwd:root,input,stdio:[input===undefined?'ignore':'pipe',output,'pipe'],env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:nul,GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'},timeout:120000,maxBuffer:16*1024*1024});
  demand(!p.error&&p.status===0,'Migration Git operation failed');return p.stdout;
 }
 // Linked worktrees keep administration outside their source directory. Resolve
@@ -177,10 +178,11 @@ export function createWorktree(source,{issue,slug,type='feature',base='HEAD'}={}
  const refs=git(origin,'for-each-ref','--format=%(refname)',`refs/heads/${branch}`).toString().trim();demand(!refs,'Work branch already exists; choose a distinct slug');
  // Worktree materialization is not an Agent snapshot: validate metadata, then stream
  // immutable Git blobs to disk without source/token byte limits or checkout filters.
- const entries=git(origin,'ls-tree','-rz','--full-tree',head).toString().split('\0').filter(Boolean),names=new Set();
- const blobs=entries.map(entry=>{const tab=entry.indexOf('\t'),name=entry.slice(tab+1),[mode,kind,oid]=entry.slice(0,tab).split(' ');safeName(name);
+ const entries=git(origin,'ls-tree','-rlz','--full-tree',head).toString().split('\0').filter(Boolean),names=new Set();
+ const blobs=entries.map(entry=>{const tab=entry.indexOf('\t'),name=entry.slice(tab+1),fields=entry.slice(0,tab).trim().split(/ +/),[mode,kind,oid,sizeText]=fields;safeName(name);
   demand(!names.has(name.toLowerCase()),'Case-aliased source');names.add(name.toLowerCase());
-  demand(kind==='blob'&&['100644','100755'].includes(mode)&&/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid),'Unsupported source type');return {name,mode,oid};});
+  demand(fields.length===4&&kind==='blob'&&['100644','100755'].includes(mode)&&/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid),'Unsupported source type');
+  const size=Number(sizeText);demand(/^\d+$/.test(sizeText)&&Number.isSafeInteger(size)&&size>=0,'Invalid source byte size');return {name,mode,oid,size};});
  const now=new Date(),pad=x=>String(x).padStart(2,'0');
  const timestamp=`${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
  const parent=path.join(origin,'.worktrees');
@@ -190,7 +192,17 @@ export function createWorktree(source,{issue,slug,type='feature',base='HEAD'}={}
  try{fs.lstatSync(destination);throw Error('Worktree destination already exists');}catch(error){if(error.code!=='ENOENT')throw error;}
  git(origin,'worktree','add','--no-checkout','-b',branch,'--',destination,head);
  // An interrupted creation is retained for inspection, never silently deleted/reset.
- for(const {name,mode,oid} of blobs){const file=path.join(destination,name);fs.mkdirSync(path.dirname(file),{recursive:true});const fd=fs.openSync(file,'wx',mode==='100755'?0o755:0o644);try{gitOutput(origin,['cat-file','blob',oid],fd);}finally{fs.closeSync(fd);}}
+ // Reuse validated batch framing for small blobs; stream large assets directly
+ // to disk so the batch size never becomes a repository/file limit.
+ const reader=Object.assign(Object.create(Controller.prototype),{repo:origin,
+  gitOutput(input,args,output='pipe'){return gitOutput(origin,args,output,input);}});
+ reader.readBlobs(blobs.filter(blob=>blob.size<=SOURCE_BATCH_BYTES),(name,{mode,bytes})=>{
+  const file=path.join(destination,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes,{flag:'wx',mode:mode==='100755'?0o755:0o644});
+ });
+ for(const {name,mode,oid,size} of blobs.filter(blob=>blob.size>SOURCE_BATCH_BYTES)){
+  const file=path.join(destination,name);fs.mkdirSync(path.dirname(file),{recursive:true});const fd=fs.openSync(file,'wx',mode==='100755'?0o755:0o644);
+  try{gitOutput(origin,['cat-file','blob',oid],fd);}finally{fs.closeSync(fd);}demand(fs.statSync(file).size===size,'Truncated worktree blob');
+ }
  git(destination,'read-tree',head);
  return {...assertWorkLocation(destination),branch,base:head,issue,slug};
 }

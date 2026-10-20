@@ -1,0 +1,57 @@
+{
+  "side": "C",
+  "root": "/var/tmp/asc-claude-paired-4KIhY3",
+  "head": "e9fc8739b25f6c97b17d508b9edc438abac66018",
+  "originalFailure": {
+    "error": "No unambiguous completed independent review of submitted HEAD",
+    "seconds": 95.92387586
+  },
+  "process": {
+    "status": 0,
+    "signal": null,
+    "seconds": 95.913698163
+  },
+  "reviewAfterParserFix": {
+    "taskId": "ad2b8a4da154179e6",
+    "agentType": "general-purpose",
+    "head": "e9fc8739b25f6c97b17d508b9edc438abac66018",
+    "verdict": "PASS"
+  },
+  "usageAfterIdentityFix": {
+    "totals": {
+      "input_tokens": 32,
+      "output_tokens": 6228,
+      "cache_read_input_tokens": 413303,
+      "cache_creation_input_tokens": 32274
+    },
+    "threads": [
+      {
+        "id": "da9cf6ee-0dfe-4a58-8b73-80acdcb380d5",
+        "messageCount": 12,
+        "usage": {
+          "input_tokens": 24,
+          "output_tokens": 5029,
+          "cache_read_input_tokens": 349980,
+          "cache_creation_input_tokens": 23232
+        }
+      },
+      {
+        "id": "ad2b8a4da154179e6",
+        "messageCount": 4,
+        "usage": {
+          "input_tokens": 8,
+          "output_tokens": 1199,
+          "cache_read_input_tokens": 63323,
+          "cache_creation_input_tokens": 9042
+        }
+      }
+    ],
+    "observedProcessedTokens": 451837,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "published": false,
+  "accepted": false,
+  "scope": "Post-stop diagnosis of existing log only. No rerun or retroactive cohort success; delivery and CI were not executed."
+}

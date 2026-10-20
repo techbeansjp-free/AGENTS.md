@@ -1,0 +1,13 @@
+{
+  "status": "failed",
+  "error": "Error: Trial failed; no replacement",
+  "runs": [
+    {
+      "pair": 1,
+      "side": "baseline",
+      "status": 1,
+      "signal": null,
+      "rootSha256": "8036d0f95acb19d75de95f8e01d0b5b1515a046b1770f16e64799edab0a4e510"
+    }
+  ]
+}

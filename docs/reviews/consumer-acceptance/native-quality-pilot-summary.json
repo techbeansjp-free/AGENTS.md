@@ -1,0 +1,36 @@
+{
+  "pairs": 1,
+  "qualityPassed": false,
+  "measurementComplete": true,
+  "requiredPairs": 5,
+  "accepted": false,
+  "scope": "This fixed synthetic fixture and model only; no general autonomous-development guarantee.",
+  "baseline": {
+    "maxSeconds": 436.177,
+    "maxProcessedTokens": 2192739,
+    "medianSeconds": 436.177,
+    "medianProcessedTokens": 2192739
+  },
+  "candidate": {
+    "maxSeconds": 560.524,
+    "maxProcessedTokens": 2349860,
+    "medianSeconds": 560.524,
+    "medianProcessedTokens": 2349860
+  },
+  "pairedDifferences": [
+    {
+      "pair": 1,
+      "seconds": 124.34699999999998,
+      "processedTokens": 157121
+    }
+  ],
+  "pairsImprovingBoth": 0,
+  "worstCaseRegression": true,
+  "requiresWorstCaseAssessment": true,
+  "postTrialReservationCounterexample": {
+    "baselineHead": "7f639737f8d88da60603a025a8e030a89d393966",
+    "candidateHead": "9182d43a19bd13103c5f45f8c52e1a1ee7c0d1b7",
+    "passed": true
+  },
+  "decision": "Stop unchanged candidate: intervened pilot is not clean acceptance, and candidate is slower and uses more processed tokens. Retain results; investigate coordinator repair overhead before further model trials."
+}

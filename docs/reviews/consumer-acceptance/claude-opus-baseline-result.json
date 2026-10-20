@@ -1,0 +1,206 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "inHostVerification": {
+      "toolUseId": "toolu_01VR7WkWZZ58ZJpxknTS3RYr",
+      "head": "ec7ae3b879fdf884f877bb8a0ba51f96e9266d1b",
+      "contractSha256": "8a96eeeb9b5df0d8ea090750ace1fd0fe4a08ca1baf6546548c7feae09e7f1ec",
+      "checks": 6,
+      "scope": "Observed coordinator Bash result; external oracle independently rechecked the same commit"
+    },
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "reviewerMode": "generic",
+    "reviewerDefinitionSha256": null,
+    "skillBundleSha256": "03628bf3bffeacc20eb57b89823ed4264f0f2b4ecbb8082057d31c468a64d0c0",
+    "version": "0.5.900-alpha.50",
+    "skillSha256": "1a1f27371fae1f54fa93f15ce7893601138a1d2b2557bab0bc7aa90ef88440be",
+    "identitySha256": "cd0b6d9e1554bfac929d1e24173e2f0cc9d6a01bcf1b1c771e4d2b8921beb92a"
+  },
+  "conditions": {
+    "runnerSha256": "39c4aaaf4d6cbe7b96f6a10a90143cdfb46d76f009eb3f422b2d8c6f2ffa07ff",
+    "scenario": "complex-two-issue-currency",
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-opus-5-5"
+    ],
+    "runtimeSha256": "e4a7881d3bc2ee5cd7072d916aed49273ef3274c2d07ba40fdf2d51789b72401",
+    "intentSha256": "50658bebc66ff5557e01700fd7c1d7f1cc39e6916a5e06a336c17db4a0931dce",
+    "commands": [
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/reservation.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/billing.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/integration.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/unknown-keys.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/accessors.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/revision.mjs",
+        "complex/previous",
+        "complex"
+      ]
+    ]
+  },
+  "model": "opus",
+  "effort": "medium",
+  "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "head": "ec7ae3b879fdf884f877bb8a0ba51f96e9266d1b",
+  "review": {
+    "taskId": "a061c5e2b7c2ba8cf",
+    "agentType": "general-purpose",
+    "head": "ec7ae3b879fdf884f877bb8a0ba51f96e9266d1b",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 68,
+      "output_tokens": 20179,
+      "cache_read_input_tokens": 645299,
+      "cache_creation_input_tokens": 110760
+    },
+    "threads": [
+      {
+        "id": "9924cc3b-649d-4090-87b7-eee98bd9db67",
+        "messageCount": 12,
+        "usage": {
+          "input_tokens": 28,
+          "output_tokens": 6652,
+          "cache_read_input_tokens": 293174,
+          "cache_creation_input_tokens": 38669
+        }
+      },
+      {
+        "id": "a852519371a93dfcf",
+        "messageCount": 7,
+        "usage": {
+          "input_tokens": 14,
+          "output_tokens": 4068,
+          "cache_read_input_tokens": 113558,
+          "cache_creation_input_tokens": 24013
+        }
+      },
+      {
+        "id": "a30be76a352c6e53c",
+        "messageCount": 8,
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 4128,
+          "cache_read_input_tokens": 154906,
+          "cache_creation_input_tokens": 22304
+        }
+      },
+      {
+        "id": "a061c5e2b7c2ba8cf",
+        "messageCount": 5,
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 5331,
+          "cache_read_input_tokens": 83661,
+          "cache_creation_input_tokens": 25774
+        }
+      }
+    ],
+    "observedProcessedTokens": 776306,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 213.035077578,
+  "deliverySeconds": 27.843967999,
+  "elapsedSeconds": null,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": {
+    "error": "Missing successful in-Host worktree verification for submitted HEAD and owner contract",
+    "seconds": 213.525572766
+  },
+  "verification": {
+    "head": "ec7ae3b879fdf884f877bb8a0ba51f96e9266d1b",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "4aaf7892a0e38a663dfaf31325af8861536237eb8c7587d27c707c6c9b34151f",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "c1adbf3e7335c95c21782d1329235e73b5541cc71d37e46e91b5e31f55ebd4f9",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e1ee7c32d2d0921c06f8834c28a44ea5be6488f480e69bc6312067017ba7c549",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/183",
+  "ci": {
+    "head": "ec7ae3b879fdf884f877bb8a0ba51f96e9266d1b",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex:complex": "success",
+      "greeting:test": "success"
+    }
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Two-Issue currency revision; worker topology and parallel execution require separate transcript evidence. Interruption and restart are not part of this observation.",
+    "No merge or release.",
+    "Total elapsed time includes evaluator repair delay and is only an estimate; not eligible for normal wall-time comparison. Original failed observation retained."
+  ],
+  "elapsedSecondsEstimate": 360.9580451660156,
+  "observationRecovery": {
+    "reason": "Evaluator rejected successful verification JSON followed by exit=0; parser corrected, saved HEAD reverified and delivered without restarting model or changing implementation.",
+    "elapsedTimeIsEstimate": true,
+    "normalElapsedPerformanceEligible": false
+  }
+}

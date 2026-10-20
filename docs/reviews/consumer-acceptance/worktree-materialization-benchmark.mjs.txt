@@ -1,0 +1,28 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+const before=await import('/baseline/src/migration.mjs');
+const after=await import('/candidate/src/migration.mjs');
+const root='/workspace/repo';fs.mkdirSync(root);
+const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',env:{...process.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_AUTHOR_DATE:'2026-01-01T00:00:00Z',GIT_COMMITTER_DATE:'2026-01-01T00:00:00Z'}}).trim();
+git(root,'init','-q','-b','main');git(root,'config','user.name','Synthetic');git(root,'config','user.email','synthetic@example.invalid');
+const files=new Map([['.gitignore',Buffer.from('.worktrees/\n')],['empty',Buffer.alloc(0)],['exec.sh',Buffer.from('#!/bin/sh\nexit 0\n')],['large.bin',Buffer.alloc(12000001,42)]]);
+for(let i=0;i<2000;i++)files.set(`source/${String(i).padStart(4,'0')}.bin`,Buffer.from(`fixture-${i}\0`.repeat(100)));
+for(const [name,bytes] of files){const p=path.join(root,name);fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,bytes);}
+fs.chmodSync(path.join(root,'exec.sh'),0o755);git(root,'add','.');git(root,'commit','-qm','Synthetic fixture');
+const head=git(root,'rev-parse','HEAD');fs.writeFileSync(path.join(root,'empty'),'owner edit');
+const runs=[];
+for(let pair=1;pair<=5;pair++)for(const side of pair%2?['baseline','candidate']:['candidate','baseline']){
+ const api=side==='baseline'?before:after;
+ const start=performance.now();const created=api.createWorktree(root,{issue:100+pair,type:'test',slug:side,base:head});const seconds=(performance.now()-start)/1000;
+ assert.equal(created.base,head);assert.equal(git(created.repo,'rev-parse','HEAD'),head);
+ for(const [name,bytes] of files)assert.deepEqual(fs.readFileSync(path.join(created.repo,name)),bytes);
+ assert.equal(fs.statSync(path.join(created.repo,'exec.sh')).mode&0o111,0o111);
+ assert.equal(git(created.repo,'status','--porcelain'),'');assert.equal(fs.readFileSync(path.join(root,'empty'),'utf8'),'owner edit');
+ runs.push({pair,side,seconds,validation:'passed'});git(root,'worktree','remove',created.repo);
+}
+const summary={};for(const side of ['baseline','candidate']){const a=runs.filter(r=>r.side===side).map(r=>r.seconds).sort((a,b)=>a-b);summary[side]={medianSeconds:a[2],maximumSeconds:a[4]};}
+const fixtureHash=createHash('sha256');for(const [name,bytes]of files)fixtureHash.update(name).update('\0').update(bytes);
+console.log(JSON.stringify({schema:'asc-worktree-materialization-benchmark/v1',scope:'Deterministic worktree creation only; not AI workflow time or token acceptance',environment:{platform:process.platform,arch:process.arch,node:process.version,git:git(root,'--version')},fixture:{head,files:files.size,bytes:[...files.values()].reduce((n,b)=>n+b.length,0),sha256:fixtureHash.digest('hex')},isolation:{network:'unshared',home:'empty tmpfs',sourceCheckoutMounted:false},order:'BC CB BC CB BC',runs,summary,validation:'All bytes, executable mode, HEAD, clean worktree and original uncommitted owner edit verified outside timed interval'},null,2));

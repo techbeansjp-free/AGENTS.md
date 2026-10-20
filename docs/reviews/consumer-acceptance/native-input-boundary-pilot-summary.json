@@ -1,0 +1,14 @@
+{
+  "accepted": false,
+  "freshPairs": 0,
+  "reusedControl": true,
+  "baselinePr": 66,
+  "candidatePr": 68,
+  "baselineSeconds": 436.177,
+  "candidateSeconds": 607.218,
+  "baselineTokens": 2192739,
+  "candidateTokens": 2793898,
+  "secondsDifference": 171.04099999999994,
+  "tokensDifference": 601159,
+  "scope": "Diagnostic only; reused baseline, not fresh paired acceptance. Two implementation repairs still needed. No unchanged repetitions scheduled."
+}

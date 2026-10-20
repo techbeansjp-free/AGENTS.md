@@ -1,0 +1,33 @@
+{
+  "scope": "Synthetic evaluation infrastructure diagnostic; not product or performance acceptance",
+  "status": "failed; proposed parent-deny/current-root-allow settings withdrawn",
+  "cli": "2.1.282",
+  "settingsBytes": 613,
+  "settingsSha256": "39fa2beb3c30eb64e6bdd9cc2d838e636b2f66e5a49b2efe8b5bee801ffb372f",
+  "commandAttempts": 1,
+  "observedFailure": "bwrap cannot create protected origin/.mcp.json: Read-only file system",
+  "assertionExecuted": false,
+  "hostProcess": {
+    "status": 0,
+    "seconds": 6.817001158837229
+  },
+  "modelUsage": {
+    "claude-sonnet-5": {
+      "inputTokens": 4,
+      "outputTokens": 225,
+      "cacheReadInputTokens": 16116,
+      "cacheCreationInputTokens": 16347,
+      "webSearchRequests": 0,
+      "costUSD": 0.0708692,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "modelReportedSuccessIsSandboxSuccess": false,
+  "retryPerformed": false,
+  "decision": "Do not launch matched development trials with these settings. Need a working compact read boundary before further performance comparison."
+}

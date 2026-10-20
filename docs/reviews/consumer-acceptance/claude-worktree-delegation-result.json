@@ -1,0 +1,202 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "inHostVerification": {
+      "toolUseId": "toolu_013FvmK5bZhhbLVaXDuHdbU2",
+      "head": "0e780886fa08e65aa5ceb6d2c82909d14e6ad9aa",
+      "contractSha256": "8a96eeeb9b5df0d8ea090750ace1fd0fe4a08ca1baf6546548c7feae09e7f1ec",
+      "checks": 6,
+      "scope": "Observed coordinator Bash result; external oracle independently rechecked the same commit"
+    },
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "reviewerMode": "generic",
+    "reviewerDefinitionSha256": null,
+    "skillBundleSha256": "cf8c4a44af83c9eb5ee159db1bfdf042c45c2a908c00b6f3842e1efbb63b603c",
+    "version": "0.5.900-alpha.48",
+    "skillSha256": "d7aaf2827736b21cf7cf9524a650007a0f10b4d338b7e776e9349156bb335c73",
+    "identitySha256": "45c88f5b9a63ffda2238462625982fa202fcffd30ab873249a292863de284c2c"
+  },
+  "conditions": {
+    "runnerSha256": "305373591440d2d26f9c933673e63683e8fba4f038bbae9f0b48bde062f0fe4d",
+    "scenario": "complex-two-issue-currency",
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "e4a7881d3bc2ee5cd7072d916aed49273ef3274c2d07ba40fdf2d51789b72401",
+    "intentSha256": "50658bebc66ff5557e01700fd7c1d7f1cc39e6916a5e06a336c17db4a0931dce",
+    "commands": [
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/reservation.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/billing.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/integration.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/unknown-keys.mjs",
+        "complex"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/accessors.mjs",
+        "complex",
+        "revised"
+      ],
+      [
+        "absolute-path-sha256:0292c4ba45d0c14f0622293d7d6678f8407c89c429f57d4c0161adb263643dd4",
+        "complex/oracle/revision.mjs",
+        "complex/previous",
+        "complex"
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "head": "0e780886fa08e65aa5ceb6d2c82909d14e6ad9aa",
+  "review": {
+    "taskId": "acf10af938ea1f1a9",
+    "agentType": "claude",
+    "head": "0e780886fa08e65aa5ceb6d2c82909d14e6ad9aa",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 94,
+      "output_tokens": 36945,
+      "cache_read_input_tokens": 2093265,
+      "cache_creation_input_tokens": 162289
+    },
+    "threads": [
+      {
+        "id": "342b28c4-3898-4a97-ab56-cbd91c1c65fd",
+        "messageCount": 22,
+        "usage": {
+          "input_tokens": 44,
+          "output_tokens": 17325,
+          "cache_read_input_tokens": 1468696,
+          "cache_creation_input_tokens": 78235
+        }
+      },
+      {
+        "id": "aca1779fefeaed3df",
+        "messageCount": 9,
+        "usage": {
+          "input_tokens": 18,
+          "output_tokens": 5741,
+          "cache_read_input_tokens": 223990,
+          "cache_creation_input_tokens": 35884
+        }
+      },
+      {
+        "id": "a18f6c0236c0a839e",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 11351,
+          "cache_read_input_tokens": 282713,
+          "cache_creation_input_tokens": 29613
+        }
+      },
+      {
+        "id": "acf10af938ea1f1a9",
+        "messageCount": 6,
+        "usage": {
+          "input_tokens": 12,
+          "output_tokens": 2528,
+          "cache_read_input_tokens": 117866,
+          "cache_creation_input_tokens": 18557
+        }
+      }
+    ],
+    "observedProcessedTokens": 2292593,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 377.708382659,
+  "deliverySeconds": 29.201015018999986,
+  "elapsedSeconds": 407.426136846,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "0e780886fa08e65aa5ceb6d2c82909d14e6ad9aa",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "95db4467d2fb93a921d6d2c70a618af656ef0fc89c9508cfa61cf1571d2b6687",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "c8df72b24bda397fefa19b4b0ca353b67d79b227fc6574ae92cf503a621427b2",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "df1884fa8059a9b18e6a356b8469143f48ae673688a87f4cac845c42e905aff1",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/168",
+  "ci": {
+    "head": "0e780886fa08e65aa5ceb6d2c82909d14e6ad9aa",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex:complex": "success",
+      "greeting:test": "success"
+    }
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Two-Issue currency revision; worker topology and parallel execution require separate transcript evidence. Interruption and restart are not part of this observation.",
+    "No merge or release."
+  ],
+  "diagnostic": {
+    "mechanism": "Both implementation workers and reviewer omitted extra worktree isolation. No worker stop/relaunch observed. Both workers were launched before either completion notification.",
+    "performanceAcceptance": false,
+    "finalSourceDifference": "Diagnostic alpha48 includes one sentence removed after independent review; final source retains two sentences.",
+    "quality": "All six in-Host and external oracles, independent submitted-HEAD review and both CI workflows passed."
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "distribution": {
+    "skillBundleSha256": "30cb5c5dae8f9ff55326f3056b0b307358c811910ee256ff6fb3c37fa6cc4a56",
+    "version": "0.5.900-alpha.5",
+    "skillSha256": "0964b95e27bcc36c028af87f0c8ce5f4f6c210dac0c03970343c58e98a71abe9",
+    "identitySha256": "dc462fb6e76abda1de5a7da2998020c552df874262ae5c4a41d108c690b108b8"
+  },
+  "conditions": {
+    "runtimeSha256": "8d98572f3378f009b3157c73708af9529000cac32102f7ab1a2f0f72aae07efb",
+    "intentSha256": "0764dc1fcf26421b837fd0d9e6197f72d213240949ace2503ece75a71d2df5d7",
+    "commands": [
+      [
+        "python3",
+        "-I",
+        "test_greeting.py"
+      ],
+      [
+        "python3",
+        "-I",
+        "-c",
+        "import sys; sys.path.insert(0, \".\"); from greeting import greeting; assert type(greeting()) is str and greeting() == \"Hello\""
+      ]
+    ]
+  },
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "12744ef0411612670326898cdb38d87040d0a2f1",
+  "review": {
+    "id": "01a15149-c557-7fe1-80c8-efb4a5b7ae4f",
+    "head": "12744ef0411612670326898cdb38d87040d0a2f1",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "rootId": "01a15149-2fba-7743-8bf7-a2cd959b7319",
+    "observedThreads": 2,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 262980,
+      "cachedInputTokens": 241152,
+      "outputTokens": 4360
+    },
+    "observedProcessedTokens": 267340,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a15149-2fba-7743-8bf7-a2cd959b7319",
+        "parent": null,
+        "usage": {
+          "input_tokens": 192289,
+          "cached_input_tokens": 175744,
+          "output_tokens": 2811
+        }
+      },
+      {
+        "id": "01a15149-c557-7fe1-80c8-efb4a5b7ae4f",
+        "parent": "01a15149-2fba-7743-8bf7-a2cd959b7319",
+        "usage": {
+          "input_tokens": 70691,
+          "cached_input_tokens": 65408,
+          "output_tokens": 1549
+        }
+      }
+    ]
+  },
+  "implementationAndReviewSeconds": 77.935057664,
+  "deliverySeconds": 20.916231029000002,
+  "elapsedSeconds": 98.864,
+  "manualHandoffs": 0,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "12744ef0411612670326898cdb38d87040d0a2f1",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/35",
+  "ci": {
+    "head": "12744ef0411612670326898cdb38d87040d0a2f1",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39175591066",
+    "transportFailures": []
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Fresh-context simple change only; repair, multiple Issues and restart acceptance remain separate.",
+    "No merge or release."
+  ]
+}

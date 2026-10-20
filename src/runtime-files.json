@@ -30,6 +30,7 @@
   "src/goal-run.mjs",
   "src/goal-worker.mjs",
   "src/host-execution.mjs",
+  "src/host-masked-paths.mjs",
   "src/host-process.mjs",
   "src/host-verification-assets.mjs",
   "src/issue-run.mjs",
@@ -41,6 +42,7 @@
   "src/project-launcher.mjs",
   "src/project-location.mjs",
   "src/restricted-agent.mjs",
+  "src/provider-failure.mjs",
   "src/review-result.mjs",
   "src/snapshot.mjs",
   "src/source-limits.mjs",
@@ -50,6 +52,7 @@
   "src/verification-git.mjs",
   "src/verification-resources.mjs",
   "src/workflow.mjs",
+  "src/verification-output.mjs",
   "src/worktree-execution.mjs",
   "migration_inspect.mjs",
   "skills/asc/SKILL.md",
@@ -109,5 +112,11 @@
   "v05/templates/specs/details/16_参照資料/00_官公庁一次資料台帳.md",
   "v05/templates/specs/details/17_デザイン/00_デザイントークン.md",
   "v05/templates/specs/details/18_レイアウト/00_レイアウトトークン.md",
-  "src/runtime-files.json"
+  "src/runtime-files.json",
+  "skills/asc/references/post-merge.md",
+  "skills/asc/references/review.md",
+  "skills/asc/references/implementation.md",
+  "skills/asc/references/coordination.md",
+  "skills/asc/references/controller.md",
+  "skills/asc/references/workspace.md"
 ]

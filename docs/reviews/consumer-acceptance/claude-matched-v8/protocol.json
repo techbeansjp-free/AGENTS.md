@@ -1,0 +1,31 @@
+{
+  "scope": "Registration-only comparison, not comparison of all historical Skill changes. Same alpha.36 artifact on both sides.",
+  "sourceCommit": "41b490afea9918d747370a386b39f761ecc9e5c3",
+  "runnerSha256": "9952128fc7df798f1674ee31c38de81257d289b82ab2a31c7e55fd258d62fcc2",
+  "driverSha256": "ab370eda689dd982c7ace83714da25daff411923496f7bf17d223b222cd32a58",
+  "packageSha256": "161d77b6c303296454826d8fba8a48b5dd74baf66cae7c2430956252f8419977",
+  "baselineReviewer": "generic",
+  "candidateReviewer": "registered",
+  "model": "sonnet",
+  "effort": "medium",
+  "order": [
+    "B",
+    "C",
+    "C",
+    "B",
+    "B",
+    "C",
+    "C",
+    "B",
+    "B",
+    "C"
+  ],
+  "maximumPairs": 5,
+  "stopConditions": [
+    "Any failed run or incomplete usage: stop, retain and do not replace.",
+    "Condition mismatch: stop.",
+    "Both first two pairs worse in time and processed tokens: stop."
+  ],
+  "acceptance": "Existing summarizeNativePairs requirements unchanged: five pairs, all quality/measurement checks, both medians lower, neither observed maximum regressed.",
+  "results": "All ten planned runs completed without replacement; see summary.json and numbered exports. Performance acceptance failed."
+}

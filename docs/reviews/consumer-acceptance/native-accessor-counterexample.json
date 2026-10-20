@@ -1,0 +1,60 @@
+{
+  "scope": "Post-trial additional counterexample, outside fixed performance oracles. No historical result rewritten. Candidate cannot pass quality acceptance while this defect exists.",
+  "oracleSha256": "0e993dbb545cdc896e52b063484beaa1a96636592fed9f9a64f3123c1761b7fb",
+  "runs": [
+    {
+      "pair": 1,
+      "side": "candidate",
+      "head": "6cb460267f3f39784fb856eb3faf6cbc22a57ca3",
+      "exit": 1,
+      "passed": false,
+      "negativeAmountPersisted": true,
+      "stderrSha256": "5197e217daca4399cf439b0477f82d5f98514686b601122231a962b4e5107004"
+    },
+    {
+      "pair": 2,
+      "side": "candidate",
+      "head": "7ff3b8c28a6a6dd568eff1e86fce79e5fac49012",
+      "exit": 1,
+      "passed": false,
+      "negativeAmountPersisted": true,
+      "stderrSha256": "5197e217daca4399cf439b0477f82d5f98514686b601122231a962b4e5107004"
+    },
+    {
+      "pair": 3,
+      "side": "candidate",
+      "head": "d7a4d6fb463dba29818877fd30983132cb2c09d5",
+      "exit": 1,
+      "passed": false,
+      "negativeAmountPersisted": true,
+      "stderrSha256": "5197e217daca4399cf439b0477f82d5f98514686b601122231a962b4e5107004"
+    },
+    {
+      "pair": 1,
+      "side": "baseline",
+      "head": "b7950f1e1955681445338c0cafa024daca31e73e",
+      "exit": 1,
+      "passed": false,
+      "negativeAmountPersisted": true,
+      "stderrSha256": "5197e217daca4399cf439b0477f82d5f98514686b601122231a962b4e5107004"
+    },
+    {
+      "pair": 2,
+      "side": "baseline",
+      "head": "1225f07ac59797438b649a2fd21b5849d9f53388",
+      "exit": 1,
+      "passed": false,
+      "negativeAmountPersisted": true,
+      "stderrSha256": "5197e217daca4399cf439b0477f82d5f98514686b601122231a962b4e5107004"
+    },
+    {
+      "pair": 3,
+      "side": "baseline",
+      "head": "69e1284cea60812eb6c7d9c016df86329b1440ff",
+      "exit": 0,
+      "passed": true,
+      "negativeAmountPersisted": false,
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

@@ -10,6 +10,6 @@ export function runHostProcess(binary,args,{env,input='',timeout=null}){
   const timer=timeout===null?undefined:setTimeout(()=>finish(Object.assign(Error('Host process deadline exceeded'),{code:'ASC_HOST_TRANSPORT_TIMEOUT'})),timeout);
   for(const [stream,chunks] of [[p.stdout,out],[p.stderr,err]])stream.on('data',b=>{size+=b.length;if(size>8*1024*1024)finish(Error('Host process output limit'));else chunks.push(b);});
   p.on('error',()=>finish(Error('Host executable could not start')));p.stdin.on('error',()=>finish(Error('Host input failed')));
-  p.on('close',code=>finish(code===0?undefined:Error('Host process failed: '+code)));p.stdin.end(input);
+  p.on('close',code=>finish(code===0?undefined:Object.assign(Error('Host process failed: '+code),{code:'ASC_PROVIDER_EXIT'})));p.stdin.end(input);
  });
 }

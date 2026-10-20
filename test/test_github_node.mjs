@@ -115,3 +115,35 @@ test('workflow ref suffix is accepted without weakening CI identity binding',asy
   assert.equal(jobReads,0);
  }
 });
+
+
+test('new Draft binds the submitted commit without claiming synthetic or Controller verification',()=>{
+ const {provider,data}=setup(),calls=[];
+ provider.command=(argv)=>{
+  calls.push(argv);
+  if(argv[0]==='git')return argv[1]==='config'?'':head;
+  if(argv[1]==='pr'&&argv[2]==='list')return '[]';
+  if(argv[1]==='pr'&&argv[2]==='create')return 'https://github.com/'+repository+'/pull/1';
+  if(argv[1]==='api')return JSON.stringify(argv[2].includes('/git/ref/')?{object:{sha:base}}:data);
+  throw Error('Unexpected command');
+ };
+ assert.equal(provider.createDraft(head),1);
+ const submitted=calls.find(a=>a[1]==='pr'&&a[2]==='create');assert(submitted.includes('--draft'));
+ assert.equal(submitted[submitted.indexOf('--title')+1],'Changes for #1');
+ const body=submitted[submitted.indexOf('--body')+1];assert(body.includes(head));assert.doesNotMatch(body,/Isolated|Controller verification|independent fresh review/);
+ assert.equal(calls.filter(a=>a.includes('push')).length,1);
+});
+
+ test('successful pending observations reset consecutive transport retry budget',async()=>{
+ const {provider,data,calls}=setup();provider.expectedHead=head;let observations=0;
+ provider.api=route=>{
+  if(route.includes('/actions/runs?')){
+   observations++;
+   if([1,3,5].includes(observations))throw Object.assign(Error('network'),{code:'ETIMEDOUT'});
+   return {workflow_runs:observations<6?[]:[{id:10,head_sha:head,event:'pull_request',path:'.github/workflows/safety.yml',repository:{full_name:repository},pull_requests:[{number:1,head:{sha:head},base:{sha:base}}],status:'completed',conclusion:'success',html_url:'fixture-run'}]};
+  }
+  return route.includes('/jobs?')?{total_count:1,jobs:[{name:'check',status:'completed',conclusion:'success'}]}:data;
+ };
+ const result=await provider.observe(1,{timeout:1000,interval:0});
+ assert.equal(result.checks.check,'success');assert.equal(result.transportFailures.length,3);assert.equal(observations,6);assert.equal(calls.length,0);
+});

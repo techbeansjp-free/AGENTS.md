@@ -1,0 +1,9 @@
+{
+  "scope": "Fixed synthetic fixture transfer, no Agent calls",
+  "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "sourceRefs": 6,
+  "destinationRefs": 0,
+  "commitObjects": 6,
+  "allCommitsInPinnedAncestry": true,
+  "alternatesPresent": false
+}

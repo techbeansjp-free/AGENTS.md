@@ -18,6 +18,8 @@ Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・
 
 更新・版指定・切戻しは、目的のtarballを導入したCLIから`project-assets`の差分を確認し、`--apply`する。現在のworktreeの同梱本体と版指定を一緒に更新するため、他の作業中worktreeは旧版のまま動く。利用者の編集と競合したら一括停止し、無断上書きしない。配布資産の変更をcommitして共有し、他のworktreeでは必要な時に通常のGit操作で取り込む。実行中プロセスのhot updateは行わない。
 
+更新前に、配布資産と`distribution.json`の正常な状態をcommit（非Gitなら別の場所へバックアップ）する。`project-assets --apply`は複数ファイルを書き換えるため、強制終了や書込み障害で部分更新が残る場合がある。失敗後は同梱CLIが起動できるとは限らない。更新前に保存したmanifestに列挙された資産と`distribution.json`だけを、現在の編集との差分を確認して復元し、取得済みtarballを導入したCLIから再試行する。壊れた更新後manifestを復元対象の正本にせず、`project/`・利用者成果物・無関係な未commit変更を一括restoreしない。Gitでは更新前commitから対象pathを指定して復元し、非Gitでは対応する保存済みファイルだけを戻す。
+
 旧配布方式（v0.5.3以前）への切戻しは例外。旧CLIは同梱本体を残したまま配布記録から外すため、その後の新版導入が「記録外の既存ファイル」として停止し得る。旧版へ戻す前に配布資産をcommit（非Gitならバックアップ）する。再更新時は、その既知のcommitから**配布manifestに列挙された資産とdistribution.jsonだけ**を戻してから新版を適用する。現在の編集と差分を確認し、固有設定・利用者成果物を一括restoreしない。保存済みの配布状態がなければ既存本体を自動採用・削除せず個別に確認する。同梱方式同士の更新・切戻しは通常手順で行える。
 
 初回導入用のnpmパッケージは `npm uninstall --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false agent-skill-chain` で削除できる。同梱本体は残り、通常起動は継続する。ASCを取り外す場合は配布manifestと実差分を確認して管理対象資産・Host登録だけを除去し、`project/`や利用者成果物を削除しない。`.agent-skill-chain/`全体を削除しない。
@@ -28,7 +30,9 @@ Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・
 
 `asc-v05 start <project-directory>` で作業場所を確認し、現在のAIがその場所で通常の実装・ビルド・テストを行う。Git管理済みrepoの場合は専用worktreeが必要。Git未管理のフォルダー（Git管理予定がないプロジェクトや複数repoの親を含む）でも開始でき、Git初期化やworktree作成は不要。pnpmの既存workspace・store・symlinkをそのまま使い、ASC向けの依存コピーやhash登録は行わない。依存が未導入ならプロジェクトのlockfileと現在のHost権限に従って導入する。worktree間の共有依存を無断で変更しない。
 
-検証の機械記録が必要なら `worktree-verify <worktree> <base> <owner-contract.json>` を使用できる。ownerファイルはworktree外に置き、`{"intent":"目的","allowedPaths":["src/file.ts"],"commands":[["pnpm","test"],["pnpm","build"]]}` のように指定する。変更をcommitしてから実行する。テストは現在のHost権限・環境変数で実際のworktree内に実行される（ASC独自sandboxではない）。現在のHostで許可されたコマンドだけ指定する。Windowsで.cmdを介する場合はHostが通常使うNodeとCLI scriptのargvなど、shellを必要としない実行入口を指定する。
+検証の機械記録が必要なら `worktree-verify <worktree> <base> <owner-contract.json>` を使用できる。ownerファイルはworktree外に置き、`{"intent":"目的","allowedPaths":["src/file.ts"],"commands":[["pnpm","test"],["pnpm","build"]]}` のように指定する。変更をcommitしてから実行する。規約は`allowedPaths`に対応するものを選び、各検証コマンド終了時に内容が変わっていないことを照合する。結果の`contextSha256`はこの選択規約のdigestであり、規約の意味的な遵守や独立レビューの代わりにはならない。テストは現在のHost権限・環境変数で実際のworktree内に実行される（ASC独自sandboxではない）。現在のHostで許可されたコマンドだけ指定する。Windowsで.cmdを介する場合はHostが通常使うNodeとCLI scriptのargvなど、shellを必要としない実行入口を指定する。
+
+結果全文を会話へ取り込まず保存する場合は `worktree-verify <worktree> <base> <owner-contract.json> --output <external-result.json>` を使用する。既存と同じ結果JSONをworktree外の新規ファイルへ保存し、標準出力には保存先・SHA256・対象commit・合否・検証数を返す。親ディレクトリは事前に作成し、既存ファイルは上書きしない。検証不合格も保存してexit 2、実行エラーはexit 1となる。`--output`なしの形式は変更しない。これは結果の受け渡しであり、署名や独立レビューの代替ではない。
 
 内部のGit観測は継承した`GIT_*`を除外して指定worktreeを確認する。owner指定の検証コマンドは現在のHost環境（`GIT_*`を含む）を引き継ぐため、Git設定や認証設定を無言で失わない。検証コマンドの対象・意味はownerが定めるものであり、任意のコマンドがそのworktreeだけを検査したことまではCLIは保証しない。
 
@@ -81,7 +85,7 @@ pathはproject root相対、`appliesTo`はglobではなく完全一致またはd
 
 例: `git worktree add -b fix/123-login-message .worktrees/20261015_143000-123-login-message <base>`。専用作業先の絶対pathを`repo`に指定する。名前が衝突したら別slugを選び、既存branchの強制reset・worktree上書きを行わない。必要に応じてownerがmerge/rebaseでbase変更を取り込み、更新した要求で検証・reviewを再実行する。実装中のCLIは自動fetch・stash・reset・base更新を行わない。マージ後のHostによる同期・整理は下記の契約に従う。
 
-命名は作成時の標準であり、安全性の証拠ではない。既存worktreeの改名や時刻の鮮度を再開条件にしない。`asc-v05 worktree-create <root> <issue> <type> <slug> <base>`で標準名の作業先を作成できる。checkout filterやhookを実行せず、既存branch/pathは上書きしない。途中失敗した作業先は調査用に保持する。独自規約の作業先はownerが作成して`run`へ渡せる。実行時は名前ではなくGitの実体、変更範囲、ContractとEvidenceを検証する。独自規約や過去の名前だけを理由に正常な作業を一律拒否しない。
+命名は作成時の標準であり、安全性の証拠ではない。既存worktreeの改名や時刻の鮮度を再開条件にしない。`asc-v05 worktree-create <repo-root> <issue> <type> <slug> <base>`で標準名の作業先を作成できる。`repo-root`は既存Git checkoutのrootを指定する。作成先の親`.worktrees`はCLIがその配下に用意するため、引数に`.worktrees`自体を渡さない。checkout filterやhookを実行せず、既存branch/pathは上書きしない。途中失敗した作業先は調査用に保持する。独自規約の作業先はownerが作成して`run`へ渡せる。実行時は名前ではなくGitの実体、変更範囲、ContractとEvidenceを検証する。独自規約や過去の名前だけを理由に正常な作業を一律拒否しない。
 
 移行や隔離実験の独立cloneを使う場合だけ、外部owner入力へ`"workspaceMode": "isolated-clone"`を明記する。未指定はworktree、未知値とrepo配下のサブディレクトリは拒否する。これはGit上の作業場所の確認であり、同時編集者がいないことの証明ではない。cloneの独立した準備はowner責務で、共有object storageの有無まではこの検査で判定しない。従来のclean状態・差分検査は継続する。内部APIを直接使うhost integrationは専用作業場所を自ら用意する。
 
@@ -473,3 +477,9 @@ v0.4で開始した作業中worktreeは、明示的に移行するまで既存�
 Git管理予定がないプロジェクトも、要求・変更内容・実テスト・独立レビューに基づき完了できる。Git初期化やPRは必須ではない。commit拘束やPR提出は、Gitで提出する場合の追加条件である。
 
 Git未管理の親ディレクトリへASCを置き、配下の複数repoで共用できる。資産導入は指定した親だけを変更し、子repoを自動初期化・変更・commitしない。進行役は共通ルールと対象repoの固有ルールを読み、許可範囲・検証結果・Gitのbase/HEADをrepoごとに区別する。Git管理済みrepoでの実装には各repoの専用worktreeを使い、repo横断の要求には統合検証も行う。非Gitファイルも許可範囲内の検証対象にできるが、Git差分に含まれているとは記録しない。この案内は複数repoを単一トランザクションとして自動提出する機能を意味しない。
+
+### Hostが作る読取り専用のnull mask
+
+Linux Hostのsandboxが保護目的で作る読取り専用`/dev/null` mountをGitが未追跡ファイルと報告する場合、`worktree-verify`は既定では`ASC_HOST_MASK_APPROVAL_REQUIRED`で拒否する。ソース修復や同じ入力の再実行では解消しない。例外が必要なら、ownerがrepo外の検証契約に`hostMaskedPaths`の完全一致相対path配列を明示する。例は`"hostMaskedPaths":[".claude/settings.json"]`。ファイル名やHost名だけで自動許可せず、実装Agentが自己承認して追加してはいけない。この指定はmountで隠された元のファイル内容を検証しないことへの許可であり、その内容の安全性を証明しない。
+
+指定は除外の許可であってmountの存在要求ではない。指定先が実際の読取り専用null device mountで、`allowedPaths`と重ならない場合だけ除外する。通常環境で対象が存在しない場合も同じ契約を使える。通常ファイル・symlink・書込み可能mountを除外しない。検証中のmount変更、tracked差分、新しい未追跡成果は引き続き拒否する。結果の`hostMaskedPaths`で対象を報告する。他OSでこの指定を流用せず、必要なHost境界を確認する。

@@ -1,0 +1,42 @@
+{
+  "head": "dcf07245e3bba353a92fb8044050e7cd7e81f861",
+  "threads": [
+    {
+      "id": "01a1528a-8443-79c2-a8fa-3f55ebb529d8",
+      "role": "coordinator",
+      "observedModelResponses": 45,
+      "maxResponseInputTokens": 50663,
+      "observedToolCalls": 43,
+      "toolOutputBytes": 79532,
+      "processedTokens": 1581369
+    },
+    {
+      "id": "01a1528b-392b-7eb0-a7ec-9ab8b1f336c8",
+      "role": "/root/issue_9001_reservation",
+      "observedModelResponses": 11,
+      "maxResponseInputTokens": 39774,
+      "observedToolCalls": 10,
+      "toolOutputBytes": 53890,
+      "processedTokens": 354961
+    },
+    {
+      "id": "01a1528b-5378-7ec2-b6db-0cd80744fff2",
+      "role": "/root/issue_9002_billing",
+      "observedModelResponses": 12,
+      "maxResponseInputTokens": 37679,
+      "observedToolCalls": 11,
+      "toolOutputBytes": 47729,
+      "processedTokens": 355249
+    },
+    {
+      "id": "01a1528e-be3b-7ad3-ae78-0c5a863d8152",
+      "role": "/root/independent_review",
+      "observedModelResponses": 13,
+      "maxResponseInputTokens": 49200,
+      "observedToolCalls": 10,
+      "toolOutputBytes": 103068,
+      "processedTokens": 502319
+    }
+  ],
+  "scope": "Saved synthetic Host records; output bytes are not tokens. No causal claim."
+}

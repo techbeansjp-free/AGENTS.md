@@ -10,7 +10,7 @@ export function validateDelegation(request){
  demand(policy?.mode==='within-owner-contract','Explicit owner decomposition delegation required');
  demand(!request.goal&&!request.unitRequests&&!request.unitCandidates,'Delegation cannot override an existing unit plan');
  if(policy.unitTestArgv!==undefined)demand(Array.isArray(policy.unitTestArgv)&&policy.unitTestArgv.length>0&&policy.unitTestArgv.every(v=>typeof v==='string'&&v&&!v.includes('\0')),'Explicit owner unit baseline command required');
- demand(Array.isArray(policy.unitChecks)&&policy.unitChecks.length>0&&policy.unitChecks.length<=64,'Owner unit verification rules required');
+ demand(Array.isArray(policy.unitChecks)&&policy.unitChecks.length>0,'Owner unit verification rules required');
  for(const rule of policy.unitChecks){
   demand(Array.isArray(rule.paths)&&rule.paths.length>0&&rule.paths.every(p=>request.contract.allowedPaths.includes(p)),'Verification rule exceeds owner scope');rule.paths.forEach(safeName);
   demand(Array.isArray(rule.argvs)&&rule.argvs.length>0&&rule.argvs.every(a=>Array.isArray(a)&&a.length&&a.every(v=>typeof v==='string'&&v&&!v.includes('\0'))),'Explicit owner verification commands required');
@@ -42,7 +42,7 @@ export async function runAdaptive(input,options={}){
  const save=result=>{const output={...result,proposal,wallSeconds:(performance.now()-started)/1000,budget:budget.snapshot(),adoption:'owner-delegated scope and verification policy; not model approval'};fs.writeFileSync(path.join(result.root,'result.json'),JSON.stringify(output,null,2));return output;};
  try{
   const adopted=adoptProposal(request,proposal);
-  const contexts=proposal.calls.map(call=>call.context);demand(contexts.every(c=>typeof c==='string'&&c),'Proposal context missing');
+  const contexts=proposal.calls.filter(call=>!(call.status==='failed'&&call.code==='ASC_PROVIDER_CAPACITY'&&call.context===null)).map(call=>call.context);demand(contexts.every(c=>typeof c==='string'&&c),'Proposal context missing');
   return save(await runGoal(adopted,{...options,executionBudget:budget,priorContexts:contexts}));
  }catch(error){error.goalDiagnostic=save(error.goalDiagnostic??{status:'blocked',root:proposal.root,units:[],error:String(error)});throw error;}
 }

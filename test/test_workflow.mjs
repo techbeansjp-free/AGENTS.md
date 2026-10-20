@@ -469,3 +469,58 @@ test('output overflow does not dispatch repair or consume another Agent call',{s
  assert.equal(calls,1);assert.equal(f.creates(),0);
  }
 });
+
+
+test('capacity resumes preserved work without consuming code repairs, then verifies and reviews',{skip:!enabled},async t=>{
+ const f=fixture(t);f.request.maxRepairs=0;let workers=0,reviews=0;
+ const result=await runWorkflow(f.request,{provider:f.provider,agent:async({workspace,writable,prompt})=>{
+  if(writable){
+   workers++;
+   if(workers===1){fs.writeFileSync(path.join(workspace,'code.txt'),'partial');throw Object.assign(Error('capacity'),{code:'ASC_PROVIDER_CAPACITY'});}
+   assert.equal(fs.readFileSync(path.join(workspace,'code.txt'),'utf8'),'partial');
+   assert.equal(JSON.parse(prompt).previousFailure.kind,'provider-capacity');
+   fs.writeFileSync(path.join(workspace,'code.txt'),'after');return {context:'resumed',seconds:0,usage:[]};
+  }
+  reviews++;return {context:'independent',seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};
+ }});
+ t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));
+ assert.equal(result.status,'draft-ci-passed');assert.equal(workers,2);assert.equal(reviews,1);
+ assert.equal(result.repairs,0);assert.equal(result.calls[0].status,'failed');assert.equal(result.calls[0].usage,null);
+});
+
+test('repeated capacity at unchanged content stops and keeps checkpoint without Delivery',{skip:!enabled},async t=>{
+ const f=fixture(t);let calls=0;
+ await assert.rejects(runWorkflow(f.request,{provider:f.provider,agent:async()=>{
+  calls++;throw Object.assign(Error('capacity'),{code:'ASC_PROVIDER_CAPACITY'});
+ }}),error=>{
+  t.after(()=>fs.rmSync(error.workflowDiagnostic.root,{recursive:true,force:true}));
+  assert.equal(error.code,'ASC_PROVIDER_CAPACITY');
+  assert.equal(fs.readFileSync(path.join(error.workflowDiagnostic.interruptedCandidate.checkpoint,'code.txt'),'utf8'),'before');return true;
+ });
+ assert.equal(calls,2);assert.equal(f.creates(),0);
+});
+
+test('capacity recovery cannot expand scope or renew Agent admission',{skip:!enabled},async t=>{
+ for(const mode of ['scope','budget']){
+  const f=fixture(t);if(mode==='budget')f.request.budget={maxAgentCalls:1};let calls=0;
+  await assert.rejects(runWorkflow(f.request,{provider:f.provider,agent:async({workspace})=>{
+   calls++;fs.writeFileSync(path.join(workspace,mode==='scope'?'outside.txt':'code.txt'),'partial');
+   throw Object.assign(Error('capacity'),{code:'ASC_PROVIDER_CAPACITY'});
+  }}),error=>{t.after(()=>fs.rmSync(error.workflowDiagnostic.root,{recursive:true,force:true}));return true;});
+  assert.equal(calls,1);assert.equal(f.creates(),0);assert.equal(f.git('rev-parse','HEAD'),f.request.base);
+ }
+});
+
+test('review capacity retries only independent review without reimplementation or revalidation',{skip:!enabled},async t=>{
+ for(const persistent of [false,true]){
+  const f=fixture(t);f.request.maxRepairs=0;let workers=0,reviews=0;
+  const execution=runWorkflow(f.request,{provider:f.provider,agent:async({workspace,writable})=>{
+   if(writable){workers++;fs.writeFileSync(path.join(workspace,'code.txt'),'after');return {context:'implementer',seconds:0,usage:[]};}
+   reviews++;if(persistent||reviews===1)throw Object.assign(Error('capacity'),{code:'ASC_PROVIDER_CAPACITY'});
+   return {context:'independent-reviewer',seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};
+  }});
+  if(persistent)await assert.rejects(execution,error=>{t.after(()=>fs.rmSync(error.workflowDiagnostic.root,{recursive:true,force:true}));assert.equal(error.code,'ASC_PROVIDER_CAPACITY');assert.equal(f.creates(),0);return true;});
+  else{const result=await execution;t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(result.status,'draft-ci-passed');assert.equal(result.controllerEvents.filter(e=>e.operation==='verify').length,1);assert.equal(result.repairs,0);}
+  assert.equal(workers,1);assert.equal(reviews,2);
+ }
+});

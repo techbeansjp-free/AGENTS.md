@@ -1,0 +1,98 @@
+{
+  "scope": "Explicit Claude reviewer registration from unpublished distribution into synthetic non-Git project; direct selection and explicit parent-to-subagent delegation, not implementation-to-PR E2E or performance comparison.",
+  "packageVersion": "0.5.900-alpha.33",
+  "packageSha256": "e16c193badb819a122bdfc32a6a5952f4e5b23ad0305749cd05c8a65aecdde1e",
+  "cliVersion": "2.1.282 (Claude Code)",
+  "model": "claude-sonnet-5",
+  "effort": "medium",
+  "selectedAgent": "asc-reviewer",
+  "discovered": true,
+  "registrationSha256": "e55d430a419bc71c263f1d7b958527cdebc620dc3a17eda88bd98cd7c9f3aefe",
+  "canonicalProcedureSha256": "392bf24c86440b6a99c9b79191bbef9eb243a44d5a5ad113777032c9cc925e20",
+  "canonicalProcedureIncluded": true,
+  "sourceSha256": "163fa14c7a1c49234bfef8f697289ea68a3c7aa08fb254ee0861d8c772fdb7ff",
+  "testSha256": "65e6f45852dd1a7329cd4d0d452dcce6515bd1cb799c7598724363cc995aefe3",
+  "commands": [
+    "ls -la && echo ---SUM--- && cat sum.mjs && echo ---TEST--- && cat test.mjs",
+    "node test.mjs; echo \"exit:$?\"\nnode -e 'import(\"./sum.mjs\").then(m=>console.log(\"sum(2,1)=\",m.sum(2,1),\"sum(0,0)=\",m.sum(0,0),\"sum(-1,5)=\",m.sum(-1,5)))'"
+  ],
+  "result": {
+    "status": 0,
+    "seconds": 26.484504021937028,
+    "sourceUnchanged": true
+  },
+  "usage": {
+    "input_tokens": 6,
+    "output_tokens": 1747,
+    "cache_read_input_tokens": 19599,
+    "cache_creation_input_tokens": 10639
+  },
+  "processedTokens": 31991,
+  "findings": [
+    "Arithmetic sum requirement contradicted by subtraction; reproduced sum(2,1)=1 instead of 3.",
+    "Existing type-only test passes despite incorrect arithmetic result."
+  ],
+  "verdict": "reject",
+  "testSourceUnchanged": true,
+  "procedureFileReadToolCalls": 0,
+  "boundary": {
+    "sandboxEnabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "networkAllowedDomains": [],
+    "settingSources": "project",
+    "userSettingsChanged": false
+  },
+  "limitations": [
+    "Known synthetic defect only; no recall or precision guarantee.",
+    "Parent delegation was explicitly requested; autonomous selection during a full implementation remains untested.",
+    "No Draft PR or delivery in this narrow reviewer trial.",
+    "Sandbox configuration recorded; this is not a fresh OS isolation audit.",
+    "No comparison with previous different fixtures or contexts."
+  ],
+  "officialReference": "https://code.claude.com/docs/en/sub-agents#write-subagent-files",
+  "delegation": {
+    "status": 0,
+    "seconds": 42.99026625487022,
+    "selectedAgent": "asc-reviewer",
+    "parentToolCalls": 1,
+    "parentSourceReads": 0,
+    "reviewProcedureCopiedIntoPrompt": false,
+    "usage": {
+      "totals": {
+        "input_tokens": 14,
+        "output_tokens": 3149,
+        "cache_read_input_tokens": 77080,
+        "cache_creation_input_tokens": 29425
+      },
+      "threads": [
+        {
+          "id": "d2172d08-00cf-4278-9276-f910bb37e864",
+          "messageCount": 3,
+          "usage": {
+            "input_tokens": 6,
+            "output_tokens": 1128,
+            "cache_read_input_tokens": 40648,
+            "cache_creation_input_tokens": 22407
+          }
+        },
+        {
+          "id": "a2efdfb7533b912dd",
+          "messageCount": 4,
+          "usage": {
+            "input_tokens": 8,
+            "output_tokens": 2021,
+            "cache_read_input_tokens": 36432,
+            "cache_creation_input_tokens": 7018
+          }
+        }
+      ],
+      "observedProcessedTokens": 109668,
+      "missingUsage": [],
+      "reconciledWithHostModelUsage": true,
+      "complete": true
+    },
+    "finalResponse": "## Review findings (asc-reviewer agent)\n\n**Verdict: Not approved**\n\n1. **sum.mjs is broken** — it performs subtraction (`a - b`), not addition. Confirmed with concrete examples: `sum(2,1)` returns `1` (should be `3`), `sum(5,3)` returns `2` (should be `8`), `sum(-2,-3)` returns `1` (should be `-5`). Direct violation of the requirement.\n\n2. **test.mjs is too weak to catch it** — its only assertion is `typeof sum(2,1) === \"number\"`. That checks the return type, not the value, so the buggy subtraction implementation passes trivially. No coverage exists for correct sums, negative numbers, zero, or mixed signs.\n\n3. **`node test.mjs` exits 0, but that's not evidence of correctness** — the passing status only reflects the weak typeof check, not that the requirement is actually met.\n\n**Unverified / open items:**\n- Whether \"integer arguments\" implies input validation (rejecting non-integers/floats) is ambiguous in the requirement — not resolved.\n- Overflow/precision behavior for very large integers (JS number precision limits) isn't addressed by the requirement or tests.\n- No type-coercion tests exist (e.g., string inputs).\n- No Git history exists for this project — review is based on a direct file snapshot, not tied to a commit.\n- Only sum.mjs/test.mjs were inspected, per the stated scope.\n\n**Required remediation (reviewer's recommendation, not yet applied):** fix `sum.mjs` to return `a + b`, and strengthen `test.mjs` with value-based assertions (positive, negative, zero, mixed-sign cases) before re-review.\n\nNo files were modified and nothing was published — this is a report only.",
+    "scope": "Parent explicitly requested delegation to registered reviewer on same synthetic defect. Not implementation-to-PR E2E or matched performance comparison."
+  }
+}

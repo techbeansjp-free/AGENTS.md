@@ -1,0 +1,20 @@
+{
+  "pair": 2,
+  "variant": "candidate",
+  "status": "measurement-observer-failed",
+  "modelExecution": {
+    "status": 0,
+    "signal": null,
+    "seconds": 186.70083128
+  },
+  "usageComplete": true,
+  "observedProcessedTokens": 1082125,
+  "draftPrCreated": false,
+  "cause": "Coordinator batched git status, HEAD and successful worktree-verify; untracked Host mask paths preceded JSON and strict observer rejected the combined output. No in-Host test failure inferred. No acceptance or performance success claimed.",
+  "eventsSha256": "a41eb937a3fcc668beb52cfb3ec11d04101c8985a60e12a780c17471dddc7517",
+  "failure": {
+    "error": "Missing successful in-Host worktree verification for submitted HEAD and owner contract",
+    "seconds": 187.231718744
+  },
+  "protocolAction": "Stop cohort at first measurement failure; retain attempt; no replacement run."
+}

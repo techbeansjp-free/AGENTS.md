@@ -1,0 +1,45 @@
+{
+  "model": "gpt-6-sol",
+  "cliVersion": "0.155.0-alpha.16.3",
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 0.35990133700000027
+  },
+  "error": "fs sandbox helper: error building bubblewrap command: mountinfo path is not absolute",
+  "phase": "thread/start before Agent work",
+  "qualityAccepted": false,
+  "performanceAccepted": false,
+  "tokens": null,
+  "scope": "READY-only read-only probe succeeded; custom filesystem sandbox start failed. No isolation bypass.",
+  "diagnosis": {
+    "modelFreeComparison": [
+      {
+        "cli": "0.153.4",
+        "exit": 0
+      },
+      {
+        "cli": "0.155.0-alpha.16.3",
+        "exit": 1,
+        "error": "mountinfo path is not absolute"
+      }
+    ],
+    "hostMountObservation": {
+      "filesystem": "nsfs",
+      "rootField": "mnt:[namespace-id]",
+      "absolute": false
+    },
+    "temporaryNamespace": {
+      "network": "unshared",
+      "credentials": "not mounted",
+      "hostMountsModified": false,
+      "firstAttempt": "inner sandbox omitted CLI path; failed to execute CLI",
+      "correctedAttempt": {
+        "cli": "0.155.0-alpha.16.3",
+        "command": "/usr/bin/true",
+        "exit": 0
+      }
+    },
+    "conclusion": "New CLI sandbox succeeds in a minimal disposable mount namespace but fails with host mount topology. Specific nsfs entry causality and full model execution in clean namespace remain unproven."
+  }
+}

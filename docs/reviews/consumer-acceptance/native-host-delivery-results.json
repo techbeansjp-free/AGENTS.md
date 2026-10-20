@@ -1,0 +1,107 @@
+{
+  "scope": "Native current-host Agent implementation and independent review; separate Host-owned delivery. One synthetic Issue, not general autonomy/performance acceptance.",
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "39c80f61b14ce77ae5d122e48074e7659cb7db2a",
+  "packageSha256": "e42b0fc2b48ad8611a179cdc76bdc2e97f21fca6c4b9a166fbc87e1a2d77b26c",
+  "implementationAndReviewSeconds": 58.899908583,
+  "deliverySeconds": 20.136074193,
+  "elapsedIncludingHandoffSeconds": 140.5360715332031,
+  "usage": {
+    "rootId": "01a1511f-9f8b-7902-9e09-148e09800128",
+    "observedThreads": 2,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 258161,
+      "cachedInputTokens": 227584,
+      "outputTokens": 4011
+    },
+    "observedProcessedTokens": 262172,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a1511f-9f8b-7902-9e09-148e09800128",
+        "parent": null,
+        "usage": {
+          "input_tokens": 208306,
+          "cached_input_tokens": 180992,
+          "output_tokens": 3051
+        }
+      },
+      {
+        "id": "01a15120-1d65-7a21-b39c-a0333e7cefcb",
+        "parent": "01a1511f-9f8b-7902-9e09-148e09800128",
+        "usage": {
+          "input_tokens": 49855,
+          "cached_input_tokens": 46592,
+          "output_tokens": 960
+        }
+      }
+    ]
+  },
+  "verification": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+    "head": "39c80f61b14ce77ae5d122e48074e7659cb7db2a",
+    "contractSha256": "2ab8edd11fc4bc7dd970455d4f0926120c0a9a8a499621892610c30ec40b856b",
+    "intent": "Change greeting() from Helo to Hello. Add an exact regression test. Preserve the existing string-returning API. Only greeting.py and test_greeting.py may change. Do not change the workflow, dependencies, or other files. Submit a Draft PR; do not merge or release.\n",
+    "results": [
+      {
+        "argv": [
+          "python3",
+          "-I",
+          "test_greeting.py"
+        ],
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "argv": [
+          "python3",
+          "-I",
+          "-c",
+          "import sys; sys.path.insert(0, \".\"); from greeting import greeting; assert type(greeting()) is str and greeting() == \"Hello\""
+        ],
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "passed": true,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  },
+  "review": {
+    "reviewerId": "01a15120-1d65-7a21-b39c-a0333e7cefcb",
+    "head": "39c80f61b14ce77ae5d122e48074e7659cb7db2a",
+    "verdict": "PASS",
+    "observedInIndependentRollout": true
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/28",
+  "ci": {
+    "head": "39c80f61b14ce77ae5d122e48074e7659cb7db2a",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39172387355",
+    "transportFailures": []
+  },
+  "interventions": {
+    "driverImplementationEdits": 0,
+    "driverPlanOrRepair": 0,
+    "manualEvaluationHandoff": "Evaluation controller inspected independent reviewer HEAD and started the deterministic delivery adapter; not an unattended integrated driver.",
+    "evaluationControllerTokens": null
+  },
+  "limitations": [
+    "One run only; no speed/token improvement claim.",
+    "Parent and reviewer usage measured; outer evaluation controller usage excluded, so total experiment cost is not established.",
+    "No repair, parallel Issue, conflict or restart in this fixture.",
+    "No merge or release."
+  ]
+}

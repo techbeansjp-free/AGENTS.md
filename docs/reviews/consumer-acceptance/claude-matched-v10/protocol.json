@@ -1,0 +1,39 @@
+{
+  "scope": "Core Skill compaction only; same runtime, references, model, fixture, owner contract and oracle. No registered reviewer. Evaluator fixes only since stopped v9; same alpha.37/38 packages. Later project-context cache change is not included in either artifact and is not measured by this comparison.",
+  "sourceCommit": "2dd586a13",
+  "runnerSha256": "01db231bf76757b30e41b4fb83f17d235b369e2ee1339cb4e971aa9361e3670b",
+  "driverSha256": "d5c22665a6708c221cc273a929159e7072453b7e7c587f32a2774bfc5675f63e",
+  "baselineReviewer": "generic",
+  "candidateReviewer": "generic",
+  "model": "sonnet",
+  "effort": "medium",
+  "order": [
+    "B",
+    "C",
+    "C",
+    "B",
+    "B",
+    "C",
+    "C",
+    "B",
+    "B",
+    "C"
+  ],
+  "maximumPairs": 5,
+  "stopConditions": [
+    "Any failed run or incomplete usage: stop, retain and do not replace.",
+    "Condition mismatch: stop.",
+    "Both first two pairs worse in time and processed tokens: stop."
+  ],
+  "acceptance": "Existing summarizeNativePairs requirements unchanged: five pairs, all quality/measurement checks, both medians lower, neither observed maximum regressed.",
+  "results": "Stopped after four completed runs by predeclared two-pair futility: candidate worse in both time and processed tokens in both pairs. All four passed quality, usage and delivery. Six runs not started. Performance acceptance failed; compact core Skill withdrawn.",
+  "baselinePackageSha256": "cb05febc28dd15f087d2371dc1f3c50c4e7790111a37b91f7b0dd61fd9c93483",
+  "candidatePackageSha256": "abc6528f01157b7328010094ea2323226944200c576a47be929741bfded80bd9",
+  "baselineSkillBytes": 11055,
+  "candidateSkillBytes": 8245,
+  "inputHashes": {
+    "scripts/run-claude-delivery.mjs": "01db231bf76757b30e41b4fb83f17d235b369e2ee1339cb4e971aa9361e3670b",
+    "scripts/claude-review-evidence.mjs": "460e64fe3daa2ba423c1cdffa366ccddd6e8a8955d222c4cdd01ec2b079498e9",
+    "scripts/claude-usage.mjs": "d0c1b0714943a6f68aebf25fd6569143755292e226fb00033bd91a473a9cea79"
+  }
+}

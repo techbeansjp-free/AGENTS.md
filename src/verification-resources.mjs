@@ -4,7 +4,7 @@ import {performance} from 'node:perf_hooks';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';import {randomUUID} from 'node:crypto';import {fileURLToPath} from 'node:url';
 const self=fileURLToPath(import.meta.url);
-function demand(ok,message){if(!ok)throw Error(message);}
+function demand(ok,message,details){if(!ok)throw Object.assign(Error(message),details);}
 export function verificationMemoryLimit(value=1073741824){
  demand(Number.isSafeInteger(value)&&value>=67108864&&value<=4294967296&&value%1048576===0,'Invalid verification memory limit');return value;
 }
@@ -77,13 +77,19 @@ export function runBoundedVerification(argv,timeout=null,memoryBytes=1073741824)
  const unit=`asc-verify-${randomUUID()}.service`,temp=fs.mkdtempSync(path.join(os.tmpdir(),'asc-verify-resource-')),request=path.join(temp,'request.json');
  const env={PATH:'/usr/bin:/bin',XDG_RUNTIME_DIR:`/run/user/${process.getuid()}`,DBUS_SESSION_BUS_ADDRESS:`unix:path=/run/user/${process.getuid()}/bus`};
  const ctl=args=>spawnSync('/usr/bin/systemctl',['--user',...args],{env,encoding:'utf8',timeout:5000,maxBuffer:65536});
- let result,cleanup;
+ let result,cleanup,failure;
  try{
   fs.writeFileSync(request,JSON.stringify({unit,argv,timeout,memoryBytes,owner:{pid:process.pid,start:ownerIdentity(process.pid)}}),{flag:'wx',mode:0o600});
   const p=spawnSync('/usr/bin/systemd-run',['--user','--wait','--pipe',`--unit=${unit}`,'--working-directory=/',`--property=MemoryMax=${memoryBytes}`,'--property=MemorySwapMax=0','--property=TasksMax=256',...(timeout===null?[]:[`--property=RuntimeMaxSec=${Math.ceil(timeout/1000)+5}`]),'--property=KillMode=control-group','--property=OOMPolicy=continue',process.execPath,self,'--resource-worker',request],{env,encoding:'utf8',timeout:timeout===null?0:timeout+10000,maxBuffer:3145728,killSignal:'SIGKILL'});
   if(p.error||p.status!==0){
-   const failure=Error(`Bounded verification observer failed (status=${p.status}, error=${p.error?.code??'none'}). Untrusted observer stderr: ${String(p.stderr??'').slice(-2048)}`);
-   failure.verificationDiagnostic={unit,status:p.status,error:p.error?.code??null,stderr:String(p.stderr??'').slice(-2048),truncated:String(p.stderr??'').length>2048,authority:'diagnostic only; no successful verification or approval'};
+   failure=Error(`Bounded verification observer failed (status=${p.status}, error=${p.error?.code??'none'}). Untrusted observer stderr: ${String(p.stderr??'').slice(-2048)}`);
+   const state=ctl(['show',unit,'--property=Result','--property=ExecMainCode','--property=ExecMainStatus','--property=ControlGroup']);
+   const service=state.error||state.status!==0?null:Object.fromEntries(state.stdout.trim().split('\n').map(line=>{const i=line.indexOf('=');return [line.slice(0,i),line.slice(i+1)];}));
+   const counters={};
+   if(service?.ControlGroup?.startsWith('/')&&path.basename(service.ControlGroup)===unit){
+    for(const name of ['memory.events','pids.events'])try{counters[name]=fs.readFileSync(path.join('/sys/fs/cgroup',service.ControlGroup,name),'utf8').slice(0,4096);}catch{counters[name]=null;}
+   }
+   failure.verificationDiagnostic={service,counters,unit,status:p.status,error:p.error?.code??null,stderr:String(p.stderr??'').slice(-2048),truncated:String(p.stderr??'').length>2048,authority:'diagnostic only; no successful verification or approval'};
    throw failure;
   }
   result=JSON.parse(p.stdout);
@@ -95,7 +101,8 @@ export function runBoundedVerification(argv,timeout=null,memoryBytes=1073741824)
   const state=ctl(['show',unit,'--property=ActiveState','--property=SubState']);
   cleanup=!state.error&&state.status===0&&/^ActiveState=inactive$/m.test(state.stdout)&&/^SubState=dead$/m.test(state.stdout);
   fs.rmSync(temp,{recursive:true,force:true});
-  demand(cleanup,'Bounded verification cleanup unconfirmed');
+  if(failure)failure.verificationDiagnostic.cleanupConfirmed=cleanup;
+  demand(cleanup,'Bounded verification cleanup unconfirmed',failure?{cause:failure,verificationDiagnostic:failure.verificationDiagnostic}:undefined);
  }
  demand(!fs.existsSync(path.join('/sys/fs/cgroup',result.resourceBoundary.after.cgroup)),'Verification cgroup remains');
  if(result.resourceBoundary.executionError==='ENOBUFS')throw Object.assign(Error('Verification output exceeded 1 MiB'),{code:'ASC_VERIFICATION_OUTPUT_LIMIT',verificationDiagnostic:{...result.resourceBoundary,cleanupConfirmed:cleanup,authority:'diagnostic only; no successful verification or approval'}});

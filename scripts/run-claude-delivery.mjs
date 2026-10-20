@@ -1,0 +1,138 @@
+/** Synthetic evaluation only. Fixed fixture; no implementation, planning or repair by this runner. */
+import fs from 'node:fs';import path from 'node:path';import {spawn,execFileSync} from 'node:child_process';import {randomUUID,createHash} from 'node:crypto';import {pathToFileURL} from 'node:url';import {performance} from 'node:perf_hooks';
+import {claudeEvaluationSettings} from './claude-evaluation-settings.mjs';
+import {prepareFixtureRepository} from './native-fixture-repository.mjs';
+import {gitControlState,assertGitControlState} from './native-git-boundary.mjs';
+import {interruptSavedAttempt} from './native-interrupted-attempt.mjs';
+import {workerCheckpointObserver} from './native-worker-checkpoint.mjs';
+import {activeClaudeWorkers} from './claude-worker-lifecycle.mjs';
+import {claudeUsage,claudeSessionIds} from './claude-usage.mjs';import {claudeReviewEvidence} from './claude-review-evidence.mjs';
+import {verificationCaptureSource} from './claude-verification-capture.mjs';
+import {claudeVerificationEvidence} from './claude-verification-evidence.mjs';
+import {assetHash,verifyBrowser} from './isolated-browser-tool.mjs';
+import {claudeBrowserEvidence} from './claude-browser-evidence.mjs';
+const [tarball,claude,fixture,mode]=process.argv.slice(2);
+if(process.argv.length!==6||![tarball,claude,fixture].every(p=>p&&path.isAbsolute(p))||!['--deliver','--complex-deliver','--complex-interrupt-deliver','--complex-build-deliver','--system-deliver'].includes(mode))throw Error('Expected absolute tarball, Claude CLI, local synthetic fixture and --deliver, --complex-deliver or --complex-interrupt-deliver');
+const system=mode==='--system-deliver',initial=system||mode==='--complex-build-deliver';
+const interrupt=mode==='--complex-interrupt-deliver',complex=mode!=='--deliver',issue=complex?3:1,repository='adachi-tatsuru/asc-public-synthetic-eval-20261016',deliveryBase='c37e08e05abc46b5a26af131f134d42a3c8a3b80',base=system?'3dfaa3a05f6e99490d715aa5a813045487249e2e':initial?'b7a906256f6f0aa2705d2517e69f7d3a6503ccff':complex?'d913e7b5cbde17acacc625c659ac8fc0146b6f45':deliveryBase,model=process.env.ASC_EVAL_MODEL,effort=process.env.ASC_EVAL_EFFORT;
+if(!model||!['low','medium','high'].includes(effort)||/fable/i.test(model))throw Error('Explicit authorized model and effort required; no Fable fallback');
+const verificationTransport=process.env.ASC_EVAL_VERIFICATION_TRANSPORT??'saved';
+if(!['saved','inline','project'].includes(verificationTransport))throw Error('Expected saved, inline or project verification transport');
+const evaluationHome=path.join(process.env.HOME,'.cache','asc-native-evaluation');fs.mkdirSync(evaluationHome,{recursive:true,mode:0o700});
+const root=fs.mkdtempSync(path.join(evaluationHome,'trial-')),origin=path.join(root,'origin'),distribution=path.join(root,'distribution'),session=randomUUID();fs.mkdirSync(distribution);
+const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^GIT_/i.test(k)));
+const command=(argv,cwd)=>execFileSync(argv[0],argv.slice(1),{cwd,env,encoding:'utf8',maxBuffer:16*1024*1024,stdio:['ignore','pipe','pipe']}).trim();
+if(command(['git','remote','get-url','origin'],fixture)!==`git@github.com:${repository}.git`)throw Error('Only public synthetic fixture allowed');
+command(['tar','-xzf',tarball,'-C',distribution]);prepareFixtureRepository({fixture,origin,base,remote:`git@github.com:${repository}.git`,command});
+const git=(...args)=>command(['git',...args],origin);git('checkout','--detach',base);git('remote','set-url','origin',`git@github.com:${repository}.git`);git('config','user.name','Synthetic Tester');git('config','user.email','test@example.invalid');
+const stamp=command(['date','+%Y%m%d_%H%M%S']),slug='claude-'+session.slice(0,8),branch='fix/'+issue+'-'+slug,worktree=path.join(origin,'.worktrees',stamp+'-'+issue+'-'+slug);git('worktree','add','-b',branch,worktree,base);
+// Pin the empty files observed after Claude startup too; do not exempt later mutations.
+for(const file of [path.join(origin,'.git/config.worktree'),path.join(command(['git','rev-parse','--absolute-git-dir'],worktree),'config.worktree')])fs.writeFileSync(file,'',{flag:'wx'});
+const captureFile=path.join(root,'capture-verification.mjs'),capture={...(verificationTransport==='project'?{projectCommands:true}:{}),...(verificationTransport==='saved'?{output:path.join(origin,'verification-result.json')}:{}),marker:randomUUID().replaceAll('-',''),command:`node ${captureFile}`};
+const controls=gitControlState(origin,[worktree]),pkg=path.join(distribution,'package'),settings=path.join(root,'settings.json'),owner=path.join(root,'owner.json'),cliVersion=command([claude,'--version']);
+const reviewerMode=process.env.ASC_EVAL_REVIEWER??'generic';
+if(!['generic','registered'].includes(reviewerMode))throw Error('Unknown reviewer mode');
+let reviewerDefinition,reviewerArguments=[];
+if(reviewerMode==='registered'){
+ const {claudeReviewerDefinition}=await import(pathToFileURL(path.join(pkg,'src/project-assets.mjs')));
+ reviewerDefinition=claudeReviewerDefinition(pkg);
+ reviewerArguments=['--agents',JSON.stringify({'asc-reviewer':reviewerDefinition})];
+}
+const intent=system?'Implement both vertical Issues from complex/SYSTEM_REQUIREMENTS.md and complex/REQUIREMENTS.md, from the supplied stubs. Deliver working reservation and invoice screens, HTTP validation/authorization, persistence and integrated browser journeys. REVISION.md is not yet applicable. Only complex/reservation/, complex/billing/ and complex/web/ may change.':initial?'Implement both original Issues in complex/REQUIREMENTS.md from the supplied stubs, including persistence, authorization, idempotency, pagination and real cross-service integration. Only complex/reservation/service.mjs and complex/billing/service.mjs may change. REVISION.md is not applicable until a later explicit request.':complex?'Implement the explicit currency revision in complex/REVISION.md while preserving complex/REQUIREMENTS.md, original security/business behavior and old stored records. Only complex/reservation/service.mjs and complex/billing/service.mjs may change.':'Change greeting() from Helo to Hello. Add an exact regression test. Preserve the string-returning API. Only greeting.py and test_greeting.py may change.';
+const allowedPaths=system?['complex/reservation/service.mjs','complex/billing/service.mjs',...['server.mjs','page.html','reservation.mjs','billing.mjs','http.mjs','app.mjs','styles.css','reservation.test.mjs','billing.test.mjs'].map(n=>'complex/web/'+n)]:complex?['complex/reservation/service.mjs','complex/billing/service.mjs']:['greeting.py','test_greeting.py'];
+const commands=complex?[...['reservation','billing','integration','unknown-keys','accessors'].map(n=>[process.execPath,'complex/oracle/'+n+'.mjs','complex',...(!initial&&['reservation','billing','accessors'].includes(n)?['revised']:[])]),...(!initial?[[process.execPath,'complex/oracle/revision.mjs','complex/previous','complex']]:[])]:[['python3','-I','test_greeting.py'],['python3','-I','-c','import sys;sys.path.insert(0,".");from greeting import greeting;assert type(greeting()) is str and greeting()=="Hello"']];
+let browserConfiguration,browserConfigBytes,browserConfigFile;
+const mcpConfiguration={mcpServers:{}};
+if(system){
+ const tools=path.join(distribution,'browser-tools');
+ const toolsSource='/tmp/asc-browser-tools';
+ const manifest=JSON.parse(fs.readFileSync(path.join(toolsSource,'node_modules/playwright-core/package.json')));
+ if(manifest.name!=='playwright-core'||manifest.version!=='1.56.1')throw Error('Pinned browser driver required');
+ const driver=path.join(toolsSource,'node_modules/playwright-core');
+ const digest=base=>{const entries=[];const walk=directory=>{for(const name of fs.readdirSync(directory).sort()){const file=path.join(directory,name),stat=fs.lstatSync(file);if(stat.isDirectory())walk(file);else if(stat.isFile())entries.push([path.relative(base,file),createHash('sha256').update(fs.readFileSync(file)).digest('hex')]);else throw Error('Nonregular browser driver asset');}};walk(base);return createHash('sha256').update(JSON.stringify(entries)).digest('hex');};
+ const pinned='9a8376e2bca8e78dddbb3a54759d9adfcd860826d698f15d54966a9d9bc57556';
+ if(digest(driver)!==pinned)throw Error('Pinned browser driver bytes changed');
+ fs.mkdirSync(path.join(tools,'node_modules'),{recursive:true});const copied=path.join(tools,'node_modules/playwright-core');fs.cpSync(driver,copied,{recursive:true});
+ if(digest(copied)!==pinned)throw Error('Copied browser driver bytes changed');
+ commands.push([process.execPath,'complex/oracle/http.mjs','complex']);
+ const oracle=path.join(distribution,'browser-oracle.mjs'),tool=path.join(distribution,'isolated-browser-tool.mjs');
+ fs.copyFileSync(path.join(worktree,'complex/oracle/browser.mjs'),oracle);fs.copyFileSync(new URL('./isolated-browser-tool.mjs',import.meta.url),tool);
+ browserConfiguration={repo:worktree,oracle,driver:copied,oracleSha256:createHash('sha256').update(fs.readFileSync(oracle)).digest('hex'),driverSha256:assetHash(copied),timeoutMilliseconds:60000};
+ browserConfigFile=path.join(distribution,'browser-config.json');browserConfigBytes=JSON.stringify(browserConfiguration);fs.writeFileSync(browserConfigFile,browserConfigBytes,{flag:'wx',mode:0o444});
+ mcpConfiguration.mcpServers.asc_browser={command:process.execPath,args:[tool,browserConfigFile]};
+}
+// Synthetic fixture only: exact protected settings paths, never implementation paths.
+// This is evaluator-owned permission, not an Agent-selected or discovered exemption.
+// Ordinary files and writable mounts at these names remain dirty and are rejected.
+const hostMaskedPaths=['.bash_profile','.bashrc','.gitconfig','.gitmodules','.idea','.mcp.json','.profile','.ripgreprc','.vscode','.zprofile','.zshrc','.claude/settings.json','.claude/settings.local.json','.claude/agents','.claude/commands','.claude/hooks','.claude/launch.json','.claude/loop.md','.claude/output-styles','.claude/routines','.claude/scheduled_tasks.json','.claude/skills','.claude/workflows'];
+const ownerBytes=JSON.stringify({intent,allowedPaths,commands,hostMaskedPaths});fs.writeFileSync(owner,ownerBytes,{flag:'wx',mode:0o444});
+const projectObserver=verificationTransport==='project'?path.join(distribution,'project-verification-observation.mjs'):undefined;
+if(projectObserver)fs.copyFileSync(new URL('./project-verification-observation.mjs',import.meta.url),projectObserver);
+fs.writeFileSync(captureFile,verificationCaptureSource({projectObserver:projectObserver?pathToFileURL(projectObserver).href:undefined,cli:path.join(pkg,'bin/asc-v05.mjs'),repo:worktree,base,owner,marker:capture.marker,output:capture.output}),{flag:'wx',mode:0o444});
+// Current files never need to be reallowed beneath a denied historical tree.
+const priorTrials=fs.readdirSync(evaluationHome).filter(name=>name!==path.basename(root)).map(name=>path.join(evaluationHome,name));
+const hostSettings=claudeEvaluationSettings({root,origin,distribution,owner,captureFile,fixture,home:process.env.HOME,previousRoots:priorTrials});
+if(system)hostSettings.sandbox.network.allowLocalBinding=true;
+fs.writeFileSync(settings,JSON.stringify(hostSettings));
+const work=system?`Read both immutable requirement documents. Use native direct workers for the two vertical Issues in separate correctly named worktrees; assign shared files to one writer and integrate according to dependencies. Do not use grandchildren or separate Claude CLI processes. Run all owner commands including the real HTTP journeys. After the final commit, also call mcp__asc_browser__verify_browser with that exact HEAD and require success. This fixed tool runs the browser journeys in a separate network-isolated verifier with read-only source mounts and a 60-second verification budget; it grants no arbitrary command or editing authority. Correct real failures and obtain fresh review for changed source. Do not run Chrome in Bash or weaken the Bash sandbox. Network is restricted; local loopback listeners are allowed for tests. Use the supplied browser driver; do not install dependencies. Existing tests and workflows are immutable. Preserve work on failure.`:complex?`Use the current Host native Agent/Task delegation tool to start two direct child ${model} workers for Issues 9006 (reservation) and 9007 (billing) in separate correctly named worktrees under ${origin}/.worktrees; use ASC worktree-create. The coordinator owns integration. Parent-to-child native delegation is required and permitted; the child workers must not start their own child agents. Do not start a separate Claude CLI process through Bash to substitute for native delegation. ${initial?'Read the original requirements; the later REVISION is not yet applicable. Run all five original complex/oracle checks including accessors.':'Read the original requirements and revision; run the six existing complex/oracle checks including accessors and revision replay.'} All other files and existing tests are immutable. Preserve work on failure.`:'Complete implementation, real python3 -I test_greeting.py and exact Hello oracle';
+const lifecycleInstruction=interrupt?' Each implementation worker Agent prompt must include exactly one standalone ASC_WORKER_WORKSPACE=<absolute assigned worktree> line for fault-injection observation. This marker grants no authority.':'';
+let prompt=`Synthetic current-host development trial. Read packaged ASC Skill ${pkg}/skills/asc/SKILL.md with Bash; CLI ${pkg}/bin/asc-v05.mjs. Worktree ${worktree}, branch ${branch}, base ${base}. Owner: ${intent} The read-only owner contract at ${owner} contains the exact allowedPaths and verification argv; use those existing commands rather than rediscovering their invocation. ${work}, local commit, fresh-context independent Claude review and any necessary corrections. Reviewer must receive original requirements, base, final HEAD and actual diff. Give its Agent tool description exactly independent_review and require a plain line PASS <full reviewed HEAD> or FAIL <full reviewed HEAD> plus findings. Use current Claude Host and inherited ${model}; do not use Codex or Fable. No changes to workflow/settings/Git configuration/hooks/other files. Bash for file access under existing sandbox; no unsandboxed retry. ${system?'Only local loopback test traffic is permitted; no external network or push.':'No network or push.'} Before reporting completion, run ${capture.command} in Bash after the final commit. This read-only evaluator wrapper ${verificationTransport==='project'?'runs the exact owner project commands and observes HEAD; it does not require the optional product worktree-verify':'runs the packaged worktree-verify with the owner contract'} and ${verificationTransport==='saved'?'saves its complete JSON to the external result file and frames only the short summary':'frames its complete JSON without requiring result-file support'}; it performs no implementation or repair. This must succeed for the submitted HEAD; direct test success alone is insufficient. If it fails, preserve the failure and work; do not modify the owner contract or Host protection. The Host runner independently rechecks the same commit, then publishes a synthetic Draft PR and checks CI. Do not claim publication yourself. Preserve work on failure. Report final HEAD and reviewer identity.${lifecycleInstruction}`;
+const setup={...(browserConfiguration?{comparisonScope:'distribution',browserVerification:{transport:'fixed-isolated-mcp/v1',toolSha256:createHash('sha256').update(fs.readFileSync(path.join(distribution,'isolated-browser-tool.mjs'))).digest('hex'),oracleSha256:browserConfiguration.oracleSha256,driverSha256:browserConfiguration.driverSha256,timeoutMilliseconds:browserConfiguration.timeoutMilliseconds}}:{}),verificationTransport,projectObserverSha256:projectObserver?createHash('sha256').update(fs.readFileSync(projectObserver)).digest('hex'):null,fixtureTransfer:'pinned-ancestry-only',priorTrialReadDenials:priorTrials.length,priorTrialReadBoundary:'separate-root-with-canonical-path-checks',verificationCapture:capture,reviewerMode,reviewerDefinitionSha256:reviewerDefinition?createHash('sha256').update(JSON.stringify(reviewerDefinition)).digest('hex'):null,runnerSha256:createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).digest('hex'),root,origin,worktree,branch,base,deliveryBase,scenario:system?'complex-two-issue-system':initial?'complex-two-issue-initial':complex?'complex-two-issue-currency':'small-greeting',issue,repository,session,model,effort,cliVersion,tarballSha256:createHash('sha256').update(fs.readFileSync(tarball)).digest('hex')};
+fs.writeFileSync(path.join(root,'setup.json'),JSON.stringify(setup,null,2));fs.writeFileSync(path.join(root,'git-controls.json'),JSON.stringify(controls));fs.writeFileSync(path.join(root,'prompt.txt'),prompt);
+const claudeArgs=id=>['-p',...reviewerArguments,'--session-id',id,'--model',model,'--effort',effort,'--tools','Bash,Agent,TaskOutput,TaskStop,SendMessage','--allowedTools','Bash,Agent,TaskOutput,TaskStop,SendMessage'+(system?',mcp__asc_browser__verify_browser':''),'--permission-mode','dontAsk','--setting-sources','','--settings',settings,'--strict-mcp-config','--mcp-config',JSON.stringify(mcpConfiguration),'--output-format','stream-json','--verbose'];
+const executionStarted=performance.now();
+let interruption=null,interruptedUsage=null;
+console.log(JSON.stringify({root,session,phase:interrupt?'interruption':'execution'}));
+if(interrupt){
+ const interruptedSession=randomUUID(),directory=path.join(root,'interrupted-attempt');let active=new Set();
+ const observe=workerCheckpointObserver({origin,integration:worktree,relativeFiles:allowedPaths,isWorkerActive:workspace=>active.has(workspace)});
+ const observeWorkers=options=>{
+  if(!options?.afterStop){
+   const file=path.join(directory,'events.jsonl'),text=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'';
+   const events=text.slice(0,text.lastIndexOf('\n')+1).split('\n').filter(Boolean).map(JSON.parse);
+   const workspaces=git('worktree','list','--porcelain','-z').split('\0').filter(x=>x.startsWith('worktree ')).map(x=>x.slice(9)).filter(x=>x!==worktree&&x.startsWith(origin+'/.worktrees/'));
+   active=new Set(activeClaudeWorkers(events,workspaces).map(x=>x.workspace));
+  }
+  return observe(options);
+ };
+ fs.writeFileSync(path.join(root,'interruption-setup.json'),JSON.stringify({session:interruptedSession,scope:'Single fault injection after two active workers save changes; fresh-context recovery; not performance comparison'}));
+ interruption=await interruptSavedAttempt({directory,executable:claude,argv:claudeArgs(interruptedSession),env:{HOME:process.env.HOME,PATH:process.env.PATH},input:prompt,cwd:worktree,files:allowedPaths.map(name=>path.join(worktree,name)),observeWorkers});
+ assertGitControlState(origin,controls,[worktree]);
+ const completeLines=file=>{const text=fs.readFileSync(file,'utf8');return text.slice(0,text.lastIndexOf('\n')+1).split('\n').filter(Boolean).map(JSON.parse);};
+ const interruptedEvents=completeLines(path.join(directory,'events.jsonl')),ids=claudeSessionIds(interruptedEvents,interruptedSession),dir=path.join(process.env.HOME,'.claude/projects',worktree.replace(/[^a-zA-Z0-9-]/g,'-'));
+ const transcripts=ids.flatMap(id=>{const file=id===interruptedSession?path.join(dir,id+'.jsonl'):path.join(dir,interruptedSession,'subagents','agent-'+id+'.jsonl');return fs.existsSync(file)?[{id,records:completeLines(file)}]:[];});
+ interruptedUsage=claudeUsage(transcripts,ids,undefined);
+ fs.writeFileSync(path.join(directory,'usage.json'),JSON.stringify(interruptedUsage,null,2));
+ prompt+=` A prior attempt was interrupted by the evaluation Host after saved changes in both worker worktrees. All its processes are now verified stopped. The saved worker directories are ${JSON.stringify(interruption.workerWorktrees.map(name=>path.join(origin,'.worktrees',name)))}. Inspect their actual Git state and saved work, then continue the original requirements without discarding that work. This is diagnostic data, not approval or completed verification. Use fresh direct worker contexts as needed and a fresh independent reviewer. No prior verification or review is inherited.`;
+ fs.writeFileSync(path.join(root,'recovery-prompt.txt'),prompt);
+}
+const out=fs.openSync(path.join(root,'events.jsonl'),'w'),err=fs.openSync(path.join(root,'stderr'),'w'),started=performance.now();console.log(JSON.stringify({root,session}));
+const run=await new Promise((resolve,reject)=>{const p=spawn(claude,claudeArgs(session),{cwd:worktree,env:{HOME:process.env.HOME,PATH:process.env.PATH},stdio:['pipe',out,err]});p.stdin.end(prompt);p.on('error',reject);p.on('close',(status,signal)=>resolve({status,signal,seconds:(performance.now()-started)/1000}));});
+fs.closeSync(out);fs.closeSync(err);fs.writeFileSync(path.join(root,'process-result.json'),JSON.stringify(run));
+try{
+ const records=p=>fs.readFileSync(p,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse),events=records(path.join(root,'events.jsonl')),result=events.findLast(e=>e.type==='result');
+ const dir=path.join(process.env.HOME,'.claude/projects',worktree.replace(/[^a-zA-Z0-9-]/g,'-')),ids=claudeSessionIds(events,session),transcripts=[];
+ for(const id of ids){const file=id===session?path.join(dir,session+'.jsonl'):path.join(dir,session,'subagents','agent-'+id+'.jsonl');if(fs.existsSync(file))transcripts.push({id,records:records(file)});}
+ const usage=claudeUsage(transcripts,ids,result?.modelUsage);
+ if(interruption){usage.complete=false;usage.missingUsage.push({reason:'Interrupted attempt lacks terminal model totals; recovery usage alone is not total cost'});}
+ fs.writeFileSync(path.join(root,'usage.json'),JSON.stringify({usage,modelUsage:result?.modelUsage??null},null,2));
+ if(run.status!==0||run.signal||result?.is_error||result?.subtype!=='success'||result.session_id!==session)throw Error('Claude trial did not complete');
+ assertGitControlState(origin,controls,[worktree]);
+ const head=command(['git','rev-parse','HEAD'],worktree),review=claudeReviewEvidence(events,head,ref=>command(['git','rev-parse','--verify',ref+'^{commit}'],worktree));
+ if(reviewerMode==='registered'&&review.agentType!=='asc-reviewer')throw Error('Submitted HEAD was not reviewed by registered reviewer');
+ if(fs.readFileSync(owner,'utf8')!==ownerBytes)throw Error('Owner contract changed during trial');
+ const {verifyWorktree}=await import(verificationTransport==='project'?new URL('../src/worktree-execution.mjs',import.meta.url):pathToFileURL(path.join(pkg,'src/worktree-execution.mjs'))),verification=verifyWorktree(worktree,base,owner);if(!verification.passed||verification.head!==head)throw Error('Oracle mismatch');
+ const inHostVerification=claudeVerificationEvidence(events,verification,capture);
+ let browserVerification;
+ if(browserConfiguration){
+  if(fs.readFileSync(browserConfigFile,'utf8')!==browserConfigBytes)throw Error('Browser verification contract changed');
+  const checked=verifyBrowser(browserConfiguration,{head});if(!checked.passed)throw Error('External browser oracle failed');
+  browserVerification={...checked,inHostObservation:claudeBrowserEvidence(events,checked)};
+ }
+ const data={...setup,run,head,review,verification,inHostVerification,...(browserVerification?{browserVerification}:{}),usage,modelUsage:result.modelUsage,implementationIntervention:0,...(interruption?{interruption,interruptedUsage,observedWholeAttemptTokens:interruptedUsage.observedProcessedTokens+usage.observedProcessedTokens,measurementScope:'Sum of observed interrupted and recovery usage, incomplete; not performance acceptance'}:{})};fs.writeFileSync(path.join(root,'acceptance.json'),JSON.stringify(data,null,2));
+ const {Github}=await import(pathToFileURL(path.join(pkg,'src/github.mjs'))),github=new Github({repository,issue,repo:worktree,branch,baseBranch:'main',base:deliveryBase,workflowPath:complex?'.github/workflows/complex.yml':'.github/workflows/test.yml',command:(argv,cwd)=>{const a=[...argv];if(a[0]==='gh'&&a[1]==='pr'&&a[2]==='create'){a[a.indexOf('--title')+1]=complex?'Synthetic Claude matched complex trial':'Synthetic Claude matched small trial';a[a.indexOf('--body')+1]=`Synthetic fixture only. Independent Claude review and exact oracle passed for ${head}. Draft only; no merge/release. Evaluation runner publishes; no evaluator implementation edits.`;}return command(a,cwd);}});
+ const deliveryStarted=performance.now(),pr=github.createDraft(head);fs.writeFileSync(path.join(root,'submitted.json'),JSON.stringify({pr,head}));const ci=await github.observe(pr);
+ if(complex){github.workflowPath='.github/workflows/test.yml';const greetingCI=await github.observe(pr);data.greetingCI=greetingCI;}
+ Object.assign(data,{pr,ci,deliverySeconds:(performance.now()-deliveryStarted)/1000,totalSeconds:(performance.now()-executionStarted)/1000,timingScope:'From initial execution (including injected interruption and recovery) through CI; excludes fixture preparation'});fs.writeFileSync(path.join(root,'delivery.json'),JSON.stringify(data,null,2));console.log(JSON.stringify({root,pr,usageComplete:usage.complete,seconds:data.totalSeconds,tokens:usage.observedProcessedTokens}));
+ if(!usage.complete)process.exitCode=2;
+}catch(e){fs.writeFileSync(path.join(root,'failure.json'),JSON.stringify({error:e.message,seconds:(performance.now()-started)/1000}));throw e;}

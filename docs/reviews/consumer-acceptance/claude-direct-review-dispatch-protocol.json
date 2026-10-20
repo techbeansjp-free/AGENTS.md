@@ -1,0 +1,48 @@
+{
+  "scope": "Prospective small-fixture paired comparison of direct real reviewer dispatch guidance. Not a general autonomy guarantee.",
+  "baseline": {
+    "version": "0.5.900-alpha.44",
+    "sha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9"
+  },
+  "candidate": {
+    "version": "0.5.900-alpha.45",
+    "sha256": "1bbbbfb2d7383a5850fa645a93ab634abec88178b1b53bcef9552d45fc9cb385"
+  },
+  "changedSourceFiles": [
+    "skills/asc/SKILL.md"
+  ],
+  "runnerSha256": "305373591440d2d26f9c933673e63683e8fba4f038bbae9f0b48bde062f0fe4d",
+  "fixture": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "model": "sonnet",
+  "effort": "medium",
+  "reviewerMode": "generic",
+  "pairs": 5,
+  "order": [
+    [
+      "baseline",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "baseline"
+    ],
+    [
+      "baseline",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "baseline"
+    ],
+    [
+      "baseline",
+      "candidate"
+    ]
+  ],
+  "earlyStop": "After two pairs, stop for futility if candidate median time and processed tokens are both no better; stop on quality or execution failure and investigate without discarding the failed trial.",
+  "acceptance": "All quality oracles, independent review, in-Host verification and Draft CI pass; complete participant usage; both medians improve; no worse maxima per existing paired acceptance. All attempts retained.",
+  "hypothesis": "Role/type clarification avoids unsupported or placeholder reviewer launches; added prompt length must not worsen small-task total cost.",
+  "priorDiagnosticUsedAsPairedEvidence": false,
+  "status": "stopped after two pairs; candidate withdrawn",
+  "result": "claude-direct-review-dispatch-summary.json"
+}

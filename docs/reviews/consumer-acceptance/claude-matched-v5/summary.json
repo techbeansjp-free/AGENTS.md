@@ -1,0 +1,62 @@
+{
+  "pairs": 5,
+  "qualityPassed": true,
+  "measurementComplete": true,
+  "requiredPairs": 5,
+  "accepted": false,
+  "scope": "This fixed synthetic fixture and model only; no general autonomous-development guarantee.",
+  "baseline": {
+    "maxSeconds": 107.58205911499999,
+    "maxProcessedTokens": 417756,
+    "medianSeconds": 99.868939761,
+    "medianProcessedTokens": 400826
+  },
+  "candidate": {
+    "maxSeconds": 138.105875314,
+    "maxProcessedTokens": 583799,
+    "medianSeconds": 90.624629279,
+    "medianProcessedTokens": 389947
+  },
+  "pairedDifferences": [
+    {
+      "pair": 1,
+      "seconds": -27.333054007,
+      "processedTokens": -10879
+    },
+    {
+      "pair": 2,
+      "seconds": 0.3887006690000021,
+      "processedTokens": 8763
+    },
+    {
+      "pair": 3,
+      "seconds": 4.038604825999997,
+      "processedTokens": -13455
+    },
+    {
+      "pair": 4,
+      "seconds": 43.139566011,
+      "processedTokens": 176576
+    },
+    {
+      "pair": 5,
+      "seconds": -22.79046059999999,
+      "processedTokens": -3826
+    }
+  ],
+  "pairsImprovingBoth": 2,
+  "worstCaseRegression": true,
+  "requiresWorstCaseAssessment": true,
+  "runnerSha256": "761f4747fd761129cb8aa41430ef461d66f6fbadb7cba63c30de4e4a99162760",
+  "observedOutlier": {
+    "trial": 7,
+    "syntheticPr": 111,
+    "parentProcessedTokens": 272251,
+    "reviewerProcessedTokens": 311548,
+    "reviewerAssistantMessages": 14,
+    "coordinatorRequestedSeparateWorktree": true,
+    "reviewProcedureReferencePassed": false,
+    "sourceEventsSha256": "b36b8b5e72557f7bdc3335ef3b6b2491c32cb1006c00c0985f4945124ca46c34",
+    "interpretation": "Repeated copy/test attempts in reviewer worktree observed; not a causal estimate of all latency variation."
+  }
+}

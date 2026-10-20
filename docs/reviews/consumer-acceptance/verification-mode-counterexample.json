@@ -1,0 +1,39 @@
+{
+  "scope": "Deterministic replay of the unwanted legacy-mode check added by the alpha.40 coordinator. No additional model run.",
+  "head": "ac40842bda3158fdb5c830181085ee5106d95b33",
+  "sourceResult": "claude-discovery-owner-result.json",
+  "checks": [
+    {
+      "argv": [
+        "node",
+        "complex/oracle/reservation.mjs",
+        "complex",
+        "revised"
+      ],
+      "exit": 0,
+      "stdoutSha256": "8f57edcf0d22e48e104cc98d95ee76c37943295cbca1cc0f7fe258e7ada9f191",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "node",
+        "complex/oracle/reservation.mjs",
+        "complex"
+      ],
+      "exit": 1,
+      "stdoutSha256": "e499e0a4c017e7d01cbf2721088b1a9448726129c001e233e6951f83d55e05f9",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "finding": "Coordinator retained the required revised argv but also incorrectly instructed workers that dropping revised preserves the same expectations. Original-mode exact resource assertions conflict with the new currency field.",
+  "correction": "Existing coordination reference forbids inferring equivalent regression coverage by dropping specification-selecting arguments; added checks must name their uncovered condition.",
+  "validation": "Independent read-only review found no waiver of required verification or permissions.",
+  "limitation": "Instruction correction is not enforced by the Host and has not been demonstrated to reduce model tokens or time.",
+  "packageValidation": {
+    "command": "TMPDIR=/var/tmp node --test test/test_package.mjs",
+    "passed": 7,
+    "failed": 0,
+    "initialAttempt": "Default /tmp failed one non-Git start case due known shared /tmp/.git; shared state was not changed.",
+    "skillValidator": "Not run successfully: quick_validate.py requires unavailable PyYAML; no frontmatter changed."
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "scope": "Single complex two-Issue registered-reviewer diagnostic. Quality delivery completed; performance acceptance unavailable due to incomplete usage. No retry or replacement observation.",
+  "distribution": {
+    "tarballSha256": "f1a9a9258734240718eea791a7e25884ecd6d7e7fad680a4c0d714248294234f",
+    "reviewerMode": "registered",
+    "reviewerDefinitionSha256": "81c881b1e1da0c771d769ba6875e00dc9fcd61ff1c4e5b296d1253f0393aaf09",
+    "runnerSha256": "9952128fc7df798f1674ee31c38de81257d289b82ab2a31c7e55fd258d62fcc2",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "model": "sonnet",
+    "effort": "medium",
+    "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45"
+  },
+  "head": "93686ff55ea372143fb76a796b50d68066c1a97b",
+  "review": {
+    "taskId": "addfa1f365f4b40b7",
+    "agentType": "asc-reviewer",
+    "head": "93686ff55ea372143fb76a796b50d68066c1a97b",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 132,
+      "output_tokens": 50853,
+      "cache_read_input_tokens": 2574885,
+      "cache_creation_input_tokens": 185431
+    },
+    "threads": [
+      {
+        "id": "9a31a5d5-1fed-46ec-a109-d945501df592",
+        "messageCount": 27,
+        "usage": {
+          "input_tokens": 54,
+          "output_tokens": 16692,
+          "cache_read_input_tokens": 1373316,
+          "cache_creation_input_tokens": 60004
+        }
+      },
+      {
+        "id": "a2653b70381d0601e",
+        "messageCount": 15,
+        "usage": {
+          "input_tokens": 30,
+          "output_tokens": 12663,
+          "cache_read_input_tokens": 536783,
+          "cache_creation_input_tokens": 53791
+        }
+      },
+      {
+        "id": "a9edd2c52689adfb5",
+        "messageCount": 14,
+        "usage": {
+          "input_tokens": 28,
+          "output_tokens": 11241,
+          "cache_read_input_tokens": 412126,
+          "cache_creation_input_tokens": 30837
+        }
+      },
+      {
+        "id": "addfa1f365f4b40b7",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 10257,
+          "cache_read_input_tokens": 252660,
+          "cache_creation_input_tokens": 40799
+        }
+      }
+    ],
+    "observedProcessedTokens": 2811301,
+    "missingUsage": [
+      {
+        "id": "a2653b70381d0601e",
+        "message": "msg_011CgBfaFy8zhkHv9hXHGBpT",
+        "reason": "terminal usage snapshot missing"
+      },
+      {
+        "reason": "Host modelUsage absent or does not reconcile"
+      }
+    ],
+    "reconciledWithHostModelUsage": false,
+    "complete": false
+  },
+  "hostModelUsage": {
+    "claude-sonnet-5": {
+      "inputTokens": 132,
+      "outputTokens": 52033,
+      "cacheReadInputTokens": 2574885,
+      "cacheCreationInputTokens": 185431,
+      "webSearchRequests": 0,
+      "costUSD": 1.5891544999999998,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 20085,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "implementationAndReviewSeconds": 500.891360341,
+  "elapsedSeconds": 530.6359425689999,
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/137",
+  "ci": {
+    "head": "93686ff55ea372143fb76a796b50d68066c1a97b",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39260199782",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "93686ff55ea372143fb76a796b50d68066c1a97b",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39260199475",
+    "transportFailures": []
+  },
+  "verification": {
+    "passed": true,
+    "head": "93686ff55ea372143fb76a796b50d68066c1a97b",
+    "exits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "implementationIntervention": 0,
+  "performanceAccepted": false,
+  "limitations": [
+    "One worker message lacks terminal usage in both session transcript and streamed events.",
+    "Host outputTokens exceeds transcript observations by 1180; aggregate difference is not imputed as per-message evidence.",
+    "Evaluation Host performs publication; this is not a standalone product autonomous-delivery guarantee.",
+    "No general speedup claim; no new matched cohort."
+  ],
+  "observations": [
+    "Two direct Claude implementation workers completed; integration oracle found old-record replay incompatibility and coordinator repaired it without evaluator code edits.",
+    "The final approver used asc-reviewer. Its request referenced the real diff instead of pasting it, but unnecessarily requested rereading the already embedded review procedure."
+  ],
+  "delegationFinding": {
+    "billingRequestSha256": "d37ae39e7f8fdd993b2fb638f248aa3ded6073c36e6bfaa7b256bb71fb2d83c5",
+    "observed": "Coordinator supplied original document references but its detailed summary omitted old-record compatibility and explicitly excluded revision.mjs as another worker responsibility. The integration oracle later detected the omission.",
+    "change": "Existing coordination guidance now preserves shared acceptance obligations and records integration-dependent verification as pending rather than dropping responsibility.",
+    "validationScope": "Instruction correction from actual failure evidence; no claim that wording deterministically enforces behavior or proves a performance improvement."
+  }
+}

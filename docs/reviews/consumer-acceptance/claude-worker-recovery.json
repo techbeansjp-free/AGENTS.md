@@ -1,0 +1,226 @@
+{
+  "scope": "Claude same-session recovery from saved outputs in two distinct worker worktrees, before integration. Linux synthetic supervisor only.",
+  "distribution": {
+    "version": "0.5.900-alpha.23",
+    "sha256": "4403da6aa765a443d96c77526117063bfb0230aea12748b1322c0600099b93a6",
+    "published": false
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "cliVersion": "2.1.282 (Claude Code)",
+  "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "head": "9152e825c0ed4f222dfe35c12309e1211dac52df",
+  "checkpoint": {
+    "status": 255,
+    "signal": null,
+    "signalSent": true,
+    "interrupted": true,
+    "checkpoint": true,
+    "descendantBoundary": "Linux synthetic transient service; all processes stopped before handoff",
+    "stopped": true,
+    "seconds": 150.492441996,
+    "files": [
+      {
+        "name": "reservation/service.mjs",
+        "before": "7c32b115d9ae8c4a1e5b02c1217daf73c7bc1f06713f33c3e8e914efd72d228c",
+        "after": "29553445ba710b20fa4925706536c76d37b24c6199cba9af982f720591b34bb8"
+      },
+      {
+        "name": "billing/service.mjs",
+        "before": "4685899b5e32d5b30f013cd7d44fa681d9e6413f069e1fb2aef7c85af621024e",
+        "after": "bef1fdb9738b9cfd7cc5004ef84341cfdef71042eab964b678768e97aea7b959"
+      }
+    ],
+    "usageComplete": false,
+    "checkpointScope": "two distinct worker worktrees before integration",
+    "workerWorktrees": [
+      "20261019_193835-9006-reservation-currency",
+      "20261019_193836-9007-billing-currency"
+    ]
+  },
+  "retention": {
+    "requested": true,
+    "verified": true,
+    "files": [
+      {
+        "name": "reservation/service.mjs",
+        "checkpointSha256": "29553445ba710b20fa4925706536c76d37b24c6199cba9af982f720591b34bb8",
+        "finalSha256": "29553445ba710b20fa4925706536c76d37b24c6199cba9af982f720591b34bb8"
+      },
+      {
+        "name": "billing/service.mjs",
+        "checkpointSha256": "bef1fdb9738b9cfd7cc5004ef84341cfdef71042eab964b678768e97aea7b959",
+        "finalSha256": "bef1fdb9738b9cfd7cc5004ef84341cfdef71042eab964b678768e97aea7b959"
+      }
+    ],
+    "scope": "Exact two worker outputs preserved into submitted commit; not arbitrary interruption or repaired-output equivalence."
+  },
+  "review": {
+    "taskId": "a39cd2b4c9fce477a",
+    "head": "9152e825c0ed4f222dfe35c12309e1211dac52df",
+    "verdict": "PASS"
+  },
+  "verification": {
+    "head": "9152e825c0ed4f222dfe35c12309e1211dac52df",
+    "passed": true,
+    "checks": [
+      {
+        "oracle": "complex/oracle/reservation.mjs",
+        "args": [
+          "complex",
+          "revised"
+        ],
+        "exit": 0,
+        "stdoutSha256": "4a198f6c954b8d8e665b8f5c015a2d8277be14e346ac63e295f50df8b8197ce7",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "oracle": "complex/oracle/billing.mjs",
+        "args": [
+          "complex",
+          "revised"
+        ],
+        "exit": 0,
+        "stdoutSha256": "a4ab7e27063a9749e12e47b9ad0f692233f884b6992f61bc836a5022f0123f95",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "oracle": "complex/oracle/integration.mjs",
+        "args": [
+          "complex"
+        ],
+        "exit": 0,
+        "stdoutSha256": "cad37c2fe83409c098a8401480ae5ddd0eef6ebad788f00f8f99ead65e80c304",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "oracle": "complex/oracle/unknown-keys.mjs",
+        "args": [
+          "complex"
+        ],
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "oracle": "complex/oracle/accessors.mjs",
+        "args": [
+          "complex",
+          "revised"
+        ],
+        "exit": 0,
+        "stdoutSha256": "e1143512ed9e71d815d2bdc70a427a2f13af76798e657017d14e6253900df61a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "oracle": "complex/oracle/revision.mjs",
+        "args": [
+          "complex/previous",
+          "complex"
+        ],
+        "exit": 0,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "interruptedSeconds": 150.492441996,
+  "resumeSeconds": 103.439867284,
+  "uninterruptedTotalSeconds": null,
+  "usage": {
+    "totals": {
+      "input_tokens": 66,
+      "output_tokens": 23882,
+      "cache_read_input_tokens": 1415568,
+      "cache_creation_input_tokens": 129799
+    },
+    "threads": [
+      {
+        "id": "9201e5ba-8bb9-4495-bfe8-2da8a80be5e4",
+        "messageCount": 22,
+        "usage": {
+          "input_tokens": 44,
+          "output_tokens": 17450,
+          "cache_read_input_tokens": 1222061,
+          "cache_creation_input_tokens": 70051
+        }
+      },
+      {
+        "id": "a34134a1094ca99b8",
+        "messageCount": 4,
+        "usage": {
+          "input_tokens": 8,
+          "output_tokens": 2234,
+          "cache_read_input_tokens": 60223,
+          "cache_creation_input_tokens": 28717
+        }
+      },
+      {
+        "id": "aa590a6e62e20b999",
+        "messageCount": 2,
+        "usage": {
+          "input_tokens": 4,
+          "output_tokens": 1225,
+          "cache_read_input_tokens": 26511,
+          "cache_creation_input_tokens": 10719
+        }
+      },
+      {
+        "id": "a39cd2b4c9fce477a",
+        "messageCount": 5,
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 2973,
+          "cache_read_input_tokens": 106773,
+          "cache_creation_input_tokens": 20312
+        }
+      }
+    ],
+    "observedProcessedTokens": 1569315,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "observerRecovery": {
+    "originalError": "Git control state changed; Host inspection refused",
+    "cause": "Two newly materialized empty worker config.worktree files; no existing Git settings changed",
+    "modelRerun": false,
+    "implementationIntervention": 0,
+    "eligibleForUninterruptedPerformanceComparison": false
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/104",
+  "ci": {
+    "head": "9152e825c0ed4f222dfe35c12309e1211dac52df",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39239507616",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "9152e825c0ed4f222dfe35c12309e1211dac52df",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39239507700",
+    "transportFailures": []
+  },
+  "provenance": {
+    "initialEventsSha256": "a11cd1f4502b7d9e75fdf521e854d94bb91600ebee5d21b1c930cc8a25a5ede0",
+    "resumeEventsSha256": "418809d1049efbdd3623b5af6a0aef494c86c234de5e85587aca06b7e58a486d",
+    "driverSha256": "bd1762f1d39023a3176a2a47e37592160d2252bdc299e9e3dfe8ac4abb7c4372"
+  },
+  "limitations": [
+    "One worker completed before interruption; not two simultaneously active writers interrupted.",
+    "Linux test supervisor stops processes; not a packaged cross-platform automatic supervisor.",
+    "Usage contains all four recorded contexts and reconciles with final Host modelUsage; unreported provider work cannot be inferred.",
+    "Original observer rejection retained; no model rerun or evaluator source edits, but not uninterrupted cost evidence.",
+    "This is a fixed shared-contract revision; not proof of arbitrary Goal decomposition or comparative speedup."
+  ]
+}

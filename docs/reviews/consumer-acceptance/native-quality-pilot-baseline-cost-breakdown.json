@@ -1,0 +1,56 @@
+{
+  "head": "7f639737f8d88da60603a025a8e030a89d393966",
+  "scope": "Synthetic baseline pilot only; provider-bound counts, tool bytes are not tokens; no outer evaluator usage or causal claim.",
+  "threads": [
+    {
+      "id": "01a15273-09ec-7611-a65f-b4cda920f66f",
+      "role": "coordinator",
+      "observedModelResponses": 23,
+      "maxResponseInputTokens": 42719,
+      "observedToolCalls": 22,
+      "toolOutputBytes": 76368,
+      "maxToolOutputBytes": 24415,
+      "processedTokens": 721614
+    },
+    {
+      "id": "01a15273-803f-77a1-9605-d5d2ed0c66e7",
+      "role": "reservation_9001",
+      "observedModelResponses": 15,
+      "maxResponseInputTokens": 41842,
+      "observedToolCalls": 14,
+      "toolOutputBytes": 56576,
+      "maxToolOutputBytes": 18312,
+      "processedTokens": 485306
+    },
+    {
+      "id": "01a15273-96a4-7263-a7a0-fc593e99fe90",
+      "role": "billing_9002",
+      "observedModelResponses": 15,
+      "maxResponseInputTokens": 38694,
+      "observedToolCalls": 14,
+      "toolOutputBytes": 51185,
+      "maxToolOutputBytes": 18312,
+      "processedTokens": 466006
+    },
+    {
+      "id": "01a15275-5e00-7a71-b3f5-fbb15344dda2",
+      "role": "billing_review",
+      "observedModelResponses": 7,
+      "maxResponseInputTokens": 27099,
+      "observedToolCalls": 6,
+      "toolOutputBytes": 29791,
+      "maxToolOutputBytes": 25599,
+      "processedTokens": 167490
+    },
+    {
+      "id": "01a15277-54ac-7043-8a5b-135ccc4e8f75",
+      "role": "independent_review",
+      "observedModelResponses": 11,
+      "maxResponseInputTokens": 39585,
+      "observedToolCalls": 10,
+      "toolOutputBytes": 70796,
+      "maxToolOutputBytes": 24622,
+      "processedTokens": 352323
+    }
+  ]
+}

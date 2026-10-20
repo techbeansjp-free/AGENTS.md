@@ -1,0 +1,54 @@
+{
+  "scope": "Saved synthetic records checked with current-turn-only reviewer verdict; no model rerun or implementation edits. Does not upgrade prior performance acceptance.",
+  "counterexample": "Completed new reviewer turn without a verdict must not inherit an earlier PASS for the same HEAD.",
+  "isolatedTests": {
+    "passed": 11,
+    "failed": 0
+  },
+  "observations": [
+    {
+      "pr": 65,
+      "head": "9182d43a19bd13103c5f45f8c52e1a1ee7c0d1b7",
+      "review": {
+        "id": "01a15270-1feb-7823-a0a9-032e5a4d0d6b",
+        "head": "9182d43a19bd13103c5f45f8c52e1a1ee7c0d1b7",
+        "verdict": "PASS"
+      },
+      "unchangedReviewer": true,
+      "unchangedTokens": true
+    },
+    {
+      "pr": 66,
+      "head": "7f639737f8d88da60603a025a8e030a89d393966",
+      "review": {
+        "id": "01a15277-54ac-7043-8a5b-135ccc4e8f75",
+        "head": "7f639737f8d88da60603a025a8e030a89d393966",
+        "verdict": "PASS"
+      },
+      "unchangedReviewer": true,
+      "unchangedTokens": true
+    },
+    {
+      "pr": 67,
+      "head": "a90e9161a238dbf4c9215f7acb0bd45d623b3b9a",
+      "review": {
+        "id": "01a15281-44b6-7ee0-a04d-9d00539e118c",
+        "head": "a90e9161a238dbf4c9215f7acb0bd45d623b3b9a",
+        "verdict": "PASS"
+      },
+      "unchangedReviewer": true,
+      "unchangedTokens": true
+    },
+    {
+      "pr": 68,
+      "head": "dcf07245e3bba353a92fb8044050e7cd7e81f861",
+      "review": {
+        "id": "01a1528e-be3b-7ad3-ae78-0c5a863d8152",
+        "head": "dcf07245e3bba353a92fb8044050e7cd7e81f861",
+        "verdict": "PASS"
+      },
+      "unchangedReviewer": true,
+      "unchangedTokens": true
+    }
+  ]
+}

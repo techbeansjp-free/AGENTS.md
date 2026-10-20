@@ -1,0 +1,69 @@
+{
+  "head": "7dfec55b19107036925b48d5e8495b1404340f21",
+  "roles": [
+    {
+      "role": "parent",
+      "tools": {
+        "exec": 14,
+        "spawn_agent": 3,
+        "wait_agent": 9,
+        "list_agents": 3
+      },
+      "usageUpdates": 31,
+      "maxReportedInputTokens": 41749,
+      "toolOutputBytes": 79512,
+      "usage": {
+        "input_tokens": 909077,
+        "cached_input_tokens": 850688,
+        "output_tokens": 7986
+      }
+    },
+    {
+      "role": "worker-1",
+      "tools": {
+        "exec": 17
+      },
+      "usageUpdates": 18,
+      "maxReportedInputTokens": 44153,
+      "toolOutputBytes": 40067,
+      "usage": {
+        "input_tokens": 596275,
+        "cached_input_tokens": 554112,
+        "output_tokens": 18851
+      }
+    },
+    {
+      "role": "worker-2",
+      "tools": {
+        "exec": 10
+      },
+      "usageUpdates": 11,
+      "maxReportedInputTokens": 37470,
+      "toolOutputBytes": 45705,
+      "usage": {
+        "input_tokens": 319117,
+        "cached_input_tokens": 294016,
+        "output_tokens": 10771
+      }
+    },
+    {
+      "role": "independent-review",
+      "tools": {
+        "exec": 17
+      },
+      "usageUpdates": 18,
+      "maxReportedInputTokens": 48259,
+      "toolOutputBytes": 85215,
+      "usage": {
+        "input_tokens": 649722,
+        "cached_input_tokens": 594944,
+        "output_tokens": 11150
+      }
+    }
+  ],
+  "limitations": [
+    "Synthetic completed run only. No rollout text or commands exported.",
+    "Usage updates are not model request counts; tool output bytes are not tokens.",
+    "External evaluation cost is not included."
+  ]
+}

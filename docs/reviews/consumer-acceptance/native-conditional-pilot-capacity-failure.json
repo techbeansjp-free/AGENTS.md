@@ -1,0 +1,16 @@
+{
+  "scope": "Candidate diagnostic failed before model work; not a performance observation",
+  "distributionSha256": "f15007634e4000c220e18a287546b82f76d8d479348b2d2e3c85fb3b9804e390",
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 7.041475597000001
+  },
+  "error": "Selected model is at capacity. Please try a different model.",
+  "processedTokens": null,
+  "qualityAccepted": false,
+  "performanceAccepted": false,
+  "replacementOfSuccessfulTrial": false
+}

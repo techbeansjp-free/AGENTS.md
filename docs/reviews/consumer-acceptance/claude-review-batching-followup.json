@@ -1,0 +1,129 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "skillBundleSha256": "5309ce99168d445bd2b78ee49d7546ec82cc4d1753cd088b3f6711b1059067f2",
+    "version": "0.5.900-alpha.32",
+    "skillSha256": "815ef9278e8acadddcc50123124ebe38b924cf8084f8f3d29b92db8bec6c6570",
+    "identitySha256": "741aa8f7aefa8c37316df10967bbb6d9c5cb36fb52ebeb089a4d2be78dee9dcc"
+  },
+  "conditions": {
+    "runnerSha256": "55608fb89b0c6d704c6fd5dbbd78f39babecd8cacd0888122ba0cb5a37d0bcf8",
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "a94d2a01fe986b7aeb25c69d52fc6a82ba9f35569e2c863c08f3dba6709a4293",
+    "intentSha256": "712b83bd0cdec6d5d3439878da31f02e08a50379fd6bf471539227cbbcd54f9f",
+    "commands": [
+      [
+        "python3",
+        "-I",
+        "test_greeting.py"
+      ],
+      [
+        "python3",
+        "-I",
+        "-c",
+        "import sys;sys.path.insert(0,\".\");from greeting import greeting;assert type(greeting()) is str and greeting()==\"Hello\""
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "f0e532665944dadf9aafb62c760a9678625388ca",
+  "review": {
+    "taskId": "a23e120a2c529db40",
+    "head": "f0e532665944dadf9aafb62c760a9678625388ca",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 26,
+      "output_tokens": 5091,
+      "cache_read_input_tokens": 312985,
+      "cache_creation_input_tokens": 38830
+    },
+    "threads": [
+      {
+        "id": "c35d99d6-7930-4495-b873-6158ee3551ef",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 4126,
+          "cache_read_input_tokens": 280726,
+          "cache_creation_input_tokens": 21661
+        }
+      },
+      {
+        "id": "a23e120a2c529db40",
+        "messageCount": 3,
+        "usage": {
+          "input_tokens": 6,
+          "output_tokens": 965,
+          "cache_read_input_tokens": 32259,
+          "cache_creation_input_tokens": 17169
+        }
+      }
+    ],
+    "observedProcessedTokens": 356932,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 57.431104713,
+  "deliverySeconds": 20.415315092999997,
+  "elapsedSeconds": 77.964579527,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "f0e532665944dadf9aafb62c760a9678625388ca",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/135",
+  "ci": {
+    "head": "f0e532665944dadf9aafb62c760a9678625388ca",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39255693665",
+    "transportFailures": []
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Fresh-context simple change only; repair, multiple Issues and restart acceptance remain separate.",
+    "No merge or release."
+  ],
+  "behavioralAcceptance": {
+    "passed": false,
+    "reason": "Coordinator omitted review.md reference from reviewer prompt; reviewer did not read it. No evidence that the revised batching instruction was exercised.",
+    "performanceClaim": false,
+    "distributionVersion": "0.5.900-alpha.32"
+  }
+}

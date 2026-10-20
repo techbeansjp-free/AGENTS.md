@@ -1,0 +1,156 @@
+{
+  "source": "claude-coordination-bundle-result.json",
+  "eventsSha256": "23ac3a1bc1267028c1ac4e30f3edd5de3c442e77feb32ab0e81ea71cc2901eb4",
+  "finding": "Inside Claude sandbox, worktree-verify rejected untracked read-only null protection masks. Independent review, six direct oracles and outer evaluator verification/CI succeeded. Outer success does not prove the in-sandbox CLI succeeded.",
+  "rootMessageUsage": {
+    "method": "Deduplicate message.id, maximum cumulative value per input/output/cache field; stage changes on first worker Agent call and independent_review call. Tool calls are not model turns.",
+    "preparation": {
+      "messages": 10,
+      "tokens": 454856,
+      "toolCalls": 21
+    },
+    "workersAndIntegration": {
+      "messages": 9,
+      "tokens": 703152,
+      "toolCalls": 9
+    },
+    "reviewAndDelivery": {
+      "messages": 3,
+      "tokens": 263687,
+      "toolCalls": 1
+    },
+    "total": 1421695,
+    "wholeTrialTokens": 2076645
+  },
+  "fixBoundary": "No automatic filename or mount trust. Only exact out-of-repo owner hostMaskedPaths, disjoint from change scope, may omit observed read-only null mounts from untracked status. Kernel mount identity must remain unchanged at command boundaries. Underlying hidden content is not verified.",
+  "validation": "Real bwrap namespace with unapproved/approved masks, writable mask, changed tracked source, unrelated untracked file, generated untracked file, symlink and scope-overlap cases. No model calls for this diagnostic.",
+  "performanceClaim": false,
+  "distributionRegression": {
+    "test": "test/test_host_masked_paths.mjs",
+    "sameTestSha256": "b5173feb847366f97dc3ff5c618b7123658fe2207867607dbbfdd596b1020883",
+    "baseline": {
+      "version": "0.5.900-alpha.42",
+      "tarballSha256": "890e9572c94879ed0aac3c755431dd2cf7e4ebc72714499a7157015bdf573df5",
+      "exit": 1,
+      "reason": "Commit intended changes before verification; preserve unrelated work separately",
+      "logSha256": "363cee4770975093d29c72480126a9e8c5fbac86acfa5ae881a7e9d1aae075b5"
+    },
+    "candidate": {
+      "version": "0.5.900-alpha.43",
+      "tarballSha256": "9314308411f945c5df72ded3a437b86f2c2846d0307c7a7470ff59f8aefb8717",
+      "exit": 0,
+      "logSha256": "88587239924d1d37acf1ade0335fa8db34eb22fbbc816f9611a9bebd138816fd"
+    },
+    "execution": "Separate extracted distributions; real bwrap namespace, no source implementation import, synthetic dedicated worktree and out-of-repo owner contract.",
+    "modelCalls": 0,
+    "scope": "Linux mask regression only; not Claude model delivery, arbitrary Host support or whole-development performance acceptance."
+  },
+  "followupValidation": {
+    "version": "0.5.900-alpha.44",
+    "tarballSha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9",
+    "testSha256": "86b2d91b7fae3039de7ffa662b89f70f06643779c4edc534ea66e3bd25356c32",
+    "logSha256": "f34b17a22bd3aae074659c2abb597ab1aa379e87426fb2f090a7351b677755dd",
+    "exit": 0,
+    "modelCalls": 0,
+    "scope": "Extracted distribution in real Linux bwrap namespace; not live Claude delivery or performance evidence.",
+    "evaluationRegression": "Replaying alpha42 events now rejects missing successful in-Host verification, despite external oracle success. Historical exports retain null inHostVerification; they are not upgraded."
+  },
+  "liveDiagnostic": {
+    "version": "0.5.900-alpha.44",
+    "tarballSha256": "3b9fe779ce50707db7a3f964f399bdc76c02e9d76af1d41841bf5bc167a8cbb9",
+    "runnerSha256": "d67c9d2398090a0006f0dbad480351da2d57f5e0c76b05664c0c3f626658cd2c",
+    "eventsSha256": "62551c5418904937bda03f2ea4bd19a64694ba05b8566f9aae59cad517d82c91",
+    "status": "failed",
+    "model": "sonnet",
+    "effort": "medium",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "process": {
+      "status": 0,
+      "signal": null,
+      "seconds": 100.60117958400001
+    },
+    "failure": {
+      "error": "Missing successful in-Host worktree verification for submitted HEAD and owner contract",
+      "seconds": 100.73129581900001
+    },
+    "usage": {
+      "totals": {
+        "input_tokens": 34,
+        "output_tokens": 6648,
+        "cache_read_input_tokens": 447418,
+        "cache_creation_input_tokens": 43313
+      },
+      "threads": [
+        {
+          "id": "ede3d698-2532-4e36-9d46-8833332383ed",
+          "messageCount": 14,
+          "usage": {
+            "input_tokens": 28,
+            "output_tokens": 5542,
+            "cache_read_input_tokens": 413942,
+            "cache_creation_input_tokens": 24232
+          }
+        },
+        {
+          "id": "adb3b095759397bc9",
+          "messageCount": 3,
+          "usage": {
+            "input_tokens": 6,
+            "output_tokens": 1106,
+            "cache_read_input_tokens": 33476,
+            "cache_creation_input_tokens": 19081
+          }
+        }
+      ],
+      "observedProcessedTokens": 497413,
+      "missingUsage": [],
+      "reconciledWithHostModelUsage": true,
+      "complete": true
+    },
+    "reason": "Ten additional exact Claude protection mounts were not authorized in the synthetic owner contract. Agent preserved the boundary and evaluation rejected outer-only success.",
+    "submitted": false,
+    "implementationIntervention": 0,
+    "nextAction": "Include observed exact protection paths in future synthetic owner contracts; never exempt ordinary files. Do not relabel this failure as success.",
+    "performanceClaim": false,
+    "setupFailure": {
+      "stage": "before model startup",
+      "reason": "Small-run clone required a local main branch absent in the fixed synthetic fixture.",
+      "modelCalls": 0,
+      "fix": "Clone local fixture then checkout the existing pinned base; remote restriction unchanged."
+    },
+    "isolatedReplay": {
+      "scope": "Separate clone of the saved synthetic commit, corrected external owner contract, 23 real read-only null mounts; no model invocation. Does not upgrade the failed live trial.",
+      "head": "4a41999153d0ec5e58a799cf9d3e2498636e66c6",
+      "passed": true,
+      "checks": 2,
+      "observedMasks": [
+        ".bash_profile",
+        ".bashrc",
+        ".claude/agents",
+        ".claude/commands",
+        ".claude/hooks",
+        ".claude/launch.json",
+        ".claude/loop.md",
+        ".claude/output-styles",
+        ".claude/routines",
+        ".claude/scheduled_tasks.json",
+        ".claude/settings.json",
+        ".claude/settings.local.json",
+        ".claude/skills",
+        ".claude/workflows",
+        ".gitconfig",
+        ".gitmodules",
+        ".idea",
+        ".mcp.json",
+        ".profile",
+        ".ripgreprc",
+        ".vscode",
+        ".zprofile",
+        ".zshrc"
+      ],
+      "stdoutSha256": "5aa32b30cc33d9802d66d2c80e14572657593c02e4f24c6bb7a474e1c187bcaa",
+      "protectedUnderlyingAssetsUnchanged": true,
+      "modelCalls": 0
+    }
+  }
+}

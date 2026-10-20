@@ -1,0 +1,249 @@
+{
+  "base": "38f72b1f3a8488cf0d2d254d511ef920e1c519cf",
+  "head": "73a25e2e4cc9695af5fe26414d86c4c3979ef469",
+  "review": {
+    "id": "01a151f3-96f9-7931-a64a-74ab3cc48f1b",
+    "head": "73a25e2e4cc9695af5fe26414d86c4c3979ef469",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "cacheWriteInput": {
+      "observedTokens": 0,
+      "totalTokens": 0,
+      "missingThreads": [],
+      "threads": [
+        {
+          "id": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+          "tokens": 0
+        },
+        {
+          "id": "01a151f0-3c69-7bd0-a2f6-526da8ee5075",
+          "tokens": 0
+        },
+        {
+          "id": "01a151f0-5c5d-7c01-8fe8-5735158a35bb",
+          "tokens": 0
+        },
+        {
+          "id": "01a151f3-96f9-7931-a64a-74ab3cc48f1b",
+          "tokens": 0
+        },
+        {
+          "id": "01a15201-a67e-7762-af8c-db1f22eb3acd",
+          "tokens": 0
+        }
+      ],
+      "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+    },
+    "rootId": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+    "observedThreads": 5,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 4317280,
+      "cachedInputTokens": 4046080,
+      "outputTokens": 57001
+    },
+    "observedProcessedTokens": 4374281,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+        "parent": null,
+        "usage": {
+          "input_tokens": 3045547,
+          "cached_input_tokens": 2874496,
+          "output_tokens": 24146
+        }
+      },
+      {
+        "id": "01a151f0-3c69-7bd0-a2f6-526da8ee5075",
+        "parent": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+        "usage": {
+          "input_tokens": 353775,
+          "cached_input_tokens": 329216,
+          "output_tokens": 10872
+        }
+      },
+      {
+        "id": "01a151f0-5c5d-7c01-8fe8-5735158a35bb",
+        "parent": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+        "usage": {
+          "input_tokens": 220465,
+          "cached_input_tokens": 202880,
+          "output_tokens": 8344
+        }
+      },
+      {
+        "id": "01a151f3-96f9-7931-a64a-74ab3cc48f1b",
+        "parent": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+        "usage": {
+          "input_tokens": 563870,
+          "cached_input_tokens": 524928,
+          "output_tokens": 10399
+        }
+      },
+      {
+        "id": "01a15201-a67e-7762-af8c-db1f22eb3acd",
+        "parent": "01a151f3-96f9-7931-a64a-74ab3cc48f1b",
+        "usage": {
+          "input_tokens": 133623,
+          "cached_input_tokens": 114560,
+          "output_tokens": 3240
+        }
+      }
+    ]
+  },
+  "continuation": {
+    "rootId": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+    "previousHead": "69e1284cea60812eb6c7d9c016df86329b1440ff",
+    "phaseUsage": {
+      "rootId": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+      "measured": {
+        "input_tokens": 2251290,
+        "cached_input_tokens": 2106368,
+        "output_tokens": 15261
+      },
+      "observedProcessedTokens": 2266551,
+      "missingUsage": [],
+      "threads": [
+        {
+          "id": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+          "usage": {
+            "input_tokens": 1967809,
+            "cached_input_tokens": 1844992,
+            "output_tokens": 11146
+          }
+        },
+        {
+          "id": "01a151f0-3c69-7bd0-a2f6-526da8ee5075",
+          "usage": {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0
+          }
+        },
+        {
+          "id": "01a151f0-5c5d-7c01-8fe8-5735158a35bb",
+          "usage": {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0
+          }
+        },
+        {
+          "id": "01a151f3-96f9-7931-a64a-74ab3cc48f1b",
+          "usage": {
+            "input_tokens": 149858,
+            "cached_input_tokens": 146816,
+            "output_tokens": 875
+          }
+        },
+        {
+          "id": "01a15201-a67e-7762-af8c-db1f22eb3acd",
+          "usage": {
+            "input_tokens": 133623,
+            "cached_input_tokens": 114560,
+            "output_tokens": 3240
+          }
+        }
+      ],
+      "cacheWriteInput": {
+        "observedTokens": 0,
+        "totalTokens": 0,
+        "threads": [
+          {
+            "id": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+            "tokens": 0
+          },
+          {
+            "id": "01a151f0-3c69-7bd0-a2f6-526da8ee5075",
+            "tokens": 0
+          },
+          {
+            "id": "01a151f0-5c5d-7c01-8fe8-5735158a35bb",
+            "tokens": 0
+          },
+          {
+            "id": "01a151f3-96f9-7931-a64a-74ab3cc48f1b",
+            "tokens": 0
+          },
+          {
+            "id": "01a15201-a67e-7762-af8c-db1f22eb3acd",
+            "tokens": 0
+          }
+        ]
+      },
+      "scope": "Difference of Host cumulative observations for the same coordinator; includes new and resumed descendants. Missing/reset counters are not zero. Full trial totals use final cumulative usage, not sum of phase totals."
+    },
+    "scope": "Same coordinator session resumed for explicit shared-contract revision in a new worktree; usage is whole-session cumulative, phaseUsage is additional work only, and all timing fields describe this revision phase only. Do not compare phase time against cumulative tokens."
+  },
+  "priorDriverFailure": {
+    "reason": "Resume configuration was read-only; corrected evaluator argument placement",
+    "firstAttemptSeconds": 85.47768363599998,
+    "firstAttemptUsageComplete": false,
+    "implementationRepairs": 0,
+    "driverIntervention": true,
+    "secondFailure": "Completed implementation/review rejected by observer counting exact duplicate-name spawn refusal as a new Agent",
+    "observerRepair": true
+  },
+  "implementationAndReviewSeconds": 304.537291051,
+  "deliverySeconds": 23.555035383,
+  "elapsedSeconds": 7138.498,
+  "driverImplementationEdits": 0,
+  "manualHandoffs": 0,
+  "complexCI": {
+    "head": "73a25e2e4cc9695af5fe26414d86c4c3979ef469",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39199315085",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "73a25e2e4cc9695af5fe26414d86c4c3979ef469",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39199315097",
+    "transportFailures": []
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/64",
+  "verification": {
+    "head": "73a25e2e4cc9695af5fe26414d86c4c3979ef469",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "236b5b3340b0ef608f898e5d7aae600391f71cfb57713dfffd4926a070736a54",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "d5e5c150fb6dd3b4f25ced189a325ba20011e7ee7d1e8ab6e989886c8d278d42",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "3f345dc26291687ed4e8177fbf84f85934c481bb6be8322cc894402b54d14933",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "scope": "Same coordinator session as original two-Issue PR63; shared currency revision in another worktree. Synthetic data only. Driver configuration and observer repairs were required; this is not clean autonomous acceptance or a performance comparison. Elapsed time retains diagnosis delays. Cumulative usage includes original and continuation work; phase usage is their difference."
+}

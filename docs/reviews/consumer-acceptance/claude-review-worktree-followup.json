@@ -1,0 +1,129 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "skillBundleSha256": "c74c31648da38f15d2b596949561c12869cd42f414ffaca30422e43dda7e9165",
+    "version": "0.5.900-alpha.26",
+    "skillSha256": "2fc5282e48238f991910ac6512b35a008774e89bb06f6a192961226d1548575a",
+    "identitySha256": "43fe6d7752f65ab618a4969dea6b657acdad286d7b0a5a559e6fbdf4bdc8483a"
+  },
+  "conditions": {
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "9c23ce07da5c7695f2e2e5922237bdff34c0b73e59eee9078c73fac02b24fa31",
+    "intentSha256": "712b83bd0cdec6d5d3439878da31f02e08a50379fd6bf471539227cbbcd54f9f",
+    "commands": [
+      [
+        "python3",
+        "-I",
+        "test_greeting.py"
+      ],
+      [
+        "python3",
+        "-I",
+        "-c",
+        "import sys;sys.path.insert(0,\".\");from greeting import greeting;assert type(greeting()) is str and greeting()==\"Hello\""
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "dde9a6a2720120305995badb1f665de0a6a7bcad",
+  "review": {
+    "taskId": "ab8ec641e130ae79a",
+    "head": "dde9a6a2720120305995badb1f665de0a6a7bcad",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 24,
+      "output_tokens": 4440,
+      "cache_read_input_tokens": 286403,
+      "cache_creation_input_tokens": 36840
+    },
+    "threads": [
+      {
+        "id": "b82d2fd9-624d-4476-aec2-4593d2dc5033",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 3734,
+          "cache_read_input_tokens": 271254,
+          "cache_creation_input_tokens": 20029
+        }
+      },
+      {
+        "id": "ab8ec641e130ae79a",
+        "messageCount": 2,
+        "usage": {
+          "input_tokens": 4,
+          "output_tokens": 706,
+          "cache_read_input_tokens": 15149,
+          "cache_creation_input_tokens": 16811
+        }
+      }
+    ],
+    "observedProcessedTokens": 327707,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 67.212214274,
+  "deliverySeconds": 20.203351632999997,
+  "elapsedSeconds": 87.545526424,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "dde9a6a2720120305995badb1f665de0a6a7bcad",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/115",
+  "ci": {
+    "head": "dde9a6a2720120305995badb1f665de0a6a7bcad",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39243247464",
+    "transportFailures": []
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Fresh-context simple change only; repair, multiple Issues and restart acceptance remain separate.",
+    "No merge or release."
+  ],
+  "targetedObservation": {
+    "purpose": "Confirm same-worktree independent review after 530e9cdb; not a replacement for failed matched v5 trials",
+    "separateReviewerWorktreeRequested": false,
+    "reviewProcedureReferencePassed": false,
+    "qualityScope": "Exact greeting oracle and fresh independent review passed, but procedure handoff remained incomplete",
+    "nextChange": "Replace long review paragraph with explicit handoff fields; this observation does not test that change"
+  }
+}

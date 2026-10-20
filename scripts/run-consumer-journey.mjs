@@ -1,0 +1,21 @@
+/** Pack and verify a visible business journey without mounting the developer repo. */
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {createHash} from 'node:crypto';
+import {execFileSync,spawnSync} from 'node:child_process';
+const source=fileURLToPath(new URL('..',import.meta.url)),tools=fs.realpathSync(process.argv[2]);
+const manifest=JSON.parse(fs.readFileSync(path.join(tools,'node_modules/playwright-core/package.json')));
+if(manifest.name!=='playwright-core'||manifest.version!=='1.56.1')throw Error('Expected playwright-core 1.56.1');
+const root=fs.mkdtempSync('/var/tmp/asc-consumer-journey-'),fixture=path.join(source,'test/fixtures/consumer-user-management');
+const packed=JSON.parse(execFileSync(process.execPath,['scripts/pack-candidate.mjs',root,'--version=0.5.900-alpha.1'],{cwd:source,encoding:'utf8'}));
+fs.copyFileSync(path.join(source,'scripts/consumer-journey.mjs'),path.join(root,'consumer-journey.mjs'));
+const runtime=path.dirname(path.dirname(fs.realpathSync(process.execPath)));
+const args=['--unshare-all','--die-with-parent','--new-session'];
+for(const dir of ['/usr','/bin','/lib','/lib64','/opt/google/chrome'])if(fs.existsSync(dir))args.push('--ro-bind',dir,dir);
+args.push('--proc','/proc','--dev','/dev','--tmpfs','/tmp','--dir','/home','--dir','/home/consumer','--ro-bind',runtime,'/runtime','--ro-bind',tools,'/tools','--ro-bind',fixture,'/fixture','--bind',root,'/work','--clearenv','--setenv','HOME','/home/consumer','--setenv','PATH','/runtime/bin:/usr/bin:/bin','--setenv','TMPDIR','/tmp','--setenv','LANG','C.UTF-8','--chdir','/work','/runtime/bin/node','/work/consumer-journey.mjs');
+const started=Date.now(),result=spawnSync('/usr/bin/bwrap',args,{encoding:'utf8',maxBuffer:16*1024*1024});
+fs.writeFileSync(path.join(root,'run.log'),(result.stdout??'')+(result.stderr??''));
+const hashes=Object.fromEntries(fs.readdirSync(fixture).map(name=>[name,createHash('sha256').update(fs.readFileSync(path.join(fixture,name))).digest('hex')]));
+fs.writeFileSync(path.join(root,'provenance.json'),JSON.stringify({packed,fixture:hashes,seconds:(Date.now()-started)/1000,status:result.status,error:result.error?.message??null,toolVersion:manifest.version,network:'unshared',credentialsProvided:false,developerRepositoryMounted:false},null,2));
+console.log(JSON.stringify({root,status:result.status},null,2));process.exitCode=result.status===0&&!result.error?0:1;

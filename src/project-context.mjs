@@ -26,12 +26,16 @@ function read(root,relative,optional=false,contents=false){
 export function projectContext(root,paths=[]){
  if(!Array.isArray(paths))throw Error('Expected changed paths');paths=paths.map(name);
  const manifest='.agent-skill-chain/project/context.json',bytes=read(root,manifest,true,true);
- const rules=new Map();
+ const rules=new Map(),observed=new Map();
  const add=(p,scope=[],optional=false)=>{
   name(p);if(!Array.isArray(scope))throw Error('Expected appliesTo path prefixes');scope.forEach(name);
   const selected=!paths.length||!scope.length||paths.some(changed=>scope.some(prefix=>changed===prefix||changed.startsWith(prefix+'/')));
   if(!selected)return;
-  const body=read(root,p,optional);if(body!==null)rules.set(p,{path:p,...body});
+  // Cache only this invocation; required references must still reject missing files.
+  // Existing files have identical content regardless of optional/required discovery.
+  // Retry a missing optional lookup when the manifest makes that reference required.
+  if(!observed.has(p)||(observed.get(p)===null&&!optional))observed.set(p,read(root,p,optional));
+  const body=observed.get(p);if(body!==null)rules.set(p,{path:p,...body});
  };
  for(const p of ['AGENTS.md','CLAUDE.md','.agent-skill-chain/project/00_利用案内.md'])add(p,[],true);
  for(const changed of paths){
@@ -47,8 +51,7 @@ export function projectContext(root,paths=[]){
   }
  }
  // Legacy configuration is an input to interpret, not an automatically executed policy engine.
- const legacy='.agent-skill-chain/project-policy.json';const old=read(root,legacy,true);
- if(old)rules.set(legacy,{path:legacy,...old});
+ const legacy='.agent-skill-chain/project-policy.json';add(legacy,[],true);const old=observed.get(legacy);
  const projectDir=path.join(root,'.agent-skill-chain/project');
  const references=[...rules.values()];
  return {schema:'asc-project-context-selection/v1',selection:paths.length?'path-prefix':'all-manifest-scopes',paths,

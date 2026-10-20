@@ -1,0 +1,26 @@
+{
+  "scope": "Same-coordinator revision attempt; not accepted autonomous completion.",
+  "rootId": "01a151ef-b2e7-72a2-98d2-ee1f01683d8c",
+  "previousHead": "69e1284cea60812eb6c7d9c016df86329b1440ff",
+  "base": "38f72b1f3a8488cf0d2d254d511ef920e1c519cf",
+  "agentExit": 0,
+  "seconds": 85.47768363599998,
+  "observedPermissionProfile": ":read-only",
+  "expectedPermissionProfile": "asc_minimal_agent",
+  "sourceChanged": false,
+  "reviewCompleted": false,
+  "deliveryCompleted": false,
+  "failure": "Resume did not apply the configured restricted writable profile; patch and oracle temp writes were rejected. Finish observer also rejected a subsequent aborted turn.",
+  "usageComplete": false,
+  "nextAction": "Verify configuration placement on resume with isolated synthetic permission probe before retry; do not disable sandbox.",
+  "correctionProbe": {
+    "sessionId": "01a151fd-a819-7a72-af32-b6f72223c253",
+    "sameSessionResumed": true,
+    "workspaceWrite": true,
+    "outsideDummyRead": "denied",
+    "observedProfile": "asc_minimal_agent",
+    "rootAccess": "deny",
+    "network": "restricted",
+    "scope": "Synthetic minimal permission probe, not a development completion or performance comparison."
+  }
+}

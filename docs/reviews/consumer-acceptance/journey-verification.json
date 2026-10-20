@@ -1,0 +1,58 @@
+{
+  "base": "115455563d939b41ae83679c531d6623e46bb1df",
+  "head": "6c81fc951ed7dd29f5b4540a89ddde624027dadc",
+  "start": {
+    "schema": "asc-worktree/v1",
+    "repo": "/work/application",
+    "head": "115455563d939b41ae83679c531d6623e46bb1df",
+    "context": {
+      "schema": "asc-project-context-selection/v1",
+      "selection": "path-prefix",
+      "paths": [
+        "server.mjs",
+        "page.html"
+      ],
+      "references": [],
+      "digest": "7cacb30ace88b566208caa1bf7f9e96ba9c821d04d8b170d141361e6a42b0eed",
+      "notices": [],
+      "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+    },
+    "execution": "current-host-worktree",
+    "snapshot": false,
+    "providerLaunch": false,
+    "skill": "/work/application/.agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+    "obligations": [
+      "owner intent and permitted scope",
+      "project build and tests in this worktree",
+      "independent context review of actual diff",
+      "verified commit matches submitted PR and CI"
+    ],
+    "verified": false
+  },
+  "verified": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "repo": "/work/application",
+    "base": "115455563d939b41ae83679c531d6623e46bb1df",
+    "head": "6c81fc951ed7dd29f5b4540a89ddde624027dadc",
+    "contractSha256": "d796ec6c11c184d00fd686d347a5ad6f2bdf34a0b72090259e0dc56568cd5266",
+    "intent": "Fulfil REQUIREMENTS.md user-management journey",
+    "results": [
+      {
+        "argv": [
+          "/runtime/bin/node",
+          "/fixture/browser.mjs",
+          "/work/application"
+        ],
+        "exit": 0,
+        "seconds": 2.6200487279999995,
+        "stdoutSha256": "1612912aeaaf314c36e43b8cb088164b13bfd03d039f80136199dcf0ce620e5c",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "passed": true,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  },
+  "modelExecutionInRunner": false
+}

@@ -1,0 +1,36 @@
+{
+  "scope": "Minimal model plus actual shell confinement diagnostic, not full quality or performance acceptance",
+  "model": "gpt-6-sol",
+  "cliVersion": "0.155.0-alpha.16.3",
+  "effort": "medium",
+  "result": {
+    "status": 0,
+    "signal": null,
+    "seconds": 20.794,
+    "sentinelUnchanged": true,
+    "workspaceProof": "READY"
+  },
+  "toolCalls": 1,
+  "externalDummyRead": "denied",
+  "usage": {
+    "input_tokens": 23786,
+    "cached_input_tokens": 11520,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 259,
+    "reasoning_output_tokens": 74
+  },
+  "hostMountModified": false,
+  "agentNetworkPolicy": "disabled; no network probe in this diagnostic",
+  "priorAttempt": {
+    "failure": "outer namespace lacked resolver symlink target",
+    "termination": "evaluator SIGINT to stop known DNS retries",
+    "seconds": 135.562,
+    "workspaceProof": null
+  },
+  "remaining": [
+    "Full complex fixture and independent review",
+    "Draft PR/CI",
+    "Matched performance pairs",
+    "No blanket security equivalence from this probe"
+  ]
+}

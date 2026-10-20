@@ -1,0 +1,78 @@
+{
+  "scope": "Third candidate diagnostic failed in coordinator after independent review PASS; not completed performance evidence",
+  "candidateSha256": "f15007634e4000c220e18a287546b82f76d8d479348b2d2e3c85fb3b9804e390",
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 157.929740464
+  },
+  "rootId": "01a152ce-5ddf-7df3-91cc-0f2053a1191a",
+  "head": "5d16b39bf68c25504113567a72c5edda52e4d747",
+  "error": "Selected model is at capacity. Please try a different model.",
+  "usage": {
+    "cacheWriteInput": {
+      "observedTokens": 0,
+      "totalTokens": 0,
+      "missingThreads": [],
+      "threads": [
+        {
+          "id": "01a152ce-5ddf-7df3-91cc-0f2053a1191a",
+          "tokens": 0
+        },
+        {
+          "id": "01a152cf-e8b1-7c30-9b46-572e20892db5",
+          "tokens": 0
+        }
+      ],
+      "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+    },
+    "rootId": "01a152ce-5ddf-7df3-91cc-0f2053a1191a",
+    "observedThreads": 2,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 253472,
+      "cachedInputTokens": 232704,
+      "outputTokens": 3854
+    },
+    "observedProcessedTokens": 257326,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a152ce-5ddf-7df3-91cc-0f2053a1191a",
+        "parent": null,
+        "usage": {
+          "input_tokens": 181853,
+          "cached_input_tokens": 166528,
+          "output_tokens": 2337
+        }
+      },
+      {
+        "id": "01a152cf-e8b1-7c30-9b46-572e20892db5",
+        "parent": "01a152ce-5ddf-7df3-91cc-0f2053a1191a",
+        "usage": {
+          "input_tokens": 71619,
+          "cached_input_tokens": 66176,
+          "output_tokens": 1517
+        }
+      }
+    ]
+  },
+  "usageComplete": false,
+  "qualityAccepted": false,
+  "performanceAccepted": false,
+  "threads": [
+    {
+      "id": "01a152ce-5ddf-7df3-91cc-0f2053a1191a",
+      "lastTurnEvent": "task_complete"
+    },
+    {
+      "id": "01a152cf-e8b1-7c30-9b46-572e20892db5",
+      "lastTurnEvent": "task_complete"
+    }
+  ],
+  "review": {
+    "id": "01a152cf-e8b1-7c30-9b46-572e20892db5",
+    "head": "5d16b39bf68c25504113567a72c5edda52e4d747",
+    "verdict": "PASS"
+  }
+}

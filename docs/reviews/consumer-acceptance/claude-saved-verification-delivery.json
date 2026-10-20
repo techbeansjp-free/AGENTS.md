@@ -1,0 +1,126 @@
+{
+  "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "head": "8a39a04411e6e82ff0fdbe3705719dcad0a0b2b9",
+  "model": "opus",
+  "effort": "medium",
+  "reviewerMode": "generic",
+  "tarballSha256": "35e5b8a3110e0837d43fe9e63828bfe304d06aaaff97b42109995d61eabe39f4",
+  "runnerSha256": "fb2040cb9f7bd40793887f301a11de923be532539d638f11183bf1d14d59542f",
+  "run": {
+    "status": 0,
+    "signal": null,
+    "seconds": 163.90887488400003
+  },
+  "review": {
+    "taskId": "acf11d4b4a5810843",
+    "agentType": "general-purpose",
+    "head": "8a39a04411e6e82ff0fdbe3705719dcad0a0b2b9",
+    "verdict": "PASS"
+  },
+  "inHostVerification": {
+    "toolUseId": "toolu_01C6qhz6ARZG1w5cknE1inZc",
+    "head": "8a39a04411e6e82ff0fdbe3705719dcad0a0b2b9",
+    "contractSha256": "8a96eeeb9b5df0d8ea090750ace1fd0fe4a08ca1baf6546548c7feae09e7f1ec",
+    "checks": 6,
+    "scope": "Observed coordinator Bash result; external oracle independently rechecked the same commit"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 76,
+      "output_tokens": 22739,
+      "cache_read_input_tokens": 744148,
+      "cache_creation_input_tokens": 108713
+    },
+    "threads": [
+      {
+        "id": "c05ca366-09f6-49d0-8e09-be13fad04e50",
+        "messageCount": 11,
+        "usage": {
+          "input_tokens": 26,
+          "output_tokens": 6567,
+          "cache_read_input_tokens": 269045,
+          "cache_creation_input_tokens": 30773
+        }
+      },
+      {
+        "id": "a2e0aacb3a10d42f3",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 5593,
+          "cache_read_input_tokens": 195377,
+          "cache_creation_input_tokens": 32092
+        }
+      },
+      {
+        "id": "ab428e5c244e2a8ca",
+        "messageCount": 8,
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 4589,
+          "cache_read_input_tokens": 151668,
+          "cache_creation_input_tokens": 22849
+        }
+      },
+      {
+        "id": "acf11d4b4a5810843",
+        "messageCount": 7,
+        "usage": {
+          "input_tokens": 14,
+          "output_tokens": 5990,
+          "cache_read_input_tokens": 128058,
+          "cache_creation_input_tokens": 22999
+        }
+      }
+    ],
+    "observedProcessedTokens": 875676,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "ci": {
+    "head": "8a39a04411e6e82ff0fdbe3705719dcad0a0b2b9",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39348237792",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "8a39a04411e6e82ff0fdbe3705719dcad0a0b2b9",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39348237751",
+    "transportFailures": []
+  },
+  "implementationIntervention": 0,
+  "totalSeconds": 191.78084904,
+  "deliverySeconds": 27.34359859099999,
+  "timingScope": "From initial execution (including injected interruption and recovery) through CI; excludes fixture preparation",
+  "scope": "Single synthetic complex two-Issue development through saved native verification, independent review, Draft PR and both CI; no evaluator implementation, planning or result-recovery intervention",
+  "version": "0.5.900-alpha.60",
+  "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/188",
+  "verification": {
+    "passed": true,
+    "checks": 6,
+    "head": "8a39a04411e6e82ff0fdbe3705719dcad0a0b2b9",
+    "contractSha256": "8a96eeeb9b5df0d8ea090750ace1fd0fe4a08ca1baf6546548c7feae09e7f1ec",
+    "contextSha256": "8a2fba7a7c7a3160a1f94aa0582598dd0c032ca89877847cf41c3ff33f963de4"
+  },
+  "resultRecoveryIntervention": false,
+  "performanceComparison": false,
+  "limits": [
+    "One trial; no causal time or token improvement claim.",
+    "Synthetic reservation/billing fixture only.",
+    "Current Claude Host; publication and CI observation by the pre-authorized deterministic runner.",
+    "No interruption injected in this run."
+  ],
+  "sourceResultSha256": "d6db8d1077cf9fe5527ba3dc7fdc4034b8738e0a697c9e3f26d913a27a2e86ed"
+}

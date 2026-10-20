@@ -1,0 +1,71 @@
+{
+  "schema": "asc-worker-batching-diagnostic-failure/v1",
+  "packageVersion": "0.5.900-alpha.55",
+  "packageSha256": "c681900d9b4a46e2a1303096564d1046b50ea119d78cf4b364a70990eb9da3cd",
+  "session": "2783b83a-5abf-4ff7-ae00-c88b19345554",
+  "base": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "model": "sonnet",
+  "effort": "medium",
+  "runnerSha256": "305373591440d2d26f9c933673e63683e8fba4f038bbae9f0b48bde062f0fe4d",
+  "result": {
+    "status": 0,
+    "signal": null,
+    "seconds": 172.918863102
+  },
+  "failure": {
+    "error": "No unambiguous completed independent review of submitted HEAD",
+    "seconds": 172.931717614
+  },
+  "usage": {
+    "usage": {
+      "totals": {
+        "input_tokens": 36,
+        "output_tokens": 13564,
+        "cache_read_input_tokens": 821111,
+        "cache_creation_input_tokens": 50843
+      },
+      "threads": [
+        {
+          "id": "2783b83a-5abf-4ff7-ae00-c88b19345554",
+          "messageCount": 18,
+          "usage": {
+            "input_tokens": 36,
+            "output_tokens": 13564,
+            "cache_read_input_tokens": 821111,
+            "cache_creation_input_tokens": 50843
+          }
+        }
+      ],
+      "observedProcessedTokens": 885554,
+      "missingUsage": [],
+      "reconciledWithHostModelUsage": true,
+      "complete": true
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 36,
+        "outputTokens": 13564,
+        "cacheReadInputTokens": 821111,
+        "cacheCreationInputTokens": 50843,
+        "webSearchRequests": 0,
+        "costUSD": 0.5033062,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "thinkingTokens": 7021,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty",
+        "costBasis": "list"
+      }
+    }
+  },
+  "accepted": false,
+  "deliveryPerformed": false,
+  "independentReviewCompleted": false,
+  "implementationIntervention": 0,
+  "diagnosis": "Parent interpreted direct workers / No nested agents as prohibiting native children, launched separate CLI processes via Bash, and stopped after authentication/network failure. No source files were changed. Native parent-to-child delegation was intended, with grandchildren prohibited.",
+  "limitations": [
+    "Not a successful quality or performance trial.",
+    "Usage represents observed Host contexts; separate attempted CLI processes do not supply reconciled child usage.",
+    "Changing evaluator wording creates new conditions; do not pool future measurements with frozen v3."
+  ]
+}

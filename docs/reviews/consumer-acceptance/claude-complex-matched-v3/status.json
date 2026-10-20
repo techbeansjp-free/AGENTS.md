@@ -1,0 +1,76 @@
+{
+  "status": "completed",
+  "runs": [
+    {
+      "pair": 1,
+      "side": "baseline",
+      "status": 0,
+      "signal": null,
+      "rootSha256": "43ed028d552ed63d6d692753687fc48a5d252748190f8e5378fef5ed9bae6310"
+    },
+    {
+      "pair": 1,
+      "side": "candidate",
+      "status": 0,
+      "signal": null,
+      "rootSha256": "cbb451c6dbab6a3996e436f5adb09ec524a5578fcd2fd083097d26e802ca3092"
+    },
+    {
+      "pair": 2,
+      "side": "candidate",
+      "status": 0,
+      "signal": null,
+      "rootSha256": "deb8cba0df3f030c38a09fea3eeaa0305e0ac1eaeb2b18fb4e19e69e5fa51293"
+    },
+    {
+      "pair": 2,
+      "side": "baseline",
+      "status": 0,
+      "signal": null,
+      "rootSha256": "8f4ee2b09cb97701513edfbdb1bf5b88460ab9fd8f4008fbd747e4f6831fe258"
+    },
+    {
+      "pair": 3,
+      "side": "baseline",
+      "status": 0,
+      "signal": null,
+      "rootSha256": "22532696a4e00a155c10c6e48dae68bb82728518750e98ca855eaafdc0bd8a7b"
+    },
+    {
+      "pair": 3,
+      "side": "candidate",
+      "status": 0,
+      "signal": null,
+      "rootSha256": "1179cdb1c96f41f214d85489b86bac8a7f79ecdc04bd87b7082aab0a2ea8ae78"
+    },
+    {
+      "pair": 4,
+      "side": "candidate",
+      "status": 0,
+      "signal": null,
+      "rootSha256": "0a899253b29d593a590a984cf13b8646e35b7bd6b54a0891c36ebb155cee814a"
+    },
+    {
+      "pair": 4,
+      "side": "baseline",
+      "status": 0,
+      "signal": null,
+      "rootSha256": "b39be71f8165274b796310207c5c90454a71cd0b866bbd0d60735c0aaf700e67"
+    },
+    {
+      "pair": 5,
+      "side": "baseline",
+      "status": 0,
+      "signal": null,
+      "rootSha256": "d03ae70d261eccb906d3409b1c90fba713cad2f5f33ce7ef900743b6b330b3c9"
+    },
+    {
+      "pair": 5,
+      "side": "candidate",
+      "status": 0,
+      "signal": null,
+      "rootSha256": "5f86f156836911d450a882fcbecc42203781249b55a4af2b92d24715e5ac4ea7"
+    }
+  ],
+  "redaction": "Local run roots replaced by SHA-256; full raw status retained outside repository."
+}

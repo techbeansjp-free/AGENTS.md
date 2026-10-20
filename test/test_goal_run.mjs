@@ -231,6 +231,18 @@ test('delegated decomposition uses owner commands, fresh contexts and shared bud
  const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
  assert.equal(r.status,'draft-ci-passed');assert.equal(r.budget.admittedAgentCalls,8);assert.equal(r.proposal.calls.length,1);assert.equal(f.deliveries(),1);assert(r.wallSeconds>=r.delivery.wallSeconds);
 });
+test('delegated decomposition completes after a capacity failure and accounts for both proposal calls',{skip:!enabled},async t=>{
+ const f=fixture(t),goal=f.request.goal;const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+ // Keep the original full integration suite; owner explicitly selects a unit baseline.
+ request.decomposition={mode:'within-owner-contract',unitTestArgv:['/bin/sh','-c','test -s contract.txt'],unitChecks:goal.units.map(u=>({paths:u.writePaths,argvs:[f.request.unitRequests[u.id].contract.testArgv]}))};request.budget={maxAgentCalls:9};let n=0;
+ const agent=async({workspace,writable,prompt})=>{const context='adaptive-'+(++n),p=prompt.startsWith('{')?JSON.parse(prompt):{};
+  if(p.pins&&n===1)throw Object.assign(Error('busy'),{code:'ASC_PROVIDER_CAPACITY'});
+  if(p.pins)return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal})};
+  if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}
+  return {context,seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};};
+ const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
+ assert.equal(r.status,'draft-ci-passed');assert.equal(r.budget.admittedAgentCalls,9);assert.equal(r.proposal.calls.length,2);assert.equal(f.deliveries(),1);assert(r.wallSeconds>=r.delivery.wallSeconds);
+});
 test('delegation cannot invent authority or adopt stale contracts',{skip:!enabled},async t=>{
  const f=fixture(t),goal=f.request.goal,request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
  request.decomposition={mode:'within-owner-contract',unitChecks:[{paths:request.contract.allowedPaths,argvs:[['/bin/true']]}]};
@@ -756,4 +768,12 @@ test('restart rejects missing Goal and malformed reused proposals before cloning
  }
  const proposal={binding,status:'proposed',goal:f.request.goal};fs.writeFileSync(resultFile,JSON.stringify({units:[],proposal}));
  const prepared=prepareGoalRestart(request);assert.equal(prepared.request.goal.units.length,3);
+});
+
+test('restart accepts more than 64 prior results without inheriting completion',t=>{
+ const f=fixture(t),root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-large-restart-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const resultFile=path.join(root,'prior.json'),directory=path.join(root,'work');
+ fs.writeFileSync(resultFile,JSON.stringify({units:Array.from({length:65},(_,i)=>({id:'old-'+i,result:{status:'draft-ci-passed'}}))}));
+ const prepared=prepareGoalRestart({...f.request,restart:{directory,resultFile}});
+ assert.deepEqual(prepared.request.unitCandidates,{});assert.match(prepared.authority,/new verification and review/);
 });

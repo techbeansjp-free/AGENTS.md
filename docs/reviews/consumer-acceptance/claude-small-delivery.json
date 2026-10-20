@@ -1,0 +1,75 @@
+{
+  "scope": "One small synthetic Claude current-host distribution trial; not complex Goal or comparative performance acceptance",
+  "distribution": {
+    "version": "0.5.900-alpha.18",
+    "sha256": "f15007634e4000c220e18a287546b82f76d8d479348b2d2e3c85fb3b9804e390"
+  },
+  "cliVersion": "2.1.282",
+  "model": "claude-sonnet-5",
+  "head": "3924ae2ff64d0e5939653b776f70fa8d41f852a7",
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/85",
+  "implementationAndReviewMilliseconds": 126456,
+  "review": {
+    "taskId": "a36f72fc54216b3da",
+    "head": "3924ae2ff64d0e5939653b776f70fa8d41f852a7",
+    "verdict": "PASS"
+  },
+  "ci": {
+    "head": "3924ae2ff64d0e5939653b776f70fa8d41f852a7",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39223063605",
+    "transportFailures": []
+  },
+  "verificationPassed": true,
+  "usage": {
+    "totals": {
+      "input_tokens": 34,
+      "output_tokens": 8788,
+      "cache_read_input_tokens": 433554,
+      "cache_creation_input_tokens": 60646
+    },
+    "observedProcessedTokens": 503022,
+    "reconciledWithHostModelUsage": true,
+    "threads": [
+      {
+        "role": "coordinator",
+        "usage": {
+          "input_tokens": 26,
+          "output_tokens": 6054,
+          "cache_read_input_tokens": 380396,
+          "cache_creation_input_tokens": 39698
+        },
+        "messageCount": 13,
+        "transcriptSha256": "83eabdeb90ae476759a41b6b95039230497b4f3c899652fef6be0e837fc135cf"
+      },
+      {
+        "role": "reviewer",
+        "usage": {
+          "input_tokens": 8,
+          "output_tokens": 2734,
+          "cache_read_input_tokens": 53158,
+          "cache_creation_input_tokens": 20948
+        },
+        "messageCount": 4,
+        "transcriptSha256": "c1e5f8ef09bef10d0f82e5e654684dc5829ca11f21ffe4bc1248082d5b43c722"
+      }
+    ]
+  },
+  "intervention": {
+    "implementationEdits": 0,
+    "planningEdits": 0,
+    "hostDeliveryScriptWrittenAfterRun": true
+  },
+  "limitations": [
+    "Single small scenario; no claim of faster or cheaper than another method",
+    "Draft publication used an evaluator-authored Host script, not a packaged Claude autonomous delivery adapter",
+    "Sandbox files and tool outputs inspected; full-network and descendant isolation acceptance pending",
+    "CLI duration excludes fixture preparation and subsequent Host delivery",
+    "No merge or release"
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "scope": "First baseline of revised Claude comparison cohort; not a completed pair or performance acceptance",
+  "variant": "baseline alpha.21",
+  "head": "c6a3bab4df0606ac20c7a4acf764ee8e5b5084c5",
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/89",
+  "model": "sonnet",
+  "effort": "medium",
+  "cliVersion": "2.1.282 (Claude Code)",
+  "actualModels": [
+    "claude-sonnet-5"
+  ],
+  "run": {
+    "status": 0,
+    "signal": null,
+    "seconds": 109.014597241
+  },
+  "deliverySeconds": 21.207092974,
+  "totalSeconds": 130.346050078,
+  "usage": {
+    "totals": {
+      "input_tokens": 38,
+      "output_tokens": 7821,
+      "cache_read_input_tokens": 556989,
+      "cache_creation_input_tokens": 33385
+    },
+    "threads": [
+      {
+        "id": "a8e54146-0afd-438e-9dcb-9b4e11233dd6",
+        "messageCount": 17,
+        "usage": {
+          "input_tokens": 34,
+          "output_tokens": 7041,
+          "cache_read_input_tokens": 531916,
+          "cache_creation_input_tokens": 26583
+        }
+      },
+      {
+        "id": "af5dc60df76517a26",
+        "messageCount": 2,
+        "usage": {
+          "input_tokens": 4,
+          "output_tokens": 780,
+          "cache_read_input_tokens": 25073,
+          "cache_creation_input_tokens": 6802
+        }
+      }
+    ],
+    "observedProcessedTokens": 598233,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "review": {
+    "taskId": "af5dc60df76517a26",
+    "head": "c6a3bab4df0606ac20c7a4acf764ee8e5b5084c5",
+    "verdict": "PASS"
+  },
+  "ci": {
+    "head": "c6a3bab4df0606ac20c7a4acf764ee8e5b5084c5",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39228430679",
+    "transportFailures": []
+  },
+  "implementationIntervention": 0,
+  "runner": "scripts/run-claude-delivery.mjs"
+}

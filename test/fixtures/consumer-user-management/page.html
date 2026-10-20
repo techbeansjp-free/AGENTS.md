@@ -1,0 +1,19 @@
+<!doctype html><html lang="ja"><meta charset="utf-8"><title>合成ユーザー管理</title>
+<h1>ユーザー管理</h1><p>評価用・固定dummy session使用</p>
+<p id="message" role="status"></p><ul id="users"></ul>
+<button id="prev">前へ</button><span id="pagination"></span><button id="next">次へ</button>
+<h2 id="heading">登録</h2><form id="form"><label>名前<input id="name" required></label><label>メール<input id="email" type="email" required></label><button>保存</button><button id="cancel" type="button">取消</button></form>
+<script type="module">
+let page=1,editing=null;
+const $=id=>document.getElementById(id);
+async function api(url,options){const response=await fetch(url,options),body=await response.json();if(!response.ok)throw Error(body.error);return body;}
+function reset(){editing=null;$('form').reset();$('heading').textContent='登録';}
+async function load(){try{const data=await api('/api/users?page='+page);page=data.page;$('users').replaceChildren();$('pagination').textContent=`${page}頁 / ${data.total}件`;$('prev').disabled=page===1;$('next').disabled=page*2>=data.total;
+for(const user of data.users){const row=document.createElement('li'),label=document.createElement('span');label.textContent=user.name+' '+user.email;row.append(label);
+const edit=document.createElement('button');edit.textContent='編集';edit.onclick=()=>{editing=user;$('name').value=user.name;$('email').value=user.email;$('heading').textContent='編集';};row.append(edit);
+const del=document.createElement('button');del.textContent='削除';del.onclick=async()=>{try{await api('/api/users/'+user.id,{method:'DELETE'});if(editing?.id===user.id)reset();$('message').textContent='削除しました';await load();}catch(e){$('message').textContent=e.message;}};row.append(del);$('users').append(row);}
+}catch(e){$('message').textContent=e.message;}}
+$('prev').onclick=()=>{page--;load();};$('next').onclick=()=>{page++;load();};$('cancel').onclick=reset;
+$('form').onsubmit=async event=>{event.preventDefault();try{await api('/api/users'+(editing?'/'+editing.id:''),{method:editing?'PUT':'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:$('name').value,email:$('email').value,...(editing?{version:editing.version}:{})})});const created=!editing;reset();$('message').textContent=created?'保存しました。追加したユーザーは一覧の最後のページで確認できます':'保存しました';await load();}catch(e){$('message').textContent=e.message;}};
+load();
+</script></html>

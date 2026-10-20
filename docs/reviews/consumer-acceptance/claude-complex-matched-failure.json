@@ -1,0 +1,127 @@
+{
+  "scope": "Failed first baseline of prospective complex comparison; same saved HEAD delivered after evaluator parser repair. Not uninterrupted performance acceptance.",
+  "status": "delivered-after-evaluator-parser-failure",
+  "packageSha256": "325798d5e09a221daa0a358e03984f568c3e2fd80292c39520bcecef9425d30a",
+  "head": "cfbd3a2cfdd758036360db14cfb431a56020638c",
+  "model": "sonnet",
+  "effort": "medium",
+  "review": {
+    "taskId": "af3674ff6e6531954",
+    "agentType": "general-purpose",
+    "head": "cfbd3a2cfdd758036360db14cfb431a56020638c",
+    "verdict": "PASS"
+  },
+  "inHostVerification": {
+    "toolUseId": "toolu_01KmNSyVMr1tC1AZHDQFiNFt",
+    "head": "cfbd3a2cfdd758036360db14cfb431a56020638c",
+    "contractSha256": "8a96eeeb9b5df0d8ea090750ace1fd0fe4a08ca1baf6546548c7feae09e7f1ec",
+    "checks": 6,
+    "scope": "Observed coordinator Bash result; external oracle independently rechecked the same commit"
+  },
+  "verification": {
+    "passed": true,
+    "checks": 6,
+    "head": "cfbd3a2cfdd758036360db14cfb431a56020638c"
+  },
+  "delivery": {
+    "url": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/166",
+    "ci": {
+      "head": "cfbd3a2cfdd758036360db14cfb431a56020638c",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "complex": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39315427208",
+      "transportFailures": []
+    },
+    "greetingCI": {
+      "head": "cfbd3a2cfdd758036360db14cfb431a56020638c",
+      "draft": true,
+      "merged": false,
+      "boundToPr": true,
+      "checks": {
+        "test": "success"
+      },
+      "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39315427019",
+      "transportFailures": []
+    }
+  },
+  "measurement": {
+    "implementationAndReviewSeconds": 312.305838805,
+    "usage": {
+      "totals": {
+        "input_tokens": 112,
+        "output_tokens": 34315,
+        "cache_read_input_tokens": 1824042,
+        "cache_creation_input_tokens": 139926
+      },
+      "threads": [
+        {
+          "id": "d10b41d7-6459-4530-b3b8-51ddba5965ee",
+          "messageCount": 21,
+          "usage": {
+            "input_tokens": 42,
+            "output_tokens": 11911,
+            "cache_read_input_tokens": 877166,
+            "cache_creation_input_tokens": 44991
+          }
+        },
+        {
+          "id": "ae6df6971fd9b9cc8",
+          "messageCount": 15,
+          "usage": {
+            "input_tokens": 30,
+            "output_tokens": 12110,
+            "cache_read_input_tokens": 476913,
+            "cache_creation_input_tokens": 47956
+          }
+        },
+        {
+          "id": "a158cad23b735cf01",
+          "messageCount": 14,
+          "usage": {
+            "input_tokens": 28,
+            "output_tokens": 6243,
+            "cache_read_input_tokens": 340162,
+            "cache_creation_input_tokens": 22836
+          }
+        },
+        {
+          "id": "af3674ff6e6531954",
+          "messageCount": 6,
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 4051,
+            "cache_read_input_tokens": 129801,
+            "cache_creation_input_tokens": 24143
+          }
+        }
+      ],
+      "observedProcessedTokens": 1998395,
+      "missingUsage": [],
+      "reconciledWithHostModelUsage": true,
+      "complete": true
+    },
+    "elapsedIncludingDiagnosis": null
+  },
+  "failure": {
+    "stage": "evaluation",
+    "cause": "Exact target HEAD line preceded successful verification JSON in a batched Bash result",
+    "retained": true
+  },
+  "intervention": {
+    "modelRestarts": 0,
+    "implementationEdits": 0,
+    "evaluatorParserCorrected": true
+  },
+  "provenance": {
+    "setup.json": "b40448d1af7574cd6bb8c6482637644bf98adc7c2d2f0049ad9219d5d4a3ed9d",
+    "events.jsonl": "154b436994e005ef6b26b004d270e138d33bb4e651b2846bd93600b25cf3533f",
+    "failure.json": "380797334cef2760fe65915507706eb563d4f3f90a670141a23af6b6c3c3bc8f",
+    "reevaluation.json": "6b891e8de18c67e5e647fa7fdf71aee5ae892ee27175ae753908211558bc67c9",
+    "recovered-delivery.json": "f48341c9c79fdb18c5aba857c6bf2aecb6ae70c4b520ce85b2b262e8dc3e1409",
+    "usage.json": "aee97b1e0afa49e69edea1183dcf2ff7035ee8060d5d71c8fe4170e281b240e0"
+  }
+}

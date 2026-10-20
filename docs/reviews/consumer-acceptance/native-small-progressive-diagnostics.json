@@ -1,0 +1,125 @@
+{
+  "scope": "Diagnostic tool-output byte counts and cumulative usage updates; not model-request counts, billed costs or proof of causal effects.",
+  "observations": [
+    {
+      "pair": 1,
+      "variant": "candidate",
+      "agents": [
+        {
+          "role": "implementer",
+          "toolCalls": 8,
+          "usageUpdates": 9,
+          "toolOutputBytes": 18647,
+          "reviewReferenceRequested": true,
+          "usage": {
+            "input_tokens": 192289,
+            "cached_input_tokens": 175744,
+            "output_tokens": 2811
+          }
+        },
+        {
+          "role": "reviewer",
+          "toolCalls": 3,
+          "usageUpdates": 4,
+          "toolOutputBytes": 5712,
+          "reviewReferenceRequested": true,
+          "usage": {
+            "input_tokens": 70691,
+            "cached_input_tokens": 65408,
+            "output_tokens": 1549
+          }
+        }
+      ]
+    },
+    {
+      "pair": 1,
+      "variant": "baseline",
+      "agents": [
+        {
+          "role": "implementer",
+          "toolCalls": 9,
+          "usageUpdates": 10,
+          "toolOutputBytes": 25141,
+          "reviewReferenceRequested": false,
+          "usage": {
+            "input_tokens": 228192,
+            "cached_input_tokens": 209280,
+            "output_tokens": 3099
+          }
+        },
+        {
+          "role": "reviewer",
+          "toolCalls": 3,
+          "usageUpdates": 4,
+          "toolOutputBytes": 1703,
+          "reviewReferenceRequested": false,
+          "usage": {
+            "input_tokens": 67670,
+            "cached_input_tokens": 63744,
+            "output_tokens": 1216
+          }
+        }
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "agents": [
+        {
+          "role": "implementer",
+          "toolCalls": 8,
+          "usageUpdates": 9,
+          "toolOutputBytes": 22309,
+          "reviewReferenceRequested": false,
+          "usage": {
+            "input_tokens": 202997,
+            "cached_input_tokens": 184960,
+            "output_tokens": 3052
+          }
+        },
+        {
+          "role": "reviewer",
+          "toolCalls": 3,
+          "usageUpdates": 4,
+          "toolOutputBytes": 2596,
+          "reviewReferenceRequested": false,
+          "usage": {
+            "input_tokens": 68424,
+            "cached_input_tokens": 46848,
+            "output_tokens": 1284
+          }
+        }
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "candidate",
+      "agents": [
+        {
+          "role": "implementer",
+          "toolCalls": 10,
+          "usageUpdates": 11,
+          "toolOutputBytes": 23768,
+          "reviewReferenceRequested": true,
+          "usage": {
+            "input_tokens": 242954,
+            "cached_input_tokens": 224000,
+            "output_tokens": 3440
+          }
+        },
+        {
+          "role": "reviewer",
+          "toolCalls": 3,
+          "usageUpdates": 4,
+          "toolOutputBytes": 4605,
+          "reviewReferenceRequested": true,
+          "usage": {
+            "input_tokens": 69377,
+            "cached_input_tokens": 64768,
+            "output_tokens": 1269
+          }
+        }
+      ]
+    }
+  ]
+}

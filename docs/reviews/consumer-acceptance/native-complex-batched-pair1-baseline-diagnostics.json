@@ -1,0 +1,72 @@
+{
+  "head": "6b99f855bc59750714cfb54a725494d9c1faa91f",
+  "roles": [
+    {
+      "role": "parent",
+      "tools": {
+        "exec": 19,
+        "spawn_agent": 3,
+        "wait_agent": 7,
+        "list_agents": 1,
+        "followup_task": 1
+      },
+      "usageUpdates": 32,
+      "maxReportedInputTokens": 43425,
+      "toolOutputBytes": 75621,
+      "usage": {
+        "input_tokens": 1041407,
+        "cached_input_tokens": 1001088,
+        "output_tokens": 7754
+      }
+    },
+    {
+      "role": "worker-1",
+      "tools": {
+        "exec": 10,
+        "list_agents": 1
+      },
+      "usageUpdates": 12,
+      "maxReportedInputTokens": 37810,
+      "toolOutputBytes": 48014,
+      "usage": {
+        "input_tokens": 357290,
+        "cached_input_tokens": 331904,
+        "output_tokens": 10096
+      }
+    },
+    {
+      "role": "worker-2",
+      "tools": {
+        "exec": 11
+      },
+      "usageUpdates": 12,
+      "maxReportedInputTokens": 37914,
+      "toolOutputBytes": 49638,
+      "usage": {
+        "input_tokens": 351930,
+        "cached_input_tokens": 326016,
+        "output_tokens": 9793
+      }
+    },
+    {
+      "role": "independent-review",
+      "tools": {
+        "exec": 10
+      },
+      "usageUpdates": 12,
+      "maxReportedInputTokens": 46495,
+      "toolOutputBytes": 98294,
+      "usage": {
+        "input_tokens": 422775,
+        "cached_input_tokens": 388608,
+        "output_tokens": 5502
+      }
+    }
+  ],
+  "limitations": [
+    "Synthetic completed run only. No rollout text or commands exported.",
+    "Usage updates are not model request counts; tool output bytes are not tokens.",
+    "Parent integration found and corrected a pagination boundary defect. Parent cost is not all avoidable coordination.",
+    "External evaluation cost is not included."
+  ]
+}

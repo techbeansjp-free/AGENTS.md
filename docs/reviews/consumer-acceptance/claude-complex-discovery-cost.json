@@ -1,0 +1,24 @@
+{
+  "scope": "Offline analysis of already recorded alpha.40 complex trial; no new model calls",
+  "source": "claude-discovery-owner-result.json",
+  "eventsSha256": "9b32003629a13865faf68448024fa9615864409f051b9a993a66a77883f614d1",
+  "counting": "Unique tool_use.id in saved events; parent_tool_use_id separates coordinator and delegated calls; tools are not equivalent to model turns",
+  "uniqueToolCalls": {
+    "coordinator:Bash": 25,
+    "coordinator:Agent": 3,
+    "delegated:Bash": 33
+  },
+  "coordinatorToolCallsBeforeFirstDelegation": 18,
+  "predelegationBashCalls": 18,
+  "findings": [
+    "Coordinator separately read Skill, owner contract, workspace guidance, coordination guidance, review guidance, requirements and revision before delegation.",
+    "Coordinator read implementation files and oracle sources before assigning two implementation workers despite existing discovery-ownership guidance.",
+    "Coordinator also requested general help and worktree-create help after reading workspace guidance."
+  ],
+  "decision": "Do not launch another identical live trial or add another redundant instruction. Existing guidance does not establish reliable avoidance of coordinator pre-reading. Any next candidate must directly address this observed behavior and preserve independent review and integration checks.",
+  "limitations": [
+    "No attribution of tokens or milliseconds to individual tools; counts do not prove causal performance savings.",
+    "One synthetic trial, not a representative workload distribution.",
+    "No claim that each predelegation call is unnecessary; requirements, authority and workspace checks remain required."
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "scope": "Evaluation settings only; not performance acceptance",
+  "status": "Provider quota restored; sandbox not exercised because model declined diagnostic",
+  "settingsBytes": 616,
+  "settingsSha256": "2b57bed3e69317c5312513b3aed2621005146cc53c332b10489b69983cde6f9f",
+  "attempts": [
+    {
+      "process": {
+        "status": 0,
+        "seconds": 5.819172258023173
+      },
+      "toolResults": 0,
+      "modelUsage": {
+        "claude-sonnet-5": {
+          "inputTokens": 2,
+          "outputTokens": 221,
+          "cacheReadInputTokens": 8079,
+          "cacheCreationInputTokens": 8077,
+          "webSearchRequests": 0,
+          "costUSD": 0.036137800000000005,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 64000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-sonnet-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "outcome": "Model declined synthetic boundary diagnostic without executing tools"
+    },
+    {
+      "process": {
+        "status": 0,
+        "seconds": 10.958793165162206
+      },
+      "toolResults": 0,
+      "modelUsage": {
+        "claude-sonnet-5": {
+          "inputTokens": 2,
+          "outputTokens": 416,
+          "cacheReadInputTokens": 13204,
+          "cacheCreationInputTokens": 3325,
+          "webSearchRequests": 0,
+          "costUSD": 0.0201048,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 64000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-sonnet-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "outcome": "Model declined synthetic boundary diagnostic without executing tools"
+    }
+  ],
+  "sandboxVerified": false,
+  "permissionsChangedBetweenAttempts": false,
+  "furtherRetries": 0,
+  "implementation": "Move current trial outside historical temporary trees; canonicalize protected and writable paths, including symlink ancestors. Four regression tests pass. Independent read-only code review found no concrete defect. Live sandbox acceptance remains missing."
+}

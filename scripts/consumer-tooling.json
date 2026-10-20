@@ -1,0 +1,14 @@
+{
+  "pnpm-10.0.0.tgz": {
+    "name": "pnpm",
+    "version": "10.0.0",
+    "sha256": "43abf6e720fb7bc53c591b0862605c7d323d0a9d2dd33bcac07b062e13cf4948",
+    "integrity": "sha512-uP71SUvT/ky9Ttq9B0XfLuW+PksLiwj6ZDqj5MZwLMwPANaPqKjJhYpzWgAySFpEmQ7SgQUmyHXkFvABsX3xKw=="
+  },
+  "typescript-5.9.3.tgz": {
+    "name": "typescript",
+    "version": "5.9.3",
+    "sha256": "10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3",
+    "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="
+  }
+}

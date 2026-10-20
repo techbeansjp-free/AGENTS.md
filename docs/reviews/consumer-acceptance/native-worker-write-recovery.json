@@ -1,0 +1,197 @@
+{
+  "head": "0d086093ba98c865b544db1ffe35a9ed31a0626b",
+  "base": "d883e1fb44d53d089117f1496da57c24ab2bff96",
+  "review": {
+    "id": "01a152c0-df49-7210-b56a-f7965efec0f7",
+    "head": "0d086093ba98c865b544db1ffe35a9ed31a0626b",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "cacheWriteInput": {
+      "observedTokens": 0,
+      "totalTokens": 0,
+      "missingThreads": [],
+      "threads": [
+        {
+          "id": "01a152be-63e3-7102-8b76-f7dc7d2ececd",
+          "tokens": 0
+        },
+        {
+          "id": "01a152c0-df49-7210-b56a-f7965efec0f7",
+          "tokens": 0
+        }
+      ],
+      "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+    },
+    "rootId": "01a152be-63e3-7102-8b76-f7dc7d2ececd",
+    "observedThreads": 2,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 717867,
+      "cachedInputTokens": 654336,
+      "outputTokens": 8984
+    },
+    "observedProcessedTokens": 726851,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a152be-63e3-7102-8b76-f7dc7d2ececd",
+        "parent": null,
+        "usage": {
+          "input_tokens": 524654,
+          "cached_input_tokens": 484608,
+          "output_tokens": 6477
+        }
+      },
+      {
+        "id": "01a152c0-df49-7210-b56a-f7965efec0f7",
+        "parent": "01a152be-63e3-7102-8b76-f7dc7d2ececd",
+        "usage": {
+          "input_tokens": 193213,
+          "cached_input_tokens": 169728,
+          "output_tokens": 2507
+        }
+      }
+    ]
+  },
+  "interruptedUsage": {
+    "complete": false,
+    "scope": "Last available cumulative observation; interruption may omit in-flight work. Never count as complete cost.",
+    "observation": {
+      "cacheWriteInput": {
+        "observedTokens": 0,
+        "totalTokens": 0,
+        "missingThreads": [],
+        "threads": [
+          {
+            "id": "01a152bb-bff3-7e30-8cb8-3360f2075cfc",
+            "tokens": 0
+          },
+          {
+            "id": "01a152bc-c15c-75d2-a8af-7268e78f3161",
+            "tokens": 0
+          },
+          {
+            "id": "01a152bc-eed7-7710-8ad8-7d749c5c6219",
+            "tokens": 0
+          }
+        ],
+        "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+      },
+      "rootId": "01a152bb-bff3-7e30-8cb8-3360f2075cfc",
+      "observedThreads": 3,
+      "missingUsage": [],
+      "measured": {
+        "inputTokens": 741284,
+        "cachedInputTokens": 671360,
+        "outputTokens": 7213
+      },
+      "observedProcessedTokens": 748497,
+      "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+      "calls": [
+        {
+          "id": "01a152bb-bff3-7e30-8cb8-3360f2075cfc",
+          "parent": null,
+          "usage": {
+            "input_tokens": 300904,
+            "cached_input_tokens": 276736,
+            "output_tokens": 2834
+          }
+        },
+        {
+          "id": "01a152bc-c15c-75d2-a8af-7268e78f3161",
+          "parent": "01a152bb-bff3-7e30-8cb8-3360f2075cfc",
+          "usage": {
+            "input_tokens": 278133,
+            "cached_input_tokens": 250752,
+            "output_tokens": 2060
+          }
+        },
+        {
+          "id": "01a152bc-eed7-7710-8ad8-7d749c5c6219",
+          "parent": "01a152bb-bff3-7e30-8cb8-3360f2075cfc",
+          "usage": {
+            "input_tokens": 162247,
+            "cached_input_tokens": 143872,
+            "output_tokens": 2319
+          }
+        }
+      ]
+    }
+  },
+  "interruptedAttempt": {
+    "status": 255,
+    "signal": null,
+    "signalSent": true,
+    "interrupted": true,
+    "checkpoint": true,
+    "descendantBoundary": "Linux synthetic transient service; all processes stopped before handoff",
+    "stopped": true,
+    "seconds": 172.491328705,
+    "files": [
+      {
+        "name": "reservation/service.mjs",
+        "before": "f1f7b28b14cc58315e5192610015a729cc63b4441559e9296d63be2848dd2163",
+        "after": "c3f1c9962bb350a696ee3307e9ae89f4fbfded43efb8b39e181463a77c6ceaf0"
+      },
+      {
+        "name": "billing/service.mjs",
+        "before": "2d184b3efc16cbbf0347455a77220a79ebcbebf9544af2990272ffa3e56d3e46",
+        "after": "b69715605fb95c933fb235693db120d3fc059d9600c5cc414e7c79a9ffe87459"
+      }
+    ],
+    "usageComplete": false,
+    "checkpointScope": "two distinct worker worktrees before integration",
+    "workerWorktrees": [
+      "9003-reservation-worker",
+      "9003-billing-worker"
+    ]
+  },
+  "elapsedSeconds": 462.789,
+  "implementationAndReviewSeconds": 439.22413852799997,
+  "resumedImplementationAndReviewSeconds": 266.73280982299997,
+  "deliverySeconds": 22.668302752000002,
+  "driverImplementationEdits": 0,
+  "manualHandoffs": 0,
+  "totalProcessedTokens": null,
+  "verification": {
+    "passed": true,
+    "head": "0d086093ba98c865b544db1ffe35a9ed31a0626b",
+    "requiredOracles": [
+      "reservation revised",
+      "billing revised",
+      "integration",
+      "unknown-keys",
+      "accessors revised",
+      "revision legacy replay"
+    ]
+  },
+  "pullRequest": {
+    "number": 77,
+    "url": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/77",
+    "head": "0d086093ba98c865b544db1ffe35a9ed31a0626b",
+    "draft": true
+  },
+  "ci": {
+    "complex": {
+      "complex": "success"
+    },
+    "greeting": {
+      "test": "success"
+    }
+  },
+  "savedWorkerFiles": [
+    {
+      "name": "reservation/service.mjs",
+      "checkpointSha256": "c3f1c9962bb350a696ee3307e9ae89f4fbfded43efb8b39e181463a77c6ceaf0",
+      "finalSha256": "c3f1c9962bb350a696ee3307e9ae89f4fbfded43efb8b39e181463a77c6ceaf0"
+    },
+    {
+      "name": "billing/service.mjs",
+      "checkpointSha256": "b69715605fb95c933fb235693db120d3fc059d9600c5cc414e7c79a9ffe87459",
+      "finalSha256": "b69715605fb95c933fb235693db120d3fc059d9600c5cc414e7c79a9ffe87459"
+    }
+  ],
+  "scope": "Two registered worker worktrees interrupted before integration, fresh coordinator recovered exact saved bytes and completed revised/legacy tests, independent review and Draft/CI. No arbitrary interruption or performance guarantee.",
+  "knownDeviation": "Worker directory names omit mandatory timestamp; full naming acceptance remains false. Subsequent Skill correction is not part of this alpha.15 trial."
+}

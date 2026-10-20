@@ -1,0 +1,164 @@
+{
+  "base": "d04d0c80507acc58052b98a0eaa2d298a339380e",
+  "head": "6381de214d47d2a5c188427eb2d575fb752576ef",
+  "review": {
+    "id": "01a151e6-6b45-7042-a2ee-42600113b276",
+    "head": "6381de214d47d2a5c188427eb2d575fb752576ef",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "cacheWriteInput": {
+      "observedTokens": 0,
+      "totalTokens": 0,
+      "missingThreads": [],
+      "threads": [
+        {
+          "id": "01a151e4-ba52-7980-bc63-7356479bf7f3",
+          "tokens": 0
+        },
+        {
+          "id": "01a151e6-6b45-7042-a2ee-42600113b276",
+          "tokens": 0
+        }
+      ],
+      "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+    },
+    "rootId": "01a151e4-ba52-7980-bc63-7356479bf7f3",
+    "observedThreads": 2,
+    "missingUsage": [],
+    "measured": {
+      "inputTokens": 698838,
+      "cachedInputTokens": 638720,
+      "outputTokens": 7592
+    },
+    "observedProcessedTokens": 706430,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a151e4-ba52-7980-bc63-7356479bf7f3",
+        "parent": null,
+        "usage": {
+          "input_tokens": 520770,
+          "cached_input_tokens": 484608,
+          "output_tokens": 5200
+        }
+      },
+      {
+        "id": "01a151e6-6b45-7042-a2ee-42600113b276",
+        "parent": "01a151e4-ba52-7980-bc63-7356479bf7f3",
+        "usage": {
+          "input_tokens": 178068,
+          "cached_input_tokens": 154112,
+          "output_tokens": 2392
+        }
+      }
+    ]
+  },
+  "implementationAndReviewSeconds": 189.31967788499998,
+  "deliverySeconds": 28.02897612,
+  "elapsedSeconds": 217.998,
+  "driverImplementationEdits": 0,
+  "manualHandoffs": 0,
+  "conflictRecovery": {
+    "injection": {
+      "kind": "pre-launch synthetic fault injection",
+      "base": "d04d0c80507acc58052b98a0eaa2d298a339380e",
+      "left": "3ce087555af44e292c6a7cb75e7500d1deed9c18",
+      "right": "0a3a52fd9f62b8e8a194a5a950066bcc318a561d",
+      "conflictingPaths": [
+        "complex/reservation/service.mjs"
+      ],
+      "gitConflictObserved": true,
+      "evaluatorResolution": false,
+      "scope": "Two intentionally invalid validation error codes conflict; original requirements remain authoritative. Agent must recover and implement revision. Not a performance comparison."
+    },
+    "injectedFaultsRemoved": true,
+    "verifiedAtHead": "6381de214d47d2a5c188427eb2d575fb752576ef",
+    "scope": "Injected validation-code conflict plus explicit revision; not arbitrary conflict recovery."
+  },
+  "complexCI": {
+    "head": "6381de214d47d2a5c188427eb2d575fb752576ef",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "complex": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39188278110",
+    "transportFailures": []
+  },
+  "greetingCI": {
+    "head": "6381de214d47d2a5c188427eb2d575fb752576ef",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39188278181",
+    "transportFailures": []
+  },
+  "scope": "Synthetic current-host conflict recovery plus explicit currency revision. Not arbitrary conflict recovery or a performance comparison.",
+  "model": "gpt-5.6-sol",
+  "effort": "medium",
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/61",
+  "verification": {
+    "head": "6381de214d47d2a5c188427eb2d575fb752576ef",
+    "passed": true,
+    "checks": [
+      {
+        "command": [
+          "complex/oracle/reservation.mjs",
+          "complex",
+          "revised"
+        ],
+        "exit": 0,
+        "stdoutSha256": "2dd0d4df8a41b7cb65f274d9e34b26aac591ef7cc51af72650246615c47bdf1c",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "complex/oracle/billing.mjs",
+          "complex",
+          "revised"
+        ],
+        "exit": 0,
+        "stdoutSha256": "aba539c60169a3e912fcc09438a64bc6ffc20cb1a4c6436f9884ad8983ac260a",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "complex/oracle/integration.mjs",
+          "complex"
+        ],
+        "exit": 0,
+        "stdoutSha256": "320fdac4aa2445637dc7a4aa06a0c9afc71ecfcc8a571873d37c14e2403538cf",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "complex/oracle/unknown-keys.mjs",
+          "complex"
+        ],
+        "exit": 0,
+        "stdoutSha256": "b6c36435bc28c84f3e3e36b8ca124d065e46c5a6fd27449cb669fee834f941c0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "complex/oracle/revision.mjs",
+          "complex/previous",
+          "complex"
+        ],
+        "exit": 0,
+        "stdoutSha256": "f209bbc74ca6326a5acdab9377f9098277b72ca51ba25de663f60e958a58e7db",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "limitations": [
+    "Pre-launch evaluator fault injection is explicit; evaluator did not resolve the conflict.",
+    "Single Linux synthetic run; not cross-platform or long-lived multi-Issue acceptance.",
+    "Outer development/evaluation usage is not included."
+  ]
+}

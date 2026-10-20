@@ -1,0 +1,63 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {summarizeNativePairs} from '../scripts/native-pair-summary.mjs';
+function fixture(){let id=0;const record=(time,tokens)=>{const head=String(++id);return {distribution:{skillBundleSha256:time===100?'baseline':'candidate'},conditions:{fixtureTransfer:'pinned-ancestry-only',cliVersion:'fixed-cli',runtimeSha256:'same-runtime',intentSha256:'fixed',commands:[['test']]},model:'same',effort:'medium',base:'fixed',head,elapsedSeconds:time,usage:{observedProcessedTokens:tokens,missingUsage:[]},verification:{passed:true,head,checks:[{exit:0}]},review:{head,verdict:'PASS'},ci:{head,draft:true,merged:false,boundToPr:true,checks:{test:'success'}},manualHandoffs:0,driverImplementationEdits:0};};return Array.from({length:5},()=>({baseline:record(100,1000),candidate:record(80,800)}));}
+test('paired acceptance requires five observations and improvement in both metrics',()=>{const p=fixture();assert.equal(summarizeNativePairs(p).accepted,true);assert.equal(summarizeNativePairs(p.slice(0,1)).accepted,false);for(const pair of p)pair.candidate.elapsedSeconds=101;assert.equal(summarizeNativePairs(p).accepted,false);});
+test('failures and missing usage cannot disappear from paired acceptance',()=>{for(const mutate of [r=>r.usage.missingUsage.push('child'),r=>r.usage.observedProcessedTokens=null,r=>r.ci.checks.test='failure',r=>r.review.head='stale',r=>r.manualHandoffs=1]){const p=fixture();mutate(p[0].candidate);assert.equal(summarizeNativePairs(p).accepted,false);}});
+test('different requirements, commands, model or fixture cannot be compared',()=>{for(const mutate of [r=>r.conditions.intentSha256='changed',r=>r.conditions.commands=[['skip']],r=>r.model='different',r=>r.base='different',r=>r.conditions.runtimeSha256='different',r=>r.distribution.skillBundleSha256='changed']){const p=fixture();mutate(p[0].candidate);assert.throws(()=>summarizeNativePairs(p));}const p=fixture();p[1]=p[0];assert.throws(()=>summarizeNativePairs(p),/Repeated/);});
+
+test('better medians do not automatically accept a worse outlier',()=>{const p=fixture();p[0].candidate.elapsedSeconds=150;const r=summarizeNativePairs(p);assert.equal(r.candidate.medianSeconds,80);assert.equal(r.requiresWorstCaseAssessment,true);assert.equal(r.accepted,false);assert.equal(r.candidate.maxSeconds,150);});
+
+test('paired regressions remain visible even when aggregate medians improve',()=>{const p=fixture();p[0].candidate.elapsedSeconds=110;p[0].candidate.usage.observedProcessedTokens=1100;const r=summarizeNativePairs(p);assert.equal(r.pairsImprovingBoth,4);assert.deepEqual(r.pairedDifferences[0],{pair:1,seconds:10,processedTokens:100});assert.equal(r.candidate.medianSeconds,80);});
+
+test('CLI changes or missing version cannot establish matched acceptance',()=>{const p=fixture();p[0].candidate.conditions.cliVersion='other-cli';assert.throws(()=>summarizeNativePairs(p));for(const pair of p)for(const side of ['baseline','candidate'])delete pair[side].conditions.cliVersion;assert.throws(()=>summarizeNativePairs(p),/CLI version/);});
+
+test('reviewer treatment is fixed within each comparison side',()=>{const p=fixture();for(const pair of p)pair.candidate.distribution.reviewerMode='registered';p[1].candidate.distribution.reviewerMode='generic';assert.throws(()=>summarizeNativePairs(p),/Reviewer variant/);});
+
+test('registered review acceptance requires the selected reviewer type',()=>{const p=fixture();for(const pair of p){pair.candidate.distribution.reviewerMode='registered';pair.candidate.review.agentType='asc-reviewer';}assert(summarizeNativePairs(p).accepted);p[0].candidate.review.agentType='claude';assert(!summarizeNativePairs(p).accepted);const q=fixture();q[0].baseline.review.agentType='asc-reviewer';assert(!summarizeNativePairs(q).accepted);});
+
+test('Claude performance acceptance requires observed in-Host verification of every submitted head',()=>{
+ const pairs=fixture();for(const pair of pairs)for(const side of ['baseline','candidate'])pair[side].conditions.host='claude';
+ let summary=summarizeNativePairs(pairs);assert.equal(summary.inHostVerificationComplete,false);assert.equal(summary.accepted,false);
+ for(const pair of pairs)for(const side of ['baseline','candidate']){const r=pair[side];r.evaluationCoverage={inHostVerification:{head:r.head,checks:r.conditions.commands.length}};}
+ summary=summarizeNativePairs(pairs);assert.equal(summary.inHostVerificationComplete,true);assert.equal(summary.accepted,true);
+ pairs[0].candidate.evaluationCoverage.inHostVerification.head='stale';assert.equal(summarizeNativePairs(pairs).accepted,false);
+});
+
+test('explicit incomplete or estimated measurements cannot pass despite numeric totals',()=>{
+ for(const mutate of [r=>r.usage.complete=false,r=>r.usage.reconciledWithHostModelUsage=false,r=>r.elapsedTimeIsEstimate=true,r=>r.elapsedComparisonEligible=false]){
+  const p=fixture();mutate(p[0].candidate);const result=summarizeNativePairs(p);
+  assert.equal(result.measurementComplete,false);assert.equal(result.accepted,false);assert.equal(result.candidate,undefined);
+ }
+});
+
+test('prior observations without isolated fixture transfer are not performance acceptance',()=>{
+ const pairs=fixture();for(const pair of pairs)for(const side of ['baseline','candidate'])delete pair[side].conditions.fixtureTransfer;
+ const summary=summarizeNativePairs(pairs);assert.equal(summary.fixtureIsolationComplete,false);assert.equal(summary.accepted,false);
+});
+
+test('verification transport must match, including unrecorded historical runs',()=>{
+ const pairs=fixture();
+ for(const pair of pairs)for(const side of ['baseline','candidate'])pair[side].conditions.verificationTransport='inline';
+ assert.equal(summarizeNativePairs(pairs).accepted,true);
+ for(const transport of ['saved','unrecorded']){
+  pairs[0].candidate.conditions.verificationTransport=transport;
+  assert.throws(()=>summarizeNativePairs(pairs),/Comparison conditions differ/);
+ }
+});
+
+test('whole-distribution comparison fixes each runtime independently without pretending they match',()=>{
+ const pairs=fixture();for(const pair of pairs)for(const side of ['baseline','candidate']){const r=pair[side];delete r.conditions.runtimeSha256;r.conditions.comparisonScope='distribution';r.distribution.runtimeSha256=(side==='baseline'?'a':'b').repeat(64);}
+ assert.equal(summarizeNativePairs(pairs).accepted,true);
+ pairs[1].candidate.distribution.runtimeSha256='c'.repeat(64);assert.throws(()=>summarizeNativePairs(pairs),/runtime changed/);
+});
+test('system comparison requires browser success and identical browser conditions',()=>{
+ const pairs=fixture();const config={transport:'fixed-isolated-mcp/v1',oracleSha256:'a'.repeat(64),driverSha256:'b'.repeat(64),timeoutMilliseconds:60000};
+ for(const pair of pairs)for(const side of ['baseline','candidate']){
+  const r=pair[side];r.conditions.scenario='complex-two-issue-system';r.conditions.browserVerification={...config};
+  r.evaluationCoverage={browserVerification:{head:r.head,passed:true,exit:0,error:null,signal:null,oracleSha256:config.oracleSha256,driverSha256:config.driverSha256,inHostObservation:{toolUseId:'browser',head:r.head,oracleSha256:config.oracleSha256,driverSha256:config.driverSha256}}};
+ }
+ assert.equal(summarizeNativePairs(pairs).accepted,true);
+ for(const change of [r=>delete r.evaluationCoverage.browserVerification,r=>r.evaluationCoverage.browserVerification.head='stale',r=>r.evaluationCoverage.browserVerification.passed=false,r=>r.evaluationCoverage.browserVerification.inHostObservation.head='stale']){const changed=structuredClone(pairs);change(changed[0].candidate);assert.equal(summarizeNativePairs(changed).accepted,false);}
+ for(const key of ['oracleSha256','driverSha256','timeoutMilliseconds']){const changed=structuredClone(pairs);changed[0].candidate.conditions.browserVerification[key]='different';assert.throws(()=>summarizeNativePairs(changed),/conditions differ/);}
+ for(const pair of pairs)for(const side of ['baseline','candidate'])delete pair[side].conditions.browserVerification;
+ assert.equal(summarizeNativePairs(pairs).accepted,false);
+});

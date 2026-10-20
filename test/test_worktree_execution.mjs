@@ -1,16 +1,7 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync,spawnSync} from 'node:child_process';
+import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';
+import {worktreeFixture as fixture} from './helpers/worktree-fixture.mjs';
 import {startWorktree,verifyWorktree} from '../src/worktree-execution.mjs';
-function fixture(t){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-native-worktree-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- const repo=path.join(root,'repo'),work=path.join(root,'work');fs.mkdirSync(repo);
- const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',stdio:'pipe'}).trim();
- git(repo,'init','-q');git(repo,'config','user.name','Fixture');git(repo,'config','user.email','fixture@example.invalid');
- fs.writeFileSync(path.join(repo,'.gitignore'),'node_modules/\nbuild/\n');fs.writeFileSync(path.join(repo,'feature.cjs'),'module.exports=41;');git(repo,'add','.');git(repo,'commit','-qm','base');const base=git(repo,'rev-parse','HEAD');
- git(repo,'worktree','add','-qb','feature',work);fs.writeFileSync(path.join(work,'feature.cjs'),'module.exports=42;');git(work,'commit','-qam','change');
- const owner=path.join(root,'owner.json'),contract={intent:'Return 42',allowedPaths:['feature.cjs'],commands:[[process.execPath,'-e',"require('assert').equal(require('./feature.cjs'),42)"]]};
- const save=()=>fs.writeFileSync(owner,JSON.stringify(contract));save();return {root,repo,work,base,owner,contract,save,git};
-}
 test('standard worktree verifies actual project with large pnpm-shaped dependencies without inventory or copies',t=>{
  const f=fixture(t),store=path.join(f.work,'node_modules/.pnpm/pkg/node_modules/pkg'),frontend=path.join(f.work,'src/frontend/node_modules');fs.mkdirSync(store,{recursive:true});fs.mkdirSync(frontend,{recursive:true});
  fs.writeFileSync(path.join(store,'index.js'),'module.exports=42;');fs.symlinkSync(process.platform==='win32'?store:path.relative(frontend,store),path.join(frontend,'pkg'),process.platform==='win32'?'junction':'dir');
@@ -74,4 +65,42 @@ test('verification preserves Host Git configuration without applying it to inter
   process.env.GIT_CONFIG_COUNT='1';process.env.GIT_CONFIG_KEY_0='asc.fixture';process.env.GIT_CONFIG_VALUE_0='host-value';
   assert.equal(verifyWorktree(f.work,f.base,f.owner).passed,true);
  }finally{for(const key of Object.keys(process.env))if(!Object.hasOwn(saved,key))delete process.env[key];Object.assign(process.env,saved);}
+});
+
+
+test('verification selects permitted path rules, discovers nested rules and ignores unrelated scope',t=>{
+ const f=fixture(t);
+ const write=(name,body)=>{const file=path.join(f.work,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,body);};
+ write('src/ui/view.cjs','module.exports=1;');
+ write('src/ui/AGENTS.md','UI contract');
+ write('rules/ui.md','UI rule');
+ write('rules/api.md','API rule');
+ write('.agent-skill-chain/project/context.json',JSON.stringify({schema:'asc-project-context/v1',rules:[{path:'rules/ui.md',appliesTo:['src/ui']},{path:'rules/api.md',appliesTo:['src/api']}]}));
+ f.git(f.work,'add','.');f.git(f.work,'commit','-qm','scoped contracts');const base=f.git(f.work,'rev-parse','HEAD');
+ write('src/ui/view.cjs','module.exports=2;');f.git(f.work,'commit','-qam','UI change');
+ f.contract.allowedPaths=['src/ui/view.cjs'];f.save();
+ const open=fs.openSync,reads=[],realWork=fs.realpathSync.native(f.work);
+ t.mock.method(fs,'openSync',function(file,...args){if(typeof file==='string')reads.push(path.relative(realWork,fs.realpathSync.native(file)).split(path.sep).join('/'));return open.call(fs,file,...args);});
+ const verified=verifyWorktree(f.work,base,f.owner);assert.equal(verified.passed,true);assert.equal(verified.contextSha256,startWorktree(f.work,f.contract.allowedPaths).context.digest);
+ assert.ok(reads.includes('src/ui/AGENTS.md'));assert.ok(reads.includes('rules/ui.md'));assert.ok(!reads.includes('rules/api.md'));
+ // A selected missing rule must still fail before running commands.
+ fs.unlinkSync(path.join(f.work,'rules/ui.md'));
+ assert.throws(()=>verifyWorktree(f.work,base,f.owner),/ENOENT/);
+});
+
+test('verification invalidates ignored project rules changed by a command',t=>{
+ const f=fixture(t);
+ fs.appendFileSync(path.join(f.work,'.gitignore'),'AGENTS.md\n');f.git(f.work,'commit','-qam','local owner rule may remain untracked');
+ fs.writeFileSync(path.join(f.work,'AGENTS.md'),'Original local requirement');
+ f.contract.allowedPaths.push('.gitignore');
+ f.contract.commands=[[process.execPath,'-e',"require('fs').writeFileSync('AGENTS.md','Changed local requirement')"],[process.execPath,'-e',"require('fs').writeFileSync('AGENTS.md','Original local requirement')"]];f.save();
+ assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/Project context changed/);
+ assert.equal(fs.readFileSync(path.join(f.work,'AGENTS.md'),'utf8'),'Changed local requirement','must stop before the next command can restore the rule');
+});
+
+test('owner mask permission does not require masks outside the sandbox or exempt ordinary files',t=>{
+ const f=fixture(t);f.contract.hostMaskedPaths=['.claude/settings.json'];f.save();
+ const plain=verifyWorktree(f.work,f.base,f.owner);assert.equal(plain.passed,true);assert.equal(plain.hostMaskedPaths,undefined);
+ fs.mkdirSync(path.join(f.work,'.claude'));fs.writeFileSync(path.join(f.work,'.claude/settings.json'),'uncommitted owner settings');
+ assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/Commit intended changes/);
 });

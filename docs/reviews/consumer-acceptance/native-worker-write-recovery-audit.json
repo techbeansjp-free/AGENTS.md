@@ -1,0 +1,19 @@
+{
+  "head": "0d086093ba98c865b544db1ffe35a9ed31a0626b",
+  "pullRequest": 77,
+  "requested": true,
+  "verified": true,
+  "files": [
+    {
+      "name": "reservation/service.mjs",
+      "checkpointSha256": "c3f1c9962bb350a696ee3307e9ae89f4fbfded43efb8b39e181463a77c6ceaf0",
+      "finalSha256": "c3f1c9962bb350a696ee3307e9ae89f4fbfded43efb8b39e181463a77c6ceaf0"
+    },
+    {
+      "name": "billing/service.mjs",
+      "checkpointSha256": "b69715605fb95c933fb235693db120d3fc059d9600c5cc414e7c79a9ffe87459",
+      "finalSha256": "b69715605fb95c933fb235693db120d3fc059d9600c5cc414e7c79a9ffe87459"
+    }
+  ],
+  "scope": "Post-run read-only audit using saved interruption observation and committed source bytes; no Agent rerun or evaluator implementation."
+}

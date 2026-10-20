@@ -1,0 +1,110 @@
+{
+  "scope": "Latest v0.5.9 two vertical Issues from stubs; first system pilot, not a paired improvement result",
+  "fixture": "8e8642489fc71cee946378b0a8d4430cd7298282",
+  "baseline": "v0.5.9",
+  "session": "9ccba7d4-e167-4bff-9771-3376566c720b",
+  "head": "da8dabaf4c570a12cb9671668c3a426165a90ce7",
+  "model": "opus",
+  "effort": "medium",
+  "modelSeconds": 939.614111024,
+  "usage": {
+    "totals": {
+      "input_tokens": 148,
+      "output_tokens": 143487,
+      "cache_read_input_tokens": 3446704,
+      "cache_creation_input_tokens": 349173
+    },
+    "threads": [
+      {
+        "id": "9ccba7d4-e167-4bff-9771-3376566c720b",
+        "messageCount": 25,
+        "usage": {
+          "input_tokens": 54,
+          "output_tokens": 36477,
+          "cache_read_input_tokens": 1582723,
+          "cache_creation_input_tokens": 97959
+        }
+      },
+      {
+        "id": "a3180603d87f3bfd8",
+        "messageCount": 15,
+        "usage": {
+          "input_tokens": 30,
+          "output_tokens": 43018,
+          "cache_read_input_tokens": 674830,
+          "cache_creation_input_tokens": 78263
+        }
+      },
+      {
+        "id": "afbbb6b66c21de9f9",
+        "messageCount": 13,
+        "usage": {
+          "input_tokens": 26,
+          "output_tokens": 36785,
+          "cache_read_input_tokens": 578007,
+          "cache_creation_input_tokens": 65731
+        }
+      },
+      {
+        "id": "a2e208b19cd16e201",
+        "messageCount": 8,
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 14610,
+          "cache_read_input_tokens": 237062,
+          "cache_creation_input_tokens": 54362
+        }
+      },
+      {
+        "id": "a0f80921f081ccf78",
+        "messageCount": 11,
+        "usage": {
+          "input_tokens": 22,
+          "output_tokens": 12597,
+          "cache_read_input_tokens": 374082,
+          "cache_creation_input_tokens": 52858
+        }
+      }
+    ],
+    "observedProcessedTokens": 3939512,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "modelUsage": {
+    "claude-opus-5-5": {
+      "inputTokens": 148,
+      "outputTokens": 143487,
+      "cacheReadInputTokens": 3446704,
+      "cacheCreationInputTokens": 349173,
+      "webSearchRequests": 0,
+      "costUSD": 5.599414800000001,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 32635,
+      "canonicalModel": "claude-opus-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "autonomousDelivery": false,
+  "draftPR": null,
+  "failure": "Six owner commands passed; real browser rejected by Claude sandbox at socket creation before page load. No sandbox bypass attempted.",
+  "observedRepair": "Independent review found invoice-key replay after reservation cancellation returned conflict; coordinator repaired and obtained a fresh PASS review.",
+  "implementationIntervention": 0,
+  "externalDiagnostic": {
+    "network": "unshared",
+    "credentialsProvided": false,
+    "source": "read-only saved implementation",
+    "revisedBrowserOracle": "HTTP response, invoice ID, reload persistence and pagination display checked",
+    "result": "passed",
+    "modelReruns": 0,
+    "changesOriginalFailure": false
+  },
+  "limitations": [
+    "No submitted PR/CI for this system pilot",
+    "External diagnostic does not replace the failed in-Host browser command",
+    "Oracle was strengthened after trial startup; no matched comparison claim",
+    "Initial driver copy included install.log containing only npm added-one-package summary; future runner copies hash-pinned driver package only"
+  ]
+}

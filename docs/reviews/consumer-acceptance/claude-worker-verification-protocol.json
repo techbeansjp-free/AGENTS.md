@@ -1,0 +1,49 @@
+{
+  "scope": "Fixed complex two-Issue comparison of one coordination paragraph; no pooling prior runs",
+  "baseline": {
+    "version": "0.5.900-alpha.60",
+    "sha256": "35e5b8a3110e0837d43fe9e63828bfe304d06aaaff97b42109995d61eabe39f4"
+  },
+  "candidate": {
+    "version": "0.5.900-alpha.62",
+    "sha256": "c7fa571ba554871f6692d3b901b667003b83ead0f7affdad47743c04a15432da"
+  },
+  "changedSourceFiles": [
+    "skills/asc/references/coordination.md"
+  ],
+  "hypothesis": "Avoid reproducing unfinished peer implementation only for worker integration tests; preserve own reproduction and final full integration",
+  "fixture": "d913e7b5cbde17acacc625c659ac8fc0146b6f45",
+  "model": "opus",
+  "effort": "medium",
+  "reviewer": "generic",
+  "order": [
+    [
+      "baseline",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "baseline"
+    ],
+    [
+      "baseline",
+      "candidate"
+    ],
+    [
+      "candidate",
+      "baseline"
+    ],
+    [
+      "baseline",
+      "candidate"
+    ]
+  ],
+  "earlyStop": "Stop on quality, execution or measurement failure. After two pairs stop if candidate medians for both elapsed time and processed tokens are not lower. No repeats for a favorable sample.",
+  "acceptance": "All six inner/external checks, independent submitted-HEAD PASS, both PR CI, complete reconciled all-context usage. Report all attempts. Five-pair lower medians for both totalSeconds and processed tokens support only this fixture/model.",
+  "runnerSha256": "fb2040cb9f7bd40793887f301a11de923be532539d638f11183bf1d14d59542f",
+  "limits": [
+    "Cache is measured, not controlled.",
+    "Prior PR188 is diagnostic, excluded.",
+    "alpha61 was not run; review correction is included only in alpha62."
+  ]
+}

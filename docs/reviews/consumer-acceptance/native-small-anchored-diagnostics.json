@@ -1,0 +1,111 @@
+{
+  "scope": "Tool calls and output bytes are diagnostics, not model-request counts or tokens. No raw prompts, output or private paths exported.",
+  "observations": [
+    {
+      "side": "candidate",
+      "pr": 40,
+      "implementationAndReviewSeconds": 83.91601866799999,
+      "deliverySeconds": 21.152646004999987,
+      "roles": [
+        {
+          "role": "implementer",
+          "toolCalls": 9,
+          "toolOutputBytes": 22407,
+          "toolNames": {
+            "exec": 7,
+            "spawn_agent": 1,
+            "wait_agent": 1
+          }
+        },
+        {
+          "role": "reviewer",
+          "toolCalls": 2,
+          "toolOutputBytes": 4549,
+          "toolNames": {
+            "exec": 2
+          }
+        }
+      ]
+    },
+    {
+      "side": "baseline",
+      "pr": 41,
+      "implementationAndReviewSeconds": 61.963889358,
+      "deliverySeconds": 19.862232423000002,
+      "roles": [
+        {
+          "role": "implementer",
+          "toolCalls": 10,
+          "toolOutputBytes": 22249,
+          "toolNames": {
+            "exec": 7,
+            "spawn_agent": 1,
+            "list_agents": 1,
+            "wait_agent": 1
+          }
+        },
+        {
+          "role": "reviewer",
+          "toolCalls": 2,
+          "toolOutputBytes": 1726,
+          "toolNames": {
+            "exec": 2
+          }
+        }
+      ]
+    },
+    {
+      "side": "baseline",
+      "pr": 42,
+      "implementationAndReviewSeconds": 74.366157309,
+      "deliverySeconds": 20.450002536999992,
+      "roles": [
+        {
+          "role": "implementer",
+          "toolCalls": 11,
+          "toolOutputBytes": 22661,
+          "toolNames": {
+            "exec": 8,
+            "spawn_agent": 1,
+            "wait_agent": 1,
+            "list_agents": 1
+          }
+        },
+        {
+          "role": "reviewer",
+          "toolCalls": 2,
+          "toolOutputBytes": 1485,
+          "toolNames": {
+            "exec": 2
+          }
+        }
+      ]
+    },
+    {
+      "side": "candidate",
+      "pr": 43,
+      "implementationAndReviewSeconds": 78.20604556699999,
+      "deliverySeconds": 19.608717521999992,
+      "roles": [
+        {
+          "role": "implementer",
+          "toolCalls": 9,
+          "toolOutputBytes": 20416,
+          "toolNames": {
+            "exec": 7,
+            "spawn_agent": 1,
+            "wait_agent": 1
+          }
+        },
+        {
+          "role": "reviewer",
+          "toolCalls": 2,
+          "toolOutputBytes": 4772,
+          "toolNames": {
+            "exec": 2
+          }
+        }
+      ]
+    }
+  ]
+}

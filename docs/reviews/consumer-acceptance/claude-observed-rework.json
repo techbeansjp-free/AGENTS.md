@@ -1,0 +1,344 @@
+{
+  "schema": "asc-observed-cost-cause/v1",
+  "scope": "Claude matched v3 synthetic greeting trials; descriptive observations, not causal performance proof",
+  "baseline": {
+    "head": "e8d978ac4cb15c8987fab36e2d05f82c9f2b0fd9",
+    "coordinatorBashCalls": 10,
+    "coordinatorAgentCalls": 1,
+    "coordinatorToolResultCharacters": 16178,
+    "processedTokens": 327369,
+    "behavior": "Read existing test, retain unittest and import setup, add exact regression"
+  },
+  "candidate": {
+    "head": "a28f044837ba515544a6d68347e568b557c95e2b",
+    "coordinatorBashCalls": 13,
+    "coordinatorAgentCalls": 1,
+    "coordinatorToolResultCharacters": 13746,
+    "processedTokens": 455180,
+    "behavior": "Overwrote existing test without reading it, lost isolated-python import setup, failed test then repaired import path; replaced unittest test structure"
+  },
+  "change": "Skill asks to inspect target and existing tests, preserve settings and regression checks, avoid unnecessary test-runner replacement",
+  "validation": "Existing captured events establish the observed rework. Behavioral effect of updated Skill is not yet measured. No new model trial run for this analysis.",
+  "priorModelPhaseAnalysis": {
+    "scope": "Post-hoc model-process-only analysis of all six v2/v3 observations; observer failures retained. Not uninterrupted Delivery acceptance or a new trial.",
+    "observations": [
+      {
+        "side": "baseline",
+        "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+        "model": [
+          "claude-sonnet-5"
+        ],
+        "effort": "medium",
+        "cliVersion": "2.1.282 (Claude Code)",
+        "packageSha256": "c56efd5aef98bf290e7e90a4a4e6d020037cf31dcfcac2774a5ef533243d1401",
+        "modelPhaseSeconds": 109.014597241,
+        "usage": {
+          "totals": {
+            "input_tokens": 38,
+            "output_tokens": 7821,
+            "cache_read_input_tokens": 556989,
+            "cache_creation_input_tokens": 33385
+          },
+          "threads": [
+            {
+              "id": "a8e54146-0afd-438e-9dcb-9b4e11233dd6",
+              "messageCount": 17,
+              "usage": {
+                "input_tokens": 34,
+                "output_tokens": 7041,
+                "cache_read_input_tokens": 531916,
+                "cache_creation_input_tokens": 26583
+              }
+            },
+            {
+              "id": "af5dc60df76517a26",
+              "messageCount": 2,
+              "usage": {
+                "input_tokens": 4,
+                "output_tokens": 780,
+                "cache_read_input_tokens": 25073,
+                "cache_creation_input_tokens": 6802
+              }
+            }
+          ],
+          "observedProcessedTokens": 598233,
+          "missingUsage": [],
+          "reconciledWithHostModelUsage": true,
+          "complete": true
+        },
+        "eventsSha256": "30c1e7e8eb994f4558d28f6c57bff924f37f22a64552031ca275fc9eee086851",
+        "observerStopped": false
+      },
+      {
+        "side": "candidate",
+        "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+        "model": [
+          "claude-sonnet-5"
+        ],
+        "effort": "medium",
+        "cliVersion": "2.1.282 (Claude Code)",
+        "packageSha256": "a09fb246613f3647c5d61eb0be0d0aaac5596a894898adfe88b1420b2879cc84",
+        "modelPhaseSeconds": 76.267999994,
+        "usage": {
+          "totals": {
+            "input_tokens": 28,
+            "output_tokens": 4588,
+            "cache_read_input_tokens": 364311,
+            "cache_creation_input_tokens": 27157
+          },
+          "threads": [
+            {
+              "id": "708a4759-3b6a-4145-9573-e91a9d996a6f",
+              "messageCount": 12,
+              "usage": {
+                "input_tokens": 24,
+                "output_tokens": 4018,
+                "cache_read_input_tokens": 338437,
+                "cache_creation_input_tokens": 20994
+              }
+            },
+            {
+              "id": "a7cee55f1b73e893f",
+              "messageCount": 2,
+              "usage": {
+                "input_tokens": 4,
+                "output_tokens": 570,
+                "cache_read_input_tokens": 25874,
+                "cache_creation_input_tokens": 6163
+              }
+            }
+          ],
+          "observedProcessedTokens": 396084,
+          "missingUsage": [],
+          "reconciledWithHostModelUsage": true,
+          "complete": true
+        },
+        "eventsSha256": "9859bc53f13ea18d50946f9a5adcab729f50dea5b90ffa4fadd46284d3651cc5",
+        "observerStopped": false
+      },
+      {
+        "side": "candidate",
+        "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+        "model": [
+          "claude-sonnet-5"
+        ],
+        "effort": "medium",
+        "cliVersion": "2.1.282 (Claude Code)",
+        "packageSha256": "a09fb246613f3647c5d61eb0be0d0aaac5596a894898adfe88b1420b2879cc84",
+        "modelPhaseSeconds": 65.40159679599999,
+        "usage": {
+          "totals": {
+            "input_tokens": 22,
+            "output_tokens": 4386,
+            "cache_read_input_tokens": 254131,
+            "cache_creation_input_tokens": 25787
+          },
+          "threads": [
+            {
+              "id": "65987a38-f5c3-4e74-a177-574fd49d4fc7",
+              "messageCount": 8,
+              "usage": {
+                "input_tokens": 16,
+                "output_tokens": 3288,
+                "cache_read_input_tokens": 212009,
+                "cache_creation_input_tokens": 19677
+              }
+            },
+            {
+              "id": "a85e894fc21830a44",
+              "messageCount": 3,
+              "usage": {
+                "input_tokens": 6,
+                "output_tokens": 1098,
+                "cache_read_input_tokens": 42122,
+                "cache_creation_input_tokens": 6110
+              }
+            }
+          ],
+          "observedProcessedTokens": 284326,
+          "missingUsage": [],
+          "reconciledWithHostModelUsage": true,
+          "complete": true
+        },
+        "eventsSha256": "3bd93aa0302cc4304c830210e55eea6e9bc8b6a3ac52c67ec345be5e2ad64a94",
+        "observerStopped": false
+      },
+      {
+        "side": "baseline",
+        "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+        "model": [
+          "claude-sonnet-5"
+        ],
+        "effort": "medium",
+        "cliVersion": "2.1.282 (Claude Code)",
+        "packageSha256": "c56efd5aef98bf290e7e90a4a4e6d020037cf31dcfcac2774a5ef533243d1401",
+        "modelPhaseSeconds": 64.55061129399999,
+        "usage": {
+          "totals": {
+            "input_tokens": 24,
+            "output_tokens": 4107,
+            "cache_read_input_tokens": 320695,
+            "cache_creation_input_tokens": 28209
+          },
+          "threads": [
+            {
+              "id": "3cb2dd2a-fe98-446c-9d86-9f1ea393a159",
+              "messageCount": 10,
+              "usage": {
+                "input_tokens": 20,
+                "output_tokens": 3559,
+                "cache_read_input_tokens": 295030,
+                "cache_creation_input_tokens": 22654
+              }
+            },
+            {
+              "id": "a0047d8c7e6701138",
+              "messageCount": 2,
+              "usage": {
+                "input_tokens": 4,
+                "output_tokens": 548,
+                "cache_read_input_tokens": 25665,
+                "cache_creation_input_tokens": 5555
+              }
+            }
+          ],
+          "observedProcessedTokens": 353035,
+          "missingUsage": [],
+          "reconciledWithHostModelUsage": true,
+          "complete": true
+        },
+        "eventsSha256": "1f689241384250d39a6d933d2de88b6fc927822ac31a156af7d3b6ab56dd2973",
+        "observerStopped": true
+      },
+      {
+        "side": "baseline",
+        "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+        "model": [
+          "claude-sonnet-5"
+        ],
+        "effort": "medium",
+        "cliVersion": "2.1.282 (Claude Code)",
+        "packageSha256": "c56efd5aef98bf290e7e90a4a4e6d020037cf31dcfcac2774a5ef533243d1401",
+        "modelPhaseSeconds": 67.469030956,
+        "usage": {
+          "totals": {
+            "input_tokens": 22,
+            "output_tokens": 4648,
+            "cache_read_input_tokens": 292554,
+            "cache_creation_input_tokens": 30145
+          },
+          "threads": [
+            {
+              "id": "2771f745-8f2e-4c0f-ab44-eaee10e06112",
+              "messageCount": 9,
+              "usage": {
+                "input_tokens": 18,
+                "output_tokens": 3893,
+                "cache_read_input_tokens": 266671,
+                "cache_creation_input_tokens": 23783
+              }
+            },
+            {
+              "id": "a65860e28525c0a7c",
+              "messageCount": 2,
+              "usage": {
+                "input_tokens": 4,
+                "output_tokens": 755,
+                "cache_read_input_tokens": 25883,
+                "cache_creation_input_tokens": 6362
+              }
+            }
+          ],
+          "observedProcessedTokens": 327369,
+          "missingUsage": [],
+          "reconciledWithHostModelUsage": true,
+          "complete": true
+        },
+        "eventsSha256": "c0bc07c92c04f060307b2f8ac4d1cdbc3344fa062cd2e026fd3f2cee04e53e7f",
+        "observerStopped": false
+      },
+      {
+        "side": "candidate",
+        "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+        "model": [
+          "claude-sonnet-5"
+        ],
+        "effort": "medium",
+        "cliVersion": "2.1.282 (Claude Code)",
+        "packageSha256": "a09fb246613f3647c5d61eb0be0d0aaac5596a894898adfe88b1420b2879cc84",
+        "modelPhaseSeconds": 95.289387189,
+        "usage": {
+          "totals": {
+            "input_tokens": 32,
+            "output_tokens": 6573,
+            "cache_read_input_tokens": 418874,
+            "cache_creation_input_tokens": 29701
+          },
+          "threads": [
+            {
+              "id": "fd90ad01-0f66-4164-ba61-00d4b7e899ec",
+              "messageCount": 14,
+              "usage": {
+                "input_tokens": 28,
+                "output_tokens": 5431,
+                "cache_read_input_tokens": 392665,
+                "cache_creation_input_tokens": 23399
+              }
+            },
+            {
+              "id": "ad67d8820169d9e18",
+              "messageCount": 2,
+              "usage": {
+                "input_tokens": 4,
+                "output_tokens": 1142,
+                "cache_read_input_tokens": 26209,
+                "cache_creation_input_tokens": 6302
+              }
+            }
+          ],
+          "observedProcessedTokens": 455180,
+          "missingUsage": [],
+          "reconciledWithHostModelUsage": true,
+          "complete": true
+        },
+        "eventsSha256": "1beec54f78792b1581cbe3696dac652b28a4b84c1374621bb0a9f38e98b8603e",
+        "observerStopped": true
+      }
+    ],
+    "medians": {
+      "baseline": {
+        "seconds": 67.469030956,
+        "tokens": 353035
+      },
+      "candidate": {
+        "seconds": 76.267999994,
+        "tokens": 396084
+      }
+    },
+    "jointImprovement": false,
+    "conclusion": "Candidate median model-process duration and processed tokens are both higher; no consistent improvement established. This analysis does not include the subsequent existing-test preservation Skill change."
+  },
+  "unchangedPostReviewRepetition": {
+    "sourceEventsSha256": "ed26e6d9a7188afddc22c2e9f908754edf4115d81178dafda2222c13af0261d9",
+    "syntheticPullRequest": 99,
+    "observation": "Coordinator issued two consecutive full base-to-head diff reads and reran python3 -I test_greeting.py -v after its successful pre-review invocation; no later source change appears in the saved coordinator tool calls.",
+    "change": "Current-host Skill explicitly reuses valid checks after confirming commit, dirty changes and applicability; retains independent reviewer, required CI and rechecking uncertain impacts.",
+    "validation": "Existing packaged Skill update scenario passes; model behavior and performance after this instruction are not measured. The fixed v4 cohort predates this instruction."
+  },
+  "v4PhaseAnalysis": {
+    "observations": {
+      "B": {
+        "medianModelSeconds": 73.63728723999999,
+        "medianDeliverySeconds": 20.420011176999992,
+        "medianParentProcessedTokens": 325623
+      },
+      "C": {
+        "medianModelSeconds": 78.169927937,
+        "medianDeliverySeconds": 21.49257889800001,
+        "medianParentProcessedTokens": 328685
+      }
+    },
+    "interpretation": "Smaller entry text alone did not establish lower coordinator usage or shorter execution. Do not attribute variation causally to Skill length or CI alone.",
+    "followup": "Workspace-specific instructions moved intact into a conditionally required reference. Normal continued-worktree entry shrinks from 11806 to 10291 UTF-8 bytes; this is input-size reduction, not measured runtime/token savings. New worktree, non-Git, multi-repository and restart paths must still read the reference."
+  }
+}

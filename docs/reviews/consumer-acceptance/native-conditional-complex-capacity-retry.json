@@ -1,0 +1,115 @@
+{
+  "scope": "Fresh complex applicability retry after successful small recovery; incomplete",
+  "candidateSha256": "f15007634e4000c220e18a287546b82f76d8d479348b2d2e3c85fb3b9804e390",
+  "result": {
+    "status": 1,
+    "signal": null,
+    "seconds": 232.90814197900002
+  },
+  "error": "Selected model is at capacity. Please try a different model.",
+  "usageComplete": false,
+  "totalTokens": null,
+  "qualityAccepted": false,
+  "performanceAccepted": false,
+  "limitations": [
+    "No Draft PR or CI completion; partial worker work retained.",
+    "Two invalid multi-operation patch attempts observed before capacity failure; not established as terminal cause.",
+    "No performance comparison or zero-cost assumption."
+  ],
+  "usage": {
+    "cacheWriteInput": {
+      "observedTokens": 0,
+      "totalTokens": null,
+      "missingThreads": [
+        "01a152f1-d5e0-7791-b9e9-76d6696fe043"
+      ],
+      "threads": [
+        {
+          "id": "01a152f0-b786-7c12-b7ba-db3e9967d957",
+          "tokens": 0
+        },
+        {
+          "id": "01a152f1-d5e0-7791-b9e9-76d6696fe043",
+          "tokens": null
+        },
+        {
+          "id": "01a152f2-0917-7182-bdb2-2404b7227bfd",
+          "tokens": 0
+        },
+        {
+          "id": "01a152f2-3b1a-7503-955d-636df6f2fd33",
+          "tokens": 0
+        }
+      ],
+      "scope": "Provider-reported cache write input, recorded separately; not added to processed tokens or converted to cost."
+    },
+    "rootId": "01a152f0-b786-7c12-b7ba-db3e9967d957",
+    "observedThreads": 4,
+    "missingUsage": [
+      "01a152f1-d5e0-7791-b9e9-76d6696fe043"
+    ],
+    "measured": {
+      "inputTokens": 748771,
+      "cachedInputTokens": 681472,
+      "outputTokens": 20767
+    },
+    "observedProcessedTokens": null,
+    "scope": "Explicitly supplied rollouts only. Descendant inventory and completed execution must be verified separately; cached input is included in input.",
+    "calls": [
+      {
+        "id": "01a152f0-b786-7c12-b7ba-db3e9967d957",
+        "parent": null,
+        "usage": {
+          "input_tokens": 312666,
+          "cached_input_tokens": 292608,
+          "output_tokens": 3458
+        }
+      },
+      {
+        "id": "01a152f1-d5e0-7791-b9e9-76d6696fe043",
+        "parent": "01a152f0-b786-7c12-b7ba-db3e9967d957",
+        "usage": null
+      },
+      {
+        "id": "01a152f2-0917-7182-bdb2-2404b7227bfd",
+        "parent": "01a152f0-b786-7c12-b7ba-db3e9967d957",
+        "usage": {
+          "input_tokens": 108792,
+          "cached_input_tokens": 94208,
+          "output_tokens": 6490
+        }
+      },
+      {
+        "id": "01a152f2-3b1a-7503-955d-636df6f2fd33",
+        "parent": "01a152f0-b786-7c12-b7ba-db3e9967d957",
+        "usage": {
+          "input_tokens": 327313,
+          "cached_input_tokens": 294656,
+          "output_tokens": 10819
+        }
+      }
+    ]
+  },
+  "terminalObservations": [
+    {
+      "id": "01a152f0-b786-7c12-b7ba-db3e9967d957",
+      "parent": null,
+      "event": "task_complete"
+    },
+    {
+      "id": "01a152f1-d5e0-7791-b9e9-76d6696fe043",
+      "parent": "01a152f0-b786-7c12-b7ba-db3e9967d957",
+      "event": "task_complete"
+    },
+    {
+      "id": "01a152f2-0917-7182-bdb2-2404b7227bfd",
+      "parent": "01a152f0-b786-7c12-b7ba-db3e9967d957",
+      "event": "turn_aborted"
+    },
+    {
+      "id": "01a152f2-3b1a-7503-955d-636df6f2fd33",
+      "parent": "01a152f0-b786-7c12-b7ba-db3e9967d957",
+      "event": "task_complete"
+    }
+  ]
+}

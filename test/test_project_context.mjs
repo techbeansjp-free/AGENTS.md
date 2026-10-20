@@ -27,3 +27,27 @@ test('optional ancestor discovery permits a planned file-to-directory change',t=
  const f=fixture(t);f.write('src','old file');assert.deepEqual(projectContext(f.root,['src/new/file.ts']).references,[]);
  f.config([{path:'src/required.md'}]);assert.throws(()=>projectContext(f.root,['src/new/file.ts']),/ENOTDIR/);
 });
+
+test('shared ancestor rules are read once per selection and refreshed on the next call',t=>{
+ const f=fixture(t);f.write('src/AGENTS.md','shared contract');
+ f.config([{path:'src/AGENTS.md',appliesTo:['src']}]);
+ const open=fs.openSync;let reads=0;
+ t.mock.method(fs,'openSync',function(file,...args){if(file===path.join(f.root,'src/AGENTS.md'))reads++;return open.call(fs,file,...args);});
+ const paths=Array.from({length:100},(_,i)=>`src/file${i}.ts`);
+ const first=projectContext(f.root,paths);assert.equal(reads,1);
+ f.write('src/AGENTS.md','changed contract');
+ const second=projectContext(f.root,paths);assert.equal(reads,2);assert.notEqual(first.digest,second.digest);
+});
+test('optional missing rule cache cannot waive a required manifest rule',t=>{
+ const f=fixture(t);f.config([{path:'src/AGENTS.md',appliesTo:['src']}]);
+ assert.throws(()=>projectContext(f.root,['src/a.ts','src/b.ts']),/ENOENT/);
+});
+
+test('manifest and legacy discovery share one read without losing legacy notice or freshness',t=>{
+ const f=fixture(t),legacy='.agent-skill-chain/project-policy.json';f.write(legacy,'{}');f.config([{path:legacy}]);
+ const open=fs.openSync;let reads=0;
+ t.mock.method(fs,'openSync',function(file,...args){if(file===path.join(f.root,legacy))reads++;return open.call(fs,file,...args);});
+ const first=projectContext(f.root,['src/a.ts']);assert.equal(reads,1);assert.equal(first.references.filter(r=>r.path===legacy).length,1);assert(first.notices.some(n=>n.startsWith('Legacy')));
+ f.write(legacy,'{"changed":true}');const next=projectContext(f.root,['src/a.ts']);assert.equal(reads,2);assert.notEqual(first.digest,next.digest);
+ fs.rmSync(path.join(f.root,legacy));assert.throws(()=>projectContext(f.root,['src/a.ts']),/ENOENT/);
+});

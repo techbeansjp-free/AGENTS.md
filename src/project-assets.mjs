@@ -42,6 +42,7 @@ function catalog(packageRoot,registerSkill){
  for(const relative of new Set(runtimeFiles)){
   safeName(relative);const bytes=read(packageRoot,relative);
   demand(bytes!==null,'Runtime inventory file missing');assets.set(runtime+relative,bytes);
+  if(relative.startsWith('skills/asc/references/'))assets.set(prefix+relative,bytes);
  }
   assets.set(prefix+'runtime.json',Buffer.from(JSON.stringify({schema:'asc-runtime/v1',version:pkg.version},null,2)+'\n'));
  assets.set(prefix+'bin/asc.mjs',read(packageRoot,'src/project-launcher.mjs'));

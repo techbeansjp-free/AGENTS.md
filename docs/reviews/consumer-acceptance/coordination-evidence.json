@@ -1,0 +1,131 @@
+{
+  "initialFailure": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "repo": "/work/consumer",
+    "base": "f36cb749c5146109748df414f01a69058ca1d090",
+    "head": "b77b232a1bd68488238ee769b252ae9d7aebd4c6",
+    "contractSha256": "17f0e21c16cf1cc6bf1d1b360379d7b92099ce9b53606fece1b55bfc311c8638",
+    "intent": "Display label from approved API contract",
+    "results": [
+      {
+        "argv": [
+          "/runtime/bin/node",
+          "consumer.cjs"
+        ],
+        "exit": 1,
+        "seconds": 0.031342258,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a881e10bda1e50a6044e92356d9bcb34a460e96ea22df459e375903a09a21a05",
+        "error": "Command failed",
+        "stdout": "",
+        "stderr": "node:assert:152\n  throw new AssertionError(obj);\n  ^\n\nAssertionError [ERR_ASSERTION]: undefined == 'Hello'\n    at Object.<anonymous> (/work/consumer/consumer.cjs:1:19)\n    at Module._compile (node:internal/modules/cjs/loader:1872:14)\n    at Object..js (node:internal/modules/cjs/loader:2003:10)\n    at Module.load (node:internal/modules/cjs/loader:1594:32)\n    at Module._load (node:internal/modules/cjs/loader:1396:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: undefined,\n  expected: 'Hello',\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v24.19.0\n"
+      }
+    ],
+    "passed": false,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  },
+  "integrated": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "repo": "/work/consumer",
+    "base": "f36cb749c5146109748df414f01a69058ca1d090",
+    "head": "56dad5355845fed632e1742136d79a659641fbb8",
+    "contractSha256": "17f0e21c16cf1cc6bf1d1b360379d7b92099ce9b53606fece1b55bfc311c8638",
+    "intent": "Display label from approved API contract",
+    "results": [
+      {
+        "argv": [
+          "/runtime/bin/node",
+          "consumer.cjs"
+        ],
+        "exit": 0,
+        "seconds": 0.034238423999999996,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "passed": true,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  },
+  "independentHead": "43d2583adfe333ddbc7b9fa88cd19da4a71f3f14",
+  "changedRequirementFailure": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "repo": "/work/consumer",
+    "base": "f36cb749c5146109748df414f01a69058ca1d090",
+    "head": "31501a87e21752e76b96cb42be7423f9c2d407be",
+    "contractSha256": "ec47fe535fb95b66c383fe396a714cb4dc2f0c9271ccd9083ed9c02849cf2553",
+    "intent": "Display revised label Hello!",
+    "results": [
+      {
+        "argv": [
+          "/runtime/bin/node",
+          "consumer.cjs"
+        ],
+        "exit": 1,
+        "seconds": 0.033362214999999994,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "6c5335489f1debbfc14cc88aac475f5100dbccac32dac01e977bfadd84bfee78",
+        "error": "Command failed",
+        "stdout": "",
+        "stderr": "node:assert:152\n  throw new AssertionError(obj);\n  ^\n\nAssertionError [ERR_ASSERTION]: 'Hello!' == 'Hello'\n    at Object.<anonymous> (/work/consumer/consumer.cjs:1:19)\n    at Module._compile (node:internal/modules/cjs/loader:1872:14)\n    at Object..js (node:internal/modules/cjs/loader:2003:10)\n    at Module.load (node:internal/modules/cjs/loader:1594:32)\n    at Module._load (node:internal/modules/cjs/loader:1396:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: 'Hello!',\n  expected: 'Hello',\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v24.19.0\n"
+      }
+    ],
+    "passed": false,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  },
+  "repaired": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "repo": "/work/consumer",
+    "base": "f36cb749c5146109748df414f01a69058ca1d090",
+    "head": "38d62f630c31608dafca2991f2639fa1230d562e",
+    "contractSha256": "ec47fe535fb95b66c383fe396a714cb4dc2f0c9271ccd9083ed9c02849cf2553",
+    "intent": "Display revised label Hello!",
+    "results": [
+      {
+        "argv": [
+          "/runtime/bin/node",
+          "consumer.cjs"
+        ],
+        "exit": 0,
+        "seconds": 0.041419359,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "passed": true,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  },
+  "conflictDetected": true,
+  "conflictingVerificationRefused": true,
+  "afterAbort": {
+    "schema": "asc-worktree-verification/v1",
+    "execution": "current-host-worktree",
+    "repo": "/work/consumer",
+    "base": "f36cb749c5146109748df414f01a69058ca1d090",
+    "head": "38d62f630c31608dafca2991f2639fa1230d562e",
+    "contractSha256": "ec47fe535fb95b66c383fe396a714cb4dc2f0c9271ccd9083ed9c02849cf2553",
+    "intent": "Display revised label Hello!",
+    "results": [
+      {
+        "argv": [
+          "/runtime/bin/node",
+          "consumer.cjs"
+        ],
+        "exit": 0,
+        "seconds": 0.043537685,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "passed": true,
+    "independentReview": "required",
+    "deliveryAuthorized": false
+  }
+}

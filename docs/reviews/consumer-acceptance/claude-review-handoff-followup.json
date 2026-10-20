@@ -1,0 +1,138 @@
+{
+  "scope": "Single synthetic current-host run with Host-owned automated review-record check, verification and Draft PR/CI delivery. Not a general performance or complex Goal guarantee.",
+  "evaluationCoverage": {
+    "hostWorktreePointerRecorded": true,
+    "scope": "Presence in the pre-execution record; older runs are not upgraded by export."
+  },
+  "distribution": {
+    "skillBundleSha256": "a448f5dd42655bc2373a3d574a565d388088f09e7c92357f0c74639be9cfa667",
+    "version": "0.5.900-alpha.27",
+    "skillSha256": "e965db5100d74f11812ce224331ec6dd804219dc4e7682c0ef4e868f2fddb407",
+    "identitySha256": "ded91581c4d74a4cfb4544224a877ce8409e285ed43b746771f1e5e982c27b73"
+  },
+  "conditions": {
+    "recoveryPolicy": "none",
+    "mountMode": "host",
+    "cliVersion": "2.1.282 (Claude Code)",
+    "host": "claude",
+    "actualModels": [
+      "claude-sonnet-5"
+    ],
+    "runtimeSha256": "9c23ce07da5c7695f2e2e5922237bdff34c0b73e59eee9078c73fac02b24fa31",
+    "intentSha256": "712b83bd0cdec6d5d3439878da31f02e08a50379fd6bf471539227cbbcd54f9f",
+    "commands": [
+      [
+        "python3",
+        "-I",
+        "test_greeting.py"
+      ],
+      [
+        "python3",
+        "-I",
+        "-c",
+        "import sys;sys.path.insert(0,\".\");from greeting import greeting;assert type(greeting()) is str and greeting()==\"Hello\""
+      ]
+    ]
+  },
+  "model": "sonnet",
+  "effort": "medium",
+  "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+  "head": "2129e2c2dd851ddc3ba406d7d73c529ae4b1b0e4",
+  "review": {
+    "taskId": "ac60907c3198beeb6",
+    "head": "2129e2c2dd851ddc3ba406d7d73c529ae4b1b0e4",
+    "verdict": "PASS"
+  },
+  "usage": {
+    "totals": {
+      "input_tokens": 28,
+      "output_tokens": 5045,
+      "cache_read_input_tokens": 331282,
+      "cache_creation_input_tokens": 29680
+    },
+    "threads": [
+      {
+        "id": "023a2bfe-f88c-4687-ba83-dfb4e6e3c6e2",
+        "messageCount": 10,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 3213,
+          "cache_read_input_tokens": 268680,
+          "cache_creation_input_tokens": 20965
+        }
+      },
+      {
+        "id": "ac60907c3198beeb6",
+        "messageCount": 4,
+        "usage": {
+          "input_tokens": 8,
+          "output_tokens": 1832,
+          "cache_read_input_tokens": 62602,
+          "cache_creation_input_tokens": 8715
+        }
+      }
+    ],
+    "observedProcessedTokens": 366035,
+    "missingUsage": [],
+    "reconciledWithHostModelUsage": true,
+    "complete": true
+  },
+  "implementationAndReviewSeconds": 88.922807648,
+  "deliverySeconds": 20.598873536,
+  "elapsedSeconds": 109.645661956,
+  "manualHandoffs": 0,
+  "recovered": false,
+  "automaticResumes": 0,
+  "attempts": null,
+  "driverImplementationEdits": 0,
+  "priorDriverFailure": null,
+  "verification": {
+    "head": "2129e2c2dd851ddc3ba406d7d73c529ae4b1b0e4",
+    "passed": true,
+    "checks": [
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "a6707d4eff38012da33ddc34bc6dc076a3b17151cfc9aef223c8790cbe64c3da"
+      },
+      {
+        "exit": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/116",
+  "ci": {
+    "head": "2129e2c2dd851ddc3ba406d7d73c529ae4b1b0e4",
+    "draft": true,
+    "merged": false,
+    "boundToPr": true,
+    "checks": {
+      "test": "success"
+    },
+    "run": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/39243614877",
+    "transportFailures": []
+  },
+  "limitations": [
+    "One run; outer development/evaluation cost not included in parent and child usage.",
+    "Fresh-context simple change only; repair, multiple Issues and restart acceptance remain separate.",
+    "No merge or release."
+  ],
+  "targetedObservation": {
+    "purpose": "Confirm explicit reviewer handoff fields, not a new matched performance cohort",
+    "separateReviewerWorktreeRequested": false,
+    "reviewProcedureReferencePassed": true,
+    "reviewProcedureReadObserved": true,
+    "sourceEventsSha256": "2f8f8775417890c490b2221d37f34dc860ad2d511afd7d9296396b8cc0be4f0b",
+    "validation": {
+      "projectAssetsUpdateTest": "passed",
+      "independentChangeReview": "no concrete finding",
+      "skillQuickValidate": "unavailable: PyYAML missing; frontmatter boundaries and local reference existence checked separately"
+    },
+    "limitations": [
+      "One observation does not guarantee future compliance or performance superiority.",
+      "Previous matched cohort failures are retained."
+    ]
+  }
+}

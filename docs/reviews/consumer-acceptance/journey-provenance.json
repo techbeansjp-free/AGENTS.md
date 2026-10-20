@@ -1,0 +1,22 @@
+{
+  "packed": {
+    "file": "/var/tmp/asc-consumer-journey-jB3rvl/agent-skill-chain-0.5.900-alpha.1.tgz",
+    "sha256": "16001d21e2c1e9c1f2ca5d2de6c2c570ea83a707f6016f64bb13c89c2c3120a5",
+    "name": "agent-skill-chain",
+    "version": "0.5.900-alpha.1",
+    "publishAuthorized": false
+  },
+  "fixture": {
+    "REQUIREMENTS.md": "2183e175e9b59c4b21e845442bf41d949ec625b0437d0686e4f9e4b60d9bdc35",
+    "browser.mjs": "3b732af314ea9d0153943ef9ba66dca6e67e0e44b11b06b32ca5f8940714c144",
+    "page.html": "461a06b87e124df7288107ac3005fcaecbf75940a6258c9e25b27c236d234565",
+    "server.mjs": "db8a630b3558923abc9c769264af762018d745808c23d74a921b0d78bdf4cd7a"
+  },
+  "seconds": 3.648,
+  "status": 0,
+  "error": null,
+  "toolVersion": "1.56.1",
+  "network": "unshared",
+  "credentialsProvided": false,
+  "developerRepositoryMounted": false
+}

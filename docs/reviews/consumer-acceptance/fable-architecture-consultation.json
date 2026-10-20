@@ -1,0 +1,29 @@
+{
+  "scope": "Owner-authorized architecture advice; not performance evidence",
+  "model": [
+    "claude-fable-5-1"
+  ],
+  "status": "success",
+  "durationMs": 114188,
+  "approvedPromptSha256": "3bf942162955208aa9657a027866fd348bcc47704cccf6d110f1090962d98a91",
+  "responseSha256": "82bf0a228e0570ee5ebd1d5c327287a4d44dc56073d5870e6870b9ea70ac321a",
+  "toolsEnabled": false,
+  "recommendation": "Consolidate delegation facts through existing entrypoints before adding a dispatcher",
+  "adoption": "Hypothesis only; statistical and causal claims corrected in context-cost-plan.md",
+  "modelUsage": {
+    "claude-fable-5-1": {
+      "inputTokens": 2,
+      "outputTokens": 6872,
+      "cacheReadInputTokens": 3322,
+      "cacheCreationInputTokens": 1929,
+      "webSearchRequests": 0,
+      "costUSD": 0.3830305,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 3559,
+      "canonicalModel": "claude-fable-5-1",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  }
+}
