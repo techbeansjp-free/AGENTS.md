@@ -1,0 +1,56 @@
+{
+  "scenario": "complex-two-issue-system",
+  "arm": "baseline-v0.5.9",
+  "fixtureCommit": "3dfaa3a05f6e99490d715aa5a813045487249e2e",
+  "status": "interrupted-provider-rate-limit",
+  "session": "8e629ccc-b44d-4474-9b30-cfdb6207180d",
+  "apiStatus": 429,
+  "rateLimitType": "five_hour",
+  "resetAt": 1792471200,
+  "durationMilliseconds": 86664,
+  "modelUsage": {
+    "claude-opus-5-5": {
+      "inputTokens": 12,
+      "outputTokens": 7103,
+      "cacheReadInputTokens": 125519,
+      "cacheCreationInputTokens": 43839,
+      "webSearchRequests": 0,
+      "costUSD": 0.5179237999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 3946,
+      "canonicalModel": "claude-opus-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "subagentStats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "completed": false,
+  "performanceAcceptance": false,
+  "implementationIntervention": 0,
+  "workPreserved": true,
+  "nextAction": "Resume the same session after provider availability; retain failed attempt usage and elapsed time, do not restart or count as a successful pair."
+}

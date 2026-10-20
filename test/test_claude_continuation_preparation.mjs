@@ -23,3 +23,21 @@ test('revision retains actual initial sources and original evidence',t=>{
  const phase=JSON.parse(fs.readFileSync(path.join(f.root,'revision/setup.json')));assert.equal(phase.session,'synthetic');assert.equal(phase.originalHead,f.head);assert.notEqual(phase.base,f.head);
  assert.notEqual(f.run().status,0,'cannot silently prepare twice');
 });
+
+test('system continuation preserves HTTP/browser CI and narrows revision scope',t=>{
+ const f=setup(t),setupFile=path.join(f.root,'setup.json'),deliveryFile=path.join(f.root,'delivery.json');
+ const config=JSON.parse(fs.readFileSync(setupFile));config.scenario='complex-two-issue-system';fs.writeFileSync(setupFile,JSON.stringify(config));
+ const workflow=path.join(f.work,'.github/workflows/complex.yml');
+ const tail='          node complex/oracle/http.mjs complex\n      - name: Browser\n        run: node complex/oracle/browser.mjs complex\n';
+ fs.appendFileSync(workflow,tail);f.git(f.work,'add','.');f.git(f.work,'commit','-qm','system workflow');
+ const head=f.git(f.work,'rev-parse','HEAD'),delivery=JSON.parse(fs.readFileSync(deliveryFile));
+ delivery.head=head;delivery.ci.head=head;delivery.greetingCI.head=head;fs.writeFileSync(deliveryFile,JSON.stringify(delivery));
+ assert.notEqual(f.run().status,0,'missing browser evidence fails before mutation');assert.equal(f.git(f.work,'status','--porcelain'),'');
+ delivery.browserVerification={passed:true,head,inHostObservation:{head}};fs.writeFileSync(deliveryFile,JSON.stringify(delivery));
+ const result=f.run();assert.equal(result.status,0,result.stderr);
+ const updated=fs.readFileSync(workflow,'utf8');assert.ok(updated.endsWith(tail));
+ assert.ok(updated.includes('node complex/oracle/accessors.mjs complex revised\n          node complex/oracle/revision.mjs complex/previous complex\n'));
+ const owner=JSON.parse(fs.readFileSync(path.join(f.root,'revision/owner.json')));
+ assert.deepEqual(owner.allowedPaths,['complex/reservation/service.mjs','complex/billing/service.mjs']);
+ for(const n of ['reservation','billing'])assert.deepEqual(fs.readFileSync(path.join(f.work,`complex/${n}/service.mjs`)),fs.readFileSync(path.join(f.work,`complex/previous/${n}/service.mjs`)));
+});
