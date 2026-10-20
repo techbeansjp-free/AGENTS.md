@@ -25,6 +25,16 @@
 
 仮説: 全体進行役が詳細履歴を保持せず、担当が必要な資料だけ読むことで再読込みを減らせる。一方、引継ぎ、追加起動、Skill本文の増分で小規模変更は悪化し得る。Agent数の減少だけでは仮説を支持しない。
 
+## PR全体の基準版の動作確認
+
+PRのbase `8fd353a8fce7a46076190190f4ac1bf5621ab7bb` と候補 `ea731816` を、同一の合成worktree・owner契約・検証コマンドで確認した。ネットワークを分離したbwrap内で、Hostの保護を模した `.claude/settings.json` の読取り専用 `/dev/null` mountを維持し、ownerにはその正確なpathを明示した。通常ファイルを無視する設定にはしていない。
+
+- 基準版の通常JSON `worktree-verify` はexit 1で `Commit intended changes before verification; preserve unrelated work separately`。Hostが作った保護mountを未commit成果として拒否した。
+- 候補の同じ通常JSON経路はexit 0、`passed:true`。合成変更のReturn 42検証を実行した。
+- 基準版は `--output` にも未対応のため、この確認では両側とも通常JSONを使用した。モデルは起動していない。これは現在のLinux Host条件における互換性修正の根拠であり、Mac/Windowsや全体の時間・tokens改善の根拠ではない。
+
+したがって、この保護mount条件でPR前の配布物と現行版をそのまま5組実走しても、同じ完走範囲の費用比較にはならない。基準版の保護を解除したり、失敗までの短い時間を候補の完走時間と比較したりしない。共通runtimeへ修正を移したSkill比較は可能だが、その結果をPR全体の改善率と呼ばない。既存の完走記録は有効なままであり、この不成立を埋めるためのモデル再実走は行わない。
+
 ## 初期比較条件（履歴）
 
 以下は初期のSkill比較条件であり、PR #1606全変更の基準版ではない。各実走の配布hash・比較範囲は対応する固定protocolを正本とする。直近の[5組比較](claude-worker-verification-summary.json)は調整手順1段落だけの比較で、その不採用をv0.5全体の性能判定へ読み替えない。
