@@ -56,7 +56,8 @@ export function verifyWorktree(directory,base,ownerFile){
   throw Error('Commit intended changes before verification; preserve unrelated work separately');
  }
  const names=execFileSync('git',['diff','--name-only','--no-renames','-z',baseHead,start.head],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
- if(names.some(p=>!contract.allowedPaths.includes(p)))throw Error('Changes exceed owner scope');
+ const allowedNames=new Set(contract.allowedPaths);
+ if(names.some(p=>!allowedNames.has(p)))throw Error('Changes exceed owner scope');
  // Owner-selected commands run in the current Host environment, unlike internal Git observations.
  const verificationEnvironment={...process.env},results=[];
  for(const argv of contract.commands){
