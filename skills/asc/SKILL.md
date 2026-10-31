@@ -23,7 +23,7 @@ Goalと許可範囲に従い、Claude CodeではClaude Code、CodexではCodex�
 
 入力が確定した独立の読取り・検証（Git状態・対象ソース・既存テスト等）は同じtool呼出しにまとめ、各終了状態を確認する。結果に依存する調査、編集、commit、承認、検証は順序を維持し、確認自体を省略しない。
 
-実装担当は変更前に対象箇所と関連する既存テストを確認し、設定・回帰条件を維持して必要な差分を加える。小変更でテスト全体や実行方式を作り直さず、変更が必要なら元の検査条件を保持したか確認する。現在のHostで、確認済み作業場所とプロジェクトの依存・検証コマンドを使い実テストを行う。依存導入はlockfileとHost権限に従う。依存が必要なのに空のsnapshotを使い、CIへ先送りして合格扱いにしない。検証でDockerを使う場合は、merge後に他のprojectやworktreeと区別して削除できるよう、プロジェクト規約がなければcompose project名をworktreeごとに変え、compose外で作るcontainer・image・networkと、`docker volume create`で先に作るvolumeへ`asc.worktree=<worktreeの絶対path>`のlabelを付ける。使い捨てのcontainerは`--rm`で作り、試験の終了時に止め、削除は`docker rm -v`で無名volumeも一緒に消す。
+実装担当は変更前に対象箇所と関連する既存テストを確認し、設定・回帰条件を維持して必要な差分を加える。小変更でテスト全体や実行方式を作り直さず、変更が必要なら元の検査条件を保持したか確認する。現在のHostで、確認済み作業場所とプロジェクトの依存・検証コマンドを使い実テストを行う。依存導入はlockfileとHost権限に従う。依存が必要なのに空のsnapshotを使い、CIへ先送りして合格扱いにしない。検証でDockerを使う場合は、merge後に他のprojectやworktreeと区別して削除できるよう、プロジェクト規約がなければcompose project名をworktreeごとに変え、compose外で作る資源へ`asc.worktree=<worktreeの絶対path>`のlabelを付ける。使い捨てのcontainerは`--rm`で作り、試験の終了時に止め、削除は`docker rm -v`で無名volumeも一緒に消す。
 
 ビルド・テストにsnapshotやハッシュ付き依存コピーを用意しない。既存のpnpm workspace・store・リンクはプロジェクトの通常の方法で使う。任意の `worktree-verify <worktree> <base> <owner-contract.json>` はcommit済み変更の許可範囲と、現在のHostで実行した検証結果を対応付ける。結果が長い場合は`--output <worktree外の新規ファイル>`で全文を保存し、短い要約と保存先を引き継げる。成功だけで独立レビューや提出権限を成立させない。
 
