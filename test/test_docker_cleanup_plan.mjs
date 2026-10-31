@@ -20,7 +20,8 @@ if(args[1]==='ls'){
  if(type==='label'){const k=value.slice(0,value.indexOf('=')),v=value.slice(value.indexOf('=')+1);match=r=>labels(r)[k]===v;}
  else if(type==='volume')match=r=>r.Mounts.some(m=>m.Name===value);
  else if(type==='ancestor')match=r=>r.Image===value;
- else if(type==='network')match=r=>r.networks.includes(value);
+ // Real Docker 29.7.2: a started container matches by network ID or name, a created one by name only.
+ else if(type==='network')match=r=>r.networks.some(id=>id===value||s.networks.find(n=>n.Id===id)?.Name===value)||(r.createdNetworks??[]).includes(value);
  else{process.stderr.write('unsupported filter');process.exit(1);}
  for(const r of records)if(match(r))console.log(id(r));process.exit(0);
 }
@@ -28,7 +29,7 @@ if(args[1]==='inspect'){const out=[];for(const want of args.slice(2)){const r=re
 process.stderr.write('unsupported '+args.join(' '));process.exit(1);
 `;
 const P='featuredocker-1';
-function fixture(t,{unavailable=false,siblingContainer=false}={}){
+function fixture(t,{unavailable=false,siblingContainer=false,createdOnNetwork=false,workingDir}={}){
  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-docker-plan-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const work=path.join(root,'Feature.Docker-1'),bin=path.join(root,'bin');fs.mkdirSync(path.join(work,'services/api'),{recursive:true});fs.mkdirSync(bin);fs.mkdirSync(`${work}-copy`);fs.symlinkSync(work,path.join(root,'alias'));
  fs.writeFileSync(path.join(bin,'docker'),FAKE,{mode:0o755});
@@ -43,6 +44,8 @@ function fixture(t,{unavailable=false,siblingContainer=false}={}){
   container('l2',{...mark,'com.docker.compose.project':'other'},[],'sha256:img-host',[]),
   container('h1',{},['host-volume'],'sha256:img-host',[])
  ];
+ if(createdOnNetwork)containers.push({...container('x2',project('other',path.join(root,'other')),[],'sha256:img-host',[]),State:{Status:'created'},createdNetworks:['scratch-net']});
+ if(workingDir!==undefined)containers.push(container('c4',{'com.docker.compose.project':P,...(workingDir===null?{}:{'com.docker.compose.project.working_dir':workingDir})},[],'sha256:img-web',[]));
  if(siblingContainer)containers.push(container('c3',project(P,`${work}-copy`),[],'sha256:img-web',['net-default']));
  const volumes=[
   {Name:'anon1',Labels:{'com.docker.volume.anonymous':''}},{Name:`${P}_data`,Labels:{'com.docker.compose.project':P}},{Name:'shared-db',Labels:{}},
@@ -58,9 +61,9 @@ function fixture(t,{unavailable=false,siblingContainer=false}={}){
  ];
  const networks=[{Id:'net-default',Name:`${P}_default`,Labels:{'com.docker.compose.project':P}},{Id:'net-shared',Name:`${P}_shared`,Labels:{'com.docker.compose.project':P}},{Id:'net-label',Name:'scratch-net',Labels:mark},{Id:'net-host',Name:'bridge',Labels:{}}];
  const state=path.join(root,'state.json'),log=path.join(root,'docker.log');fs.writeFileSync(state,JSON.stringify({unavailable,containers,volumes,images,networks}));
- const run=(...args)=>spawnSync(process.execPath,[cli,'docker-cleanup-plan',...args],{encoding:'utf8',env:{...process.env,PATH:`${bin}${path.delimiter}${process.env.PATH}`,FAKE_DOCKER_STATE:state,FAKE_DOCKER_LOG:log}});
+ const runIn=(cwd,...args)=>spawnSync(process.execPath,[cli,'docker-cleanup-plan',...args],{cwd,encoding:'utf8',env:{...process.env,PATH:`${bin}${path.delimiter}${process.env.PATH}`,FAKE_DOCKER_STATE:state,FAKE_DOCKER_LOG:log}}),run=(...args)=>runIn(undefined,...args);
  const calls=()=>fs.existsSync(log)?fs.readFileSync(log,'utf8').trim().split('\n').filter(Boolean).map(l=>JSON.parse(l)):[];
- return {root,work,run,calls};
+ return {root,work,run,runIn,calls};
 }
 const byKey=list=>Object.fromEntries(list.map(e=>[e.id??e.name,e]));
 function assertReadOnly(calls){
@@ -74,6 +77,9 @@ function assertReadOnly(calls){
 test('CLI plans deletion candidates for an eligible compose project and worktree label without mutating Docker',{skip:process.platform==='win32'},t=>{
  const f=fixture(t),p=f.run(f.work);assert.equal(p.status,0,p.stderr);const plan=JSON.parse(p.stdout);
  assert.equal(plan.project,P);assert.equal(plan.label,`asc.worktree=${f.work}`);assert.equal(plan.deletionAuthorized,false);
+ assert.equal(plan.projectSource,'default');assert.equal(plan.labelSource,'default');assert.equal(plan.notices.some(n=>/not verified/.test(n)),false);
+ assert.match(plan.observedAt,/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);assert.ok(Math.abs(Date.parse(plan.observedAt)-Date.now())<60000);
+ assert.ok(plan.notices.includes('Dependencies between images are not detected; if docker image rm --no-prune fails, report that image as retained.'));
  assert.equal(plan.compose.eligible,true);assert.deepEqual(byKey(plan.compose.containers).c2,{id:'c2',name:'c2-name',workingDir:path.join(f.root,'alias/services/api'),underWorktree:true});assert.equal(plan.compose.reason,'all-containers-under-worktree');assert.deepEqual(plan.compose.outsideWorktree,[]);
  assert.deepEqual(plan.compose.down,{recommended:true,reason:'all-containers-under-worktree',removeOrphans:true,volumes:false,rmi:false});
  assert.deepEqual(byKey(plan.containers.delete),{c1:{id:'c1',name:'c1-name',via:'compose-down'},c2:{id:'c2',name:'c2-name',via:'compose-down'},l1:{id:'l1',name:'l1-name',via:'rm-v',state:'exited'}});
@@ -116,10 +122,13 @@ test('a project container outside the worktree (sibling path prefix) makes the c
 
 test('explicit project and label select only those markers; a project without containers is not eligible',{skip:process.platform==='win32'},t=>{
  const f=fixture(t),p=f.run(f.work,'--project','absent','--label','asc.worktree=/nowhere');assert.equal(p.status,0,p.stderr);const plan=JSON.parse(p.stdout);
- assert.equal(plan.project,'absent');assert.equal(plan.label,'asc.worktree=/nowhere');
+ assert.equal(plan.project,'absent');assert.equal(plan.label,'asc.worktree=/nowhere');assert.equal(plan.projectSource,'explicit');assert.equal(plan.labelSource,'explicit');
+ assert.ok(plan.notices.includes('The correspondence between the explicit --project and --label value and this worktree was not verified.'));
+ assert.equal(f.calls().some(a=>a.includes(`label=com.docker.compose.project=${P}`)),false);
+ const onlyLabel=JSON.parse(f.run(f.work,'--label','asc.worktree=/nowhere').stdout);assert.equal(onlyLabel.projectSource,'default');assert.equal(onlyLabel.labelSource,'explicit');
+ assert.ok(onlyLabel.notices.includes('The correspondence between the explicit --label value and this worktree was not verified.'));
  assert.equal(plan.compose.eligible,false);assert.equal(plan.compose.reason,'no-project-containers');assert.equal(plan.compose.down.recommended,false);
  for(const kind of ['containers','volumes','images','networks'])assert.deepEqual(plan[kind],{delete:[],retain:[]},kind);
- assert.equal(f.calls().some(a=>a.includes(`label=com.docker.compose.project=${P}`)),false);
  for(const bad of [['--label','novalue'],['--label','=x'],['--project','Bad.Name'],['--output'],['--project','a','--project','b'],['--force','x']]){
   const r=f.run(f.work,...bad);assert.equal(r.status,1,bad.join(' '));assert.match(r.stderr,/docker-cleanup-plan|--label|Invalid compose project name|Usage/,bad.join(' '));
  }
@@ -137,6 +146,21 @@ test('--output stores the plan outside the worktree without overwriting',{skip:p
  assert.equal(result.schema,'asc-docker-cleanup-plan-output/v1');assert.equal(result.output,output);assert.equal(result.sha256,createHash('sha256').update(bytes).digest('hex'));assert.deepEqual(JSON.parse(bytes),result.plan);
  const again=f.run(f.work,'--output',output);assert.equal(again.status,1);assert.match(again.stderr,/EEXIST/);assert.deepEqual(fs.readFileSync(output),bytes);
  const inside=f.run(f.work,'--output',path.join(f.work,'plan.json'));assert.equal(inside.status,1);assert.match(inside.stderr,/Docker cleanup plan output must be outside the worktree/);assert.equal(fs.existsSync(path.join(f.work,'plan.json')),false);
+});
+
+test('a created container joined to a network by name keeps that network',{skip:process.platform==='win32'},t=>{
+ const f=fixture(t,{createdOnNetwork:true}),p=f.run(f.work);assert.equal(p.status,0,p.stderr);const plan=JSON.parse(p.stdout);
+ assert.deepEqual(byKey(plan.networks.retain)['net-label'],{id:'net-label',name:'scratch-net',reason:'used-by-other-container',usedBy:['x2']});
+ assert.equal(byKey(plan.networks.delete)['net-label'],undefined);assert.ok(f.calls().some(a=>a.includes('network=scratch-net')));assertReadOnly(f.calls());
+});
+
+test('a project container without an absolute working_dir label makes the compose project ineligible',{skip:process.platform==='win32'},t=>{
+ // The relative value names an existing directory inside the worktree and is resolved from there if absoluteness is not checked.
+ for(const workingDir of [null,'services/api']){
+  const f=fixture(t,{workingDir}),p=f.runIn(f.work,f.work);assert.equal(p.status,0,p.stderr);const plan=JSON.parse(p.stdout);
+  assert.equal(plan.compose.eligible,false,String(workingDir));assert.equal(plan.compose.reason,'working-dir-outside-worktree');assert.deepEqual(plan.compose.outsideWorktree,['c4']);
+  assert.deepEqual(byKey(plan.compose.containers).c4,{id:'c4',name:'c4-name',workingDir,underWorktree:false});assert.equal(plan.compose.down.recommended,false);
+ }
 });
 
 test('read-only guard rejects mutating subcommands before calling the runner',()=>{

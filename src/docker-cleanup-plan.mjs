@@ -39,7 +39,7 @@ function within(root,candidate){
 }
 
 /** Observation layer: only labelled resources and those mounted or used by the project containers are listed. */
-export function observeDocker({worktree,project,label},runner){
+export function observeDocker({worktree,project,label,projectSource='explicit',labelSource='explicit'},runner){
  const docker=readOnlyDocker(runner);
  const lines=args=>docker(args).split('\n').map(s=>s.trim()).filter(Boolean);
  const unique=values=>[...new Set(values)].sort();
@@ -50,6 +50,7 @@ export function observeDocker({worktree,project,label},runner){
   image:filter=>unique(lines(['image','ls','-a','--no-trunc','--filter',filter,'--format','{{.ID}}'])),
   network:filter=>unique(lines(['network','ls','--no-trunc','--filter',filter,'--format','{{.ID}}']))
  };
+ const observedAt=new Date().toISOString();
  try{docker(['version','--format','{{.Server.Version}}']);}catch(e){throw Error(`Docker is unavailable; nothing was deleted: ${e.message}`,{cause:e});}
  const byProject=`label=${PROJECT}=${project}`,byLabel=`label=${label.key}=${label.value}`;
  const composeContainers=inspect('container',ls.container(byProject));
@@ -68,9 +69,10 @@ export function observeDocker({worktree,project,label},runner){
  const users={
   volume:Object.fromEntries(volumes.map(v=>[v.Name,ls.container(`volume=${v.Name}`)])),
   image:Object.fromEntries(images.map(i=>[i.Id,ls.container(`ancestor=${i.Id}`)])),
-  network:Object.fromEntries(networks.map(n=>[n.Id,ls.container(`network=${n.Id}`)]))
+  // A created (never started) container matches its network by name only, so join the ID and name filters.
+  network:Object.fromEntries(networks.map(n=>[n.Id,unique([...ls.container(`network=${n.Id}`),...(n.Name?ls.container(`network=${n.Name}`):[])])]))
  };
- return {worktree,project,label,composeContainers,labelContainers,volumes,images,networks,workingDirs,users};
+ return {worktree,project,label,projectSource,labelSource,observedAt,composeContainers,labelContainers,volumes,images,networks,workingDirs,users};
 }
 
 /** Decision layer: a pure function of the observation. */
@@ -118,13 +120,16 @@ export function buildDockerCleanupPlan(o){
  for(const n of o.networks)place('networks',{id:n.Id,name:n.Name},classify(n.Labels??{},o.users.network[n.Id],()=>null),via=>via==='compose'?'compose-down':'network-rm');
  const order=(a,b)=>String(a.id??a.name).localeCompare(String(b.id??b.name));
  for(const kind of Object.values(plan))for(const list of Object.values(kind))list.sort(order);
- return {schema:'asc-docker-cleanup-plan/v1',worktree:o.worktree,project:P,label:`${o.label.key}=${o.label.value}`,deletionAuthorized:false,
+ const explicit=[o.projectSource==='explicit'?'--project':null,o.labelSource==='explicit'?'--label':null].filter(Boolean);
+ return {schema:'asc-docker-cleanup-plan/v1',observedAt:o.observedAt,worktree:o.worktree,project:P,projectSource:o.projectSource,label:`${o.label.key}=${o.label.value}`,labelSource:o.labelSource,deletionAuthorized:false,
   compose:{project:P,eligible,reason,containers:compose.sort(order),outsideWorktree:outside.sort(),
    down:{recommended:eligible,reason,removeOrphans:eligible,volumes:false,rmi:false}},
   ...plan,
   notices:['This plan is not a deletion permission. Confirm the worktree removal decision, then delete each listed resource individually.',
    'Save this plan before compose down so the recorded volumes remain available; run down with the compose files used at startup.',
-   'Build cache and unlabelled resources are not listed.']};
+   'Build cache and unlabelled resources are not listed.',
+   'Dependencies between images are not detected; if docker image rm --no-prune fails, report that image as retained.',
+   ...(explicit.length?[`The correspondence between the explicit ${explicit.join(' and ')} value and this worktree was not verified.`]:[])]};
 }
 
 export function planDockerCleanup(worktree,{project,label,runner}={}){
@@ -138,5 +143,5 @@ export function planDockerCleanup(worktree,{project,label,runner}={}){
   if(at<1||at===label.length-1)throw Error('Expected --label <key>=<value>');
   parsed={key:label.slice(0,at),value:label.slice(at+1)};
  }
- return buildDockerCleanupPlan(observeDocker({worktree:root,project:name,label:parsed},runner));
+ return buildDockerCleanupPlan(observeDocker({worktree:root,project:name,label:parsed,projectSource:project===undefined?'default':'explicit',labelSource:label===undefined?'default':'explicit'},runner));
 }
