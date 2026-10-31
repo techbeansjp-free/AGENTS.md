@@ -29,7 +29,7 @@ if(args[1]==='inspect'){const out=[];for(const want of args.slice(2)){const r=re
 process.stderr.write('unsupported '+args.join(' '));process.exit(1);
 `;
 const P='featuredocker-1';
-function fixture(t,{unavailable=false,siblingContainer=false,createdOnNetwork=false,workingDir}={}){
+function fixture(t,{unavailable=false,siblingContainer=false,createdOnNetwork=false,workingDir,labelState='exited'}={}){
  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-docker-plan-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const work=path.join(root,'Feature.Docker-1'),bin=path.join(root,'bin');fs.mkdirSync(path.join(work,'services/api'),{recursive:true});fs.mkdirSync(bin);fs.mkdirSync(`${work}-copy`);fs.symlinkSync(work,path.join(root,'alias'));
  fs.writeFileSync(path.join(bin,'docker'),FAKE,{mode:0o755});
@@ -45,7 +45,9 @@ function fixture(t,{unavailable=false,siblingContainer=false,createdOnNetwork=fa
   container('h1',{},['host-volume'],'sha256:img-host',[])
  ];
  if(createdOnNetwork)containers.push({...container('x2',project('other',path.join(root,'other')),[],'sha256:img-host',[]),State:{Status:'created'},createdNetworks:['scratch-net']});
- if(workingDir!==undefined)containers.push(container('c4',{'com.docker.compose.project':P,...(workingDir===null?{}:{'com.docker.compose.project.working_dir':workingDir})},[],'sha256:img-web',[]));
+ containers.find(c=>c.Id==='l1').State={Status:labelState};
+ const wd=typeof workingDir==='function'?workingDir(root,work):workingDir;
+ if(wd!==undefined)containers.push(container('c4',{'com.docker.compose.project':P,...(wd===null?{}:{'com.docker.compose.project.working_dir':wd})},[],'sha256:img-web',[]));
  if(siblingContainer)containers.push(container('c3',project(P,`${work}-copy`),[],'sha256:img-web',['net-default']));
  const volumes=[
   {Name:'anon1',Labels:{'com.docker.volume.anonymous':''}},{Name:`${P}_data`,Labels:{'com.docker.compose.project':P}},{Name:'shared-db',Labels:{}},
@@ -79,6 +81,7 @@ test('CLI plans deletion candidates for an eligible compose project and worktree
  assert.equal(plan.project,P);assert.equal(plan.label,`asc.worktree=${f.work}`);assert.equal(plan.deletionAuthorized,false);
  assert.equal(plan.projectSource,'default');assert.equal(plan.labelSource,'default');assert.equal(plan.notices.some(n=>/not verified/.test(n)),false);
  assert.match(plan.observedAt,/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);assert.ok(Math.abs(Date.parse(plan.observedAt)-Date.now())<60000);
+ assert.ok(plan.notices.includes('Build cache is not listed. Resources without the project or worktree label appear only when project containers use them, and are always retained.'));assert.equal(plan.notices.some(n=>/unlabelled resources are not listed/.test(n)),false);
  assert.ok(plan.notices.includes('Dependencies between images are not detected; if docker image rm --no-prune fails, report that image as retained.'));
  assert.equal(plan.compose.eligible,true);assert.deepEqual(byKey(plan.compose.containers).c2,{id:'c2',name:'c2-name',workingDir:path.join(f.root,'alias/services/api'),underWorktree:true});assert.equal(plan.compose.reason,'all-containers-under-worktree');assert.deepEqual(plan.compose.outsideWorktree,[]);
  assert.deepEqual(plan.compose.down,{recommended:true,reason:'all-containers-under-worktree',removeOrphans:true,volumes:false,rmi:false});
@@ -161,6 +164,30 @@ test('a project container without an absolute working_dir label makes the compos
   assert.equal(plan.compose.eligible,false,String(workingDir));assert.equal(plan.compose.reason,'working-dir-outside-worktree');assert.deepEqual(plan.compose.outsideWorktree,['c4']);
   assert.deepEqual(byKey(plan.compose.containers).c4,{id:'c4',name:'c4-name',workingDir,underWorktree:false});assert.equal(plan.compose.down.recommended,false);
  }
+});
+
+test('an active worktree-labelled container is retained and keeps what it uses',{skip:process.platform==='win32'},t=>{
+ for(const state of ['running','paused','restarting']){
+  const f=fixture(t,{labelState:state}),p=f.run(f.work);assert.equal(p.status,0,p.stderr);const plan=JSON.parse(p.stdout);
+  assert.deepEqual(byKey(plan.containers.retain).l1,{id:'l1',name:'l1-name',reason:'running',state},state);assert.equal(byKey(plan.containers.delete).l1,undefined,state);
+  assert.deepEqual(byKey(plan.images.retain)['sha256:img-label'],{id:'sha256:img-label',tags:['scratch-tool:1'],reason:'used-by-other-container',usedBy:['l1']},state);
+  assert.deepEqual(byKey(plan.networks.retain)['net-label'],{id:'net-label',name:'scratch-net',reason:'used-by-other-container',usedBy:['l1']},state);
+ }
+ const f=fixture(t,{labelState:'created'}),plan=JSON.parse(f.run(f.work).stdout);
+ assert.deepEqual(byKey(plan.containers.delete).l1,{id:'l1',name:'l1-name',via:'rm-v',state:'created'});assert.equal(byKey(plan.images.delete)['sha256:img-label'].via,'image-rm-no-prune');
+});
+
+test('a removed working_dir is resolved through its nearest existing ancestor',{skip:process.platform==='win32'},t=>{
+ // Through a symlink that resolves into the worktree: still under the worktree.
+ const inside=fixture(t,{workingDir:root=>path.join(root,'alias/removed/sub')}),inPlan=JSON.parse(inside.run(inside.work).stdout);
+ assert.equal(inPlan.compose.eligible,true);assert.deepEqual(byKey(inPlan.compose.containers).c4,{id:'c4',name:'c4-name',workingDir:path.join(inside.root,'alias/removed/sub'),underWorktree:true});
+ // Through a symlink inside the worktree that resolves outside it: not under the worktree.
+ const outside=fixture(t,{workingDir:(root,work)=>path.join(work,'link-out/gone')});fs.mkdirSync(path.join(outside.root,'elsewhere'));fs.symlinkSync(path.join(outside.root,'elsewhere'),path.join(outside.work,'link-out'));
+ const outPlan=JSON.parse(outside.run(outside.work).stdout);
+ assert.equal(outPlan.compose.eligible,false);assert.equal(outPlan.compose.reason,'working-dir-outside-worktree');assert.deepEqual(outPlan.compose.outsideWorktree,['c4']);
+ // A dangling symlink cannot be confirmed.
+ const dangling=fixture(t,{workingDir:(root,work)=>path.join(work,'dangling/x')});fs.symlinkSync(path.join(dangling.root,'missing'),path.join(dangling.work,'dangling'));
+ assert.deepEqual(JSON.parse(dangling.run(dangling.work).stdout).compose.outsideWorktree,['c4']);
 });
 
 test('read-only guard rejects mutating subcommands before calling the runner',()=>{

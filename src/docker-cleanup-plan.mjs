@@ -33,6 +33,18 @@ export function composeProjectName(directory){
  return [...String(directory).toLowerCase()].filter(c=>/[a-z0-9_-]/.test(c)).join('').replace(/^[_-]+/,'');
 }
 
+/** Resolve the nearest existing ancestor and append the missing tail; a dangling symlink cannot be confirmed (null). */
+function resolveNearest(value){
+ const rest=[];let current=path.resolve(value);
+ for(;;){
+  try{return path.join(fs.realpathSync(current),...rest);}catch{
+   try{fs.lstatSync(current);return null;}catch{ /* Missing: continue with the parent. */ }
+   const parent=path.dirname(current);if(parent===current)return null;
+   rest.unshift(path.basename(current));current=parent;
+  }
+ }
+}
+
 function within(root,candidate){
  const relative=path.relative(root,candidate);
  return relative===''||(!relative.startsWith(`..${path.sep}`)&&relative!=='..'&&!path.isAbsolute(relative));
@@ -63,8 +75,7 @@ export function observeDocker({worktree,project,label,projectSource='explicit',l
  for(const c of composeContainers){
   const value=c.Config?.Labels?.[WORKING_DIR];
   if(typeof value!=='string'||!path.isAbsolute(value)){workingDirs[c.Id]=null;continue;}
-  let resolved=path.resolve(value);try{resolved=fs.realpathSync(resolved);}catch{ /* A removed directory is compared lexically. */ }
-  workingDirs[c.Id]=resolved;
+  workingDirs[c.Id]=resolveNearest(value);
  }
  const users={
   volume:Object.fromEntries(volumes.map(v=>[v.Name,ls.container(`volume=${v.Name}`)])),
@@ -92,8 +103,11 @@ export function buildDockerCleanupPlan(o){
  for(const c of o.labelContainers){
   if(composeIds.has(c.Id)||seen.has(c.Id))continue;seen.add(c.Id);
   const project=c.Config?.Labels?.[PROJECT];
+  const state=c.State?.Status??null;
   if(project!==undefined)plan.containers.retain.push({id:c.Id,name:name(c),reason:'other-compose-project',project});
-  else{plan.containers.delete.push({id:c.Id,name:name(c),via:'rm-v',state:c.State?.Status??null});own.add(c.Id);}
+  // An active container is not removed; what it uses stays retained as used by another container.
+  else if(['running','paused','restarting'].includes(state))plan.containers.retain.push({id:c.Id,name:name(c),reason:'running',state});
+  else{plan.containers.delete.push({id:c.Id,name:name(c),via:'rm-v',state});own.add(c.Id);}
  }
  const others=ids=>(ids??[]).filter(id=>!own.has(id)).sort();
  // Shared order: worktree label, other project, project eligibility, kind rule, then use by other containers.
@@ -127,7 +141,7 @@ export function buildDockerCleanupPlan(o){
   ...plan,
   notices:['This plan is not a deletion permission. Confirm the worktree removal decision, then delete each listed resource individually.',
    'Save this plan before compose down so the recorded volumes remain available; run down with the compose files used at startup.',
-   'Build cache and unlabelled resources are not listed.',
+   'Build cache is not listed. Resources without the project or worktree label appear only when project containers use them, and are always retained.',
    'Dependencies between images are not detected; if docker image rm --no-prune fails, report that image as retained.',
    ...(explicit.length?[`The correspondence between the explicit ${explicit.join(' and ')} value and this worktree was not verified.`]:[])]};
 }

@@ -79,7 +79,7 @@ pathはproject root相対、`appliesTo`はglobではなく完全一致またはd
 
 未保存変更・未追跡/ignoredファイル・未push commit・入れ子repo・他の作業やプロセスがあれば保持する。`git status`がcleanなだけで削除可能と判断しない。squash・rebase mergeでもPRのHEADと作業先の対応を確認し、強制削除やresetは行わない。複数repoではそれぞれのPRのマージ先に従い、同期・削除できた対象と保留理由を報告する。詳細は[配布Skill](../skills/asc/SKILL.md#マージ後の同期と整理)を参照する。
 
-`asc-v05 docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]`は、そのworktreeのcompose project（既定はdirectory名をcomposeの規則で正規化した名前）と`asc.worktree=<worktreeの実path>`（既定）のlabelを持つcontainer・volume・image・networkを読取り専用で調べ、種別ごとの削除候補と保持理由、`down`を行うべきかをJSONで返す。Dockerの`version`・`ls`・`inspect`だけを呼び、削除・停止・`down`は行わない。出力は削除許可ではなく、印のない資源とbuild cacheは列挙しない。`--output`は`worktree-verify`と同じくworktree外の新規fileにだけ書き、`down`前の記録に使う。Dockerが使えない・応答しない場合はexit 1で終了する。
+`asc-v05 docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]`は、そのworktreeのcompose project（既定はdirectory名をcomposeの規則で正規化した名前）と`asc.worktree=<worktreeの実path>`（既定）のlabelを持つcontainer・volume・image・networkを読取り専用で調べ、種別ごとの削除候補と保持理由、`down`を行うべきかをJSONで返す。Dockerの`version`・`ls`・`inspect`だけを呼び、削除・停止・`down`は行わない。出力は削除許可ではない。build cacheは列挙しない。projectとworktreeのどちらのlabelも持たない資源は、project containerが使うものだけを常に保持として一覧する。`asc.worktree`等のlabelを持つcompose外のcontainerでも、running・paused・restartingのものは削除候補にせず保持とし、それが使う資源も保持する。`--output`は`worktree-verify`と同じくworktree外の新規fileにだけ書き、`down`前の記録に使う。Dockerが使えない・応答しない場合はexit 1で終了する。
 
 ## 作業場所
 
