@@ -21,6 +21,7 @@
   "src/candidate.mjs",
   "src/codex-runtime.mjs",
   "src/controller.mjs",
+  "src/docker-cleanup-plan.mjs",
   "src/execution-budget.mjs",
   "src/execution-host.mjs",
   "src/github.mjs",

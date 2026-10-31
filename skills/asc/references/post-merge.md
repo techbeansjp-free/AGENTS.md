@@ -6,7 +6,7 @@
 
 完了したPRのHEADと整理対象worktreeのHEAD・用途を照合する。squash・rebase mergeではマージ先との祖先判定を使わず、整理対象のHEADがmerge済みPRのHEADの祖先かを確かめる。PRのHEADは通常のfetchでは取得されないため、forgeが示すcommitを取得する（例：`git fetch <remote> refs/pull/<番号>/head`）。取得できない、またはworktreeのbranchにPRのHEADに含まれないcommitがあれば保持する。tracked変更だけでなく、未追跡・ignoredファイル、入れ子のrepo、未push commit、継続中のAgent・プロセス・別Issueの利用も確認する。固有データや進行中の作業がなく不要と確認できた対象だけ、安全な別directoryから通常の`git worktree remove`で削除する。`--force`や一括削除で押し切らない。local branchの削除は成果が保存済みと確認でき通常の削除が可能な場合だけとし、remote branch削除は別途の許可に従う。
 
-上の確認で削除すると決めたworktreeがDockerを使っていれば、worktreeの削除前に、そのworktreeが作ったcontainer・volume・image・networkを削除する。Dockerはhost全体で他のprojectや同じprojectの並行するworktreeと共有されるため、このworktreeの物と確かめられた資源だけを対象にする。
+上の確認で削除すると決めたworktreeがDockerを使っていれば、worktreeの削除前に、そのworktreeが作ったcontainer・volume・image・networkを削除する。Dockerはhost全体で他のprojectや同じprojectの並行するworktreeと共有されるため、このworktreeの物と確かめられた資源だけを対象にする。下の判定は`docker-cleanup-plan <worktree> [--project <名前>] [--label <key>=<value>] [--output <worktree外の新規file>]`で読取り専用に一覧でき（`down`の前に`--output`で保存して記録にする）、その出力は判定の補助であって削除許可ではない。
 
 1. compose projectは、作成時に定めたworktree固有のproject名（既定はhost上で一意なworktreeのdirectory名）を使う。その名前の`com.docker.compose.project` labelを持つcontainerが1件以上あり、全件の`com.docker.compose.project.working_dir`がこのworktree配下（pathの区切りで判定）の場合だけ対象にする。containerが無い、または他の場所を指すcontainerがあれば、持ち主を確かめられないので削除せず報告する。
 2. 対象のcontainerがmountするvolumeを記録してから、cwdや`.env`に依存しないよう、このworktreeで起動時と同じcomposeファイルを指定して`docker compose -p <確かめたproject名> down --remove-orphans`を実行する。`--volumes`・`--rmi`は使わない。
