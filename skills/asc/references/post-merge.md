@@ -6,7 +6,14 @@
 
 完了したPRのHEADと整理対象worktreeのHEAD・用途を照合する。squash・rebase mergeではマージ先との祖先判定を使わず、整理対象のHEADがmerge済みPRのHEADの祖先かを確かめる。PRのHEADは通常のfetchでは取得されないため、forgeが示すcommitを取得する（例：`git fetch <remote> refs/pull/<番号>/head`）。取得できない、またはworktreeのbranchにPRのHEADに含まれないcommitがあれば保持する。tracked変更だけでなく、未追跡・ignoredファイル、入れ子のrepo、未push commit、継続中のAgent・プロセス・別Issueの利用も確認する。固有データや進行中の作業がなく不要と確認できた対象だけ、安全な別directoryから通常の`git worktree remove`で削除する。`--force`や一括削除で押し切らない。local branchの削除は成果が保存済みと確認でき通常の削除が可能な場合だけとし、remote branch削除は別途の許可に従う。
 
-Dockerを使う作業では、worktreeを削除する前に、そのworktreeが作ったcontainer・volume・image・networkを削除する。Dockerはhost全体で他のprojectや同じprojectの並行するworktreeと共有されるため、名前とlabelの両方がこのworktreeに固有の資源だけを対象にする。compose projectは、project名がこのworktreeのdirectory名（composeの正規化後）と一致し、その名前の全containerの`com.docker.compose.project.working_dir`がこのworktree配下である場合に限り、`down`の前にそれらのcontainerが使う無名volumeを記録してから、`docker compose down --remove-orphans`を実行する。続けて、`com.docker.compose.project=<project名>`のlabelを持ち、名前が`<project名>_`で始まるvolume、記録した無名volume、同じlabelを持ち名前が`<project名>-`で始まるimage（`docker image rm --no-prune`）を個別に削除する。`--volumes`・`--rmi`は使わない。composeファイルの`name:`で名前を固定したvolume・network、`image:`で共有のtagを付けたimageはlabelが付いても他と共有し得るため残す。compose外の資源は、作成時に付けた`asc.worktree=<worktreeの絶対path>`（またはプロジェクト規約のlabel）で絞り込み、個別に削除する（containerは`docker rm -v`）。repo名やimage名の前方一致だけで絞らない。他のcontainerが使う資源、共有し得る資源、印のない資源、host全体のbuild cacheは削除せず報告し、これらだけを理由にworktreeを保持しない。`docker system prune`等のhost全体の一括削除や`-f`で押し切らない。このworktreeに固有と特定した資源の削除に失敗した場合は、worktreeも保持して理由を報告する。
+上の確認で削除すると決めたworktreeがDockerを使っていれば、worktreeの削除前に、そのworktreeが作ったcontainer・volume・image・networkを削除する。Dockerはhost全体で他のprojectや同じprojectの並行するworktreeと共有されるため、このworktreeの物と確かめられた資源だけを対象にする。
+
+1. compose projectは、作成時に定めたworktree固有のproject名（既定はworktreeのdirectory名）を使う。その名前の`com.docker.compose.project` labelを持つcontainerが1件以上あり、全件の`com.docker.compose.project.working_dir`がこのworktree配下（pathの区切りで判定）の場合だけ対象にする。containerが無い、または他の場所を指すcontainerがあれば、持ち主を確かめられないので削除せず報告する。
+2. 対象のcontainerがmountするvolumeと使うimageを記録してから、cwdや`.env`に依存しないよう`docker compose -p <確かめたproject名> down --remove-orphans`を実行する。`--volumes`・`--rmi`は使わない。
+3. 記録したvolumeのうち、無名volumeと、名前が`<project名>_`で始まりそのproject labelを持つvolumeを個別に削除する。imageは、そのproject labelを持ち、名前が`<project名>-`で始まるもの、またはtagのないものを`docker image rm --no-prune`で削除する。composeファイルの`name:`で名前を固定したvolume、`image:`で付けたtagのimageは他と共有し得るため残す。
+4. compose外の資源は、作成時に付けた`asc.worktree=<worktreeの絶対path>`（またはプロジェクト規約のlabel）で絞り込み、個別に削除する（containerは`docker rm -v`）。
+
+repo名やimage名の前方一致だけで絞らない。`docker system prune`等のhost全体の一括削除や`-f`で押し切らない。他のcontainerが使用中の資源、共有し得る資源、印のない資源、host全体のbuild cacheは削除せず報告し、これらだけを理由にworktreeを保持しない。それ以外の理由で`down`や対象の削除に失敗した場合は、worktreeも保持して理由を報告する。
 
 複数repo・Issueでは対象ごとに処理し、一つの保留を他の作業の禁止にしない。すでに整理済みなら何もしない。同期したbranch、削除したworktreeとDockerの資源、保持した対象と理由を完了報告へ簡潔に記す。専用AgentやJournalは追加しない。このSkillはHostへの実行指示であり、CLIがmerge後に自動実行する機能ではない。
 
