@@ -8,7 +8,7 @@
 
 上の確認で削除すると決めたworktreeがDockerを使っていれば、worktreeの削除前に、そのworktreeが作ったcontainer・volume・image・networkを削除する。Dockerはhost全体で他のprojectや同じprojectの並行するworktreeと共有されるため、このworktreeの物と確かめられた資源だけを対象にする。
 
-1. compose projectは、作成時に定めたworktree固有のproject名（既定はworktreeのdirectory名）を使う。その名前の`com.docker.compose.project` labelを持つcontainerが1件以上あり、全件の`com.docker.compose.project.working_dir`がこのworktree配下（pathの区切りで判定）の場合だけ対象にする。containerが無い、または他の場所を指すcontainerがあれば、持ち主を確かめられないので削除せず報告する。
+1. compose projectは、作成時に定めたworktree固有のproject名（既定はhost上で一意なworktreeのdirectory名）を使う。その名前の`com.docker.compose.project` labelを持つcontainerが1件以上あり、全件の`com.docker.compose.project.working_dir`がこのworktree配下（pathの区切りで判定）の場合だけ対象にする。containerが無い、または他の場所を指すcontainerがあれば、持ち主を確かめられないので削除せず報告する。
 2. 対象のcontainerがmountするvolumeを記録してから、cwdや`.env`に依存しないよう、このworktreeで起動時と同じcomposeファイルを指定して`docker compose -p <確かめたproject名> down --remove-orphans`を実行する。`--volumes`・`--rmi`は使わない。
 3. 記録したvolumeのうち、無名volumeと、名前が`<project名>_`で始まりそのproject labelを持つvolumeを個別に削除する。imageは、そのproject labelを持ち、名前が`<project名>-`で始まるもの、またはtagのないものを`docker image rm --no-prune`で削除する。composeファイルの`name:`で名前を固定したvolume、`image:`で付けたtagのimageは他と共有し得るため残す。
 4. compose外の資源は、作成時に付けた`asc.worktree=<worktreeの絶対path>`（またはプロジェクト規約のlabel）で絞り込み、個別に削除する（containerは`docker rm -v`）。
