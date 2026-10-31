@@ -75,9 +75,9 @@ pathはproject root相対、`appliesTo`はglobではなく完全一致またはd
 
 ## マージ後の後始末
 
-配布Skillは、許可されたPRのmerge確認後に、現在のHostが実際のマージ先（`main`、`develop`等）を確認し、対象remoteの取得、cleanなマージ先local branchのfast-forward同期、完了worktreeの安全な整理まで行うよう指示する。PR作成だけの依頼からmergeを推定しない。CLIによる自動cleanupではない。
+配布Skillは、許可されたPRのmerge確認後に、現在のHostが実際のマージ先（`main`、`develop`等）を確認し、対象remoteの取得、cleanなマージ先local branchのfast-forward同期、完了worktreeとそのDockerの資源の安全な整理まで行うよう指示する。PR作成だけの依頼からmergeを推定しない。CLIによる自動cleanupではない。
 
-未保存変更・未追跡/ignoredファイル・未push commit・入れ子repo・他の作業やプロセスがあれば保持する。`git status`がcleanなだけで削除可能と判断しない。squash mergeでもPRのHEADと作業先の対応を確認し、強制削除やresetは行わない。複数repoではそれぞれのPRのマージ先に従い、同期・削除できた対象と保留理由を報告する。詳細は[配布Skill](../skills/asc/SKILL.md#マージ後の同期と整理)を参照する。
+未保存変更・未追跡/ignoredファイル・未push commit・入れ子repo・他の作業やプロセスがあれば保持する。`git status`がcleanなだけで削除可能と判断しない。squash・rebase mergeでもPRのHEADと作業先の対応を確認し、強制削除やresetは行わない。複数repoではそれぞれのPRのマージ先に従い、同期・削除できた対象と保留理由を報告する。詳細は[配布Skill](../skills/asc/SKILL.md#マージ後の同期と整理)を参照する。
 
 ## 作業場所
 
