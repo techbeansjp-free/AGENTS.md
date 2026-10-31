@@ -79,6 +79,8 @@ pathはproject root相対、`appliesTo`はglobではなく完全一致またはd
 
 未保存変更・未追跡/ignoredファイル・未push commit・入れ子repo・他の作業やプロセスがあれば保持する。`git status`がcleanなだけで削除可能と判断しない。squash・rebase mergeでもPRのHEADと作業先の対応を確認し、強制削除やresetは行わない。複数repoではそれぞれのPRのマージ先に従い、同期・削除できた対象と保留理由を報告する。詳細は[配布Skill](../skills/asc/SKILL.md#マージ後の同期と整理)を参照する。
 
+`asc-v05 docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]`は、そのworktreeのcompose project（既定はdirectory名をcomposeの規則で正規化した名前）と`asc.worktree=<worktreeの実path>`（既定）のlabelを持つcontainer・volume・image・networkを読取り専用で調べ、種別ごとの削除候補と保持理由、`down`を行うべきかをJSONで返す。Dockerの`version`・`ls`・`inspect`だけを呼び、削除・停止・`down`は行わない。出力は削除許可ではなく、印のない資源とbuild cacheは列挙しない。`--output`は`worktree-verify`と同じくworktree外の新規fileにだけ書き、`down`前の記録に使う。Dockerが使えない・応答しない場合はexit 1で終了する。
+
 ## 作業場所
 
 標準の`start`と`project-assets`がlinked worktreeを要求するのは、対象がGit管理済みrepoの場合に限る。Git未管理のフォルダーにはそのまま使用できる。snapshot入口の`run`/`run-goal`は引き続きGit管理された作業場所を必要とする。以下はGitの作業場所を作成・使用する場合の説明である。新規作成時の標準命名はv0.4と同じく、directoryを`.worktrees/<YYYYMMDD_HHMMSS>-<Issue番号>-<slug>`、作業branchを`<type>/<Issue番号>-<slug>`とする。時刻は作成環境のlocal time、slugは小文字英数字とハイフン、標準typeは`feature`・`fix`・`refactor`・`test`・`docs`・`chore`。Issue番号とslugはdirectoryとbranchで揃える。プロジェクトが明示した命名規約を優先する。同じIssueを並列分担する場合はslugへ担当名を含める（例: `account-api` / `account-ui`）。

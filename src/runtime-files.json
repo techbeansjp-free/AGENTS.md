@@ -19,6 +19,7 @@
   "src/approval.mjs",
   "src/authority-command.mjs",
   "src/candidate.mjs",
+  "src/docker-cleanup-plan.mjs",
   "src/codex-runtime.mjs",
   "src/controller.mjs",
   "src/execution-budget.mjs",

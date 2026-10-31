@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import {saveVerification} from '../src/verification-output.mjs';
+import {saveJsonOutside,saveVerification} from '../src/verification-output.mjs';
+import {planDockerCleanup} from '../src/docker-cleanup-plan.mjs';
 import {startWorktree,verifyWorktree} from '../src/worktree-execution.mjs';
 import {projectAssets} from '../src/project-assets.mjs';
 import {restartGoal} from '../src/goal-restart.mjs';
@@ -32,6 +33,7 @@ try {
     start:'start <project-directory> [--path <changed-path>]...\n作業場所・規約参照を確認します（非Gitも可、Agent起動なし）。',
     'worktree-create':'worktree-create <repo-root> <issue> <type> <slug> <base>\n既存Git checkoutのrootを指定します（.worktrees自体ではありません）。その配下の.worktreesへ専用worktreeを作成します。type: feature|fix|refactor|test|docs|chore。baseは明示指定し、既存branch・作業場所は上書きしません。',
     'worktree-verify':'worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>]\n現在のHost権限で検証します。repo外のowner契約にintent・allowedPaths・commands（argv配列の配列）を指定します。検証失敗はexit 2。',
+    'docker-cleanup-plan':'docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]\nmerge後の整理で、そのworktreeのDocker資源の削除候補と保持理由を読取り専用で一覧します。削除・down・停止は行わず、出力は削除許可ではありません。--project省略時はdirectory名をcomposeの規則で正規化、--label省略時はasc.worktree=<worktreeの実path>。Dockerが使えなければexit 1。',
     'project-assets':'project-assets <project-directory> [--register-skill] [--apply]\n既定は差分表示のみ。--applyで未編集の配布資産を更新し、利用者の変更との競合は保護します。'
   };
   if(Object.hasOwn(nativeHelp,command)&&args.length===1&&['--help','-h'].includes(args[0])){
@@ -48,6 +50,8 @@ try {
 
   worktree-create <repo-root> <issue> <type> <slug> <base>
       専用worktreeを作成（既存branch・作業場所は上書きしない）
+  docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]
+      worktreeのDocker資源の削除候補と保持理由を読取り専用で一覧（削除しない・削除許可ではない）
 明示選択のsnapshot実行:
   run --snapshot <external-owner-request.json>
       範囲が明確な変更を実装・検証・独立レビューし、Draft PR/CIへ進める
@@ -83,6 +87,11 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     const run=()=>verifyWorktree(...args.slice(0,3));
     const result=args.length===5?saveVerification(args[0],args[4],run):run();
     console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
+  } else if(command==='docker-cleanup-plan'&&args.length%2===1){
+    const options={};
+    for(let i=1;i<args.length;i+=2){const key={'--project':'project','--label':'label','--output':'output'}[args[i]];if(!key||Object.hasOwn(options,key))throw Error('Expected docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]');options[key]=args[i+1];}
+    const run=()=>planDockerCleanup(args[0],{project:options.project,label:options.label});
+    console.log(JSON.stringify(options.output===undefined?run():saveJsonOutside(args[0],options.output,run,{noun:'Docker cleanup plan output',summarize:(plan,saved)=>({schema:'asc-docker-cleanup-plan-output/v1',...saved,plan})}),null,2));
   } else if(command==='probe-native'&&args.length===1){
     const result=await probeNativeSandbox(args[0]);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
   } else if(command==='project-assets'&&args.length>=1&&args.length<=3&&args.slice(1).every(a=>['--apply','--register-skill'].includes(a))&&new Set(args.slice(1)).size===args.length-1){
@@ -150,10 +159,10 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     if(!(command==='review'?result.status==='reviewed-candidate':['draft-ci-passed','proposed'].includes(result.status)))process.exitCode=2;
   } else if (command==='capabilities'   && args.length===0) {
     console.log(JSON.stringify({schema:'asc-v05-capabilities/v1',releaseReady:true,releaseTarget:'native-linux',publishAuthorized:false,
-      defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','worktree-verify','probe-native','project-assets','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
+      defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','worktree-verify','docker-cleanup-plan','probe-native','project-assets','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
       execution:'current-host-worktree',executionBackends:['current-host-worktree','current-host-directory','owner-selected-host','linux-runner'],host:executionHost(),legacyFallback:false}));
   } else {
-    throw Error('Usage: asc-v05 --version | start <project-directory> | worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>] | worktree-create <repo-root> <issue> <type> <slug> <base> | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');
+    throw Error('Usage: asc-v05 --version | start <project-directory> | worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>] | worktree-create <repo-root> <issue> <type> <slug> <base> | docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>] | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');
   }
 } catch (e) {
   // Preserve existing controller observations without turning a failed run into success.
