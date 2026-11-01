@@ -2,10 +2,17 @@
 // usage: node exp2_oracle.mjs <repo> <checkoutDir(with node_modules installed or not)> <out.json>
 import { L1, TreeCtx, lsTree, buildFull, isCode, ts, resolveFile } from './prototype.mjs';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 const [repo, wt, outFile] = process.argv.slice(2);
 const entries = lsTree(repo, 'HEAD');
+{ // the oracle reads the checkout from disk; refuse when it differs from the HEAD tree the graph is built from
+  const code = [...entries.keys()].filter(isCode);
+  const hashes = execFileSync('git', ['-C', wt, 'hash-object', '--no-filters', '--stdin-paths'], { input: code.join('\n') + '\n', encoding: 'utf8', maxBuffer: 1 << 28, cwd: wt }).trim().split('\n');
+  const bad = code.filter((p, i) => hashes[i] !== entries.get(p).blob);
+  if (bad.length) { console.error('checkout differs from HEAD: ' + bad.slice(0, 5).join(', ')); process.exit(2); }
+}
 const l1 = new L1(repo, false);
 await l1.ensure(entries);
 const ctx = new TreeCtx(entries, l1);

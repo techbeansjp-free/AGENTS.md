@@ -4,9 +4,10 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const cfg = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const lines = (f) => fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
 const summary = (f) => JSON.parse(execFileSync(process.execPath, [path.join(here, 'phase0-summary.mjs'), f], { encoding: 'utf8' }));
@@ -34,7 +35,7 @@ const out = {
   correctness: { historyEquivalence: cfg.equivalence.map(equivalence), syntheticInvalidation: read(cfg.synthetic).verdict,
     resolverVsTypeScript: cfg.oracle.map(({ name, file }) => { const j = read(file); return { repository: name, recall: j.recall, precisionCodeTargets: j.precisionCode, precisionAllTargets: j.precision, counts: j.stat }; }) },
   storage: cfg.storage.map(({ name, file }) => ({ ...read(file), repo: name })), // never publish the local clone path
-  contentAddressedResults: lines(cfg.contentAddressed),
+  contentAddressedResults: cfg.contentAddressed.map(({ name, file }) => ({ ...lines(file)[0], repo: name })), // never publish the local clone path
   syntheticReachability: read(cfg.syntheticReachability),
   traceability: { test262: read(cfg.test262).stat, asc: read(cfg.ascTrace).sample.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== 'topNever'))) },
   executionHistoryRefs: read(cfg.executionHistoryRefs),

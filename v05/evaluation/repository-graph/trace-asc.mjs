@@ -28,7 +28,8 @@ async function scan(entries) {
         const [, pre, a, b] = m; const w = a.length;
         for (let k = Number(a); k <= Number(b) && k - Number(a) < 200; k++) refs.push({ id: pre + String(k).padStart(w, '0'), path: p, expanded: true });
       }
-      for (const m of line.matchAll(ID)) if (!defined.has(m[0])) refs.push({ id: m[0], path: p, expanded: false });
+      const plain = line.replace(/\b([A-Z]+-[A-Z0-9-]*?-)(\d{2,4})\s*[〜~]\s*(\d{2,4})\b/g, ' ');
+      for (const m of plain.matchAll(ID)) if (!defined.has(m[0])) refs.push({ id: m[0], path: p, expanded: false });
     }
   });
   return { defs, refs };

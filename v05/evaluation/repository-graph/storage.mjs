@@ -93,6 +93,7 @@ for (let i = 1; i < commits.length; i++) {
   db.prepare('INSERT INTO tree_entry SELECT ?, path, blob, mode FROM tree_entry WHERE tree=?').run(ntree, tree);
   for (const p of diff.deleted) db.prepare('DELETE FROM tree_entry WHERE tree=? AND path=?').run(ntree, p);
   for (const p of [...diff.added, ...diff.modified]) db.prepare('INSERT OR REPLACE INTO tree_entry VALUES (?,?,?,?)').run(ntree, p, next.get(p).blob, next.get(p).mode);
+  for (const [p, e] of next) if (entries.get(p)?.blob === e.blob && entries.get(p).mode !== e.mode) db.prepare('UPDATE tree_entry SET mode=? WHERE tree=? AND path=?').run(e.mode, ntree, p); // mode-only change
   db.prepare("INSERT INTO edge SELECT ?, src, dst, kind FROM edge WHERE tree=? AND src NOT IN (SELECT p FROM chg)").run(ntree, tree);
   db.prepare('INSERT INTO resolution_probe SELECT ?, candidate, src_path, hit FROM resolution_probe WHERE tree=? AND src_path NOT IN (SELECT p FROM chg)').run(ntree, tree);
   db.prepare('INSERT INTO unresolved SELECT ?, src_path, ref_kind, target, reason FROM unresolved WHERE tree=? AND src_path NOT IN (SELECT p FROM chg)').run(ntree, tree);

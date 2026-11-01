@@ -100,7 +100,7 @@ execFileSync('git', ['init', '-q', root + '/D']); g(root + '/D', ['remote', 'add
 t = now(); fetch(root + '/D'); res.freshFetchMs = now() - t;
 t = now(); const lr = g(root + '/D', ['ls-remote', 'origin']); res.lsRemoteMs = now() - t; res.advertisedRefs = lr.split('\n').length;
 t = now(); project(root + '/D', root + '/p4.db'); res.projectAllMs = now() - t;
-res.originBytes = Number(execFileSync('du', ['-sb', root + '/origin.git'], { encoding: 'utf8' }).split('\t')[0]);
+res.originBytes = fs.readdirSync(root + '/origin.git', { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).reduce((a, e) => a + fs.statSync(path.join(e.parentPath, e.name)).size, 0);
 console.log(JSON.stringify(res, null, 1));
 if (outFile) fs.writeFileSync(outFile, JSON.stringify(res, null, 1));
 fs.rmSync(root, { recursive: true, force: true });

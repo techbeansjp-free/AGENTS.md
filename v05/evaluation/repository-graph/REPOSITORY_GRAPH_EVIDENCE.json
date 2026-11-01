@@ -16,29 +16,29 @@
    {
     "id": "consumer-A",
     "language": "Rust",
-    "trackedFiles": 1165,
-    "multiCommitPRs": 11,
-    "prsWithLateExistingFiles": 10,
-    "lateExistingFiles": 60,
+    "trackedFiles": 1175,
+    "multiCommitPRs": 12,
+    "prsWithLateExistingFiles": 11,
+    "lateExistingFiles": 61,
     "lateNewFiles": 559,
     "recall": {
      "graph": 0,
      "importOneHop": 0,
      "importReverseTransitive": 0,
      "sharedId": 0,
-     "sameDirectory": 0.217,
-     "coChange": 0.017,
-     "baselineUnion": 0.217
+     "sameDirectory": 0.23,
+     "coChange": 0.033,
+     "baselineUnion": 0.246
     },
     "meanPredictedFiles": {
-     "graph": 2.7,
-     "sameDirectory": 29.3,
-     "coChange": 2.7
+     "graph": 6.4,
+     "sameDirectory": 45.1,
+     "coChange": 6.4
     },
     "precision": {
      "graph": 0,
-     "sameDirectory": 0.044,
-     "coChange": 0.037
+     "sameDirectory": 0.028,
+     "coChange": 0.029
     },
     "graphOnlyLateFiles": 0,
     "graphOnlyPrs": 0,
@@ -50,7 +50,7 @@
      "sameDirRecall": 0.294,
      "graphOnly": 0,
      "graphOnlyPrs": 0,
-     "graphNotCoChange": null,
+     "graphNotCoChange": 0,
      "meanGraphSize": 2.6
     }
    },
@@ -74,12 +74,12 @@
     "meanPredictedFiles": {
      "graph": 5.1,
      "sameDirectory": 6.6,
-     "coChange": 5.4
+     "coChange": 3.9
     },
     "precision": {
      "graph": 0.14,
      "sameDirectory": 0.095,
-     "coChange": 0.068
+     "coChange": 0.095
     },
     "graphOnlyLateFiles": 43,
     "graphOnlyPrs": 2,
@@ -109,18 +109,18 @@
      "importReverseTransitive": 0,
      "sharedId": 0,
      "sameDirectory": 0.145,
-     "coChange": 0.028,
-     "baselineUnion": 0.166
+     "coChange": 0.048,
+     "baselineUnion": 0.186
     },
     "meanPredictedFiles": {
      "graph": 4.1,
      "sameDirectory": 24.6,
-     "coChange": 4.9
+     "coChange": 4.6
     },
     "precision": {
      "graph": 0.033,
      "sameDirectory": 0.028,
-     "coChange": 0.027
+     "coChange": 0.051
     },
     "graphOnlyLateFiles": 0,
     "graphOnlyPrs": 0,
@@ -132,7 +132,7 @@
      "sameDirRecall": 0,
      "graphOnly": 0,
      "graphOnlyPrs": 0,
-     "graphNotCoChange": null,
+     "graphNotCoChange": 0,
      "meanGraphSize": 7
     }
    },
@@ -150,8 +150,8 @@
      "importReverseTransitive": 0,
      "sharedId": 0.06,
      "sameDirectory": 0.31,
-     "coChange": 0.262,
-     "baselineUnion": 0.476
+     "coChange": 0.31,
+     "baselineUnion": 0.524
     },
     "meanPredictedFiles": {
      "graph": 10,
@@ -161,7 +161,7 @@
     "precision": {
      "graph": 0.073,
      "sameDirectory": 0.081,
-     "coChange": 0.202
+     "coChange": 0.239
     },
     "graphOnlyLateFiles": 1,
     "graphOnlyPrs": 1,
@@ -173,7 +173,7 @@
      "sameDirRecall": 0.385,
      "graphOnly": 0,
      "graphOnlyPrs": 0,
-     "graphNotCoChange": null,
+     "graphNotCoChange": 0,
      "meanGraphSize": 9.2
     }
    },
@@ -191,30 +191,30 @@
      "importReverseTransitive": 0.144,
      "sharedId": 0.013,
      "sameDirectory": 0.093,
-     "coChange": 0.102,
-     "baselineUnion": 0.166
+     "coChange": 0.152,
+     "baselineUnion": 0.199
     },
     "meanPredictedFiles": {
      "graph": 92,
      "sameDirectory": 60,
-     "coChange": 88
+     "coChange": 70.9
     },
     "precision": {
      "graph": 0.026,
      "sameDirectory": 0.029,
-     "coChange": 0.021
+     "coChange": 0.04
     },
-    "graphOnlyLateFiles": 70,
-    "graphOnlyPrs": 31,
+    "graphOnlyLateFiles": 54,
+    "graphOnlyPrs": 29,
     "reviewFix": {
      "prs": 89,
      "lateFiles": 435,
      "graphRecall": 0.326,
-     "coRecall": 0.225,
+     "coRecall": 0.285,
      "sameDirRecall": 0.232,
-     "graphOnly": 23,
-     "graphOnlyPrs": 17,
-     "graphNotCoChange": null,
+     "graphOnly": 22,
+     "graphOnlyPrs": 16,
+     "graphNotCoChange": 51,
      "meanGraphSize": 95.2
     }
    },
@@ -232,30 +232,30 @@
      "importReverseTransitive": 0.162,
      "sharedId": 0.083,
      "sameDirectory": 0.137,
-     "coChange": 0.117,
-     "baselineUnion": 0.209
+     "coChange": 0.13,
+     "baselineUnion": 0.216
     },
     "meanPredictedFiles": {
      "graph": 181.6,
      "sameDirectory": 154.1,
-     "coChange": 147.1
+     "coChange": 83.7
     },
     "precision": {
      "graph": 0.019,
      "sameDirectory": 0.019,
-     "coChange": 0.017
+     "coChange": 0.033
     },
-    "graphOnlyLateFiles": 185,
-    "graphOnlyPrs": 55,
+    "graphOnlyLateFiles": 175,
+    "graphOnlyPrs": 54,
     "reviewFix": {
      "prs": 181,
      "lateFiles": 2149,
      "graphRecall": 0.185,
-     "coRecall": 0.143,
+     "coRecall": 0.16,
      "sameDirRecall": 0.161,
-     "graphOnly": 93,
-     "graphOnlyPrs": 40,
-     "graphNotCoChange": null,
+     "graphOnly": 87,
+     "graphOnlyPrs": 39,
+     "graphNotCoChange": 208,
      "meanGraphSize": 187.7
     }
    }
@@ -275,30 +275,30 @@
     "importReverseTransitive": 0.075,
     "sharedId": 0.052,
     "sameDirectory": 0.168,
-    "coChange": 0.11,
-    "baselineUnion": 0.22
+    "coChange": 0.135,
+    "baselineUnion": 0.231
    },
    "meanPredictedFiles": {
     "graph": 39.9,
     "sameDirectory": 103.5,
-    "coChange": 39.9
+    "coChange": 39
    },
    "precision": {
     "graph": 0.037,
     "sameDirectory": 0.019,
-    "coChange": 0.032
+    "coChange": 0.041
    },
-   "graphOnlyLateFiles": 32,
-   "graphOnlyPrs": 21,
+   "graphOnlyLateFiles": 27,
+   "graphOnlyPrs": 17,
    "reviewFix": {
     "prs": 79,
     "lateFiles": 485,
     "graphRecall": 0.264,
-    "coRecall": 0.21,
+    "coRecall": 0.249,
     "sameDirRecall": 0.285,
-    "graphOnly": 25,
-    "graphOnlyPrs": 17,
-    "graphNotCoChange": null,
+    "graphOnly": 22,
+    "graphOnlyPrs": 14,
+    "graphNotCoChange": 46,
     "meanGraphSize": 52.7
    }
   }
@@ -697,7 +697,7 @@
  ],
  "contentAddressedResults": [
   {
-   "repo": "/data/zod",
+   "repo": "colinhacks/zod",
    "trees": 500,
    "perTreeRows": 4124165,
    "casRows": 445387,
@@ -708,7 +708,7 @@
    "keyMismatch": 0
   },
   {
-   "repo": "/data/vite",
+   "repo": "vitejs/vite",
    "trees": 500,
    "perTreeRows": 13165676,
    "casRows": 1257658,
@@ -719,7 +719,7 @@
    "keyMismatch": 0
   },
   {
-   "repo": "/data/vscode",
+   "repo": "microsoft/vscode",
    "trees": 100,
    "perTreeRows": 63494544,
    "casRows": 2978096,
@@ -878,9 +878,9 @@
     "commit": "403b0cd44",
     "date": "2026-08-27",
     "defs": 1026,
-    "refs": 5899,
-    "resolved": 4468,
-    "dangling": 1431,
+    "refs": 5477,
+    "resolved": 4184,
+    "dangling": 1293,
     "resolvedViaRange": 1824,
     "danglingExpanded": 755,
     "by": {
@@ -889,12 +889,12 @@
       "dangling": 1
      },
      "reviews": {
-      "refs": 3432,
-      "dangling": 1253
+      "refs": 3092,
+      "dangling": 1117
      },
      "specs": {
-      "refs": 1883,
-      "dangling": 87
+      "refs": 1801,
+      "dangling": 85
      },
      "other": {
       "refs": 1,
@@ -910,17 +910,17 @@
      }
     },
     "danglingEverDefined": 0,
-    "danglingNeverDefined": 1431,
-    "neverIssueLocal": 1181,
-    "neverOther": 250
+    "danglingNeverDefined": 1293,
+    "neverIssueLocal": 1054,
+    "neverOther": 239
    },
    {
     "commit": "1db2a07ad",
     "date": "2026-09-03",
     "defs": 1560,
-    "refs": 11019,
-    "resolved": 8756,
-    "dangling": 2263,
+    "refs": 10329,
+    "resolved": 8261,
+    "dangling": 2068,
     "resolvedViaRange": 3574,
     "danglingExpanded": 1107,
     "by": {
@@ -933,34 +933,34 @@
       "dangling": 2
      },
      "reviews": {
-      "refs": 7029,
-      "dangling": 2002
+      "refs": 6456,
+      "dangling": 1809
      },
      "specs": {
-      "refs": 3155,
-      "dangling": 109
+      "refs": 3039,
+      "dangling": 107
      },
      "code": {
       "refs": 25,
       "dangling": 19
      },
      "test": {
-      "refs": 744,
+      "refs": 743,
       "dangling": 130
      }
     },
     "danglingEverDefined": 0,
-    "danglingNeverDefined": 2263,
-    "neverIssueLocal": 1869,
-    "neverOther": 394
+    "danglingNeverDefined": 2068,
+    "neverIssueLocal": 1685,
+    "neverOther": 383
    },
    {
     "commit": "dc4794199",
     "date": "2026-09-14",
     "defs": 2133,
-    "refs": 18213,
-    "resolved": 14460,
-    "dangling": 3753,
+    "refs": 17155,
+    "resolved": 13710,
+    "dangling": 3445,
     "resolvedViaRange": 5073,
     "danglingExpanded": 1728,
     "by": {
@@ -973,34 +973,34 @@
       "dangling": 5
      },
      "code": {
-      "refs": 95,
+      "refs": 93,
       "dangling": 52
      },
      "reviews": {
-      "refs": 11877,
-      "dangling": 3213
+      "refs": 11005,
+      "dangling": 2918
      },
      "specs": {
-      "refs": 5047,
-      "dangling": 201
+      "refs": 4865,
+      "dangling": 189
      },
      "test": {
-      "refs": 1115,
-      "dangling": 281
+      "refs": 1113,
+      "dangling": 280
      }
     },
     "danglingEverDefined": 3,
-    "danglingNeverDefined": 3750,
-    "neverIssueLocal": 2692,
-    "neverOther": 1058
+    "danglingNeverDefined": 3442,
+    "neverIssueLocal": 2434,
+    "neverOther": 1008
    },
    {
     "commit": "1981ef8a7",
     "date": "2026-10-21",
     "defs": 0,
-    "refs": 16567,
+    "refs": 15333,
     "resolved": 0,
-    "dangling": 16567,
+    "dangling": 15333,
     "resolvedViaRange": 0,
     "danglingExpanded": 8154,
     "by": {
@@ -1009,26 +1009,26 @@
       "dangling": 52
      },
      "other": {
-      "refs": 76,
-      "dangling": 76
+      "refs": 74,
+      "dangling": 74
      },
      "reviews": {
-      "refs": 16439,
-      "dangling": 16439
+      "refs": 15207,
+      "dangling": 15207
      }
     },
-    "danglingEverDefined": 11774,
-    "danglingNeverDefined": 4793,
-    "neverIssueLocal": 3600,
-    "neverOther": 1193
+    "danglingEverDefined": 10958,
+    "danglingNeverDefined": 4375,
+    "neverIssueLocal": 3261,
+    "neverOther": 1114
    },
    {
     "commit": "a5bd897b0",
     "date": "2026-10-16",
     "defs": 2824,
-    "refs": 25891,
-    "resolved": 19778,
-    "dangling": 6113,
+    "refs": 24356,
+    "resolved": 18728,
+    "dangling": 5628,
     "resolvedViaRange": 6865,
     "danglingExpanded": 3138,
     "by": {
@@ -1037,38 +1037,38 @@
       "dangling": 1
      },
      "other": {
-      "refs": 76,
+      "refs": 74,
       "dangling": 7
      },
      "code": {
-      "refs": 370,
+      "refs": 368,
       "dangling": 113
      },
      "reviews": {
-      "refs": 16439,
-      "dangling": 5135
+      "refs": 15207,
+      "dangling": 4688
      },
      "specs": {
-      "refs": 7434,
-      "dangling": 486
+      "refs": 7144,
+      "dangling": 451
      },
      "test": {
-      "refs": 1509,
-      "dangling": 371
+      "refs": 1500,
+      "dangling": 368
      }
     },
-    "danglingEverDefined": 462,
-    "danglingNeverDefined": 5651,
-    "neverIssueLocal": 3853,
-    "neverOther": 1798
+    "danglingEverDefined": 424,
+    "danglingNeverDefined": 5204,
+    "neverIssueLocal": 3500,
+    "neverOther": 1704
    },
    {
     "commit": "db49ed048",
     "date": "2026-10-16",
     "defs": 0,
-    "refs": 16747,
+    "refs": 15512,
     "resolved": 0,
-    "dangling": 16747,
+    "dangling": 15512,
     "resolvedViaRange": 0,
     "danglingExpanded": 8157,
     "by": {
@@ -1077,30 +1077,30 @@
       "dangling": 57
      },
      "other": {
-      "refs": 82,
-      "dangling": 82
+      "refs": 80,
+      "dangling": 80
      },
      "code": {
-      "refs": 169,
-      "dangling": 169
+      "refs": 168,
+      "dangling": 168
      },
      "reviews": {
-      "refs": 16439,
-      "dangling": 16439
+      "refs": 15207,
+      "dangling": 15207
      }
     },
-    "danglingEverDefined": 11896,
-    "danglingNeverDefined": 4851,
-    "neverIssueLocal": 3647,
-    "neverOther": 1204
+    "danglingEverDefined": 11079,
+    "danglingNeverDefined": 4433,
+    "neverIssueLocal": 3308,
+    "neverOther": 1125
    },
    {
     "commit": "4a4846fe1",
     "date": "2026-11-01",
     "defs": 0,
-    "refs": 16567,
+    "refs": 15333,
     "resolved": 0,
-    "dangling": 16567,
+    "dangling": 15333,
     "resolvedViaRange": 0,
     "danglingExpanded": 8154,
     "by": {
@@ -1109,18 +1109,18 @@
       "dangling": 52
      },
      "other": {
-      "refs": 76,
-      "dangling": 76
+      "refs": 74,
+      "dangling": 74
      },
      "reviews": {
-      "refs": 16439,
-      "dangling": 16439
+      "refs": 15207,
+      "dangling": 15207
      }
     },
-    "danglingEverDefined": 11774,
-    "danglingNeverDefined": 4793,
-    "neverIssueLocal": 3600,
-    "neverOther": 1193
+    "danglingEverDefined": 10958,
+    "danglingNeverDefined": 4375,
+    "neverIssueLocal": 3261,
+    "neverOther": 1114
    }
   ]
  },

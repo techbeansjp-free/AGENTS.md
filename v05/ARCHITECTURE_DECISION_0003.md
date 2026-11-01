@@ -16,18 +16,18 @@ gitから決定的に再構築できる依存・ID追跡グラフ（v0.4のSeman
 | TypeScript | 519 | 12.5% | 5.2% | 8.3%（43件、うち全件が2 PR） | 11.0 |
 | PHP | 12 | 0% | 0% | 0% | 7.0 |
 | HCL | 13 | 0% | 0% | 0% | 9.2 |
-| Python | 435 | 32.6% | 22.5% | 5.3% | 95.2 |
-| Python | 2,149 | 18.5% | 14.3% | 4.3% | 187.7 |
-| このrepository | 485 | 26.4% | 21.0% | 5.2% | 52.7 |
+| Python | 435 | 32.6% | 28.5% | 5.1% | 95.2 |
+| Python | 2,149 | 18.5% | 16.0% | 4.0% | 187.7 |
+| このrepository | 485 | 26.4% | 24.9% | 4.5% | 52.7 |
 
-結論は対象ごとに異なる。Python 2件とこのrepositoryでは、グラフは同件数の同時変更より再現率が4〜10ポイント高いが、予測件数が是正fileを持つPRの平均で53〜188件と多く、後から変更された全fileに対する精度は2〜4%にとどまる。Rust・PHP・HCLでは是正fileの母数が12〜17件と小さく、グラフは1件も予測しなかった。TypeScriptでは予測件数（是正fileを持つPRの平均）11件、後から変更された全fileに対する精度14%と絞れていて非グラフ基準を上回るが、グラフだけが予測したfileは2 PRに集中しており、再検討条件の上積み15%に届かない。対象全体で共通するのは、非グラフ基準に対する上積みが0〜8%と15%未満であることである。後から変更されたfileは、対象全体では既存fileより新規fileが多く（このrepositoryではほぼ同数）、新規fileはどの方式でも予測できない。判定の数値基準は測定前に固定していない。
+結論は対象ごとに異なる。Python 2件とこのrepositoryでは、グラフは同件数の同時変更より再現率が1.5〜4.1ポイント高いが、予測件数が是正fileを持つPRの平均で53〜188件と多く、後から変更された全fileに対する精度は2〜4%にとどまる。Rust・PHP・HCLでは是正fileの母数が12〜17件と小さく、グラフは1件も予測しなかった。TypeScriptでは予測件数（是正fileを持つPRの平均）11件、後から変更された全fileに対する精度14%と絞れていて非グラフ基準を上回るが、グラフだけが予測したfileは2 PRに集中しており、再検討条件の上積み15%に届かない。対象全体で共通するのは、非グラフ基準に対する上積みが0〜8%と15%未満であることである。後から変更されたfileは、対象全体では既存fileより新規fileが多く（このrepositoryではほぼ同数）、新規fileはどの方式でも予測できない。判定の数値基準は測定前に固定していない。
 
 限界：
 - 後から変更されたfileは見落としの代理指標であり、計画的な分割commitも含む。
 - 是正commitの識別はメッセージの字面による。`comment`や`nit`などを語境界なしで照合するため広めに拾う（このrepositoryの直近3000 commitでは、語境界付きの照合よりcommit単位で約4〜7%多い。レビュー時の手動確認で、利用者repositoryでは確認していない）。
-- 同時変更はグラフの件数（最低5件）に揃え、50 fileを超える過去commitは数えない。同一directoryは件数を揃えていないため、「グラフだけが予測した割合」はグラフの上積みの下限である。同件数での比較は表の同時変更の列を参照する。
+- 同時変更は基点treeに存在するノイズ以外のfileから選び、グラフの件数（最低5件）に揃える。50 fileを超える過去commitは数えない。同一directoryは件数を揃えていないため、「グラフだけが予測した割合」はグラフの上積みの下限である。同件数での比較は表の同時変更の列を参照する。
 - グラフは基点treeで構築するので、最初のcommitで新規作成したfileは起点にならない。別のfeature branchの上に積んだPRは、その下のbranchの最初のcommitを起点にする（最大150 commitで打ち切る）。
-- Python・PHP・Rust・HCLの依存抽出は簡易規則で、公式の解決結果と照合していない。TypeScriptの対象は`.astro`等のscript部分のimportも抽出して測り直した値である。
+- Python・PHP・Rust・HCLの依存抽出は簡易規則で、公式の解決結果と照合していない。JavaScript/TypeScriptの解決は、tsconfigの`extends`配列の2件目以降と、`require`専用の`exports`条件を扱わない。測定対象にはどちらも存在しなかった（`extends`配列のtsconfigと、`import`・`require`の両条件を持つworkspace package.jsonは、各repositoryのHEADで0件）。TypeScriptの対象は`.astro`等のscript部分のimportも抽出して測り直した値である。
 - グラフの価値をReviewerの指摘の質で直接測る比較試験は行っていない。
 
 ## 再検討する条件
@@ -47,7 +47,7 @@ gitから決定的に再構築できる依存・ID追跡グラフ（v0.4のSeman
 - **保存。** treeごとにedgeを複写する方式は採らない（コード約15,000 fileのrepositoryで1 treeあたり208 MB、増分の書込み中央値3.6秒、初回と増分29回の計30 treeで4.6 GB）。解決結果を「対象blobと試行候補の結果と設定blob」のhashで共有すると、treeごとの複写に比べて行数が9〜21分の1になり（評価記録の`contentAddressedResults`）、同一keyで結果が食い違った例は0件だった。中規模（コード約1,500 file）では全再構築がメモリ上で中央値約0.1秒・p95約0.5秒であり、保存自体が不要な場合が多い。
 - **問い合わせ。** SQLiteの再帰CTEで逆到達を書くと、plannerが`dst`側の索引を使わず全edgeを走査する（評価記録の`storage[].naivePlan`。コード約15,000 fileのrepositoryでは5分を超えても返らなかった。この時間は手動観測）。`FROM r CROSS JOIN edge e ON e.dst = r.n`で結合順を固定し、`EXPLAIN QUERY PLAN`を回帰で確認する。
 - **未commitの作業tree。** 実indexの複製へ`git add -A`して`write-tree`すると、作業treeを約70〜300 ms（コード約1,500〜15,000 file）でtree hashにできる。この値は評価記録に含まない手動測定である。
-- **ID追跡。** IDの定義位置は推測せずプロジェクトで宣言させる（このrepositoryの旧仕様では受入条件が`- 受け入れ条件:`行で定義されていた）。範囲表記（例：`-01〜06`）を展開しないと解決済み参照の約1/3を失う。生成されるID、別文書のID、廃止済みIDは未解決として理由付きで残す。
+- **ID追跡。** IDの定義位置は推測せずプロジェクトで宣言させる（このrepositoryの旧仕様では受入条件が`- 受け入れ条件:`行で定義されていた）。範囲表記（例：`-01〜06`）を展開しないと解決済み参照の4割前後（37〜44%）を失う。生成されるID、別文書のID、廃止済みIDは未解決として理由付きで残す。
 - **言語。** 利用者repositoryの大半はJavaScript/TypeScript以外である。TypeScript本体を同梱する方式は配布方針に合わない。
 - **実行履歴。** runごとのGit ref（`refs/asc/runs/<id>`）へeventを追記する方式は、ローカルの共有repositoryで衝突回避・競合時の拒否・gc耐性・決定的な再構築を確認した。ただしADR 0002の「新しいJournalを前提にしない」に当たるため、既存のPR・CI・`worktree-verify`の記録で足りないことを示すまで採らない。GitHub上での受付・保持は確認していない。
 
@@ -71,4 +71,4 @@ node $D/phase0-summary.mjs <out.jsonl>...
 node $D/build-evidence.mjs <config.json> > $D/REPOSITORY_GRAPH_EVIDENCE.json
 ```
 
-`phase0.mjs`は`refs/pull/*/head`を取得済みのcloneを前提とする。利用者repositoryを測る場合は隔離環境で行う。`phase0.mjs`の生の出力は確認用にfile pathの例を含むためcommitしない。公開するのは`build-evidence.mjs`が出力する集計値だけとし、匿名IDと実repositoryの対応を書いたconfigもrepositoryの外に置く。手動観測と明記した値を除き、本書の数値は評価記録から再生成できる。
+scriptはNode 24で実行した（`storage.mjs`等は`node:sqlite`を使うため、Node 20では起動しない）。`phase0.mjs`は`refs/pull/*/head`を取得済みのcloneを前提とする。利用者repositoryを測る場合は隔離環境で行う。`phase0.mjs`の生の出力は確認用にfile pathの例を含むためcommitしない。公開するのは`build-evidence.mjs`が出力する集計値だけとし、匿名IDと実repositoryの対応を書いたconfigもrepositoryの外に置く。手動観測と明記した値を除き、本書の数値は評価記録から再生成できる。

@@ -103,13 +103,13 @@ const chainList = [...chain].reverse(); // oldest -> newest
 const chainIdx = new Map(chainList.map((c, i) => [c, i]));
 const commitFiles = new Map();
 const cfiles = (c) => { if (!commitFiles.has(c)) { const p = parents(c); commitFiles.set(c, p.length ? sh(['diff-tree', '--no-commit-id', '-r', '--name-only', '--no-renames', '-m', '--first-parent', c]).split('\n').filter(Boolean) : []); } return commitFiles.get(c); };
-function coChange(baseIdx, seeds, k) {
+function coChange(baseIdx, seeds, k, exists) {
   const score = new Map();
-  for (let i = Math.max(0, baseIdx - 1000); i <= baseIdx; i++) { const fs_ = cfiles(chainList[i]); if (fs_.length > 50) continue; if (!fs_.some((f) => seeds.has(f))) continue; for (const f of fs_) if (!seeds.has(f)) score.set(f, (score.get(f) ?? 0) + 1); }
+  for (let i = Math.max(0, baseIdx - 1000); i <= baseIdx; i++) { const fs_ = cfiles(chainList[i]); if (fs_.length > 50) continue; if (!fs_.some((f) => seeds.has(f))) continue; for (const f of fs_) if (!seeds.has(f) && exists(f) && !isNoise(f)) score.set(f, (score.get(f) ?? 0) + 1); }
   return new Set([...score].sort((a, b) => b[1] - a[1]).slice(0, k).map(([f]) => f));
 }
 
-const prs = sh(['for-each-ref', '--format=%(refname)', 'refs/pull']).split('\n').filter(Boolean)
+const prs = sh(['for-each-ref', '--format=%(refname)', 'refs/pull']).split('\n').filter((r) => /^refs\/pull\/\d+\/head$/.test(r))
   .map((r) => ({ ref: r, n: Number(r.split('/')[2]) })).sort((a, b) => b.n - a.n).slice(0, Number(maxPrs));
 const out = fs.createWriteStream(outFile); const skip = {};
 const graphCache = new Map();
@@ -137,7 +137,7 @@ for (const { ref, n } of prs) {
   for (const id of seedIds) for (const f of g.ids.get(id)) if (!seeds.has(f)) idSet.add(f);
   const graphU = new Set([...imp1, ...idSet]);
   const sameDir = new Set(g.files.filter((f) => !seeds.has(f) && !isNoise(f) && [...seeds].some((s) => path.dirname(s) === path.dirname(f))));
-  const co = coChange(chainIdx.get(base) ?? 0, seeds, Math.max(graphU.size, 5));
+  const co = coChange(chainIdx.get(base) ?? 0, seeds, Math.max(graphU.size, 5), (f) => g.entries.has(f));
   const hit = (S) => [...L].filter((f) => S.has(f)).length;
   const LR = [...laterReview].filter((f) => g.entries.has(f)); const hitR = (S) => LR.filter((f) => S.has(f)).length;
   const graphOnly = [...L].filter((f) => graphU.has(f) && !co.has(f) && !sameDir.has(f));

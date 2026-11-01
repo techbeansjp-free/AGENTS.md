@@ -45,8 +45,13 @@ export function lsTree(repo, rev) {
 export class CatFile {
   constructor(repo) {
     this.p = spawn('git', ['-C', repo, 'cat-file', '--batch'], { stdio: ['pipe', 'pipe', 'inherit'] });
-    this.q = []; this.buf = Buffer.alloc(0);
+    this.q = []; this.buf = Buffer.alloc(0); this.ended = null;
     this.p.stdout.on('data', (d) => { this.buf = Buffer.concat([this.buf, d]); this.drain(); });
+    // 'close' fires after stdout is fully read, so valid answers are resolved before the rest is rejected
+    const end = (why) => { this.ended ??= why; this.drain(); for (const r of this.q.splice(0)) r.reject(Error('git cat-file ended: ' + this.ended)); };
+    this.p.on('error', (e) => end(e.message));
+    this.p.stdin.on('error', (e) => end(e.message));
+    this.p.on('close', (code, signal) => end(signal ?? 'exit ' + code));
   }
   drain() {
     while (this.q.length) {
@@ -61,7 +66,7 @@ export class CatFile {
       this.q.shift().resolve(Buffer.from(body));
     }
   }
-  read(sha) { return new Promise((resolve, reject) => { this.q.push({ resolve, reject }); this.p.stdin.write(sha + '\n'); }); }
+  read(sha) { return new Promise((resolve, reject) => { if (this.ended) return reject(Error('git cat-file ended: ' + this.ended)); this.q.push({ resolve, reject }); this.p.stdin.write(sha + '\n'); }); }
   close() { this.p.stdin.end(); }
 }
 
