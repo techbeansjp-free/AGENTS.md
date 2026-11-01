@@ -20,7 +20,7 @@ for (let i = 0; i < entries.length; i++) {
   const text = bodies[i].toString('utf8');
   const fm = text.match(/\/\*---([\s\S]*?)---\*\//);
   const esid = fm?.[1].match(/^\s*esid:\s*(\S+)/m)?.[1];
-  // "mention" extractor: any sec-* token anywhere in the file (what a regex supported-by edge would see)
+  // "mention" extractor: every sec-* token in the file (what a regex supported-by edge would see)
   const mentions = new Set([...text.matchAll(/\bsec-[a-z0-9.\-%@]+/gi)].map((m) => m[0].replace(/[.-]+$/, '')));
   stat.mentionsTotal += mentions.size;
   for (const m of mentions) if (m !== esid) stat.mentionsNotDeclared++;

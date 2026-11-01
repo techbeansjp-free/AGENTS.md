@@ -1,6 +1,6 @@
 // V-trace on ASC itself: deterministic ID ledger (definitions) vs references, across history.
 // Definition = first cell of a Markdown table row under docs/specs (except the trace table), a Markdown heading,
-// or `Scenario: <ID>` in a .feature file. Reference = any other occurrence, with `X-01〜06` ranges expanded.
+// or `Scenario: <ID>` in a .feature file. Reference = every other occurrence, with `X-01〜06` ranges expanded.
 import { lsTree, CatFile, git, firstParentCommits } from './prototype.mjs';
 import fs from 'node:fs';
 
