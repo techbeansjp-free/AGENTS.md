@@ -1,0 +1,1150 @@
+{
+ "schema": "asc-repository-graph-evaluation/v1",
+ "issue": 1614,
+ "measuredOn": "2026-11-01",
+ "environment": {
+  "container": "node:24-bookworm",
+  "network": "none during measurement (clones fetched beforehand)",
+  "node": "v24.22.2",
+  "consumerAccess": "read-only clones inside the container; names, paths and contents are not recorded here"
+ },
+ "phase0": {
+  "question": "Do dependency/ID-trace graphs predict existing files a PR touched only after its first commit, beyond same-directory and co-change baselines?",
+  "method": "PR heads from refs/pull/*/head; base = first ancestor on the default branch first-parent chain; seeds = first non-merge commit files; late = files touched by later non-merge commits; reviewFix = late files from commits whose message matches the REVIEW pattern in phase0.mjs. Lock files, build output, docs/reviews and the bundled ASC runtime are excluded. JS/TS (and the script blocks of .astro/.vue/.svelte/.mdx) use the TypeScript-checked resolver; Python/PHP/Rust/HCL use unverified lightweight extractors. coChange is size-matched to the graph; sameDirectory is not capped.",
+  "thresholdPreregistered": false,
+  "consumers": [
+   {
+    "id": "consumer-A",
+    "language": "Rust",
+    "trackedFiles": 1175,
+    "multiCommitPRs": 12,
+    "prsWithLateExistingFiles": 11,
+    "lateExistingFiles": 61,
+    "lateNewFiles": 559,
+    "recall": {
+     "graph": 0,
+     "importOneHop": 0,
+     "importReverseTransitive": 0,
+     "sharedId": 0,
+     "sameDirectory": 0.23,
+     "coChange": 0.033,
+     "baselineUnion": 0.246
+    },
+    "meanPredictedFiles": {
+     "graph": 6.4,
+     "sameDirectory": 45.1,
+     "coChange": 6.4
+    },
+    "precision": {
+     "graph": 0,
+     "sameDirectory": 0.028,
+     "coChange": 0.029
+    },
+    "graphOnlyLateFiles": 0,
+    "graphOnlyPrs": 0,
+    "reviewFix": {
+     "prs": 7,
+     "lateFiles": 17,
+     "graphRecall": 0,
+     "coRecall": 0,
+     "sameDirRecall": 0.294,
+     "graphOnly": 0,
+     "graphOnlyPrs": 0,
+     "graphNotCoChange": 0,
+     "meanGraphSize": 2.6
+    }
+   },
+   {
+    "id": "consumer-B",
+    "language": "TypeScript",
+    "trackedFiles": 794,
+    "multiCommitPRs": 147,
+    "prsWithLateExistingFiles": 95,
+    "lateExistingFiles": 890,
+    "lateNewFiles": 1512,
+    "recall": {
+     "graph": 0.075,
+     "importOneHop": 0.004,
+     "importReverseTransitive": 0.004,
+     "sharedId": 0.072,
+     "sameDirectory": 0.067,
+     "coChange": 0.039,
+     "baselineUnion": 0.101
+    },
+    "meanPredictedFiles": {
+     "graph": 5.1,
+     "sameDirectory": 6.6,
+     "coChange": 3.9
+    },
+    "precision": {
+     "graph": 0.14,
+     "sameDirectory": 0.095,
+     "coChange": 0.095
+    },
+    "graphOnlyLateFiles": 43,
+    "graphOnlyPrs": 2,
+    "reviewFix": {
+     "prs": 42,
+     "lateFiles": 519,
+     "graphRecall": 0.125,
+     "coRecall": 0.052,
+     "sameDirRecall": 0.021,
+     "graphOnly": 43,
+     "graphOnlyPrs": 2,
+     "graphNotCoChange": 46,
+     "meanGraphSize": 11
+    }
+   },
+   {
+    "id": "consumer-C",
+    "language": "PHP",
+    "trackedFiles": 609,
+    "multiCommitPRs": 39,
+    "prsWithLateExistingFiles": 30,
+    "lateExistingFiles": 145,
+    "lateNewFiles": 304,
+    "recall": {
+     "graph": 0.028,
+     "importOneHop": 0.028,
+     "importReverseTransitive": 0,
+     "sharedId": 0,
+     "sameDirectory": 0.145,
+     "coChange": 0.048,
+     "baselineUnion": 0.186
+    },
+    "meanPredictedFiles": {
+     "graph": 4.1,
+     "sameDirectory": 24.6,
+     "coChange": 4.6
+    },
+    "precision": {
+     "graph": 0.033,
+     "sameDirectory": 0.028,
+     "coChange": 0.051
+    },
+    "graphOnlyLateFiles": 0,
+    "graphOnlyPrs": 0,
+    "reviewFix": {
+     "prs": 6,
+     "lateFiles": 12,
+     "graphRecall": 0,
+     "coRecall": 0,
+     "sameDirRecall": 0,
+     "graphOnly": 0,
+     "graphOnlyPrs": 0,
+     "graphNotCoChange": 0,
+     "meanGraphSize": 7
+    }
+   },
+   {
+    "id": "consumer-D",
+    "language": "HCL",
+    "trackedFiles": 503,
+    "multiCommitPRs": 25,
+    "prsWithLateExistingFiles": 11,
+    "lateExistingFiles": 84,
+    "lateNewFiles": 428,
+    "recall": {
+     "graph": 0.095,
+     "importOneHop": 0.036,
+     "importReverseTransitive": 0,
+     "sharedId": 0.06,
+     "sameDirectory": 0.31,
+     "coChange": 0.31,
+     "baselineUnion": 0.524
+    },
+    "meanPredictedFiles": {
+     "graph": 10,
+     "sameDirectory": 29.3,
+     "coChange": 9.9
+    },
+    "precision": {
+     "graph": 0.073,
+     "sameDirectory": 0.081,
+     "coChange": 0.239
+    },
+    "graphOnlyLateFiles": 1,
+    "graphOnlyPrs": 1,
+    "reviewFix": {
+     "prs": 6,
+     "lateFiles": 13,
+     "graphRecall": 0,
+     "coRecall": 0,
+     "sameDirRecall": 0.385,
+     "graphOnly": 0,
+     "graphOnlyPrs": 0,
+     "graphNotCoChange": 0,
+     "meanGraphSize": 9.2
+    }
+   },
+   {
+    "id": "consumer-E",
+    "language": "Python",
+    "trackedFiles": 3961,
+    "multiCommitPRs": 241,
+    "prsWithLateExistingFiles": 122,
+    "lateExistingFiles": 2259,
+    "lateNewFiles": 6072,
+    "recall": {
+     "graph": 0.129,
+     "importOneHop": 0.118,
+     "importReverseTransitive": 0.144,
+     "sharedId": 0.013,
+     "sameDirectory": 0.093,
+     "coChange": 0.152,
+     "baselineUnion": 0.199
+    },
+    "meanPredictedFiles": {
+     "graph": 92,
+     "sameDirectory": 60,
+     "coChange": 70.9
+    },
+    "precision": {
+     "graph": 0.026,
+     "sameDirectory": 0.029,
+     "coChange": 0.04
+    },
+    "graphOnlyLateFiles": 54,
+    "graphOnlyPrs": 29,
+    "reviewFix": {
+     "prs": 89,
+     "lateFiles": 435,
+     "graphRecall": 0.326,
+     "coRecall": 0.285,
+     "sameDirRecall": 0.232,
+     "graphOnly": 22,
+     "graphOnlyPrs": 16,
+     "graphNotCoChange": 51,
+     "meanGraphSize": 95.2
+    }
+   },
+   {
+    "id": "consumer-F",
+    "language": "Python",
+    "trackedFiles": 7242,
+    "multiCommitPRs": 254,
+    "prsWithLateExistingFiles": 198,
+    "lateExistingFiles": 4230,
+    "lateNewFiles": 6675,
+    "recall": {
+     "graph": 0.164,
+     "importOneHop": 0.129,
+     "importReverseTransitive": 0.162,
+     "sharedId": 0.083,
+     "sameDirectory": 0.137,
+     "coChange": 0.13,
+     "baselineUnion": 0.216
+    },
+    "meanPredictedFiles": {
+     "graph": 181.6,
+     "sameDirectory": 154.1,
+     "coChange": 83.7
+    },
+    "precision": {
+     "graph": 0.019,
+     "sameDirectory": 0.019,
+     "coChange": 0.033
+    },
+    "graphOnlyLateFiles": 175,
+    "graphOnlyPrs": 54,
+    "reviewFix": {
+     "prs": 181,
+     "lateFiles": 2149,
+     "graphRecall": 0.185,
+     "coRecall": 0.16,
+     "sameDirRecall": 0.161,
+     "graphOnly": 87,
+     "graphOnlyPrs": 39,
+     "graphNotCoChange": 208,
+     "meanGraphSize": 187.7
+    }
+   }
+  ],
+  "asc": {
+   "id": "techbeansjp-free/AGENTS.md",
+   "language": "JavaScript / Markdown",
+   "head": "4a4846fe119b6aacefc8854be4522f6c4d34b961",
+   "trackedFiles": 1007,
+   "multiCommitPRs": 387,
+   "prsWithLateExistingFiles": 127,
+   "lateExistingFiles": 1489,
+   "lateNewFiles": 1433,
+   "recall": {
+    "graph": 0.125,
+    "importOneHop": 0.096,
+    "importReverseTransitive": 0.075,
+    "sharedId": 0.052,
+    "sameDirectory": 0.168,
+    "coChange": 0.135,
+    "baselineUnion": 0.231
+   },
+   "meanPredictedFiles": {
+    "graph": 39.9,
+    "sameDirectory": 103.5,
+    "coChange": 39
+   },
+   "precision": {
+    "graph": 0.037,
+    "sameDirectory": 0.019,
+    "coChange": 0.041
+   },
+   "graphOnlyLateFiles": 27,
+   "graphOnlyPrs": 17,
+   "reviewFix": {
+    "prs": 79,
+    "lateFiles": 485,
+    "graphRecall": 0.264,
+    "coRecall": 0.249,
+    "sameDirRecall": 0.285,
+    "graphOnly": 22,
+    "graphOnlyPrs": 14,
+    "graphNotCoChange": 46,
+    "meanGraphSize": 52.7
+   }
+  }
+ },
+ "correctness": {
+  "historyEquivalence": [
+   {
+    "repository": "colinhacks/zod",
+    "firstCommit": "b84367ac6c166f6cdea24f946f12d6df2eab3bfc",
+    "codeFilesAtFirst": 390,
+    "edgesAtFirst": 679,
+    "incrementalUpdates": 499,
+    "probeMismatch": 0,
+    "naiveMismatchCommits": 1,
+    "mutantsKilledCommits": {
+     "noAdd": 0,
+     "noDel": 0,
+     "noCfg": 1,
+     "noPkg": 0
+    },
+    "incrementalMs": {
+     "p50": 0.53,
+     "p95": 37.79,
+     "max": 245.26
+    },
+    "fullResolveMs": {
+     "p50": 44.13,
+     "p95": 200.64,
+     "max": 456.79
+    },
+    "edgeChurnPerCommit": {
+     "p50": 0,
+     "p95": 3,
+     "max": 56
+    }
+   },
+   {
+    "repository": "vitejs/vite",
+    "firstCommit": "57f59bc843dd527a81c503684b7f408872edaef3",
+    "codeFilesAtFirst": 1484,
+    "edgesAtFirst": 2141,
+    "incrementalUpdates": 499,
+    "probeMismatch": 0,
+    "naiveMismatchCommits": 2,
+    "mutantsKilledCommits": {
+     "noAdd": 2,
+     "noDel": 0,
+     "noCfg": 0,
+     "noPkg": 0
+    },
+    "incrementalMs": {
+     "p50": 0.81,
+     "p95": 57.28,
+     "max": 317.24
+    },
+    "fullResolveMs": {
+     "p50": 113.3,
+     "p95": 472.11,
+     "max": 947.56
+    },
+    "edgeChurnPerCommit": {
+     "p50": 0,
+     "p95": 2,
+     "max": 14
+    }
+   },
+   {
+    "repository": "microsoft/vscode",
+    "firstCommit": "0d958c41dd9dbfb1da6cff3469d5990b46fa2212",
+    "codeFilesAtFirst": 15538,
+    "edgesAtFirst": 155689,
+    "incrementalUpdates": 99,
+    "probeMismatch": 0,
+    "naiveMismatchCommits": 0,
+    "mutantsKilledCommits": {
+     "noAdd": 0,
+     "noDel": 0,
+     "noCfg": 0,
+     "noPkg": 0
+    },
+    "incrementalMs": {
+     "p50": 6.87,
+     "p95": 91.21,
+     "max": 6045.35
+    },
+    "fullResolveMs": {
+     "p50": 5802.12,
+     "p95": 8230.05,
+     "max": 13823.4
+    },
+    "edgeChurnPerCommit": {
+     "p50": 1,
+     "p95": 63,
+     "max": 110
+    }
+   },
+   {
+    "repository": "techbeansjp-free/AGENTS.md",
+    "firstCommit": "5ed26bb55f8041e6fc9bf662c9c3196e2dc22382",
+    "codeFilesAtFirst": 166,
+    "edgesAtFirst": 499,
+    "incrementalUpdates": 499,
+    "probeMismatch": 0,
+    "naiveMismatchCommits": 0,
+    "mutantsKilledCommits": {
+     "noAdd": 0,
+     "noDel": 0,
+     "noCfg": 0,
+     "noPkg": 0
+    },
+    "incrementalMs": {
+     "p50": 1.17,
+     "p95": 14.5,
+     "max": 39.21
+    },
+    "fullResolveMs": {
+     "p50": 10.91,
+     "p95": 33.58,
+     "max": 41.22
+    },
+    "edgeChurnPerCommit": {
+     "p50": 0,
+     "p95": 32,
+     "max": 1539
+    }
+   }
+  ],
+  "syntheticInvalidation": {
+   "probeAlwaysEq": true,
+   "survivors": [],
+   "killed": {
+    "probe": [],
+    "naive": [
+     "delete import target only",
+     "add index file for unresolved import",
+     "paths fallback after delete",
+     "modify extended config (drop customConditions)",
+     "rename package p->q",
+     "add another package named p",
+     "modify exports only",
+     "duplicate package name -> ambiguous",
+     "add nearer tsconfig",
+     "add .ts that outranks imported .js",
+     "rename into a probed path",
+     "delete nearer tsconfig"
+    ],
+    "noAdd": [
+     "add index file for unresolved import",
+     "add nearer tsconfig",
+     "add .ts that outranks imported .js",
+     "rename into a probed path"
+    ],
+    "noDel": [
+     "delete import target only",
+     "delete nearer tsconfig"
+    ],
+    "noCfg": [
+     "modify extended config (drop customConditions)"
+    ],
+    "noPkg": [
+     "rename package p->q",
+     "add another package named p",
+     "modify exports only",
+     "duplicate package name -> ambiguous"
+    ]
+   }
+  },
+  "resolverVsTypeScript": [
+   {
+    "repository": "colinhacks/zod",
+    "recall": 1,
+    "precisionCodeTargets": 1,
+    "precisionAllTargets": 0.9969135802469136,
+    "counts": {
+     "refs": 1456,
+     "agree": 969,
+     "bothNone": 484,
+     "oursOnly": 3,
+     "oracleOnly": 0,
+     "differ": 0,
+     "oracleExternal": 365,
+     "oursOnlyAsset": 3
+    }
+   },
+   {
+    "repository": "vitejs/vite",
+    "recall": 0.9976569821930646,
+    "precisionCodeTargets": 0.9547085201793722,
+    "precisionAllTargets": 0.8718263718263718,
+    "counts": {
+     "refs": 3955,
+     "agree": 2129,
+     "bothNone": 1510,
+     "oursOnly": 311,
+     "oracleOnly": 3,
+     "differ": 2,
+     "oracleExternal": 784,
+     "oursOnlyAsset": 212,
+     "oursOnlyCode": 99
+    }
+   }
+  ]
+ },
+ "storage": [
+  {
+   "repo": "colinhacks/zod",
+   "l1ScanMs": 759.778732,
+   "resolveMs": 49.857930000000124,
+   "codeFiles": 521,
+   "edges": 928,
+   "l1WriteMs": 28.37289799999985,
+   "l2FullWriteMs": 24.508665000000065,
+   "dbBytesOneTree": 2838528,
+   "rows": {
+    "tree_entry": 730,
+    "edge": 928,
+    "resolution_probe": 7543,
+    "unresolved": 478,
+    "fact_ref": 1446,
+    "fact_def": 3966
+   },
+   "treeReuse": 1,
+   "incWriteMs": {
+    "n": 49,
+    "p50": 27.29495600000064,
+    "p95": 59.19249900000068,
+    "max": 187.95126900000014
+   },
+   "dbBytesAfterK": 76984320,
+   "dbBytesGC3": 8253440,
+   "packBytes": 29495296,
+   "loadEdgesMs": 1.0646939999996903,
+   "naivePlan": "CO-ROUTINE r | SETUP | SCAN CONSTANT ROW | RECURSIVE STEP | SEARCH e USING COVERING INDEX edge_rev (tree=?) | SCAN r | SCAN r",
+   "reach": {
+    "seeds": 200,
+    "mismatch": 0,
+    "cteMs": {
+     "p50": 0.010772000000542903,
+     "p95": 0.5410919999994803
+    },
+    "bfsMs": {
+     "p50": 0.0008109999998850981,
+     "p95": 0.07262399999945046
+    },
+    "blastFrac": {
+     "p50": 0,
+     "p90": 0.1420345489443378,
+     "max": 0.6314779270633397,
+     "zero": 0.705
+    }
+   },
+   "scc": {
+    "nodes": 465,
+    "comps": 444,
+    "nontrivial": 2,
+    "top5": [
+     15,
+     8
+    ],
+    "largestFracOfCode": 0.028790786948176585
+   },
+   "ftsMs": {
+    "max": 0.31070700000054785,
+    "rows": 14783
+   }
+  },
+  {
+   "repo": "vitejs/vite",
+   "l1ScanMs": 1394.781672,
+   "resolveMs": 105.87570400000004,
+   "codeFiles": 1606,
+   "edges": 2278,
+   "l1WriteMs": 36.42663100000004,
+   "l2FullWriteMs": 112.60479400000008,
+   "dbBytesOneTree": 6737920,
+   "rows": {
+    "tree_entry": 2875,
+    "edge": 2278,
+    "resolution_probe": 23372,
+    "unresolved": 1477,
+    "fact_ref": 3924,
+    "fact_def": 3323
+   },
+   "incWriteMs": {
+    "n": 50,
+    "p50": 87.01166700000022,
+    "p95": 106.77302200000031,
+    "max": 110.52387400000043
+   },
+   "dbBytesAfterK": 261644288,
+   "dbBytesGC3": 16269312,
+   "packBytes": 46132224,
+   "loadEdgesMs": 1.7988320000004023,
+   "naivePlan": "CO-ROUTINE r | SETUP | SCAN CONSTANT ROW | RECURSIVE STEP | SEARCH e USING COVERING INDEX edge_rev (tree=?) | SCAN r | SCAN r",
+   "reach": {
+    "seeds": 200,
+    "mismatch": 0,
+    "cteMs": {
+     "p50": 0.013661000000865897,
+     "p95": 0.597910000000411
+    },
+    "bfsMs": {
+     "p50": 0.0007499999992433004,
+     "p95": 0.06423700000050303
+    },
+    "blastFrac": {
+     "p50": 0.0006226650062266501,
+     "p90": 0.099626400996264,
+     "max": 0.1095890410958904,
+     "zero": 0.33
+    }
+   },
+   "scc": {
+    "nodes": 1342,
+    "comps": 1186,
+    "nontrivial": 32,
+    "top5": [
+     89,
+     25,
+     8,
+     4,
+     4
+    ],
+    "largestFracOfCode": 0.055417185554171855
+   },
+   "ftsMs": {
+    "max": 0.2195480000009411,
+    "rows": 5305
+   }
+  },
+  {
+   "repo": "microsoft/vscode",
+   "l1ScanMs": 39238.434633,
+   "resolveMs": 4487.256288999997,
+   "codeFiles": 15562,
+   "edges": 156060,
+   "l1WriteMs": 2937.614039,
+   "l2FullWriteMs": 6664.544674000004,
+   "dbBytesOneTree": 207585280,
+   "rows": {
+    "tree_entry": 20714,
+    "edge": 156060,
+    "resolution_probe": 467912,
+    "unresolved": 11306,
+    "fact_ref": 168176,
+    "fact_def": 84841
+   },
+   "treeReuse": 1,
+   "incWriteMs": {
+    "n": 29,
+    "p50": 3646.2205600000016,
+    "p95": 5078.446802999999,
+    "max": 5478.042601000023
+   },
+   "dbBytesAfterK": 4599189504,
+   "dbBytesGC3": 470507520,
+   "packBytes": 1528540160,
+   "loadEdgesMs": 91.96510199998738,
+   "naivePlan": "CO-ROUTINE r | SETUP | SCAN CONSTANT ROW | RECURSIVE STEP | SEARCH e USING COVERING INDEX edge_rev (tree=?) | SCAN r | SCAN r",
+   "reach": {
+    "seeds": 200,
+    "mismatch": 0,
+    "cteMs": {
+     "p50": 0.0765829999872949,
+     "p95": 21.930615999997826
+    },
+    "bfsMs": {
+     "p50": 0.005632000014884397,
+     "p95": 1.562170999997761
+    },
+    "blastFrac": {
+     "p50": 0.0010281454825857858,
+     "p90": 0.12594782161675877,
+     "max": 0.6085978665981236,
+     "zero": 0.2
+    }
+   },
+   "scc": {
+    "nodes": 15572,
+    "comps": 14438,
+    "nontrivial": 173,
+    "top5": [
+     245,
+     92,
+     55,
+     50,
+     45
+    ],
+    "largestFracOfCode": 0.015743477702094846
+   },
+   "ftsMs": {
+    "max": 3.6353280000039376,
+    "rows": 89188
+   }
+  }
+ ],
+ "contentAddressedResults": [
+  {
+   "repo": "colinhacks/zod",
+   "trees": 500,
+   "perTreeRows": 4124165,
+   "casRows": 445387,
+   "mapRows": 227655,
+   "payloadRows": 217732,
+   "distinctResults": 11411,
+   "ratio": 9.3,
+   "keyMismatch": 0
+  },
+  {
+   "repo": "vitejs/vite",
+   "trees": 500,
+   "perTreeRows": 13165676,
+   "casRows": 1257658,
+   "mapRows": 778010,
+   "payloadRows": 479648,
+   "distinctResults": 20615,
+   "ratio": 10.5,
+   "keyMismatch": 0
+  },
+  {
+   "repo": "microsoft/vscode",
+   "trees": 100,
+   "perTreeRows": 63494544,
+   "casRows": 2978096,
+   "mapRows": 1555805,
+   "payloadRows": 1422291,
+   "distinctResults": 32811,
+   "ratio": 21.3,
+   "keyMismatch": 0
+  }
+ ],
+ "syntheticReachability": {
+  "N": 100000,
+  "edges": 992596,
+  "writeMs": 18568.914365999997,
+  "dbBytes": 99508224,
+  "loadAllEdgesMs": 1026.886209999997,
+  "loaded": 992596,
+  "mismatch": 0,
+  "reachSize": {
+   "p50": 99979,
+   "max": 99981
+  },
+  "cteMs": {
+   "p50": 1083.74,
+   "p95": 1238.5,
+   "max": 1276.78
+  },
+  "bfsMs": {
+   "p50": 289.59,
+   "p95": 433.72,
+   "max": 452.14
+  }
+ },
+ "traceability": {
+  "test262": {
+   "files": 53751,
+   "withEsid": 42794,
+   "resolved": 22067,
+   "unresolved": 20727,
+   "withoutEsid": 10957,
+   "mentionOnly": 1,
+   "mentionsTotal": 37981,
+   "mentionsNotDeclared": 1601,
+   "extractMs": 350.92535,
+   "readMs": 2343.969782,
+   "specIds": 2681,
+   "resolvedRate": 0.5156564004299669
+  },
+  "asc": [
+   {
+    "commit": "bba783a74",
+    "date": "2025-11-23",
+    "defs": 0,
+    "refs": 0,
+    "resolved": 0,
+    "dangling": 0,
+    "resolvedViaRange": 0,
+    "danglingExpanded": 0,
+    "by": {},
+    "danglingEverDefined": 0,
+    "danglingNeverDefined": 0,
+    "neverIssueLocal": 0,
+    "neverOther": 0
+   },
+   {
+    "commit": "57ac22567",
+    "date": "2026-07-14",
+    "defs": 0,
+    "refs": 0,
+    "resolved": 0,
+    "dangling": 0,
+    "resolvedViaRange": 0,
+    "danglingExpanded": 0,
+    "by": {},
+    "danglingEverDefined": 0,
+    "danglingNeverDefined": 0,
+    "neverIssueLocal": 0,
+    "neverOther": 0
+   },
+   {
+    "commit": "d1e3d79dd",
+    "date": "2026-07-17",
+    "defs": 0,
+    "refs": 0,
+    "resolved": 0,
+    "dangling": 0,
+    "resolvedViaRange": 0,
+    "danglingExpanded": 0,
+    "by": {},
+    "danglingEverDefined": 0,
+    "danglingNeverDefined": 0,
+    "neverIssueLocal": 0,
+    "neverOther": 0
+   },
+   {
+    "commit": "ac5a481bd",
+    "date": "2026-07-26",
+    "defs": 0,
+    "refs": 0,
+    "resolved": 0,
+    "dangling": 0,
+    "resolvedViaRange": 0,
+    "danglingExpanded": 0,
+    "by": {},
+    "danglingEverDefined": 0,
+    "danglingNeverDefined": 0,
+    "neverIssueLocal": 0,
+    "neverOther": 0
+   },
+   {
+    "commit": "22cc33519",
+    "date": "2026-08-05",
+    "defs": 0,
+    "refs": 0,
+    "resolved": 0,
+    "dangling": 0,
+    "resolvedViaRange": 0,
+    "danglingExpanded": 0,
+    "by": {},
+    "danglingEverDefined": 0,
+    "danglingNeverDefined": 0,
+    "neverIssueLocal": 0,
+    "neverOther": 0
+   },
+   {
+    "commit": "2301ec5e6",
+    "date": "2026-08-11",
+    "defs": 0,
+    "refs": 0,
+    "resolved": 0,
+    "dangling": 0,
+    "resolvedViaRange": 0,
+    "danglingExpanded": 0,
+    "by": {},
+    "danglingEverDefined": 0,
+    "danglingNeverDefined": 0,
+    "neverIssueLocal": 0,
+    "neverOther": 0
+   },
+   {
+    "commit": "0b7dec26c",
+    "date": "2026-08-19",
+    "defs": 0,
+    "refs": 0,
+    "resolved": 0,
+    "dangling": 0,
+    "resolvedViaRange": 0,
+    "danglingExpanded": 0,
+    "by": {},
+    "danglingEverDefined": 0,
+    "danglingNeverDefined": 0,
+    "neverIssueLocal": 0,
+    "neverOther": 0
+   },
+   {
+    "commit": "403b0cd44",
+    "date": "2026-08-27",
+    "defs": 1026,
+    "refs": 5477,
+    "resolved": 4184,
+    "dangling": 1293,
+    "resolvedViaRange": 1824,
+    "danglingExpanded": 755,
+    "by": {
+     "skills": {
+      "refs": 53,
+      "dangling": 1
+     },
+     "reviews": {
+      "refs": 3092,
+      "dangling": 1117
+     },
+     "specs": {
+      "refs": 1801,
+      "dangling": 85
+     },
+     "other": {
+      "refs": 1,
+      "dangling": 0
+     },
+     "code": {
+      "refs": 18,
+      "dangling": 18
+     },
+     "test": {
+      "refs": 512,
+      "dangling": 72
+     }
+    },
+    "danglingEverDefined": 0,
+    "danglingNeverDefined": 1293,
+    "neverIssueLocal": 1054,
+    "neverOther": 239
+   },
+   {
+    "commit": "1db2a07ad",
+    "date": "2026-09-03",
+    "defs": 1560,
+    "refs": 10329,
+    "resolved": 8261,
+    "dangling": 2068,
+    "resolvedViaRange": 3574,
+    "danglingExpanded": 1107,
+    "by": {
+     "skills": {
+      "refs": 53,
+      "dangling": 1
+     },
+     "other": {
+      "refs": 13,
+      "dangling": 2
+     },
+     "reviews": {
+      "refs": 6456,
+      "dangling": 1809
+     },
+     "specs": {
+      "refs": 3039,
+      "dangling": 107
+     },
+     "code": {
+      "refs": 25,
+      "dangling": 19
+     },
+     "test": {
+      "refs": 743,
+      "dangling": 130
+     }
+    },
+    "danglingEverDefined": 0,
+    "danglingNeverDefined": 2068,
+    "neverIssueLocal": 1685,
+    "neverOther": 383
+   },
+   {
+    "commit": "dc4794199",
+    "date": "2026-09-14",
+    "defs": 2133,
+    "refs": 17155,
+    "resolved": 13710,
+    "dangling": 3445,
+    "resolvedViaRange": 5073,
+    "danglingExpanded": 1728,
+    "by": {
+     "skills": {
+      "refs": 55,
+      "dangling": 1
+     },
+     "other": {
+      "refs": 24,
+      "dangling": 5
+     },
+     "code": {
+      "refs": 93,
+      "dangling": 52
+     },
+     "reviews": {
+      "refs": 11005,
+      "dangling": 2918
+     },
+     "specs": {
+      "refs": 4865,
+      "dangling": 189
+     },
+     "test": {
+      "refs": 1113,
+      "dangling": 280
+     }
+    },
+    "danglingEverDefined": 3,
+    "danglingNeverDefined": 3442,
+    "neverIssueLocal": 2434,
+    "neverOther": 1008
+   },
+   {
+    "commit": "1981ef8a7",
+    "date": "2026-10-21",
+    "defs": 0,
+    "refs": 15333,
+    "resolved": 0,
+    "dangling": 15333,
+    "resolvedViaRange": 0,
+    "danglingExpanded": 8154,
+    "by": {
+     "skills": {
+      "refs": 52,
+      "dangling": 52
+     },
+     "other": {
+      "refs": 74,
+      "dangling": 74
+     },
+     "reviews": {
+      "refs": 15207,
+      "dangling": 15207
+     }
+    },
+    "danglingEverDefined": 10958,
+    "danglingNeverDefined": 4375,
+    "neverIssueLocal": 3261,
+    "neverOther": 1114
+   },
+   {
+    "commit": "a5bd897b0",
+    "date": "2026-10-16",
+    "defs": 2824,
+    "refs": 24356,
+    "resolved": 18728,
+    "dangling": 5628,
+    "resolvedViaRange": 6865,
+    "danglingExpanded": 3138,
+    "by": {
+     "skills": {
+      "refs": 63,
+      "dangling": 1
+     },
+     "other": {
+      "refs": 74,
+      "dangling": 7
+     },
+     "code": {
+      "refs": 368,
+      "dangling": 113
+     },
+     "reviews": {
+      "refs": 15207,
+      "dangling": 4688
+     },
+     "specs": {
+      "refs": 7144,
+      "dangling": 451
+     },
+     "test": {
+      "refs": 1500,
+      "dangling": 368
+     }
+    },
+    "danglingEverDefined": 424,
+    "danglingNeverDefined": 5204,
+    "neverIssueLocal": 3500,
+    "neverOther": 1704
+   },
+   {
+    "commit": "db49ed048",
+    "date": "2026-10-16",
+    "defs": 0,
+    "refs": 15512,
+    "resolved": 0,
+    "dangling": 15512,
+    "resolvedViaRange": 0,
+    "danglingExpanded": 8157,
+    "by": {
+     "skills": {
+      "refs": 57,
+      "dangling": 57
+     },
+     "other": {
+      "refs": 80,
+      "dangling": 80
+     },
+     "code": {
+      "refs": 168,
+      "dangling": 168
+     },
+     "reviews": {
+      "refs": 15207,
+      "dangling": 15207
+     }
+    },
+    "danglingEverDefined": 11079,
+    "danglingNeverDefined": 4433,
+    "neverIssueLocal": 3308,
+    "neverOther": 1125
+   },
+   {
+    "commit": "4a4846fe1",
+    "date": "2026-11-01",
+    "defs": 0,
+    "refs": 15333,
+    "resolved": 0,
+    "dangling": 15333,
+    "resolvedViaRange": 0,
+    "danglingExpanded": 8154,
+    "by": {
+     "skills": {
+      "refs": 52,
+      "dangling": 52
+     },
+     "other": {
+      "refs": 74,
+      "dangling": 74
+     },
+     "reviews": {
+      "refs": 15207,
+      "dangling": 15207
+     }
+    },
+    "danglingEverDefined": 10958,
+    "danglingNeverDefined": 4375,
+    "neverIssueLocal": 3261,
+    "neverOther": 1114
+   }
+  ]
+ },
+ "executionHistoryRefs": {
+  "pushA": true,
+  "pushB": true,
+  "plainCloneHasAscRefs": false,
+  "fetchExplicit": true,
+  "afterFetchRefs": [
+   "refs/asc/runs/r-a1",
+   "refs/asc/runs/r-b1"
+  ],
+  "raceFirstPush": true,
+  "raceSecondPushRejected": true,
+  "afterGcEvents": 3,
+  "projectionDeterministic": true,
+  "projectionSameAcrossClones": true,
+  "appendMsPerEvent": 42.6566882077,
+  "scalePush": true,
+  "scalePushMs": 5616.214651999995,
+  "freshFetchMs": 954.4469079999835,
+  "lsRemoteMs": 42.36316800001077,
+  "advertisedRefs": 2003,
+  "projectAllMs": 63113.73388100002,
+  "originBytes": 4997223
+ }
+}
