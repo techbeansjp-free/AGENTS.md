@@ -1,6 +1,6 @@
 // V-oracle: compare our L2 import edges with TypeScript's own module resolution on a checked-out tree.
 // usage: node exp2_oracle.mjs <repo> <checkoutDir(with node_modules installed or not)> <out.json>
-import { L1, TreeCtx, lsTree, buildFull, isCode, ts, resolveFile } from './prototype.mjs';
+import { L1, TreeCtx, lsTree, buildFull, isCode, isConfig, ts, resolveFile } from './prototype.mjs';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -8,10 +8,14 @@ import path from 'node:path';
 const [repo, wt, outFile] = process.argv.slice(2);
 const entries = lsTree(repo, 'HEAD');
 { // the oracle reads the checkout from disk; refuse when it differs from the HEAD tree the graph is built from
-  const code = [...entries.keys()].filter(isCode);
+  const relevant = (p) => isCode(p) || isConfig(p) || p.endsWith('.json');
+  const code = [...entries.keys()].filter(relevant);
   const hashes = execFileSync('git', ['-C', wt, 'hash-object', '--no-filters', '--stdin-paths'], { input: code.join('\n') + '\n', encoding: 'utf8', maxBuffer: 1 << 28, cwd: wt }).trim().split('\n');
   const bad = code.filter((p, i) => hashes[i] !== entries.get(p).blob);
-  if (bad.length) { console.error('checkout differs from HEAD: ' + bad.slice(0, 5).join(', ')); process.exit(2); }
+  // files outside HEAD could become resolution targets; installed dependencies under node_modules are expected
+  const extra = fs.readdirSync(wt, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => path.relative(wt, path.join(e.parentPath, e.name)).split(path.sep).join('/'))
+    .filter((p) => !p.split('/').includes('node_modules') && !p.startsWith('.git/') && relevant(p) && !entries.has(p));
+  if (bad.length || extra.length) { console.error('checkout differs from HEAD: ' + [...bad, ...extra.map((p) => '+' + p)].slice(0, 5).join(', ')); process.exit(2); }
 }
 const l1 = new L1(repo, false);
 await l1.ensure(entries);
