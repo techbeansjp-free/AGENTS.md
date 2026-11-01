@@ -27,7 +27,7 @@ gitから決定的に再構築できる依存・ID追跡グラフ（v0.4のSeman
 - 是正commitの識別はメッセージの字面による。`comment`や`nit`などを語境界なしで照合するため広めに拾う（このrepositoryの直近3000 commitでは、語境界付きの照合よりcommit単位で約4〜7%多い。レビュー時の手動確認で、利用者repositoryでは確認していない）。
 - 同時変更は基点treeに存在するノイズ以外のfileから選び、グラフの件数（最低5件）に揃える。50 fileを超える過去commitは数えない。同一directoryは件数を揃えていないため、「グラフだけが予測した割合」はグラフの上積みの下限である。同件数での比較は表の同時変更の列を参照する。
 - グラフは基点treeで構築するので、最初のcommitで新規作成したfileは起点にならない。別のfeature branchの上に積んだPRは、その下のbranchの最初のcommitを起点にする（最大150 commitで打ち切る）。
-- Python・PHP・Rust・HCLの依存抽出は簡易規則で、公式の解決結果と照合していない。JavaScript/TypeScriptの解決は、tsconfigの`extends`配列の2件目以降と、`require`専用の`exports`条件を扱わない。測定対象にはどちらも存在しなかった（`extends`配列のtsconfigと、`exports`に`require`条件を持つworkspace package.jsonは、各repositoryの全履歴で一度も追加されていない）。TypeScriptの対象は`.astro`等のscript部分のimportも抽出して測り直した値である。
+- Python・PHP・Rust・HCLの依存抽出は簡易規則で、公式の解決結果と照合していない。JavaScript/TypeScriptの解決は、tsconfigの`extends`配列の2件目以降と、`require`専用の`exports`条件を扱わない。測定対象にはどちらも存在しなかった（`extends`配列のtsconfigと、`exports`に`require`条件を持つworkspace package.jsonは、各repositoryの全履歴で一度も追加されていない）。TypeScriptの対象は`.astro`等のscript部分のimportも抽出して測り直した値である。TypeScriptの解決結果との照合（zod、vite）は、依存を導入したcheckoutで行った。zodは依存導入のためにroot `package.json`の`packageManager`を削除し、`pnpm-workspace.yaml`を追加している。どちらもimport解決には関与しない。現在の`resolver-oracle.mjs`はHEADと異なるcheckoutを拒否するため、再実行時は依存の導入方法を別に用意する。
 - グラフの価値をReviewerの指摘の質で直接測る比較試験は行っていない。
 
 ## 再検討する条件
