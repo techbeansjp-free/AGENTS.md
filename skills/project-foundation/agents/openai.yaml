@@ -1,0 +1,4 @@
+interface:
+  display_name: "開発基盤・規約の構築"
+  short_description: "言語やフレームワークを問わず、設計・規約・検証可能な開発基盤を整える"
+  default_prompt: "$project-foundation を使って、このプロジェクトの先行決定事項を洗い出し、規約と再現可能な開発・検証環境を構築してください。"

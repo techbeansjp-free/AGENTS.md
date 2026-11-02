@@ -1,6 +1,7 @@
 /** Build an unpublished canonical-name candidate from npm's explicit file inventory. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {execFileSync} from 'node:child_process';import {createHash} from 'node:crypto';
+import {checkPackageInventory} from './check-package-inventory.mjs';
 const output=process.argv[2], versionOption=process.argv[3];
 if(![3,4].includes(process.argv.length)||!path.isAbsolute(output??'')||(versionOption!==undefined&&!/^--version=0\.5\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$/.test(versionOption)))throw Error('Usage: node scripts/pack-candidate.mjs <absolute-existing-output-directory> [--version=0.5.N[-alpha/beta/rc.N]]');
 const candidateVersion=versionOption?.slice('--version='.length);
@@ -9,7 +10,7 @@ const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),
 const run=(args,cwd)=>execFileSync(process.execPath,[npm,...args],{cwd,encoding:'utf8',timeout:120000,maxBuffer:8e6,stdio:['ignore','pipe','pipe']});
 const hash=b=>createHash('sha256').update(b).digest('hex');
 try{
- const listing=JSON.parse(run(['pack','--dry-run','--ignore-scripts','--json'],root))[0];
+ const listing=checkPackageInventory(root);
  const sourceFiles={};
  for(const entry of listing.files){
   const name=entry.path;if(path.isAbsolute(name)||name.split('/').some(p=>p==='..'||p==='.'||!p))throw Error('Unsafe package path');

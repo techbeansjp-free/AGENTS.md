@@ -1,5 +1,7 @@
 # v0.5評価CLIの実行手順
 
+配布Skillには`asc`と、開発基盤・規約を整備・点検する[project-foundation](../skills/project-foundation/SKILL.md)があります。`project-foundation`はASCの工程から独立して使え、Codex用は`project-assets --register-skill --apply`、Claude Code用は`project-assets --register-claude-skill --apply`で全配布SkillのHost入口を配置できます。検証高速化・移行・実操作受入・監査・技術調査・実行復旧・規約検査・サブエージェントのモデル選択・作業調整・レビュー是正のSkillも選べます（[目的別一覧](../skills/README.md)）。
+
 ## 標準の導入先（ASC_CLIは不要）
 
 GitHub Releaseから使用する版のtarballとSHA256SUMSを取得・照合し、ASCを置くディレクトリで次を実行する。`<tarball>`には取得済みファイルを指定する。npm registryやnpxからの取得は前提にしない。
@@ -9,6 +11,8 @@ npm install --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --
 node .agent-skill-chain/node_modules/agent-skill-chain/bin/asc-v05.mjs project-assets . --register-skill --apply
 node .agent-skill-chain/bin/asc.mjs start .
 ```
+
+上の登録例はCodex用。Claude Codeでは`--register-skill`を`--register-claude-skill`へ替える。両Hostで共有する場合は両方指定できる。
 
 Git管理済みの対象では専用worktreeで実施する。Git未管理の対象や複数repoの親にも配置できる。`project-assets`は**実行可能なASC本体一式**を`.agent-skill-chain/managed-runtime/`へ配置する。`bin/`、`src/`、Skill・実行に必要な資料を含み、利用者側のビルドやASC用依存installは不要（Nodeは必要）。`.mjs`はそのまま実行する配布形式であり、利用者アプリのビルド・テスト用依存とは別である。
 
@@ -303,7 +307,7 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 詳細雛形はAPI・データ・セキュリティ・運用などの記入項目が必要な場合だけ選ぶ。選んだ雛形を利用者の仕様書としてコピーした後は、その文書は利用者の成果物であり、ASCのパッケージ更新で上書き・再生成しない。雛形の更新と、作成済み仕様書の更新は別の作業である。
 
-同一prefixでのnpm更新は配布パッケージの交換であり、利用者側の固有ルール・Skill登録・旧Hook・CI設定を自動移行する機能ではない。既存の`.agent-skill-chain/`を丸ごと新しい配布物で置換してはならない。設定移行には[移行手順](MIGRATION_PLAN.md)を使用する。利用者側の案内・Skill・雛形は、以下の`project-assets`で配置・更新する。`.agents/skills/`を使うHost向けの入口は明示オプションで配置できる。既存Hook・CI・権限設定の変換はこの操作に含まれない。
+同一prefixでのnpm更新は配布パッケージの交換であり、利用者側の固有ルール・Skill登録・旧Hook・CI設定を自動移行する機能ではない。既存の`.agent-skill-chain/`を丸ごと新しい配布物で置換してはならない。設定移行には[移行手順](MIGRATION_PLAN.md)を使用する。利用者側の案内・Skill・雛形は、以下の`project-assets`で配置・更新する。Codex用`.agents/skills/`とClaude Code用`.claude/skills/`の入口はHost別の明示オプションで配置できる。既存Hook・CI・権限設定の変換はこの操作に含まれない。
 
 
 ### プロジェクト内の配布資産を導入・更新する
@@ -321,7 +325,7 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 .agent-skill-chain/
 ├── 00_利用案内.md
 ├── distribution.json      配布済み内容のhash（Git利用時は共有資産とともに管理）
-├── skills/asc/SKILL.md     相対参照の共有Skill
+├── skills/                 目的別一覧と全配布Skill・参照資料
 ├── bin/asc.mjs             ローカル実行入口
 ├── runtime.json            使用バージョン
 ├── managed-runtime/        版固定された実行本体一式（Git共有対象）
@@ -340,20 +344,33 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 Linuxで2つの未公開v0.5候補を旧→新→旧とoffline導入し、配布資産の復元、固有ルール・作成済み仕様書・アプリの保持、編集済み資産での全体停止を確認した（`RELEASE_READINESS.json`の`projectAssetPackageRoundtrip`）。v0.4 runtimeへの復帰、実行中の更新、任意の設定変換を保証する試験ではない。
 
-### HostからASC Skillを選べるようにする
+### Hostから配布Skillを選べるようにする
 
-`.agents/skills/`を認識するHostでは、次の明示オプションでプロジェクト内の入口を配置できる。
+利用するHostに対応する入口を明示的に登録する。オプションなしでは共有本文だけを配置し、Hostの発見用ディレクトリは作らない。
+
+| Host | 登録オプション | 発見用入口 |
+| --- | --- | --- |
+| Codex | `--register-skill` | `.agents/skills/<name>/SKILL.md` |
+| Claude Code | `--register-claude-skill` | `.claude/skills/<name>/SKILL.md` |
 
 ```text
-<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --register-skill
-<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --register-skill --apply
+<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --register-claude-skill
+<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --register-claude-skill --apply
 ```
 
-追加対象は`.agents/skills/asc/SKILL.md`だけ。この短い入口は`.agent-skill-chain/skills/asc/SKILL.md`を相対参照するため、通常の配布資産更新後も新しい本文へ辿れる。既存の同名Skillが異なる内容なら競合として停止し、他Skill・ユーザー全体の設定・AGENTS.md・Hook・権限は変更しない。通常の更新で登録入口が`retained`に出ても、不要になったという意味ではない。
+Codexではオプションを置き換える。両方指定して登録することもできる。登録対象は配布inventoryに含まれる全Skill（[目的別一覧](../skills/README.md)）。各入口は`.agent-skill-chain/skills/<name>/SKILL.md`を相対参照する。入口のname/descriptionがHostの発見・選択に使われ、選択後は入口の指示で共有本文を読み、必要なreferencesだけを本文のディレクトリ基準で読む。ASC CLIがモデルへ全Skillを強制注入する仕組みではない。
 
-既存の旧ASC Skillを自動削除・無効化する機能ではない。旧入口を使っている場合は移行差分として確認する。配置後はHostの新しいセッションでSkillの認識と参照先を確認する。ファイル配置・リンク整合性の試験は、実Hostによる自動発見や実モデルでの実行成功とは区別する。
+利用者はClaude Codeで`/migration-assurance`、Codexで`$migration-assurance`のように明示して依頼できる。自然言語からの自動選択はHostとモデルに依存する。認識されない場合は新しいセッションで登録先を確認し、共有本文のパスを明示して読ませる。登録だけで本文読込みや実作業の成功を保証しない。
 
-LinuxのCodex CLI 0.153.4では、通信を遮断した`app-server`の`skills/list`で、この入口がrepoスコープの有効なSkillとして認識されることを確認した。同じHostプロセスから別の未登録worktreeを照会すると、そこにはASC Skillが現れない。これはローカル一覧取得の実測であり、IDE・Claudeでの認識や、モデルがSkillを選んで開発を完走することの実証ではない。対象commitと条件は`RELEASE_READINESS.json`の`projectSkillHostDiscovery`に記録する。
+未登録の同名fileや利用者が編集した入口が配布内容と異なる場合は競合として全体を停止し、上書きしない。配布対象外のSkill・ユーザー全体の設定・AGENTS.md・Hook・権限は変更しない。通常の更新では登録入口を更新せず、その管理記録を保持する。description等も更新したい場合は使用Hostの登録オプションを再指定する。`retained`に出ても、不要になったという意味ではない。
+
+隔離環境や別PCでは、登録入口だけでなく`.agent-skill-chain/skills/`の本文・referencesとASC実行本体をまとめて配置する。コンテナへHostのホームディレクトリ全体を渡す必要はない。プロジェクトをGitで共有する場合は必要なHost入口も共有し、その隔離環境内でHostを起動して認識を確認する。設定でSkillを無効化した環境や参照先をmountしていない環境は、配置済みでも利用できない。
+
+登録入口は共有のname/descriptionを扱う。起動制限やtool権限等の未対応metadataを黙って落として登録しない。Codex用の表示情報は共有正本に保持し、薄い入口には複製しないため、そのUI表示の適用は保証しない。表示情報と起動policyは別であり、未対応policyがあれば登録は停止する。
+
+既存の旧ASC Skillを自動削除・無効化する機能ではない。廃止・改名されたSkillも、保持した本文と入口があればHostに表示され続ける。`retained`と実ファイルを確認し、不要な入口の撤去は利用者の判断で行う。保持した資産の配布時hashは更新時も引き継ぐため、同名資産の再導入でも利用者編集を検出する。旧入口を使っている場合は移行差分として確認する。配置後はHostの新しいセッションでSkillの認識と参照先を確認する。ファイル配置・リンク整合性の試験は、実Hostによる自動発見や実モデルでの実行成功とは区別する。
+
+LinuxのCodex CLI 0.153.4では、通信を遮断した`app-server`の`skills/list`で、ASCの入口がrepoスコープの有効なSkillとして認識されることを確認した。同じHostプロセスから別の未登録worktreeを照会すると、そこにはASC Skillが現れない。これはローカル一覧取得の実測であり、IDE・Claudeでの認識や、モデルがSkillを選んで開発を完走することの実証ではない。対象commitと条件は`RELEASE_READINESS.json`の`projectSkillHostDiscovery`に記録する。
 
 ## Mac・Windowsネイティブ対応の検証入口
 

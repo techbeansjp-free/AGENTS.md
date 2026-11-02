@@ -1,3 +1,5 @@
+import {registrations,assertAdditionalSkills,assertAdditionalEntries} from './helpers/distributed-skills.mjs';
+import {foundationHashes,assertFoundation,assertFoundationEntry} from './helpers/foundation-skill.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -5,6 +7,63 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
+
+test('package file declarations exactly match the runtime inventory',()=>{
+ const manifest=JSON.parse(fs.readFileSync('package.json')),inventory=JSON.parse(fs.readFileSync('src/runtime-files.json'));
+ assert.deepEqual([...manifest.files].sort(),[...new Set(inventory)].sort());
+ assert.equal(manifest.scripts.prepack,'node scripts/check-package-inventory.mjs');
+ for(const file of manifest.files){
+  assert(!/[?*\\]/.test(file)&&!file.endsWith('/'),file);
+  assert(fs.lstatSync(file).isFile(),file);
+ }
+});
+
+test('root and canonical package generation exclude unlisted files in runtime directories',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-package-inventory-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const source=path.join(root,'source');fs.mkdirSync(source);
+ const manifest=JSON.parse(fs.readFileSync('package.json'));
+ for(const name of [...manifest.files,'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
+ const unlisted=['skills/execution-recovery/notes.md','src/local-notes.mjs','bin/private-helper.mjs','v05/templates/specs/local-notes.md'];
+ for(const name of unlisted){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,'Synthetic unlisted package fixture\n');}
+ const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
+ for(const flags of [[],['--ignore-scripts']]){
+  const listing=JSON.parse(execFileSync(process.execPath,[npm,'pack','--dry-run','--json',...flags],{cwd:source,encoding:'utf8'}))[0];
+  assert.deepEqual(listing.files.map(file=>file.path).sort(),[...manifest.files].sort());
+  for(const name of unlisted)assert(!listing.files.some(file=>file.path===name),name);
+ }
+ const candidate=JSON.parse(execFileSync(process.execPath,[path.resolve('scripts/pack-candidate.mjs'),root],{cwd:source,encoding:'utf8'}));
+ const consumer=path.join(root,'consumer');fs.mkdirSync(consumer);
+ execFileSync(process.execPath,[npm,'install','--prefix',consumer,'--offline','--ignore-scripts','--no-audit','--no-fund',candidate.file],{stdio:'pipe'});
+ const installed=path.join(consumer,'node_modules/agent-skill-chain'),identity=JSON.parse(fs.readFileSync(path.join(installed,'release-identity.json')));
+ for(const name of unlisted){assert.equal(fs.existsSync(path.join(installed,name)),false,name);assert.equal(Object.hasOwn(identity.sourceFiles,name),false,name);}
+});
+
+test('guarded root and canonical packing reject npm implicit files before creating an artifact',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-package-implicit-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const source=path.join(root,'source'),destination=path.join(root,'output');fs.mkdirSync(source);fs.mkdirSync(destination);
+ const manifest=JSON.parse(fs.readFileSync('package.json'));
+ for(const name of [...manifest.files,'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
+ const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
+ const candidateScript=path.resolve('scripts/pack-candidate.mjs');
+ for(const name of ['README.private.md','COPYING.private','LICENSE.private']){
+  const target=path.join(source,name),bytes=Buffer.from('Synthetic unapproved root document\n');fs.writeFileSync(target,bytes);
+  const candidate=spawnSync(process.execPath,[candidateScript,destination],{cwd:source,encoding:'utf8'});
+  assert.equal(candidate.status,1);assert.match(candidate.stderr,/npm pack file inventory mismatch/);assert(candidate.stderr.includes(name));
+  const ordinary=spawnSync(process.execPath,[npm,'pack','--json','--pack-destination',destination],{cwd:source,encoding:'utf8'});
+  assert.notEqual(ordinary.status,0);assert.match(ordinary.stderr,/npm pack file inventory mismatch/);
+  assert.deepEqual(fs.readdirSync(destination),[]);assert.deepEqual(fs.readFileSync(target),bytes);
+  fs.unlinkSync(target);
+ }
+ // The same guarded source still packs normally after the unapproved inputs are removed.
+ const clean=JSON.parse(execFileSync(process.execPath,[npm,'pack','--json','--pack-destination',destination],{cwd:source,encoding:'utf8'}))[0];
+ assert.deepEqual(clean.files.map(file=>file.path).sort(),[...manifest.files].sort());
+ assert(fs.existsSync(path.join(destination,clean.filename)));
+ // Declarations cannot authorize additional files without changing runtime inventory.
+ fs.writeFileSync(path.join(source,'package.json'),JSON.stringify({...manifest,files:[...manifest.files,'scripts/check-package-inventory.mjs']}));
+ const mismatch=spawnSync(process.execPath,[candidateScript,destination,'--version=0.5.1-rc.0'],{cwd:source,encoding:'utf8'});
+ assert.equal(mismatch.status,1);assert.match(mismatch.stderr,/Package declarations file inventory mismatch/);
+ assert.equal(fs.existsSync(path.join(destination,'agent-skill-chain-0.5.1-rc.0.tgz')),false);
+});
 
 test('packed Node distribution runs without source checkout, Python or dependencies',t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-packed-'));
@@ -16,6 +75,8 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const install=path.join(root,'isolated 日本語 %');fs.mkdirSync(install);
  execFileSync(process.execPath,[npm,'install','--prefix',install,'--ignore-scripts','--no-audit','--no-fund','--offline',path.join(root,tarballs[0].filename)],{stdio:'pipe'});
  const packageRoot=path.join(install,'node_modules/agent-skill-chain');
+ assertFoundation(path.join(packageRoot,'skills/project-foundation'));
+ assertAdditionalSkills(path.join(packageRoot,'skills'),path.resolve('skills'));
  const cli=path.join(packageRoot,'bin/asc-v05.mjs');
  const help=execFileSync(process.execPath,[cli,'--help'],{encoding:'utf8'});
  assert(help.includes(path.join(packageRoot,'v05/USAGE.md')),'Help must display a decoded native filesystem path');
@@ -118,8 +179,13 @@ assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
  const checked=JSON.parse(execFileSync(process.execPath,[cli,'worktree-verify',work,workBase,nativeOwner],{encoding:'utf8'}));assert.equal(checked.passed,true);assert.equal(checked.deliveryAuthorized,false);
  const assetWork=path.join(root,'asset-work');git('worktree','add','-b','assets',assetWork);
  const assetPreview=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.equal(assetPreview.applied,false);assert(assetPreview.changes.length>50);
+ for(const name of Object.keys(foundationHashes))assert(assetPreview.changes.some(c=>c.path==='.agent-skill-chain/skills/project-foundation/'+name));
  const assetApply=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--apply'],{encoding:'utf8'}));assert.equal(assetApply.applied,true);
  assert.equal(fs.readFileSync(path.join(assetWork,'.agent-skill-chain/templates/specs/01_要求定義.md'),'utf8'),fs.readFileSync(path.join(templates,'01_要求定義.md'),'utf8'));
+ assertFoundation(path.join(assetWork,'.agent-skill-chain/skills/project-foundation'));
+ assertAdditionalSkills(path.join(assetWork,'.agent-skill-chain/skills'),path.join(packageRoot,'skills'));
+ for(const entry of registrations)assert.equal(fs.existsSync(path.join(assetWork,entry)),false);
+ assert.equal(fs.existsSync(path.join(assetWork,'.agents/skills/project-foundation/SKILL.md')),false);
  const projectSkill=fs.readFileSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8');assert(!projectSkill.includes(cli));assert(projectSkill.includes('../../bin/asc.mjs'));
  const sharedSkillRoot=path.join(assetWork,'.agent-skill-chain/skills/asc');
  for(const name of ['review.md','coordination.md','post-merge.md','controller.md']){
@@ -128,9 +194,22 @@ assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
   for(const match of content.matchAll(/\]\(([^)]+)\)/g))assert(fs.existsSync(path.resolve(path.dirname(file),match[1])),match[1]);
  }
  const registration=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--register-skill','--apply'],{encoding:'utf8'}));assert.equal(registration.applied,true);
+ assertFoundationEntry(assetWork);
+ assertAdditionalEntries(assetWork);
  const registeredEntry=path.join(assetWork,'.agents/skills/asc/SKILL.md');const registeredText=fs.readFileSync(registeredEntry,'utf8');
  const projectReference=/\]\(([^)]+)\)/.exec(registeredText)[1];assert.equal(fs.realpathSync(path.resolve(path.dirname(registeredEntry),projectReference)),fs.realpathSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md')));
- const assetAgain=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.deepEqual(assetAgain.changes,[]);assert.equal(assetAgain.recordChanged,false);assert.deepEqual(assetAgain.retained,['.agents/skills/asc/SKILL.md']);
+ const assetAgain=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.deepEqual(assetAgain.changes,[]);assert.equal(assetAgain.recordChanged,false);assert.deepEqual(assetAgain.retained,registrations);
+ const claudeRegistration=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--register-claude-skill','--apply'],{encoding:'utf8'}));assert.equal(claudeRegistration.applied,true);
+ const claudeEntries=registrations.map(name=>name.replace('.agents/','.claude/'));
+ for(const relative of claudeEntries){
+  const file=path.join(assetWork,relative),text=fs.readFileSync(file,'utf8');
+  const canonical=path.resolve(path.dirname(file),text.match(/\]\(([^)]+)\)/)[1]);
+  assert.equal(canonical,path.join(assetWork,'.agent-skill-chain/skills',relative.split('/')[2],'SKILL.md'));
+  assert(fs.existsSync(canonical));assert.match(text,/を読み/);
+  if(!relative.endsWith('/asc/SKILL.md'))assert.match(text,/必要なreferences/);
+ }
+ const bothAgain=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--register-skill','--register-claude-skill','--apply'],{encoding:'utf8'}));assert.deepEqual(bothAgain.changes,[]);assert.equal(bothAgain.recordChanged,false);
+ const retainedBoth=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.equal(retainedBoth.recordChanged,false);assert.deepEqual(retainedBoth.retained,[...registrations,...claudeEntries].sort());
  const linked=spawnSync(process.execPath,[cli,'run-goal','--snapshot',owner],{encoding:'utf8'});
  assert.equal(linked.status,1);assert.doesNotMatch(linked.stderr,/dedicated Git worktree/);
  const reviewRefused=spawnSync(process.execPath,[cli,'review','--snapshot',owner],{encoding:'utf8'});assert.equal(reviewRefused.status,1);assert.match(reviewRefused.stderr,/Host-pinned Codex|Execution isolation unsupported/);
@@ -156,7 +235,7 @@ for(const version of [null,'0.5.0','0.5.1-rc.0'])test(`canonical ${version??'sou
  execFileSync(process.execPath,[npm,'install','--prefix',consumer,'--offline','--ignore-scripts','--no-audit','--no-fund',output.file],{stdio:'pipe'});
  const installed=path.join(consumer,'node_modules/agent-skill-chain'),pkg=JSON.parse(fs.readFileSync(path.join(installed,'package.json')));
  const skillRoot=path.join(installed,'skills/asc'),skill=fs.readFileSync(path.join(skillRoot,'SKILL.md'),'utf8');
- for(const match of skill.matchAll(/\]\(([^)]+)\)/g))assert(fs.existsSync(path.resolve(skillRoot,match[1])),match[1]);
+ for(const match of skill.matchAll(/\]\(([^)]+)\)/g))assert(fs.existsSync(path.resolve(skillRoot,match[1].split('#')[0])),match[1]);
  assert.equal(path.resolve(skillRoot,'../../bin/asc-v05.mjs'),path.join(installed,'bin/asc-v05.mjs'));
  assert.equal(pkg.version,version??JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url))).version);assert.equal(pkg.private,true);assert.deepEqual(Object.keys(pkg.bin),['agent-skill-chain','asc-v05']);
  for(const [name,entry] of Object.entries(pkg.bin)){
@@ -196,6 +275,7 @@ test('repository root package installs only the v0.5 runtime through the canonic
  // Public development commands must not silently execute the retired Step runtime.
  for(const [name,command] of Object.entries(pkg.scripts)){
   if(name.endsWith(':legacy'))continue;
+  if(name==='prepack'){assert.equal(command,'node scripts/check-package-inventory.mjs');continue;}
   assert.doesNotMatch(command,/scripts\/|cucumber|compile|workflow:|audit:/,name);
  }
  for(const name of ['workflow:check','test:unit','test:integration','test:e2e','quality:legacy'])assert.equal(Object.hasOwn(pkg.scripts,name),false,name);
