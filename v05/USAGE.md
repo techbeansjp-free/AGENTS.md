@@ -254,6 +254,8 @@ stderrのエラーと終了コード1は維持する。`status: blocked`は成�
 呼出し側は終了コードとstatusの両方を確認し、失敗した検証・Agent起動・観測usageを保存する。
 入力検査などController開始前の失敗では構造化診断がない場合もあり、欠測をゼロと扱わない。
 
+Linux snapshot Controllerの検証コマンド出力には、通常経路はstdout/stderr合計、`browser-cgroup-v1`は各streamに1MiBのバッファ保護上限がある。超過時は`ASC_VERIFICATION_OUTPUT_LIMIT`で停止し、検証成功や修復対象のテスト失敗として扱わない。出力量を抑えて再実行する。これは実行時間などのowner指定予算とは別であり、現在のHostで実行する`worktree-verify`のコマンド出力にはこの上限を設けていない。
+
 LinuxのProvider subprocessと隔離preflightの寿命管理は、上記「Agentの寿命管理」の呼出しごとのsystemd user service・cgroupとController専有pipeを使用する。Toolのfilesystem/network隔離は別のCodex profileが担当する。途中終了時のsnapshot・ログは残り得る。次の実行はGitの実状態から検証・独立レビューをやり直し、未完成ログを承認として使わない。
 
 OwnerはContractの`verificationLimits`で検証の有限予算を指定できる。`timeoutMilliseconds`・`cpuSeconds`・`fileBytes` は未指定なら制限しない。指定する各値は正の安全整数で、時間はNodeタイマーの表現限界2147483647以下。未知keyや明示nullは拒否する（無制限はkeyを省略する）。Agentの出力・source容量・stdout上限・cgroupのpids・通信権限は変更しない。CPUはprocess単位、fileBytesは生成する単一fileの上限で、合計disk消費を保証するものではない。
@@ -473,6 +475,19 @@ Git未管理の`start`は`gitManaged:false`・`head:null`・`execution:current-h
 既存の絶対パス型資産は、導入先で更新CLIの `project-assets <directory> --apply` を一度実行すれば、未編集資産だけが移行される。利用者が編集した資産は従来どおり競合として保持し、上書きしない。移行後は同梱本体を含む共有資産が揃っていれば、他環境でASCの再導入・共有資産の再生成は不要。Node等の実行環境は別途必要。
 
 v0.4で開始した作業中worktreeは、明示的に移行するまで既存のv0.4入口を使い続けられる。v0.5導入のためにglobal PATHや旧インストールを上書きしない。これはv0.5が失敗時にv0.4へ自動fallbackするという意味ではない。
+
+### 利用側のCodeRabbitレビューから配布物を除外する
+
+同梱配布物をGitで共有し、利用側ではその内容を直接修正しない場合は、repoルートの既存`.coderabbit.yaml`の`reviews.path_filters`へ次の除外を追加できる。設定全体を置き換えず、既存のレビュー条件を保持する。
+
+```yaml
+reviews:
+  path_filters:
+    - "!.agent-skill-chain/managed-runtime/**"
+    - "!.agent-skill-chain/v05/**"
+```
+
+これは標準配置の本体と配布資料だけを対象にした任意設定である。別の配置を使う場合は実際のpathへ合わせ、利用者所有の規約・アプリ・テストまで除外しない。登録Skillなども除外する場合は、その配置と所有者を確認して個別に指定する。配布元での検証・レビュー、更新時の版と導入元の確認は引き続き行う。ASCは利用側のCodeRabbit設定を自動変更しない。構文と適用条件は[CodeRabbit公式設定リファレンス](https://docs.coderabbit.ai/reference/configuration#reviews-path-filters)を参照する。
 
 ### Gitを使わない作業・複数repo
 
