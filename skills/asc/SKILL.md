@@ -17,7 +17,7 @@ Goalと許可範囲に従い、Claude CodeではClaude Code、CodexではCodex�
 
 ## 複数IssueとContextの引継ぎ
 
-複数Issue、並列worktree、Context交代・中断再開、PR後の修復では[調整と引継ぎ](references/coordination.md)を読む。担当範囲・依存関係・終了状態を確認し、未commit成果を保持する。親会話全文や別Issueのログを複製しない。
+複数Issue、並列worktree、Context交代・中断再開、PR後の修復、利用者への進捗報告・判断質問では[調整と引継ぎ](references/coordination.md)を読む。担当範囲・依存関係・終了状態を確認し、未commit成果を保持する。親会話全文や別Issueのログを複製しない。
 
 進行役は元要求・契約・範囲・依存から割り当て、実装と既存テストの詳細調査は担当へ任せる。割当てが明確なら依頼文のためだけに全文を先読みせず、所在と未解決の問いを渡す。分担・共有設計・指摘・競合・統合失敗の判断に必要な箇所は進行役も確認し、不明な影響は読取りを広げる。自分が実装する変更と独立Reviewerにはこの分担を適用しない。
 
