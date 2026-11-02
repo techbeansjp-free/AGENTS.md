@@ -16,7 +16,7 @@ snapshot ControllerのHostツール管理や任意の外部prefixを選ぶ場合
 
 `agent-skill-chain`と`asc-v05`は同じ新版CLI。実行条件は[実行手順](USAGE.md)を参照する。通常開発は専用worktree、移行候補は独立cloneを明示的に使用できる。owner入力・実行ツール・依存物・認証情報は候補の外へ置く。
 
-ソースcheckoutでは`node scripts/pack-candidate.mjs /absolute/existing/output --version=0.5.0`で未公開候補を作成できる。インストール済みtarballには開発スクリプトを含めない。番号指定は公開承認ではなく、候補はprivateのまま。identityは内容hashであり、署名や独立した信頼の証明ではない。
+ソースcheckoutでは`node scripts/pack-candidate.mjs /absolute/existing/output --version=0.5.0`で未公開候補を作成できる。インストール済みtarballには開発スクリプトを含めない。配布対象は`src/runtime-files.json`と`package.json`の`files`を一致させ、候補生成時にnpmの実収録一覧も照合する。npmが暗黙に収録するREADME・COPYING・LICENSE系を含め、未列挙ファイルがあればコピー前に停止する。通常のソースcheckoutでの`npm pack`にもprepack検査があるが、`--ignore-scripts`等で無効にした直接packはこの保証の対象外。共有する候補は上記の生成入口を使い、ignore設定だけを情報分離の根拠にしない。番号指定は公開承認ではなく、候補はprivateのまま。identityは内容hashであり、署名や独立した信頼の証明ではない。
 
 以下のコマンド例は、v0.5を導入済みのworktreeルートから実行する。検査対象は引数で明示する。
 

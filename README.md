@@ -1,5 +1,7 @@
 # agent-skill-chain v0.5
 
+配布Skillには`asc`と、開発基盤・規約を整備・点検する[project-foundation](skills/project-foundation/SKILL.md)があります。`project-foundation`はASCの工程から独立して使え、Codex用は`project-assets --register-skill --apply`、Claude Code用は`project-assets --register-claude-skill --apply`で全配布SkillのHost入口を配置できます。検証高速化・移行・実操作受入・監査・技術調査・実行復旧・規約検査・サブエージェントのモデル選択・作業調整・レビュー是正のSkillも選べます（[目的別一覧](skills/README.md)）。
+
 ASCは、Goal・要求・リスク・プロジェクト契約・検証Evidenceから必要な開発作業を選ぶAI開発ハーネスです。固定Step 0〜11を実行する旧runtimeは、新版の標準CLIと配布物には含めません。
 
 v0.5系を正式版として提供します。[GitHub Release](https://github.com/techbeansjp-free/AGENTS.md/releases)の固定tarballを明示指定して導入してください。v0.4とは非互換のため、既存プロジェクトへの適用前に移行手順を確認してください。
@@ -37,10 +39,10 @@ snapshot Controllerは明示選択の別経路です。利用する場合だけ 
 │   ├── managed-runtime/     実行可能なASC本体（Git共有可能）
 │   ├── v05/                 利用・移行などの資料
 │   ├── project/             利用者固有ルール（保持）
-│   ├── skills/asc/          v0.5の実行案内
+│   ├── skills/              ASCと目的別Skill・一覧
 │   ├── templates/specs/     仕様書の雛形
 │   └── distribution.json   配布資産の更新判定用
-├── .agents/skills/asc/      Host向け入口（明示登録時のみ）
+├── .agents/skills/<name>/   全配布SkillのHost向け入口（明示登録時のみ）
 ├── docs/specs/              作成済み仕様書（既存配置を優先）
 ├── src/                     利用者のアプリ
 └── .worktrees/              Issue別作業先
@@ -74,4 +76,4 @@ v0.4系と同様、mainへのマージでRelease CIが起動し、既存の正�
 
 手動の`workflow_dispatch`では`version`と`dry_run`（既定true）を指定できます。Alpha・Beta・RCはプレリリース扱いでLatestを変更しません。公開失敗時は同じ実行を再実行でき、途中のDraftと一致する添付物を再利用します。公開先はGitHub Releasesで、npm registryへは公開しません。
 
-候補だけをローカル生成する場合は`node scripts/pack-candidate.mjs /absolute/existing/output --version=0.5.N`を使います。生成自体は公開許可ではありません。配布物の出自記録とruntimeの権限表示は、GitHub上の公開状態とは別です。
+候補だけをローカル生成する場合は`node scripts/pack-candidate.mjs /absolute/existing/output --version=0.5.N`を使います。この入口は配布inventory・manifest・npm収録対象の一致を検査し、未列挙ファイルがあれば候補を生成せず停止します。生成自体は公開許可ではありません。配布物の出自記録とruntimeの権限表示は、GitHub上の公開状態とは別です。
