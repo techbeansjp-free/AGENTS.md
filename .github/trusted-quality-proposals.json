@@ -461,6 +461,29 @@
           "afterSha256": "4523540f1504cd17100c4835e85b7eefd49911580f8efff0599a8f283be6b9e3"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-V05-SKILL-DISTRIBUTION-001",
+      "status": "staged",
+      "fromVersion": 17,
+      "toVersion": 18,
+      "owner": "repository maintainer (approval pending)",
+      "rationale": "Issue #1620 / PR #1621の目的別Skill配布に伴うpackage.jsonの配布対象明示とprepack検査追加を完全一致hashで事前登録する。既存の品質検査・権限境界は変更しない。",
+      "rollback": "適用前はこの提案を有効化しない。適用後に戻す場合は次世代の事前登録と検証を行い、検査の無効化や同時自己承認で戻さない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "package.json",
+          "beforeSha256": "046fed1a311252f070e1bd02ffbd25803335e50e90c2b6eccbf72b7fcaad6ba7",
+          "afterSha256": "6b3d026bae6264ec183254119c84cef7592d34d79574168ce6bd46ba21d48d50"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "4523540f1504cd17100c4835e85b7eefd49911580f8efff0599a8f283be6b9e3",
+          "afterSha256": "4ec9599fc203d176a301536c2e091a19bc852759b255bd6818810a42c5fed14a"
+        }
+      ]
     }
   ]
 }
