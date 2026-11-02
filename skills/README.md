@@ -8,13 +8,13 @@
 | 新規基盤を整える、既存基盤の考慮漏れを点検する | [project-foundation](project-foundation/SKILL.md) | 先行決定・機械検査・再現性。通常の局所修正では使わない |
 | CIが重い、重複検査・並列化・結果再利用を見直す | [verification-optimization](verification-optimization/SKILL.md) | 保証を維持した同等性確認と計測。単なるテスト実行とは分ける |
 | 言語・DB・基盤を段階移行・置換する、併存や移行完了を点検する | [migration-assurance](migration-assurance/SKILL.md) | 受入・データ・構築・運用経路の継承。製品本体だけで完了にしない |
-| 利用者が画面から一連の操作を完了できるか確かめる | [user-journey-acceptance](user-journey-acceptance/SKILL.md) | 実操作・実接続・保存・失敗回復。見た目の確認だけとは分ける |
+| 利用者が画面から一連の操作を完了できるか確かめる、デモを見せる | [user-journey-acceptance](user-journey-acceptance/SKILL.md) | 実操作・実接続・保存・失敗回復。見た目の確認だけとは分ける |
 | 脆弱性監査・SBOM・監査Summaryを整備または点検する | [security-evidence](security-evidence/SKILL.md) | 対象実体と原始結果・評価の対応。通常変更に一律scanを要求しない |
 | 技術を比較・実証して採用判断と実装計画へつなぐ | [research-to-implementation](research-to-implementation/SKILL.md) | 根拠・反証・受入・未決の接続。単なる事実質問とは分ける |
 | 実行が止まった、待機理由や所有者が不明で再開したい | [execution-recovery](execution-recovery/SKILL.md) | 所有者の同定・原因診断・安全な復旧。通常の長時間処理とは分ける |
 | 規約を検査に結び付ける、検査の抜け道を塞ぐ | [contract-enforcement](contract-enforcement/SKILL.md) | 規約と強制点、許可例・反例、local/CIの一致。新規思想を強制しない |
 | サブエージェントのモデル・推論設定・費用を判断する | [subagent-model-selection](subagent-model-selection/SKILL.md) | 利用可能性と許可を分け、仕事に必要な能力・切替え条件を選ぶ。委譲や別Host利用を強制しない |
-| 担当・依存・書込み先を調整する、Contextを引き継ぐ | [work-coordination](work-coordination/SKILL.md) | 作業割当・現物照合・未完了と統合検証の引継ぎ。Agent起動を必須にしない |
+| 担当・依存・書込み先を調整する、引継ぎ文や確認事項を整理する | [work-coordination](work-coordination/SKILL.md) | 作業割当・現物照合・未完了と統合検証の引継ぎ。Agent起動を必須にしない |
 | 変更をレビューする、指摘の是正・再確認を進める | [review-and-remediation](review-and-remediation/SKILL.md) | 対象と指摘と検証を対応付ける。レビューのみでは編集しない |
 
 `asc`以外はASC CLI・特定Host・固定Stepに依存しない。Claude CodeでもCodexでも、対象プロジェクトの権限・通常の実行環境・レビュー手順に従う。`agents/openai.yaml`は任意のCodex用表示情報であり、他Hostの前提ではない。
