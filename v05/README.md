@@ -8,12 +8,11 @@ ASCは、目的と受入条件、許可された変更範囲、既存規約を�
 
 標準worktree入口は0.5.0-alpha.3からの機能です。既公開alpha.2以前には含まれません。候補のversion更新だけでGitHub Releaseが公開されたことにはなりません。
 
-Node.js 20以上を使用します。標準導入は[利用手順](USAGE.md#標準の導入先asc_cliは不要)に従い、固定tarballから`project-assets`で本体を`managed-runtime/`へ配置します。以下は任意の外部prefixへ導入する例です。npmのlifecycle scriptは実行しません。`<版>`を選んだReleaseの版番号に置き換え、ダウンロードしたtarballの実際のパスを指定してください。
+Node.js 20以上を使用します。[利用手順](USAGE.md#標準の導入先asc_cliは不要)に従い、取得・照合済みの固定tarballを操作ごとの新規専用一時prefixへ導入し、そのCLIの`project-assets`で本体を`managed-runtime/`へ配置します。既存の共有prefixや`.agent-skill-chain/`へnpm install・uninstall・pruneを実行しません。npm cacheを含む専用prefixの作り方・後始末、任意の外部ツール配置も同じ利用手順を参照してください。配置後の確認入口は次のとおりです。
 
 ```sh
-npm install --prefix /absolute/asc-tools --offline --ignore-scripts "/absolute/agent-skill-chain-<版>.tgz"
-/absolute/asc-tools/node_modules/.bin/agent-skill-chain --version
-/absolute/asc-tools/node_modules/.bin/agent-skill-chain capabilities
+node .agent-skill-chain/bin/asc.mjs --version
+node .agent-skill-chain/bin/asc.mjs capabilities
 ```
 
 `--version`は現在の作業projectではなく、実行した配布物自身のversionを表示します。version番号は正式公開やリリース受入の証明ではありません。

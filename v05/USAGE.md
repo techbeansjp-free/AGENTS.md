@@ -4,29 +4,43 @@
 
 ## 標準の導入先（ASC_CLIは不要）
 
-GitHub Releaseから使用する版のtarballとSHA256SUMSを取得・照合し、ASCを置くディレクトリで次を実行する。`<tarball>`には取得済みファイルを指定する。npm registryやnpxからの取得は前提にしない。
+GitHub Releaseから使用する版のtarballとSHA256SUMSを取得・照合し、ASCを置くディレクトリで次を実行する。以下はLinux/macOSのPOSIX shell用。`asc_tarball`を取得済みtarballの絶対パスへ置き換える。npm registryやnpxからの取得は前提にしない。
+
+npmの導入先は、操作ごとに新しく作る専用の一時ディレクトリにする。共有prefixへのnpm installは、他の未保存packageをpruneする場合がある。既存の`.agent-skill-chain/`や利用者のツール用prefixへnpm install・uninstall・pruneを実行しない。
 
 ```sh
-npm install --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false <tarball>
-node .agent-skill-chain/node_modules/agent-skill-chain/bin/asc-v05.mjs project-assets . --register-skill --apply
-node .agent-skill-chain/bin/asc.mjs start .
+(
+  set -eu
+  asc_tarball='/absolute/path/to/agent-skill-chain.tgz'
+  test -f "$asc_tarball"
+  asc_bootstrap_dir=$(mktemp -d /tmp/asc-bootstrap.XXXXXXXXXX)
+  printf 'ASC bootstrap: %s\n' "$asc_bootstrap_dir"
+  npm install --prefix "$asc_bootstrap_dir" --cache "$asc_bootstrap_dir/npm-cache" --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false "$asc_tarball"
+  node "$asc_bootstrap_dir/node_modules/agent-skill-chain/bin/asc-v05.mjs" project-assets "$PWD" --register-skill --apply
+  node .agent-skill-chain/bin/asc.mjs start "$PWD"
+  rm -rf "$asc_bootstrap_dir"
+)
 ```
 
-上の登録例はCodex用。Claude Codeでは`--register-skill`を`--register-claude-skill`へ替える。両Hostで共有する場合は両方指定できる。
+この一時ディレクトリは導入CLIとnpm cache・log用のもの。同梱本体は通常どおりプロジェクトの`.agent-skill-chain/managed-runtime/`へ配置される。末尾の削除はこの操作で新規作成した専用ディレクトリだけに限定する。途中で失敗した場合は`set -e`で後続処理と削除を止め、表示された一時ディレクトリを保持する。別の既存prefixへ読み替えない。変数はsubshell内だけで使い、Hostの環境変数や利用者のpackage.json・lockfileを変更しない。
+
+上の登録例はCodex用。Claude Codeでは`--register-skill`を`--register-claude-skill`へ替える。両Hostで共有する場合は両方指定できる。選択したHostは配布記録に保存され、以後の通常更新でも入口の追加・説明更新・廃止に追従する。
 
 Git管理済みの対象では専用worktreeで実施する。Git未管理の対象や複数repoの親にも配置できる。`project-assets`は**実行可能なASC本体一式**を`.agent-skill-chain/managed-runtime/`へ配置する。`bin/`、`src/`、Skill・実行に必要な資料を含み、利用者側のビルドやASC用依存installは不要（Nodeは必要）。`.mjs`はそのまま実行する配布形式であり、利用者アプリのビルド・テスト用依存とは別である。
 
 標準入口は同梱本体を優先して`runtime.json`の版と照合する。`ASC_CLI`は不要。既に設定されている場合はその明示指定が優先されるので、標準配置へ切り替えるときは現在のHostで解除する。ホームディレクトリへ設定を追加する必要はない。
 
-Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・資料・`bin/asc.mjs`・`runtime.json`・`distribution.json`をまとめてcommitする。これによりclone・新規worktreeでも同じ版が動く。初回配置に使った`.agent-skill-chain/node_modules/`だけはignoreでき、配置後は不要。上記npmオプションは利用者のpackage.jsonやlockfileを更新しない。
+Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・資料・`bin/asc.mjs`・`runtime.json`・`distribution.json`をまとめてcommitする。これによりclone・新規worktreeでも同じ版が動く。導入用の一時prefixは共有対象に含めず、配置と起動確認後にその専用ディレクトリだけを削除できる。以前の手順で`.agent-skill-chain/node_modules/`を作成済みでも、他のpackageや利用者ファイルが同居している可能性があるため、一括削除やnpm uninstall・pruneは行わない。所有が不明ならそのまま保持する。
 
-更新・版指定・切戻しは、目的のtarballを導入したCLIから`project-assets`の差分を確認し、`--apply`する。現在のworktreeの同梱本体と版指定を一緒に更新するため、他の作業中worktreeは旧版のまま動く。利用者の編集と競合したら一括停止し、無断上書きしない。配布資産の変更をcommitして共有し、他のworktreeでは必要な時に通常のGit操作で取り込む。実行中プロセスのhot updateは行わない。
+更新・版指定・切戻しも、目的のtarballを**新しい専用一時prefix**へ導入したCLIから`project-assets`の差分を確認し、`--apply`する。導入用prefixは再利用しない。現在のworktreeの同梱本体と版指定を一緒に更新するため、他の作業中worktreeは旧版のまま動く。利用者の編集と競合したら一括停止し、無断上書きしない。配布資産の変更をcommitして共有し、他のworktreeでは必要な時に通常のGit操作で取り込む。実行中プロセスのhot updateは行わない。
 
-更新前に、配布資産と`distribution.json`の正常な状態をcommit（非Gitなら別の場所へバックアップ）する。`project-assets --apply`は複数ファイルを書き換えるため、強制終了や書込み障害で部分更新が残る場合がある。失敗後は同梱CLIが起動できるとは限らない。更新前に保存したmanifestに列挙された資産と`distribution.json`だけを、現在の編集との差分を確認して復元し、取得済みtarballを導入したCLIから再試行する。壊れた更新後manifestを復元対象の正本にせず、`project/`・利用者成果物・無関係な未commit変更を一括restoreしない。Gitでは更新前commitから対象pathを指定して復元し、非Gitでは対応する保存済みファイルだけを戻す。
+更新前に、配布資産と`distribution.json`の正常な状態をcommit（非Gitなら別の場所へバックアップ）する。`project-assets --apply`は複数ファイルを書き換える。検出できた適用・検証エラーでは、今回の変更内容と一致するファイルだけを更新前へ復元する。強制終了や復元中の書込み障害、同じ利用先での並行編集では部分更新が残る場合がある。失敗後は同梱CLIが起動できるとは限らない。更新前に保存したmanifestに列挙された資産と`distribution.json`だけを、現在の編集との差分を確認して復元し、取得済みtarballを導入したCLIから再試行する。壊れた更新後manifestを復元対象の正本にせず、`project/`・利用者成果物・無関係な未commit変更を一括restoreしない。Gitでは更新前commitから対象pathを指定して復元し、非Gitでは対応する保存済みファイルだけを戻す。
 
 旧配布方式（v0.5.3以前）への切戻しは例外。旧CLIは同梱本体を残したまま配布記録から外すため、その後の新版導入が「記録外の既存ファイル」として停止し得る。旧版へ戻す前に配布資産をcommit（非Gitならバックアップ）する。再更新時は、その既知のcommitから**配布manifestに列挙された資産とdistribution.jsonだけ**を戻してから新版を適用する。現在の編集と差分を確認し、固有設定・利用者成果物を一括restoreしない。保存済みの配布状態がなければ既存本体を自動採用・削除せず個別に確認する。同梱方式同士の更新・切戻しは通常手順で行える。
 
-初回導入用のnpmパッケージは `npm uninstall --prefix .agent-skill-chain --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false agent-skill-chain` で削除できる。同梱本体は残り、通常起動は継続する。ASCを取り外す場合は配布manifestと実差分を確認して管理対象資産・Host登録だけを除去し、`project/`や利用者成果物を削除しない。`.agent-skill-chain/`全体を削除しない。
+導入CLI用の一時prefixの後始末と、プロジェクトからのASC撤去は別の操作である。新規作成した一時prefixだけを削除しても同梱本体は残り、通常起動は継続する。共有prefixへのnpm uninstallは後始末の手段にしない。既存の旧bootstrap資産は、所有と他packageへの影響を確認できなければ保持する。
+
+ASC全体の撤去は[配布資産を撤去する](#配布資産を撤去する)の`uninstall`を使う。npm uninstallでは管理資産やHost入口は撤去されない。
 
 任意の外部prefixを使う場合だけ`ASC_CLI`で明示する。外部prefixを上書きするとそれを参照する別worktreeへ影響するため、版別prefixを使う。旧配置互換のため、同梱package.jsonが見つからない場合はnode_modulesを探索する。snapshot ControllerのHost実行ツールは候補外で管理する別の信頼境界を維持する。
 
@@ -225,7 +239,7 @@ Source observation has no fixed repository byte/file-count quota. Git contents a
 
 ## 評価配布物の更新・差し戻し
 
-標準経路の導入・更新は冒頭の`.agent-skill-chain/`配置を使う。以下はsnapshot Controller用の外部ツール管理または任意の外部prefixを選ぶ場合の手順である。信頼するhost管理のprefixをcandidate worktree外に用意し、固定したlocal tarballをnpmで導入する。例: `npm install --prefix <host-prefix> --offline --ignore-scripts --no-audit --no-fund --save-exact <tarball>`。入口は`<host-prefix>/node_modules/.bin/asc-v05`。Nodeはhostが用意する。更新も同じコマンドで新tarballを指定し、差し戻しでは保持した旧tarballを指定する。package.jsonとlockfileはnpmが更新するため、旧tarballとそのhashを保持する。全世界へのglobal installやcandidate側からの自己更新は行わない。
+標準経路は冒頭の専用一時prefixから`project-assets`を実行し、プロジェクト内の同梱本体を更新する。snapshot ControllerのHostツール管理や任意の外部prefixを選ぶ場合も、候補worktree外に**ASC専用の新規directory**を版ごとに用意し、固定したlocal tarballを導入する。npmオプションは冒頭と同じものを使い、既存の共有prefixへinstall・uninstall・pruneしない。入口は`<asc-only-prefix>/node_modules/.bin/asc-v05`。NodeはHostが用意する。更新は新しい専用prefixを作り、差し戻しでは保持した旧tarballを別の新規専用prefixへ導入して明示的な参照先を切り替える。取得済みtarballとそのhashを保持する。全世界へのglobal installやcandidate側からの自己更新は行わない。
 
 `NODE_PACKAGE_UPGRADE_EVIDENCE.json`ではLinuxの同一prefixで2つのprivate alpha snapshotを往復し、配布37fileの一覧とbytes、npmのCLI入口、利用者file保持を確認した。公開registry、他OS、v0.4のpolicy/Skill/CI変換、実行中プロセスのhot upgradeは対象外。既存プロセス終了後に切り替え、新しい実行では現在のContractとEvidenceを再確認する。これによって旧版のレビューや承認が新しい変更に引き継がれるわけではない。
 
@@ -307,24 +321,24 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 詳細雛形はAPI・データ・セキュリティ・運用などの記入項目が必要な場合だけ選ぶ。選んだ雛形を利用者の仕様書としてコピーした後は、その文書は利用者の成果物であり、ASCのパッケージ更新で上書き・再生成しない。雛形の更新と、作成済み仕様書の更新は別の作業である。
 
-同一prefixでのnpm更新は配布パッケージの交換であり、利用者側の固有ルール・Skill登録・旧Hook・CI設定を自動移行する機能ではない。既存の`.agent-skill-chain/`を丸ごと新しい配布物で置換してはならない。設定移行には[移行手順](MIGRATION_PLAN.md)を使用する。利用者側の案内・Skill・雛形は、以下の`project-assets`で配置・更新する。Codex用`.agents/skills/`とClaude Code用`.claude/skills/`の入口はHost別の明示オプションで配置できる。既存Hook・CI・権限設定の変換はこの操作に含まれない。
+専用prefixへのnpm導入は配布パッケージの準備であり、利用者側の固有ルール・Skill登録・旧Hook・CI設定を自動移行する機能ではない。既存の`.agent-skill-chain/`を丸ごと新しい配布物で置換してはならない。設定移行には[移行手順](MIGRATION_PLAN.md)を使用する。利用者側の案内・Skill・雛形は、以下の`project-assets`で配置・更新する。Codex用`.agents/skills/`とClaude Code用`.claude/skills/`の入口はHost別の明示オプションで配置できる。既存Hook・CI・権限設定の変換はこの操作に含まれない。
 
 
 ### プロジェクト内の配布資産を導入・更新する
 
-インストール済みの固定CLIを使い、対象ディレクトリに対して実施する。Git管理済みrepoなら専用worktreeを指定する。Git未管理のフォルダーならそのフォルダーを直接指定でき、Git初期化やworktree作成は不要。
+新規のASC専用prefixへ導入した対象版のCLIを使い、対象ディレクトリに対して実施する。Git管理済みrepoなら専用worktreeを指定する。Git未管理のフォルダーならそのフォルダーを直接指定でき、Git初期化やworktree作成は不要。
 
 ```text
-<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory>
-<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --apply
+<asc-only-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory>
+<asc-only-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --apply
 ```
 
-最初のコマンドは読取りのみで、作成・更新予定と競合をJSON表示する。`--apply`を指定すると、現在の配布パッケージから次の資産を配置する。
+最初のコマンドは読取りのみで、作成・更新・管理済みHost入口の削除予定と競合をJSON表示する。`registeredHosts`が継続更新するHostを示し、`changes`の`kind: "host-entry"`と`host`で入口を本体資産（`kind: "asset"`）から区別する。廃止入口は`action: "delete"`、`afterSha256: null`となる。`--apply`を指定すると、現在の配布パッケージから次の資産を配置する。
 
 ```text
 .agent-skill-chain/
 ├── 00_利用案内.md
-├── distribution.json      配布済み内容のhash（Git利用時は共有資産とともに管理）
+├── distribution.json      配布時hash・登録Host・管理入口（Git利用時は共有管理）
 ├── skills/                 目的別一覧と全配布Skill・参照資料
 ├── bin/asc.mjs             ローカル実行入口
 ├── runtime.json            使用バージョン
@@ -333,20 +347,58 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 └── templates/specs/       基本雛形と任意の詳細雛形
 ```
 
-前回配布時の内容から変わっていない資産だけを更新する。既存の異なるファイル、利用者が編集・削除した配布資産があれば、競合を表示して一切適用しない（終了コード2）。強制上書きオプションはない。競合は利用者の編集内容を確認して解決し、再度差分を確認する。旧v0.4の同名ファイルも自動的にASC所有とみなさない。
+前回配布時の内容から変わっていない資産だけを更新する。記録にない既存ファイルは内容が配布版と同一でも採用しない。利用者が編集・削除した配布資産も、編集内容が次版と同一でも、競合を表示して一切適用しない（終了コード2）。強制上書きオプションはない。競合は利用者の編集内容を確認して解決し、再度差分を確認する。旧v0.4の同名ファイルも自動的にASC所有とみなさない。
 
-`project/`、利用者作成の仕様書、カスタム雛形、アプリコード、他worktree、Git indexは変更しない。新しい配布版からなくなった資産や、今回のオプションで更新対象に選ばなかった資産も自動削除せず`retained`に表示する。不要なら実ファイルの差分を確認して別途削除する。適用はcommit・pushを行わない。Git管理下ではGit差分でレビューし、必要ならその変更だけを戻せる。非Gitでは実ファイルの変更内容を確認し、復元が必要な場合は利用者が保持したバックアップを使用する。
+`project/`、利用者作成の仕様書、カスタム雛形、アプリコード、他worktree、Git indexは変更しない。新しい配布版からなくなった本体・本文・資料は自動削除せず`retained`に表示し、元の配布時hashを保持する。登録Hostの管理入口は例外で、配布からなくなり、配布時hashから未変更の場合だけ自動削除する。同居する利用者ファイルやディレクトリを再帰削除しない。入口の削除で空になったディレクトリはGitの適用で取り除かれる場合がある。`retained`の資産が不要なら実ファイルの差分を確認して別途削除する。適用はcommit・pushを行わない。Git管理下ではGit差分でレビューし、必要ならその変更だけを戻せる。非Gitでは実ファイルの変更内容を確認し、復元が必要な場合は利用者が保持したバックアップを使用する。
 
-通常の更新ではHostのSkill入口・AGENTS.md・Hook・権限設定は変更しない。Skillは相対参照とruntime.jsonの版を共有する。同梱本体も共有すれば別Host・clone・worktreeでのASC再導入やASC_CLI設定は不要。外部prefixを明示選択する場合だけ、版別prefixとASC_CLIを使用する。共有資産の再生成は不要。実行中のAgentと並行して設定更新しない。中断・I/Oエラー時はworktreeを確認し、再度previewする。途中状態を成功と扱わず、競合がある場合は自動復旧やresetを行わない。正常な別worktreeの変更だけで更新を拒否することはない。
+通常の更新でも配布記録に登録したHostのSkill入口を同期する。未登録Host・AGENTS.md・Hook・権限設定は変更しない。Skillは相対参照とruntime.jsonの版を共有する。同梱本体も共有すれば別Host・clone・worktreeでのASC再導入やASC_CLI設定は不要。外部prefixを明示選択する場合だけ、版別prefixとASC_CLIを使用する。共有資産の再生成は不要。実行中のAgentや別の更新処理と同じ利用先で並行編集しない。中断・I/Oエラー時はworktreeを確認する。復元未完了のエラーでは更新前のバックアップから対象資産と記録を復元してから再度previewし、途中状態を成功と扱わない。競合を自動解消するresetは行わない。正常な別worktreeの変更だけで更新を拒否することはない。
 
 
-配布資産も前の候補へ戻す場合は、保持した旧tarballを同じprefixへ再インストールしてから、そのCLIで`project-assets <project-directory>`の差分を確認し、`--apply`する。利用者が編集した資産は差し戻し時も競合として停止する。旧版にない新規資産は自動削除しない。必要なら変更を確認して別途撤去する。CLIの再インストールだけでプロジェクト内の資産が戻ったとは扱わない。
+配布資産も前の候補へ戻す場合は、保持した旧tarballを新しい専用一時prefixへ導入してから、そのCLIで`project-assets <project-directory>`の差分を確認し、`--apply`する。利用者が編集した資産は差し戻し時も競合として停止する。本体・本文・資料のうち旧版にない資産は自動削除しない。このHost同期に対応したCLIなら、その版にない未編集の管理入口は差し戻しでも削除する。旧CLIの登録・削除挙動はその版のhelpと手順で確認する。CLIの再インストールだけでプロジェクト内の資産が戻ったとは扱わない。
+
+通常更新・版指定・切戻しの実行例。取得・照合済みの対象tarballを指定する。最初の`project-assets`は差分表示のみ、次の`--apply`が適用である。差分の確認だけを行う場合は`--apply`の行を省く。既存の登録Hostは記録から引き継ぐため、Hostを追加しない通常更新では登録オプションを再指定しない。
+
+```sh
+(
+  set -eu
+  asc_tarball='/absolute/path/to/selected-agent-skill-chain.tgz'
+  test -f "$asc_tarball"
+  asc_bootstrap_dir=$(mktemp -d /tmp/asc-bootstrap.XXXXXXXXXX)
+  printf 'ASC bootstrap: %s\n' "$asc_bootstrap_dir"
+  npm install --prefix "$asc_bootstrap_dir" --cache "$asc_bootstrap_dir/npm-cache" --offline --ignore-scripts --no-audit --no-fund --no-save --package-lock=false "$asc_tarball"
+  node "$asc_bootstrap_dir/node_modules/agent-skill-chain/bin/asc-v05.mjs" project-assets "$PWD"
+  node "$asc_bootstrap_dir/node_modules/agent-skill-chain/bin/asc-v05.mjs" project-assets "$PWD" --apply
+  node .agent-skill-chain/bin/asc.mjs start "$PWD"
+  rm -rf "$asc_bootstrap_dir"
+)
+```
 
 Linuxで2つの未公開v0.5候補を旧→新→旧とoffline導入し、配布資産の復元、固有ルール・作成済み仕様書・アプリの保持、編集済み資産での全体停止を確認した（`RELEASE_READINESS.json`の`projectAssetPackageRoundtrip`）。v0.4 runtimeへの復帰、実行中の更新、任意の設定変換を保証する試験ではない。
 
+### 配布資産を撤去する
+
+`uninstall <project-directory>`で削除予定を確認し、`--apply`でASCの管理資産と登録したHost入口を撤去する。Git管理済みの対象では専用worktreeを使う。実行前に同じ利用先のAgent・更新処理を止め、正常な配布資産と`distribution.json`をcommitまたは利用先の外へバックアップする。
+
+```sh
+node .agent-skill-chain/bin/asc.mjs uninstall "$PWD"
+node .agent-skill-chain/bin/asc.mjs uninstall "$PWD" --apply
+```
+
+既定のpreviewは何も変更しない。JSONの`changes`が削除候補、`conflicts`が停止理由となるpath、`recordPresent`が配布記録の有無を表す。競合があればpreview・applyとも終了値2、不正な記録や安全でないfilesystemは終了値1で停止する。`--apply`も毎回全対象を再検証する。強制削除オプションはない。
+
+削除対象は、実行している信頼済みASC packageの配布一覧または明示した過去の配布path一覧に含まれ、利用先の配布記録に保存されている未編集ファイルだけ。Host入口は既知の生成形式も検証する。利用先の記録へpathとhashを追加しただけで、任意のファイルが削除対象になることはない。対象の編集・欠落・所有不明が1件でもあれば全体を停止する。symlink・hardlink・曖昧なUnicode別名・不正pathも拒否する。setuid・setgid・stickyの特殊な権限ビットが付いた管理ファイルや配布記録も、削除前に全体を停止する。削除を始める前に全件を検証し、個別削除の直前にも状態を再確認する。
+
+`AGENTS.md`・`CLAUDE.md`、`project/`、アプリ、作成済み仕様書、独自Skill・reference、設定・Hook、記録外ファイル、共有node_modules、空ディレクトリは保持する。ディレクトリの再帰削除・glob削除・npm操作は行わない。配布記録は対象ファイルを削除した最後に削除する。正常終了すると同梱CLI自体もなくなるため、起動確認は再導入後に行う。
+
+記録がなければ`recordPresent: false`とnoticeを返し、何も削除しない。これは孤立した旧資産まで消えたという意味ではない。同梱CLIがない状態で再確認する場合や旧CLIにuninstallがない場合は、取得・照合した新しいtarballを新規専用一時prefixへ導入し、そのCLIで対象projectの`uninstall`を実行する。再導入は通常の`project-assets`手順を使う。
+
+配布一覧から廃止された旧ファイルは、信頼済みpackageの`src/project-assets.mjs`の`retiredAssetPaths`に列挙された既知のpathだけを扱う。未知の旧資産が記録に残っていれば全体停止する。配布元は資産を廃止するreleaseで、そのexact pathをこの履歴へ追加し、利用者の固有pathは追加しない。利用者側で削除を通すために配布記録や実行packageの一覧を書き換えない。対応した信頼済み版を使用するか、保存済みの正常な配布物と照合して個別に復旧する。
+
+検出できた削除・検証エラーでは、この処理が削除したファイルを元の内容・modeへ戻す。復元先が別の編集で変わっていれば上書きせず、復元できなかったpathをエラーへ示す。強制終了・I/O障害・同時編集すべてに対する原子性は保証しない。復元不完全の場合は残存状態を確認し、正常保存状態から対象pathだけを復元する。実行packageと正常な配布記録の信頼性が前提であり、整合するよう全面改変された状態の真正性を自動証明する機能ではない。
+
 ### Hostから配布Skillを選べるようにする
 
-利用するHostに対応する入口を明示的に登録する。オプションなしでは共有本文だけを配置し、Hostの発見用ディレクトリは作らない。
+初回は利用するHostに対応する入口を明示的に登録する。一度も登録していない利用先では、オプションなしなら共有本文だけを配置し、Hostの発見用ディレクトリは作らない。選択は加算され、片方のオプションを後から指定しても他方の既存登録は解除しない。
 
 | Host | 登録オプション | 発見用入口 |
 | --- | --- | --- |
@@ -354,21 +406,21 @@ Linuxで2つの未公開v0.5候補を旧→新→旧とoffline導入し、配布
 | Claude Code | `--register-claude-skill` | `.claude/skills/<name>/SKILL.md` |
 
 ```text
-<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --register-claude-skill
-<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --register-claude-skill --apply
+<asc-only-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --register-claude-skill
+<asc-only-prefix>/node_modules/.bin/agent-skill-chain project-assets <project-directory> --register-claude-skill --apply
 ```
 
 Codexではオプションを置き換える。両方指定して登録することもできる。登録対象は配布inventoryに含まれる全Skill（[目的別一覧](../skills/README.md)）。各入口は`.agent-skill-chain/skills/<name>/SKILL.md`を相対参照する。入口のname/descriptionがHostの発見・選択に使われ、選択後は入口の指示で共有本文を読み、必要なreferencesだけを本文のディレクトリ基準で読む。ASC CLIがモデルへ全Skillを強制注入する仕組みではない。
 
 利用者はClaude Codeで`/migration-assurance`、Codexで`$migration-assurance`のように明示して依頼できる。自然言語からの自動選択はHostとモデルに依存する。認識されない場合は新しいセッションで登録先を確認し、共有本文のパスを明示して読ませる。登録だけで本文読込みや実作業の成功を保証しない。
 
-未登録の同名fileや利用者が編集した入口が配布内容と異なる場合は競合として全体を停止し、上書きしない。配布対象外のSkill・ユーザー全体の設定・AGENTS.md・Hook・権限は変更しない。通常の更新では登録入口を更新せず、その管理記録を保持する。description等も更新したい場合は使用Hostの登録オプションを再指定する。`retained`に出ても、不要になったという意味ではない。
+未登録の同名fileは配布内容と同一でも競合となる。利用者が編集・削除した管理入口も、更新・廃止のどちらでも競合として全体を停止する。編集内容が次版の内容と一致しても無断採用しない。配布対象外のSkill・ユーザー全体の設定・AGENTS.md・Hook・権限は変更しない。通常更新で登録済みHostの入口を追加・更新し、未編集の廃止入口だけを削除するため、登録オプションの再指定は不要。登録していないHostの入口は作らない。
 
 隔離環境や別PCでは、登録入口だけでなく`.agent-skill-chain/skills/`の本文・referencesとASC実行本体をまとめて配置する。コンテナへHostのホームディレクトリ全体を渡す必要はない。プロジェクトをGitで共有する場合は必要なHost入口も共有し、その隔離環境内でHostを起動して認識を確認する。設定でSkillを無効化した環境や参照先をmountしていない環境は、配置済みでも利用できない。
 
 登録入口は共有のname/descriptionを扱う。起動制限やtool権限等の未対応metadataを黙って落として登録しない。Codex用の表示情報は共有正本に保持し、薄い入口には複製しないため、そのUI表示の適用は保証しない。表示情報と起動policyは別であり、未対応policyがあれば登録は停止する。
 
-既存の旧ASC Skillを自動削除・無効化する機能ではない。廃止・改名されたSkillも、保持した本文と入口があればHostに表示され続ける。`retained`と実ファイルを確認し、不要な入口の撤去は利用者の判断で行う。保持した資産の配布時hashは更新時も引き継ぐため、同名資産の再導入でも利用者編集を検出する。旧入口を使っている場合は移行差分として確認する。配置後はHostの新しいセッションでSkillの認識と参照先を確認する。ファイル配置・リンク整合性の試験は、実Hostによる自動発見や実モデルでの実行成功とは区別する。
+`distribution.json`の`registeredHosts`にHost選択、`hostEntries`に管理入口、`files`に配布時hashを保存する。新旧どちらの記録でも、記録済みhashと既知の生成入口形式・本文の記録から所有を証明できる入口だけを管理する。パス名や`hostEntries`への列挙、任意の内容のhash一致だけでは、利用者ファイルを廃止入口として削除・更新しない。旧記録（`files`のみ）からも、この証明を満たす登録だけを引き継ぐ。入口も対応する本文も編集・欠落して所有を確認できない旧記録は競合として停止するため、更新前の正常な記録・資産を確認して復元する。ASCの管理記録にない旧入口は削除しない。保持した本体・本文の配布時hashは更新時も引き継ぐため、同名資産の再導入でも利用者編集を検出する。配布パッケージと更新前の正常な記録を所有判定の根拠として信頼する。生成形式の照合は真正性の暗号学的な証明ではなく、記録と正本が整合するよう丸ごと改変された場合まで保証しない。配置後はHostの新しいセッションでSkillの認識と参照先を確認する。ファイル配置・リンク整合性の試験は、実Hostによる自動発見や実モデルでの実行成功とは区別する。
 
 LinuxのCodex CLI 0.153.4では、通信を遮断した`app-server`の`skills/list`で、ASCの入口がrepoスコープの有効なSkillとして認識されることを確認した。同じHostプロセスから別の未登録worktreeを照会すると、そこにはASC Skillが現れない。これはローカル一覧取得の実測であり、IDE・Claudeでの認識や、モデルがSkillを選んで開発を完走することの実証ではない。対象commitと条件は`RELEASE_READINESS.json`の`projectSkillHostDiscovery`に記録する。
 

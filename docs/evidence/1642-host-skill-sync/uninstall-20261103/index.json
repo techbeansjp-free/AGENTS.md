@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-03",
+  "cases": 24,
+  "commands": 148,
+  "passed": true,
+  "payloadFiles": 152,
+  "files": {
+    "base-validator-final.json": "98e425b645e0cf828c9da8f4d67560676c0d40b341b341b608c3208bbd71b225",
+    "candidate-payload.json": "4726301cbc916b48fc9da54245eed0a0eedb8610749ff630fbf02b405c4047ab",
+    "ci-guard-before-relocation.txt": "ecc7488440dcc275e6942e1ddaf9831c8995d6ef2e17025f83120d33f0fd82de",
+    "execution.json": "5a231b8bb67ab40784db38acb1bc97dd318d8aca42f2267b7d5e92a04b80c65c",
+    "regression-before-special-mode.txt": "401a0dcf56a84e79ad5421dee71e3935544ae3da5a4fb441d914b11099d85e1b",
+    "related-lint-final.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "related-tests-failed-ancestry.txt": "7fa429fd1544e6f7d45248e19d925e9c4ace5c37f1f545e20bbb493ce0107b05",
+    "related-tests-final.txt": "dfcbe14669fe24818bc8894ec99c0d95768b6416432603719318c87ad545e172",
+    "results.json": "3b60692cde035bd834b804736da1c4123327424333d01ed3f024fac6faf22061",
+    "run.mjs": "35e96596987dbb79acaf3334191f2ab7dde06579ce560acc5fe22dd2dd68e304",
+    "special-mode-before-fix.txt": "9569a27f05650a47fed053ac592e147168b754ac2af029979b620142a2dbab82",
+    "special-mode-reproduction.mjs": "808c3d80b38a7adadf06d21c1d919159adaa0dac4af704af1fab064168dd6487",
+    "verify.mjs": "807693b7d3e72b75c95f1deba5971c509543cf7d16a9fbff1b85f9a276be9d06"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "observedAtUtc": "2026-11-03T05:40:52.081154+00:00",
+  "testedCommit": "0ec85ffb0440eb27606b34e6fbde11ffe71f9c47",
+  "consumerCases": 31,
+  "consumerCommands": 88,
+  "protectionCases": 4,
+  "unchangedPrivateFiles": 16,
+  "allFilesUnchangedConflictCases": 3,
+  "candidatePayloadFilesMatched": 152,
+  "candidateTarballSha256": "55a1ed5ada4253bc037e899c623885b26661ad0039dd5cebec983a3d09ac4572",
+  "evidenceSha256": {
+    "consumer-transcript.json": "1ccccbe46e78ed4eb90b361d8ab579f5b67efbbbf2829e5037455cdb944125ce",
+    "consumer-execution.json": "dfac4ef952440615416b2cc2a7f233e6f2783a86717dd6daf7acbfdda7d2b697",
+    "before-after.json": "ad0769345d4a138088718a39abb9fac74ecc0b83489b26382da04571d483e2bc",
+    "before-after-execution.json": "a11e8d6435243bbb95159560c3a8afa3f9b0f679ce4dbd469d0bad8da4f7a1c5",
+    "capture-before-after.mjs": "f2fcc6e97616a63260ee0d09381d566fecf753825697b9a505b45d60ad873647"
+  }
+}

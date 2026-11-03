@@ -1,0 +1,147 @@
+{
+  "node": "v24.22.0",
+  "baseline": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md",
+  "candidate": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20261103_135832-1642-host-skill-sync",
+  "fixture": "Synthetic next version: execution-recovery renamed to recovery-next, verification-optimization description changed; no published release claim",
+  "argv": [
+    "bwrap",
+    "--unshare-all",
+    "--new-session",
+    "--die-with-parent",
+    "--clearenv",
+    "--ro-bind",
+    "/usr",
+    "/usr",
+    "--symlink",
+    "usr/bin",
+    "/bin",
+    "--symlink",
+    "usr/lib",
+    "/lib",
+    "--symlink",
+    "usr/lib64",
+    "/lib64",
+    "--proc",
+    "/proc",
+    "--dev",
+    "/dev",
+    "--tmpfs",
+    "/tmp",
+    "--dir",
+    "/tools",
+    "--ro-bind",
+    "/home/tatsuru/.local/share/mise/installs/node/24.22.0/bin/node",
+    "/tools/node",
+    "--ro-bind",
+    "/tmp/asc-1642-consumer/ownership-final-1/artifacts",
+    "/input",
+    "--ro-bind",
+    "/tmp/asc-1642-consumer/run.mjs",
+    "/run.mjs",
+    "--bind",
+    "/tmp/asc-1642-consumer/ownership-final-1/workspace",
+    "/workspace",
+    "--setenv",
+    "PATH",
+    "/tools:/usr/bin",
+    "--setenv",
+    "LANG",
+    "C.UTF-8",
+    "--setenv",
+    "ASC_TEST_HOST_NET",
+    "net:[4026531833]",
+    "--setenv",
+    "ASC_TEST_HOST_PORT",
+    "41453",
+    "--chdir",
+    "/workspace",
+    "/tools/node",
+    "/run.mjs"
+  ],
+  "exit": 0,
+  "seconds": 20.246641499000003,
+  "stdout": "{\"passed\":true,\"hasFixed\":true,\"cases\":31}\n",
+  "stderr": "",
+  "hashes": {
+    "baseline-next.tgz": "46a7bc3e1430e6fd310da80872600884277ab9f8c517fd027fd54da6625c0481",
+    "baseline.tgz": "fc83819a332d3c2b3c2d9f8cd68511827e511691a1160fd7239a5f328e4ea0d7",
+    "fixed-next.tgz": "d194f714ab168f76d36770a6c49e7aa12ca2fb52171bf2953432068d666b923d",
+    "fixed.tgz": "55a1ed5ada4253bc037e899c623885b26661ad0039dd5cebec983a3d09ac4572"
+  },
+  "calls": [
+    {
+      "cmd": "npm",
+      "args": [
+        "pack",
+        "--ignore-scripts",
+        "--json",
+        "--pack-destination",
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts"
+      ],
+      "cwd": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md",
+      "status": 0,
+      "stderr": ""
+    },
+    {
+      "cmd": "tar",
+      "args": [
+        "-xzf",
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts/baseline.tgz",
+        "-C",
+        "/tmp/asc-1642-consumer/ownership-final-1/baseline-next-source"
+      ],
+      "status": 0,
+      "stderr": ""
+    },
+    {
+      "cmd": "npm",
+      "args": [
+        "pack",
+        "--ignore-scripts",
+        "--json",
+        "--pack-destination",
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts"
+      ],
+      "cwd": "/tmp/asc-1642-consumer/ownership-final-1/baseline-next-source/package",
+      "status": 0,
+      "stderr": ""
+    },
+    {
+      "cmd": "npm",
+      "args": [
+        "pack",
+        "--ignore-scripts",
+        "--json",
+        "--pack-destination",
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts"
+      ],
+      "cwd": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20261103_135832-1642-host-skill-sync",
+      "status": 0,
+      "stderr": ""
+    },
+    {
+      "cmd": "tar",
+      "args": [
+        "-xzf",
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts/fixed.tgz",
+        "-C",
+        "/tmp/asc-1642-consumer/ownership-final-1/fixed-next-source"
+      ],
+      "status": 0,
+      "stderr": ""
+    },
+    {
+      "cmd": "npm",
+      "args": [
+        "pack",
+        "--ignore-scripts",
+        "--json",
+        "--pack-destination",
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts"
+      ],
+      "cwd": "/tmp/asc-1642-consumer/ownership-final-1/fixed-next-source/package",
+      "status": 0,
+      "stderr": ""
+    }
+  ]
+}

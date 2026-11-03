@@ -10,7 +10,7 @@ v0.5系を正式版として提供します。[GitHub Release](https://github.co
 
 ## 利用入口
 
-Release添付のtarballから、[導入手順](v05/USAGE.md)の`project-assets`で実行本体を`.agent-skill-chain/managed-runtime/`へ配置します。Git共有時は本体もcommitし、clone・worktreeごとに同じ版を使います。ASC本体のビルドは不要です。通常のコマンド名は`agent-skill-chain`です。`asc-v05`も同じruntimeを呼び出します。旧コマンドへの暗黙の切り替えは行いません。
+Release添付のtarballを新規の専用一時prefixへ導入し、[導入手順](v05/USAGE.md)の`project-assets`で実行本体を`.agent-skill-chain/managed-runtime/`へ配置します。Git共有時は本体もcommitし、clone・worktreeごとに同じ版を使います。既存の共有prefixや`.agent-skill-chain/`へnpm install・uninstall・pruneを行いません。ASC本体のビルドは不要です。通常のコマンド名は`agent-skill-chain`です。`asc-v05`も同じruntimeを呼び出します。旧コマンドへの暗黙の切り替えは行いません。
 
 ```sh
 node .agent-skill-chain/bin/asc.mjs --version
@@ -50,7 +50,7 @@ snapshot Controllerは明示選択の別経路です。利用する場合だけ 
 
 ASCのプログラムも案内・Skill・雛形と一緒に更新します。更新先の固定tarballを導入し、その版のCLIの`project-assets <project-directory>`で差分を確認して、`--apply`で適用します。Git管理済みなら専用worktreeで行います。既存の同梱CLIは自動で新版をダウンロードしません。Host向け入口も配置する場合だけ`--register-skill`を指定します。
 
-未編集の配布資産だけを更新し、利用者が編集・削除した資産は競合として停止します。`project/`、作成済み仕様書、独自の雛形、アプリは上書きしません。旧Step専用の設定・Hook・Skillの撤去はこの更新操作に含めません。具体的な操作と制約は[配布資産の導入・更新](v05/USAGE.md#プロジェクト内の配布資産を導入更新する)を参照してください。
+未編集の配布資産だけを更新し、利用者が編集・削除した資産は競合として停止します。`project/`、作成済み仕様書、独自の雛形、アプリは上書きしません。旧Step専用の設定・Hook・Skillの撤去はこの更新操作に含めません。 ASC管理資産の撤去には[uninstall](v05/USAGE.md#配布資産を撤去する)を使い、preview後に`--apply`で未編集の管理ファイルだけを削除します。具体的な操作と制約は[配布資産の導入・更新](v05/USAGE.md#プロジェクト内の配布資産を導入更新する)を参照してください。
 
 ## 品質と移行
 
