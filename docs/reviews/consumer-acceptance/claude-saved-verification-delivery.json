@@ -103,7 +103,7 @@
   "implementationIntervention": 0,
   "totalSeconds": 191.78084904,
   "deliverySeconds": 27.34359859099999,
-  "timingScope": "From initial execution (including injected interruption and recovery) through CI; excludes fixture preparation",
+  "timingScope": "From initial execution through CI; excludes fixture preparation; no interruption injected",
   "scope": "Single synthetic complex two-Issue development through saved native verification, independent review, Draft PR and both CI; no evaluator implementation, planning or result-recovery intervention",
   "version": "0.5.900-alpha.60",
   "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/188",
