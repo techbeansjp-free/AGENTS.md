@@ -1,0 +1,2 @@
+rollback error: Injected unlink failure
+{"first":".agent-skill-chain/00_利用案内.md","before":"4751","after":"751","exactModeRestored":false}

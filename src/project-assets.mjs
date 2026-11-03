@@ -9,9 +9,9 @@ import {projectLocation} from './project-location.mjs';
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const hostNames=['.agents','.claude'];
 const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;
-// Fifteen registered Skills plus two optional assets use 282 assets; reserve 12 preimages
+// Fifteen registered Skills plus two optional assets use 283 assets; reserve 12 preimages
 // for retained canonical/runtime assets. Retired owned Host entries are removed.
-const maxAssets=294;
+const maxAssets=295;
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
 function demand(ok,message){if(!ok)throw Error(message);}
 function inspect(root,name){
@@ -29,7 +29,7 @@ function inspect(root,name){
   else demand(st.isFile()&&st.nlink===1&&st.size<=2000000,'Unsafe asset file');
  }
  const fd=fs.openSync(cursor,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
- try{const st=fs.fstatSync(fd);demand(st.isFile()&&st.nlink===1&&st.size<=2000000,'Asset changed during read');return {path:resolved.join('/'),bytes:fs.readFileSync(fd),mode:st.mode&0o777,dev:st.dev,ino:st.ino};}finally{fs.closeSync(fd);}
+ try{const st=fs.fstatSync(fd);demand(st.isFile()&&st.nlink===1&&st.size<=2000000,'Asset changed during read');return {path:resolved.join('/'),bytes:fs.readFileSync(fd),mode:st.mode&0o777,specialMode:st.mode&0o7000,dev:st.dev,ino:st.ino};}finally{fs.closeSync(fd);}
 }
 function read(root,name){return inspect(root,name).bytes;}
 function sameBytes(a,b){return a===null?b===null:b!==null&&a.equals(b);}
@@ -51,7 +51,7 @@ function restorePreimages(repo,transaction){
      demand(st.dev===current.dev&&st.ino===current.ino&&st.size===current.bytes.length,'Asset changed during rollback');
      const bytes=Buffer.alloc(st.size);demand(fs.readSync(fd,bytes,0,bytes.length,0)===bytes.length&&bytes.equals(current.bytes),'Asset changed during rollback');
     }
-    fs.ftruncateSync(fd,0);fs.writeFileSync(fd,original.bytes);
+    fs.ftruncateSync(fd,0);fs.writeFileSync(fd,original.bytes);fs.fchmodSync(fd,original.mode);
    }finally{fs.closeSync(fd);}
   }
  }catch{failed.push(name);}
@@ -143,8 +143,7 @@ function git(repo,args,input){
  const result=spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','core.attributesFile=/dev/null',...args],{cwd:repo,input,encoding:null,maxBuffer:16000000,timeout:20000,env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_ATTR_NOSYSTEM:'1',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'}});
  demand(!result.error&&result.status===0,'Asset Git operation failed; inspect worktree before retry');return result.stdout;
 }
-export function projectAssets(directory,{apply=false,registerSkill=false,registerClaudeSkill=false,packageRoot=defaultPackage}={}){
- const {repo}=projectLocation(directory);packageRoot=fs.realpathSync(packageRoot);
+function distributionState(repo){
  const priorRecord=inspect(repo,record),priorBytes=priorRecord.bytes,previous=Object.create(null),selected=new Set(),owned=new Set(),ownershipConflicts=[];
  let parsed;
  if(priorBytes){
@@ -171,6 +170,11 @@ export function projectAssets(directory,{apply=false,registerSkill=false,registe
   const host=entry[1];
   if(provenEntry(repo,name,previous)){selected.add(host);owned.add(name);}else ownershipConflicts.push(name);
  }
+ return {priorRecord,priorBytes,previous,selected,owned,ownershipConflicts};
+}
+export function projectAssets(directory,{apply=false,registerSkill=false,registerClaudeSkill=false,packageRoot=defaultPackage}={}){
+ const {repo}=projectLocation(directory);packageRoot=fs.realpathSync(packageRoot);
+ const {priorRecord,priorBytes,previous,selected,owned,ownershipConflicts}=distributionState(repo);
  if(registerSkill)selected.add('.agents');if(registerClaudeSkill)selected.add('.claude');
  const hosts=hostNames.filter(host=>selected.has(host)),assets=catalog(packageRoot,hosts);
  // Retained canonical/runtime assets keep their original preimages. Only
@@ -229,4 +233,61 @@ export function projectAssets(directory,{apply=false,registerSkill=false,registe
   if(applying){const failed=restorePreimages(repo,transaction);if(failed.length)throw Error(`Asset update failed; rollback incomplete for ${failed.join(', ')}; restore the saved distribution before retry`,{cause:error});}
   throw error;
  }finally{fs.rmSync(temp,{recursive:true,force:true});}
+}
+
+function uninstallCatalog(packageRoot){
+ const known=new Set(catalog(packageRoot,hostNames).keys());
+ // Trust the executing package catalog, including when it is bundled locally.
+ // A record cannot nominate another inventory as authority. Releases retain
+ // exact retired paths here so updates do not strand their old distribution.
+ const retired=JSON.parse(read(packageRoot,'src/retired-project-assets.json'));
+ demand(Array.isArray(retired)&&retired.length<=maxAssets&&new Set(retired).size===retired.length,'Invalid retired asset catalog');
+ for(const name of retired){
+  safeName(name);demand(name===name.normalize('NFC'),'Retired asset catalog paths must use NFC');
+  const relative=name.startsWith(prefix+'managed-runtime/')?name.slice((prefix+'managed-runtime/').length):null;
+  const runtime=relative!==null&&(/^(?:src|bin)\/[a-z0-9-]+\.(?:mjs|json)$/.test(relative)||/^(?:package\.json|README\.md|migration_inspect\.mjs)$/.test(relative)||/^v05\/(?:[A-Z0-9_]+\.(?:md|json)|templates\/specs\/.+\.md|optional-skills\/[a-z0-9-]+\/(?:SKILL\.md|agents\/openai\.yaml))$/.test(relative)||/^skills\/(?:README\.md|[a-z0-9-]+\/(?:SKILL\.md|agents\/openai\.yaml|references\/.+\.md))$/.test(relative));
+  const canonical=/^\.agent-skill-chain\/(?:skills\/(?:README\.md|[a-z0-9-]+\/(?:SKILL\.md|agents\/openai\.yaml|references\/.+\.md))|templates\/specs\/.+\.md|v05\/[A-Z0-9_]+\.(?:md|json)|bin\/asc\.mjs|runtime\.json|00_利用案内\.md)$/.test(name);
+  demand(runtime||canonical||hostEntry.test(name),'Invalid retired asset path');known.add(name);
+ }
+ return known;
+}
+
+/** Remove only recorded, unchanged files inside the trusted distribution catalog. */
+export function uninstallProjectAssets(directory,{apply=false,packageRoot=defaultPackage}={}){
+ const {repo}=projectLocation(directory);
+ const {priorRecord,priorBytes,previous,selected,owned,ownershipConflicts}=distributionState(repo);
+ const result={schema:'asc-project-uninstall-plan/v1',repo,applied:false,recordPresent:priorBytes!==null,registeredHosts:hostNames.filter(host=>selected.has(host)),changes:[],conflicts:[...ownershipConflicts]};
+ if(priorBytes===null)return {...result,notice:'No distribution record; unrecorded files were not inspected or removed.'};
+ // ASC does not distribute special permissions. Refuse them before removal,
+ // rather than recreate privileged files during a partial-failure rollback.
+ demand(priorRecord.specialMode===0,'Unsafe asset permissions');
+ const known=uninstallCatalog(fs.realpathSync(packageRoot)),before=new Map();
+ for(const name of Object.keys(previous).sort()){
+  if(!known.has(name)||(hostEntry.test(name)&&!owned.has(name))){if(!result.conflicts.includes(name))result.conflicts.push(name);continue;}
+  const original=inspect(repo,name),actual=original.bytes===null?null:hash(original.bytes);
+  if(original.bytes!==null)demand(original.specialMode===0,'Unsafe asset permissions');before.set(name,original);
+  if(actual!==previous[name]){if(!result.conflicts.includes(name))result.conflicts.push(name);continue;}
+  result.changes.push({path:name,kind:hostEntry.test(name)?'host-entry':'asset',...(hostEntry.test(name)?{host:hostEntry.exec(name)[1]}:{}),action:'delete',beforeSha256:actual,afterSha256:null});
+ }
+ result.changes.push({path:record,kind:'distribution-record',action:'delete',beforeSha256:hash(priorBytes),afterSha256:null});before.set(record,priorRecord);
+ if(!apply||result.conflicts.length)return result;
+ const unchanged=(name,original)=>{
+  const current=inspect(repo,name);
+  demand(current.path===original.path&&current.dev===original.dev&&current.ino===original.ino&&current.mode===original.mode&&current.specialMode===original.specialMode&&sameBytes(current.bytes,original.bytes),'Asset changed after planning');
+ };
+ // Validate the complete plan before deleting anything, then recheck each file
+ // immediately before unlink. Never recursively remove project or Host folders.
+ for(const [name,original] of before)unchanged(name,original);
+ const transaction=[];
+ try{
+  for(const [name,original] of before){
+   unchanged(name,original);transaction.push([name,original,null]);fs.unlinkSync(path.join(repo,original.path));
+  }
+  for(const [name] of before)demand(read(repo,name)===null,'Uninstalled asset verification failed');
+  return {...result,applied:true};
+ }catch(error){
+  const failed=restorePreimages(repo,transaction);
+  if(failed.length)throw Error(`Asset uninstall failed; rollback incomplete for ${failed.join(', ')}; restore the saved distribution before retry`,{cause:error});
+  throw error;
+ }
 }

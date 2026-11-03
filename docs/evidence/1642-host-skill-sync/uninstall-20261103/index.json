@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-03",
+  "cases": 24,
+  "commands": 148,
+  "passed": true,
+  "payloadFiles": 153,
+  "files": {
+    "candidate-payload.json": "82000fad5232432e2c9158e0faf7b14c3b6a5f4ffb11d1e78153662ceb934102",
+    "execution.json": "256a7befc9536be7b1bbe4d2aacaad44d66e860610470e4134bcb3c41fd6c857",
+    "regression-before-special-mode.txt": "401a0dcf56a84e79ad5421dee71e3935544ae3da5a4fb441d914b11099d85e1b",
+    "related-lint-final.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "related-tests-failed-ancestry.txt": "7fa429fd1544e6f7d45248e19d925e9c4ace5c37f1f545e20bbb493ce0107b05",
+    "related-tests-final.txt": "8b9ced4e176f2c838ef7b90d49d3003c98acacc5659c98eeb811faeaa1279936",
+    "results.json": "ff2ad1185a74666cf8efddf6c2427e3a2587c3c81629f1227b1369047b01d087",
+    "run.mjs": "35e96596987dbb79acaf3334191f2ab7dde06579ce560acc5fe22dd2dd68e304",
+    "special-mode-before-fix.txt": "9569a27f05650a47fed053ac592e147168b754ac2af029979b620142a2dbab82",
+    "special-mode-reproduction.mjs": "808c3d80b38a7adadf06d21c1d919159adaa0dac4af704af1fab064168dd6487",
+    "verify.mjs": "368ded8c69faf367f911d7c7420a861c41e9bec6b6a31a953b811753ab6e8bb2"
+  }
+}

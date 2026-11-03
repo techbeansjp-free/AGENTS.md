@@ -114,6 +114,7 @@
   "v05/templates/specs/details/17_デザイン/00_デザイントークン.md",
   "v05/templates/specs/details/18_レイアウト/00_レイアウトトークン.md",
   "src/runtime-files.json",
+  "src/retired-project-assets.json",
   "skills/asc/references/post-merge.md",
   "skills/asc/references/review.md",
   "skills/asc/references/implementation.md",

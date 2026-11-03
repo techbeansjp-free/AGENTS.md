@@ -40,7 +40,7 @@ Gitで共有する場合は、`managed-runtime/`を含む配布資産・Skill・
 
 導入CLI用の一時prefixの後始末と、プロジェクトからのASC撤去は別の操作である。新規作成した一時prefixだけを削除しても同梱本体は残り、通常起動は継続する。共有prefixへのnpm uninstallは後始末の手段にしない。既存の旧bootstrap資産は、所有と他packageへの影響を確認できなければ保持する。
 
-ASC全体の撤去は[配布資産を手動で撤去する](#配布資産を手動で撤去する)に従う。ASCにuninstallコマンドはなく、npm uninstallでも管理資産やHost入口は撤去されない。
+ASC全体の撤去は[配布資産を撤去する](#配布資産を撤去する)の`uninstall`を使う。npm uninstallでは管理資産やHost入口は撤去されない。
 
 任意の外部prefixを使う場合だけ`ASC_CLI`で明示する。外部prefixを上書きするとそれを参照する別worktreeへ影響するため、版別prefixを使う。旧配置互換のため、同梱package.jsonが見つからない場合はnode_modulesを探索する。snapshot ControllerのHost実行ツールは候補外で管理する別の信頼境界を維持する。
 
@@ -375,16 +375,26 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 Linuxで2つの未公開v0.5候補を旧→新→旧とoffline導入し、配布資産の復元、固有ルール・作成済み仕様書・アプリの保持、編集済み資産での全体停止を確認した（`RELEASE_READINESS.json`の`projectAssetPackageRoundtrip`）。v0.4 runtimeへの復帰、実行中の更新、任意の設定変換を保証する試験ではない。
 
-### 配布資産を手動で撤去する
+### 配布資産を撤去する
 
-これは利用者が実施する手順であり、自動uninstall機能ではない。撤去する利用先でAgent・更新処理を止め、正常な`distribution.json`と配布資産をcommitまたは別の場所へバックアップする。
+`uninstall <project-directory>`で削除予定を確認し、`--apply`でASCの管理資産と登録したHost入口を撤去する。Git管理済みの対象では専用worktreeを使う。実行前に同じ利用先のAgent・更新処理を止め、正常な配布資産と`distribution.json`をcommitまたは利用先の外へバックアップする。
 
-1. 信頼できる保存済み`distribution.json`の`files`を対象一覧にする。対象はその配布で管理していた`.agent-skill-chain/`内の資産と、選択したHostの管理入口だけ。`AGENTS.md`・`CLAUDE.md`・`project/`・アプリ・他のSkill・共有node_modulesを一覧へ追加しない。現在の記録が不正・不明なら削除を始めない。
-2. **削除前に対象全件を確認する。** 相対pathが利用先の外へ出ず、全path成分にsymlinkやUnicodeの曖昧な別名がなく、各対象がhardlinkではない通常fileで、現在のSHA-256が保存記録と一致することを照合する。編集・欠落・所有不明・安全でないpathが1件でもあれば、全件を保持して停止する。編集内容を確認し、利用者の成果物として必要な場所へ保存するなど解決してから、全件確認をやり直す。
-3. 確認した一覧のfileだけを個別に削除する。ディレクトリの再帰削除やglobによる削除は行わない。途中のI/Oエラーでは停止して残存状態を確認し、記録を残す。対象全件の削除を確認した後で、対応する`distribution.json`だけを最後に削除する。
-4. 記録外のfile、編集済みfile、同居する設定・Skill・空directory・旧bootstrapのnode_modulesは保持する。`.agent-skill-chain/`・`.agents/`・`.claude/`を丸ごと削除しない。ASCを再導入するときは、取得・照合したtarballと新しい専用一時prefixを使い、残った既存fileとの競合を確認する。
+```sh
+node .agent-skill-chain/bin/asc.mjs uninstall "$PWD"
+node .agent-skill-chain/bin/asc.mjs uninstall "$PWD" --apply
+```
 
-手動撤去は複数fileの原子的な削除を保証しない。同じ利用先を並行編集しない。取得物・保存記録の真正性確認、利用者編集の扱い、失敗後の復元判断は利用者が行う。
+既定のpreviewは何も変更しない。JSONの`changes`が削除候補、`conflicts`が停止理由となるpath、`recordPresent`が配布記録の有無を表す。競合があればpreview・applyとも終了値2、不正な記録や安全でないfilesystemは終了値1で停止する。`--apply`も毎回全対象を再検証する。強制削除オプションはない。
+
+削除対象は、実行している信頼済みASC packageの配布一覧または明示した過去の配布path一覧に含まれ、利用先の配布記録に保存されている未編集ファイルだけ。Host入口は既知の生成形式も検証する。利用先の記録へpathとhashを追加しただけで、任意のファイルが削除対象になることはない。対象の編集・欠落・所有不明が1件でもあれば全体を停止する。symlink・hardlink・曖昧なUnicode別名・不正pathも拒否する。setuid・setgid・stickyの特殊な権限ビットが付いた管理ファイルや配布記録も、削除前に全体を停止する。削除を始める前に全件を検証し、個別削除の直前にも状態を再確認する。
+
+`AGENTS.md`・`CLAUDE.md`、`project/`、アプリ、作成済み仕様書、独自Skill・reference、設定・Hook、記録外ファイル、共有node_modules、空ディレクトリは保持する。ディレクトリの再帰削除・glob削除・npm操作は行わない。配布記録は対象ファイルを削除した最後に削除する。正常終了すると同梱CLI自体もなくなるため、起動確認は再導入後に行う。
+
+記録がなければ`recordPresent: false`とnoticeを返し、何も削除しない。これは孤立した旧資産まで消えたという意味ではない。同梱CLIがない状態で再確認する場合や旧CLIにuninstallがない場合は、取得・照合した新しいtarballを新規専用一時prefixへ導入し、そのCLIで対象projectの`uninstall`を実行する。再導入は通常の`project-assets`手順を使う。
+
+配布一覧から廃止された旧ファイルは、信頼済みpackageの`src/retired-project-assets.json`に列挙された既知のpathだけを扱う。未知の旧資産が記録に残っていれば全体停止する。配布元は資産を廃止するreleaseで、そのexact pathをこの履歴へ追加し、利用者の固有pathは追加しない。利用者側で削除を通すために配布記録や実行packageの一覧を書き換えない。対応した信頼済み版を使用するか、保存済みの正常な配布物と照合して個別に復旧する。
+
+検出できた削除・検証エラーでは、この処理が削除したファイルを元の内容・modeへ戻す。復元先が別の編集で変わっていれば上書きせず、復元できなかったpathをエラーへ示す。強制終了・I/O障害・同時編集すべてに対する原子性は保証しない。復元不完全の場合は残存状態を確認し、正常保存状態から対象pathだけを復元する。実行packageと正常な配布記録の信頼性が前提であり、整合するよう全面改変された状態の真正性を自動証明する機能ではない。
 
 ### Hostから配布Skillを選べるようにする
 
