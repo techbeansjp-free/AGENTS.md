@@ -1,0 +1,43 @@
+{
+  "frozen_at_utc": "2026-11-03T03:26:30.908718+00:00",
+  "fixture_root": "/tmp/asc-1509-review-fixtures",
+  "model": "gpt-6.1-sol",
+  "effort": "medium",
+  "runs_planned": 6,
+  "samples_per_cell": 1,
+  "oracle_hidden": true,
+  "sha256": {
+    "docs/evidence/1509-review-repetition/fixtures.json": "d76b25a47d6a8680310f2d60c5bdddb5eaff4fe86154e604a4b5ac67600b4942",
+    "docs/evidence/1509-review-repetition/oracle.json": "ad1a65eea0d7135dca41cece92448e66a5467651274d23e53fc3daf93cdca49b",
+    "/tmp/asc-1509-review-fixtures/authorization/initial/subject.mjs": "6286582fea0a58da7e41ef3ee1dee59d5ab1b7cb0d4c649167a63826fe9d7cec",
+    "/tmp/asc-1509-review-fixtures/authorization/initial/test.mjs": "d871ebd2bccc95f0a17a76df5f430f3b463985dd3eabd523a2c17f16a82a7518",
+    "/tmp/asc-1509-review-fixtures/authorization/initial/requirements.txt": "123440fb8b30320af17600ffd85ca45e91c0eee4954d1c804f982dc6dcc8c98d",
+    "/tmp/asc-1509-review-fixtures/authorization/initial/before.mjs": "65c459d12ae529fea40b970fcb90ac5ddf98ae3d4685b44f8e032d8a0e96f538",
+    "/tmp/asc-1509-review-fixtures/authorization/after/subject.mjs": "151fb0fa930023cf823fd6b141192e769ff88245fdeade40a3338e2600893400",
+    "/tmp/asc-1509-review-fixtures/authorization/after/test.mjs": "d871ebd2bccc95f0a17a76df5f430f3b463985dd3eabd523a2c17f16a82a7518",
+    "/tmp/asc-1509-review-fixtures/authorization/after/requirements.txt": "123440fb8b30320af17600ffd85ca45e91c0eee4954d1c804f982dc6dcc8c98d",
+    "/tmp/asc-1509-review-fixtures/authorization/after/before.mjs": "6286582fea0a58da7e41ef3ee1dee59d5ab1b7cb0d4c649167a63826fe9d7cec",
+    "/tmp/asc-1509-review-fixtures/failed-save/initial/subject.mjs": "2af0189a4e333ea16c2c6db13de3dbe34b9b547177f7ddff4758504cdf45b06f",
+    "/tmp/asc-1509-review-fixtures/failed-save/initial/test.mjs": "807dc84e6d5a146bd0801e2cf8ee2901e0ecba75802b0c065a86481a1b873dcd",
+    "/tmp/asc-1509-review-fixtures/failed-save/initial/requirements.txt": "225d141bd87d5fcd7feb5b6547ac30d50e5ab653d592847743d470c7f863708d",
+    "/tmp/asc-1509-review-fixtures/failed-save/initial/before.mjs": "65c459d12ae529fea40b970fcb90ac5ddf98ae3d4685b44f8e032d8a0e96f538",
+    "/tmp/asc-1509-review-fixtures/failed-save/after/subject.mjs": "32290a946a6220a608e566766ed2d06fc275b4c704665bdb8926e7e485e1616f",
+    "/tmp/asc-1509-review-fixtures/failed-save/after/test.mjs": "807dc84e6d5a146bd0801e2cf8ee2901e0ecba75802b0c065a86481a1b873dcd",
+    "/tmp/asc-1509-review-fixtures/failed-save/after/requirements.txt": "225d141bd87d5fcd7feb5b6547ac30d50e5ab653d592847743d470c7f863708d",
+    "/tmp/asc-1509-review-fixtures/failed-save/after/before.mjs": "2af0189a4e333ea16c2c6db13de3dbe34b9b547177f7ddff4758504cdf45b06f",
+    "/tmp/asc-1509-review-fixtures/private-helper/initial/subject.mjs": "ce57514ec476f7da54b5f4246524fca74fd7e573013022ca4666468142ce0c35",
+    "/tmp/asc-1509-review-fixtures/private-helper/initial/test.mjs": "32593a16aa12ee4c4e3d83181c2721fdbad5d35ee9adc096846ae0b3b2b8bf30",
+    "/tmp/asc-1509-review-fixtures/private-helper/initial/requirements.txt": "769aed8366260b937085f141ea80ece9ff0d2c38121e05fddb2af420046081b7",
+    "/tmp/asc-1509-review-fixtures/private-helper/initial/before.mjs": "65c459d12ae529fea40b970fcb90ac5ddf98ae3d4685b44f8e032d8a0e96f538",
+    "/tmp/asc-1509-review-fixtures/private-helper/after/subject.mjs": "6aa069153bb7eaeb21d794459fdba9ecaca590664eb4e9e533cec68fdda0b16c",
+    "/tmp/asc-1509-review-fixtures/private-helper/after/test.mjs": "32593a16aa12ee4c4e3d83181c2721fdbad5d35ee9adc096846ae0b3b2b8bf30",
+    "/tmp/asc-1509-review-fixtures/private-helper/after/requirements.txt": "769aed8366260b937085f141ea80ece9ff0d2c38121e05fddb2af420046081b7",
+    "/tmp/asc-1509-review-fixtures/private-helper/after/before.mjs": "ce57514ec476f7da54b5f4246524fca74fd7e573013022ca4666468142ce0c35"
+  },
+  "skill_sha256": {
+    "skills/asc/SKILL.md": "1cae4c4dcc4e1f39742ed7fb134c391f59db01c7e5c5dd19754a80d7d69907f6",
+    "skills/asc/references/review.md": "3febe305e3c722a472c47bc75d71c02dbb47722b96cdb5977a800378416462bc",
+    "skills/review-and-remediation/SKILL.md": "8c3e09eab69beffbb8de81da7fef457eb0856e5bae29ff3b0d74ec4b8dffd65c",
+    "skills/review-and-remediation/references/review-method.md": "39a3a4d8db464a8da56f2146146cfd91ee68c0c1ce41f814052238c64e588e42"
+  }
+}
