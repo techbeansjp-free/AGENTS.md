@@ -1,0 +1,35 @@
+{
+  "checked_at_utc": "2026-11-03T03:38:15.461Z",
+  "node": "v24.22.0",
+  "timeout_test": {
+    "argv": [
+      "/home/tatsuru/.local/share/mise/installs/node/24.22.0/bin/node",
+      "-e",
+      "process.on('SIGTERM',()=>{}); console.log('ready'); setInterval(()=>{},1000)"
+    ],
+    "timeout_ms": 500,
+    "kill_grace_ms": 100,
+    "exitCode": null,
+    "signal": "SIGKILL",
+    "error": null,
+    "stdout": "ready\n",
+    "stderr": "",
+    "timedOut": true,
+    "signals": [
+      "SIGTERM",
+      "SIGKILL"
+    ],
+    "wallSeconds": 0.605879
+  },
+  "spawn_failure_test": {
+    "exitCode": null,
+    "signal": null,
+    "error": "spawn /definitely-missing-asc-1509-executable ENOENT",
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "signals": [],
+    "wallSeconds": 0.001716
+  },
+  "model_measurement_executed": false
+}

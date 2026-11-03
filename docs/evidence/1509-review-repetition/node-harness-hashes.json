@@ -1,0 +1,28 @@
+{
+  "checked_at_utc": "2026-11-03T03:39:57.312Z",
+  "original_measurement_runner": {
+    "language": "Python",
+    "source_commit": "7d60ca568c0354723db35abd596feb08a0d21135",
+    "sha256": {
+      "prepare.py": "38433db94abf8a34b19d92c0218ef37c86cf8e893f5a07ec355fc85d755c6ebc",
+      "measure.py": "f122f1fb52788ce8e92118ad089c4de67bdab1c2364ee8fd2fa8307f8a0c06c6",
+      "verify.py": "78712ad5dd2bedb414b642a38883c50346b3b312146874d8ce5681f18d2c467f"
+    }
+  },
+  "node_port": {
+    "language": "Node.js",
+    "model_measurement_executed": false,
+    "sha256": {
+      "prepare.mjs": "5f37d42949389bc816d1da5294ce060a877d2ef5edc800487f285c8d7662fc5b",
+      "measure.mjs": "5887ee6f097bceed69ab4f748f1e085b1e4400d2fe96e473c7ea2af69567e71b",
+      "verify.mjs": "10687dd5622135771a28c175cd628cc82430b82594370194eb51c51d168c83ad",
+      "harness.mjs": "bff369b983a8cff1d95b6f540807b9b52d5725f2df3d3f42337cc91a1baa3222"
+    }
+  },
+  "original_frozen_manifest_sha256": "e2a909f0f3fb5d3d45cb4d6cad420de36b0c9a6e1dcd0b40e9bad4b5ece102bf",
+  "source_quality": {
+    "valid": true,
+    "errors": [],
+    "files": 236
+  }
+}

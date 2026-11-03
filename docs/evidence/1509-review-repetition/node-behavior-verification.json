@@ -1,0 +1,160 @@
+{
+  "runner": "Node port; not an additional Codex CLI measurement",
+  "checked_at_utc": "2026-11-03T03:39:57.017Z",
+  "oracle_matches": 6,
+  "fixtures_unchanged": true,
+  "rows": [
+    {
+      "scenario": "authorization",
+      "stage": "initial",
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {renameProject} from './subject.mjs';\nconst projects=new Map([['p',{organizationId:'other',title:'old'}]]);\nconst response=renameProject({organizationId:'mine'},'p','new',projects);\nconsole.log(JSON.stringify({response,title:projects.get('p').title,contractSatisfied:response.status===403&&projects.get('p').title==='old'}));"
+      ],
+      "target": "/tmp/asc-1509-review-fixtures/authorization/initial",
+      "exit_code": 0,
+      "stdout": {
+        "response": {
+          "status": 200
+        },
+        "title": "new",
+        "contractSatisfied": false
+      },
+      "stderr": "",
+      "oracleMatched": true,
+      "existing_test": {
+        "exit_code": 0,
+        "stdout": "existing authorization tests passed\n"
+      }
+    },
+    {
+      "scenario": "authorization",
+      "stage": "after",
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {renameProject} from './subject.mjs';\nconst projects=new Map([['p',{organizationId:'other',title:'old'}]]);\nconst response=renameProject({organizationId:'mine'},'p','new',projects);\nconsole.log(JSON.stringify({response,title:projects.get('p').title,contractSatisfied:response.status===403&&projects.get('p').title==='old'}));"
+      ],
+      "target": "/tmp/asc-1509-review-fixtures/authorization/after",
+      "exit_code": 0,
+      "stdout": {
+        "response": {
+          "status": 403
+        },
+        "title": "old",
+        "contractSatisfied": true
+      },
+      "stderr": "",
+      "oracleMatched": true,
+      "existing_test": {
+        "exit_code": 0,
+        "stdout": "existing authorization tests passed\n"
+      }
+    },
+    {
+      "scenario": "private-helper",
+      "stage": "initial",
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {renameDocument} from './subject.mjs';\nconst d={title:'old'};const rejected=['',null,0,{},[],true].every(title=>renameDocument(d,title).status===400&&d.title==='old');\nconst accepted=renameDocument(d,'new').status===200&&d.title==='new';\nconsole.log(JSON.stringify({rejected,accepted,contractSatisfied:rejected&&accepted}));"
+      ],
+      "target": "/tmp/asc-1509-review-fixtures/private-helper/initial",
+      "exit_code": 0,
+      "stdout": {
+        "rejected": true,
+        "accepted": true,
+        "contractSatisfied": true
+      },
+      "stderr": "",
+      "oracleMatched": true,
+      "existing_test": {
+        "exit_code": 0,
+        "stdout": "existing private-helper tests passed\n"
+      }
+    },
+    {
+      "scenario": "private-helper",
+      "stage": "after",
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {renameDocument} from './subject.mjs';\nconst d={title:'old'};const rejected=['',null,0,{},[],true].every(title=>renameDocument(d,title).status===400&&d.title==='old');\nconst accepted=renameDocument(d,'new').status===200&&d.title==='new';\nconsole.log(JSON.stringify({rejected,accepted,contractSatisfied:rejected&&accepted}));"
+      ],
+      "target": "/tmp/asc-1509-review-fixtures/private-helper/after",
+      "exit_code": 0,
+      "stdout": {
+        "rejected": true,
+        "accepted": true,
+        "contractSatisfied": true
+      },
+      "stderr": "",
+      "oracleMatched": true,
+      "existing_test": {
+        "exit_code": 0,
+        "stdout": "existing private-helper tests passed\n"
+      }
+    },
+    {
+      "scenario": "failed-save",
+      "stage": "initial",
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {updateNote} from './subject.mjs';\nconst record={note:'old'};const consumed=new Set();const store={get:id=>record,save:()=>{throw new Error('simulated write failure')}};\nconst response=updateNote(store,'x','new','k',consumed);\nconsole.log(JSON.stringify({response,note:record.note,retryKeyConsumed:consumed.has('k'),stateContractSatisfied:record.note==='old',keyContractSatisfied:!consumed.has('k'),contractSatisfied:response.status===503&&record.note==='old'&&!consumed.has('k')}));"
+      ],
+      "target": "/tmp/asc-1509-review-fixtures/failed-save/initial",
+      "exit_code": 0,
+      "stdout": {
+        "response": {
+          "status": 503
+        },
+        "note": "new",
+        "retryKeyConsumed": true,
+        "stateContractSatisfied": false,
+        "keyContractSatisfied": false,
+        "contractSatisfied": false
+      },
+      "stderr": "",
+      "oracleMatched": true,
+      "existing_test": {
+        "exit_code": 0,
+        "stdout": "existing failed-save tests passed\n"
+      }
+    },
+    {
+      "scenario": "failed-save",
+      "stage": "after",
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {updateNote} from './subject.mjs';\nconst record={note:'old'};const consumed=new Set();const store={get:id=>record,save:()=>{throw new Error('simulated write failure')}};\nconst response=updateNote(store,'x','new','k',consumed);\nconsole.log(JSON.stringify({response,note:record.note,retryKeyConsumed:consumed.has('k'),stateContractSatisfied:record.note==='old',keyContractSatisfied:!consumed.has('k'),contractSatisfied:response.status===503&&record.note==='old'&&!consumed.has('k')}));"
+      ],
+      "target": "/tmp/asc-1509-review-fixtures/failed-save/after",
+      "exit_code": 0,
+      "stdout": {
+        "response": {
+          "status": 503
+        },
+        "note": "new",
+        "retryKeyConsumed": false,
+        "stateContractSatisfied": false,
+        "keyContractSatisfied": true,
+        "contractSatisfied": false
+      },
+      "stderr": "",
+      "oracleMatched": true,
+      "existing_test": {
+        "exit_code": 0,
+        "stdout": "existing failed-save tests passed\n"
+      }
+    }
+  ]
+}
