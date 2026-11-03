@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a19f0a-4b22-78d2-893f-db28349f98b0"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"The meeting starts tomorrow at 3 p.m."}}
+{"type":"turn.completed","usage":{"input_tokens":20050,"cached_input_tokens":12288,"cache_write_input_tokens":0,"output_tokens":14,"reasoning_output_tokens":0}}
