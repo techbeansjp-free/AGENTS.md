@@ -33,13 +33,13 @@
     "/home/tatsuru/.local/share/mise/installs/node/24.22.0/bin/node",
     "/tools/node",
     "--ro-bind",
-    "/tmp/asc-1642-consumer/final-4/artifacts",
+    "/tmp/asc-1642-consumer/ownership-final-1/artifacts",
     "/input",
     "--ro-bind",
     "/tmp/asc-1642-consumer/run.mjs",
     "/run.mjs",
     "--bind",
-    "/tmp/asc-1642-consumer/final-4/workspace",
+    "/tmp/asc-1642-consumer/ownership-final-1/workspace",
     "/workspace",
     "--setenv",
     "PATH",
@@ -52,21 +52,21 @@
     "net:[4026531833]",
     "--setenv",
     "ASC_TEST_HOST_PORT",
-    "44067",
+    "41453",
     "--chdir",
     "/workspace",
     "/tools/node",
     "/run.mjs"
   ],
   "exit": 0,
-  "seconds": 22.093419239000003,
-  "stdout": "{\"passed\":true,\"hasFixed\":true,\"cases\":20}\n",
+  "seconds": 20.246641499000003,
+  "stdout": "{\"passed\":true,\"hasFixed\":true,\"cases\":31}\n",
   "stderr": "",
   "hashes": {
     "baseline-next.tgz": "46a7bc3e1430e6fd310da80872600884277ab9f8c517fd027fd54da6625c0481",
     "baseline.tgz": "fc83819a332d3c2b3c2d9f8cd68511827e511691a1160fd7239a5f328e4ea0d7",
-    "fixed-next.tgz": "8e1448de3edba740f1358a22da5b9fea4169d72076d3d63551725d5f2a1f5b7d",
-    "fixed.tgz": "91666a2174a885649f585361a7243961948bdd258bff8bbfd887ac6e634dbb87"
+    "fixed-next.tgz": "d194f714ab168f76d36770a6c49e7aa12ca2fb52171bf2953432068d666b923d",
+    "fixed.tgz": "55a1ed5ada4253bc037e899c623885b26661ad0039dd5cebec983a3d09ac4572"
   },
   "calls": [
     {
@@ -76,7 +76,7 @@
         "--ignore-scripts",
         "--json",
         "--pack-destination",
-        "/tmp/asc-1642-consumer/final-4/artifacts"
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts"
       ],
       "cwd": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md",
       "status": 0,
@@ -86,9 +86,9 @@
       "cmd": "tar",
       "args": [
         "-xzf",
-        "/tmp/asc-1642-consumer/final-4/artifacts/baseline.tgz",
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts/baseline.tgz",
         "-C",
-        "/tmp/asc-1642-consumer/final-4/baseline-next-source"
+        "/tmp/asc-1642-consumer/ownership-final-1/baseline-next-source"
       ],
       "status": 0,
       "stderr": ""
@@ -100,9 +100,9 @@
         "--ignore-scripts",
         "--json",
         "--pack-destination",
-        "/tmp/asc-1642-consumer/final-4/artifacts"
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts"
       ],
-      "cwd": "/tmp/asc-1642-consumer/final-4/baseline-next-source/package",
+      "cwd": "/tmp/asc-1642-consumer/ownership-final-1/baseline-next-source/package",
       "status": 0,
       "stderr": ""
     },
@@ -113,7 +113,7 @@
         "--ignore-scripts",
         "--json",
         "--pack-destination",
-        "/tmp/asc-1642-consumer/final-4/artifacts"
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts"
       ],
       "cwd": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20261103_135832-1642-host-skill-sync",
       "status": 0,
@@ -123,9 +123,9 @@
       "cmd": "tar",
       "args": [
         "-xzf",
-        "/tmp/asc-1642-consumer/final-4/artifacts/fixed.tgz",
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts/fixed.tgz",
         "-C",
-        "/tmp/asc-1642-consumer/final-4/fixed-next-source"
+        "/tmp/asc-1642-consumer/ownership-final-1/fixed-next-source"
       ],
       "status": 0,
       "stderr": ""
@@ -137,9 +137,9 @@
         "--ignore-scripts",
         "--json",
         "--pack-destination",
-        "/tmp/asc-1642-consumer/final-4/artifacts"
+        "/tmp/asc-1642-consumer/ownership-final-1/artifacts"
       ],
-      "cwd": "/tmp/asc-1642-consumer/final-4/fixed-next-source/package",
+      "cwd": "/tmp/asc-1642-consumer/ownership-final-1/fixed-next-source/package",
       "status": 0,
       "stderr": ""
     }

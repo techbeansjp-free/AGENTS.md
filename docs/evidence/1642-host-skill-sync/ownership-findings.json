@@ -1,0 +1,32 @@
+{
+  "evaluatedHead": "d64dea342e6f399c3d5b5647694f57bedd4240be",
+  "candidateTarballSha256": "91666a2174a885649f585361a7243961948bdd258bff8bbfd887ac6e634dbb87",
+  "rawAuditSha256": "fc0bc59a836417df14ffe6de01aaf29c6ca6ab7d909d4942ca9137436ab68d38",
+  "results": [
+    {
+      "name": "misattributed modern record must not retire an unrelated Skill",
+      "protected": false
+    },
+    {
+      "name": "unrecorded identical canonical file must not be adopted then overwritten",
+      "protected": false
+    },
+    {
+      "name": "ordinary update preserves independent configuration, Skills and sibling files",
+      "protected": true
+    }
+  ],
+  "interpretation": [
+    "A misattributed modern record containing a private Skill path and matching file hash caused that file to be deleted. This involved a malformed ownership claim, not a normal CLI-produced record.",
+    "A preexisting unrecorded canonical file equal to distribution bytes was adopted; a later normal update overwrote it.",
+    "Ordinary updates preserved the sixteen unrelated owner settings/Skill/sibling canaries."
+  ],
+  "fixes": [
+    "Modern and legacy Host claims require exact known generated wrapper proof.",
+    "All existing catalog assets require a matching prior owned hash before any equal-next shortcut."
+  ],
+  "remainingAssumptions": [
+    "Trusted distribution and correctly attributed record; no cryptographic defense against comprehensive consistent forgery.",
+    "No concurrent edits to the same consumer during apply/rollback."
+  ]
+}

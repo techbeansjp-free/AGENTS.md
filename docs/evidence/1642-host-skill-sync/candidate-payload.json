@@ -1,6 +1,6 @@
 {
   "base": "c6bd2a04f0e39f5736c9228c9a5f15b1c359d32e",
-  "tarballSha256": "91666a2174a885649f585361a7243961948bdd258bff8bbfd887ac6e634dbb87",
+  "tarballSha256": "55a1ed5ada4253bc037e899c623885b26661ad0039dd5cebec983a3d09ac4572",
   "files": {
     "package.json": "e2ae3487e97b9bceb68549f18275ad682dd1f982a7adcef2791345c76aa70a29",
     "v05/RELEASE_READINESS.json": "3f3ce67cd755e29d6763e6469afc681d269054697683de6898cdaf0703ffc29a",
@@ -102,7 +102,7 @@
     "skills/verification-optimization/SKILL.md": "220358fe91ab1f58e97ac5dd258c6dc43ac9c226361dac3a5a35e5c1d3b5cff9",
     "skills/work-coordination/SKILL.md": "fd18e4160c6c7700ecae51d787926e0e28553d93c2ee60454c8ad3abbb71fad9",
     "v05/optional-skills/model-deliberation/SKILL.md": "9d59820bcafb703662520bbd6944a1354a305e681f84644cced853fb1070317e",
-    "v05/USAGE.md": "f8dce4a6f7c2682aa8a9b310ffa49215c7be424b2b9283f8b028e14f5531815f",
+    "v05/USAGE.md": "66bce307fe693a8058bfa5b70517266d4efe28d3d1b5ed5f2493842f892ccca4",
     "skills/project-foundation/references/verification-and-security.md": "5b704c7e6d445e931cd5471bda6d68e6fc3a1bb4fad418a55f8ee752e87c4831",
     "skills/asc/references/workspace.md": "1248e770f86f77b6b8d4261a87b499cf969f1b21f4285d25a054d1fdb8ab7bd0",
     "src/adaptive-run.mjs": "b29a8d0288df441335134114ddfd6d3b48d71d84ee1ea6f17e49ae8c39244e62",
@@ -134,7 +134,7 @@
     "migration_inspect.mjs": "e5f99afc0c47b4ad15666c6d1b9023fa234dea54661f425e9bb67b8113099c09",
     "src/migration.mjs": "ee96c927935e485daa6347640d848c294144d193c8d2b950959c860dc525c778",
     "src/native-probe.mjs": "1c365a2a966d417dc7706f63a9c197ebbb7b0fbb6d700efc0cd049dbf4b117a0",
-    "src/project-assets.mjs": "83454e93622ca83152bd15dee0e951e893b93f13513f4ba08309db87692858f0",
+    "src/project-assets.mjs": "a1f2fa925f992fa676b38f5d0d39abccf2e5a4df52185f91ba0966c3ffff8a76",
     "src/project-context.mjs": "d5dd7b2ced21e4cc9dcc7c122670356931e1cfb16c136ce225c2464dd1959be2",
     "src/project-launcher.mjs": "68fad6176430e848568ea1143e6948421e42538d06578071878add0dd246e883",
     "src/project-location.mjs": "b421f399bfdf192ae2210bb13628294ea50dada53edf9d9dd195a79f31881837",
