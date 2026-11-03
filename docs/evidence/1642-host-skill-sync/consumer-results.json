@@ -1,0 +1,5028 @@
+{
+  "passed": true,
+  "hasFixed": true,
+  "node": "v24.22.0",
+  "homeVisible": false,
+  "networkNamespace": "net:[4026533655]",
+  "results": [
+    {
+      "name": "network namespace is separate and host listener unreachable",
+      "passed": true
+    },
+    {
+      "name": "baseline reproduces stale added/changed/retired entries",
+      "passed": true
+    },
+    {
+      "name": "legacy both ordinary upgrade and repeat",
+      "passed": true
+    },
+    {
+      "name": "legacy codex ordinary upgrade and repeat",
+      "passed": true
+    },
+    {
+      "name": "legacy claude ordinary upgrade and repeat",
+      "passed": true
+    },
+    {
+      "name": "legacy none ordinary upgrade and repeat",
+      "passed": true
+    },
+    {
+      "name": "new-record both ordinary upgrade and repeat",
+      "passed": true
+    },
+    {
+      "name": "new-record codex ordinary upgrade and repeat",
+      "passed": true
+    },
+    {
+      "name": "new-record claude ordinary upgrade and repeat",
+      "passed": true
+    },
+    {
+      "name": "new-record none ordinary upgrade and repeat",
+      "passed": true
+    },
+    {
+      "name": "legacy edited verification-optimization blocks all updates",
+      "passed": true
+    },
+    {
+      "name": "legacy edited execution-recovery blocks all updates",
+      "passed": true
+    },
+    {
+      "name": "new-record edited verification-optimization blocks all updates",
+      "passed": true
+    },
+    {
+      "name": "new-record edited execution-recovery blocks all updates",
+      "passed": true
+    },
+    {
+      "name": "unowned added name different blocks all updates",
+      "passed": true
+    },
+    {
+      "name": "unowned added name identical blocks all updates",
+      "passed": true
+    },
+    {
+      "name": "unselected Host and unrelated skills remain untouched",
+      "passed": true
+    },
+    {
+      "name": "symlink retired entry rejected without touching owner canary",
+      "passed": true
+    },
+    {
+      "name": "hardlink retired entry rejected without touching owner canary",
+      "passed": true
+    },
+    {
+      "name": "system mounts reject write",
+      "passed": true
+    }
+  ],
+  "rawTranscriptSha256": "ef923736c7c3b811d9857af9c08370e2b5ea009e6861574b156898ad57d84b62",
+  "commands": [
+    {
+      "command": "tar",
+      "args": [
+        "-xzf",
+        "/input/baseline.tgz",
+        "-C",
+        "/workspace/packages/baseline"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "tar",
+      "args": [
+        "-xzf",
+        "/input/baseline-next.tgz",
+        "-C",
+        "/workspace/packages/baseline-next"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "tar",
+      "args": [
+        "-xzf",
+        "/input/fixed.tgz",
+        "-C",
+        "/workspace/packages/fixed"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "tar",
+      "args": [
+        "-xzf",
+        "/input/fixed-next.tgz",
+        "-C",
+        "/workspace/packages/fixed-next"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "-e",
+        "const s=require('net').connect({host:'127.0.0.1',port:Number(process.env.ASC_TEST_HOST_PORT)});s.on('connect',()=>process.exit(1));s.on('error',()=>process.exit(0));setTimeout(()=>process.exit(2),2000);"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/baseline/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/baseline",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "c368a938b6b29c9e710a77ccd622aa9513d6d0faa1b65842276ea7c717cd0d29",
+      "plan": {
+        "applied": true,
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 282,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/baseline-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/baseline",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "ee2fc30abca17554951919bd22f027acbcb324d78f47da4b34b0fe3a7c8d1b4c",
+      "plan": {
+        "applied": true,
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md",
+          ".agents/skills/asc/SKILL.md",
+          ".agents/skills/contract-enforcement/SKILL.md",
+          ".agents/skills/engineering-judgment/SKILL.md",
+          ".agents/skills/estimate-and-scope/SKILL.md",
+          ".agents/skills/execution-recovery/SKILL.md",
+          ".agents/skills/migration-assurance/SKILL.md",
+          ".agents/skills/project-foundation/SKILL.md",
+          ".agents/skills/research-to-implementation/SKILL.md",
+          ".agents/skills/review-and-remediation/SKILL.md",
+          ".agents/skills/security-evidence/SKILL.md",
+          ".agents/skills/subagent-model-selection/SKILL.md",
+          ".agents/skills/tracker-issue-writing/SKILL.md",
+          ".agents/skills/user-journey-acceptance/SKILL.md",
+          ".agents/skills/verification-optimization/SKILL.md",
+          ".agents/skills/work-coordination/SKILL.md",
+          ".claude/skills/asc/SKILL.md",
+          ".claude/skills/contract-enforcement/SKILL.md",
+          ".claude/skills/engineering-judgment/SKILL.md",
+          ".claude/skills/estimate-and-scope/SKILL.md",
+          ".claude/skills/execution-recovery/SKILL.md",
+          ".claude/skills/migration-assurance/SKILL.md",
+          ".claude/skills/project-foundation/SKILL.md",
+          ".claude/skills/research-to-implementation/SKILL.md",
+          ".claude/skills/review-and-remediation/SKILL.md",
+          ".claude/skills/security-evidence/SKILL.md",
+          ".claude/skills/subagent-model-selection/SKILL.md",
+          ".claude/skills/tracker-issue-writing/SKILL.md",
+          ".claude/skills/user-journey-acceptance/SKILL.md",
+          ".claude/skills/verification-optimization/SKILL.md",
+          ".claude/skills/work-coordination/SKILL.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/fresh-next-reference",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "3a35428907a01d1692ae87c6f510b49303afef998b5fd71e51e9cc7ed41d7236",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".agents/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".agents/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".agents/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".agents/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".agents/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".agents/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".agents/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".agents/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".agents/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".claude/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".claude/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".claude/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".claude/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".claude/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".claude/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".claude/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".claude/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".claude/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "git",
+      "args": [
+        "init",
+        "--quiet",
+        "/workspace/repositories/legacy-both"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "git",
+      "args": [
+        "-C",
+        "/workspace/repositories/legacy-both",
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "--allow-empty",
+        "-m",
+        "Fixture baseline"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "git",
+      "args": [
+        "-C",
+        "/workspace/repositories/legacy-both",
+        "worktree",
+        "add",
+        "--quiet",
+        "-b",
+        "consumer",
+        "/workspace/consumers/legacy-both"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/baseline/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-both",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "fffc4866d73e7338b944eb56e86672413c75fb5fc61e3b1de89e5f6bfda5aaff",
+      "plan": {
+        "applied": true,
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 282,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-both"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "b3cf1459f871847b0c5aadd4b80c5c2ee74d01b0291ebb3827ddbe20baf9a98e",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-both",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "b9e2bbdbce269cb8cb104bbcf2a7dcf91dcea97e313c69d131aeb1e80b073824",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-both",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "28a6bde92b327c987e6ff6940fb6af44ee5401cd6feb229dfd41301a4cd63c56",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": false,
+        "assetChangeCount": 0,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/baseline/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-codex",
+        "--register-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "99dbe2d5467bf3b907f525921597373e74e0e20c6f5dad2a55ebd1cf44a2dfc3",
+      "plan": {
+        "applied": true,
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 267,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-codex"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "ffa07f44a13f663201a76e69f3fa5fc0266f20edcc9f3446e453732e1b744f96",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-codex",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "ba91d8bfcec3109457f4dc117512d9167014718c7c06b3a874f6b9b49e9fb228",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-codex",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "049f6e28cdfaedac49080138863be46736bb799bb85f9df64981f15d673a3bc5",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": false,
+        "assetChangeCount": 0,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/baseline/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-claude",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "5f9e8def412862b11076e2ca68f3b0be2eeea34d124caf5e4a19d7d1cdacba51",
+      "plan": {
+        "applied": true,
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 267,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-claude"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "cc08dc6bfb81337ae998e0ba4f1477e381e580ccc9657956889683dd4aea1a87",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": [
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-claude",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e4cde7f7131f457d26a54da4c54ee5faa3bb8a4670e174129b23733c0fc65e4f",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": [
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-claude",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "38016bf920510cee990903991bab773001fe4cfdd2ecdbb3f7a25efb23909503",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": false,
+        "assetChangeCount": 0,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/baseline/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-none",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e1d7cf0a25b4a10fd941a5bb6cf53a74fbfb488687f609deeca865c89252399b",
+      "plan": {
+        "applied": true,
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-none"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "62999a7b0c59458e455a335b271932b308c43f8372c25fc5fc2f656d919ae823",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-none",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "2165651972e732d2c0f27531f54d82a4078e9d08a6bd2fd14749d7677b8333be",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-none",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "4670b4724161b4291585b325313020491f03db9c75dd1e19fa5b22271165f0dc",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": false,
+        "assetChangeCount": 0,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "git",
+      "args": [
+        "init",
+        "--quiet",
+        "/workspace/repositories/new-record-both"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "git",
+      "args": [
+        "-C",
+        "/workspace/repositories/new-record-both",
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "--allow-empty",
+        "-m",
+        "Fixture baseline"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "git",
+      "args": [
+        "-C",
+        "/workspace/repositories/new-record-both",
+        "worktree",
+        "add",
+        "--quiet",
+        "-b",
+        "consumer",
+        "/workspace/consumers/new-record-both"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-both",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "848887ab1d691a89c42041fb8c49f551d2ff19d0d772df4a2e5e3b927d38ec7c",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".agents/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".agents/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".agents/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".agents/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".agents/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".agents/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".agents/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".agents/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".agents/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".agents/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".agents/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".claude/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".claude/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".claude/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".claude/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".claude/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".claude/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".claude/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".claude/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".claude/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".claude/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".claude/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-both"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "0955ba5ef3a3970fdddffc3d9afa085d9c5824a300df4b215f39f1b5438b75f2",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-both",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "552b1bddc6ba91635a22b3f3d5a228eec91ed6ed553a80bf904feb21c7986d62",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-both",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "be00ac2df691fde2648cd41ca205c3c2320d4958a907d29ec8652d326c9c7bb5",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": false,
+        "assetChangeCount": 0,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-codex",
+        "--register-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "b87314cda57ee4db2ace7939f4be124329df9665075d7beabbd288b224f888a7",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".agents/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".agents/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".agents/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".agents/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".agents/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".agents/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".agents/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".agents/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".agents/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".agents/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".agents/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-codex"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "45a82d9f878c903a2a1ad24ed1dcb0916c65c8bc6138711feaf95008b4f340ec",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-codex",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "fd405f43b65259b29faeb9d06022ad25210015de5bca08cfaf2bb23fab9a569d",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-codex",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "fc925e52fb095a8ea369bfbbcb28a406a8742550ec4f19eaa1e4ccafbe8a7dd4",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": false,
+        "assetChangeCount": 0,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-claude",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "a03972e9d40650329f7238f3520c869bbe7c329b5fad86a525cfea5195d9bc77",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".claude/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".claude/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".claude/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".claude/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".claude/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".claude/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".claude/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".claude/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".claude/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".claude/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".claude/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-claude"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e02ff59f400ec113f5ccf6d57b1bd77c6889ce811b04e937664d49e477ad505e",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-claude",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e85fa18fea00a4fc835afe3d138c4e273d14d84bda3a57588a9e99f882fb9528",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-claude",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "0fbbfdeca329ec7672d0f92bd828838553945545c70e2547636c886655f88477",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": false,
+        "assetChangeCount": 0,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-none",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e31edededd34f6117a7e82c8a7899f9d9163a7aacce636a89da9fbefb40014c0",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-none"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "874026d9afa5b1c5aa6653a0cecc20683c35497e91a70608cc2aa0182e68ef96",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-none",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "6b3b13d23f5508df38ef3d8fe8d77e3b75ca4e5a963c96f61a5ed8c7bdfc7ffb",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-none",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "7d54e5322ff93dc7af5a091bfed73652787450501e082e948a61534d89a99e94",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": false,
+        "assetChangeCount": 0,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/baseline/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-edit-verification-optimization",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "0ee7934d75ca71223f9838ce5d80256c601c6d4ae0add3a6d20d4115d24146cd",
+      "plan": {
+        "applied": true,
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 282,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-edit-verification-optimization"
+      ],
+      "status": 2,
+      "stderr": "",
+      "stdoutSha256": "f7e32d5f29291387828702945517105db2777499c22f92f324ba39db22f1670f",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [
+          ".claude/skills/verification-optimization/SKILL.md"
+        ],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-edit-verification-optimization",
+        "--apply"
+      ],
+      "status": 2,
+      "stderr": "",
+      "stdoutSha256": "f7e32d5f29291387828702945517105db2777499c22f92f324ba39db22f1670f",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [
+          ".claude/skills/verification-optimization/SKILL.md"
+        ],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/baseline/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-edit-execution-recovery",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "d5445c9ced85f155cfb624c58097f13f23ea574e0739be6bd7b2d406fc4a4900",
+      "plan": {
+        "applied": true,
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 282,
+        "hostEntryChanges": []
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-edit-execution-recovery"
+      ],
+      "status": 2,
+      "stderr": "",
+      "stdoutSha256": "bb9ba1ddabbad813144ebe3c0cb57359e4f008b2862fa8c4a8a07817f1ef4a64",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [
+          ".claude/skills/execution-recovery/SKILL.md"
+        ],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md",
+          ".claude/skills/execution-recovery/SKILL.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/legacy-edit-execution-recovery",
+        "--apply"
+      ],
+      "status": 2,
+      "stderr": "",
+      "stdoutSha256": "bb9ba1ddabbad813144ebe3c0cb57359e4f008b2862fa8c4a8a07817f1ef4a64",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [
+          ".claude/skills/execution-recovery/SKILL.md"
+        ],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md",
+          ".claude/skills/execution-recovery/SKILL.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 16,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "c126df144abd6e807480c8fcd3ae196548eb36741a591d7c8ec91aa8c882acf4",
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-edit-verification-optimization",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "923cf0ae9a15488d7e26feb0c9e82fcc297305537d0ebc784cdc2b7ea1c49867",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".agents/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".agents/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".agents/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".agents/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".agents/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".agents/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".agents/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".agents/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".agents/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".agents/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".agents/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".claude/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".claude/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".claude/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".claude/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".claude/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".claude/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".claude/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".claude/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".claude/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".claude/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".claude/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-edit-verification-optimization"
+      ],
+      "status": 2,
+      "stderr": "",
+      "stdoutSha256": "fbf70a170457588681d34c0d2ba8f46076d3037ba54f38f2a2d36f9a95c3d2ac",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [
+          ".claude/skills/verification-optimization/SKILL.md"
+        ],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-edit-verification-optimization",
+        "--apply"
+      ],
+      "status": 2,
+      "stderr": "",
+      "stdoutSha256": "fbf70a170457588681d34c0d2ba8f46076d3037ba54f38f2a2d36f9a95c3d2ac",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [
+          ".claude/skills/verification-optimization/SKILL.md"
+        ],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-edit-execution-recovery",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "69bf0cf5caed76c91fd9e81a74a7a8312a4ee588e3c3fc368d1e4b3be88bf364",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".agents/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".agents/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".agents/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".agents/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".agents/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".agents/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".agents/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".agents/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".agents/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".agents/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".agents/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".claude/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".claude/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".claude/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".claude/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".claude/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".claude/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".claude/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".claude/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".claude/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".claude/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".claude/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-edit-execution-recovery"
+      ],
+      "status": 2,
+      "stderr": "",
+      "stdoutSha256": "567aa2f40c90e1945d33162e940ec0860c204e77041e79c9d6d932827314aad0",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [
+          ".claude/skills/execution-recovery/SKILL.md"
+        ],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md",
+          ".claude/skills/execution-recovery/SKILL.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/new-record-edit-execution-recovery",
+        "--apply"
+      ],
+      "status": 2,
+      "stderr": "",
+      "stdoutSha256": "567aa2f40c90e1945d33162e940ec0860c204e77041e79c9d6d932827314aad0",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [
+          ".claude/skills/execution-recovery/SKILL.md"
+        ],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md",
+          ".claude/skills/execution-recovery/SKILL.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/unowned-false",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "1801085cbb24c7fd3b7c5f19ed110288476d9594b240e1f116d0d63470399fc0",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".agents/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".agents/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".agents/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".agents/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".agents/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".agents/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".agents/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".agents/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".agents/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".agents/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".agents/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".claude/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".claude/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".claude/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".claude/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".claude/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".claude/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".claude/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".claude/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".claude/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".claude/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".claude/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/unowned-false",
+        "--apply"
+      ],
+      "status": 2,
+      "stderr": "",
+      "stdoutSha256": "c9a18a164473cbe4f36fbca66051a04ff8df2d58e7fa127afebccbea9913d603",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [
+          ".agents/skills/recovery-next/SKILL.md"
+        ],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/unowned-true",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "899ca6ab7cda8a3670de7a361d498fa4f4cb691dea43975e754d29af4b048d01",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".agents/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".agents/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".agents/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".agents/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".agents/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".agents/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".agents/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".agents/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".agents/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".agents/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".agents/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".claude/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".claude/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".claude/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".claude/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".claude/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".claude/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".claude/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".claude/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".claude/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".claude/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".claude/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/unowned-true",
+        "--apply"
+      ],
+      "status": 2,
+      "stderr": "",
+      "stdoutSha256": "43a1a421e9963dc3c874b02d6b45a70acfbbc22c371e0fdc27f0167f615ae65d",
+      "plan": {
+        "applied": false,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [
+          ".agents/skills/recovery-next/SKILL.md"
+        ],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".claude/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/unselected",
+        "--register-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "60dff4f8c5385b9b328678b547505c481280341790d86a82fe8b74cea6938a93",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".agents/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".agents/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".agents/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".agents/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".agents/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".agents/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".agents/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".agents/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".agents/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".agents/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".agents/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/unselected",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "e2560aa65102b1fc8b1f2117b18cee17858e5694ad68d9fda247832438c4f530",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents"
+        ],
+        "conflicts": [],
+        "retained": [
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/managed-runtime/skills/execution-recovery/references/owned-execution.md",
+          ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+          ".agent-skill-chain/skills/execution-recovery/references/owned-execution.md"
+        ],
+        "recordChanged": true,
+        "assetChangeCount": 9,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/recovery-next/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b8be26bab0fe2f4b6d803db7f3cf4f3d357f46757e5904293173c157620a6397"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "update",
+            "beforeSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148",
+            "afterSha256": "6f3cb1b8c28faa01dcef2c0c63a77fe0eb91e7f7c6507bb5ab0727f50dbd1f60"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "delete",
+            "beforeSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f",
+            "afterSha256": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/unsafe-symlink",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "fa691c0223d47beae2c15243019f71abcd38583cddacd021b78cca2122cfe46b",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".agents/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".agents/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".agents/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".agents/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".agents/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".agents/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".agents/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".agents/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".agents/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".agents/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".agents/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".claude/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".claude/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".claude/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".claude/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".claude/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".claude/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".claude/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".claude/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".claude/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".claude/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".claude/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/unsafe-symlink",
+        "--apply"
+      ],
+      "status": 1,
+      "stderr": "Asset path traverses a symlink\n",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/unsafe-hardlink",
+        "--register-skill",
+        "--register-claude-skill",
+        "--apply"
+      ],
+      "status": 0,
+      "stderr": "",
+      "stdoutSha256": "f952bfff1925952ebc14749da06dcaa4a6fc16ce0071152ecaaf36e4dd7cb0cc",
+      "plan": {
+        "applied": true,
+        "registeredHosts": [
+          ".agents",
+          ".claude"
+        ],
+        "conflicts": [],
+        "retained": [],
+        "recordChanged": true,
+        "assetChangeCount": 252,
+        "hostEntryChanges": [
+          {
+            "path": ".agents/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".agents/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".agents/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".agents/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".agents/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".agents/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".agents/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".agents/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".agents/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".agents/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".agents/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".agents/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".agents/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".agents/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".agents/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".agents",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          },
+          {
+            "path": ".claude/skills/asc/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "ce01b8924cb5935aeeba01b2140c3827bc36df01f45f48db0e91b8857df6b895"
+          },
+          {
+            "path": ".claude/skills/project-foundation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "5e0c3ea7d1b9c24ff0491b3c4b4406f539c1f6e41501cebcfa747a8afc1bf18d"
+          },
+          {
+            "path": ".claude/skills/contract-enforcement/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "a5452043a6eefd5e1de51a2e0d3323c886ac0a08e27e8b8290e6e8fc750c445f"
+          },
+          {
+            "path": ".claude/skills/execution-recovery/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "b264237207aba5bf9ed1ac4a28768ab4e3219e036a1f424fcafdfa39d0d4708f"
+          },
+          {
+            "path": ".claude/skills/migration-assurance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f127f406b40fe43060b7e034a16cc419645a2077d919c868afb4f8ef4bc71022"
+          },
+          {
+            "path": ".claude/skills/research-to-implementation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "dc6fd99d128696d95484cdb330354ff08acb444fcd2455750f86c1515dba731d"
+          },
+          {
+            "path": ".claude/skills/security-evidence/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "1b9cf23fcedf83ce31b2294bf762ec832742e1dbc96e9f4f937283a107892e30"
+          },
+          {
+            "path": ".claude/skills/user-journey-acceptance/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "3db10ba71ec3443d8a7c3fcb49605be3a1f6ff14564c17502ef785abd4635636"
+          },
+          {
+            "path": ".claude/skills/verification-optimization/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "cf985ec5b3d5fdfd792325c0f0345ce8777d259c01e9cfd7f0a0aefe309e9148"
+          },
+          {
+            "path": ".claude/skills/subagent-model-selection/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "f6146c29f8a68e53d6a0fb696e1f3efd5c8ad5dbd801ce70d5281d8b2591e1c6"
+          },
+          {
+            "path": ".claude/skills/work-coordination/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c3a5e96b2b9f1a688062b2df4c36863f6f33706413b0a47d2bf3d7eccb5ba3d8"
+          },
+          {
+            "path": ".claude/skills/review-and-remediation/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "c72fb8ba3e75f82ba8815f6b6f8403620c593b58b36f8e47fab5dfffa09c6e28"
+          },
+          {
+            "path": ".claude/skills/engineering-judgment/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "9052f57c9b97eee890ed847159e4990b9766ce09f787f01cbb0ea1f0d0f6cb13"
+          },
+          {
+            "path": ".claude/skills/estimate-and-scope/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "e09b48acd55931e659f8bf74822ff20cef77eaa9e432a4fc6d658402821d2a7f"
+          },
+          {
+            "path": ".claude/skills/tracker-issue-writing/SKILL.md",
+            "kind": "host-entry",
+            "host": ".claude",
+            "action": "create",
+            "beforeSha256": null,
+            "afterSha256": "2f081f0c60eb5576290cadd399a4a7dd89bdff7560e939f0e9b347a2f4b34054"
+          }
+        ]
+      }
+    },
+    {
+      "command": "/tools/node",
+      "args": [
+        "/workspace/packages/fixed-next/package/bin/asc-v05.mjs",
+        "project-assets",
+        "/workspace/consumers/unsafe-hardlink",
+        "--apply"
+      ],
+      "status": 1,
+      "stderr": "Unsafe asset file\n",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "earlierHarnessCorrections": [
+    {
+      "run": "final-1",
+      "reason": "Git fixture used primary checkout; CLI correctly required a dedicated worktree. Fixture corrected, no product guard changed."
+    },
+    {
+      "run": "final-2",
+      "reason": "Conflict fixture expected exit 0; actual CLI correctly returned exit 2. Harness now asserts exit 2 iff conflicts exist."
+    }
+  ]
+}
