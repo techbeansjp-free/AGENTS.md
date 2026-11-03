@@ -1,5 +1,5 @@
 {
-  "checked_at_utc": "2026-11-03T03:39:57.312Z",
+  "checked_at_utc": "2026-11-03T03:45:27.811Z",
   "original_measurement_runner": {
     "language": "Python",
     "source_commit": "7d60ca568c0354723db35abd596feb08a0d21135",
@@ -16,13 +16,15 @@
       "prepare.mjs": "5f37d42949389bc816d1da5294ce060a877d2ef5edc800487f285c8d7662fc5b",
       "measure.mjs": "5887ee6f097bceed69ab4f748f1e085b1e4400d2fe96e473c7ea2af69567e71b",
       "verify.mjs": "10687dd5622135771a28c175cd628cc82430b82594370194eb51c51d168c83ad",
-      "harness.mjs": "bff369b983a8cff1d95b6f540807b9b52d5725f2df3d3f42337cc91a1baa3222"
-    }
+      "harness.mjs": "a8443136aa4c05d6fbafb36a1530cba08ba0b8a2882d30e6ca09533be3aeb4dd",
+      "verify-timeout.mjs": "f752be96d54fd9d9045cd8841abe746e0e8ad969edaeb65608f965bcf6c69316"
+    },
+    "revision_reason": "Independent review Medium: direct-child close must not cancel pending descendant process-group cleanup."
   },
   "original_frozen_manifest_sha256": "e2a909f0f3fb5d3d45cb4d6cad420de36b0c9a6e1dcd0b40e9bad4b5ece102bf",
   "source_quality": {
     "valid": true,
     "errors": [],
-    "files": 236
+    "files": 237
   }
 }

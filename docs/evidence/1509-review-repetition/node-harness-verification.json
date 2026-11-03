@@ -1,35 +1,65 @@
 {
-  "checked_at_utc": "2026-11-03T03:38:15.461Z",
+  "checked_at_utc": "2026-11-03T03:44:29.816Z",
   "node": "v24.22.0",
-  "timeout_test": {
-    "argv": [
-      "/home/tatsuru/.local/share/mise/installs/node/24.22.0/bin/node",
-      "-e",
-      "process.on('SIGTERM',()=>{}); console.log('ready'); setInterval(()=>{},1000)"
-    ],
-    "timeout_ms": 500,
-    "kill_grace_ms": 100,
-    "exitCode": null,
-    "signal": "SIGKILL",
-    "error": null,
-    "stdout": "ready\n",
-    "stderr": "",
-    "timedOut": true,
-    "signals": [
-      "SIGTERM",
-      "SIGKILL"
-    ],
-    "wallSeconds": 0.605879
-  },
-  "spawn_failure_test": {
-    "exitCode": null,
-    "signal": null,
-    "error": "spawn /definitely-missing-asc-1509-executable ENOENT",
-    "stdout": "",
-    "stderr": "",
-    "timedOut": false,
-    "signals": [],
-    "wallSeconds": 0.001716
-  },
-  "model_measurement_executed": false
+  "timeout_ms": 500,
+  "kill_grace_ms": 100,
+  "model_measurement_executed": false,
+  "rows": [
+    {
+      "name": "direct child ignores TERM",
+      "argv": [
+        "/home/tatsuru/.local/share/mise/installs/node/24.22.0/bin/node",
+        "-e",
+        "process.on('SIGTERM',()=>{}); console.log('ready'); setInterval(()=>{},1000)"
+      ],
+      "exitCode": null,
+      "signal": "SIGKILL",
+      "error": null,
+      "stdout": "ready\n",
+      "stderr": "",
+      "timedOut": true,
+      "signals": [
+        "SIGTERM",
+        "SIGKILL"
+      ],
+      "timeoutCleanupComplete": true,
+      "wallSeconds": 0.607231
+    },
+    {
+      "name": "direct child closes on TERM; ignored-stdio descendant ignores TERM",
+      "argv": [
+        "/home/tatsuru/.local/share/mise/installs/node/24.22.0/bin/node",
+        "-e",
+        "\nconst {spawn}=require('node:child_process');\nconst descendant=spawn(process.execPath,['-e',\"process.on('SIGTERM',()=>{});setInterval(()=>{},1000)\"],{stdio:'ignore'});\nconsole.log(descendant.pid);\nprocess.on('SIGTERM',()=>process.exit(0));\nsetInterval(()=>{},1000);\n"
+      ],
+      "descendant_pid": 159095,
+      "after_return_state": "Z",
+      "after_250ms_state": "absent",
+      "zombie_interpretation": "Z means terminated, awaiting system reaping; it is not a live executing descendant.",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "stdout": "159095\n",
+      "stderr": "",
+      "timedOut": true,
+      "signals": [
+        "SIGTERM",
+        "SIGKILL"
+      ],
+      "timeoutCleanupComplete": true,
+      "wallSeconds": 0.60235
+    },
+    {
+      "name": "spawn error",
+      "exitCode": null,
+      "signal": null,
+      "error": "spawn /definitely-missing-asc-1509-executable ENOENT",
+      "stdout": "",
+      "stderr": "",
+      "timedOut": false,
+      "signals": [],
+      "timeoutCleanupComplete": true,
+      "wallSeconds": 0.001838
+    }
+  ]
 }

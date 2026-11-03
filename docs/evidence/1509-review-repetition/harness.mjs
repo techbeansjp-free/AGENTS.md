@@ -33,6 +33,7 @@ export function runProcess(argv, { cwd, input = '', timeoutMs = 600000, killGrac
     const started = performance.now();
     const child = spawn(argv[0], argv.slice(1), { cwd, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '', stderr = '', timedOut = false, killTimer, settled = false;
+    let closed = false, cleanupComplete = true, outcome;
     const signals = [];
     child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
     child.stdout.on('data', chunk => { stdout += chunk; });
@@ -45,17 +46,25 @@ export function runProcess(argv, { cwd, input = '', timeoutMs = 600000, killGrac
         signals.push(signal);
       } catch (error) { if (error.code !== 'ESRCH') stderr += `\n${error.message}`; }
     };
-    const finish = (exitCode, signal, error = null) => {
-      if (settled) return;
+    const finish = () => {
+      if (settled || !closed || !cleanupComplete) return;
       settled = true; clearTimeout(timer); clearTimeout(killTimer);
-      resolve({ exitCode, signal, error, stdout, stderr, timedOut, signals, wallSeconds: Math.round((performance.now() - started) * 1000) / 1000000 });
+      resolve({ ...outcome, stdout, stderr, timedOut, signals, timeoutCleanupComplete: cleanupComplete, wallSeconds: Math.round((performance.now() - started) * 1000) / 1000000 });
+    };
+    const recordClose = (exitCode, signal, error = null) => {
+      if (!closed) outcome = { exitCode, signal, error };
+      closed = true; finish();
     };
     const timer = setTimeout(() => {
-      timedOut = true; send('SIGTERM');
-      killTimer = setTimeout(() => send('SIGKILL'), killGraceMs);
+      timedOut = true; cleanupComplete = false; send('SIGTERM');
+      // A direct child may close while descendants ignore TERM with closed stdio.
+      // Keep group cleanup pending independently of the direct child's close event.
+      killTimer = setTimeout(() => {
+        send('SIGKILL'); cleanupComplete = true; finish();
+      }, killGraceMs);
     }, timeoutMs);
-    child.once('error', error => finish(null, null, error.message));
-    child.once('close', (code, signal) => finish(code, signal));
+    child.once('error', error => recordClose(null, null, error.message));
+    child.once('close', (code, signal) => recordClose(code, signal));
     child.stdin.end(input);
   });
 }
