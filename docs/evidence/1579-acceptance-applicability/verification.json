@@ -1,0 +1,70 @@
+{
+  "assessedSourceCommit": "60d68920d3f925ede528993c44bd4bd67fc795e6",
+  "nodeVersion": "v24.22.0",
+  "platform": "native-linux",
+  "workingTreeChangeScope": "Documentation, evidence and evaluation-runner timing description only; product src/bin/skills unchanged by this issue.",
+  "regression": {
+    "command": "TMPDIR=/tmp/asc-acceptance-audit ASC_TEST_CGROUP=1 node --test test/test_goal_plan.mjs test/test_goal_propose.mjs test/test_goal_run.mjs test/test_project_assets.mjs test/test_verification_output.mjs test/test_worktree_execution.mjs test/test_native_worker_checkpoint.mjs test/test_review_corpus.mjs test/test_scenario_corpus.mjs test/test_review_diagnostics.mjs",
+    "exitCode": 0,
+    "tests": 129,
+    "pass": 129,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "durationMilliseconds": 227845.626764,
+    "logSha256": "f80eef8ceb4553066e1b5732316b2c2b30265692fb3a9c432dc3bd698b956a64",
+    "logLocation": "/tmp/asc-acceptance-audit/1579-regression.log",
+    "modelCalls": 0,
+    "externalPublication": false
+  },
+  "package": {
+    "command": "TMPDIR=/tmp/asc-acceptance-audit npm run package:check",
+    "exitCode": 0,
+    "tests": 10,
+    "pass": 10,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "durationMilliseconds": 81370.980305,
+    "logSha256": "96a050c90c27e1e85b20ac29bd8c91dbce0af6a6f874f4b3e66d7c031f3a7c6f",
+    "logLocation": "/tmp/asc-acceptance-audit/1579-package.log",
+    "modelCalls": 0,
+    "externalPublication": false
+  },
+  "lint": {
+    "command": "npm run lint",
+    "exitCode": 0
+  },
+  "evaluationRunnerSyntax": {
+    "command": "node --check scripts/run-claude-delivery.mjs",
+    "exitCode": 0
+  },
+  "testSourceSha256": {
+    "test/test_goal_plan.mjs": "387fe7e05eb522e451e2c2e02943bf198157aa44c283d24030829de6bb7ab13b",
+    "test/test_goal_propose.mjs": "982049cd0ed9517315e71a5c8d44f8443caa6c0a2da2d66f3355d2a4b224dfac",
+    "test/test_goal_run.mjs": "e11baf16a95edc6dd3fcddd491fbdeefab40f4c2f40660c559a05c318d5c12f2",
+    "test/test_project_assets.mjs": "702fef6c3554901d8370cb71fe7bbe8da810475a6583e4a8dbfbfe2dc3302e70",
+    "test/test_verification_output.mjs": "7b0912e60a5c8c4de259091705cbb8c4402f8fbd6e2d3f58d1bf0f61fba36f67",
+    "test/test_worktree_execution.mjs": "73bad56dd64d1059a91c48a88ac7c604ced86520d2df02010ff16f64a8742382",
+    "test/test_native_worker_checkpoint.mjs": "dd47786d1a2fd78538b9684175d21ba3238055fbe5124981f37b7f08f6d4f4a3",
+    "test/test_review_corpus.mjs": "79338a710f87ea9e47e573577a6f61bbcf352f944102f94493ed41ccd13a4fb6",
+    "test/test_scenario_corpus.mjs": "b7643cefa7469c2563ac81520ec15223e2d9cd3e92e182816929991615a1ec72",
+    "test/test_review_diagnostics.mjs": "c2238049451b25662aef0dd765c2dfcc14d1775400aae98d2cfac0a94aa8d9b4",
+    "test/test_package.mjs": "ba4b928ba95e2417202e209d2398c9a876ca76a1df4a4bf640a24327815815d5"
+  },
+  "changedEvaluationSourceSha256": "81309da349944093e3e4e193e85f92463e50257acbe47a13384c8fecf929ba0e",
+  "sandboxRetry": {
+    "initialRestrictedAttempt": "Node spawnSync EPERM for Python/git; environment failure, not accepted evidence.",
+    "acceptedExecution": "Explicitly escalated existing fixture-only tests; cgroup enabled; 129 passed without skip.",
+    "processCompletion": "Test execution returned exit 0; no continuing wait or unowned process termination."
+  },
+  "limits": [
+    "This is selected deterministic regression, not a new model/Host E2E run or full quality invocation.",
+    "No historical measured values, failures, missing usage or failed performance acceptance were rewritten.",
+    "Independent review and integration-head applicability are submission responsibilities."
+  ],
+  "selfReview": {
+    "scope": "Actual diff, original source hash and matching exported fields, relative evidence links, runtime unchanged, missing-data and performance boundaries",
+    "result": "No unresolved issue found in self-review; not independent review."
+  }
+}

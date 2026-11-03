@@ -1,0 +1,108 @@
+{
+  "assessedSourceCommit": "60d68920d3f925ede528993c44bd4bd67fc795e6",
+  "previousApplicabilityCommit": "25cf778a9211cef4de7a8e36952c2211bd365ac6",
+  "changedFiles": [
+    {
+      "path": "bin/asc-v05.mjs",
+      "previousSha256": "15a114ef6784da871c0cfd04a01104444d101e4b5bb0cc14ee5ac8217cae00ff",
+      "assessedSha256": "ec6c473530db20794e5014ba42f42abf15c2b2f791f28e7f6a9f7760ac149ea1"
+    },
+    {
+      "path": "skills/asc/SKILL.md",
+      "previousSha256": "1d224c327d8ae84a7a1104aff12f2eb9ccf69942d93ed4163c0cccda322cac14",
+      "assessedSha256": "1cae4c4dcc4e1f39742ed7fb134c391f59db01c7e5c5dd19754a80d7d69907f6"
+    },
+    {
+      "path": "skills/asc/references/coordination.md",
+      "previousSha256": "905b9e7c8fa78bbf4404e22bccc9c5dd6c0945eddfcd072e1802dc58a6352374",
+      "assessedSha256": "261150fb349d06e9e33b728aec6e004fe041c6b8c32d07306eea485493e38a10"
+    },
+    {
+      "path": "skills/asc/references/implementation.md",
+      "previousSha256": "ccdd853422a65c3c797722eacf07ccb6d210d3c358b5cd1ff6c361541dbc65d0",
+      "assessedSha256": "e57faf6435f65f41b10cdebbfcbfc786fd99b574455677c7efcf5d6d838c7962"
+    },
+    {
+      "path": "skills/asc/references/post-merge.md",
+      "previousSha256": "562d9257d0c7b947c38c6ae50718886cdf6fd1d201a98d841af037f61255b81a",
+      "assessedSha256": "9ebb432d4d2ca67540e3baa36feb517cea5bb723aff5dd2cead5eb5334b8fbce"
+    },
+    {
+      "path": "skills/asc/references/review.md",
+      "previousSha256": "72a12fc47da475f454aefec5608e62f1e3b066e60f94b7151687d18028242ec6",
+      "assessedSha256": "3febe305e3c722a472c47bc75d71c02dbb47722b96cdb5977a800378416462bc"
+    },
+    {
+      "path": "skills/review-and-remediation/SKILL.md",
+      "previousSha256": null,
+      "assessedSha256": "8c3e09eab69beffbb8de81da7fef457eb0856e5bae29ff3b0d74ec4b8dffd65c"
+    },
+    {
+      "path": "skills/review-and-remediation/references/review-method.md",
+      "previousSha256": null,
+      "assessedSha256": "39a3a4d8db464a8da56f2146146cfd91ee68c0c1ce41f814052238c64e588e42"
+    },
+    {
+      "path": "src/adaptive-run.mjs",
+      "previousSha256": "2c7549ca39d9aeb4a91e1d4508cdf09464fa5758b5684020fbed8153c0ebeeab",
+      "assessedSha256": "b29a8d0288df441335134114ddfd6d3b48d71d84ee1ea6f17e49ae8c39244e62"
+    },
+    {
+      "path": "src/docker-cleanup-plan.mjs",
+      "previousSha256": null,
+      "assessedSha256": "e47fb987075040bdd0dc76129eafeb8f61e8c4d2bfccc488402119fdc8842cd0"
+    },
+    {
+      "path": "src/goal-plan.mjs",
+      "previousSha256": "f9635f4320abd8c465b070221f65de64577e477a4ac364d439756dc62ae796e3",
+      "assessedSha256": "b12a780157d26f0895ae2cebd6e3894769cd6c4e8f6340848c7984627b0ad2ef"
+    },
+    {
+      "path": "src/goal-restart.mjs",
+      "previousSha256": "45ec46b2a46d26ed9a2d2fd2d54887a5948e058b78700a7a2810e3e8d2b8b767",
+      "assessedSha256": "06157ecab82ff538158f6cead82314e47cc2aab362762df26fa0755f9081ea6b"
+    },
+    {
+      "path": "src/project-assets.mjs",
+      "previousSha256": "b8d687a42d80ff0ede7b130c19d8ec3315aca79f103841989b15ea5927844873",
+      "assessedSha256": "9e0799d154c73f75eafa55f8c457e426e65de6c9096b732561782f3a00d351e3"
+    },
+    {
+      "path": "src/runtime-files.json",
+      "previousSha256": "0bc06279d2b3f66087f36dfc199c8a216e9462889d8702d43e379033fc8b6c72",
+      "assessedSha256": "db39784714dc0dfd6b48d4750e63d550d480ab13cbfcb47f12eee6e0c6acaf10"
+    },
+    {
+      "path": "src/verification-output.mjs",
+      "previousSha256": "e676aee274de94381a314ac0abf215d0f26722b676a8dd62bd149bb1efc8b274",
+      "assessedSha256": "929d37c0e3cca280c7e9bf9f116bd27341a98e3d80ead18f36c107cd58dfb07b"
+    }
+  ],
+  "historicalPr188Correction": {
+    "rawSourceSha256": "d6db8d1077cf9fe5527ba3dc7fdc4034b8738e0a697c9e3f26d913a27a2e86ed",
+    "rawSourceRetainedUnchanged": true,
+    "head": "8a39a04411e6e82ff0fdbe3705719dcad0a0b2b9",
+    "pr": 188,
+    "comparedFields": [
+      "head",
+      "base",
+      "model",
+      "effort",
+      "review",
+      "inHostVerification",
+      "usage",
+      "ci",
+      "greetingCI",
+      "implementationIntervention",
+      "totalSeconds",
+      "deliverySeconds"
+    ],
+    "interruptionRecorded": false,
+    "interruptedUsageRecorded": false,
+    "interruptionSetupPresent": false,
+    "interruptedAttemptPresent": false,
+    "originalTimingScope": "From initial execution (including injected interruption and recovery) through CI; excludes fixture preparation",
+    "correctedTimingScope": "From initial execution through CI; excludes fixture preparation; no interruption injected",
+    "conclusion": "The runner unconditionally emitted interruption wording. Correct the exported description only; retain original evidence, measured values and missing-data distinctions."
+  }
+}
