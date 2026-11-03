@@ -1,0 +1,157 @@
+{
+  "subject_commit": "60d68920d3f925ede528993c44bd4bd67fc795e6",
+  "codex_version": "0.164.0-alpha.11.1",
+  "successful_contexts": 6,
+  "unique_thread_ids": 6,
+  "wall_seconds": 231.135,
+  "usage": {
+    "input_tokens": 593620,
+    "cached_input_tokens": 496384,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 8597,
+    "reasoning_output_tokens": 494
+  },
+  "startup_failed_attempts": 3,
+  "startup_failed_wall_seconds": 20.192,
+  "startup_failed_tokens": null,
+  "all_attempt_known_wall_seconds": 251.327,
+  "known_violation_instances": 4,
+  "detected_violation_instances": 4,
+  "missed_violation_instances": 0,
+  "resolved_violation_recheck_opportunities": 2,
+  "unnecessary_representations": 0,
+  "legitimate_repeated_violations": 1,
+  "false_positives": 0,
+  "normal_control_contexts": 2,
+  "required_skill_paths_read_in_all_contexts": true,
+  "oracle_access_seen_in_commands": false,
+  "classification": [
+    {
+      "run_id": "authorization-initial",
+      "expected_violations": [
+        "F1"
+      ],
+      "observed_violations": [
+        "F1"
+      ],
+      "resolved_violations": [],
+      "missed_violations": [],
+      "false_positives": [],
+      "unnecessary_representations": 0,
+      "legitimate_repeated_violations": 0,
+      "assessment_method": "Evaluator manually compared full answer and executable counterexample with frozen oracle; combined findings normalized into violation IDs.",
+      "answer": "traces/authorization-initial.answer.txt",
+      "command_execution_count": 9,
+      "nonzero_command_exits": [
+        {
+          "command": "/bin/bash -lc \"node --input-type=module <<'JS'\nimport assert from 'node:assert/strict';\nimport { renameProject } from './subject.mjs';\nconst cases = [\n  ['same organization', {organizationId:'a'}, 'p', 'new', 200, 'new'],\n  ['other organization', {organizationId:'b'}, 'p', 'new', 403, 'old'],\n  ['missing project', {organizationId:'a'}, 'missing', 'new', 404, 'old'],\n  ['empty title', {organizationId:'a'}, 'p', '', 400, 'old'],\n  ['number title', {organizationId:'a'}, 'p', 0, 400, 'old'],\n  ['null title', {organizationId:'a'}, 'p', null, 400, 'old'],\n  ['object title', {organizationId:'a'}, 'p', {}, 400, 'old'],\n  ['array title', {organizationId:'a'}, 'p', [], 400, 'old'],\n  ['boolean title', {organizationId:'a'}, 'p', false, 400, 'old'],\n  ['whitespace is valid', {organizationId:'a'}, 'p', ' ', 200, ' '],\n];\nlet failures = 0;\nfor (const [name,user,id,title,status,expectedTitle] of cases) {\n  const project = {organizationId:'a',title:'old'};\n  const other = {organizationId:'b',title:'untouched'};\n  const projects = new Map([['p',project],['other',other]]);\n  const result = renameProject(user,id,title,projects);\n  try {\n    assert.deepEqual(result,{status});\n    assert.deepEqual(project,{organizationId:'a',title:expectedTitle});\n    assert.deepEqual(other,{organizationId:'b',title:'untouched'});\n    assert.equal(projects.size,2);\n    assert.equal(projects.get('p'),project);\n    console.log('PASS',name);\n  } catch (error) {\n    failures++;\n    console.log('FAIL',name,JSON.stringify({expected:{status,title:expectedTitle},actual:{status:result.status,title:project.title}}));\n  }\n}\nprocess.exitCode = failures ? 1 : 0;\nJS\"",
+          "exit_code": 1,
+          "interpretation": "Expected diff difference, or authorization-initial behavioral counterexample failure; not a test infrastructure success."
+        }
+      ]
+    },
+    {
+      "run_id": "authorization-after",
+      "expected_violations": [],
+      "observed_violations": [],
+      "resolved_violations": [
+        "F1"
+      ],
+      "missed_violations": [],
+      "false_positives": [],
+      "unnecessary_representations": 0,
+      "legitimate_repeated_violations": 0,
+      "assessment_method": "Evaluator manually compared full answer and executable counterexample with frozen oracle; combined findings normalized into violation IDs.",
+      "answer": "traces/authorization-after.answer.txt",
+      "command_execution_count": 8,
+      "nonzero_command_exits": [
+        {
+          "command": "/bin/bash -lc 'sha256sum before.mjs subject.mjs requirements.txt test.mjs; diff -u before.mjs subject.mjs'",
+          "exit_code": 1,
+          "interpretation": "Expected diff difference, or authorization-initial behavioral counterexample failure; not a test infrastructure success."
+        }
+      ]
+    },
+    {
+      "run_id": "private-helper-initial",
+      "expected_violations": [],
+      "observed_violations": [],
+      "resolved_violations": [],
+      "missed_violations": [],
+      "false_positives": [],
+      "unnecessary_representations": 0,
+      "legitimate_repeated_violations": 0,
+      "assessment_method": "Evaluator manually compared full answer and executable counterexample with frozen oracle; combined findings normalized into violation IDs.",
+      "answer": "traces/private-helper-initial.answer.txt",
+      "command_execution_count": 9,
+      "nonzero_command_exits": [
+        {
+          "command": "/bin/bash -lc 'diff -u before.mjs subject.mjs'",
+          "exit_code": 1,
+          "interpretation": "Expected diff difference, or authorization-initial behavioral counterexample failure; not a test infrastructure success."
+        }
+      ]
+    },
+    {
+      "run_id": "private-helper-after",
+      "expected_violations": [],
+      "observed_violations": [],
+      "resolved_violations": [],
+      "missed_violations": [],
+      "false_positives": [],
+      "unnecessary_representations": 0,
+      "legitimate_repeated_violations": 0,
+      "assessment_method": "Evaluator manually compared full answer and executable counterexample with frozen oracle; combined findings normalized into violation IDs.",
+      "answer": "traces/private-helper-after.answer.txt",
+      "command_execution_count": 9,
+      "nonzero_command_exits": []
+    },
+    {
+      "run_id": "failed-save-initial",
+      "expected_violations": [
+        "F1",
+        "F2"
+      ],
+      "observed_violations": [
+        "F1",
+        "F2"
+      ],
+      "resolved_violations": [],
+      "missed_violations": [],
+      "false_positives": [],
+      "unnecessary_representations": 0,
+      "legitimate_repeated_violations": 0,
+      "assessment_method": "Evaluator manually compared full answer and executable counterexample with frozen oracle; combined findings normalized into violation IDs.",
+      "answer": "traces/failed-save-initial.answer.txt",
+      "command_execution_count": 9,
+      "nonzero_command_exits": [
+        {
+          "command": "/bin/bash -lc 'nl -ba subject.mjs; sha256sum before.mjs subject.mjs requirements.txt test.mjs; diff -u before.mjs subject.mjs'",
+          "exit_code": 1,
+          "interpretation": "Expected diff difference, or authorization-initial behavioral counterexample failure; not a test infrastructure success."
+        }
+      ]
+    },
+    {
+      "run_id": "failed-save-after",
+      "expected_violations": [
+        "F1"
+      ],
+      "observed_violations": [
+        "F1"
+      ],
+      "resolved_violations": [
+        "F2"
+      ],
+      "missed_violations": [],
+      "false_positives": [],
+      "unnecessary_representations": 0,
+      "legitimate_repeated_violations": 1,
+      "assessment_method": "Evaluator manually compared full answer and executable counterexample with frozen oracle; combined findings normalized into violation IDs.",
+      "answer": "traces/failed-save-after.answer.txt",
+      "command_execution_count": 7,
+      "nonzero_command_exits": []
+    }
+  ],
+  "decision": "Do not add a mechanism from these observations. No unnecessary re-presentation was observed in the selected trajectories; a remaining failure was correctly retained. Frequency in real development is unknown; no savings or superiority claim."
+}

@@ -1,0 +1,35 @@
+
+> agent-skill-chain@0.5.0 package:check
+> node --test test/test_package.mjs
+
+
+> agent-skill-chain@0.5.0 prepack
+> node scripts/check-package-inventory.mjs
+
+
+> agent-skill-chain@0.5.0 prepack
+> node scripts/check-package-inventory.mjs
+
+
+> agent-skill-chain@0.5.0 prepack
+> node scripts/check-package-inventory.mjs
+
+✔ package file declarations exactly match the runtime inventory (4.397361ms)
+✔ packing rejects decomposed source names and noncanonical declarations without emitting a candidate (2760.316027ms)
+✔ root and canonical package generation exclude unlisted files in runtime directories (12376.312185ms)
+✔ guarded root and canonical packing reject npm implicit files before creating an artifact (19978.400804ms)
+✔ packed Node distribution runs without source checkout, Python or dependencies (22184.305271ms)
+✔ canonical source-version candidate installs both CLI names without enabling legacy commands or publication (8377.245747ms)
+✔ canonical 0.5.0 candidate installs both CLI names without enabling legacy commands or publication (8672.71198ms)
+✔ canonical 0.5.1-rc.0 candidate installs both CLI names without enabling legacy commands or publication (9111.734089ms)
+✔ canonical version override rejects invalid or out-of-line versions before packaging (363.812577ms)
+✔ repository root package installs only the v0.5 runtime through the canonical CLI (8820.724802ms)
+✔ root release candidate stamps the sole manifest without modifying source or enabling publication (5375.0984ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 98224.878242

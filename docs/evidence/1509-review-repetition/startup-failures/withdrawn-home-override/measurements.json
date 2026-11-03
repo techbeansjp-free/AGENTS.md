@@ -1,0 +1,48 @@
+[
+  {
+    "run_id": "authorization-initial",
+    "started_at_utc": "2026-11-03T03:28:04.126418+00:00",
+    "wall_seconds": 19.879,
+    "argv": [
+      "codex",
+      "-a",
+      "never",
+      "exec",
+      "--ignore-user-config",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--json",
+      "--color",
+      "never",
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=\"medium\"",
+      "-c",
+      "web_search=\"disabled\"",
+      "-s",
+      "read-only",
+      "-C",
+      "/tmp/asc-1509-review-fixtures/authorization/initial",
+      "-"
+    ],
+    "exit_code": 1,
+    "timeout": false,
+    "turn_completed": false,
+    "usage": null,
+    "parse_errors": 0,
+    "missing": [
+      "turn.completed",
+      "token usage"
+    ],
+    "existing_test": {
+      "argv": [
+        "node",
+        "test.mjs"
+      ],
+      "exit_code": 0,
+      "stdout": "existing authorization tests passed\n"
+    },
+    "thread_id": "01a19f73-1ed2-72d2-babf-b3c98d47f9ed"
+  }
+]

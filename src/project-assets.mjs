@@ -12,19 +12,24 @@ const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const maxAssets=288;
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
 function demand(ok,message){if(!ok)throw Error(message);}
-function read(root,name){
+function inspect(root,name){
  safeName(name);let cursor=root;
- const parts=name.split('/');
+ const parts=name.split('/'),resolved=[];
  for(let i=0;i<parts.length;i++){
-  cursor=path.join(cursor,parts[i]);let st;
-  try{st=fs.lstatSync(cursor);}catch(e){if(e.code==='ENOENT')return null;throw e;}
+  // Resolve every component, including exact matches: two canonically equal
+  // entries are ambiguous on a Unicode-sensitive filesystem. Never pick one.
+  const matches=fs.readdirSync(cursor).filter(entry=>entry.normalize('NFC')===parts[i].normalize('NFC'));
+  demand(matches.length<=1,'Ambiguous Unicode asset path');
+  if(!matches.length)return {path:[...resolved,...parts.slice(i)].join('/'),bytes:null};
+  resolved.push(matches[0]);cursor=path.join(cursor,matches[0]);const st=fs.lstatSync(cursor);
   demand(!st.isSymbolicLink(),'Asset path traverses a symlink');
   if(i<parts.length-1)demand(st.isDirectory(),'Asset parent is not a directory');
   else demand(st.isFile()&&st.nlink===1&&st.size<=2000000,'Unsafe asset file');
  }
  const fd=fs.openSync(cursor,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
- try{const st=fs.fstatSync(fd);demand(st.isFile()&&st.nlink===1&&st.size<=2000000,'Asset changed during read');return fs.readFileSync(fd);}finally{fs.closeSync(fd);}
+ try{const st=fs.fstatSync(fd);demand(st.isFile()&&st.nlink===1&&st.size<=2000000,'Asset changed during read');return {path:resolved.join('/'),bytes:fs.readFileSync(fd)};}finally{fs.closeSync(fd);}
 }
+function read(root,name){return inspect(root,name).bytes;}
 function skillFrontmatter(bytes,name){
  const frontmatter=/^---\n([\s\S]*?)\n---\n/.exec(bytes.toString());
  demand(frontmatter&&frontmatter[1].split('\n').includes(`name: ${name}`),'Skill frontmatter must match its directory');
@@ -57,6 +62,7 @@ function catalog(packageRoot,hosts){
  const runtime=prefix+'managed-runtime/';
  const runtimeFiles=JSON.parse(read(packageRoot,'src/runtime-files.json'));
  demand(Array.isArray(runtimeFiles),'Runtime file inventory required');
+ demand(runtimeFiles.every(relative=>typeof relative==='string'&&relative===relative.normalize('NFC')),'Runtime inventory paths must use NFC');
  for(const relative of new Set(runtimeFiles)){
   safeName(relative);const bytes=read(packageRoot,relative);
   demand(bytes!==null,'Runtime inventory file missing');
@@ -109,17 +115,21 @@ export function projectAssets(directory,{apply=false,registerSkill=false,registe
  const {repo}=projectLocation(directory);packageRoot=fs.realpathSync(packageRoot);
  const hosts=[...(registerSkill?['.agents']:[]),...(registerClaudeSkill?['.claude']:[])];
  const assets=catalog(packageRoot,hosts),priorBytes=read(repo,record);
- let previous={};
+ const previous=Object.create(null);
  if(priorBytes){
   const parsed=JSON.parse(priorBytes);demand(parsed.schema==='asc-project-assets/v1'&&parsed.files&&typeof parsed.files==='object'&&!Array.isArray(parsed.files),'Invalid distribution record');
-  previous=parsed.files;demand(Object.keys(previous).length<=maxAssets,'Invalid asset inventory');
-  for(const [name,value] of Object.entries(previous)){safeName(name);demand(typeof value==='string'&&/^[a-f0-9]{64}$/.test(value),'Invalid asset digest');}
+  demand(Object.keys(parsed.files).length<=maxAssets,'Invalid asset inventory');
+  for(const [name,value] of Object.entries(parsed.files)){
+   safeName(name);const canonical=name.normalize('NFC');
+   demand(!Object.hasOwn(previous,canonical),'Ambiguous Unicode asset inventory');
+   demand(typeof value==='string'&&/^[a-f0-9]{64}$/.test(value),'Invalid asset digest');previous[canonical]=value;
+  }
  }
  // Retain original preimages even when a Skill disappears or this Host was not
  // selected. Re-reading retained files here would adopt owner edits as managed.
  const changes=[],conflicts=[],before=new Map(),files={...previous};
  for(const [name,bytes] of assets){
-  const current=read(repo,name),actual=current===null?null:hash(current),next=hash(bytes);before.set(name,current);files[name]=next;
+  const currentFile=inspect(repo,name),current=currentFile.bytes,actual=current===null?null:hash(current),next=hash(bytes);before.set(name,currentFile);files[name]=next;
   if(actual===next)continue;
   if((current===null&&Object.hasOwn(previous,name))||(current!==null&&actual!==previous[name]))conflicts.push(name);
   else changes.push({path:name,action:current===null?'create':'update',beforeSha256:actual,afterSha256:next});
@@ -134,11 +144,11 @@ export function projectAssets(directory,{apply=false,registerSkill=false,registe
  try{
   const old=path.join(temp,'old'),next=path.join(temp,'new');fs.mkdirSync(old);fs.mkdirSync(next);
   const write=(base,name,bytes)=>{if(bytes===null)return;const file=path.join(base,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);};
-  for(const change of changes){write(old,change.path,before.get(change.path));write(next,change.path,assets.get(change.path));}
+  for(const change of changes){const current=before.get(change.path);write(old,current.path,current.bytes);write(next,current.path,assets.get(change.path));}
   if(result.recordChanged){write(old,record,priorBytes);write(next,record,nextRecord);}
   const diff=spawnSync('git',['-c','core.attributesFile=/dev/null','diff','--no-index','--no-ext-diff','--no-textconv','--binary','--','old','new'],{cwd:temp,encoding:null,maxBuffer:16000000,timeout:20000,env:{PATH:process.env.PATH,HOME:temp,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}});
   demand(!diff.error&&[0,1].includes(diff.status),'Cannot prepare asset patch');
-  for(const [name,current] of [...before,[record,priorBytes]]){const now=read(repo,name);demand(current===null?now===null:now!==null&&current.equals(now),'Asset changed after planning');}
+  for(const [name,current] of [...before,[record,{path:record,bytes:priorBytes}]]){const now=inspect(repo,name);demand(current.path===now.path&&(current.bytes===null?now.bytes===null:now.bytes!==null&&current.bytes.equals(now.bytes)),'Asset changed after planning');}
   if(diff.stdout.length){
    // git apply in the consumer repository would run its configured clean/smudge
    // filters. Use disposable metadata and override attributes instead.

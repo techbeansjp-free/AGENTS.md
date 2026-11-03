@@ -1,0 +1,30 @@
+ASCの独立Reviewerとしてレビューのみ実施してください。現在のHostの新規contextです。
+手順: /home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20261103_122413-1509-review-repetition/skills/asc/references/review.md を読み、参照先の変更のレビューと是正Skillも読んで適用してください。
+対象はGit未管理の合成Node fixture: /tmp/asc-1509-review-fixtures/failed-save/after。base/HEADなし。before.mjsが変更前、subject.mjsがレビュー対象の変更後、requirements.txtが元要求・受入条件、test.mjsが既存テストです。対象の全公開APIと関連経路はこのmodule内で完結しています。レビュー用コピーやworktreeを作らず、この対象実体で確認してください。
+適用契約: 要求を満たす操作と失敗時不変性を確認し、要求外の保証・抽象化を追加しない。差分外の既存防御も反証として確認する。指摘は現在成立する根拠・影響・既存対策による反証・必要な是正と検証を示す。以前の指摘でも現在の対象で成立するか確認する。書込み禁止で、node test.mjs と node --input-type=module による無書込みの追加確認は可能です。編集・外部アクセス・追加Agent起動はしないでください。
+既存検証: node test.mjs exit=0; existing failed-save tests passed
+レビュー履歴:
+前回レビューの出力（主張を鵜呑みにせず現在の実体で検証する）:
+指定のレビュー手順と参照Skillを読み、対象moduleの公開API・失敗時の状態・既存防御を確認します。書込みや修正は行いません。
+
+
+「変更のレビューと是正」Skillを適用します。要求と差分を照合し、既存テストに加えて失敗後の状態を無書込みで検証します。
+
+
+**判定：要是正（Medium 1件、再現済み）**
+
+[subject.mjs:5](/tmp/asc-1509-review-fixtures/failed-save/initial/subject.mjs:5)で保存前にretryKeyを消費し、live recordのnoteを変更しています。`save`がthrowすると503を返しますが、読み出せるnoteは`old`から`new`に変わり、retryKeyも消費済みでした。同じキーで再試行すると409となり、保存を再試行できません。失敗時不変性の要求に違反します。
+
+既存防御も確認しました。409・404の早期returnは各経路の変更を防ぎますが、保存失敗には作用しません。catchは503への変換のみで、`save`側が保存しなくてもlive参照への変更は残ります。
+
+必要な是正は、live recordを直接変更せず更新候補を保存し、保存成功後にのみretryKeyを消費することです。是正後は、保存失敗時のrecord・キーの不変性と、同じキーでの再試行成功を検証してください。
+
+確認結果：
+
+- `node test.mjs`：exit 0。ただし既存テストに保存失敗の検証はありません。
+- 無書込みの追加確認：成功200、既消費409、未存在404、および上記の失敗・再試行を確認しました。
+- 公開APIは`updateNote`のみ。契約範囲内に残る未確認事項はありません。並行実行・クラッシュ・外部I/Oは要求どおり対象外です。
+
+対象は指定fixture実体の`before.mjs`→`subject.mjs`（Git未管理、base/HEADなし）。開始・終了時の4ファイルのSHA-256は一致しました。修正・書込みは実施していません。
+調査対象は上記fixtureと参照Skillのみです。docs/evidence内のfixture生成元・oracle・集計・別試行は参照しないでください。
+指摘・確認した重要な振る舞い・未確認事項・現在の対象を日本語で簡潔に報告してください。修正は実施しないでください。
