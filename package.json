@@ -157,7 +157,10 @@
     "skills/subagent-model-selection/SKILL.md",
     "skills/work-coordination/SKILL.md",
     "skills/review-and-remediation/SKILL.md",
-    "skills/review-and-remediation/references/review-method.md"
+    "skills/review-and-remediation/references/review-method.md",
+    "skills/engineering-judgment/SKILL.md",
+    "skills/engineering-judgment/references/conditions-and-counterexamples.md",
+    "skills/estimate-and-scope/SKILL.md"
   ],
   "scripts": {
     "prepack": "node scripts/check-package-inventory.mjs",
@@ -185,5 +188,5 @@
     "type": "git",
     "url": "git+https://github.com/techbeansjp-free/AGENTS.md.git"
   },
-  "qualityContractVersion": 18
+  "qualityContractVersion": 19
 }

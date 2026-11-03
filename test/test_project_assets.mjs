@@ -322,7 +322,7 @@ test('Claude opt-in registers all distributed canonical Skills without copying H
  const preview=projectAssets(f.work,options);
  assert.deepEqual(preview.changes.map(c=>c.path).sort(),claude);assert.equal(preview.applied,false);
  assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
- assert.equal(claude.length,12);
+ assert.equal(claude.length,14);
  for(const relative of claude){
   const file=path.join(f.work,relative),entry=fs.readFileSync(file,'utf8');
   const name=relative.split('/')[2];
@@ -404,19 +404,19 @@ test('CLI accepts independent or combined Host registration and rejects duplicat
 
 test('distribution inventory remains bounded after adding a second Host',t=>{
  const f=fixture(t);
- f.write('.agent-skill-chain/distribution.json',JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:281},(_,i)=>[`entry-${i}`,'a'.repeat(64)]))}));
+ f.write('.agent-skill-chain/distribution.json',JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:289},(_,i)=>[`entry-${i}`,'a'.repeat(64)]))}));
  assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,registerClaudeSkill:true,apply:true}),/Invalid asset inventory/);
  assert.equal(fs.existsSync(path.join(f.work,asset)),false);
 });
 
-test('the inventory bound includes retained preimages as well as all twelve Skills',t=>{
+test('the inventory bound includes retained preimages as well as all fourteen Skills',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,registerSkill:true,registerClaudeSkill:true};
- const active=projectAssets(f.work,options);assert.equal(active.changes.length,266);
+ const active=projectAssets(f.work,options);assert.equal(active.changes.length,276);
  const record='.agent-skill-chain/distribution.json';
  const retired=count=>JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:count},(_,i)=>[`retired-${i}`,'a'.repeat(64)]))});
- f.write(record,retired(15));
+ f.write(record,retired(13));
  assert.throws(()=>projectAssets(f.work,{...options,apply:true}),/Invalid asset inventory/);
  assert.equal(fs.existsSync(path.join(f.work,asset)),false);
- f.write(record,retired(14));assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
- assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.work,record))).files).length,280);
+ f.write(record,retired(12));assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
+ assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.work,record))).files).length,288);
 });

@@ -1,0 +1,181 @@
+[
+  {
+    "id": "smoke",
+    "expected_skill": "engineering-judgment",
+    "expected_reference": "conditions-and-counterexamples.md",
+    "turn_completed": true,
+    "entry_read": true,
+    "body_read": true,
+    "reference_read": true,
+    "command_count": 5,
+    "usage": {
+      "input_tokens": 105518,
+      "cached_input_tokens": 90240,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2173,
+      "reasoning_output_tokens": 56
+    },
+    "pass": true
+  },
+  {
+    "id": "estimate",
+    "expected_skill": "estimate-and-scope",
+    "expected_reference": null,
+    "turn_completed": true,
+    "entry_read": true,
+    "body_read": true,
+    "reference_read": null,
+    "command_count": 2,
+    "usage": {
+      "input_tokens": 53897,
+      "cached_input_tokens": 41856,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1757,
+      "reasoning_output_tokens": 92
+    },
+    "pass": true,
+    "execution": {
+      "id": "estimate",
+      "exit": 0,
+      "seconds": 51.1
+    }
+  },
+  {
+    "id": "migration",
+    "expected_skill": "migration-assurance",
+    "expected_reference": "acceptance-and-cutover.md",
+    "turn_completed": true,
+    "entry_read": true,
+    "body_read": true,
+    "reference_read": true,
+    "command_count": 8,
+    "usage": {
+      "input_tokens": 79679,
+      "cached_input_tokens": 68096,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1592,
+      "reasoning_output_tokens": 0
+    },
+    "pass": true,
+    "execution": {
+      "id": "migration",
+      "exit": 0,
+      "seconds": 46.04
+    }
+  },
+  {
+    "id": "verification",
+    "expected_skill": "verification-optimization",
+    "expected_reference": "equivalence-and-reuse.md",
+    "turn_completed": true,
+    "entry_read": true,
+    "body_read": true,
+    "reference_read": true,
+    "command_count": 5,
+    "usage": {
+      "input_tokens": 107181,
+      "cached_input_tokens": 78976,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2384,
+      "reasoning_output_tokens": 53
+    },
+    "pass": true,
+    "execution": {
+      "id": "verification",
+      "exit": 0,
+      "seconds": 72.84
+    }
+  },
+  {
+    "id": "journey",
+    "expected_skill": "user-journey-acceptance",
+    "expected_reference": "journeys.md",
+    "turn_completed": true,
+    "entry_read": true,
+    "body_read": true,
+    "reference_read": true,
+    "command_count": 3,
+    "usage": {
+      "input_tokens": 73815,
+      "cached_input_tokens": 54144,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1216,
+      "reasoning_output_tokens": 0
+    },
+    "pass": true,
+    "execution": {
+      "id": "journey",
+      "exit": 0,
+      "seconds": 40.28
+    }
+  },
+  {
+    "id": "coordination",
+    "expected_skill": "work-coordination",
+    "expected_reference": null,
+    "turn_completed": true,
+    "entry_read": true,
+    "body_read": true,
+    "reference_read": null,
+    "command_count": 2,
+    "usage": {
+      "input_tokens": 55152,
+      "cached_input_tokens": 47104,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 601,
+      "reasoning_output_tokens": 0
+    },
+    "pass": true,
+    "execution": {
+      "id": "coordination",
+      "exit": 0,
+      "seconds": 19.95
+    }
+  },
+  {
+    "id": "negative_translation",
+    "expected_skill": null,
+    "expected_reference": null,
+    "turn_completed": true,
+    "entry_read": null,
+    "body_read": null,
+    "reference_read": null,
+    "command_count": 0,
+    "usage": {
+      "input_tokens": 20050,
+      "cached_input_tokens": 12288,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 14,
+      "reasoning_output_tokens": 0
+    },
+    "pass": true,
+    "execution": {
+      "id": "negative_translation",
+      "exit": 0,
+      "seconds": 5.42
+    }
+  },
+  {
+    "id": "negative_typo",
+    "expected_skill": null,
+    "expected_reference": null,
+    "turn_completed": true,
+    "entry_read": null,
+    "body_read": null,
+    "reference_read": null,
+    "command_count": 0,
+    "usage": {
+      "input_tokens": 20045,
+      "cached_input_tokens": 12288,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 9,
+      "reasoning_output_tokens": 0
+    },
+    "pass": true,
+    "execution": {
+      "id": "negative_typo",
+      "exit": 0,
+      "seconds": 5.28
+    }
+  }
+]
