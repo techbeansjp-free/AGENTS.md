@@ -7,9 +7,9 @@ import {spawnSync} from 'node:child_process';
 import {hash,safeName} from './controller.mjs';
 import {projectLocation} from './project-location.mjs';
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
-// Fourteen Skills use 276 assets with both Hosts; reserve 12 preimages
+// Fifteen registered Skills plus two optional assets use 282 assets; reserve 12 preimages
 // for two retired two-file Skills (two copies and two Host entries each).
-const maxAssets=288;
+const maxAssets=294;
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
 function demand(ok,message){if(!ok)throw Error(message);}
 function inspect(root,name){

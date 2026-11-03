@@ -28,3 +28,5 @@
 配布パッケージにはこの一覧と各Skillの全ファイルを含める。`project-assets --apply`でプロジェクトの`.agent-skill-chain/skills/`へ配置し、Codex用の`--register-skill`で`.agents/skills/`へ、Claude Code用の`--register-claude-skill`で`.claude/skills/`へ全配布Skillの薄い入口を配置する。両方指定できる。入口のdescriptionで選択され、入口の指示に従って共有本文と必要なreferencesを読む。隔離環境にも入口・本文・referencesを一緒に配置する。既存の同名fileや利用者編集は競合として保護する。配置はHostでの認識・実行の証明ではなく、外部操作の許可も与えない。
 
 Skillの採否は、配布の成立と実務上の効果を分けて判断する。ファイル一致・リンク・登録の検査は呼出しや判断品質の証明ではない。同じ課題で有無を比較し、不要な呼出し、成果の正しさ、手間・時間も確認する。実行失敗や欠測は不発火や合格へ変換しない。個人版と配布版が同名なら、利用先の登録元と本文を照合してから評価し、異なる版の結果を混ぜない。
+
+起票・課題分割を依頼された場合は[tracker起票](tracker-issue-writing/SKILL.md)で重複・受入・field・作成後照合を扱う。作業調整だけでtracker書込みを始めない。複数モデル協議は通常登録へ含めず、[任意の明示導入](../v05/USAGE.md)へ分離する。

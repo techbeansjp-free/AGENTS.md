@@ -517,3 +517,24 @@ Git未管理の親ディレクトリへASCを置き、配下の複数repoで共�
 Linux Hostのsandboxが保護目的で作る読取り専用`/dev/null` mountをGitが未追跡ファイルと報告する場合、`worktree-verify`は既定では`ASC_HOST_MASK_APPROVAL_REQUIRED`で拒否する。ソース修復や同じ入力の再実行では解消しない。例外が必要なら、ownerがrepo外の検証契約に`hostMaskedPaths`の完全一致相対path配列を明示する。例は`"hostMaskedPaths":[".claude/settings.json"]`。ファイル名やHost名だけで自動許可せず、実装Agentが自己承認して追加してはいけない。この指定はmountで隠された元のファイル内容を検証しないことへの許可であり、その内容の安全性を証明しない。
 
 指定は除外の許可であってmountの存在要求ではない。指定先が実際の読取り専用null device mountで、`allowedPaths`と重ならない場合だけ除外する。通常環境で対象が存在しない場合も同じ契約を使える。通常ファイル・symlink・書込み可能mountを除外しない。検証中のmount変更、tracked差分、新しい未追跡成果は引き続き拒否する。結果の`hostMaskedPaths`で対象を報告する。他OSでこの指定を流用せず、必要なHost境界を確認する。
+
+
+### ASCを読む契機を利用先へ採用する（任意）
+
+Skill登録は発見のためのmetadata配置であり、本文を読むことや手順を適用することの保証ではない。ASCを利用するプロジェクトでは、所有者が次の短い文例を確認し、既存のAGENTS.md（Codex）またはCLAUDE.md（Claude Code）へ採用できる。共有規約を一方から参照している場合は正本だけへ追記する。project-assetsはこれらの文書を自動生成・上書きしない。
+
+```text
+このプロジェクトでASCを使う開発・再開・独立レビュー・PR提出・許可されたmergeと後片付けでは、.agent-skill-chain/skills/asc/SKILL.mdを読み、依頼に必要なreferenceだけを参照する。本文が欠落していれば導入状態を確認する。対象・規約・版が変わった場合は影響する箇所を読み直す。通常の質問・翻訳等には開発工程を追加しない。Skillの読取りから外部操作の許可を推定しない。
+```
+
+新規導入は配布・登録後に正本への到達を確認する。既存導入では既存文書の参照先と旧登録を照合し、利用者の記述を保持した差分として採用する。配布版更新時は採用済みの文例まで自動変更されない。
+
+新しいHostセッションで、(1) Skillが発見される、(2)入口から正本本文・必要referenceを実際に読む、(3)依頼に該当する手順を適用する、を別々に確認する。例えばmerge前ならCI未完了を合格にしないこと、後片付けなら未保存の成果を削除しないことを使い捨てfixtureで観測する。翻訳等の非開発依頼への過剰適用も確認する。回答の「Skillを使った」だけを証拠にせず、tool記録と実際の成果を照合する。未測定Hostや版で自動適用を保証しない。
+
+### 明示依頼専用の協議手順（Codexへの任意導入）
+
+複数モデル協議は通常の全Skill登録から除外している。必要な利用者だけが、同梱packageの `v05/optional-skills/model-deliberation/` 全体を、利用先の `.agents/skills/model-deliberation/` へ変更内容を確認して採用する。既存同名directoryがあれば上書きせず、本文とmetadataを照合する。`agents/openai.yaml` の `policy.allow_implicit_invocation: false` も含めて保持する。本文だけをコピーした登録は提供対象外である。
+
+Codexでは新しいsessionで `$model-deliberation` を明示選択する。自然文の協議依頼だけで起動しない場合は、この明示選択を行う。通常の設計依頼では自動選択しない設定であり、ファイルを直接指定する読取りまで権限機構として禁止するものではない。本文でも明示協議依頼を確認し、Agent起動を制限する。使用するCodex版で明示選択と非選択を実測してから採用する。[公式Skill設定](https://developers.openai.com/codex/skills/)を確認する。
+
+この任意directoryは `project-assets --register-skill` の登録対象ではなく、managed-runtime内の配布原本である。採用後の任意登録もproject-assetsの自動更新対象ではない。更新時は元の配布原本と採用先を比較し、policyを落とさない。Claude Codeや他Hostの登録への変換は本提供方法では扱わない。未確認のHostで明示限定を保証したとはしない。

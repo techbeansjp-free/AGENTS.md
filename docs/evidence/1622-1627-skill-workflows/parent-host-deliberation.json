@@ -1,0 +1,26 @@
+{
+  "recordType": "parent-transcribed-tool-observation",
+  "scope": "Separate parent-Host experiment, not a continuation or proof of the CLI trace",
+  "commonPrompt": "任意協議Skillの合成動作検証。v05/optional-skills/model-deliberation/SKILL.mdを読み独立意見を返す。親が許可モデル2種類の独立Contextを各1回起動済みなので追加Agent不要。他者の結論は渡さない。通知1日100件、少人数運用、数分遅延可、予約保存成功をメール障害で取り消してはいけない。同期メール送信か永続キュー+workerか比較し推奨・根拠・反例・未確認と見直し条件を400字程度で。外部操作/ファイル変更なし。",
+  "agents": [
+    {
+      "tool": "collaboration.spawn_agent",
+      "task_name": "deliberation_sol61",
+      "returned_agent_name": "/root/deliberation_sol61",
+      "fork_turns": "none",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "medium",
+      "answer": "推奨は永続キュー＋worker。1日100件の処理量だけなら同期送信でも足りるが、予約保存成功をメール障害から切り離し、数分の遅延を許容する要件に合う。予約と通知待ちレコードを同じDBトランザクションで保存し、小さな定期workerが送信・再試行する構成なら、専用ブローカーを増やさず運用できる。重複送信への対策、再試行上限、失敗件数の可視化は必要。\n\n反例として、通知が完全なベストエフォートで欠落も許されるなら、保存後に同期送信し、失敗を記録するだけの方が簡単。ただし保存後・送信前の停止やメール障害で通知を失う。\n\n未確認は通知欠落・重複の許容度、既存DBと定期実行基盤。欠落許容が明示され、workerの維持負担が便益を上回るなら同期方式へ見直す。これは要件からの設計推論で、実測結果ではない。"
+    },
+    {
+      "tool": "collaboration.spawn_agent",
+      "task_name": "deliberation_sol6",
+      "returned_agent_name": "/root/deliberation_sol6",
+      "fork_turns": "none",
+      "model": "gpt-6-sol",
+      "reasoning_effort": "medium",
+      "answer": "推奨は「予約確定と同じDBトランザクションで送信予定を記録する永続キュー（outbox）＋worker」。1日100件なら処理能力は問題にならず、数分遅延を許容できるため、予約保存の成否をメールサービスから切り離せる。workerで再試行、冪等キー、送信失敗の可視化と手動再送を用意する。同期送信は実装が軽い反例で、保存コミット後に送ればメール障害で予約を取り消さない条件も満たせる。ただしプロセス停止時に通知予定が失われ得て、再送・障害調査を別途作る必要がある。未確認は通知の必達性、既存DB・worker基盤、送信サービスの障害率、重複メール許容度。必達でなく欠落時の手動対応が許され、worker運用コストが大きいと判明すれば、同期のコミット後送信＋失敗記録へ見直す。外部操作・ファイル変更なし。"
+    }
+  ],
+  "limitations": ["Prompt is a normalized transcription; actual call used the absolute source path", "No independently signed Host audit log", "Configured model identifiers are tool invocation parameters, not independently attested model weights", "No token or timing comparison is claimed"]
+}

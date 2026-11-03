@@ -1,0 +1,339 @@
+[
+  {
+    "case": "deliberation-explicit",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 96078,
+      "cached_input_tokens": 78848,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 937,
+      "reasoning_output_tokens": 53
+    },
+    "completedCommands": [
+      {
+        "command": "/bin/bash -lc \"pwd && rg --files -g 'AGENTS.md' -g '*notif*' -g '*通知*' -g 'SKILL.md' -g 'README*' -g '*spec*' -g '*architecture*' -g '*package*' -g '*pyproject*' -g '*Cargo*' -g '*go.mod*' -g '*issue*' -g '*1622*'\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agents/skills/model-deliberation/SKILL.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc \"rg --files --hidden -g '\"'!.git/**'\"' -g '\"'!**/SKILL.md'\"' -g '\"'!**/references/**'\"' -g '\"'!**/agents/**'\"' -g '\"'!**/scripts/**'\"'\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc \"cat AGENTS.md && rg -n --hidden -g '\"'!.git/**'\"' '通知|notification|分離' .\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc \"rg --files --hidden -g '\"'!.git'\"' -g '\"'!.git/**'\"' -g '\"'!.agent-skill-chain/**'\"' -g '\"'!.agents/**'\"' -g '\"'!.codex/**'\"'\"",
+        "exit": 0
+      }
+    ],
+    "execution": {
+      "id": "deliberation-explicit",
+      "exit": 0,
+      "seconds": 36.205
+    }
+  },
+  {
+    "case": "deliberation-negative",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 55782,
+      "cached_input_tokens": 42112,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 261,
+      "reasoning_output_tokens": 0
+    },
+    "completedCommands": [
+      {
+        "command": "/bin/bash -lc 'cat .agents/skills/engineering-judgment/SKILL.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agent-skill-chain/skills/engineering-judgment/SKILL.md'",
+        "exit": 0
+      }
+    ],
+    "execution": {
+      "id": "deliberation-negative",
+      "exit": 0,
+      "seconds": 15.765
+    }
+  },
+  {
+    "case": "deliberation-two-models",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 175587,
+      "cached_input_tokens": 146432,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1393,
+      "reasoning_output_tokens": 38
+    },
+    "completedCommands": [
+      {
+        "command": "/bin/bash -lc 'cat .agents/skills/model-deliberation/SKILL.md .agents/skills/subagent-model-selection/SKILL.md .agents/skills/engineering-judgment/SKILL.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agent-skill-chain/skills/subagent-model-selection/SKILL.md .agent-skill-chain/skills/engineering-judgment/SKILL.md'",
+        "exit": 0
+      }
+    ]
+  },
+  {
+    "case": "dev",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 131907,
+      "cached_input_tokens": 102272,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 711,
+      "reasoning_output_tokens": 27
+    },
+    "completedCommands": [
+      {
+        "command": "/bin/bash -lc \"pwd; git status --short; rg --files --hidden -g AGENTS.md -g SKILL.md -g '*asc*' -g '\"'!node_modules'\"' -g '\"'!.git'\"'\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agent-skill-chain/skills/asc/SKILL.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat AGENTS.md; cat .agent-skill-chain/skills/asc/references/workspace.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc \"git rev-parse --show-toplevel; git branch --show-current; git log -1 --format='%h %s'; git worktree list; cat .agent-skill-chain/runtime.json; cat .agent-skill-chain/bin/asc.mjs; rg --files --hidden -g '\"'!.git'\"' -g '\"'!**/skills/**'\"' -g '\"'!**/managed-runtime/**'\"'\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'node .agent-skill-chain/bin/asc.mjs start <FIXTURE>'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'git status --short; git diff --stat; git diff --cached --stat'",
+        "exit": 0
+      }
+    ],
+    "execution": {
+      "id": "dev",
+      "exit": 0,
+      "seconds": 28.454
+    }
+  },
+  {
+    "case": "merge",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 62264,
+      "cached_input_tokens": 36864,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 416,
+      "reasoning_output_tokens": 0
+    },
+    "completedCommands": [
+      {
+        "command": "/bin/bash -lc 'pwd; cat .agent-skill-chain/skills/asc/SKILL.md; cat .agents/skills/asc/SKILL.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agent-skill-chain/skills/asc/references/review.md'",
+        "exit": 0
+      }
+    ],
+    "execution": {
+      "id": "merge",
+      "exit": 0,
+      "seconds": 19.297
+    }
+  },
+  {
+    "case": "nondev",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 17635,
+      "cached_input_tokens": 12288,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 33,
+      "reasoning_output_tokens": 18
+    },
+    "completedCommands": [],
+    "execution": {
+      "id": "nondev",
+      "exit": 0,
+      "seconds": 6.764
+    }
+  },
+  {
+    "case": "review",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 90354,
+      "cached_input_tokens": 77056,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 973,
+      "reasoning_output_tokens": 70
+    },
+    "completedCommands": [
+      {
+        "command": "/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'SKILL.md' .agent-skill-chain .agents 2>/dev/null\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agent-skill-chain/skills/asc/SKILL.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agent-skill-chain/skills/asc/references/review.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc \"cat .agent-skill-chain/skills/subagent-model-selection/SKILL.md; rg --files .agent-skill-chain | rg '(runtime.json|manifest|contract|policy|coordination.md)\"'$'\"'\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc \"cat .agent-skill-chain/runtime.json; rg --files -g 'AGENTS.md' -g '*manifest*' -g '*contract*' -g '*policy*' -g '*context*' .agent-skill-chain . | head -60\"",
+        "exit": 0
+      }
+    ],
+    "execution": {
+      "id": "review",
+      "exit": 0,
+      "seconds": 38.022
+    }
+  },
+  {
+    "case": "sandbox-probe",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 35577,
+      "cached_input_tokens": 24576,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 182,
+      "reasoning_output_tokens": 0
+    },
+    "completedCommands": []
+  },
+  {
+    "case": "tracker-retry",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 109785,
+      "cached_input_tokens": 78080,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 609,
+      "reasoning_output_tokens": 24
+    },
+    "completedCommands": [
+      {
+        "command": "/bin/bash -lc \"pwd && rg --files -g 'AGENTS.md' -g '*tracker*' -g 'SKILL.md' -g '*resume*' -g '*issue*' -g '*journal*' -g '*log*' -g '\"'!node_modules'\"' -g '\"'!vendor'\"'\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agent-skill-chain/skills/asc/SKILL.md .agents/skills/tracker-issue-writing/SKILL.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agent-skill-chain/skills/tracker-issue-writing/SKILL.md tracker-settings.json tracker.mjs'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'node tracker.mjs fields'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'node tracker.mjs list'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'node tracker.mjs show 17'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'node tracker.mjs update 17 19 High'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'node tracker.mjs show 17'",
+        "exit": 0
+      }
+    ]
+  },
+  {
+    "case": "tracker",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 135926,
+      "cached_input_tokens": 101760,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1012,
+      "reasoning_output_tokens": 102
+    },
+    "completedCommands": [
+      {
+        "command": "/bin/bash -lc 'cat .agents/skills/tracker-issue-writing/SKILL.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc \"cat .agent-skill-chain/skills/tracker-issue-writing/SKILL.md; rg --files -g 'AGENTS.md' -g '*tracker*' -g '*project*' -g '*issue*' -g '*reservation*' -g '*booking*' -g 'README*' -g '*notification*' -g '*通知*' -g '*予約*' -g '*field*' -g '*asc*' -g '\"'!node_modules'\"' -g '\"'!vendor'\"' --hidden\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc \"pwd; ls -la; rg -n --hidden -g '\"'!.git/**'\"' -g '\"'!managed-runtime/**'\"' '予約|通知|tracker|field.?[Ii][Dd]|project|Issue' . --glob '\"'!.agent-skill-chain/managed-runtime/**'\"' --glob '\"'!.agent-skill-chain/skills/**'\"' --glob '\"'!node_modules/**'\"'\"",
+        "exit": 0
+      }
+    ],
+    "execution": {
+      "id": "tracker",
+      "exit": 0,
+      "seconds": 35.166
+    }
+  },
+  {
+    "case": "update",
+    "turnCompleted": true,
+    "usage": {
+      "input_tokens": 129770,
+      "cached_input_tokens": 104960,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1510,
+      "reasoning_output_tokens": 30
+    },
+    "completedCommands": [
+      {
+        "command": "/bin/bash -lc \"pwd && rg --files -g 'SKILL.md' -g 'AGENTS.md' -g '*update*' -g '*install*' .agent-skill-chain .agents/skills/asc 2>/dev/null\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agent-skill-chain/skills/asc/SKILL.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'cat .agent-skill-chain/skills/asc/references/workspace.md'",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc \"rg -n 'プロジェクト内|project-assets|preview|conflict|競合|checksum|復元|rollback|register|worktree|runtime.json' .agent-skill-chain/v05/USAGE.md .agent-skill-chain/v05/MIGRATION_PLAN.md .agent-skill-chain/bin/asc.mjs && cat .agents/skills/asc/SKILL.md\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc \"sed -n '313,373p' .agent-skill-chain/v05/USAGE.md && sed -n '1,90p' .agent-skill-chain/v05/MIGRATION_PLAN.md && cat .agent-skill-chain/bin/asc.mjs && cat .agent-skill-chain/runtime.json\"",
+        "exit": 0
+      },
+      {
+        "command": "/bin/bash -lc 'node .agent-skill-chain/bin/asc.mjs --help'",
+        "exit": 0
+      }
+    ],
+    "execution": {
+      "id": "update",
+      "exit": 0,
+      "seconds": 43.521
+    }
+  }
+]
