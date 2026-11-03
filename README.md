@@ -10,7 +10,7 @@ v0.5系を正式版として提供します。[GitHub Release](https://github.co
 
 ## 利用入口
 
-Release添付のtarballから、[導入手順](v05/USAGE.md)の`project-assets`で実行本体を`.agent-skill-chain/managed-runtime/`へ配置します。Git共有時は本体もcommitし、clone・worktreeごとに同じ版を使います。ASC本体のビルドは不要です。通常のコマンド名は`agent-skill-chain`です。`asc-v05`も同じruntimeを呼び出します。旧コマンドへの暗黙の切り替えは行いません。
+Release添付のtarballを新規の専用一時prefixへ導入し、[導入手順](v05/USAGE.md)の`project-assets`で実行本体を`.agent-skill-chain/managed-runtime/`へ配置します。Git共有時は本体もcommitし、clone・worktreeごとに同じ版を使います。既存の共有prefixや`.agent-skill-chain/`へnpm install・uninstall・pruneを行いません。ASC本体のビルドは不要です。通常のコマンド名は`agent-skill-chain`です。`asc-v05`も同じruntimeを呼び出します。旧コマンドへの暗黙の切り替えは行いません。
 
 ```sh
 node .agent-skill-chain/bin/asc.mjs --version
