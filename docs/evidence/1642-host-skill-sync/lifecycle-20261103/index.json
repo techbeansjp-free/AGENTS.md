@@ -1,0 +1,17 @@
+{
+  "date": "2026-11-03",
+  "cases": 9,
+  "passed": true,
+  "actualCommands": 89,
+  "payloadFiles": 152,
+  "files": {
+    "candidate-payload.json": "a4a210814cf04c857a4eef1b3311d4c070107a31d65cc56f4b34e8b65cbec13f",
+    "execution.json": "b1c8e44fcbd6cd296ed9633cb2da6f5b285f1a5e63c748f553b0a246ebbc48d0",
+    "old-procedure-execution.json": "7e58f86f41ac8b4f9190115bbc6db39bf6331e08ef3549d5beb75e3c0c29c5f6",
+    "old-procedure-results.json": "8b594694a68093062ca5da007f620d1599c8c5a341db6d122e79a8db950a4336",
+    "old-procedure-run.mjs": "ef3e4c8cdf4a4d2e92b29d9a374683ac393f2f3c301aae5f9b8b85ce970ef842",
+    "results.json": "6e06f7fb9e40734aeae43edd8b1bf7464843485e39c00384d690e8a2241b3d0d",
+    "run.mjs": "7136b12dc396924da8e35e77fb914ae65f84d409baab7f8bafe459825e0c5448",
+    "verify.mjs": "648e97439bdf8d61fb090a2f92240a8293fd5cda3795060118238179aa9340b6"
+  }
+}
