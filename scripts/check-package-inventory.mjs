@@ -6,6 +6,7 @@ import {execFileSync} from 'node:child_process';
 
 function paths(values,label){
  if(!Array.isArray(values)||values.some(name=>typeof name!=='string'||path.isAbsolute(name)||/[\\?*]/.test(name)||name.split('/').some(part=>!part||part==='.'||part==='..'))||new Set(values).size!==values.length)throw Error(`Invalid ${label} file inventory`);
+ if(values.some(name=>name!==name.normalize('NFC')))throw Error(`${label} file inventory paths must use NFC`);
  return new Set(values);
 }
 function equal(actual,expected,label){

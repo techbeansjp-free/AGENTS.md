@@ -14,8 +14,29 @@ test('package file declarations exactly match the runtime inventory',()=>{
  assert.equal(manifest.scripts.prepack,'node scripts/check-package-inventory.mjs');
  for(const file of manifest.files){
   assert(!/[?*\\]/.test(file)&&!file.endsWith('/'),file);
+  assert.equal(file,file.normalize('NFC'));
   assert(fs.lstatSync(file).isFile(),file);
  }
+});
+
+test('packing rejects decomposed source names and noncanonical declarations without emitting a candidate',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-package-unicode-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const source=path.join(root,'source'),destination=path.join(root,'output');fs.mkdirSync(source);fs.mkdirSync(destination);
+ const manifest=JSON.parse(fs.readFileSync('package.json'));
+ for(const name of [...manifest.files,'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
+ const canonical='v05/templates/specs/details/07_データ/00_データ一覧.md',decomposed=canonical.normalize('NFD');
+ const old=path.join(source,canonical),temporary=old+'.unicode-rename';fs.renameSync(old,temporary);fs.mkdirSync(path.dirname(path.join(source,decomposed)),{recursive:true});fs.renameSync(temporary,path.join(source,decomposed));
+ const candidateScript=path.resolve('scripts/pack-candidate.mjs');
+ // On a normalizing filesystem both spellings resolve; on Linux the source
+ // inventory mismatch must fail closed rather than silently omit the template.
+ if(!fs.existsSync(old)){
+  const mismatch=spawnSync(process.execPath,[candidateScript,destination],{cwd:source,encoding:'utf8'});
+  assert.equal(mismatch.status,1);assert.match(mismatch.stderr,/npm pack file inventory mismatch/);assert.deepEqual(fs.readdirSync(destination),[]);
+ }
+ manifest.files=manifest.files.map(name=>name===canonical?decomposed:name);fs.writeFileSync(path.join(source,'package.json'),JSON.stringify(manifest));
+ fs.writeFileSync(path.join(source,'src/runtime-files.json'),JSON.stringify(manifest.files));
+ const invalid=spawnSync(process.execPath,[candidateScript,destination],{cwd:source,encoding:'utf8'});
+ assert.equal(invalid.status,1);assert.match(invalid.stderr,/runtime file inventory paths must use NFC/);assert.deepEqual(fs.readdirSync(destination),[]);
 });
 
 test('root and canonical package generation exclude unlisted files in runtime directories',t=>{
@@ -230,6 +251,9 @@ for(const version of [null,'0.5.0','0.5.1-rc.0'])test(`canonical ${version??'sou
  const packArgs=['scripts/pack-candidate.mjs',root,...(version?[`--version=${version}`]:[])];
  const output=JSON.parse(execFileSync(process.execPath,packArgs,{encoding:'utf8'}));
  assert.equal(output.name,'agent-skill-chain');assert.equal(output.publishAuthorized,false);
+ const entries=execFileSync('tar',['-tzf',output.file],{encoding:'utf8'}).trimEnd().split('\n');
+ const inventory=JSON.parse(fs.readFileSync('src/runtime-files.json'));
+ assert(entries.every(name=>name===name.normalize('NFC')));assert.deepEqual(entries.sort(),[...inventory,'release-identity.json'].map(name=>'package/'+name).sort());
  const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
  const consumer=path.join(root,'consumer');fs.mkdirSync(consumer);
  execFileSync(process.execPath,[npm,'install','--prefix',consumer,'--offline','--ignore-scripts','--no-audit','--no-fund',output.file],{stdio:'pipe'});
