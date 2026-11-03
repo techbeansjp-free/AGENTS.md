@@ -9,10 +9,12 @@ import {projectLocation} from './project-location.mjs';
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const hostNames=['.agents','.claude'];
 const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;
-// Fifteen registered Skills plus two optional assets use 283 assets; reserve 12 preimages
+// Fifteen registered Skills plus two optional assets use 282 assets; reserve 12 preimages
 // for retained canonical/runtime assets. Retired owned Host entries are removed.
-const maxAssets=295;
+const maxAssets=294;
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
+// Exact retired distribution paths, maintained by trusted package releases.
+const retiredAssetPaths=[];
 function demand(ok,message){if(!ok)throw Error(message);}
 function inspect(root,name){
  safeName(name);let cursor=root;
@@ -240,7 +242,7 @@ function uninstallCatalog(packageRoot){
  // Trust the executing package catalog, including when it is bundled locally.
  // A record cannot nominate another inventory as authority. Releases retain
  // exact retired paths here so updates do not strand their old distribution.
- const retired=JSON.parse(read(packageRoot,'src/retired-project-assets.json'));
+ const retired=retiredAssetPaths;
  demand(Array.isArray(retired)&&retired.length<=maxAssets&&new Set(retired).size===retired.length,'Invalid retired asset catalog');
  for(const name of retired){
   safeName(name);demand(name===name.normalize('NFC'),'Retired asset catalog paths must use NFC');

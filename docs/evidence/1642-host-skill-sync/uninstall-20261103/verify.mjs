@@ -13,9 +13,11 @@ function future(archive,name){
  const changed=path.join(pkg,'skills/verification-optimization/SKILL.md'),lines=fs.readFileSync(changed,'utf8').split('\n');lines[2]='description: Fixture release updated verification guidance.';fs.writeFileSync(changed,lines.join('\n'));
  const replace=s=>s.replace('skills/'+old+'/','skills/'+next+'/');
  const inventory=path.join(pkg,'src/runtime-files.json'),prior=JSON.parse(fs.readFileSync(inventory));
- const retiredPath=path.join(pkg,'src/retired-project-assets.json'),retired=JSON.parse(fs.readFileSync(retiredPath));
+ const retired=[];
  for(const name of prior.filter(p=>p.startsWith('skills/'+old+'/')))for(const prefix of ['.agent-skill-chain/','.agent-skill-chain/managed-runtime/'])retired.push(prefix+name);
- fs.writeFileSync(retiredPath,JSON.stringify([...new Set(retired)].sort(),null,2)+'\n');
+ const implementation=path.join(pkg,'src/project-assets.mjs'),source=fs.readFileSync(implementation,'utf8');
+ assert(source.includes('const retiredAssetPaths=[];'),'Fixture requires the current empty trusted history');
+ fs.writeFileSync(implementation,source.replace('const retiredAssetPaths=[];','const retiredAssetPaths='+JSON.stringify([...new Set(retired)].sort())+';'));
  fs.writeFileSync(inventory,JSON.stringify(prior.map(replace),null,2)+'\n');
  const manifest=path.join(pkg,'package.json'),data=JSON.parse(fs.readFileSync(manifest));data.version='0.5.0-fixture.next';data.files=data.files.map(replace);fs.writeFileSync(manifest,JSON.stringify(data,null,2)+'\n');
  return pack(pkg,name);

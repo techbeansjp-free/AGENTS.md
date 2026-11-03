@@ -1,7 +1,7 @@
 [
   {
     "file": "package.json",
-    "sha256": "c72b1ff25da86e046c04ba59a66990032eb03d3e42927ebaa900461fdcc1c11d"
+    "sha256": "e2ae3487e97b9bceb68549f18275ad682dd1f982a7adcef2791345c76aa70a29"
   },
   {
     "file": "v05/README.md",
@@ -17,7 +17,7 @@
   },
   {
     "file": "v05/USAGE.md",
-    "sha256": "58cbab5e85711c1cd2fd9aca1823a9cfc016d1f1e097b794669bb3ea022e153e"
+    "sha256": "4aaa629c696a68aa96fbbe9c8356e6fb8faca6af90995f70f52f64a11aaccbce"
   },
   {
     "file": "v05/MIGRATION_PLAN.md",
@@ -157,7 +157,7 @@
   },
   {
     "file": "src/project-assets.mjs",
-    "sha256": "caa5a1d3d8380e1c299a435269111ce416fab7ef8154a4a686fe67921b711c2c"
+    "sha256": "025d16ac4723401087b9f5052573e688a3c6292962957fe949e23aef96d25d24"
   },
   {
     "file": "src/project-context.mjs",
@@ -457,11 +457,7 @@
   },
   {
     "file": "src/runtime-files.json",
-    "sha256": "6cbc23c31a014fceea86745fba29408f020bad2cd17994292c712971e328e09f"
-  },
-  {
-    "file": "src/retired-project-assets.json",
-    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    "sha256": "97f62eec2af5b47cea271bc9c443acedd1c99b2eb2ea57dd65176e7e50b73d04"
   },
   {
     "file": "skills/asc/references/post-merge.md",

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync,spawnSync} from 'node:child_process';
+import {pathToFileURL} from 'node:url';
 import {projectAssets,uninstallProjectAssets} from '../src/project-assets.mjs';
 const record='.agent-skill-chain/distribution.json',asset='.agent-skill-chain/templates/specs/01_要求定義.md';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -19,13 +20,19 @@ function fixture(t,selection={registerSkill:true,registerClaudeSkill:true}){
 }
 function save(f){return new Map([...Object.keys(f.manifest().files),record].filter(name=>fs.existsSync(path.join(f.work,name))).map(name=>[name,fs.readFileSync(path.join(f.work,name))]));}
 function assertSaved(f,saved){for(const [name,bytes] of saved)assert.deepEqual(fs.readFileSync(path.join(f.work,name)),bytes,name);}
+function setRetiredPaths(f,names){
+ const source=path.join(f.pkg,'src/project-assets.mjs'),bytes=fs.readFileSync(source,'utf8');
+ assert.match(bytes,/^const retiredAssetPaths=.*;$/m);
+ fs.writeFileSync(source,bytes.replace(/^const retiredAssetPaths=.*;$/m,`const retiredAssetPaths=${JSON.stringify(names)};`));
+}
+async function packageUninstaller(f){return (await import(pathToFileURL(path.join(f.pkg,'src/project-assets.mjs')))).uninstallProjectAssets;}
 function retireRecovery(f){
  const file=path.join(f.pkg,'src/runtime-files.json'),inventory=JSON.parse(fs.readFileSync(file)),old='skills/execution-recovery/',next='skills/recovery-next/';
  const oldPaths=Object.keys(f.manifest().files).filter(name=>name.startsWith('.agent-skill-chain/')&&name.includes('/'+old));
  fs.cpSync(path.join(f.pkg,old),path.join(f.pkg,next),{recursive:true});
  const source=path.join(f.pkg,next,'SKILL.md');fs.writeFileSync(source,fs.readFileSync(source,'utf8').replace('name: execution-recovery','name: recovery-next'));
  fs.writeFileSync(file,JSON.stringify(inventory.map(name=>name.startsWith(old)?next+name.slice(old.length):name)));
- fs.writeFileSync(path.join(f.pkg,'src/retired-project-assets.json'),JSON.stringify(oldPaths));return oldPaths;
+ setRetiredPaths(f,oldPaths);return oldPaths;
 }
 
 test('uninstall previews then removes only unchanged managed files, preserving every directory and owner sibling',t=>{
@@ -60,10 +67,10 @@ test('uninstall accepts legacy file-only records and every saved Host selection'
  }
 });
 
-test('known retained preimages uninstall after a Skill rename and an ordinary update',t=>{
+test('known retained preimages uninstall after a Skill rename and an ordinary update',async t=>{
  const f=fixture(t),retired=retireRecovery(f),update=projectAssets(f.work,{...f.options,apply:true});assert.equal(update.applied,true);assert.deepEqual(update.retained,retired);
  for(const name of retired)assert(fs.existsSync(path.join(f.work,name)));
- const result=uninstallProjectAssets(f.work,{...f.options,apply:true});assert.equal(result.applied,true);assert.deepEqual(result.conflicts,[]);
+ const uninstall=await packageUninstaller(f),result=uninstall(f.work,{...f.options,apply:true});assert.equal(result.applied,true);assert.deepEqual(result.conflicts,[]);
  for(const name of retired)assert.equal(fs.existsSync(path.join(f.work,name)),false,name);
 });
 
@@ -73,9 +80,9 @@ test('older release bytes on cataloged paths use their recorded hashes instead o
  assertSaved(f,saved);assert.equal(uninstallProjectAssets(f.work,{...f.options,apply:true}).applied,true);
 });
 
-test('unknown retained assets block the entire uninstall until the trusted release knows their exact paths',t=>{
- const f=fixture(t),retired=retireRecovery(f);projectAssets(f.work,{...f.options,apply:true});fs.writeFileSync(path.join(f.pkg,'src/retired-project-assets.json'),'[]');
- const saved=save(f),result=uninstallProjectAssets(f.work,{...f.options,apply:true});assert.equal(result.applied,false);assert.deepEqual(result.conflicts,retired);assertSaved(f,saved);
+test('unknown retained assets block the entire uninstall until the trusted release knows their exact paths',async t=>{
+ const f=fixture(t),retired=retireRecovery(f);projectAssets(f.work,{...f.options,apply:true});setRetiredPaths(f,[]);
+ const saved=save(f),uninstall=await packageUninstaller(f),result=uninstall(f.work,{...f.options,apply:true});assert.equal(result.applied,false);assert.deepEqual(result.conflicts,retired);assertSaved(f,saved);
 });
 
 test('missing or edited managed files block all deletions and preserve the record',t=>{
@@ -107,9 +114,9 @@ test('malformed records and unsafe digests or paths are rejected before any unli
  }
 });
 
-test('retired asset catalog cannot nominate owner settings, traversal paths, record or noncanonical aliases',t=>{
+test('retired asset catalog cannot nominate owner settings, traversal paths, record or noncanonical aliases',async t=>{
  for(const name of ['owner.txt',record,'.agent-skill-chain/project-policy.json','.agent-skill-chain/managed-runtime/.agents/config.json','../owner','.agent-skill-chain/templates/specs/07_データ.md'.normalize('NFD')]){
-  const f=fixture(t),saved=save(f);fs.writeFileSync(path.join(f.pkg,'src/retired-project-assets.json'),JSON.stringify([name]));assert.throws(()=>uninstallProjectAssets(f.work,{...f.options,apply:true}),/retired asset|Retired asset|Unsafe source path/);assertSaved(f,saved);
+  const f=fixture(t),saved=save(f);setRetiredPaths(f,[name]);const uninstall=await packageUninstaller(f);assert.throws(()=>uninstall(f.work,{...f.options,apply:true}),/retired asset|Retired asset|Unsafe source path/);assertSaved(f,saved);
  }
 });
 
