@@ -636,3 +636,38 @@ test('owned Host entries edited to exactly the next release still conflict',t=>{
  f.write(name,fs.readFileSync(path.join(donor,name)));const saved=savedAssets(f.work);
  const result=projectAssets(f.work,{...options,apply:true});assert.equal(result.applied,false);assert.deepEqual(result.conflicts,[name]);assertSaved(f.work,saved);
 });
+
+test('modern Host ownership claims cannot delete or overwrite unrelated plain or wrapper-like owner content',t=>{
+ for(const [host,skill,bytes] of [
+  ['.agents','user-private','Unrelated private owner Skill\n'],
+  ['.claude','user-private','---\nname: user-private\ndescription: Owner metadata\n---\nOwner instructions, not an ASC wrapper\n'],
+  ['.agents','verification-optimization','Owner replacement at a distributed Skill path\n']
+ ]){
+  const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,registerSkill:true,registerClaudeSkill:true,apply:true});
+  const entry=`${host}/skills/${skill}/SKILL.md`,record='.agent-skill-chain/distribution.json';f.write(entry,bytes);
+  const manifest=JSON.parse(fs.readFileSync(path.join(f.work,record)));if(!manifest.hostEntries.includes(entry))manifest.hostEntries.push(entry);manifest.files[entry]=createHash('sha256').update(bytes).digest('hex');f.write(record,JSON.stringify(manifest));
+  nextSkillDistribution(f);const saved=savedAssets(f.work),preview=projectAssets(f.work,options);assert(preview.conflicts.includes(entry));assert(!preview.changes.some(c=>c.path===entry));assertSaved(f.work,saved);
+  const result=projectAssets(f.work,{...options,apply:true});assert.equal(result.applied,false);assert(result.conflicts.includes(entry));assertSaved(f.work,saved);assert.equal(fs.existsSync(path.join(f.work,'.agents/skills/recovery-next/SKILL.md')),false);
+ }
+});
+
+test('unrecorded identical canonical, runtime, template and generated assets never become managed',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,apply:true});
+ const names=['.agent-skill-chain/skills/verification-optimization/SKILL.md','.agent-skill-chain/managed-runtime/src/project-assets.mjs',asset,'.agent-skill-chain/bin/asc.mjs','.agent-skill-chain/runtime.json','.agent-skill-chain/v05/USAGE.md'];
+ for(const [index,name] of names.entries()){
+  const other=path.join(f.root,'unowned-'+index);f.git('worktree','add','-qb','unowned-'+index,other);
+  const target=path.join(other,name),bytes=fs.readFileSync(path.join(f.work,name));fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,bytes);
+  for(const apply of [false,true]){
+   const result=projectAssets(other,{...options,apply});assert.equal(result.applied,false);assert.deepEqual(result.conflicts,[name]);assert.deepEqual(fs.readFileSync(target),bytes);assert.equal(fs.existsSync(path.join(other,'.agent-skill-chain/distribution.json')),false);
+  }
+ }
+});
+
+test('recorded canonical and template edits equal to the next release remain whole-update conflicts',t=>{
+ for(const source of ['skills/verification-optimization/SKILL.md','v05/templates/specs/01_要求定義.md']){
+  const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,apply:true});
+  const file=path.join(f.pkg,source);fs.appendFileSync(file,'\nNext release bytes already copied by owner\n');
+  const target=source.startsWith('skills/')?'.agent-skill-chain/'+source:asset;f.write(target,fs.readFileSync(file));
+  const saved=savedAssets(f.work),result=projectAssets(f.work,{...options,apply:true});assert.equal(result.applied,false);assert.deepEqual(result.conflicts,[target]);assertSaved(f.work,saved);
+ }
+});

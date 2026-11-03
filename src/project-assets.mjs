@@ -72,6 +72,18 @@ function entryBytes(name,frontmatter='---\nname: asc\ndescription: ASCで許可�
 [プロジェクトのASC Skill](../../../.agent-skill-chain/skills/asc/SKILL.md)を読み、指定されたGoalと権限の範囲で実行する。入口が欠落していれば導入状態を確認し、旧WorkflowやPATH上の別版へ推測で切り替えない。Skillの登録は外部操作や権限拡張の承認ではない。
 `:`\n[${name}](../../../.agent-skill-chain/skills/${name}/SKILL.md)の本文を読み、今回の要求に必要なreferencesをその本文の指示に従って読み適用する。参照先は正本のSkillディレクトリを基準に解決する。入口が欠落していれば導入状態を確認し、推測で別版へ切り替えない。Skillの登録は外部操作や権限拡張の承認ではない。\n`));
 }
+function provenEntry(repo,name,previous){
+ const skill=hostEntry.exec(name)[2];
+ if(skill==='asc'&&hash(entryBytes(skill))===previous[name])return true;
+ for(const source of [prefix+`skills/${skill}/SKILL.md`,prefix+`managed-runtime/skills/${skill}/SKILL.md`,name]){
+  if(!Object.hasOwn(previous,source))continue;
+  const bytes=read(repo,source);if(bytes===null||hash(bytes)!==previous[source])continue;
+  // A path/hash claim alone cannot make unrelated owner content an ASC entry.
+  // Prove a known generated wrapper preimage, independently of its current edit.
+  try{if(hash(entryBytes(skill,skillFrontmatter(bytes,skill)))===previous[name])return true;}catch{ /* not a known generated preimage */ }
+ }
+ return false;
+}
 function validateCodexDisplayMetadata(packageRoot,name){
  const bytes=read(packageRoot,`skills/${name}/agents/openai.yaml`);
  if(bytes===null)return;
@@ -133,7 +145,7 @@ function git(repo,args,input){
 }
 export function projectAssets(directory,{apply=false,registerSkill=false,registerClaudeSkill=false,packageRoot=defaultPackage}={}){
  const {repo}=projectLocation(directory);packageRoot=fs.realpathSync(packageRoot);
- const priorRecord=inspect(repo,record),priorBytes=priorRecord.bytes,previous=Object.create(null),selected=new Set(),owned=new Set(),legacyConflicts=[];
+ const priorRecord=inspect(repo,record),priorBytes=priorRecord.bytes,previous=Object.create(null),selected=new Set(),owned=new Set(),ownershipConflicts=[];
  let parsed;
  if(priorBytes){
   parsed=JSON.parse(priorBytes);demand(parsed.schema==='asc-project-assets/v1'&&parsed.files&&typeof parsed.files==='object'&&!Array.isArray(parsed.files),'Invalid distribution record');
@@ -144,44 +156,37 @@ export function projectAssets(directory,{apply=false,registerSkill=false,registe
    demand(typeof value==='string'&&/^[a-f0-9]{64}$/.test(value),'Invalid asset digest');previous[canonical]=value;
   }
  }
- // Selection and deletion ownership are explicit in new records. Legacy path
- // names alone never opt a consumer in: prove the generated wrapper preimage.
+ // Records persist selection and ownership claims, but neither a modern claim
+ // nor a legacy path/hash alone proves a generated wrapper preimage.
  if(parsed&&('registeredHosts' in parsed||'hostEntries' in parsed)){
   demand(Array.isArray(parsed.registeredHosts)&&parsed.registeredHosts.every(host=>hostNames.includes(host))&&new Set(parsed.registeredHosts).size===parsed.registeredHosts.length,'Invalid registered Hosts');
   demand(Array.isArray(parsed.hostEntries)&&parsed.hostEntries.length<=maxAssets&&new Set(parsed.hostEntries).size===parsed.hostEntries.length,'Invalid Host entry inventory');
   for(const host of parsed.registeredHosts)selected.add(host);
   for(const name of parsed.hostEntries){
-   demand(typeof name==='string'&&hostEntry.test(name)&&selected.has(hostEntry.exec(name)[1])&&Object.hasOwn(previous,name),'Invalid Host entry ownership');owned.add(name);
+   demand(typeof name==='string'&&hostEntry.test(name)&&selected.has(hostEntry.exec(name)[1])&&Object.hasOwn(previous,name),'Invalid Host entry ownership');
+   if(provenEntry(repo,name,previous))owned.add(name);else ownershipConflicts.push(name);
   }
  }else for(const name of Object.keys(previous)){
   const entry=hostEntry.exec(name);if(!entry)continue;
-  const [,host,skill]=entry;
-  let proven=skill==='asc'&&hash(entryBytes(skill))===previous[name];
-  for(const source of [prefix+`skills/${skill}/SKILL.md`,prefix+`managed-runtime/skills/${skill}/SKILL.md`,name]){
-   if(proven)break;
-   if(!Object.hasOwn(previous,source))continue;
-   const bytes=read(repo,source);if(bytes===null||hash(bytes)!==previous[source])continue;
-   // Unsupported/edited legacy content grants no ownership. It remains a
-   // visible conflict rather than silently disabling an existing registration.
-   try{proven=hash(entryBytes(skill,skillFrontmatter(bytes,skill)))===previous[name];}catch{ /* not a known generated preimage */ }
-  }
-  if(proven){selected.add(host);owned.add(name);}else legacyConflicts.push(name);
+  const host=entry[1];
+  if(provenEntry(repo,name,previous)){selected.add(host);owned.add(name);}else ownershipConflicts.push(name);
  }
  if(registerSkill)selected.add('.agents');if(registerClaudeSkill)selected.add('.claude');
  const hosts=hostNames.filter(host=>selected.has(host)),assets=catalog(packageRoot,hosts);
  // Retained canonical/runtime assets keep their original preimages. Only
  // explicitly owned Host entries can be retired, never directories or siblings.
- const changes=[],conflicts=[...legacyConflicts],before=new Map(),files={...previous},nextOwned=new Set();
+ const changes=[],conflicts=[...ownershipConflicts],before=new Map(),files={...previous},nextOwned=new Set();
  const change=(name,action,actual,next)=>({path:name,kind:hostEntry.test(name)?'host-entry':'asset',...(hostEntry.test(name)?{host:hostEntry.exec(name)[1]}:{}),action,beforeSha256:actual,afterSha256:next});
  for(const [name,bytes] of assets){
   const currentFile=inspect(repo,name),current=currentFile.bytes,actual=current===null?null:hash(current),next=hash(bytes);before.set(name,currentFile);files[name]=next;
   const entry=hostEntry.test(name);
   if(entry)nextOwned.add(name);
-  if(entry&&current!==null&&!owned.has(name)){if(!conflicts.includes(name))conflicts.push(name);continue;}
-  if(entry&&owned.has(name)&&actual!==previous[name]){if(!conflicts.includes(name))conflicts.push(name);continue;}
+  if((entry&&current!==null&&!owned.has(name))||
+    (current===null?Object.hasOwn(previous,name):actual!==previous[name])){
+   if(!conflicts.includes(name))conflicts.push(name);continue;
+  }
   if(actual===next)continue;
-  if((current===null&&Object.hasOwn(previous,name))||(current!==null&&actual!==previous[name])){if(!conflicts.includes(name))conflicts.push(name);}
-  else changes.push(change(name,current===null?'create':'update',actual,next));
+  changes.push(change(name,current===null?'create':'update',actual,next));
  }
  for(const name of owned){
   if(assets.has(name))continue;
