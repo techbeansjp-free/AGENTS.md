@@ -53,45 +53,30 @@ test('removed distribution assets are retained, and malformed records cannot tar
  const result=projectAssets(f.work,options);assert.equal(result.applied,true);assert.deepEqual(result.retained,['.agent-skill-chain/managed-runtime/v05/templates/specs/01_要求定義.md',asset]);assert(fs.existsSync(path.join(f.work,asset)));
  f.write('.agent-skill-chain/distribution.json',JSON.stringify({schema:'asc-project-assets/v1',files:{'../outside':'a'.repeat(64)}}));assert.throws(()=>projectAssets(f.work,options),/Unsafe source path/);
 });
-test('removed and renamed Skills keep original preimages through rollback and reintroduction',t=>{
+test('retired Host entries disappear while canonical preimages survive rename and reintroduction',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,apply:true,registerSkill:true,registerClaudeSkill:true};
  projectAssets(f.work,options);
  const record=path.join(f.work,'.agent-skill-chain/distribution.json'),before=JSON.parse(fs.readFileSync(record)).files;
  const oldPrefix='skills/execution-recovery/',renamedPrefix='skills/recovery-next/';
- const retained=Object.keys(before).filter(name=>name.includes('/'+oldPrefix)||name.endsWith('/skills/execution-recovery/SKILL.md'));
- const original=new Map(retained.map(name=>[name,fs.readFileSync(path.join(f.work,name))]));
+ const retained=Object.keys(before).filter(name=>name.startsWith('.agent-skill-chain/')&&name.includes('/'+oldPrefix));
+ const entries=['.agents','.claude'].map(host=>`${host}/skills/execution-recovery/SKILL.md`);
  const manifestPath=path.join(f.pkg,'src/runtime-files.json'),inventory=JSON.parse(fs.readFileSync(manifestPath));
- const source=path.join(f.pkg,oldPrefix+'SKILL.md'),sourceBytes=fs.readFileSync(source,'utf8');
  fs.cpSync(path.join(f.pkg,oldPrefix),path.join(f.pkg,renamedPrefix),{recursive:true});
- fs.writeFileSync(path.join(f.pkg,renamedPrefix,'SKILL.md'),sourceBytes.replace('name: execution-recovery','name: recovery-next'));
- const renamed=inventory.map(name=>name.startsWith(oldPrefix)?renamedPrefix+name.slice(oldPrefix.length):name);
- for(const edited of [null,...retained]){
-  if(edited)f.write(edited,'Synthetic owner edit before retirement');
-  fs.writeFileSync(manifestPath,JSON.stringify(renamed));
-  const retirement=projectAssets(f.work,options);assert.equal(retirement.applied,true);
-  const after=JSON.parse(fs.readFileSync(record)).files;
-  for(const name of retained){assert(retirement.retained.includes(name));assert.equal(after[name],before[name]);}
-  // Returning to the old inventory also changes the old distribution's contents.
-  // Only owner changes should conflict; retired files have not become unmanaged.
-  fs.writeFileSync(manifestPath,JSON.stringify(inventory));
-  fs.writeFileSync(source,sourceBytes.replace('description: ','description: Synthetic updated '));
-  const plan=projectAssets(f.work,{...options,apply:false});
-  assert.deepEqual(plan.conflicts,edited?[edited]:[]);
-  if(edited){
-   const saved=fs.readFileSync(record);assert.equal(projectAssets(f.work,options).applied,false);assert.deepEqual(fs.readFileSync(record),saved);
-   f.write(edited,original.get(edited));
-  }
-  assert.equal(projectAssets(f.work,options).applied,true);
-  // Restore the baseline for each independent owner-edit counterexample.
-  fs.writeFileSync(source,sourceBytes);assert.equal(projectAssets(f.work,options).applied,true);
- }
- const removedInventory=inventory.filter(name=>!name.startsWith(oldPrefix));
- fs.writeFileSync(manifestPath,JSON.stringify(removedInventory));
- assert.equal(projectAssets(f.work,{packageRoot:f.pkg,apply:true}).applied,true);
- for(const name of retained)assert.equal(JSON.parse(fs.readFileSync(record)).files[name],before[name]);
+ const source=path.join(f.pkg,renamedPrefix,'SKILL.md');fs.writeFileSync(source,fs.readFileSync(source,'utf8').replace('name: execution-recovery','name: recovery-next'));
+ fs.writeFileSync(manifestPath,JSON.stringify(inventory.map(name=>name.startsWith(oldPrefix)?renamedPrefix+name.slice(oldPrefix.length):name)));
+ f.write('.agents/skills/execution-recovery/owner.txt','Owner sibling');
+ const retirement=projectAssets(f.work,{packageRoot:f.pkg,apply:true});assert.equal(retirement.applied,true);
+ const after=JSON.parse(fs.readFileSync(record));
+ for(const name of retained){assert(retirement.retained.includes(name));assert.equal(after.files[name],before[name]);}
+ for(const name of entries){assert(!fs.existsSync(path.join(f.work,name)));assert(!Object.hasOwn(after.files,name));assert(!after.hostEntries.includes(name));}
+ assert.equal(fs.readFileSync(path.join(f.work,'.agents/skills/execution-recovery/owner.txt'),'utf8'),'Owner sibling');
+ const deletion=retirement.changes.filter(c=>c.action==='delete');assert.deepEqual(deletion.map(c=>c.path).sort(),entries);assert(deletion.every(c=>c.kind==='host-entry'&&c.afterSha256===null));
  fs.writeFileSync(manifestPath,JSON.stringify(inventory));
- fs.writeFileSync(source,sourceBytes.replace('description: ','description: Synthetic reintroduced '));
- assert.equal(projectAssets(f.work,options).applied,true);
+ assert.equal(projectAssets(f.work,{packageRoot:f.pkg,apply:true}).applied,true);
+ for(const name of entries)assert(fs.existsSync(path.join(f.work,name)));
+ // Canonical assets retained by either version still reject owner edits later.
+ f.write(retained[0],'Owner canonical edit');
+ const saved=fs.readFileSync(record);const blocked=projectAssets(f.work,{packageRoot:f.pkg,apply:true});assert.equal(blocked.applied,false);assert(blocked.conflicts.includes(retained[0]));assert.deepEqual(fs.readFileSync(record),saved);
 });
 test('asset paths cannot traverse symlinks or overwrite hardlinked host files',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,apply:true};
@@ -252,12 +237,15 @@ test('foundation canonical assets install, register and update without losing ow
  assert.equal(projectAssets(f.work,registered).applied,true);assertFoundationEntry(f.work);
  const again=projectAssets(f.work,registered);assert.deepEqual(again.changes,[]);assert.equal(again.recordChanged,false);
  const record=path.join(f.work,'.agent-skill-chain/distribution.json'),before=fs.readFileSync(record);
+ const originalEntry=fs.readFileSync(path.join(f.work,registration));
  f.write(registration,'Owner entry');
- assert.equal(projectAssets(f.work,{...options,apply:true}).recordChanged,false);
+ const ordinary=projectAssets(f.work,{...options,apply:true});assert.equal(ordinary.applied,false);assert.deepEqual(ordinary.conflicts,[registration]);
+ assert.equal(ordinary.recordChanged,false);
  assert.deepEqual(fs.readFileSync(record),before);
  assert.deepEqual(projectAssets(f.work,registered).conflicts,[registration]);
  // Even after an ordinary update, explicit registration must not adopt the edit.
  assert.equal(fs.readFileSync(path.join(f.work,registration),'utf8'),'Owner entry');
+ f.write(registration,originalEntry);
  const source='skills/project-foundation/references/contracts-and-ui.md';
  fs.appendFileSync(path.join(f.pkg,source),'\nSynthetic distribution update\n');
  const updated=projectAssets(f.work,options);assert(updated.changes.some(c=>c.path===prefix+'references/contracts-and-ui.md'&&c.action==='update'));
@@ -287,7 +275,7 @@ test('purpose Skills distribute only inventoried assets and opt-in entries with 
  assert.deepEqual(projectAssets(f.work,{...registered,apply:false}).changes.map(change=>change.path).sort(),registrations);
  assert.equal(projectAssets(f.work,registered).applied,true);assertAdditionalEntries(f.work);
  const again=projectAssets(f.work,registered);assert.deepEqual(again.changes,[]);assert.equal(again.recordChanged,false);
- const ordinary=projectAssets(f.work,{...options,apply:true});assert.deepEqual(ordinary.changes,[]);assert.equal(ordinary.recordChanged,false);assert.deepEqual(ordinary.retained,registrations);
+ const ordinary=projectAssets(f.work,{...options,apply:true});assert.deepEqual(ordinary.changes,[]);assert.equal(ordinary.recordChanged,false);assert.deepEqual(ordinary.retained,[]);
  const record=path.join(f.work,'.agent-skill-chain/distribution.json');
  for(const name of additionalSkills){
   const file=prefix+name+'/SKILL.md',source=path.join(f.pkg,'skills',name,'SKILL.md');
@@ -365,8 +353,10 @@ test('Codex registration accepts display metadata and rejects unsupported policy
  assert.equal(projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}).applied,true);
  // A Codex-only policy is not reinterpreted as Claude configuration.
  fs.writeFileSync(source,original+'\npolicy:\n  allow_implicit_invocation: false\n');
- const claude=projectAssets(f.work,{packageRoot:f.pkg,registerClaudeSkill:true,apply:true});assert.equal(claude.applied,true);
- assert.equal(fs.existsSync(path.join(f.work,'.claude/skills/project-foundation/agents/openai.yaml')),false);
+ assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerClaudeSkill:true,apply:true}),/Unsupported Codex Skill metadata/);
+ const claudeFixture=fixture(t);fs.writeFileSync(path.join(claudeFixture.pkg,'skills/project-foundation/agents/openai.yaml'),original+'\npolicy:\n  allow_implicit_invocation: false\n');
+ const claude=projectAssets(claudeFixture.work,{packageRoot:claudeFixture.pkg,registerClaudeSkill:true,apply:true});assert.equal(claude.applied,true);
+ assert.equal(fs.existsSync(path.join(claudeFixture.work,'.claude/skills/project-foundation/agents/openai.yaml')),false);
 });
 
 test('both Host registrations preserve preimages through ordinary updates and block all writes on edits',t=>{
@@ -381,10 +371,11 @@ test('both Host registrations preserve preimages through ordinary updates and bl
   f.write(entry,'Owner registration edit');
   const source=path.join(f.pkg,'skills/execution-recovery/SKILL.md');
   fs.appendFileSync(source,'\nSynthetic updated canonical guidance\n');
-  const ordinary=projectAssets(f.work,{packageRoot:f.pkg,apply:true});assert.equal(ordinary.applied,true);
+  const canonical=fs.readFileSync(path.join(f.work,'.agent-skill-chain/skills/execution-recovery/SKILL.md'));
+  const ordinary=projectAssets(f.work,{packageRoot:f.pkg,apply:true});assert.equal(ordinary.applied,false);assert.deepEqual(ordinary.conflicts,[entry]);
   assert.equal(JSON.parse(fs.readFileSync(record)).files[entry],manifest.files[entry]);
   assert.equal(fs.readFileSync(path.join(f.work,entry),'utf8'),'Owner registration edit');
-  assert.deepEqual(fs.readFileSync(path.join(f.work,'.agent-skill-chain/skills/execution-recovery/SKILL.md')),fs.readFileSync(source));
+  assert.deepEqual(fs.readFileSync(path.join(f.work,'.agent-skill-chain/skills/execution-recovery/SKILL.md')),canonical);
   const beforeRecord=fs.readFileSync(record),beforeAsset=fs.readFileSync(path.join(f.work,asset));
   fs.appendFileSync(path.join(f.pkg,'v05/templates/specs/01_要求定義.md'),'\nPending update\n');
   const blocked=projectAssets(f.work,options);assert.equal(blocked.applied,false);assert.deepEqual(blocked.conflicts,[entry]);
@@ -495,4 +486,153 @@ test('noncanonical runtime inventory rejects before creating project assets',t=>
  fs.writeFileSync(file,JSON.stringify(inventory.map(name=>name.normalize('NFD'))));
  assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,apply:true}),/Runtime inventory paths must use NFC/);
  assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain')),false);
+});
+
+function nextSkillDistribution(f){
+ const manifest=path.join(f.pkg,'src/runtime-files.json'),inventory=JSON.parse(fs.readFileSync(manifest));
+ const from='skills/execution-recovery/',to='skills/recovery-next/';
+ fs.cpSync(path.join(f.pkg,from),path.join(f.pkg,to),{recursive:true});
+ const source=path.join(f.pkg,to,'SKILL.md');fs.writeFileSync(source,fs.readFileSync(source,'utf8').replace('name: execution-recovery','name: recovery-next'));
+ fs.writeFileSync(manifest,JSON.stringify(inventory.map(name=>name.startsWith(from)?to+name.slice(from.length):name)));
+ for(const skill of ['asc','verification-optimization']){
+  const file=path.join(f.pkg,'skills',skill,'SKILL.md');fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace('description: ','description: Revised description '));
+ }
+}
+function savedAssets(work){
+ const record=path.join(work,'.agent-skill-chain/distribution.json');
+ return new Map([...Object.keys(JSON.parse(fs.readFileSync(record)).files),'.agent-skill-chain/distribution.json'].map(name=>[name,fs.readFileSync(path.join(work,name))]));
+}
+function assertSaved(work,saved){for(const [name,bytes] of saved)assert.deepEqual(fs.readFileSync(path.join(work,name)),bytes,name);}
+function legacyRecord(f){
+ const name='.agent-skill-chain/distribution.json',record=JSON.parse(fs.readFileSync(path.join(f.work,name)));
+ delete record.registeredHosts;delete record.hostEntries;f.write(name,JSON.stringify(record));return record;
+}
+
+test('ordinary updates remember both, single, or no Host selection and preview entry additions, descriptions and deletes',t=>{
+ for(const selection of [{registerSkill:true,registerClaudeSkill:true},{registerSkill:true},{registerClaudeSkill:true},{}]){
+  const f=fixture(t),options={packageRoot:f.pkg};
+  assert.equal(projectAssets(f.work,{...options,...selection,apply:true}).applied,true);
+  const selected=[...(selection.registerSkill?['.agents']:[]),...(selection.registerClaudeSkill?['.claude']:[])];
+  nextSkillDistribution(f);
+  const saved=savedAssets(f.work),preview=projectAssets(f.work,options);assertSaved(f.work,saved);
+  assert.deepEqual(preview.registeredHosts,selected);
+  const entries=preview.changes.filter(c=>c.kind==='host-entry');
+  assert.equal(entries.length,selected.length*4);
+  for(const host of selected){
+   assert.deepEqual(entries.filter(c=>c.host===host).map(c=>[c.path,c.action]).sort(),[
+    [`${host}/skills/asc/SKILL.md`,'update'],[`${host}/skills/execution-recovery/SKILL.md`,'delete'],[`${host}/skills/recovery-next/SKILL.md`,'create'],[`${host}/skills/verification-optimization/SKILL.md`,'update']]);
+  }
+  assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
+  for(const host of ['.agents','.claude']){
+   assert.equal(fs.existsSync(path.join(f.work,host,'skills/recovery-next/SKILL.md')),selected.includes(host));
+   assert.equal(fs.existsSync(path.join(f.work,host,'skills/execution-recovery/SKILL.md')),false);
+   if(selected.includes(host))for(const skill of ['asc','verification-optimization'])assert.match(fs.readFileSync(path.join(f.work,host,'skills',skill,'SKILL.md'),'utf8'),/description: Revised description/);
+  }
+  const again=projectAssets(f.work,{...options,apply:true});assert.deepEqual(again.changes,[]);assert.equal(again.recordChanged,false);
+ }
+});
+
+test('legacy records upgrade only proven entry ownership and retain each chosen Host through ordinary updates',t=>{
+ for(const selection of [{registerSkill:true,registerClaudeSkill:true},{registerSkill:true},{registerClaudeSkill:true},{}]){
+  const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,...selection,apply:true});legacyRecord(f);nextSkillDistribution(f);
+  const selected=[...(selection.registerSkill?['.agents']:[]),...(selection.registerClaudeSkill?['.claude']:[])];
+  const saved=savedAssets(f.work),preview=projectAssets(f.work,options);assertSaved(f.work,saved);assert.deepEqual(preview.registeredHosts,selected);
+  assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
+  const record=JSON.parse(fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json')));assert.deepEqual(record.registeredHosts,selected);assert.equal(record.hostEntries.length,selected.length*15);
+  assert(record.hostEntries.every(name=>!name.includes('/execution-recovery/')));
+  assert.equal(projectAssets(f.work,options).recordChanged,false);
+ }
+});
+
+test('legacy ownership proof survives edited or missing entries, and ambiguous records cannot silently opt out or opt in',t=>{
+ for(const mode of ['edited','missing','ambiguous','arbitrary']){
+  const f=fixture(t),options={packageRoot:f.pkg},entry='.agents/skills/execution-recovery/SKILL.md';
+  projectAssets(f.work,{...options,registerSkill:true,apply:true});const original=legacyRecord(f);
+  if(mode==='missing')fs.unlinkSync(path.join(f.work,entry));else f.write(entry,'Owner entry');
+  if(mode==='ambiguous')for(const prefix of ['.agent-skill-chain/skills/','.agent-skill-chain/managed-runtime/skills/'])f.write(prefix+'execution-recovery/SKILL.md','Owner canonical entry');
+  if(mode==='arbitrary'){
+   f.write('.agent-skill-chain/distribution.json',JSON.stringify({schema:'asc-project-assets/v1',files:{[entry]:createHash('sha256').update('Owner entry').digest('hex')}}));
+  }
+  nextSkillDistribution(f);const record=fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json'));
+  const result=projectAssets(f.work,{...options,apply:true});assert.equal(result.applied,false);assert(result.conflicts.includes(entry));assert.deepEqual(fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json')),record);
+  assert.equal(fs.existsSync(path.join(f.work,'.agents/skills/recovery-next/SKILL.md')),false);
+  if(mode==='arbitrary')assert.deepEqual(result.registeredHosts,[]);else assert.deepEqual(result.registeredHosts,['.agents']);
+  if(mode!=='missing')assert.equal(fs.readFileSync(path.join(f.work,entry),'utf8'),'Owner entry');
+  assert(original.files[entry]);
+ }
+});
+
+test('legacy fixed ASC wrapper is recognized even when its entry is locally deleted',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,registerSkill:true,apply:true});
+ const entry='.agents/skills/asc/SKILL.md',old=fs.readFileSync(path.join(f.work,entry),'utf8').replace(/^description: .+$/m,'description: ASCで許可された開発・再開・独立レビューを実行するとき、プロジェクトのASC入口を使う。通常作業へASC導入を強制しない。');
+ const record=legacyRecord(f);record.files[entry]=createHash('sha256').update(old).digest('hex');f.write('.agent-skill-chain/distribution.json',JSON.stringify(record));
+ fs.unlinkSync(path.join(f.work,entry));const result=projectAssets(f.work,{...options,apply:true});assert.equal(result.applied,false);assert.deepEqual(result.conflicts,[entry]);assert.deepEqual(result.registeredHosts,['.agents']);
+ f.write(entry,old);assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
+ assert.match(fs.readFileSync(path.join(f.work,entry),'utf8'),/description: ASC v0.5/);
+});
+
+test('edited or missing retired entries block additions, updates, deletions and record changes together',t=>{
+ for(const mode of ['edited','missing']){
+  const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,registerSkill:true,registerClaudeSkill:true,apply:true});nextSkillDistribution(f);
+  const entry='.claude/skills/execution-recovery/SKILL.md';if(mode==='edited')f.write(entry,'Owner edit');else fs.unlinkSync(path.join(f.work,entry));
+  const record=fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json')),other=fs.readFileSync(path.join(f.work,'.agents/skills/execution-recovery/SKILL.md'));
+  const result=projectAssets(f.work,{...options,apply:true});assert.equal(result.applied,false);assert.deepEqual(result.conflicts,[entry]);assert.deepEqual(fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json')),record);assert.deepEqual(fs.readFileSync(path.join(f.work,'.agents/skills/execution-recovery/SKILL.md')),other);
+  assert.equal(fs.existsSync(path.join(f.work,'.agents/skills/recovery-next/SKILL.md')),false);
+ }
+});
+
+test('unowned identical current or newly added Host entries conflict without adopting them',t=>{
+ for(const existing of [true,false]){
+  const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,...(!existing?{registerSkill:true}:{}),apply:true});
+  if(!existing)nextSkillDistribution(f);
+  const plan=projectAssets(f.work,{...options,registerSkill:true}),entry=`.agents/skills/${existing?'asc':'recovery-next'}/SKILL.md`;
+  const donor=path.join(f.root,'donor');f.git('worktree','add','-qb','donor',donor);projectAssets(donor,{...options,registerSkill:true,apply:true});
+  f.write(entry,fs.readFileSync(path.join(donor,entry)));
+  const before=fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json'));const result=projectAssets(f.work,{...options,...(existing?{registerSkill:true}:{}),apply:true});
+  assert.equal(result.applied,false);assert.deepEqual(result.conflicts,[entry]);assert.deepEqual(fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json')),before);assert(plan.changes.some(c=>c.path===entry));
+ }
+});
+
+test('retired entry deletion keeps symlink, hardlink and parent protections and rejects malformed ownership',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,registerSkill:true,apply:true});nextSkillDistribution(f);
+ const entry='.agents/skills/execution-recovery/SKILL.md',target=path.join(f.work,entry),original=fs.readFileSync(target),record=fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json'));
+ const outside=path.join(f.root,'outside');fs.writeFileSync(outside,'Outside owner file');
+ fs.unlinkSync(target);fs.symlinkSync(outside,target);assert.throws(()=>projectAssets(f.work,{...options,apply:true}),/symlink/);assert.deepEqual(fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json')),record);
+ fs.unlinkSync(target);fs.linkSync(outside,target);assert.throws(()=>projectAssets(f.work,{...options,apply:true}),/Unsafe asset/);assert.equal(fs.readFileSync(outside,'utf8'),'Outside owner file');
+ fs.unlinkSync(target);fs.writeFileSync(target,original);
+ const parent=path.dirname(target),moved=path.join(f.root,'moved');fs.renameSync(parent,moved);fs.symlinkSync(moved,parent);assert.throws(()=>projectAssets(f.work,{...options,apply:true}),/symlink/);fs.unlinkSync(parent);fs.renameSync(moved,parent);
+ for(const invalid of ['../owner','.agents/skills/execution-recovery/owner.txt','.claude/skills/execution-recovery/SKILL.md']){
+  const changed=JSON.parse(record);changed.hostEntries.push(invalid);f.write('.agent-skill-chain/distribution.json',JSON.stringify(changed));
+  assert.throws(()=>projectAssets(f.work,{...options,apply:true}),/Invalid Host entry ownership/);assert.deepEqual(fs.readFileSync(target),original);
+ }
+});
+
+test('failed partial or complete apply restores deleted, added, updated entries and record before retry',t=>{
+ for(const mode of ['partial','complete','owner-edit']){
+  const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,registerSkill:true,registerClaudeSkill:true,apply:true});nextSkillDistribution(f);
+  const saved=savedAssets(f.work),tools=path.join(f.root,'tools');fs.mkdirSync(tools);
+  const realGit=execFileSync('which',['git'],{encoding:'utf8'}).trim(),originalPath=process.env.PATH;
+  const deleted=path.join(f.work,'.agents/skills/execution-recovery/SKILL.md'),created=path.join(f.work,'.agents/skills/recovery-next/SKILL.md');
+  const donor=path.join(f.root,'rollback-donor');f.git('worktree','add','-qb','rollback-donor',donor);projectAssets(donor,{...options,registerSkill:true,apply:true});
+  const postimage=fs.readFileSync(path.join(donor,'.agents/skills/recovery-next/SKILL.md'),'utf8');
+  const injection=mode==='partial'?`fs.unlinkSync(${JSON.stringify(deleted)});fs.mkdirSync(${JSON.stringify(path.dirname(created))},{recursive:true});fs.writeFileSync(${JSON.stringify(created)},${JSON.stringify(postimage)});`:
+   `const r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});if(r.status!==0)process.exit(r.status??1);`+(mode==='owner-edit'?`fs.mkdirSync(${JSON.stringify(path.dirname(deleted))},{recursive:true});fs.writeFileSync(${JSON.stringify(deleted)},'Owner during failed apply');`:'');
+  const script=`#!${process.execPath}\nimport fs from 'node:fs';import {spawnSync} from 'node:child_process';\nconst args=process.argv.slice(2);if(args.includes('apply')){${injection}process.exit(1);}const r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(r.status??1);\n`;
+  fs.writeFileSync(path.join(tools,'git'),script,{mode:0o755});
+  try{process.env.PATH=tools+path.delimiter+originalPath;assert.throws(()=>projectAssets(f.work,{...options,apply:true}),mode==='owner-edit'?/rollback incomplete for .agents\/skills\/execution-recovery\/SKILL.md/:/Asset Git operation failed/);}finally{process.env.PATH=originalPath;}
+  if(mode==='owner-edit'){
+   assert.equal(fs.readFileSync(deleted,'utf8'),'Owner during failed apply');saved.delete('.agents/skills/execution-recovery/SKILL.md');
+  }
+  assertSaved(f.work,saved);assert.equal(fs.existsSync(created),false);
+  if(mode!=='owner-edit'){assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);assert.equal(fs.existsSync(deleted),false);assert.equal(fs.existsSync(created),true);}
+ }
+});
+
+test('owned Host entries edited to exactly the next release still conflict',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,registerSkill:true,apply:true});
+ const name='.agents/skills/verification-optimization/SKILL.md',source=path.join(f.pkg,'skills/verification-optimization/SKILL.md');
+ fs.writeFileSync(source,fs.readFileSync(source,'utf8').replace('description: ','description: Next description '));
+ const donor=path.join(f.root,'next-donor');f.git('worktree','add','-qb','next-donor',donor);projectAssets(donor,{...options,registerSkill:true,apply:true});
+ f.write(name,fs.readFileSync(path.join(donor,name)));const saved=savedAssets(f.work);
+ const result=projectAssets(f.work,{...options,apply:true});assert.equal(result.applied,false);assert.deepEqual(result.conflicts,[name]);assertSaved(f.work,saved);
 });

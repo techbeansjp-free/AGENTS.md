@@ -222,7 +222,7 @@ assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
  assertAdditionalEntries(assetWork);
  const registeredEntry=path.join(assetWork,'.agents/skills/asc/SKILL.md');const registeredText=fs.readFileSync(registeredEntry,'utf8');
  const projectReference=/\]\(([^)]+)\)/.exec(registeredText)[1];assert.equal(fs.realpathSync(path.resolve(path.dirname(registeredEntry),projectReference)),fs.realpathSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md')));
- const assetAgain=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.deepEqual(assetAgain.changes,[]);assert.equal(assetAgain.recordChanged,false);assert.deepEqual(assetAgain.retained,registrations);
+ const assetAgain=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.deepEqual(assetAgain.changes,[]);assert.equal(assetAgain.recordChanged,false);assert.deepEqual(assetAgain.retained,[]);
  const claudeRegistration=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--register-claude-skill','--apply'],{encoding:'utf8'}));assert.equal(claudeRegistration.applied,true);
  const claudeEntries=registrations.map(name=>name.replace('.agents/','.claude/'));
  for(const relative of claudeEntries){
@@ -233,7 +233,7 @@ assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
   if(!relative.endsWith('/asc/SKILL.md'))assert.match(text,/必要なreferences/);
  }
  const bothAgain=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--register-skill','--register-claude-skill','--apply'],{encoding:'utf8'}));assert.deepEqual(bothAgain.changes,[]);assert.equal(bothAgain.recordChanged,false);
- const retainedBoth=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.equal(retainedBoth.recordChanged,false);assert.deepEqual(retainedBoth.retained,[...registrations,...claudeEntries].sort());
+ const retainedBoth=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork],{encoding:'utf8'}));assert.equal(retainedBoth.recordChanged,false);assert.deepEqual(retainedBoth.retained,[]);
  const linked=spawnSync(process.execPath,[cli,'run-goal','--snapshot',owner],{encoding:'utf8'});
  assert.equal(linked.status,1);assert.doesNotMatch(linked.stderr,/dedicated Git worktree/);
  const reviewRefused=spawnSync(process.execPath,[cli,'review','--snapshot',owner],{encoding:'utf8'});assert.equal(reviewRefused.status,1);assert.match(reviewRefused.stderr,/Host-pinned Codex|Execution isolation unsupported/);
