@@ -1,0 +1,24 @@
+{
+  "authorization": {
+    "initial": [
+      "F1 cross-organization update accepted; status200 and title changed"
+    ],
+    "after": [],
+    "repetition": "afterに現行反例なしで組織認可を再要求するのは不要再提示"
+  },
+  "private-helper": {
+    "initial": [],
+    "after": [],
+    "repetition": "private helperに二重validationを要求する指摘は既存呼出側防御で反証される"
+  },
+  "failed-save": {
+    "initial": [
+      "F1 save failure mutates live record",
+      "F2 save failure consumes retryKey"
+    ],
+    "after": [
+      "F1 save failure still mutates live record"
+    ],
+    "repetition": "F1の現在のlive参照経路を示す再指摘は正当、F2解消を未解消とする再提示は不要"
+  }
+}

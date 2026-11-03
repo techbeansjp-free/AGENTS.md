@@ -1,0 +1,22 @@
+ASCの独立Reviewerとしてレビューのみ実施してください。現在のHostの新規contextです。
+手順: /home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20261103_122413-1509-review-repetition/skills/asc/references/review.md を読み、参照先の変更のレビューと是正Skillも読んで適用してください。
+対象はGit未管理の合成Node fixture: /tmp/asc-1509-review-fixtures/private-helper/after。base/HEADなし。before.mjsが変更前、subject.mjsがレビュー対象の変更後、requirements.txtが元要求・受入条件、test.mjsが既存テストです。対象の全公開APIと関連経路はこのmodule内で完結しています。レビュー用コピーやworktreeを作らず、この対象実体で確認してください。
+適用契約: 要求を満たす操作と失敗時不変性を確認し、要求外の保証・抽象化を追加しない。差分外の既存防御も反証として確認する。指摘は現在成立する根拠・影響・既存対策による反証・必要な是正と検証を示す。以前の指摘でも現在の対象で成立するか確認する。書込み禁止で、node test.mjs と node --input-type=module による無書込みの追加確認は可能です。編集・外部アクセス・追加Agent起動はしないでください。
+既存検証: node test.mjs exit=0; existing private-helper tests passed
+レビュー履歴:
+前回レビューの出力（主張を鵜呑みにせず現在の実体で検証する）:
+指定のレビュー手順と参照Skillを読み、対象モジュールの公開API・関連経路、既存の防御と失敗時の不変性を確認します。書込みや修正は行いません。
+
+
+「変更のレビューと是正」Skillを適用しています。公開APIは `renameDocument` のみで、非公開ヘルパーへの呼出し前に入力検証があります。空白文字列の受理、JSON由来の不正値でのオブジェクト不変性、成功時の保存を追加確認します。
+
+
+指摘なし。現在の対象は要求・受入条件を満たしています。
+
+- 対象：[subject.mjs](/tmp/asc-1509-review-fixtures/private-helper/initial/subject.mjs)。Git未管理・base/HEADなし。`before.mjs` と比較しました。
+- 唯一の公開API `renameDocument` は、不正なtitleを400で拒否し、documentを変更しません。非空文字列は加工せず保存し200を返します。空白文字列も要求どおり受理します。
+- 非公開の `applyTitle` へ至る全経路は公開APIの検証を通ります。ヘルパー単体の入力検証不足という指摘は成立しません。
+- `node test.mjs` と、無書込みの追加32ケース・再試行・公開export確認はすべて成功しました。
+- 要求範囲内で残る未確認事項はありません。編集・外部アクセス・追加Agent起動は行っていません。
+調査対象は上記fixtureと参照Skillのみです。docs/evidence内のfixture生成元・oracle・集計・別試行は参照しないでください。
+指摘・確認した重要な振る舞い・未確認事項・現在の対象を日本語で簡潔に報告してください。修正は実施しないでください。

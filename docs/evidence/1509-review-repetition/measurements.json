@@ -1,0 +1,296 @@
+[
+  {
+    "run_id": "authorization-initial",
+    "started_at_utc": "2026-11-03T03:28:48.046584+00:00",
+    "wall_seconds": 40.59,
+    "argv": [
+      "codex",
+      "-a",
+      "never",
+      "exec",
+      "--ignore-user-config",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--json",
+      "--color",
+      "never",
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=\"medium\"",
+      "-c",
+      "web_search=\"disabled\"",
+      "-s",
+      "read-only",
+      "-C",
+      "/tmp/asc-1509-review-fixtures/authorization/initial",
+      "-"
+    ],
+    "exit_code": 0,
+    "timeout": false,
+    "turn_completed": true,
+    "usage": {
+      "input_tokens": 105482,
+      "cached_input_tokens": 90496,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1607,
+      "reasoning_output_tokens": 89
+    },
+    "parse_errors": 0,
+    "missing": [],
+    "existing_test": {
+      "argv": [
+        "node",
+        "test.mjs"
+      ],
+      "exit_code": 0,
+      "stdout": "existing authorization tests passed\n"
+    },
+    "thread_id": "01a19f73-cc03-7341-bcd0-4838090604d6"
+  },
+  {
+    "run_id": "authorization-after",
+    "started_at_utc": "2026-11-03T03:29:28.678624+00:00",
+    "wall_seconds": 47.276,
+    "argv": [
+      "codex",
+      "-a",
+      "never",
+      "exec",
+      "--ignore-user-config",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--json",
+      "--color",
+      "never",
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=\"medium\"",
+      "-c",
+      "web_search=\"disabled\"",
+      "-s",
+      "read-only",
+      "-C",
+      "/tmp/asc-1509-review-fixtures/authorization/after",
+      "-"
+    ],
+    "exit_code": 0,
+    "timeout": false,
+    "turn_completed": true,
+    "usage": {
+      "input_tokens": 102827,
+      "cached_input_tokens": 89088,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1588,
+      "reasoning_output_tokens": 181
+    },
+    "parse_errors": 0,
+    "missing": [],
+    "existing_test": {
+      "argv": [
+        "node",
+        "test.mjs"
+      ],
+      "exit_code": 0,
+      "stdout": "existing authorization tests passed\n"
+    },
+    "thread_id": "01a19f74-6957-7881-8a56-cf1f90d01da5"
+  },
+  {
+    "run_id": "private-helper-initial",
+    "started_at_utc": "2026-11-03T03:30:15.992622+00:00",
+    "wall_seconds": 34.525,
+    "argv": [
+      "codex",
+      "-a",
+      "never",
+      "exec",
+      "--ignore-user-config",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--json",
+      "--color",
+      "never",
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=\"medium\"",
+      "-c",
+      "web_search=\"disabled\"",
+      "-s",
+      "read-only",
+      "-C",
+      "/tmp/asc-1509-review-fixtures/private-helper/initial",
+      "-"
+    ],
+    "exit_code": 0,
+    "timeout": false,
+    "turn_completed": true,
+    "usage": {
+      "input_tokens": 84692,
+      "cached_input_tokens": 54656,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1232,
+      "reasoning_output_tokens": 97
+    },
+    "parse_errors": 0,
+    "missing": [],
+    "existing_test": {
+      "argv": [
+        "node",
+        "test.mjs"
+      ],
+      "exit_code": 0,
+      "stdout": "existing private-helper tests passed\n"
+    },
+    "thread_id": "01a19f75-2214-76b0-b771-f1060516a416"
+  },
+  {
+    "run_id": "private-helper-after",
+    "started_at_utc": "2026-11-03T03:30:50.557552+00:00",
+    "wall_seconds": 34.07,
+    "argv": [
+      "codex",
+      "-a",
+      "never",
+      "exec",
+      "--ignore-user-config",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--json",
+      "--color",
+      "never",
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=\"medium\"",
+      "-c",
+      "web_search=\"disabled\"",
+      "-s",
+      "read-only",
+      "-C",
+      "/tmp/asc-1509-review-fixtures/private-helper/after",
+      "-"
+    ],
+    "exit_code": 0,
+    "timeout": false,
+    "turn_completed": true,
+    "usage": {
+      "input_tokens": 107191,
+      "cached_input_tokens": 90880,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1269,
+      "reasoning_output_tokens": 49
+    },
+    "parse_errors": 0,
+    "missing": [],
+    "existing_test": {
+      "argv": [
+        "node",
+        "test.mjs"
+      ],
+      "exit_code": 0,
+      "stdout": "existing private-helper tests passed\n"
+    },
+    "thread_id": "01a19f75-a8de-74b2-8ec1-054fa73b4f27"
+  },
+  {
+    "run_id": "failed-save-initial",
+    "started_at_utc": "2026-11-03T03:31:24.662941+00:00",
+    "wall_seconds": 46.328,
+    "argv": [
+      "codex",
+      "-a",
+      "never",
+      "exec",
+      "--ignore-user-config",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--json",
+      "--color",
+      "never",
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=\"medium\"",
+      "-c",
+      "web_search=\"disabled\"",
+      "-s",
+      "read-only",
+      "-C",
+      "/tmp/asc-1509-review-fixtures/failed-save/initial",
+      "-"
+    ],
+    "exit_code": 0,
+    "timeout": false,
+    "turn_completed": true,
+    "usage": {
+      "input_tokens": 105772,
+      "cached_input_tokens": 94848,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1496,
+      "reasoning_output_tokens": 68
+    },
+    "parse_errors": 0,
+    "missing": [],
+    "existing_test": {
+      "argv": [
+        "node",
+        "test.mjs"
+      ],
+      "exit_code": 0,
+      "stdout": "existing failed-save tests passed\n"
+    },
+    "thread_id": "01a19f76-2e17-7362-9c4d-f9cdac2ce2da"
+  },
+  {
+    "run_id": "failed-save-after",
+    "started_at_utc": "2026-11-03T03:32:11.030106+00:00",
+    "wall_seconds": 28.346,
+    "argv": [
+      "codex",
+      "-a",
+      "never",
+      "exec",
+      "--ignore-user-config",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--json",
+      "--color",
+      "never",
+      "-m",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=\"medium\"",
+      "-c",
+      "web_search=\"disabled\"",
+      "-s",
+      "read-only",
+      "-C",
+      "/tmp/asc-1509-review-fixtures/failed-save/after",
+      "-"
+    ],
+    "exit_code": 0,
+    "timeout": false,
+    "turn_completed": true,
+    "usage": {
+      "input_tokens": 87656,
+      "cached_input_tokens": 76416,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1405,
+      "reasoning_output_tokens": 10
+    },
+    "parse_errors": 0,
+    "missing": [],
+    "existing_test": {
+      "argv": [
+        "node",
+        "test.mjs"
+      ],
+      "exit_code": 0,
+      "stdout": "existing failed-save tests passed\n"
+    },
+    "thread_id": "01a19f76-e337-7e12-8fce-4250b7898aa5"
+  }
+]
