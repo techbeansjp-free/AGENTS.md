@@ -1,0 +1,117 @@
+{
+  "summary": {
+    "baseline": {
+      "runs": [
+        26,
+        24
+      ],
+      "total": 50,
+      "max": 64
+    },
+    "candidate": {
+      "runs": [
+        31,
+        30
+      ],
+      "total": 61,
+      "max": 64
+    }
+  },
+  "by_case": {
+    "A": {
+      "baseline": [
+        3,
+        3
+      ],
+      "candidate": [
+        4,
+        4
+      ]
+    },
+    "B": {
+      "baseline": [
+        3,
+        3
+      ],
+      "candidate": [
+        4,
+        4
+      ]
+    },
+    "C": {
+      "baseline": [
+        3,
+        3
+      ],
+      "candidate": [
+        3,
+        3
+      ]
+    },
+    "D": {
+      "baseline": [
+        3,
+        3
+      ],
+      "candidate": [
+        4,
+        4
+      ]
+    },
+    "E": {
+      "baseline": [
+        3,
+        3
+      ],
+      "candidate": [
+        4,
+        4
+      ]
+    },
+    "F": {
+      "baseline": [
+        3,
+        3
+      ],
+      "candidate": [
+        4,
+        4
+      ]
+    },
+    "G": {
+      "baseline": [
+        4,
+        3
+      ],
+      "candidate": [
+        4,
+        3
+      ]
+    },
+    "H": {
+      "baseline": [
+        4,
+        3
+      ],
+      "candidate": [
+        4,
+        4
+      ]
+    }
+  },
+  "issues": [
+    {
+      "run": "candidate-1",
+      "case": "G",
+      "severity": "minor",
+      "reason": "前任者の存在は依頼にないが、「前任者の設計理由」の確認を求めている。"
+    },
+    {
+      "run": "candidate-2",
+      "case": "C",
+      "severity": "minor",
+      "reason": "「まず既存の監視から」とし、依頼で明らかでない監視の存在を前提にしている。"
+    }
+  ],
+  "limitations": []
+}

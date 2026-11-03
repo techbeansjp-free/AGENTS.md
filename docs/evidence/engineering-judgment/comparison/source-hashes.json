@@ -1,0 +1,22 @@
+{
+  "personal_source_revision": "5f3abd92481c8da71156666030513f9f12ec03b0",
+  "hashes": {
+    "comparison/cases.json": "b027f28f246268ef23ee67cf9733a7415c49b1919a8879a3e8e33d8af0b3ab7a",
+    "comparison/rubric.json": "2255f56df83f156b8188040377c9ecf3d2ce28ba80e54c4ed43183be010ade8f",
+    "personal-source/skills/engineering-judgment/SKILL.md": "6a7852144e9737cca6eff933b6cada39f3aebd81c530730c73fc1cf3a3589bd4",
+    "personal-source/skills/estimate-and-scope/SKILL.md": "102326d82414e2c4bcb4fc5a5f6a8bc512c3d6f06283093b63890d1dfe5c3306",
+    "personal-source/skills/engineering-judgment/references/anti-patterns.md": "15db788aab6336446537a9bbe7c439e8dc89473f5cea539af0b16012de090b38",
+    "personal-source/skills/engineering-judgment/references/communication-and-decisions.md": "ab95c062d03b4ce2f995544d57976879bf449234160b76aad03ebe0f9c222783",
+    "personal-source/skills/engineering-judgment/references/verification.md": "82e2bfa12b240f1ce4e428afd8ab1995a514b9ab4f65aadef78bba2f9166c368",
+    "personal-source/skills/engineering-judgment/references/security-and-boundaries.md": "43e9c4cc51bb087379c18996d6aa73b55c025aefdbeafc88151be1d33a3c2844",
+    "personal-source/skills/engineering-judgment/references/simplicity-and-structure.md": "cb406a38d7334633f1bb31ab77bbee304cb13913c4b3e5dde93f719b69eaf125",
+    "personal-source/skills/engineering-judgment/references/ux-and-error-states.md": "4d3e37c1893280aa20d28adbe01958d98ec7fbed654f04681e52772b8454065a",
+    "personal-source/skills/engineering-judgment/references/release-and-operations.md": "6577fa06d6b840a63f679110406d97d56590cf6b80354045c9a473731888e05f",
+    "personal-source/skills/engineering-judgment/references/requirements-and-scope.md": "b5f7b09bf6468c46944eefc0415afb3ff6d5cfe2d5f3e19380b0d9c46df26283",
+    "personal-source/skills/engineering-judgment/references/evidence.md": "bbc81ba212ca3b790ce9c5eb4b7020d79206672ae1311cddd3733b3c3869d1d3",
+    "personal-source/skills/engineering-judgment/references/pressure-traps.md": "e5aad9a38eab317d5870077762fc58b128cf1f28dd6277848614117b5f364653",
+    "previous-generic/skills/engineering-judgment/SKILL.md": "249655bd1d52d1cba2d86adba3760172601aad314f09ef0a86445bbacfc98039",
+    "previous-generic/skills/engineering-judgment/references/conditions-and-counterexamples.md": "dad35c6cd34f7d874e374e7ebf0ad3f575762f346ad1292fe3141df0f896193b"
+  },
+  "note": "Historical comparison source fingerprints, not final candidate evidence. Original private research and personal source text are not redistributed. Exact archived generation traces and token measurements unavailable."
+}
