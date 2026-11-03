@@ -420,3 +420,69 @@ test('the inventory bound includes retained preimages as well as all fourteen Sk
  f.write(record,retired(12));assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
  assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.work,record))).files).length,288);
 });
+
+function decomposeNames(directory){
+ let changed=0;
+ for(const name of fs.readdirSync(directory)){
+  const file=path.join(directory,name);
+  if(fs.lstatSync(file).isDirectory())changed+=decomposeNames(file);
+  const decomposed=name.normalize('NFD');
+  if(name!==decomposed){const temporary=file+'.unicode-rename';fs.renameSync(file,temporary);fs.renameSync(temporary,path.join(directory,decomposed));changed++;}
+ }
+ return changed;
+}
+const unicodeTemplate='v05/templates/specs/details/07_データ/00_データ一覧.md';
+const unicodeAsset='.agent-skill-chain/templates/specs/details/07_データ/00_データ一覧.md';
+test('NFD distribution sources install NFC records and update existing NFD destination names',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg,apply:true};
+ assert(decomposeNames(path.join(f.pkg,'v05/templates/specs'))>0);
+ f.write('.agent-skill-chain/project/rules.md','Owner rule');f.write('docs/specs/データ.md','Owner specification');
+ assert.equal(projectAssets(f.work,options).applied,true);
+ const record=path.join(f.work,'.agent-skill-chain/distribution.json');
+ assert(Object.keys(JSON.parse(fs.readFileSync(record)).files).every(name=>name===name.normalize('NFC')));
+ assert(decomposeNames(path.join(f.work,'.agent-skill-chain'))>0);
+ const stable=fs.readFileSync(record),unchanged=projectAssets(f.work,options);assert.deepEqual(unchanged.changes,[]);assert.equal(unchanged.recordChanged,false);
+ const decomposed=path.join(f.work,unicodeAsset.normalize('NFD'));
+ fs.appendFileSync(path.join(f.pkg,unicodeTemplate.normalize('NFD')),'\nUpdated NFD source\n');
+ assert.equal(projectAssets(f.work,options).applied,true);
+ assert.match(fs.readFileSync(decomposed,'utf8'),/Updated NFD source/);
+ if(process.platform==='linux')assert.equal(fs.existsSync(path.join(f.work,unicodeAsset)),false);
+ fs.appendFileSync(decomposed,'\nOwner edit\n');
+ const before=fs.readFileSync(record),blocked=projectAssets(f.work,options);assert.equal(blocked.applied,false);assert.deepEqual(blocked.conflicts,[unicodeAsset]);assert.deepEqual(fs.readFileSync(record),before);
+ assert.notDeepEqual(before,stable);
+ assert.equal(fs.readFileSync(path.join(f.work,'.agent-skill-chain/project/rules.md'),'utf8'),'Owner rule');assert.equal(fs.readFileSync(path.join(f.work,'docs/specs/データ.md'),'utf8'),'Owner specification');
+});
+test('NFC-equivalent source and destination aliases reject before writing even with an exact match',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg,apply:true};
+ const source=path.join(f.pkg,unicodeTemplate),alias=source.normalize('NFD');fs.mkdirSync(path.dirname(alias),{recursive:true});fs.writeFileSync(alias,'Ambiguous source');
+ if(fs.readdirSync(path.dirname(path.dirname(source))).filter(name=>name.normalize('NFC')==='07_データ').length!==2){t.skip('Filesystem does not preserve distinct canonical aliases');return;}
+ assert.throws(()=>projectAssets(f.work,options),/Ambiguous Unicode asset path/);assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain')),false);
+ fs.rmSync(path.dirname(alias),{recursive:true});
+ const target=path.join(f.work,unicodeAsset),targetAlias=target.normalize('NFD');f.write(unicodeAsset,'Owner NFC');f.write(unicodeAsset.normalize('NFD'),'Owner NFD');
+ assert.throws(()=>projectAssets(f.work,options),/Ambiguous Unicode asset path/);
+ assert.equal(fs.readFileSync(target,'utf8'),'Owner NFC');assert.equal(fs.readFileSync(targetAlias,'utf8'),'Owner NFD');assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain/distribution.json')),false);
+});
+test('NFD path aliases retain symlink and hardlink protection',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg,apply:true};
+ decomposeNames(path.join(f.pkg,'v05/templates/specs'));
+ const alias=unicodeTemplate.normalize('NFD'),target=path.join(f.pkg,alias);fs.mkdirSync(path.dirname(target),{recursive:true});
+ fs.unlinkSync(target);
+ const outside=path.join(f.root,'outside');fs.writeFileSync(outside,'Owner secret');fs.symlinkSync(outside,target);
+ assert.throws(()=>projectAssets(f.work,options),/symlink/);assert.equal(fs.readFileSync(outside,'utf8'),'Owner secret');assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain')),false);
+ fs.unlinkSync(target);fs.linkSync(outside,target);assert.throws(()=>projectAssets(f.work,options),/Unsafe asset/);
+});
+test('single NFD record keys migrate to NFC while canonical aliases in records reject before writing',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg,apply:true};projectAssets(f.work,options);
+ const record=path.join(f.work,'.agent-skill-chain/distribution.json'),original=JSON.parse(fs.readFileSync(record));
+ const decomposed=structuredClone(original);decomposed.files[unicodeAsset.normalize('NFD')]=decomposed.files[unicodeAsset];delete decomposed.files[unicodeAsset];
+ fs.writeFileSync(record,JSON.stringify(decomposed));assert.equal(projectAssets(f.work,options).applied,true);
+ assert.deepEqual(JSON.parse(fs.readFileSync(record)),original);
+ decomposed.files[unicodeAsset]=original.files[unicodeAsset];const ambiguous=JSON.stringify(decomposed);fs.writeFileSync(record,ambiguous);
+ assert.throws(()=>projectAssets(f.work,options),/Ambiguous Unicode asset inventory/);assert.equal(fs.readFileSync(record,'utf8'),ambiguous);
+});
+test('noncanonical runtime inventory rejects before creating project assets',t=>{
+ const f=fixture(t),file=path.join(f.pkg,'src/runtime-files.json'),inventory=JSON.parse(fs.readFileSync(file));
+ fs.writeFileSync(file,JSON.stringify(inventory.map(name=>name.normalize('NFD'))));
+ assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,apply:true}),/Runtime inventory paths must use NFC/);
+ assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain')),false);
+});
