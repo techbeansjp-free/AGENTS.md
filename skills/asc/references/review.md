@@ -15,3 +15,33 @@ High・Mediumは是正後、指摘の解消と影響範囲の回帰を独立レ�
 Lowだけでも振る舞い・契約・権限が変わる、または影響を限定できなければ再レビューする。誤字等で影響しないと進行役が確認できる場合だけ再レビューを省略できる。必要な実検証と提出対象・Evidenceの一致は維持する。
 
 起動権限の違反や必須観点の欠落があれば影響する合格Evidenceを保留し、対象・実際の操作・欠けた確認を照合する。適合する権限で必要なレビューを再実行する。「今後注意する」だけで是正済みとせず、未確認の操作や変更を断定しない。
+
+## 現在のHostで起動し、結果を回収する
+
+依頼にはこのファイルの所在、元要求・受入、対象worktreeとbase/完全HEAD、変更範囲、実検証の参照を渡す。観点本文は複製しない。Hostの版・設定と実際の制限を確認してから、独立Contextを起動する。別Hostを必須にしない。
+
+Codex CLIの任意例（導入済み版の`codex exec --help`で確認する）:
+
+```sh
+codex exec --ephemeral -s read-only -C /absolute/worktree \
+  --json -o /absolute/evidence/review.txt \
+  'この作業場所のskills/asc/references/review.mdを読み、指定した要求・base・HEAD・検証記録を照合して独立レビューする。'
+```
+
+これは起動形式の例であり、実際の依頼には未記入の要求・base・HEAD・検証記録を補う。`read-only`はそのHostのローカル実行制限であり、MCP等の外部ツールの書込み可否まで証明しない。書込みを要するbuild・テストはその場で成功したとせず、実装担当の同一対象のログを照合するか、許可された実行担当へ依頼する。レビューのためにsandboxを解除しない。
+
+Claude Codeの任意例は、導入済み版の`claude --help`で`-p`と`--allowedTools`を確認し、プロジェクト契約が許す読取りツールに限定する。例えば `claude -p --allowedTools Read Glob Grep -- '<要求と参照を含む依頼>'`。Bash・外部連携を追加すればその権限も別途確認する。フラグが存在するだけで安全性が成立したとは扱わず、保護した使い捨てファイルへの書込み拒否などを実環境で検証する。本例の存在をClaude Codeでの実証済み保証としない。
+
+親Hostの完了通知・管理されたjob/sessionの終了イベントを優先し、同じjob IDから結果を回収する。通知がなければHostが返す実行IDのwait/pollを使い、既知の進捗と残る独立作業に応じて待つ。`sleep`と`pgrep`を繰り返してプロセス名の消滅を成功判定にしない。通信断や時間切れでは実行ID・最後の出力・所有者を残し、未完了として復旧する。親の終了やinterruptだけで子の終了を推定しない。
+
+終了コード・完了イベント・レビュー本文・判定対象HEADを照合して、成功、指摘あり、中断、起動失敗、結果欠落を分ける。出力が空、別HEAD、ツール拒否で必要な経路を読めない場合はレビュー未完了。結果は既存PR等に参照で残す。Host固有の機能・構文は[Codex CLI](https://developers.openai.com/codex/cli/reference/)と[Claude Code CLI](https://code.claude.com/docs/en/cli-reference)の対象版を確認する。
+
+## 許可されたmergeの直前
+
+merge依頼がある場合だけ、PRの対象repo・base・HEADと今回の操作許可を照合する。PR作成やCI成功をmerge許可に読み替えない。必須CIの成功・未完了・失敗、独立レビューと是正の対象HEAD、未解決threadを実際のremote状態で読む。botが不在・レート制限でも、それだけを理由に独立レビューを追加せず、既存レビューの有効範囲を確認する。
+
+指摘は一件ずつ現在の差分・関連経路で成立するか調べる。修正不要なら根拠を残す。返信・resolveは許可がある場合だけ行い、ラベルやthread解消を修正の証明にしない。修正後の再検証・再レビューは上の重要度別規約に従う。
+
+baseとの差分から必要性を判断して取り込む。すべてのPRに無条件のbase更新を要求しない。競合解消だけでなく、migration head・共有契約・生成物・依存version等の意味的な不整合を確認する。HEADが変われば影響する検証を更新し、古いHEADのCIを新HEADの合格としない。有効な既存証拠まで形式的に再実行しない。
+
+確認後にHEADが変わる競合を防ぐため、forgeが提供する期待HEAD拘束を使う。GitHub CLIなら `gh pr merge <PR> --merge --match-head-commit <確認済み完全HEAD>` が例であり、merge方式は対象repoの規約に合わせる。チェックやbranch保護を迂回するオプションは追加しない。拒否されたら現在のHEADと理由を読み直す。依存PRは先行PRのmergeを確認してからbase・受入を更新する。操作応答だけで完了とせず、PRのMERGED状態・merge commit・マージ先を読み戻して[同期と整理](post-merge.md)へ進む。

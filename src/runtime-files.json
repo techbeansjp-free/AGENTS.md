@@ -147,5 +147,8 @@
   "skills/review-and-remediation/references/review-method.md",
   "skills/engineering-judgment/SKILL.md",
   "skills/engineering-judgment/references/conditions-and-counterexamples.md",
-  "skills/estimate-and-scope/SKILL.md"
+  "skills/estimate-and-scope/SKILL.md",
+  "skills/tracker-issue-writing/SKILL.md",
+  "v05/optional-skills/model-deliberation/SKILL.md",
+  "v05/optional-skills/model-deliberation/agents/openai.yaml"
 ]

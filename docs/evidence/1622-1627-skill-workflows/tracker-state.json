@@ -1,0 +1,22 @@
+{
+  "issues": [
+    {
+      "id": 17,
+      "title": "予約通知を追加する",
+      "body": "予約確定後に担当者へ通知する。通知失敗時も予約内容を保持し再試行する。",
+      "fields": {
+        "19": "High"
+      },
+      "project": "fixture",
+      "parent": 3
+    }
+  ],
+  "operations": [
+    {
+      "op": "update",
+      "id": 17,
+      "field": 19,
+      "value": "High"
+    }
+  ]
+}

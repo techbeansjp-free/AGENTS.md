@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const additionalSkills=['contract-enforcement','engineering-judgment','estimate-and-scope','execution-recovery','migration-assurance','research-to-implementation','review-and-remediation','security-evidence','subagent-model-selection','user-journey-acceptance','verification-optimization','work-coordination'];
+export const additionalSkills=['contract-enforcement','engineering-judgment','estimate-and-scope','execution-recovery','migration-assurance','research-to-implementation','review-and-remediation','security-evidence','subagent-model-selection','user-journey-acceptance','verification-optimization','work-coordination','tracker-issue-writing'];
 export const registeredSkills=['asc','project-foundation',...additionalSkills].sort();
 export const registrations=registeredSkills.map(name=>`.agents/skills/${name}/SKILL.md`);
 export function skillFiles(root){

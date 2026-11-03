@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a19f74-a629-7a60-9e0a-0bc845e1e347"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"The meeting is at three o’clock tomorrow."}}
+{"type":"turn.completed","usage":{"input_tokens":17635,"cached_input_tokens":12288,"cache_write_input_tokens":0,"output_tokens":33,"reasoning_output_tokens":18}}

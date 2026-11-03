@@ -1,0 +1,4 @@
+# Fixture owner rule
+Do not publish anything from this fixture.
+
+このプロジェクトでASCを使う開発・再開・独立レビュー・PR提出・許可されたmergeと後片付けでは、.agent-skill-chain/skills/asc/SKILL.mdを読み、依頼に必要なreferenceだけを参照する。本文が欠落していれば導入状態を確認する。対象・規約・版が変わった場合は影響する箇所を読み直す。通常の質問・翻訳等には開発工程を追加しない。Skillの読取りから外部操作の許可を推定しない。

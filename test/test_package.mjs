@@ -191,7 +191,10 @@ assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
  for(const name of ['review.md','coordination.md','post-merge.md','controller.md']){
   const file=path.join(sharedSkillRoot,'references',name),content=fs.readFileSync(file,'utf8');
   assert.equal(content,fs.readFileSync(path.join(packageRoot,'skills/asc/references',name),'utf8'));
-  for(const match of content.matchAll(/\]\(([^)]+)\)/g))assert(fs.existsSync(path.resolve(path.dirname(file),match[1])),match[1]);
+  for(const [,link] of content.matchAll(/\]\(([^)]+)\)/g)){
+   if(/^https?:\/\//.test(link)){assert(new URL(link).hostname);continue;}
+   assert(fs.existsSync(path.resolve(path.dirname(file),link.split('#')[0])),link);
+  }
  }
  const registration=JSON.parse(execFileSync(process.execPath,[cli,'project-assets',assetWork,'--register-skill','--apply'],{encoding:'utf8'}));assert.equal(registration.applied,true);
  assertFoundationEntry(assetWork);
