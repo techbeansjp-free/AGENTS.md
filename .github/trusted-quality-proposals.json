@@ -530,6 +530,29 @@
           "afterSha256": "f5ca38f748a1d6eaf726b8a42fb575c3c71f1864a8143301782de13da2d9202b"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-HOST-SESSION-NAMES-001",
+      "status": "staged",
+      "fromVersion": 20,
+      "toVersion": 21,
+      "owner": "repository maintainer (approval pending)",
+      "rationale": "Issue #1644 / PR #1645 のClaude Code・Codex別セッション命名を配布するため、package.json filesへの実装2件・手順1件追加を事前登録する。品質script、依存関係、validatorと権限制限は変更しない。",
+      "rollback": "適用前は有効化しない。適用後に配布対象を戻す場合は次versionのproposalを先行登録して適用する。登録済みproposal削除や品質検査の解除は行わない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "package.json",
+          "beforeSha256": "b54c83a469fa8dd108313f75344a54efdac4913d54648e92f523b046f92b9cf3",
+          "afterSha256": "b97ae8c254a753159d630615d6b6af869f50ad1f15551744a008049dc3460be5"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "f5ca38f748a1d6eaf726b8a42fb575c3c71f1864a8143301782de13da2d9202b",
+          "afterSha256": "6f4b6612125fb3a0daecd2799dfd6c9c299424fd920f9b308110a2c1fbd8f443"
+        }
+      ]
     }
   ]
 }
