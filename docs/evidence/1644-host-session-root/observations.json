@@ -86,5 +86,44 @@
       "session-tests.log": "6300819f374faea4f9a2d0b45054a48a6affea40fe3ddd712307cdac50bf0b41",
       "lint.log": "fd7a67df91cc19a8971d037a6a39fd368678cc3b61160fe3588d27c8cfaa11d1"
     }
+  },
+  "claudeRetry": {
+    "status": {
+      "schema": "asc-host-session/v1",
+      "host": "claude",
+      "cwd": "/tmp/asc1644-root-live/primary",
+      "targetDirectory": "/tmp/asc1644-root-live/target",
+      "targetHead": "0c3fe99d586e4a9c2f46e72f309d865cd50eb887",
+      "model": "haiku",
+      "ephemeral": false,
+      "name": "自動: 1644 root listing retry",
+      "sessionId": "330215e3-b75d-49a0-aae8-2fc53eb8b570",
+      "status": "completed",
+      "naming": "completed",
+      "outputDir": "/tmp/asc1644-root-live/claude-retry-1",
+      "startedAt": "2026-11-04T08:29:56.174Z",
+      "process": {
+        "code": 0,
+        "signal": null
+      },
+      "rename": {
+        "code": 0,
+        "signal": null
+      },
+      "finishedAt": "2026-11-04T08:30:04.752Z"
+    },
+    "response": "**marker.txt contents** (`/tmp/asc1644-root-live/target/marker.txt`, line 1):\n\n```\nWORKTREE_ONLY_SENTINEL\n```\n\n**Target HEAD:** `0c3fe99d586e4a9c2f46e72f309d865cd50eb887`. This matches the `targetHead` in the session info.\n\nBash is disabled in this session, so I couldn't run `git rev-parse`. I got the HEAD by reading files instead. `target/.git` points to `primary/.git/worktrees/target`, whose HEAD is `ref: refs/heads/target`. The loose ref `refs/heads/target` contains `0c3fe99d…`. That ref was read from disk, not through Git, so it could differ from what Git would report if the ref is packed or overridden.\n\nI did not read the primary checkout's marker file. I made no writes and used no external tools.\n",
+    "rootBucketFileExists": true,
+    "observedCwds": [
+      "/tmp/asc1644-root-live/primary"
+    ],
+    "completedTitle": "済: 自動: 1644 root listing retry",
+    "uiDisplayVerified": false,
+    "logHashes": {
+      "status.json": "bfc7e9a6f913e5c711a777339bc49d2383eb6d153de87f06a2cbefbd2e87deba",
+      "result.txt": "e1bdf12f56c6e67a58ba55328ad34b5fdb6727a6f1738ba0f99e97fb72418736",
+      "events.jsonl": "5178596871eb55cd4e537bb7c7a5fa38e0a414c3449ff5baa99de149d2077bbc",
+      "rename.stdout": "a12b7cb43c9d9134b5bb1b35e9096b66775d9e92e7611d1cc92b02edd6782a87"
+    }
   }
 }
