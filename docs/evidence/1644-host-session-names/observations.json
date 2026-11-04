@@ -31,7 +31,7 @@
       "id": "01a1a48e-d362-7a20-be83-f41db37d1f4e",
       "name": "済: 自動: 1644 動作確認"
     },
-    "scope": "Initial implementation live run; later shutdown drain and input checks covered by regression tests, final CLI review pending approval."
+    "scope": "Initial smoke and final read-only review both completed; final review uses submitted implementation."
   },
   "claude": {
     "version": "2.1.317",
@@ -74,7 +74,25 @@
       "Use explicit rename model, otherwise preserve selected model",
       "Wait for Codex child close/drain before closing artifact file descriptors"
     ],
-    "finalReadOnlyCli": "blocked by automatic approval review; explicit user permission requested; not run"
+    "finalReadOnlyCli": {
+      "status": {
+        "schema": "asc-host-session/v1",
+        "host": "codex",
+        "cwd": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20261104_121418-1644-host-session-names",
+        "model": "gpt-6.1-sol",
+        "ephemeral": false,
+        "name": "自動: 1644 最終独立レビュー",
+        "sessionId": "01a1a4a3-18ca-7ba1-8178-effdec7218f5",
+        "status": "completed",
+        "naming": "completed",
+        "outputDir": "/tmp/asc1644-live/review-approved",
+        "startedAt": "2026-11-04T03:38:34.326Z",
+        "finishedAt": "2026-11-04T03:40:06.479Z"
+      },
+      "reviewedCommit": "bf26b046f9833b4bfad8cf439e1ae04acc98ab0a",
+      "highMediumFindings": 0,
+      "authorization": "User explicitly approved the specified worktree and verification logs for OpenAI Codex review."
+    }
   },
   "verification": {
     "quality": {
