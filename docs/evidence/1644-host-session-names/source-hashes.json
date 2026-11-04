@@ -1,0 +1,14 @@
+{
+  "bin/asc-v05.mjs": "85426c4f48e640f46171161df49d67dd1acc0969dfa62e41447faf7c1a4cdf70",
+  "package.json": "764b7ff9aed13a0e9cb969a6ed1dbb20ceeefb9fe699b3ef38c2fbd6ffd189f9",
+  "skills/asc/SKILL.md": "3d7c6ea491eaa1e292bd42afd3c1bab96ecd5de39e3f60acd5d7da87604bc556",
+  "skills/asc/references/host-session.md": "39c9d789a8d90ae9631e1475d0954247aa0e307f31da0c3bf89736933af1f15f",
+  "skills/asc/references/review.md": "d6bc533a7202b31a08be1ebf162c8e06dc3e7573cba874c08b769364c7bb6324",
+  "src/host-session.mjs": "488971b03ddb893843d5ae6497a317c18ddf4ebc8e2f03d42f3872f4a10b6b48",
+  "src/project-assets.mjs": "1dc7c285b2bbf9eebde2e2c90193ecf803ed7abc297d4d14f99adfacf16049e8",
+  "src/runtime-files.json": "999b2b301159db6c3b73de5c67e4c8e5e6948c35b0f224de55ef5f50299e5ab9",
+  "src/session-rpc.mjs": "540da4492da96dd0cc61df76b4c4bb8abbcc4b22786dfffc495e4bc890322260",
+  "test/test_host_session.mjs": "b33c9719ae9d6db2154a390fdc359712bb643d2f294b78b468a76386ec8926c5",
+  "test/test_project_assets.mjs": "49b7f207e3d6b4d12e939317a1d3570a16f7dd631071f0f2af8297423f266323",
+  "v05/USAGE.md": "dbc9353e9d09f0ced284d5dfee12af877f2570d00a69ee33960396b52a8c616a"
+}

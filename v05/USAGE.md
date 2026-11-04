@@ -590,3 +590,7 @@ Skill登録は発見のためのmetadata配置であり、本文を読むこと�
 Codexでは新しいsessionで `$model-deliberation` を明示選択する。自然文の協議依頼だけで起動しない場合は、この明示選択を行う。通常の設計依頼では自動選択しない設定であり、ファイルを直接指定する読取りまで権限機構として禁止するものではない。本文でも明示協議依頼を確認し、Agent起動を制限する。使用するCodex版で明示選択と非選択を実測してから採用する。[公式Skill設定](https://developers.openai.com/codex/skills/)を確認する。
 
 この任意directoryは `project-assets --register-skill` の登録対象ではなく、managed-runtime内の配布原本である。採用後の任意登録もproject-assetsの自動更新対象ではない。更新時は元の配布原本と採用先を比較し、policyを落とさない。Claude Codeや他Hostの登録への変換は本提供方法では扱わない。未確認のHostで明示限定を保証したとはしない。
+
+## 独立レビュー・相談の別セッション
+
+`host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory>`で読取り用の新規セッションを起動し、結果保存後に`自動: <内容>`から`済: 自動: <内容>`へ改名します。Claude CodeとCodexの両方に対応し、非永続は`--ephemeral`で明示します。改名失敗でも本体の結果を保持します。権限制限・復旧・未対応版の扱いは[別セッションの手順](../skills/asc/references/host-session.md)を参照してください。
