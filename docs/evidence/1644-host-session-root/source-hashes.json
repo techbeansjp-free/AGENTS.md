@@ -1,7 +1,8 @@
 {
   "bin/asc-v05.mjs": "12b839fa7b2a019d0ea2aa38dbd0a82dc675efb3755f19d20ab50d8187924ff7",
-  "skills/asc/references/host-session.md": "f249badb11f717e386a823d7b840c066f95b767a7ec9da5b4fb1382af1a4c7e1",
-  "src/host-session.mjs": "285096e19d93e6b832abe24ea1aeb6ab7e40fd2def2521d12e79cf32a39408e5",
-  "test/test_host_session.mjs": "3885bfd8d6ff9f074e4695e2c9882257a5e54824fbedc8a2f6d0b3599e84f9b0",
-  "v05/USAGE.md": "e28c20bacf0ebc2148285b0befba6d665eb0d73f7d21e3b359a752cbab9d475c"
+  "skills/asc/references/host-session.md": "6461fbb14787fd851fee934c4cc0fafa6220b162fc63e5d75c6c535ad911826f",
+  "src/host-session.mjs": "727bb78330fbf48ed8a90e690b76e0a5be6b28afa340472b6f83fcf2c6883b66",
+  "test/test_host_session.mjs": "238a76b436377531980de60097a73f4291fc82d234372092bc9f97ab09000e48",
+  "v05/USAGE.md": "e28c20bacf0ebc2148285b0befba6d665eb0d73f7d21e3b359a752cbab9d475c",
+  "src/session-rpc.mjs": "f492618f615070dd8f371ac9e4f302df968f245054488b05d0f998a8ff4b16eb"
 }

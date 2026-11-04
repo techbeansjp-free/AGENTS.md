@@ -125,5 +125,97 @@
       "events.jsonl": "5178596871eb55cd4e537bb7c7a5fa38e0a414c3449ff5baa99de149d2077bbc",
       "rename.stdout": "a12b7cb43c9d9134b5bb1b35e9096b66775d9e92e7611d1cc92b02edd6782a87"
     }
+  },
+  "remediation": {
+    "claude": {
+      "status": {
+        "schema": "asc-host-session/v1",
+        "host": "claude",
+        "cwd": "/tmp/asc1644-root-live/primary",
+        "targetDirectory": "/tmp/asc1644-root-live/target",
+        "targetHead": "0c3fe99d586e4a9c2f46e72f309d865cd50eb887",
+        "model": "haiku",
+        "ephemeral": false,
+        "name": "自動: 1644 hook suppression verification",
+        "sessionId": "c179f67b-913d-4a4d-b7c7-429aea0263dc",
+        "status": "completed",
+        "naming": "completed",
+        "outputDir": "/tmp/asc1644-root-live/claude-remediated",
+        "startedAt": "2026-11-04T09:02:17.603Z",
+        "process": {
+          "code": 0,
+          "signal": null
+        },
+        "rename": {
+          "code": 0,
+          "signal": null
+        },
+        "finishedAt": "2026-11-04T09:02:29.520Z"
+      },
+      "response": "The marker file's exact contents are `WORKTREE_ONLY_SENTINEL`, and the target HEAD is `0c3fe99d586e4a9c2f46e72f309d865cd50eb887`, which matches the supplied `targetHead`.\n\n- **marker.txt** (`/tmp/asc1644-root-live/target/marker.txt`): line 1 is `WORKTREE_ONLY_SENTINEL`, followed by an empty line 2.\n- **Target HEAD:** I could not run `git rev-parse` because Bash is disabled in this session. Instead I read the git metadata by hand. `target/.git` is a pointer file to `primary/.git/worktrees/target`, whose HEAD is `ref: refs/heads/target`. The ref file `primary/.git/refs/heads/target` contains `0c3fe99d586e4a9c2f46e72f309d865cd50eb887`. This is a manual resolution, not a live Git check, and I did not check packed-refs in case the loose ref were stale.\n\nI did not read the primary checkout's marker file. Reading the target's worktree metadata under `primary/.git` was the only way to get the HEAD without Bash, and I made no writes.\n"
+    },
+    "codex": {
+      "status": {
+        "schema": "asc-host-session/v1",
+        "host": "codex",
+        "cwd": "/tmp/asc1644-root-live/primary",
+        "targetDirectory": "/tmp/asc1644-root-live/target",
+        "targetHead": "0c3fe99d586e4a9c2f46e72f309d865cd50eb887",
+        "model": "gpt-6.1-sol",
+        "ephemeral": false,
+        "name": "自動: 1644 Git environment verification",
+        "sessionId": "01a1a5cb-909d-7540-8549-f4e2fbae7c45",
+        "status": "completed",
+        "naming": "completed",
+        "outputDir": "/tmp/asc1644-root-live/codex-remediated",
+        "startedAt": "2026-11-04T09:02:23.477Z",
+        "finishedAt": "2026-11-04T09:02:40.249Z"
+      },
+      "response": "I’ll read the target’s repository instructions and marker, then verify its Git HEAD using local read-only commands.\n\n`/tmp/asc1644-root-live/target/marker.txt` contains exactly:\n```text\nWORKTREE_ONLY_SENTINEL\n```\nThe contents end with a newline (`\\n`).\n\nTarget Git HEAD: `0c3fe99d586e4a9c2f46e72f309d865cd50eb887` — matches the supplied target HEAD.\n"
+    },
+    "hookControl": {
+      "sentinelAfterControl": "hook-firedn",
+      "sentinelAfterRestrictedBodyAndRename": "hook-firedn",
+      "settingsSource": "synthetic primary/.claude/settings.json SessionStart command"
+    },
+    "targetedTests": {
+      "passed": 27,
+      "failed": 0
+    },
+    "beforeFixRegression": {
+      "failed": 4,
+      "scope": "Git environment and rename HEAD change; both Hosts"
+    },
+    "quality": {
+      "tests": 559,
+      "passed": 547,
+      "failed": 0,
+      "skipped": 12,
+      "exitCode": 0
+    },
+    "independentReview": {
+      "schema": "asc-host-session/v1",
+      "host": "codex",
+      "cwd": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md",
+      "targetDirectory": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20261104_152640-1644-host-session-root",
+      "targetHead": "061a71850ca06ccd28a6fcb74212eba106bc74dd",
+      "model": "gpt-6.1-sol",
+      "ephemeral": false,
+      "name": "自動: 1647 指摘是正 独立レビュー",
+      "sessionId": "01a1a5cc-54ee-77f3-b1ff-742b50188dca",
+      "status": "completed",
+      "naming": "completed",
+      "outputDir": "/tmp/asc1644-root-live/remediation-review",
+      "startedAt": "2026-11-04T09:03:13.747Z",
+      "finishedAt": "2026-11-04T09:04:29.606Z"
+    },
+    "reviewedProductDiffSha256": "cefe541d468380baf95b719e0e74c50d6eab2146f84d4d411b52ee31db500d30",
+    "logHashes": {
+      "remediation-tests.log": "d88eeaf55c17503bf611dde04df8e4646a89b8f22f9822dc832104d72264fc0b",
+      "remediation-quality.log": "53417ec90180d94107ab25d98f678a5f7ad16f8768de5dd4b697a1649c926c0e",
+      "before-fix-tests.log": "c566597a54c8e35704dbc3ec13461fdbf6500c7f2ede1960abd087e2654636c3",
+      "hook-control.txt": "a12b7cb43c9d9134b5bb1b35e9096b66775d9e92e7611d1cc92b02edd6782a87",
+      "hook-sentinel": "4492348f149f103fd1aee38e0d64843701a6d31844a23d89a1b481f90cd806d7"
+    }
   }
 }
