@@ -1,0 +1,7 @@
+{
+  "bin/asc-v05.mjs": "12b839fa7b2a019d0ea2aa38dbd0a82dc675efb3755f19d20ab50d8187924ff7",
+  "skills/asc/references/host-session.md": "f249badb11f717e386a823d7b840c066f95b767a7ec9da5b4fb1382af1a4c7e1",
+  "src/host-session.mjs": "285096e19d93e6b832abe24ea1aeb6ab7e40fd2def2521d12e79cf32a39408e5",
+  "test/test_host_session.mjs": "3885bfd8d6ff9f074e4695e2c9882257a5e54824fbedc8a2f6d0b3599e84f9b0",
+  "v05/USAGE.md": "e28c20bacf0ebc2148285b0befba6d665eb0d73f7d21e3b359a752cbab9d475c"
+}

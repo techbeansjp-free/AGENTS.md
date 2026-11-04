@@ -1,0 +1,90 @@
+{
+  "base": "aa7bb399141df70adc3baaa438109393b623758a",
+  "reviewedDiffSha256": "87bbb1422008cbb0c9de9014a447c42d88b426e4de499f0b80e3f453fad3c7c6",
+  "codex": {
+    "id": "01a1a53f-5c73-7381-8aee-b58a3a572400",
+    "cwd": "/tmp/asc1644-root-live/primary",
+    "name": "済: 自動: 1644 root listing smoke",
+    "inRootList": true,
+    "inTargetList": false,
+    "response": "I’ll read the target directory’s marker and check its Git HEAD using local read-only commands.\n\n`/tmp/asc1644-root-live/target/marker.txt` contains exactly:\n\n```text\nWORKTREE_ONLY_SENTINEL\n```\n\nA newline follows the text.\n\nTarget Git HEAD: `0c3fe99d586e4a9c2f46e72f309d865cd50eb887` (matches the supplied HEAD).\n"
+  },
+  "claude": {
+    "status": {
+      "schema": "asc-host-session/v1",
+      "host": "claude",
+      "cwd": "/tmp/asc1644-root-live/primary",
+      "targetDirectory": "/tmp/asc1644-root-live/target",
+      "targetHead": "0c3fe99d586e4a9c2f46e72f309d865cd50eb887",
+      "model": "haiku",
+      "ephemeral": false,
+      "name": "自動: 1644 root listing smoke",
+      "sessionId": "dfc12113-7f58-4fbe-897d-7f4abf590ebe",
+      "status": "failed",
+      "naming": "pending",
+      "outputDir": "/tmp/asc1644-root-live/claude",
+      "startedAt": "2026-11-04T06:30:21.719Z",
+      "process": {
+        "code": 1,
+        "signal": null
+      },
+      "error": "Claude exited 1",
+      "finishedAt": "2026-11-04T06:30:23.737Z"
+    },
+    "rootBucketFileExists": true,
+    "observedCwds": [
+      "/tmp/asc1644-root-live/primary"
+    ],
+    "observedTitles": [
+      "自動: 1644 root listing smoke"
+    ],
+    "apiError": {
+      "api_error_status": 429,
+      "api_error": "usage_limit_reached",
+      "result": "You've hit your weekly limit · resets Nov 8, 11am (Asia/Tokyo)"
+    },
+    "inspection": "Only the session created for this test was read. No session store was edited. UI display and successful turn remain unverified."
+  },
+  "review": {
+    "schema": "asc-host-session/v1",
+    "host": "codex",
+    "cwd": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md",
+    "targetDirectory": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20261104_152640-1644-host-session-root",
+    "targetHead": "aa7bb399141df70adc3baaa438109393b623758a",
+    "model": "gpt-6.1-sol",
+    "ephemeral": false,
+    "name": "自動: 1644 root起動 独立レビュー",
+    "sessionId": "01a1a541-0254-7a40-9ad7-bd8df1b42a90",
+    "status": "completed",
+    "naming": "completed",
+    "outputDir": "/tmp/asc1644-root-live/review",
+    "startedAt": "2026-11-04T06:31:03.022Z",
+    "finishedAt": "2026-11-04T06:32:21.677Z"
+  },
+  "contractCheck": {
+    "valid": true,
+    "errors": [],
+    "checks": [
+      "base-approved v0.5 configuration and staged maintenance"
+    ]
+  },
+  "verification": {
+    "quality": {
+      "tests": 555,
+      "pass": 543,
+      "fail": 0,
+      "skipped": 12,
+      "exitCode": 0
+    },
+    "targeted": {
+      "tests": 23,
+      "pass": 23,
+      "fail": 0
+    },
+    "logsSha256": {
+      "quality.log": "46e2d2d5f504c9b55da750d987d13547c0897d8d85dbe4965d3711efe63eaf75",
+      "session-tests.log": "6300819f374faea4f9a2d0b45054a48a6affea40fe3ddd712307cdac50bf0b41",
+      "lint.log": "fd7a67df91cc19a8971d037a6a39fd368678cc3b61160fe3588d27c8cfaa11d1"
+    }
+  }
+}

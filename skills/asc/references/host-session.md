@@ -4,7 +4,7 @@
 
 ## 一括実行
 
-配布パッケージのNode CLIで起動・結果保存・完了時改名を一度に行う。実行するHostを明示し、別Hostへ自動切替えしない。新規Contextを作り、既存セッションの履歴を独立レビューへ継承しない。モデルは[モデル選択](../../subagent-model-selection/SKILL.md)と利用者の許可範囲で明示する。
+配布パッケージのNode CLIで起動・結果保存・完了時改名を一度に行う。実行するHostを明示し、別Hostへ自動切替えしない。位置引数は**レビュー対象のworktree**のまま指定する。Git管理済みなら、Gitのworktree一覧にある主要checkout（repository root）からHostを起動し、セッションの所属先とレビュー対象を分離する。rootからコマンドを呼んだだけでは不十分なため、CLIが起動cwdを解決する。非Gitでは指定directoryを起動先・対象の両方に使う。新規Contextを作り、既存セッションの履歴を独立レビューへ継承しない。モデルは[モデル選択](../../subagent-model-selection/SKILL.md)と利用者の許可範囲で明示する。
 
 ```sh
 node /absolute/package/bin/asc-v05.mjs host-session claude /absolute/worktree \
@@ -18,10 +18,14 @@ node /absolute/package/bin/asc-v05.mjs host-session codex /absolute/worktree \
 
 依頼ファイルに元要求・対象・契約・レビュー手順を含める。出力先の親directoryは事前に用意し、実行ごとに未作成のdirectoryを指定する。既存directoryは上書きしない。`--executable /absolute/host-binary`で導入済みのHostを選べる。依存の自動導入やHost設定の書換えはしない。
 
-- Claude Code: `-p -n`で命名、事前に生成したUUIDを`--session-id`で指定。同一cwd・IDを`--resume`して`-n '済: …'`で改名する。改名は`--max-turns 1`、ツール無効で短い応答だけを行う。モデルは本体と同じものを使うが、許可された小さいモデルを`--rename-model haiku`等で明示できる。上限や権限拒否を別モデルで回避しない。モデル呼出しが一度増える。実行本体は`--tools Read,Glob,Grep --allowedTools Read,Glob,Grep --permission-mode dontAsk --strict-mcp-config`で限定する。Bashが必要なレビューをこのコマンドだけで完了扱いしない。
-- Codex: `codex app-server`の公式JSON-RPCで新規`thread/start`、開始前に`thread/name/set`、`turn/start`、成功した`turn/completed`後に同じIDへ`thread/name/set`を送る。命名だけではモデルを呼ばない。`sandbox: read-only`・`approvalPolicy: never`を指定し、サーバーからの承認要求は許可しない。MCP等の外部連携の権限は別途確認する。ローカルsandboxだけを外部書込み防止の保証にしない。
+- Claude Code: `-p -n`で命名、事前に生成したUUIDを`--session-id`で指定。起動時と同じrepository root・IDを`--resume`して`-n '済: …'`で改名する。改名は`--max-turns 1`、ツール無効で短い応答だけを行う。モデルは本体と同じものを使うが、許可された小さいモデルを`--rename-model haiku`等で明示できる。上限や権限拒否を別モデルで回避しない。モデル呼出しが一度増える。対象がrootと異なるときは`--add-dir <worktree絶対path>`を付ける。実行本体は`--tools Read,Glob,Grep --allowedTools Read,Glob,Grep --permission-mode dontAsk --strict-mcp-config`で限定する。Bashが必要なレビューをこのコマンドだけで完了扱いしない。
+- Codex: `codex app-server`の公式JSON-RPCでrepository rootを`cwd`にした新規`thread/start`、開始前に`thread/name/set`、`turn/start`、成功した`turn/completed`後に同じIDへ`thread/name/set`を送る。`turn/start`でcwdをworktreeへ変えず、セッションのroot所属を保つ。命名だけではモデルを呼ばない。`sandbox: read-only`・`approvalPolicy: never`を指定し、サーバーからの承認要求は許可しない。MCP等の外部連携の権限は別途確認する。ローカルsandboxだけを外部書込み防止の保証にしない。
 
-Hostの版・プロジェクトのhookや外部ツール設定は起動前に確認する。必須制限を満たせない場合は未完了。表示名のためにsandboxや承認を解除しない。セッションのjsonl・index・DBを直接編集しない。Claudeのworktree別の保存場所を探したり、Codexの最新セッションを推測して改名したりせず、この実行のIDだけを使う。
+両Hostへ対象worktreeの絶対path・開始時HEADを追加指示し、rootは一覧用の場所であってレビュー対象ではないと明示する。対象側のAGENTS.md/CLAUDE.md・入れ子規約を読む。Claudeの追加指示とCodexのdeveloperInstructionsにこの境界を入れる。mainの同名fileや別worktreeで代用せず、必要なGit操作は対象pathを指定する。本体終了後に対象HEADが変わっていれば失敗とし、完了改名しない。未commit差分もレビュー対象に含める場合は、その内容と検証対象の一致を依頼側で維持する。
+
+主要checkoutが消えている・bare構成で主要checkoutがない・Gitメタデータが壊れている場合は無名の別の場所へfallbackせず起動前に停止する。非Git判定のために壊れたGit状態を無視しない。
+
+Hostの版・rootと対象worktree双方のhookや外部ツール設定は起動前に確認する。必須制限を満たせない場合は未完了。表示名のためにsandboxや承認を解除しない。セッションのjsonl・index・DBを直接編集しない。Claudeのworktree別の保存場所を探したり、Codexの最新セッションを推測して改名したりせず、この実行のIDだけを使う。
 
 ## 記録が不要・命名機能が使えないとき
 
@@ -31,10 +35,12 @@ Codexの`exec`には命名用フラグを仮定しない。App Serverの命名AP
 
 ## 結果・失敗・復旧
 
-`status.json`にHost、cwd、ID、指定モデル、時刻、処理状態と命名状態を保存する。`result.txt`が応答、`events.jsonl`がHostの元出力、`stderr.txt`が診断。Claudeの改名出力は別ファイルで保存する。これらは依頼や応答を含むことがあるため、公開前に秘密情報を確認する。
+`status.json`にHost、実際の起動先`cwd`、対象`targetDirectory`・`targetHead`、ID、指定モデル、時刻、処理状態と命名状態を保存する。`result.txt`が応答、`events.jsonl`がHostの元出力、`stderr.txt`が診断。Claudeの改名出力は別ファイルで保存する。これらは依頼や応答を含むことがあるため、公開前に秘密情報を確認する。
 
 応答は改名より先に保存する。改名だけ失敗しても`status: completed`と結果を保持し、`naming: failed`で報告する。終了コードは本体成功0、本体失敗2、引数・出力先等のエラー1。成功コードだけで改名成功やレビュー合格と判定せず、状態と本文を確認する。命名失敗時にレビューを再実行しない。保存したID・cwdを使って公式手段で改名を再試行できる。
 
 `--timeout-ms`は本体の待機上限（既定15分）。Codexの個別RPCとClaudeの改名は最大60秒。強制停止・プロセス障害で`running`が残ることがあり、未完了として元出力とHostの状態を確認する。親の終了から子孫プロセスの終了を推定せず、[復旧手順](../../execution-recovery/SKILL.md)に従う。
 
 対応手段の参照: [Claude Code CLI](https://code.claude.com/docs/en/cli-reference)、[Codex App Server](https://learn.chatgpt.com/docs/app-server)、[Codex CLI](https://learn.chatgpt.com/docs/cli/reference)。対応版と実検証の対象は提出Evidenceに残す。
+
+一覧の確認は、起動したrootと同じprojectを開き、この実行のIDと表示名で行う。Codexは公式`thread/list`のcwdフィルタでも確認できる。UI固有のフィルタや別rootを開いている場合まで「必ず今の一覧に出る」とは保証しない。Claude/Codexで主要checkoutとは別のproject一覧を意図する場合は未対応として明示する。
