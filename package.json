@@ -163,7 +163,10 @@
     "skills/estimate-and-scope/SKILL.md",
     "skills/tracker-issue-writing/SKILL.md",
     "v05/optional-skills/model-deliberation/SKILL.md",
-    "v05/optional-skills/model-deliberation/agents/openai.yaml"
+    "v05/optional-skills/model-deliberation/agents/openai.yaml",
+    "src/host-session.mjs",
+    "src/session-rpc.mjs",
+    "skills/asc/references/host-session.md"
   ],
   "scripts": {
     "prepack": "node scripts/check-package-inventory.mjs",

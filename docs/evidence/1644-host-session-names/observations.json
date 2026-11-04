@@ -1,0 +1,105 @@
+{
+  "issue": 1644,
+  "base": "891eb369a3253b2fc0c0710cccd44eeb7bc2d64a",
+  "codex": {
+    "version": "0.164.0-alpha.11.1",
+    "state": {
+      "schema": "asc-host-session/v1",
+      "host": "codex",
+      "cwd": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20261104_121418-1644-host-session-names",
+      "model": "gpt-6.1-sol",
+      "ephemeral": false,
+      "name": "自動: 1644 動作確認",
+      "sessionId": "01a1a48e-d362-7a20-be83-f41db37d1f4e",
+      "status": "completed",
+      "naming": "completed",
+      "outputDir": "/tmp/asc1644-live/codex-live",
+      "startedAt": "2026-11-04T03:16:25.820Z",
+      "finishedAt": "2026-11-04T03:16:30.388Z"
+    },
+    "effectiveSettings": {
+      "model": "gpt-6.1-sol",
+      "sandbox": {
+        "type": "readOnly",
+        "networkAccess": false
+      },
+      "approvalPolicy": "never",
+      "reasoningEffort": "medium"
+    },
+    "response": "ASC1644_OK",
+    "readBack": {
+      "id": "01a1a48e-d362-7a20-be83-f41db37d1f4e",
+      "name": "済: 自動: 1644 動作確認"
+    },
+    "scope": "Initial implementation live run; later shutdown drain and input checks covered by regression tests, final CLI review pending approval."
+  },
+  "claude": {
+    "version": "2.1.317",
+    "state": {
+      "schema": "asc-host-session/v1",
+      "host": "claude",
+      "cwd": "/home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20261104_121418-1644-host-session-names",
+      "model": "haiku",
+      "ephemeral": false,
+      "name": "自動: 1644 動作確認",
+      "sessionId": "fc8ad6b4-9bf7-4922-9179-365ace424e48",
+      "status": "failed",
+      "naming": "pending",
+      "outputDir": "/tmp/asc1644-live/claude-live",
+      "startedAt": "2026-11-04T03:16:30.672Z",
+      "process": {
+        "code": 1,
+        "signal": null
+      },
+      "error": "Claude exited 1",
+      "finishedAt": "2026-11-04T03:16:32.976Z"
+    },
+    "apiError": {
+      "api_error_status": 429,
+      "api_error": "usage_limit_reached",
+      "result": "You've hit your weekly limit · resets Nov 8, 11am (Asia/Tokyo)"
+    },
+    "successPathVerified": false
+  },
+  "candidate": {
+    "file": "/tmp/asc1644-live/package/agent-skill-chain-0.5.0.tgz",
+    "sha256": "fce52bca1209ed0a0f238f6d1a9124f7e4c3eb8c21619b291c79fbdfb3088054",
+    "name": "agent-skill-chain",
+    "version": "0.5.0",
+    "publishAuthorized": false
+  },
+  "independentReview": {
+    "staticContext": "review_1644; no parent history; gpt-6.1-sol high",
+    "fixedFindings": [
+      "Use explicit rename model, otherwise preserve selected model",
+      "Wait for Codex child close/drain before closing artifact file descriptors"
+    ],
+    "finalReadOnlyCli": "blocked by automatic approval review; explicit user permission requested; not run"
+  },
+  "verification": {
+    "quality": {
+      "command": "npm run quality",
+      "exitCode": 0,
+      "tests": 547,
+      "passed": 535,
+      "failed": 0,
+      "skipped": 12,
+      "durationMs": 145848.10763
+    },
+    "hostSessionTests": {
+      "passed": 15,
+      "failed": 0
+    },
+    "installedCandidateTests": {
+      "passed": 15,
+      "failed": 0
+    },
+    "candidateSourceFilesMatch": 154,
+    "logs": {
+      "quality-final.log": "ba41f3e7fe991b6b08b973d95a07ed0fb3f5c02a01f13bab7f196b0f118b377e",
+      "session-tests.log": "fcccffd0ed6c5196268583f2378e4e2045189756f28126ff89f9a3f6edcbb65b",
+      "installed-tests.log": "84ab70007db722433492a761dbea5879903ba37948f0ec13e505a073eec881b8",
+      "package-check.log": "f317773fdd191a84b0045a376db162bf0764f38bba4b391f14e2c9b7c3c1a147"
+    }
+  }
+}

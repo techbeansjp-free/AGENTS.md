@@ -402,14 +402,14 @@ test('distribution inventory remains bounded after adding a second Host',t=>{
 
 test('the inventory bound includes retained preimages as well as all fifteen registered Skills and optional assets',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,registerSkill:true,registerClaudeSkill:true};
- const active=projectAssets(f.work,options);assert.equal(active.changes.length,282);
+ const active=projectAssets(f.work,options);assert.equal(active.changes.length,286);
  const record='.agent-skill-chain/distribution.json';
  const retired=count=>JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:count},(_,i)=>[`retired-${i}`,'a'.repeat(64)]))});
  f.write(record,retired(13));
  assert.throws(()=>projectAssets(f.work,{...options,apply:true}),/Invalid asset inventory/);
  assert.equal(fs.existsSync(path.join(f.work,asset)),false);
  f.write(record,retired(12));assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
- assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.work,record))).files).length,294);
+ assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.work,record))).files).length,298);
 });
 
 test('explicit deliberation is distributed intact but never auto-registered',t=>{

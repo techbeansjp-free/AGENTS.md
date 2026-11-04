@@ -7,6 +7,7 @@ import {restartGoal} from '../src/goal-restart.mjs';
 import {runIssues} from '../src/issue-run.mjs';
 /** Linux distribution candidate. Unsupported operations stop; never invoke v0.4 implicitly. */
 import fs from 'node:fs';
+import {sessionOptions,runHostSession} from '../src/host-session.mjs';
 import {fileURLToPath} from 'node:url';
 import {executionHost} from '../src/execution-host.mjs';
 import {probeNativeSandbox} from '../src/native-probe.mjs';
@@ -30,6 +31,7 @@ try {
     args.shift();
   }
   const nativeHelp={
+    'host-session':'host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory> [--executable <path>] [--rename-model <claude-model>] [--ephemeral] [--timeout-ms <ms>]\n読取り用の別セッションを命名して起動し、成功後に済へ改名します。結果は改名とは別に保存。失敗はexit 2。',
     start:'start <project-directory> [--path <changed-path>]...\n作業場所・規約参照を確認します（非Gitも可、Agent起動なし）。',
     'worktree-create':'worktree-create <repo-root> <issue> <type> <slug> <base>\n既存Git checkoutのrootを指定します（.worktrees自体ではありません）。その配下の.worktreesへ専用worktreeを作成します。type: feature|fix|refactor|test|docs|chore。baseは明示指定し、既存branch・作業場所は上書きしません。',
     'worktree-verify':'worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>]\n現在のHost権限で検証します。repo外のowner契約にintent・allowedPaths・commands（argv配列の配列）を指定します。検証失敗はexit 2。',
@@ -49,6 +51,8 @@ try {
   worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>]
       現在のHost権限で既存ビルド・テストを実行し対象commitへ対応付け
 
+  host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory>
+      独立レビュー・相談を命名して実行、結果保存後に完了名へ変更
   worktree-create <repo-root> <issue> <type> <slug> <base>
       専用worktreeを作成（既存branch・作業場所は上書きしない）
   docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]
@@ -83,6 +87,8 @@ try {
 snapshot実行やworktree-verifyのowner入力ファイルは作業repoの外に置きます。Git管理済みrepoの通常実行は専用worktreeを使用します。
 必要環境・入力例・承認・検証資産の準備: ${fileURLToPath(new URL('../v05/USAGE.md',import.meta.url))}
 v0.5の実行入口です。使用版は--versionで確認してください。明示Host経路はOS名で拒否しません。標準経路は現在のHost権限を使います。snapshot経路は実行時の隔離検査が必須です。公開・merge・releaseの承認は別途必要です。`);
+  } else if(command==='host-session'){
+    const result=await runHostSession(sessionOptions(args));console.log(JSON.stringify(result,null,2));if(result.status!=='completed')process.exitCode=2;
   } else if(command==='start'&&args.length>=1){
     const paths=[];for(let i=1;i<args.length;i+=2){if(args[i]!=='--path'||!args[i+1])throw Error('Expected --path <changed-path>');paths.push(args[i+1]);}
     console.log(JSON.stringify(startWorktree(args[0],paths),null,2));
@@ -164,7 +170,7 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     if(!(command==='review'?result.status==='reviewed-candidate':['draft-ci-passed','proposed'].includes(result.status)))process.exitCode=2;
   } else if (command==='capabilities'   && args.length===0) {
     console.log(JSON.stringify({schema:'asc-v05-capabilities/v1',releaseReady:true,releaseTarget:'native-linux',publishAuthorized:false,
-      defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','worktree-verify','docker-cleanup-plan','probe-native','project-assets','uninstall','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
+      defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','host-session','worktree-verify','docker-cleanup-plan','probe-native','project-assets','uninstall','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
       execution:'current-host-worktree',executionBackends:['current-host-worktree','current-host-directory','owner-selected-host','linux-runner'],host:executionHost(),legacyFallback:false}));
   } else {
     throw Error('Usage: asc-v05 uninstall <project-directory> [--apply] | --version | start <project-directory> | worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>] | worktree-create <repo-root> <issue> <type> <slug> <base> | docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>] | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');
