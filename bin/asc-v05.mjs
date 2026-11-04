@@ -31,7 +31,7 @@ try {
     args.shift();
   }
   const nativeHelp={
-    'host-session':'host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory> [--executable <path>] [--rename-model <claude-model>] [--ephemeral] [--timeout-ms <ms>]\n読取り用の別セッションを命名して起動し、成功後に済へ改名します。結果は改名とは別に保存。失敗はexit 2。',
+    'host-session':'host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory> [--executable <path>] [--rename-model <claude-model>] [--ephemeral] [--timeout-ms <ms>]\n指定directoryをレビュー対象とし、Gitではrepository rootから命名して起動、成功後に済へ改名します。結果は改名とは別に保存。失敗はexit 2。',
     start:'start <project-directory> [--path <changed-path>]...\n作業場所・規約参照を確認します（非Gitも可、Agent起動なし）。',
     'worktree-create':'worktree-create <repo-root> <issue> <type> <slug> <base>\n既存Git checkoutのrootを指定します（.worktrees自体ではありません）。その配下の.worktreesへ専用worktreeを作成します。type: feature|fix|refactor|test|docs|chore。baseは明示指定し、既存branch・作業場所は上書きしません。',
     'worktree-verify':'worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>]\n現在のHost権限で検証します。repo外のowner契約にintent・allowedPaths・commands（argv配列の配列）を指定します。検証失敗はexit 2。',

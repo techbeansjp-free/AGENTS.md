@@ -593,4 +593,4 @@ Codexでは新しいsessionで `$model-deliberation` を明示選択する。自
 
 ## 独立レビュー・相談の別セッション
 
-`host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory>`で読取り用の新規セッションを起動し、結果保存後に`自動: <内容>`から`済: 自動: <内容>`へ改名します。Claude CodeとCodexの両方に対応し、非永続は`--ephemeral`で明示します。改名失敗でも本体の結果を保持します。権限制限・復旧・未対応版の扱いは[別セッションの手順](../skills/asc/references/host-session.md)を参照してください。
+`host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory>`で指定した対象を読む新規セッションを起動します。Git worktreeの場合、Hostの起動先・一覧上のcwdはrepository root、レビュー対象は指定worktreeとそのHEADに分離します。結果保存後に`自動: <内容>`から`済: 自動: <内容>`へ改名します。Claude CodeとCodexの両方に対応し、非永続は`--ephemeral`で明示します。改名失敗でも本体の結果を保持します。権限制限・復旧・未対応版の扱いは[別セッションの手順](../skills/asc/references/host-session.md)を参照してください。
