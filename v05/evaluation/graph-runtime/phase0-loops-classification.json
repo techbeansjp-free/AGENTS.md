@@ -1,0 +1,274 @@
+{
+ "note": "Manual inputs for phase0-loops.mjs (#1648 Phase 0 idea A). bodyIndependentRemediationRounds = remediation rounds after an independent (non-GitHub) review that the PR body states, without timestamps; 0 when the body states none or only passes. sameTypeRecurrence is judged from the finding texts of consecutive rounds (same invariant or same path). capWouldShorten = a round cap plus escalation (split / owner decision) plausibly shortens the work, per the finding texts.",
+ "prs": [
+  {
+   "pr": 1581,
+   "bodyIndependentRemediationRounds": 1
+  },
+  {
+   "pr": 1586,
+   "bodyIndependentRemediationRounds": 1
+  },
+  {
+   "pr": 1589,
+   "bodyIndependentRemediationRounds": 1
+  },
+  {
+   "pr": 1597,
+   "bodyIndependentRemediationRounds": 1
+  },
+  {
+   "pr": 1602,
+   "bodyIndependentRemediationRounds": 1
+  },
+  {
+   "pr": 1613,
+   "bodyIndependentRemediationRounds": 1
+  },
+  {
+   "pr": 1640,
+   "bodyIndependentRemediationRounds": 1
+  },
+  {
+   "pr": 1641,
+   "bodyIndependentRemediationRounds": 1
+  },
+  {
+   "pr": 1643,
+   "bodyIndependentRemediationRounds": 1
+  },
+  {
+   "pr": 1595,
+   "rounds": 2,
+   "bodyIndependentRemediationRounds": 0,
+   "sameTypeRecurrence": false,
+   "label": "non-Git project handling (code, then docs)",
+   "rationale": "Round 1 is bare-repository detection in code, round 2 is the worktree condition in USAGE; same theme, different invariant and path."
+  },
+  {
+   "pr": 1599,
+   "rounds": 2,
+   "bodyIndependentRemediationRounds": 2,
+   "sameTypeRecurrence": false,
+   "label": "unrelated",
+   "rationale": "Body records two independent-review remediations in separate audit scopes (migration/Git output, then whole-repo docs); no shared invariant stated."
+  },
+  {
+   "pr": 1606,
+   "rounds": 5,
+   "bodyIndependentRemediationRounds": 0,
+   "sameTypeRecurrence": true,
+   "capWouldShorten": true,
+   "label": "fixture server-side email validation; review start precondition; trust of agent-writable Git metadata",
+   "rationale": "Email validation of the same fixture file is reopened in rounds 1,2,3,5 (domain labels, local-part dots, local-part symbols, 64-octet limit); one owner decision on the validation spec at the cap would remove the piecemeal regex rounds. Rounds 2-3 both target the review-start condition; rounds 4-5 both target host trust of agent-writable Git metadata. Time after round 3 is mostly new scope, not the loop."
+  },
+  {
+   "pr": 1612,
+   "rounds": 5,
+   "bodyIndependentRemediationRounds": 4,
+   "sameTypeRecurrence": true,
+   "capWouldShorten": true,
+   "label": "Docker cleanup deletes resources not owned by the worktree",
+   "rationale": "Body: five independent-review rounds; three wrong-deletion paths (subdir compose name collision, down without -p, zero-container ownership vacuously true) share one ownership invariant. The split actually taken (#1613 moves the judgement into a deterministic read-only CLI) is the escalation a cap would have triggered earlier."
+  },
+  {
+   "pr": 1615,
+   "rounds": 3,
+   "bodyIndependentRemediationRounds": 2,
+   "sameTypeRecurrence": false,
+   "label": "distinct findings",
+   "rationale": "Independent round 1 (precision/count wording, extraction coverage, missing scripts), round 2 (Low wording/anonymisation) and 12 CodeRabbit findings over different scripts; no invariant recurs across consecutive rounds."
+  },
+  {
+   "pr": 1634,
+   "rounds": 2,
+   "bodyIndependentRemediationRounds": 2,
+   "sameTypeRecurrence": false,
+   "label": "distinct findings",
+   "rationale": "Asset-count upper-bound regression, then timeout termination guarantee of a separate runner; different invariants."
+  }
+ ],
+ "qualityNote": "Protocol section 品質側の測定 (A). Severity mapping: CodeRabbit Critical/Major = High/Medium (real defect when remediated in code/contract); Minor/Nitpick = Low. Independent-review severities are taken from the PR body. Covers every PR with R>=3 under L, B, D or X. Rounds under B are commit bursts and carry no finding text unless a GitHub review falls inside them. resolvableByCapTransition = the defect could still have been resolved if the only transitions after the cap were split or owner decision (never accepting it unresolved). Independently re-classified on a 6-item sample (6/6 agreement); see phase0-blind-reclassification.json.",
+ "quality": [
+  {
+   "pr": 1606,
+   "basis": "L",
+   "rounds": [
+    {
+     "round": 1,
+     "real": 0,
+     "low": 1,
+     "items": [
+      "fixture email domain validation (Minor)"
+     ]
+    },
+    {
+     "round": 2,
+     "real": 0,
+     "low": 3,
+     "items": [
+      "review start before integration verified (Minor)",
+      "shared SQLite table namespace contract (Minor)",
+      "email local-part dots (Minor)"
+     ]
+    },
+    {
+     "round": 3,
+     "real": 2,
+     "low": 1,
+     "items": [
+      "interrupt trial passes when agent exits before editing (Major, real)",
+      "integration oracle failure not excluded from review start (Major, real)",
+      "email local-part symbols (Minor)"
+     ]
+    },
+    {
+     "round": 4,
+     "real": 0,
+     "low": 2,
+     "items": [
+      "usage message names wrong script (Minor)",
+      "host trusts agent-written origin Git config (Minor, Security)"
+     ]
+    },
+    {
+     "round": 5,
+     "real": 1,
+     "low": 1,
+     "items": [
+      "worktree Git metadata missing from baseline state (Major, Security, real)",
+      "email local-part 64-octet limit (Minor)"
+     ]
+    }
+   ],
+   "realDefectsRoundGe3": 3,
+   "resolvableByCapTransition": "split only: all three are in evaluation-only scripts, which the body says are not user workflow, so a split PR could carry them; owner decision alone does not fix them. A split moves the rounds rather than removing them."
+  },
+  {
+   "pr": 1612,
+   "basis": "D",
+   "rounds": [
+    {
+     "round": "1-5 (independent, untimed)",
+     "real": 3,
+     "low": 0,
+     "items": [
+      "subdir compose project-name collision deletes others' resources",
+      "down without -p",
+      "zero-container ownership vacuously true"
+     ]
+    }
+   ],
+   "realDefectsRoundGe3": "unknown (1-3; the body does not give rounds)",
+   "resolvableByCapTransition": "yes by split, which actually happened: #1613 moved ownership judgement into a deterministic read-only CLI"
+  },
+  {
+   "pr": 1615,
+   "basis": "D/X",
+   "rounds": [
+    {
+     "round": 1,
+     "real": 5,
+     "low": 2,
+     "items": [
+      "independent review: Medium 5 (precision/count wording, extraction coverage, missing reproducible scripts), Low 2"
+     ]
+    },
+    {
+     "round": 2,
+     "real": 0,
+     "low": 4,
+     "items": [
+      "independent review: Low 4 (population wording, manual value range, co-change floor, path anonymisation)"
+     ]
+    },
+    {
+     "round": 3,
+     "real": 1,
+     "low": 11,
+     "items": [
+      "CodeRabbit Major: enumerate PR head refs only (head+merge refs double counted)",
+      "11 Minor; 2 of them changed measured numbers and were re-measured"
+     ]
+    }
+   ],
+   "realDefectsRoundGe3": 1,
+   "resolvableByCapTransition": "no: the ADR's numbers depend on the fix; an owner decision cannot accept an unverified measurement and a split would leave the ADR's evidence unfixed"
+  },
+  {
+   "pr": 1580,
+   "basis": "B",
+   "rounds": [
+    {
+     "round": "B>=3",
+     "real": 0,
+     "low": 1,
+     "items": [
+      "CodeRabbit Minor __proto__ own property; finding itself says not exploitable on this path"
+     ]
+    }
+   ],
+   "realDefectsRoundGe3": 0
+  },
+  {
+   "pr": 1595,
+   "basis": "B/X",
+   "rounds": [
+    {
+     "round": 1,
+     "real": 0,
+     "low": 1,
+     "items": [
+      "bare repository detection (Minor)"
+     ]
+    },
+    {
+     "round": "2-3",
+     "real": 0,
+     "low": 1,
+     "items": [
+      "USAGE worktree condition for non-Git (Minor, outside diff)"
+     ]
+    }
+   ],
+   "realDefectsRoundGe3": 0
+  },
+  {
+   "pr": 1643,
+   "basis": "B/X",
+   "rounds": [
+    {
+     "round": "B>=3",
+     "real": 1,
+     "low": 0,
+     "items": [
+      "independent review: setuid-like mode 04751 restored as 0751 after partial failure (remediated by pre-rejecting special modes)"
+     ]
+    }
+   ],
+   "realDefectsRoundGe3": 1,
+   "resolvableByCapTransition": "yes by split or owner decision: uninstall was an added user request; it could ship separately, and the chosen remedy narrows its scope"
+  },
+  {
+   "pr": 1578,
+   "basis": "B",
+   "rounds": [],
+   "realDefectsRoundGe3": "no data (Draft, no CodeRabbit, body states no round findings)"
+  },
+  {
+   "pr": 1581,
+   "basis": "B",
+   "rounds": [
+    {
+     "round": "untimed",
+     "real": 1,
+     "low": 0,
+     "items": [
+      "independent review: persistent pin and symlink finding remediated"
+     ]
+    }
+   ],
+   "realDefectsRoundGe3": "unknown (round not timestamped)"
+  }
+ ]
+}

@@ -1,0 +1,140 @@
+{
+  "schema": "asc-graph-runtime-phase0/v1",
+  "issue": 1648,
+  "protocol": "PHASE0_PROTOCOL.md",
+  "population": {
+    "mergedPrs": 44,
+    "sessions": 275,
+    "developmentSessionsWithUserMessages": 8,
+    "since": "2026-10-16T14:11:00+09:00",
+    "until": "2026-11-08"
+  },
+  "A_loopTermination": {
+    "verdict": "no-value",
+    "roundsAtLeast3Share": {
+      "githubVisibleReviewsOnly": 0.023,
+      "plusIndependentReviewsInPrBody": 0.068,
+      "commitChunksOver20min": 0.159,
+      "mostLenientMaxPerPr": 0.182,
+      "threshold": 0.2
+    },
+    "excessTimeShare": {
+      "literal": 0.234,
+      "loopAttributableOnly": 0.016,
+      "threshold": 0.1,
+      "note": "literal value is one PR (#1606) whose late time is mostly new scope added after round 5"
+    },
+    "sameTypeRecurrenceCases": 2,
+    "quality": {
+      "prsWithRealDefectsInRound3Plus": 3,
+      "realDefectsInRound3Plus": 5,
+      "unresolvableBySplitOrOwnerDecision": 1,
+      "counterexamplePr": 1615
+    },
+    "independentReclassification": {
+      "sample": 6,
+      "agree": 6,
+      "record": "phase0-blind-reclassification.json"
+    }
+  },
+  "B_explicitState": {
+    "verdict": "value-upper-bound",
+    "totalProcessedTokens": 2387000000,
+    "coordinatorShare": 0.804,
+    "accumulationShareOfInput": 0.801,
+    "counterfactualReduction": {
+      "topGroupMedian": 0.77,
+      "tokenWeighted": 0.608,
+      "top10Median": 0.588,
+      "coordinatorMedian": 0.62,
+      "reread20kPersistent": {
+        "topGroupMedian": 0.667,
+        "tokenWeighted": 0.522
+      },
+      "periodStartBaseline": {
+        "topGroupMedian": 0.0004,
+        "tokenWeighted": 0.109
+      },
+      "threshold": 0.2
+    },
+    "caveats": [
+      "top group is a single session holding 65% of tokens and starting before the period",
+      "counterfactual upper bound; information loss on reset is not priced in tokens"
+    ],
+    "compaction": {
+      "sessionsCompacted": 4,
+      "events": 99,
+      "note": "largest session averaged 167k context after 92 compactions"
+    },
+    "quality": {
+      "sessionsWithLosableConstraints": 0.75,
+      "excludingAuthorityScopeConstraints": 0.5,
+      "note": "most losable constraints are authority scopes, the same information as C"
+    },
+    "window": "phase0-context.mjs was run from 2026-10-16T00:00+09:00, about 14 hours before the population start; not decision-relevant",
+    "milestoneRule": "commit / PR creation / review completion commands, success not distinguished"
+  },
+  "C_decisionPoints": {
+    "verdict": "value-on-unnecessary-stops-only",
+    "c1": {
+      "literal": 20,
+      "withBorderline": 29,
+      "waitMinutesUpperBound": 148,
+      "medianWaitMinutes": 2,
+      "precededByHostDenial": {
+        "strict": {
+          "within180min": 10,
+          "within60min": 6,
+          "of": 20
+        },
+        "withBorderline": {
+          "within180min": 12,
+          "within60min": 6,
+          "of": 29
+        },
+        "rule": "host approval-review denials are recorded in reviewer subagent sessions; each is attributed to its root coordinator session (full IDs) and counted when it precedes the stop within the window. Timing only, not causation.",
+        "hostDenialRecords": 11,
+        "distinctSessionMinutes": 9
+      }
+    },
+    "c2": {
+      "literal": 3,
+      "withBorderline": 4,
+      "withDamage": 0,
+      "stoppedBy": {
+        "hostApprovalReview": 2,
+        "owner": 1
+      },
+      "precededByHostDenial": {
+        "within180min": 2,
+        "within60min": 1,
+        "of": 3
+      },
+      "lowerBound": "Extraction starts from user messages; owner-gated commands after the last user message were outside classification. In 3 of the 16 coordinator sessions with in-window user messages, `gh pr merge` or `git push` ran after the last user message (phase0-decisions.mjs terminal candidates), so c2 is a lower bound."
+    },
+    "hostApprovalReview": {
+      "allowed": 2240,
+      "denied": 11
+    },
+    "threshold": {
+      "c1PlusC2": 3,
+      "orDamagingC2": 1
+    },
+    "independentReclassification": {
+      "sample": 25,
+      "agreeOnC1VsNot": 22,
+      "rate": 0.88,
+      "missedC1InUnlabeledSample": 2,
+      "unlabeledSample": 15,
+      "note": "c2 not represented in the sample",
+      "record": "phase0-blind-reclassification.json",
+      "scope": "c1 vs not only"
+    }
+  },
+  "phase1Candidates": [
+    "B and C combined: a structured state carrying goal, scope, authorized decision points and owner constraints, used for fresh-context handoff at milestones and as the authorization record for the agent and host approval review"
+  ],
+  "excludedFromPhase1": [
+    "A"
+  ]
+}
