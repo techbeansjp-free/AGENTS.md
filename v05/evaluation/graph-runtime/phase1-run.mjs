@@ -71,8 +71,10 @@ const runExec=(args,input,log)=>new Promise((resolve,reject)=>{
   const thread=fs.readFileSync(log,'utf8').split('\n').filter(Boolean).map(l=>{try{return JSON.parse(l);}catch{return {};}}).find(e=>e.type==='thread.started')?.thread_id;
   resolve({status,signal,timedOut,thread,seconds:(performance.now()-began)/1000});});
 });
+const failed=e=>e.status!==0||e.signal||e.timedOut;
 const common=['--ignore-user-config','--ignore-rules','--skip-git-repo-check','--json','-m',model,'-c',`model_reasoning_effort=${JSON.stringify(effort)}`];
-const oracleRun=(d,name)=>{try{sh(['node',`${d}/oracle/${name}.mjs`,...(name==='revision'?[path.join(preRevision,d),d]:[d])],worktree);return true;}catch{return false;}};
+// Oracles import agent-written code; a hung oracle counts as a failure instead of stalling the run.
+const oracleRun=(d,name)=>{try{execFileSync('node',[`${d}/oracle/${name}.mjs`,...(name==='revision'?[path.join(preRevision,d),d]:[d])],{cwd:worktree,env,stdio:'ignore',timeout:10*60*1000,killSignal:'SIGKILL'});return true;}catch{return false;}};
 const complete=s=>(guard(),!git(['status','--porcelain'],worktree)&&s.oracles.every(o=>oracleRun(s.unit.dir,o)));
 
 const startedAt=new Date().toISOString(),started=performance.now(),record={arm,scenario,model,effort,base,startedAt,mountMode:process.env.ASC_EVAL_MOUNT_MODE??'host',cliVersion:sh([codex,'--version']),stages:[]};
@@ -96,11 +98,11 @@ try{
   if(fresh)coordinator=first.thread;else if(first.thread!==coordinator)throw Error(`Stage ${s.n}: resume changed the coordinator thread`);
   for(let i=1;i<=MAX_RESUMES&&!complete(s);i++){
    // An exec that failed or timed out is not an owner-facing stop; count it separately.
-   const last=stage.execs.at(-1);if(last.status!==0||last.signal||last.timedOut)stage.execFailures++;else stage.ownerReplies++;
+   const last=stage.execs.at(-1);if(!failed(last))stage.ownerReplies++;
    const next=await runExec(['exec','-C',worktree,'resume',...common,...c.options,coordinator,'-'],reply,path.join(root,`stage${s.n}-${i}.jsonl`));
    stage.execs.push(next);if(next.thread!==coordinator)throw Error(`Stage ${s.n}: resume changed the thread`);
   }
-  stage.complete=complete(s);stage.thread=coordinator;stage.head=git(['rev-parse','HEAD'],worktree);record.stages.push(stage);
+  stage.execFailures=stage.execs.filter(failed).length;stage.complete=complete(s);stage.thread=coordinator;stage.head=git(['rev-parse','HEAD'],worktree);record.stages.push(stage);
   fs.writeFileSync(path.join(root,'progress.json'),JSON.stringify(record,null,2));
   if(!stage.complete)break;
  }

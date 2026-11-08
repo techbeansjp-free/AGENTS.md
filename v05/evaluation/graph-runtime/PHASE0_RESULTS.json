@@ -12,8 +12,10 @@
   "A_loopTermination": {
     "verdict": "no-value",
     "roundsAtLeast3Share": {
-      "literal": 0.023,
-      "mostLenient": 0.182,
+      "githubVisibleReviewsOnly": 0.023,
+      "plusIndependentReviewsInPrBody": 0.068,
+      "commitChunksOver20min": 0.159,
+      "mostLenientMaxPerPr": 0.182,
       "threshold": 0.2
     },
     "excessTimeShare": {
@@ -69,7 +71,8 @@
       "excludingAuthorityScopeConstraints": 0.5,
       "note": "most losable constraints are authority scopes, the same information as C"
     },
-    "window": "phase0-context.mjs was run from 2026-10-16T00:00+09:00, about 14 hours before the population start; not decision-relevant"
+    "window": "phase0-context.mjs was run from 2026-10-16T00:00+09:00, about 14 hours before the population start; not decision-relevant",
+    "milestoneRule": "commit / PR creation / review completion commands, success not distinguished"
   },
   "C_decisionPoints": {
     "verdict": "value-on-unnecessary-stops-only",
@@ -106,7 +109,8 @@
         "within180min": 2,
         "within60min": 1,
         "of": 3
-      }
+      },
+      "lowerBound": "Extraction starts from user messages; owner-gated commands after the last user message were outside classification (5 of 16 top-level sessions had merge/push there), so c2 is a lower bound."
     },
     "hostApprovalReview": {
       "allowed": 2240,
@@ -123,7 +127,8 @@
       "missedC1InUnlabeledSample": 2,
       "unlabeledSample": 15,
       "note": "c2 not represented in the sample",
-      "record": "phase0-blind-reclassification.json"
+      "record": "phase0-blind-reclassification.json",
+      "scope": "c1 vs not only"
     }
   },
   "phase1Candidates": [

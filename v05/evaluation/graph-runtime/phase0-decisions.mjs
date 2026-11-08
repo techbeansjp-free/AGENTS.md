@@ -90,6 +90,8 @@ for (const f of files) {
     });
     prevUserTs = e.ts; tools = [];
   }
+  // Owner-gated commands after the last user message have no reacting message; keep them as candidates too.
+  if (tools.length) users.push({ session: s.id, file: s.file, kind: s.kind, ts: tools.at(-1).ts, prevUserTs, terminal: true, user: null, prevAssistant: null, stopHits: [], gatedSincePrevUser: tools, nextAssistant: null });
   sessions.push({ session: s.id, file: s.file, kind: s.kind, cwd: s.cwd, userMessages: users.length });
   if (s.kind === 'top') candidates.push(...users);
 }
