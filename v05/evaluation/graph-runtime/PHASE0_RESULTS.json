@@ -79,9 +79,17 @@
       "waitMinutesUpperBound": 148,
       "medianWaitMinutes": 2,
       "precededByHostDenial": {
-        "strict": 2,
-        "of": 20,
-        "rule": "a host approval-review denial in the same session within 180 minutes before the stop (1 within 60 minutes)",
+        "strict": {
+          "within180min": 10,
+          "within60min": 6,
+          "of": 20
+        },
+        "withBorderline": {
+          "within180min": 12,
+          "within60min": 6,
+          "of": 29
+        },
+        "rule": "host approval-review denials are recorded in reviewer subagent sessions; each is attributed to its root coordinator session (full IDs) and counted when it precedes the stop within the window. Timing only, not causation.",
         "hostDenialRecords": 11,
         "distinctSessionMinutes": 9
       }
@@ -94,7 +102,11 @@
         "hostApprovalReview": 2,
         "owner": 1
       },
-      "note": "classified as stopped by host review (2) and owner (1); one of the two host-review cases has no denial record near it"
+      "precededByHostDenial": {
+        "within180min": 2,
+        "within60min": 1,
+        "of": 3
+      }
     },
     "hostApprovalReview": {
       "allowed": 2240,

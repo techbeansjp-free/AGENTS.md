@@ -36,7 +36,10 @@
       "cachedInputTokens": 4388864,
       "outputTokens": 31727,
       "coordinatorThreads": 1,
-      "subagentThreads": 4
+      "subagentThreads": 4,
+      "coordinatorFirstContext": [
+        17013
+      ]
     },
     {
       "arm": "state",
@@ -58,7 +61,13 @@
       "cachedInputTokens": 3750912,
       "outputTokens": 39660,
       "coordinatorThreads": 4,
-      "subagentThreads": 3
+      "subagentThreads": 3,
+      "coordinatorFirstContext": [
+        16887,
+        16889,
+        16947,
+        16914
+      ]
     }
   ],
   "long": [
@@ -88,7 +97,10 @@
       "outputTokens": 62296,
       "coordinatorThreads": 1,
       "subagentThreads": 8,
-      "ownerFilesTouchedByAgent": []
+      "ownerFilesTouchedByAgent": [],
+      "coordinatorFirstContext": [
+        17045
+      ]
     },
     {
       "run": 2,
@@ -116,7 +128,17 @@
       "outputTokens": 68938,
       "coordinatorThreads": 8,
       "subagentThreads": 8,
-      "ownerFilesTouchedByAgent": []
+      "ownerFilesTouchedByAgent": [],
+      "coordinatorFirstContext": [
+        16924,
+        16924,
+        17008,
+        16954,
+        16947,
+        16929,
+        16938,
+        16959
+      ]
     },
     {
       "run": 3,
@@ -144,7 +166,17 @@
       "outputTokens": 76469,
       "coordinatorThreads": 8,
       "subagentThreads": 8,
-      "ownerFilesTouchedByAgent": []
+      "ownerFilesTouchedByAgent": [],
+      "coordinatorFirstContext": [
+        16924,
+        16925,
+        17009,
+        16954,
+        16948,
+        16929,
+        16938,
+        16959
+      ]
     },
     {
       "run": 4,
@@ -172,7 +204,10 @@
       "outputTokens": 56662,
       "coordinatorThreads": 1,
       "subagentThreads": 8,
-      "ownerFilesTouchedByAgent": []
+      "ownerFilesTouchedByAgent": [],
+      "coordinatorFirstContext": [
+        17029
+      ]
     }
   ],
   "blindReview": {

@@ -43,8 +43,9 @@ const c=configuration({workspace:bootstrap,runtime,executable:fs.realpathSync(co
 extendFixturePermissions(c.options,[pkg,preRevision],[origin,path.join(origin,'.git'),...(arm==='state'?[stateDir]:[])]);
 c.options=c.options.map(v=>v==='features.multi_agent=false'?'features.multi_agent=true':v);
 const controls=gitControlState(origin,[worktree]);
-// The agent can write .git; re-check config/attributes/hooks before every evaluator git call so a planted
-// filter driver never runs outside the sandbox.
+// The agent can write .git; re-check the git control files (config, hooks) before every evaluator git call so a
+// planted filter driver is not run by the evaluator. Oracles still import agent-written service.mjs on the host,
+// as in the existing native evaluations; the author name `Evaluator` is trusted, not verified.
 const guard=()=>assertGitControlState(origin,controls,[worktree]);
 
 const editable=units.flatMap(u=>[`${u.dir}/reservation/`,`${u.dir}/billing/`]).join(', ');
@@ -106,6 +107,7 @@ try{
 }catch(e){record.error=e.message;}
 record.seconds=(performance.now()-started)/1000;record.execSeconds=record.stages.flatMap(s=>s.execs).reduce((a,e)=>a+e.seconds,0);
 try{guard();record.gitControlsVerified=true;}catch(e){record.gitControlsVerified=false;record.gitControlsError=e.message;}
+try{
 if(record.gitControlsVerified){
  record.head=git(['rev-parse','HEAD'],worktree);
  record.oracles=Object.fromEntries(units.flatMap(u=>['reservation','billing','integration','unknown-keys','revision'].map(o=>[`${u.dir}/${o}`,!fs.existsSync(path.join(worktree,u.dir))||(o==='revision'&&!fs.existsSync(path.join(preRevision,u.dir)))?null:oracleRun(u.dir,o)])));
@@ -117,11 +119,12 @@ if(record.gitControlsVerified){
  // Owner-owned files (requirements, oracles, AGENTS.md) touched by any non-evaluator commit.
  record.ownerFilesTouchedByAgent=[...new Set(git(['log','--no-merges','--format=%x01%an','--name-only',`${base}..HEAD`],worktree).split('\x01').filter(Boolean).flatMap(x=>{const [author,...files]=x.split('\n').filter(Boolean);return author==='Evaluator'?[]:files;}).filter(f=>/^AGENTS\.md$|\/(?:oracle\/|(?:SYSTEM_)?REQUIREMENTS\.md$|REVISION\.md$)/.test(f)))];
 }
+}catch(e){record.inspectionError=e.message;}
 record.usage=[];
 for(const id of [...new Set(record.stages.map(s=>s.thread).filter(Boolean))]){
  try{const u=summarizeNativeUsage(id,await rolloutsFor(id,startedAt));record.usage.push({id,observedProcessedTokens:u.observedProcessedTokens,observedThreads:u.observedThreads,measured:u.measured,missingUsage:u.missingUsage});}
  catch(e){record.usage.push({id,error:e.message});}
 }
 record.processedTokens=record.usage.length&&record.usage.every(u=>Number.isSafeInteger(u.observedProcessedTokens))?record.usage.reduce((a,u)=>a+u.observedProcessedTokens,0):null;
-if(arm==='state')record.finalState=JSON.parse(fs.readFileSync(stateFile,'utf8'));
+if(arm==='state')try{record.finalState=JSON.parse(fs.readFileSync(stateFile,'utf8'));}catch(e){record.finalStateError=e.message;}
 fs.writeFileSync(path.join(root,'result.json'),JSON.stringify(record,null,2));console.log(root);
