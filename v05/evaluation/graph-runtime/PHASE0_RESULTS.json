@@ -110,7 +110,7 @@
         "within60min": 1,
         "of": 3
       },
-      "lowerBound": "Extraction starts from user messages; owner-gated commands after the last user message were outside classification (5 of 16 top-level sessions had merge/push there), so c2 is a lower bound."
+      "lowerBound": "Extraction starts from user messages; owner-gated commands after the last user message were outside classification. In 3 of the 16 coordinator sessions with in-window user messages, `gh pr merge` or `git push` ran after the last user message (phase0-decisions.mjs terminal candidates), so c2 is a lower bound."
     },
     "hostApprovalReview": {
       "allowed": 2240,
