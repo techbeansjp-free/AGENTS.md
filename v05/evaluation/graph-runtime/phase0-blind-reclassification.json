@@ -1,0 +1,184 @@
+{
+ "protocol": "PHASE0_PROTOCOL.md (分類の独立確認)",
+ "method": "Seeded random sample; a fresh context without the hypothesis or original labels classified items from the rubric only. Item texts are private and not stored here.",
+ "sample": {
+  "C": {
+   "labeled": 10,
+   "unlabeled": 15,
+   "note": "one original label may map to several candidates within the same minute"
+  },
+  "A": {
+   "items": 6,
+   "of": 23
+  }
+ },
+ "C": [
+  {
+   "id": "C1",
+   "original": "not-c1/c2",
+   "blind": "neutral"
+  },
+  {
+   "id": "C2",
+   "original": "c1",
+   "blind": "c1"
+  },
+  {
+   "id": "C3",
+   "original": "c1",
+   "blind": "c1"
+  },
+  {
+   "id": "C4",
+   "original": "c1",
+   "blind": "c1"
+  },
+  {
+   "id": "C5",
+   "original": "not-c1/c2",
+   "blind": "other"
+  },
+  {
+   "id": "C6",
+   "original": "not-c1/c2",
+   "blind": "c1"
+  },
+  {
+   "id": "C7",
+   "original": "c1",
+   "blind": "c1"
+  },
+  {
+   "id": "C8",
+   "original": "not-c1/c2",
+   "blind": "other"
+  },
+  {
+   "id": "C9",
+   "original": "not-c1/c2",
+   "blind": "neutral"
+  },
+  {
+   "id": "C10",
+   "original": "not-c1/c2",
+   "blind": "neutral"
+  },
+  {
+   "id": "C11",
+   "original": "not-c1/c2",
+   "blind": "neutral"
+  },
+  {
+   "id": "C12",
+   "original": "not-c1/c2",
+   "blind": "c1"
+  },
+  {
+   "id": "C13",
+   "original": "c1",
+   "blind": "c1"
+  },
+  {
+   "id": "C14",
+   "original": "c1",
+   "blind": "other"
+  },
+  {
+   "id": "C15",
+   "original": "c1",
+   "blind": "c1"
+  },
+  {
+   "id": "C16",
+   "original": "not-c1/c2",
+   "blind": "neutral"
+  },
+  {
+   "id": "C17",
+   "original": "not-c1/c2",
+   "blind": "other"
+  },
+  {
+   "id": "C18",
+   "original": "not-c1/c2",
+   "blind": "neutral"
+  },
+  {
+   "id": "C19",
+   "original": "not-c1/c2",
+   "blind": "other"
+  },
+  {
+   "id": "C20",
+   "original": "not-c1/c2",
+   "blind": "other"
+  },
+  {
+   "id": "C21",
+   "original": "not-c1/c2",
+   "blind": "neutral"
+  },
+  {
+   "id": "C22",
+   "original": "not-c1/c2",
+   "blind": "neutral"
+  },
+  {
+   "id": "C23",
+   "original": "c1",
+   "blind": "c1"
+  },
+  {
+   "id": "C24",
+   "original": "c1",
+   "blind": "c1"
+  },
+  {
+   "id": "C25",
+   "original": "c1",
+   "blind": "c1"
+  }
+ ],
+ "A": [
+  {
+   "id": "A1",
+   "original": "real",
+   "blind": "real"
+  },
+  {
+   "id": "A2",
+   "original": "real",
+   "blind": "real"
+  },
+  {
+   "id": "A3",
+   "original": "low",
+   "blind": "low"
+  },
+  {
+   "id": "A4",
+   "original": "real",
+   "blind": "real"
+  },
+  {
+   "id": "A5",
+   "original": "low",
+   "blind": "low"
+  },
+  {
+   "id": "A6",
+   "original": "low",
+   "blind": "low"
+  }
+ ],
+ "agreement": {
+  "C": {
+   "c1VsNot": 22,
+   "of": 25
+  },
+  "A": {
+   "agree": 6,
+   "of": 6
+  }
+ }
+}

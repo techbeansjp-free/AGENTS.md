@@ -9,7 +9,11 @@
     "codexCli": "codex-cli 0.166.0-alpha.5.1",
     "mountMode": "host",
     "fixture": "test/fixtures/complex-issues",
-    "order": "baseline,state,state,baseline"
+    "order": "baseline,state,state,baseline",
+    "harnessCommit": {
+      "pilot": "8954e939",
+      "long": "82b59078"
+    }
   },
   "pilot": [
     {
@@ -27,7 +31,12 @@
         "commits": 2,
         "compliant": 2
       },
-      "gitControlsVerified": true
+      "gitControlsVerified": true,
+      "inputTokens": 4612366,
+      "cachedInputTokens": 4388864,
+      "outputTokens": 31727,
+      "coordinatorThreads": 1,
+      "subagentThreads": 4
     },
     {
       "arm": "state",
@@ -44,7 +53,12 @@
         "commits": 2,
         "compliant": 2
       },
-      "gitControlsVerified": true
+      "gitControlsVerified": true,
+      "inputTokens": 4084412,
+      "cachedInputTokens": 3750912,
+      "outputTokens": 39660,
+      "coordinatorThreads": 4,
+      "subagentThreads": 3
     }
   ],
   "long": [
@@ -68,7 +82,13 @@
       "coordinator": {
         "calls": 108,
         "meanInput": 82757
-      }
+      },
+      "inputTokens": 11491003,
+      "cachedInputTokens": 11105792,
+      "outputTokens": 62296,
+      "coordinatorThreads": 1,
+      "subagentThreads": 8,
+      "ownerFilesTouchedByAgent": []
     },
     {
       "run": 2,
@@ -90,7 +110,13 @@
       "coordinator": {
         "calls": 167,
         "meanInput": 44392
-      }
+      },
+      "inputTokens": 10005216,
+      "cachedInputTokens": 9345152,
+      "outputTokens": 68938,
+      "coordinatorThreads": 8,
+      "subagentThreads": 8,
+      "ownerFilesTouchedByAgent": []
     },
     {
       "run": 3,
@@ -112,7 +138,13 @@
       "coordinator": {
         "calls": 175,
         "meanInput": 46438
-      }
+      },
+      "inputTokens": 10906302,
+      "cachedInputTokens": 10214144,
+      "outputTokens": 76469,
+      "coordinatorThreads": 8,
+      "subagentThreads": 8,
+      "ownerFilesTouchedByAgent": []
     },
     {
       "run": 4,
@@ -134,7 +166,13 @@
       "coordinator": {
         "calls": 117,
         "meanInput": 72359
-      }
+      },
+      "inputTokens": 10754768,
+      "cachedInputTokens": 10321920,
+      "outputTokens": 56662,
+      "coordinatorThreads": 1,
+      "subagentThreads": 8,
+      "ownerFilesTouchedByAgent": []
     }
   ],
   "blindReview": {
@@ -147,7 +185,9 @@
     "pilotUnresolvedHighMedium": {
       "baseline": 0,
       "state": 0
-    }
+    },
+    "lowNotes": "Below the High/Medium bar and present in both arms: -0 amountCents returned on first issue (P,Q,S), array accepted as actor (P,R). Legacy replay simulated, not run against real pre-revision code.",
+    "key": "P=run3 state, Q=run1 baseline, R=run4 baseline, S=run2 state"
   },
   "decision": {
     "tokenMedianRatio": 0.942,
@@ -166,12 +206,25 @@
     "verdict": "not-adopted"
   },
   "extrapolation": {
-    "note": "Model only, not measured: reset arm tokens = calls x 1.55 x (first context + 27k) over the 9 Phase 0 coordinator sessions",
+    "note": "Model only, not measured: reset-arm coordinator tokens = calls x m x (first context + 27k) over the 9 Phase 0 coordinator sessions. m is the pooled Phase 1 call multiplier 1.52 (342/225); 27k is the state-arm mean coordinator input (about 45k) minus the first context (about 17k), rounded down.",
     "tokenWeightedReduction": {
-      "multiplier1_3": 0.616,
-      "multiplier1_55": 0.542,
-      "multiplier1_8": 0.469,
-      "excludingLargestSession_1_55": 0.475
-    }
-  }
+      "m1_3": 0.616,
+      "m1_52": 0.551,
+      "m1_8": 0.469,
+      "excludingLargestSession_m1_52": 0.484
+    },
+    "phase0CoordinatorMeanContextK": [
+      336,
+      189,
+      167,
+      155,
+      137,
+      131,
+      86,
+      83,
+      60
+    ]
+  },
+  "reviewRounds": "Not applicable as a separate count: stages are fixed and each review request is part of a stage; independent reviewer subagents are counted in subagentThreads.",
+  "ownerFileCheck": "Long runs checked after the fact with the rule now in phase1-run.mjs: no non-evaluator commit touched requirements, oracles or AGENTS.md."
 }

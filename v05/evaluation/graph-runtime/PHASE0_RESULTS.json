@@ -2,33 +2,122 @@
   "schema": "asc-graph-runtime-phase0/v1",
   "issue": 1648,
   "protocol": "PHASE0_PROTOCOL.md",
-  "population": {"mergedPrs": 44, "sessions": 275, "developmentSessionsWithUserMessages": 8, "since": "2026-10-16T14:11:00+09:00", "until": "2026-11-08"},
+  "population": {
+    "mergedPrs": 44,
+    "sessions": 275,
+    "developmentSessionsWithUserMessages": 8,
+    "since": "2026-10-16T14:11:00+09:00",
+    "until": "2026-11-08"
+  },
   "A_loopTermination": {
     "verdict": "no-value",
-    "roundsAtLeast3Share": {"literal": 0.023, "mostLenient": 0.182, "threshold": 0.2},
-    "excessTimeShare": {"literal": 0.234, "loopAttributableOnly": 0.016, "threshold": 0.1, "note": "literal value is one PR (#1606) whose late time is mostly new scope added after round 5"},
+    "roundsAtLeast3Share": {
+      "literal": 0.023,
+      "mostLenient": 0.182,
+      "threshold": 0.2
+    },
+    "excessTimeShare": {
+      "literal": 0.234,
+      "loopAttributableOnly": 0.016,
+      "threshold": 0.1,
+      "note": "literal value is one PR (#1606) whose late time is mostly new scope added after round 5"
+    },
     "sameTypeRecurrenceCases": 2,
-    "quality": {"prsWithRealDefectsInRound3Plus": 3, "realDefectsInRound3Plus": 5, "unresolvableBySplitOrOwnerDecision": 1, "counterexamplePr": 1615},
-    "independentReclassification": {"sample": 6, "agree": 6}
+    "quality": {
+      "prsWithRealDefectsInRound3Plus": 3,
+      "realDefectsInRound3Plus": 5,
+      "unresolvableBySplitOrOwnerDecision": 1,
+      "counterexamplePr": 1615
+    },
+    "independentReclassification": {
+      "sample": 6,
+      "agree": 6,
+      "record": "phase0-blind-reclassification.json"
+    }
   },
   "B_explicitState": {
     "verdict": "value-upper-bound",
     "totalProcessedTokens": 2387000000,
     "coordinatorShare": 0.804,
     "accumulationShareOfInput": 0.801,
-    "counterfactualReduction": {"topGroupMedian": 0.770, "tokenWeighted": 0.608, "top10Median": 0.588, "coordinatorMedian": 0.620, "reread20kPersistent": {"topGroupMedian": 0.667, "tokenWeighted": 0.522}, "periodStartBaseline": {"topGroupMedian": 0.0004, "tokenWeighted": 0.109}, "threshold": 0.2},
-    "caveats": ["top group is a single session holding 65% of tokens and starting before the period", "counterfactual upper bound; information loss on reset is not priced in tokens"],
-    "compaction": {"sessionsCompacted": 4, "events": 99, "note": "largest session averaged 167k context after 92 compactions"},
-    "quality": {"sessionsWithLosableConstraints": 0.75, "excludingAuthorityScopeConstraints": 0.5, "note": "most losable constraints are authority scopes, the same information as C"}
+    "counterfactualReduction": {
+      "topGroupMedian": 0.77,
+      "tokenWeighted": 0.608,
+      "top10Median": 0.588,
+      "coordinatorMedian": 0.62,
+      "reread20kPersistent": {
+        "topGroupMedian": 0.667,
+        "tokenWeighted": 0.522
+      },
+      "periodStartBaseline": {
+        "topGroupMedian": 0.0004,
+        "tokenWeighted": 0.109
+      },
+      "threshold": 0.2
+    },
+    "caveats": [
+      "top group is a single session holding 65% of tokens and starting before the period",
+      "counterfactual upper bound; information loss on reset is not priced in tokens"
+    ],
+    "compaction": {
+      "sessionsCompacted": 4,
+      "events": 99,
+      "note": "largest session averaged 167k context after 92 compactions"
+    },
+    "quality": {
+      "sessionsWithLosableConstraints": 0.75,
+      "excludingAuthorityScopeConstraints": 0.5,
+      "note": "most losable constraints are authority scopes, the same information as C"
+    },
+    "window": "phase0-context.mjs was run from 2026-10-16T00:00+09:00, about 14 hours before the population start; not decision-relevant"
   },
   "C_decisionPoints": {
     "verdict": "value-on-unnecessary-stops-only",
-    "c1": {"literal": 20, "withBorderline": 29, "waitMinutesUpperBound": 148, "medianWaitMinutes": 2},
-    "c2": {"literal": 3, "withBorderline": 4, "withDamage": 0, "stoppedBy": {"hostApprovalReview": 2, "owner": 1}},
-    "hostApprovalReview": {"allowed": 2240, "denied": 11},
-    "threshold": {"c1PlusC2": 3, "orDamagingC2": 1},
-    "independentReclassification": {"sample": 25, "agreeOnC1VsNot": 22, "rate": 0.88, "missedC1InUnlabeledSample": 2, "unlabeledSample": 15, "note": "c2 not represented in the sample"}
+    "c1": {
+      "literal": 20,
+      "withBorderline": 29,
+      "waitMinutesUpperBound": 148,
+      "medianWaitMinutes": 2,
+      "precededByHostDenial": {
+        "strict": 2,
+        "of": 20,
+        "rule": "a host approval-review denial in the same session within 180 minutes before the stop (1 within 60 minutes)",
+        "hostDenialRecords": 11,
+        "distinctSessionMinutes": 9
+      }
+    },
+    "c2": {
+      "literal": 3,
+      "withBorderline": 4,
+      "withDamage": 0,
+      "stoppedBy": {
+        "hostApprovalReview": 2,
+        "owner": 1
+      },
+      "note": "classified as stopped by host review (2) and owner (1); one of the two host-review cases has no denial record near it"
+    },
+    "hostApprovalReview": {
+      "allowed": 2240,
+      "denied": 11
+    },
+    "threshold": {
+      "c1PlusC2": 3,
+      "orDamagingC2": 1
+    },
+    "independentReclassification": {
+      "sample": 25,
+      "agreeOnC1VsNot": 22,
+      "rate": 0.88,
+      "missedC1InUnlabeledSample": 2,
+      "unlabeledSample": 15,
+      "note": "c2 not represented in the sample",
+      "record": "phase0-blind-reclassification.json"
+    }
   },
-  "phase1Candidates": ["B and C combined: a structured state carrying goal, scope, authorized decision points and owner constraints, used for fresh-context handoff at milestones and as the authorization record for the agent and host approval review"],
-  "excludedFromPhase1": ["A"]
+  "phase1Candidates": [
+    "B and C combined: a structured state carrying goal, scope, authorized decision points and owner constraints, used for fresh-context handoff at milestones and as the authorization record for the agent and host approval review"
+  ],
+  "excludedFromPhase1": [
+    "A"
+  ]
 }
