@@ -241,12 +241,12 @@
     "verdict": "not-adopted"
   },
   "extrapolation": {
-    "note": "Model only, not measured: reset-arm coordinator tokens = calls x m x (first context + 27k) over the 9 Phase 0 coordinator sessions. m is the pooled Phase 1 call multiplier 1.52 (342/225); 27k is the state-arm mean coordinator input (about 45k) minus the first context (about 17k), rounded down.",
+    "note": "Model only, not measured: reset-arm coordinator tokens = calls x m x (first context + 28k) over the 9 Phase 0 coordinator sessions. m is the pooled Phase 1 call multiplier 1.52 (342/225); 28k is the call-weighted state-arm mean coordinator input (about 45.4k) minus the first context (about 17k).",
     "tokenWeightedReduction": {
-      "m1_3": 0.616,
-      "m1_52": 0.551,
-      "m1_8": 0.469,
-      "excludingLargestSession_m1_52": 0.484
+      "m1_3": 0.608,
+      "m1_52": 0.542,
+      "m1_8": 0.458,
+      "excludingLargestSession_m1_52": 0.475
     },
     "phase0CoordinatorMeanContextK": [
       336,

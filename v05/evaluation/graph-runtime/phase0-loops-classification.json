@@ -88,7 +88,7 @@
    "rationale": "Asset-count upper-bound regression, then timeout termination guarantee of a separate runner; different invariants."
   }
  ],
- "qualityNote": "Protocol section 品質側の測定 (A). Severity mapping: CodeRabbit Critical/Major = High/Medium (real defect when remediated in code/contract); Minor/Nitpick = Low. Independent-review severities are taken from the PR body. Covers every PR with R>=3 under L, B, D or X. Rounds under B are commit bursts and carry no finding text unless a GitHub review falls inside them. resolvableByCapTransition = the defect could still have been resolved if the only transitions after the cap were split or owner decision (never accepting it unresolved). The classification has not yet been checked by an independent context.",
+ "qualityNote": "Protocol section 品質側の測定 (A). Severity mapping: CodeRabbit Critical/Major = High/Medium (real defect when remediated in code/contract); Minor/Nitpick = Low. Independent-review severities are taken from the PR body. Covers every PR with R>=3 under L, B, D or X. Rounds under B are commit bursts and carry no finding text unless a GitHub review falls inside them. resolvableByCapTransition = the defect could still have been resolved if the only transitions after the cap were split or owner decision (never accepting it unresolved). Independently re-classified on a 6-item sample (6/6 agreement); see phase0-blind-reclassification.json.",
  "quality": [
   {
    "pr": 1606,

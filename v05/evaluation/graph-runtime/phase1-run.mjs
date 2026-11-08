@@ -43,8 +43,8 @@ const c=configuration({workspace:bootstrap,runtime,executable:fs.realpathSync(co
 extendFixturePermissions(c.options,[pkg,preRevision],[origin,path.join(origin,'.git'),...(arm==='state'?[stateDir]:[])]);
 c.options=c.options.map(v=>v==='features.multi_agent=false'?'features.multi_agent=true':v);
 const controls=gitControlState(origin,[worktree]);
-// The agent can write .git; re-check the git control files (config, hooks) before every evaluator git call so a
-// planted filter driver is not run by the evaluator. Oracles still import agent-written service.mjs on the host,
+// The agent can write .git; re-check the git control files (config, hooks) before each stage, at each completion
+// check and before the final inspection, so a planted filter driver is not run by the evaluator's status/add/archive. Oracles still import agent-written service.mjs on the host,
 // as in the existing native evaluations; the author name `Evaluator` is trusted, not verified.
 const guard=()=>assertGitControlState(origin,controls,[worktree]);
 
