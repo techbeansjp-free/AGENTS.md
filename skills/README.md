@@ -4,7 +4,7 @@
 
 | 依頼・状況 | Skill | 成果と適用境界 |
 | --- | --- | --- |
-| ASCで開発・再開・独立レビューを進める | [asc](asc/SKILL.md) | Goal・権限・Evidenceに沿った実行。通常開発へASCを強制しない |
+| Issueの開発を始める・再開する、PR提出・許可されたmergeまで進める | [asc](asc/SKILL.md) | Goal・権限・Evidenceに沿った実行。通常開発へASCを強制しない |
 | 新規基盤を整える、既存基盤の考慮漏れを点検する | [project-foundation](project-foundation/SKILL.md) | 先行決定・機械検査・再現性。通常の局所修正では使わない |
 | 機能設計の案を比較する、提案前に前提や過剰設計を問い直す | [engineering-judgment](engineering-judgment/SKILL.md) | 要求・単純さ・利用者負担に基づく判断。誤字修正や決定済みの機械的変更には使わない |
 | 見積・納期・保守範囲・継続費用と管理責任を判断する | [estimate-and-scope](estimate-and-scope/SKILL.md) | 契約と調査に基づく見積・回答案。過去案件の商慣行を一律に適用しない |
