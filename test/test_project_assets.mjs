@@ -568,7 +568,8 @@ test('legacy fixed ASC wrapper is recognized even when its entry is locally dele
  const record=legacyRecord(f);record.files[entry]=createHash('sha256').update(old).digest('hex');f.write('.agent-skill-chain/distribution.json',JSON.stringify(record));
  fs.unlinkSync(path.join(f.work,entry));const result=projectAssets(f.work,{...options,apply:true});assert.equal(result.applied,false);assert.deepEqual(result.conflicts,[entry]);assert.deepEqual(result.registeredHosts,['.agents']);
  f.write(entry,old);assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
- assert.match(fs.readFileSync(path.join(f.work,entry),'utf8'),/description: ASC v0.5/);
+ const description=s=>s.match(/^description: .+$/m)[0],updated=fs.readFileSync(path.join(f.work,entry),'utf8');
+ assert.equal(description(updated),description(fs.readFileSync(path.join(f.pkg,'skills','asc','SKILL.md'),'utf8')));assert.notEqual(description(updated),description(old));
 });
 
 test('edited or missing retired entries block additions, updates, deletions and record changes together',t=>{
