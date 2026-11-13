@@ -1,0 +1,126 @@
+{
+ "minutes-handoff": {
+  "expect": "decision-ownership",
+  "skills_invoked": [
+   "decision-ownership"
+  ],
+  "reads": [
+   ".agent-skill-chain/skills/decision-ownership/SKILL.md"
+  ],
+  "canonical_read": true,
+  "references_read": [],
+  "result": "success",
+  "ok": true,
+  "pass": true,
+  "output_tokens": 1543,
+  "seconds": 22
+ },
+ "client-request-owner": {
+  "expect": "decision-ownership",
+  "skills_invoked": [
+   "decision-ownership"
+  ],
+  "reads": [
+   ".agent-skill-chain/skills/decision-ownership/SKILL.md",
+   ".agent-skill-chain/skills/decision-ownership/references/conditions-and-counterexamples.md"
+  ],
+  "canonical_read": true,
+  "references_read": [
+   ".agent-skill-chain/skills/decision-ownership/references/conditions-and-counterexamples.md"
+  ],
+  "result": "success",
+  "ok": true,
+  "pass": true,
+  "output_tokens": 2165,
+  "seconds": 33
+ },
+ "thread-gaps": {
+  "expect": "decision-ownership",
+  "skills_invoked": [
+   "decision-ownership"
+  ],
+  "reads": [
+   ".agent-skill-chain/skills/decision-ownership/SKILL.md"
+  ],
+  "canonical_read": true,
+  "references_read": [],
+  "result": "success",
+  "ok": true,
+  "pass": true,
+  "output_tokens": 2829,
+  "seconds": 33
+ },
+ "estimate": {
+  "expect": "estimate-and-scope",
+  "skills_invoked": [
+   "estimate-and-scope"
+  ],
+  "reads": [
+   ".agent-skill-chain/skills/estimate-and-scope/SKILL.md"
+  ],
+  "canonical_read": true,
+  "references_read": [],
+  "result": "success",
+  "ok": true,
+  "pass": true,
+  "output_tokens": 2638,
+  "seconds": 30
+ },
+ "handoff-text": {
+  "expect": "work-coordination",
+  "skills_invoked": [
+   "work-coordination"
+  ],
+  "reads": [
+   "ERROR:<tool_use_error>Error: No such tool available: Bash. Bash is disabled for this s",
+   ".agent-skill-chain/skills/work-coordination/SKILL.md"
+  ],
+  "canonical_read": true,
+  "references_read": [],
+  "result": "success",
+  "ok": true,
+  "pass": true,
+  "output_tokens": 2172,
+  "seconds": 26
+ },
+ "design-compare": {
+  "expect": "engineering-judgment",
+  "skills_invoked": [
+   "engineering-judgment"
+  ],
+  "reads": [
+   ".agent-skill-chain/skills/engineering-judgment/SKILL.md"
+  ],
+  "canonical_read": true,
+  "references_read": [],
+  "result": "success",
+  "ok": true,
+  "pass": true,
+  "output_tokens": 1428,
+  "seconds": 24
+ },
+ "typo": {
+  "expect": null,
+  "skills_invoked": [],
+  "reads": [],
+  "canonical_read": null,
+  "references_read": [],
+  "result": "success",
+  "ok": true,
+  "pass": true,
+  "output_tokens": 64,
+  "seconds": 5
+ },
+ "translate": {
+  "expect": null,
+  "skills_invoked": [],
+  "reads": [],
+  "canonical_read": null,
+  "references_read": [],
+  "result": "success",
+  "ok": true,
+  "pass": true,
+  "output_tokens": 65,
+  "seconds": 7
+ }
+}

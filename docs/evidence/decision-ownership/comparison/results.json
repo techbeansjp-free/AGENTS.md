@@ -1,0 +1,107 @@
+{
+ "model": {
+  "generation": "claude-sonnet (Claude Code subagent, 各回別Context)",
+  "scoring": "claude-opus (別Context、匿名ID・課題・観点のみ)"
+ },
+ "conditions": {
+  "none": {
+   "run1": {
+    "id": "0fc4a8",
+    "total": 29,
+    "missed": [
+     "B2",
+     "E4",
+     "F1"
+    ],
+    "unfounded": 1,
+    "over_refusal": 0,
+    "decided_for_owner": 1
+   },
+   "run2": {
+    "id": "544c2a",
+    "total": 26,
+    "missed": [
+     "A1",
+     "B2",
+     "C3",
+     "D1",
+     "E4",
+     "F1"
+    ],
+    "unfounded": 0,
+    "over_refusal": 0,
+    "decided_for_owner": 1
+   },
+   "sum": 55,
+   "max": 64
+  },
+  "generalized": {
+   "run1": {
+    "id": "358ccc",
+    "total": 32,
+    "missed": [],
+    "unfounded": 0,
+    "over_refusal": 0,
+    "decided_for_owner": 0
+   },
+   "run2": {
+    "id": "d86631",
+    "total": 31,
+    "missed": [
+     "B2"
+    ],
+    "unfounded": 0,
+    "over_refusal": 0,
+    "decided_for_owner": 0
+   },
+   "sum": 63,
+   "max": 64
+  },
+  "original": {
+   "run2": {
+    "id": "5ab21c",
+    "total": 31,
+    "missed": [
+     "B2"
+    ],
+    "unfounded": 0,
+    "over_refusal": 0,
+    "decided_for_owner": 0
+   },
+   "run1": {
+    "id": "6d585c",
+    "total": 31,
+    "missed": [
+     "B2"
+    ],
+    "unfounded": 0,
+    "over_refusal": 0,
+    "decided_for_owner": 1
+   },
+   "sum": 62,
+   "max": 64
+  }
+ },
+ "reads": {
+  "none-1": [],
+  "none-2": [],
+  "generalized-1": [
+   "skills/decision-ownership/SKILL.md",
+   "skills/decision-ownership/references/conditions-and-counterexamples.md"
+  ],
+  "generalized-2": [
+   "skills/decision-ownership/SKILL.md",
+   "skills/decision-ownership/references/conditions-and-counterexamples.md"
+  ],
+  "original-1": [
+   "<personal>/SKILL.md",
+   "<personal>/references/a.md",
+   "<personal>/references/b.md"
+  ],
+  "original-2": [
+   "<personal>/SKILL.md",
+   "<personal>/references/a.md",
+   "<personal>/references/b.md"
+  ]
+ }
+}

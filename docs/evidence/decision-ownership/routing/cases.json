@@ -1,0 +1,13 @@
+{
+ "note": "Skill名を含まない自然文。期待Skillは実行前に記録した。複数Skillの併用は誤発火としない。",
+ "cases": [
+  {"id":"minutes-handoff","expect":"decision-ownership","prompt":"今日の定例の議事録です。「新しい通知機能は来月リリース。通知の文面は先方で確認。テストは双方で実施。」担当者と期限の欄は空です。このまま開発チームに渡して大丈夫か見てもらえますか。"},
+  {"id":"client-request-owner","expect":"decision-ownership","prompt":"取引先の営業担当から、管理画面に承認フローを足してほしいと言われました。先方の情報システム部門はまだ知らないようです。これ、誰が何を決めないといけない話ですか？"},
+  {"id":"thread-gaps","expect":"decision-ownership","prompt":"顧客とのやり取りをまとめました。「月末締めの集計を自動化したい」「CSVの形式は今と同じで」「対象部署は後で連絡します」「できれば来月から使いたい」。進める前に抜け漏れがないか整理してください。"},
+  {"id":"estimate","expect":"estimate-and-scope","prompt":"保守契約中の顧客から、帳票を1種類追加してほしいと依頼がありました。何人日くらいか、保守の範囲で受けてよいかを整理してください。"},
+  {"id":"handoff-text","expect":"work-coordination","prompt":"この作業を別のセッションに引き継ぎたいので、貼り付けられる引継ぎ文を作ってください。作業は検索APIのページング修正で、テストが2件まだ落ちています。"},
+  {"id":"design-compare","expect":"engineering-judgment","prompt":"通知の配信を、DBのポーリングで実装するか、メッセージキューを入れるかで迷っています。利用者は100人程度です。どちらがよいですか。"},
+  {"id":"typo","expect":null,"prompt":"次の文の誤字だけ直してください：「来週の打ち合せは延期になりました。」"},
+  {"id":"translate","expect":null,"prompt":"「仕様は来週確定します」を英語にしてください。"}
+ ]
+}

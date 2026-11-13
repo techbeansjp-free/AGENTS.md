@@ -8,6 +8,7 @@
 | 新規基盤を整える、既存基盤の考慮漏れを点検する | [project-foundation](project-foundation/SKILL.md) | 先行決定・機械検査・再現性。通常の局所修正では使わない |
 | 機能設計の案を比較する、提案前に前提や過剰設計を問い直す | [engineering-judgment](engineering-judgment/SKILL.md) | 要求・単純さ・利用者負担に基づく判断。誤字修正や決定済みの機械的変更には使わない |
 | 見積・納期・保守範囲・継続費用と管理責任を判断する | [estimate-and-scope](estimate-and-scope/SKILL.md) | 契約と調査に基づく見積・回答案。過去案件の商慣行を一律に適用しない |
+| 依頼・議事録・チケットの未決事項と判断者を整理する、進めてよいか・誰が決めるかを確かめる | [decision-ownership](decision-ownership/SKILL.md) | 判断者・先出しのリスク・仮置き案を示し、判断は判断者に残す。設計案の比較や見積そのものには使わない |
 | CIが重い、重複検査・並列化・結果再利用を見直す | [verification-optimization](verification-optimization/SKILL.md) | 保証を維持した同等性確認と計測。単なるテスト実行とは分ける |
 | 言語・DB・基盤を段階移行・置換する、併存や移行完了を点検する | [migration-assurance](migration-assurance/SKILL.md) | 受入・データ・構築・運用経路の継承。製品本体だけで完了にしない |
 | 利用者が画面から一連の操作を完了できるか確かめる、デモを見せる | [user-journey-acceptance](user-journey-acceptance/SKILL.md) | 実操作・実接続・保存・失敗回復。見た目の確認だけとは分ける |
@@ -24,6 +25,8 @@
 同じ作業に複数が必要な場合も、目的と成果を分けて既存の証拠を共有する。例えば移行では`migration-assurance`が保証の継承を扱い、実測した検証の律速を改善するときだけ`verification-optimization`を追加する。基盤全般のチェック項目を、専門Skillのたびに繰り返さない。
 
 `engineering-judgment`は設計案を選ぶ基準と自己反証を扱い、採用理由・見直し条件を示す。開発思想の全項目を毎回実行するチェックリストではなく、判断が未決の場面に限定する。個人用Skillが持つ会話の好み・本人への助言・個別契約の慣行を、そのままチーム共通の規則にするものではない。基盤の網羅点検は`project-foundation`、技術調査・実証から実装への接続は`research-to-implementation`、変更の独立レビューと是正管理は`review-and-remediation`が扱う。共通の権限・品質契約を追加定義せず、判断に必要なときだけ組み合わせる。
+
+`decision-ownership`は、技術の設計案ではなく、依頼や記録に含まれる業務・優先度・受入の判断を誰が持つかを扱う。判断者・判断材料・仮置き案を出し、判断を代わりに確定しない。確認事項の回答と反映の追跡は`work-coordination`、見積と対応範囲は`estimate-and-scope`が扱う。
 
 配布パッケージにはこの一覧と各Skillの全ファイルを含める。`project-assets --apply`でプロジェクトの`.agent-skill-chain/skills/`へ配置し、Codex用の`--register-skill`で`.agents/skills/`へ、Claude Code用の`--register-claude-skill`で`.claude/skills/`へ全配布Skillの薄い入口を配置する。両方指定できる。入口のdescriptionで選択され、入口の指示に従って共有本文と必要なreferencesを読む。隔離環境にも入口・本文・referencesを一緒に配置する。既存の同名fileや利用者編集は競合として保護する。配置はHostでの認識・実行の証明ではなく、外部操作の許可も与えない。
 
