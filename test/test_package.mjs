@@ -252,6 +252,7 @@ assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
 
 // Read stored entry names from the archive bytes. External tar listings depend on the
 // platform and locale (octal escapes, macOS NFD display), which would hide the NFC check.
+// Supports the ustar and pax headers that npm pack writes; GNU long names fail instead of being misread.
 function tarEntryNames(gzip){
  const bytes=zlib.gunzipSync(gzip),field=(start,end)=>{const raw=bytes.subarray(start,end),nul=raw.indexOf(0);return (nul<0?raw:raw.subarray(0,nul)).toString('utf8');};
  const names=[];let offset=0,paxPath=null;
