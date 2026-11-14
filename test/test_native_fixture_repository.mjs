@@ -1,7 +1,8 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
+import {tempDir} from './helpers/temp-dir.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {prepareFixtureRepository} from '../scripts/native-fixture-repository.mjs';
 test('fixture transfer preserves base ancestry without trial branches, tags or answer objects',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-fixture-transfer-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-fixture-transfer-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const fixture=path.join(root,'source'),origin=path.join(root,'trial'),env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^GIT_/i.test(k)));
  const command=(argv,cwd)=>execFileSync(argv[0],argv.slice(1),{cwd,env,stdio:['ignore','pipe','pipe'],encoding:'utf8'}).trim();
  command(['git','init','--quiet',fixture]);

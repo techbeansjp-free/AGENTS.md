@@ -1,3 +1,4 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {setImmediate} from 'node:timers';
 import {test} from 'node:test';
 import {createVerificationGit} from '../src/verification-git.mjs';
@@ -11,7 +12,7 @@ import {Controller,safeName,hash} from '../src/controller.mjs';
 import {approvalBytes,keyFingerprint} from '../src/approval.mjs';
 
 function fixture(t,extra={}) {
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-node-controller-'));
+ const root=tempDir('asc-node-controller-');
  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',stdio:'pipe'}).trim();
  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
@@ -201,7 +202,7 @@ test('candidate above the former aggregate limit retains scope and publishes cor
  const {commitCandidate}=await import('../src/candidate.mjs');
  const names=Array.from({length:6},(_,i)=>`large-${i}.txt`);
  const {c,git,root,base}=fixture(t,{allowedPaths:names});
- const space=fs.mkdtempSync(path.join(os.tmpdir(),'asc-output-cap-'));t.after(()=>fs.rmSync(space,{recursive:true,force:true}));
+ const space=tempDir('asc-output-cap-');t.after(()=>fs.rmSync(space,{recursive:true,force:true}));
  for(const name of names)fs.writeFileSync(path.join(space,name),Buffer.alloc(11_000_000,97));
  commitCandidate(c,space);
  assert.notEqual(git('rev-parse','HEAD'),base);assert.equal(git('status','--porcelain'),'');
@@ -227,7 +228,7 @@ test('opt-in shallow verification Git preserves exact HEAD without history or au
 
 test('verification Git reconstructs nested binary executable trees in both object formats',t=>{
  for(const format of ['sha1','sha256']){
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-git-view-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const root=tempDir('asc-git-view-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const source=path.join(root,'source'),view=path.join(root,'view');fs.mkdirSync(source);fs.mkdirSync(view);
   const git=(...args)=>execFileSync('git',args,{cwd:source,encoding:'utf8',stdio:'pipe'}).trim();
   git('init','-q','--object-format='+format);git('config','user.name','Fixture');git('config','user.email','test@example.invalid');

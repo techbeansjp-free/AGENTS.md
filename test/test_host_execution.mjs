@@ -1,3 +1,4 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';
 import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
@@ -8,7 +9,7 @@ import {hostExecution} from '../src/host-execution.mjs';
 import {runWorkflow} from '../src/workflow.mjs';
 
 function fixture(t){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-host-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-host-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const repo=path.join(root,'repo');fs.mkdirSync(repo);const git=(...args)=>execFileSync('git',args,{cwd:repo,encoding:'utf8',stdio:'pipe'}).trim();
  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');fs.writeFileSync(path.join(repo,'code.txt'),'before');git('add','.');git('commit','-qm','base');
  const script=path.join(root,'host.mjs');

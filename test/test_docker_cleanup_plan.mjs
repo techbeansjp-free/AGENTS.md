@@ -1,5 +1,6 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';import {createHash} from 'node:crypto';
+import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {readOnlyDocker,composeProjectName,planDockerCleanup} from '../src/docker-cleanup-plan.mjs';
 const cli=fileURLToPath(new URL('../bin/asc-v05.mjs',import.meta.url));
@@ -30,7 +31,7 @@ process.stderr.write('unsupported '+args.join(' '));process.exit(1);
 `;
 const P='featuredocker-1';
 function fixture(t,{unavailable=false,siblingContainer=false,createdOnNetwork=false,workingDir,labelState='exited'}={}){
- const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-docker-plan-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-docker-plan-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const work=path.join(root,'Feature.Docker-1'),bin=path.join(root,'bin');fs.mkdirSync(path.join(work,'services/api'),{recursive:true});fs.mkdirSync(bin);fs.mkdirSync(`${work}-copy`);fs.symlinkSync(work,path.join(root,'alias'));
  fs.writeFileSync(path.join(bin,'docker'),FAKE,{mode:0o755});
  const project=(p,wd)=>({'com.docker.compose.project':p,'com.docker.compose.project.working_dir':wd});
@@ -202,6 +203,6 @@ test('read-only guard rejects mutating subcommands before calling the runner',()
 test('default project name follows the compose normalization rule and empty names require --project',t=>{
  assert.equal(composeProjectName('Feature.Docker-1'),'featuredocker-1');assert.equal(composeProjectName('_My App'),'myapp');assert.equal(composeProjectName('--x_Y'),'x_y');
  assert.equal(composeProjectName('20261101_064053-1611-docker-cleanup-plan'),'20261101_064053-1611-docker-cleanup-plan');
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-docker-name-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.mkdirSync(path.join(root,'__.'));
+ const root=tempDir('asc-docker-name-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.mkdirSync(path.join(root,'__.'));
  let called=false;assert.throws(()=>planDockerCleanup(path.join(root,'__.'),{runner:()=>{called=true;return {status:0,stdout:'',stderr:''};}}),/Invalid compose project name: ""; pass --project/);assert.equal(called,false);
 });

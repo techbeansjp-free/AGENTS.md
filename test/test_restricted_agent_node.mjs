@@ -1,9 +1,10 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {performance} from 'node:perf_hooks';
 import {setTimeout} from 'node:timers';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import {configuration,assertPreflight} from '../src/restricted-agent.mjs';
 test('preflight requires explicit completed denial and unchanged host',()=>{
@@ -15,7 +16,7 @@ test('preflight requires explicit completed denial and unchanged host',()=>{
  assert.throws(()=>assertPreflight(good,'changed'));
 });
 test('profile keeps provider credentials out of tool environment and rejects aliases',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-node-profile-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-node-profile-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const workspace=path.join(root,'source'),runtime=path.join(root,'runtime');fs.mkdirSync(workspace);fs.mkdirSync(runtime);
  // Configuration-only fixture binary. It is never executed as Codex.
  const binary=path.join(root,'provider','bin','codex.js');fs.mkdirSync(path.dirname(binary),{recursive:true});fs.writeFileSync(binary,'fixture');fs.writeFileSync(path.join(path.dirname(path.dirname(binary)),'package.json'),JSON.stringify({name:'@openai/codex'}));
@@ -38,7 +39,7 @@ test('deadline settles even when detached child retains output pipes',{skip:proc
  assert(performance.now()-started<1500,'Host wait must not await inherited pipe close');
 });
 test('split npm native runtime is narrowly included and cannot contain candidate state',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-split-provider-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-split-provider-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const workspace=path.join(root,'source'),runtime=path.join(root,'runtime'),pkg=path.join(root,'node_modules','@openai','codex');
  const native=path.join(root,'node_modules','@openai',`codex-${process.platform}-${process.arch}`);
  for(const dir of [workspace,runtime,path.join(pkg,'bin'),native])fs.mkdirSync(dir,{recursive:true});
@@ -85,7 +86,7 @@ test('OS identity does not reject execution or claim release acceptance',async()
 test('Controller termination stops Agent and detached descendants through the transient service cgroup',
  {skip:process.platform!=='linux'||process.env.ASC_TEST_ISOLATION==='0'},async t=>{
  const {spawn}=await import('node:child_process');const {once}=await import('node:events');
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-lifecycle-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-lifecycle-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const state=pid=>{try{const raw=fs.readFileSync(`/proc/${pid}/stat`,'utf8'),fields=raw.slice(raw.lastIndexOf(')')+2).split(' ');return {live:fields[0]!=='Z',start:fields[19]};}catch{return null;}};
  for(const signal of ['SIGTERM','SIGKILL']){
   const ready=path.join(root,signal+'.ready'),driver=path.join(root,signal+'.mjs');
@@ -111,7 +112,7 @@ test('Controller termination stops Agent and detached descendants through the tr
 
 
 test('verification retains tracked control data but launches Codex outside candidate configuration',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-verify-controls-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-verify-controls-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const workspace=path.join(root,'source'),runtime=path.join(root,'runtime'),binary=path.join(root,'provider','bin','codex.js');
  for(const dir of [workspace,runtime,path.dirname(binary)])fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(binary,'fixture');fs.writeFileSync(path.join(path.dirname(path.dirname(binary)),'package.json'),JSON.stringify({name:'@openai/codex'}));
  for(const dir of ['.codex','.agents']){fs.mkdirSync(path.join(workspace,dir));fs.writeFileSync(path.join(workspace,dir,'data'),'tracked');}

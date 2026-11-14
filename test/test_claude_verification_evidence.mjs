@@ -1,3 +1,4 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {claudeVerificationEvidence} from '../scripts/claude-verification-evidence.mjs';
 const expected={schema:'asc-worktree-verification/v1',passed:true,repo:'/synthetic/worktree',base:'a'.repeat(40),head:'b'.repeat(40),contractSha256:'c'.repeat(64),contextSha256:'d'.repeat(64),results:[{argv:['node','test.mjs'],exit:0}]};
@@ -69,10 +70,10 @@ test('framed verification ignores shell chatter but not failed, duplicate or sta
 });
 
 test('capture executes fixed verifier and preserves its failure instead of shell status',async t=>{
- const fs=await import('node:fs'),os=await import('node:os'),path=await import('node:path');
+ const fs=await import('node:fs'),path=await import('node:path');
  const {spawnSync}=await import('node:child_process');
  const {verificationCaptureSource,capturedVerification}=await import('../scripts/claude-verification-capture.mjs');
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-capture-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-capture-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const cli=path.join(root,'cli.mjs'),wrapper=path.join(root,'capture.mjs'),marker='3'.repeat(32);
  fs.writeFileSync(wrapper,verificationCaptureSource({cli,repo:'/synthetic/repo',base:expected.base,owner:'/synthetic/owner',marker}));
  fs.writeFileSync(cli,`import assert from 'node:assert/strict';assert.deepEqual(process.argv.slice(2),${JSON.stringify(['worktree-verify','/synthetic/repo',expected.base,'/synthetic/owner'])});console.log(${JSON.stringify(JSON.stringify(expected))});`);

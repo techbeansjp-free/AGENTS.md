@@ -1,7 +1,8 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
+import {tempDir} from './helpers/temp-dir.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {injectNativeConflict,assertConflictFaultsRemoved,conflictFaultCodes} from '../scripts/native-conflict-fixture.mjs';
 test('injects real conflicting faults only in reservation and leaves resolution to the Agent',()=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-conflict-test-'));
+ const root=tempDir('asc-conflict-test-');
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^GIT_/i.test(k))),git=(...a)=>execFileSync('git',['-c','core.hooksPath=/dev/null',...a],{cwd:root,env,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
  try{
   git('init','-b','test/9003-currency');git('config','user.name','Synthetic');git('config','user.email','test@example.invalid');

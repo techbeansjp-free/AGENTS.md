@@ -1,9 +1,10 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {setTimeout} from 'node:timers';
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {inspectAssets,AssetController} from '../src/verification-assets.mjs';import {hash} from '../src/controller.mjs';
 const enabled=process.platform==='linux'&&process.env.ASC_TEST_ISOLATION!=='0';
 function fixture(t){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-assets-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-assets-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const repo=path.join(root,'repo'),runtime=path.join(root,'runtime'),deps=path.join(root,'deps');for(const dir of [repo,runtime,deps])fs.mkdirSync(dir);
  fs.copyFileSync(fs.realpathSync(process.execPath),path.join(runtime,'node'));fs.chmodSync(path.join(runtime,'node'),0o755);fs.writeFileSync(path.join(deps,'value.json'),'42');
  const git=(...a)=>execFileSync('git',a,{cwd:repo,encoding:'utf8',stdio:'pipe'}).trim();git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
@@ -184,7 +185,7 @@ test('normal exit waits for finite teardown but rejects a surviving descendant',
 
 test('unlimited verification stops when its Controller is killed',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async t=>{
  const {spawn}=await import('node:child_process');
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-owner-lifetime-')),marker=path.join(root,'child.json');
+ const root=tempDir('asc-owner-lifetime-'),marker=path.join(root,'child.json');
  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const script=`import {runBoundedVerification} from ${JSON.stringify(new URL('../src/verification-resources.mjs',import.meta.url).href)};runBoundedVerification(['--',process.execPath,'-e',${JSON.stringify("const fs=require('fs');fs.writeFileSync(process.argv[1],JSON.stringify({pid:process.pid,cgroup:fs.readFileSync('/proc/self/cgroup','utf8')}));setInterval(()=>{},1000)")},${JSON.stringify(marker)}],null);`;
  const child=spawn(process.execPath,['--input-type=module','-e',script],{stdio:'ignore'});t.after(()=>child.kill('SIGKILL'));

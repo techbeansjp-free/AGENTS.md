@@ -1,5 +1,6 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import fs from 'node:fs';import path from 'node:path';
 import {spawn} from 'node:child_process';import {once} from 'node:events';import {setTimeout} from 'node:timers/promises';
 import {runServiceProcess} from '../src/agent-lifecycle.mjs';
 const linux=process.platform==='linux';
@@ -16,7 +17,7 @@ test('service lifecycle rejects timeout, excess output and unavailable executabl
  await assert.rejects(runServiceProcess('/nonexistent-asc-provider',[],{env:{},input:'',timeout:5000}),/failed|cleanup/);
 });
 test('Controller SIGTERM and SIGKILL stop detached service descendants',{skip:!linux},async t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-service-lifetime-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-service-lifetime-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const state=pid=>{try{const raw=fs.readFileSync(`/proc/${pid}/stat`,'utf8'),parts=raw.slice(raw.lastIndexOf(')')+2).split(' ');return {live:parts[0]!=='Z',start:parts[19]};}catch{return null;}};
  for(const signal of ['SIGTERM','SIGKILL']){
   const ready=path.join(root,signal+'.json'),driver=path.join(root,signal+'.mjs');

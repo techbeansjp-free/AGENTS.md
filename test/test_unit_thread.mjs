@@ -1,5 +1,6 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {pathToFileURL} from 'node:url';import {runControllerThread} from '../src/unit-thread.mjs';
-function worker(t,source){const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-thread-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const file=path.join(root,'worker.mjs');fs.writeFileSync(file,"import {parentPort} from 'node:worker_threads';\n"+source);return pathToFileURL(file);}
+import {tempDir} from './helpers/temp-dir.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {pathToFileURL} from 'node:url';import {runControllerThread} from '../src/unit-thread.mjs';
+function worker(t,source){const root=tempDir('asc-thread-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const file=path.join(root,'worker.mjs');fs.writeFileSync(file,"import {parentPort} from 'node:worker_threads';\n"+source);return pathToFileURL(file);}
 test('controller result does not conceal a later failing exit',async t=>{
  const module=worker(t,"parentPort.postMessage({type:'result',result:{status:'pass'}});process.exitCode=2;");await assert.rejects(runControllerThread(module,{},()=>{}),/without result/);
 });

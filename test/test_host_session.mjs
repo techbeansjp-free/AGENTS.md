@@ -1,13 +1,14 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {sessionOptions,runHostSession} from '../src/host-session.mjs';
 
 function fixture(t,host,mode='success'){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-session-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-session-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const executable=path.join(root,'host');
  const mutation=`async function mutate(){if(fs.existsSync(${JSON.stringify(path.join(root,'mutate.json'))})){const change=JSON.parse(fs.readFileSync(${JSON.stringify(path.join(root,'mutate.json'))}));const {spawnSync}=await import('node:child_process');spawnSync('git',['-C',change.target,'update-ref','HEAD',change.head],{encoding:'utf8'});}}
 if(${JSON.stringify(mode)}!=='rename-mutate')await mutate();`;

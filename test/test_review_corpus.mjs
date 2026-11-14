@@ -1,7 +1,8 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import * as calculation from '../v05/evaluation/review-corpus.mjs';
@@ -14,7 +15,7 @@ for(const [name,corpus,filename] of [
  ['authorization-impact',{...authorization,cases:authorization.impactCases},'service.py'],
  ['injection',injection,'service.py'],['persistence',persistence,'ledger.py'],
 ])test(`review oracle reproduces exact ${name} defects and clean controls`,t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-review-oracle-'));
+ const root=tempDir('asc-review-oracle-');
  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  for(const c of [{id:'baseline',candidate:corpus.baseline,defects:[]},...corpus.cases]){
   fs.writeFileSync(path.join(root,filename),c.candidate);

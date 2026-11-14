@@ -1,8 +1,9 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync,spawnSync} from 'node:child_process';import {createHash} from 'node:crypto';import {fileURLToPath} from 'node:url';
+import {tempDir} from './helpers/temp-dir.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync,spawnSync} from 'node:child_process';import {createHash} from 'node:crypto';import {fileURLToPath} from 'node:url';
 const script=fileURLToPath(new URL('../scripts/export-native-delivery.mjs',import.meta.url));
 const hash=s=>createHash('sha256').update(s).digest('hex');
 test('complex export binds original intent and both CI runs without upgrading missing measurements',()=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-export-'));
+ const root=tempDir('asc-export-');
  try{
   const worktree=path.join(root,'worktree'),pkg=path.join(root,'distribution/package');fs.mkdirSync(path.join(worktree,'complex'),{recursive:true});fs.mkdirSync(path.join(pkg,'skills/asc'),{recursive:true});
   const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^GIT_/i.test(k)));
@@ -27,7 +28,7 @@ test('complex export binds original intent and both CI runs without upgrading mi
 });
 
 test('Claude export retains actual model and rejects incomplete or intervened observations',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-claude-export-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-claude-export-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const pkg=path.join(root,'distribution/package');fs.mkdirSync(path.join(pkg,'skills/asc'),{recursive:true});
  fs.writeFileSync(path.join(pkg,'skills/asc/SKILL.md'),'synthetic');fs.writeFileSync(path.join(pkg,'package.json'),'{"version":"0.5.900-alpha.20"}');fs.writeFileSync(path.join(pkg,'release-identity.json'),JSON.stringify({sourceFiles:{'skills/asc/SKILL.md':hash('synthetic')}}));
  const write=(name,value)=>fs.writeFileSync(path.join(root,name),JSON.stringify(value));
