@@ -48,8 +48,9 @@ test('release waits for a missing check and an unfinished workflow run, and name
  const checkRoute=`/repos/${repo}/commits/${head}/check-runs?filter=latest&per_page=100&page=1`,base=verification();
  const all=(transform=x=>x)=>({check_runs:checks.map((name,id)=>transform({id,name,details_url:`https://github.com/${repo}/actions/runs/${id}/job/1`,app:{slug:'github-actions'},head_sha:head,status:'completed',conclusion:'success'})).filter(Boolean)});
  let clock=0;const wait={timeoutMs:60_000,intervalMs:15_000,sleep:async ms=>{clock+=ms;},now:()=>clock};
- let calls=0;const missing=async route=>route===checkRoute?all(r=>calls++===0&&r.name.startsWith('base validator')?null:r):base(route);
+ let calls=0;const missing=async route=>{if(route!==checkRoute)return base(route);const first=calls++===0;return all(r=>first&&r.name.startsWith('base validator')?null:r);};
  assert.equal((await verify({api:missing,repo,sha,version:'0.5.1',wait})).testedHead,head);
+ assert.equal(calls,2);
  const validator=checks.findIndex(n=>n.startsWith('base validator'));let runCalls=0;clock=0;
  const runPending=async route=>{const r=await base(route);if(route.endsWith(`/actions/runs/${validator}`)&&runCalls++===0)return {...r,status:'in_progress',conclusion:null};return r;};
  assert.equal((await verify({api:runPending,repo,sha,version:'0.5.1',wait})).testedHead,head);

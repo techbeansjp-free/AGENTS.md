@@ -58,7 +58,7 @@ export async function verify({api,repo,sha,version,wait={}}){
   }
  }
  const started=now();
- let selected,verifiedRuns;
+ let selected,verifiedRuns,waited=false;
  for(;;){
   const runs=[];
   for(let page=1;;page++){
@@ -76,10 +76,10 @@ export async function verify({api,repo,sha,version,wait={}}){
    if(runId&&verifiedRuns.get(runId).status!=='completed')pending=true;
   }
   if(failed||!pending||now()-started>=timeoutMs)break;
-  await sleep(intervalMs);
+  await sleep(intervalMs);waited=true;
  }
  // Main may advance while waiting; stop here instead of building an artifact publish would reject.
- if(now()>started)demand((await api(`${prefix}/commits/main`)).sha===sha,'Source must be current main');
+ if(waited)demand((await api(`${prefix}/commits/main`)).sha===sha,'Source must be current main');
  // Report a failed check before a still-pending one so the error names the cause.
  const failedFirst=[...checks].sort((a,b)=>Number(selected.get(b)?.status==='completed'&&selected.get(b)?.conclusion!=='success')-Number(selected.get(a)?.status==='completed'&&selected.get(a)?.conclusion!=='success'));
  for(const name of failedFirst){
