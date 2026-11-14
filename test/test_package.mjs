@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 
@@ -249,12 +250,28 @@ assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
 
 });
 
+// Read stored entry names from the archive bytes. External tar listings depend on the
+// platform and locale (octal escapes, macOS NFD display), which would hide the NFC check.
+// Supports the ustar and pax headers that npm pack writes; GNU long names fail instead of being misread.
+function tarEntryNames(gzip){
+ const bytes=zlib.gunzipSync(gzip),field=(start,end)=>{const raw=bytes.subarray(start,end),nul=raw.indexOf(0);return (nul<0?raw:raw.subarray(0,nul)).toString('utf8');};
+ const names=[];let offset=0,paxPath=null;
+ while(offset+512<=bytes.length&&bytes.subarray(offset,offset+512).some(b=>b!==0)){
+  const size=parseInt(field(offset+124,offset+136).trim()||'0',8),type=String.fromCharCode(bytes[offset+156]||48),body=bytes.subarray(offset+512,offset+512+size);
+  if(type==='L'||type==='K')throw Error('Unsupported GNU long-name tar entry');
+  if(type==='x'){for(const record of body.toString('utf8').split('\n'))if(/^\d+ path=/.test(record))paxPath=record.slice(record.indexOf('=')+1);}
+  else if(type!=='g'){const prefix=field(offset+345,offset+500),name=field(offset,offset+100);names.push(paxPath??(prefix?`${prefix}/${name}`:name));paxPath=null;}
+  offset+=512+Math.ceil(size/512)*512;
+ }
+ return names;
+}
+
 for(const version of [null,'0.5.0','0.5.1-rc.0'])test(`canonical ${version??'source-version'} candidate installs both CLI names without enabling legacy commands or publication`,t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-canonical-package-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const packArgs=['scripts/pack-candidate.mjs',root,...(version?[`--version=${version}`]:[])];
  const output=JSON.parse(execFileSync(process.execPath,packArgs,{encoding:'utf8'}));
  assert.equal(output.name,'agent-skill-chain');assert.equal(output.publishAuthorized,false);
- const entries=execFileSync('tar',['-tzf',output.file],{encoding:'utf8'}).trimEnd().split('\n');
+ const entries=tarEntryNames(fs.readFileSync(output.file));
  const inventory=JSON.parse(fs.readFileSync('src/runtime-files.json'));
  assert(entries.every(name=>name===name.normalize('NFC')));assert.deepEqual(entries.sort(),[...inventory,'release-identity.json'].map(name=>'package/'+name).sort());
  const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
