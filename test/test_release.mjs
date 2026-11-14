@@ -24,7 +24,25 @@ test('release reuses only matching merged tree and completed checks',async()=>{
   {[`/repos/${repo}/commits/${sha}/pulls?per_page=100`]:[]},
   {[`/repos/${repo}/commits/${head}/check-runs?filter=latest&per_page=100&page=1`]:{check_runs:[]}},
   {[`/repos/${repo}/contents/.github/workflows/ci.yml?ref=${sha}`]:content('implicit merge checkout')}
- ])await assert.rejects(verify({api:verification(overrides),repo,sha,version:'0.5.1'}));
+ ])await assert.rejects(verify({api:verification(overrides),repo,sha,version:'0.5.1',wait:{timeoutMs:0,sleep:async()=>{}}}));
+});
+test('release waits for re-running required checks and keeps failing closed',async()=>{
+ const checkRoute=`/repos/${repo}/commits/${head}/check-runs?filter=latest&per_page=100&page=1`;
+ const base=verification(),states=status=>({check_runs:checks.map((name,id)=>({id,name,details_url:`https://github.com/${repo}/actions/runs/${id}/job/1`,app:{slug:'github-actions'},head_sha:head,...(name.startsWith('base validator')?status:{status:'completed',conclusion:'success'})}))});
+ const sequence=(...steps)=>{let calls=0;const api=async route=>route===checkRoute?states(steps[Math.min(calls++,steps.length-1)]):base(route);return {api,calls:()=>calls};};
+ let clock=0;const wait={timeoutMs:60_000,intervalMs:15_000,sleep:async ms=>{clock+=ms;},now:()=>clock};
+ const settles=sequence({status:'in_progress',conclusion:null},{status:'queued',conclusion:null},{status:'completed',conclusion:'success'});
+ assert.equal((await verify({api:settles.api,repo,sha,version:'0.5.1',wait})).testedHead,head);
+ assert.equal(settles.calls(),3);
+ clock=0;const fails=sequence({status:'in_progress',conclusion:null},{status:'completed',conclusion:'failure'});
+ await assert.rejects(verify({api:fails.api,repo,sha,version:'0.5.1',wait}),/Required check not successful: base validator/);
+ assert.equal(fails.calls(),2);
+ clock=0;const stalls=sequence({status:'in_progress',conclusion:null});
+ await assert.rejects(verify({api:stalls.api,repo,sha,version:'0.5.1',wait}),/Required check not successful: base validator/);
+ assert.equal(stalls.calls(),5);
+ clock=0;const failedFirst=sequence({status:'completed',conclusion:'failure'});
+ await assert.rejects(verify({api:failedFirst.api,repo,sha,version:'0.5.1',wait}),/Required check not successful/);
+ assert.equal(failedFirst.calls(),1);
 });
 test('automatic version increments stable patches and reuses the same source tag',async()=>{
  const refs=[{ref:'refs/tags/v0.5.0',object:{type:'commit',sha:'old'}},{ref:'refs/tags/v0.5.1-alpha.0',object:{type:'commit',sha:'preview'}}];

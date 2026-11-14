@@ -29,7 +29,11 @@ export async function nextVersion({api,repo,sha}){
  demand(Number.isSafeInteger(floor),'Release version overflow');
  return `0.5.${Math.max(max+1,floor)}`;
 }
-export async function verify({api,repo,sha,version}){
+// A merge can land while a required check is re-running (for example after ready_for_review); wait for it to settle.
+export const checkWait={timeoutMs:20*60_000,intervalMs:15_000,sleep:ms=>new Promise(r=>setTimeout(r,ms)),now:()=>Date.now()};
+const workflowFor=name=>name.startsWith('worktree (')?'worktree-execution.yml':name.startsWith('Mac native')?'native-verification.yml':name.startsWith('base validator')?'trusted-quality.yml':'ci.yml';
+export async function verify({api,repo,sha,version,wait={}}){
+ const {timeoutMs,intervalMs,sleep,now}={...checkWait,...wait};
  releaseVersion(version);demand(/^[0-9a-f]{40}$/.test(sha),'Invalid source SHA');
  const prefix=`/repos/${repo}`;
  const main=await api(`${prefix}/commits/main`);demand(main.sha===sha,'Source must be current main');
@@ -53,20 +57,32 @@ export async function verify({api,repo,sha,version}){
    demand(/^\s+ref: \$\{\{ github.event.pull_request.head.sha \}\}\s*$/m.test(checkout),'CI is not pinned to PR HEAD');
   }
  }
- const runs=[];
- for(let page=1;;page++){
-  const batch=await api(`${prefix}/commits/${pr.head.sha}/check-runs?filter=latest&per_page=100&page=${page}`);
-  runs.push(...batch.check_runs);if(batch.check_runs.length<100)break;
+ const started=now();
+ let selected,verifiedRuns;
+ for(;;){
+  const runs=[];
+  for(let page=1;;page++){
+   const batch=await api(`${prefix}/commits/${pr.head.sha}/check-runs?filter=latest&per_page=100&page=${page}`);
+   runs.push(...batch.check_runs);if(batch.check_runs.length<100)break;
+  }
+  selected=new Map(checks.map(name=>[name,runs.filter(r=>r.name===name&&r.app?.slug==='github-actions'&&r.head_sha===pr.head.sha).sort((a,b)=>b.id-a.id)[0]]));
+  verifiedRuns=new Map();
+  let pending=false,failed=false;
+  for(const check of selected.values()){
+   if(check?.status!=='completed'){pending=true;continue;}
+   if(check.conclusion!=='success'){failed=true;continue;}
+   const runId=/\/actions\/runs\/(\d+)\//.exec(check.details_url??'')?.[1];
+   if(runId&&!verifiedRuns.has(runId))verifiedRuns.set(runId,await api(`${prefix}/actions/runs/${runId}`));
+   if(runId&&verifiedRuns.get(runId).status!=='completed')pending=true;
+  }
+  if(failed||!pending||now()-started>=timeoutMs)break;
+  await sleep(intervalMs);
  }
- const verifiedRuns=new Map();
  for(const name of checks){
-  const matching=runs.filter(r=>r.name===name&&r.app?.slug==='github-actions'&&r.head_sha===pr.head.sha).sort((a,b)=>b.id-a.id);
-  const check=matching[0];
+  const check=selected.get(name);
   demand(check?.status==='completed'&&check?.conclusion==='success',`Required check not successful: ${name}`);
   const runId=/\/actions\/runs\/(\d+)\//.exec(check.details_url??'')?.[1];demand(runId,'Missing workflow run binding');
-  if(!verifiedRuns.has(runId))verifiedRuns.set(runId,await api(`${prefix}/actions/runs/${runId}`));
-  const run=verifiedRuns.get(runId);
-  const workflow=name.startsWith('worktree (')?'worktree-execution.yml':name.startsWith('Mac native')?'native-verification.yml':name.startsWith('base validator')?'trusted-quality.yml':'ci.yml';
+  const run=verifiedRuns.get(runId),workflow=workflowFor(name);
   demand(run.path===`.github/workflows/${workflow}`&&run.head_sha===pr.head.sha&&run.event===(workflow==='trusted-quality.yml'?'pull_request_target':'pull_request')&&run.status==='completed'&&run.conclusion==='success','Workflow run binding mismatch');
  }
  return {sha,version,pr:pr.number,testedHead:pr.head.sha,tree:head.commit.tree.sha};
