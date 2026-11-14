@@ -88,7 +88,7 @@ test('Codex unavailable naming stops before model turn',async t=>{
  assert.equal(result.status,'failed');assert(!fs.readFileSync(path.join(root,'calls'),'utf8').includes('turn/start'));
 });
 test('Codex timeout preserves partial response and fails',async t=>{
- const {options}=fixture(t,'codex','timeout');options.timeout=150;const result=await runHostSession(options);
+ const {options}=fixture(t,'codex','timeout');const result=await runHostSession(options);
  assert.equal(result.status,'failed');assert.match(result.error,/timeout/);
  assert.equal(fs.readFileSync(path.join(options.outputDir,'result.txt'),'utf8'),'ORIGINAL REVIEW\n');
 });
