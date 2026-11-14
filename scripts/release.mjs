@@ -78,9 +78,13 @@ export async function verify({api,repo,sha,version,wait={}}){
   if(failed||!pending||now()-started>=timeoutMs)break;
   await sleep(intervalMs);
  }
- for(const name of checks){
+ // Main may advance while waiting; stop here instead of building an artifact publish would reject.
+ if(now()>started)demand((await api(`${prefix}/commits/main`)).sha===sha,'Source must be current main');
+ // Report a failed check before a still-pending one so the error names the cause.
+ const failedFirst=[...checks].sort((a,b)=>Number(selected.get(b)?.status==='completed'&&selected.get(b)?.conclusion!=='success')-Number(selected.get(a)?.status==='completed'&&selected.get(a)?.conclusion!=='success'));
+ for(const name of failedFirst){
   const check=selected.get(name);
-  demand(check?.status==='completed'&&check?.conclusion==='success',`Required check not successful: ${name}`);
+  demand(check?.status==='completed'&&check?.conclusion==='success',`Required check not successful: ${name} (${check?.status??'missing'}/${check?.conclusion??'none'})`);
   const runId=/\/actions\/runs\/(\d+)\//.exec(check.details_url??'')?.[1];demand(runId,'Missing workflow run binding');
   const run=verifiedRuns.get(runId),workflow=workflowFor(name);
   demand(run.path===`.github/workflows/${workflow}`&&run.head_sha===pr.head.sha&&run.event===(workflow==='trusted-quality.yml'?'pull_request_target':'pull_request')&&run.status==='completed'&&run.conclusion==='success','Workflow run binding mismatch');

@@ -44,6 +44,21 @@ test('release waits for re-running required checks and keeps failing closed',asy
  await assert.rejects(verify({api:failedFirst.api,repo,sha,version:'0.5.1',wait}),/Required check not successful/);
  assert.equal(failedFirst.calls(),1);
 });
+test('release waits for a missing check and an unfinished workflow run, and names the failed check',async()=>{
+ const checkRoute=`/repos/${repo}/commits/${head}/check-runs?filter=latest&per_page=100&page=1`,base=verification();
+ const all=(transform=x=>x)=>({check_runs:checks.map((name,id)=>transform({id,name,details_url:`https://github.com/${repo}/actions/runs/${id}/job/1`,app:{slug:'github-actions'},head_sha:head,status:'completed',conclusion:'success'})).filter(Boolean)});
+ let clock=0;const wait={timeoutMs:60_000,intervalMs:15_000,sleep:async ms=>{clock+=ms;},now:()=>clock};
+ let calls=0;const missing=async route=>route===checkRoute?all(r=>calls++===0&&r.name.startsWith('base validator')?null:r):base(route);
+ assert.equal((await verify({api:missing,repo,sha,version:'0.5.1',wait})).testedHead,head);
+ const validator=checks.findIndex(n=>n.startsWith('base validator'));let runCalls=0;clock=0;
+ const runPending=async route=>{const r=await base(route);if(route.endsWith(`/actions/runs/${validator}`)&&runCalls++===0)return {...r,status:'in_progress',conclusion:null};return r;};
+ assert.equal((await verify({api:runPending,repo,sha,version:'0.5.1',wait})).testedHead,head);
+ assert.equal(runCalls,2);
+ clock=0;const mixed=async route=>route===checkRoute?all(r=>r.name==='linux'?{...r,status:'in_progress',conclusion:null}:r.name.startsWith('base validator')?{...r,conclusion:'failure'}:r):base(route);
+ await assert.rejects(verify({api:mixed,repo,sha,version:'0.5.1',wait}),/base validator.*completed\/failure/);
+ clock=0;let mainCalls=0;const moved=async route=>route.endsWith('/commits/main')&&mainCalls++>0?{sha:'c'.repeat(40)}:route===checkRoute&&clock===0?all(r=>r.name==='linux'?{...r,status:'queued',conclusion:null}:r):base(route);
+ await assert.rejects(verify({api:moved,repo,sha,version:'0.5.1',wait}),/Source must be current main/);
+});
 test('automatic version increments stable patches and reuses the same source tag',async()=>{
  const refs=[{ref:'refs/tags/v0.5.0',object:{type:'commit',sha:'old'}},{ref:'refs/tags/v0.5.1-alpha.0',object:{type:'commit',sha:'preview'}}];
  assert.equal(await nextVersion({api:async route=>route.includes('/contents/package.json')?content('{"version":"0.5.0"}'):refs,repo,sha}),'0.5.1');
