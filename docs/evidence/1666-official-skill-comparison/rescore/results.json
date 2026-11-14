@@ -1,0 +1,598 @@
+{
+ "1": {
+  "per_run": {
+   "official-1": 35,
+   "ascv2-1": 39,
+   "none-2": 37,
+   "ascv2-2": 36,
+   "asc-2": 38,
+   "official-2": 35,
+   "none-1": 38,
+   "asc-1": 37
+  },
+  "per_group": {
+   "official/R": 22,
+   "ascv2/R": 23,
+   "none/R": 22,
+   "asc/R": 23,
+   "ascv2/C": 24,
+   "asc/C": 24,
+   "none/C": 26,
+   "official/C": 23,
+   "ascv2/U": 28,
+   "asc/U": 28,
+   "none/U": 27,
+   "official/U": 25
+  },
+  "flags": {
+   "asc": [
+    [
+     "asc-2",
+     "R2",
+     "invented_finding",
+     "「' ' や 'abc' は Number で NaN のまま」とあるが Number(' ') は 0 で NaN にならない。"
+    ],
+    [
+     "asc-1",
+     "R2",
+     "overreach",
+     "再レビュー依頼なのに「削除したテストを正しい形で戻します」と修正を行う予定を書いている。"
+    ]
+   ],
+   "official": [
+    [
+     "official-1",
+     "R2",
+     "invented_finding",
+     "「[P3] 空白だけの文字列は NaN のまま」とするが Number(' ') は 0。"
+    ]
+   ]
+  },
+  "item_by_condition": {
+   "R1-1": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 2,
+    "asc": 2
+   },
+   "R1-2": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 2,
+    "asc": 2
+   },
+   "R1-3": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 2,
+    "asc": 2
+   },
+   "R1-4": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 2,
+    "asc": 2
+   },
+   "R1-5": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 2,
+    "asc": 2
+   },
+   "R1-6": {
+    "official": 0,
+    "ascv2": 0,
+    "none": 0,
+    "asc": 0
+   },
+   "R2-1": {
+    "asc": 2,
+    "none": 2,
+    "official": 2,
+    "ascv2": 2
+   },
+   "R2-2": {
+    "asc": 2,
+    "none": 2,
+    "official": 2,
+    "ascv2": 2
+   },
+   "R2-3": {
+    "asc": 1,
+    "none": 0,
+    "official": 0,
+    "ascv2": 1
+   },
+   "R2-4": {
+    "asc": 2,
+    "none": 2,
+    "official": 2,
+    "ascv2": 2
+   },
+   "R2-5": {
+    "asc": 2,
+    "none": 2,
+    "official": 2,
+    "ascv2": 2
+   },
+   "R3-1": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "R3-2": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "C1-1": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 1
+   },
+   "C1-2": {
+    "ascv2": 1,
+    "asc": 2,
+    "none": 2,
+    "official": 1
+   },
+   "C1-3": {
+    "ascv2": 1,
+    "asc": 2,
+    "none": 2,
+    "official": 0
+   },
+   "C1-4": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "C1-5": {
+    "ascv2": 2,
+    "asc": 1,
+    "none": 2,
+    "official": 1
+   },
+   "C2-1": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 0,
+    "asc": 1
+   },
+   "C2-2": {
+    "none": 0,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "C2-3": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "C2-4": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "C2-5": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 0
+   },
+   "C3-1": {
+    "none": 2,
+    "ascv2": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "C3-2": {
+    "none": 2,
+    "ascv2": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "C3-3": {
+    "none": 2,
+    "ascv2": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "C3-4": {
+    "none": 2,
+    "ascv2": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "U1-1": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U1-2": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U1-3": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U1-4": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U1-5": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 1,
+    "official": 0
+   },
+   "U1-6": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U1-7": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U2-1": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "U2-2": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "U2-3": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "U2-4": {
+    "none": 2,
+    "official": 1,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "U3-1": {
+    "official": 2,
+    "asc": 2,
+    "none": 2,
+    "ascv2": 2
+   },
+   "U3-2": {
+    "official": 2,
+    "asc": 2,
+    "none": 2,
+    "ascv2": 2
+   },
+   "U3-3": {
+    "official": 2,
+    "asc": 2,
+    "none": 2,
+    "ascv2": 2
+   }
+  }
+ },
+ "2": {
+  "per_run": {
+   "official-1": 36,
+   "ascv2-1": 40,
+   "none-2": 36,
+   "ascv2-2": 36,
+   "asc-2": 38,
+   "official-2": 36,
+   "none-1": 38,
+   "asc-1": 37
+  },
+  "per_group": {
+   "official/R": 24,
+   "ascv2/R": 24,
+   "none/R": 21,
+   "asc/R": 24,
+   "ascv2/C": 24,
+   "asc/C": 23,
+   "none/C": 26,
+   "official/C": 23,
+   "ascv2/U": 28,
+   "asc/U": 28,
+   "none/U": 27,
+   "official/U": 25
+  },
+  "flags": {
+   "asc": [
+    [
+     "asc-2",
+     "R2",
+     "invented_finding",
+     "States \"' ' や 'abc' は Number で NaN のまま\", but Number(' ') is 0."
+    ],
+    [
+     "asc-1",
+     "R2",
+     "overreach",
+     "In a re-review it says \"削除したテストを正しい形で戻します\", i.e. it will modify the code itself."
+    ]
+   ],
+   "official": [
+    [
+     "official-1",
+     "R2",
+     "invented_finding",
+     "Claims \"空白だけの文字列は NaN のまま\", but Number(' ') is 0."
+    ]
+   ]
+  },
+  "item_by_condition": {
+   "R1-1": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 2,
+    "asc": 2
+   },
+   "R1-2": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 2,
+    "asc": 2
+   },
+   "R1-3": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 2,
+    "asc": 2
+   },
+   "R1-4": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 2,
+    "asc": 2
+   },
+   "R1-5": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 2,
+    "asc": 2
+   },
+   "R1-6": {
+    "official": 2,
+    "ascv2": 2,
+    "none": 1,
+    "asc": 1
+   },
+   "R2-1": {
+    "asc": 2,
+    "none": 2,
+    "official": 2,
+    "ascv2": 2
+   },
+   "R2-2": {
+    "asc": 2,
+    "none": 2,
+    "official": 2,
+    "ascv2": 2
+   },
+   "R2-3": {
+    "asc": 1,
+    "none": 0,
+    "official": 0,
+    "ascv2": 1
+   },
+   "R2-4": {
+    "asc": 2,
+    "none": 2,
+    "official": 2,
+    "ascv2": 2
+   },
+   "R2-5": {
+    "asc": 2,
+    "none": 0,
+    "official": 2,
+    "ascv2": 1
+   },
+   "R3-1": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "R3-2": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "C1-1": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 1
+   },
+   "C1-2": {
+    "ascv2": 1,
+    "asc": 2,
+    "none": 2,
+    "official": 1
+   },
+   "C1-3": {
+    "ascv2": 1,
+    "asc": 2,
+    "none": 2,
+    "official": 0
+   },
+   "C1-4": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "C1-5": {
+    "ascv2": 2,
+    "asc": 1,
+    "none": 2,
+    "official": 1
+   },
+   "C2-1": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 0,
+    "asc": 1
+   },
+   "C2-2": {
+    "none": 0,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "C2-3": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 1
+   },
+   "C2-4": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "C2-5": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 0
+   },
+   "C3-1": {
+    "none": 2,
+    "ascv2": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "C3-2": {
+    "none": 2,
+    "ascv2": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "C3-3": {
+    "none": 2,
+    "ascv2": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "C3-4": {
+    "none": 2,
+    "ascv2": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "U1-1": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U1-2": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U1-3": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U1-4": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U1-5": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 1,
+    "official": 0
+   },
+   "U1-6": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U1-7": {
+    "ascv2": 2,
+    "asc": 2,
+    "none": 2,
+    "official": 2
+   },
+   "U2-1": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "U2-2": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "U2-3": {
+    "none": 2,
+    "official": 2,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "U2-4": {
+    "none": 2,
+    "official": 1,
+    "ascv2": 2,
+    "asc": 2
+   },
+   "U3-1": {
+    "official": 2,
+    "asc": 2,
+    "none": 2,
+    "ascv2": 2
+   },
+   "U3-2": {
+    "official": 2,
+    "asc": 2,
+    "none": 2,
+    "ascv2": 2
+   },
+   "U3-3": {
+    "official": 2,
+    "asc": 2,
+    "none": 2,
+    "ascv2": 2
+   }
+  }
+ }
+}
