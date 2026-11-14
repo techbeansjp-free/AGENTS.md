@@ -9,9 +9,9 @@ import {projectLocation} from './project-location.mjs';
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const hostNames=['.agents','.claude'];
 const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;
-// Fifteen registered Skills plus two optional assets use 286 assets; reserve 12 preimages
+// Sixteen registered Skills plus two optional assets use 292 assets; reserve 12 preimages
 // for retained canonical/runtime assets. Retired owned Host entries are removed.
-const maxAssets=298;
+const maxAssets=304;
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
 // Exact retired distribution paths, maintained by trusted package releases.
 const retiredAssetPaths=[];

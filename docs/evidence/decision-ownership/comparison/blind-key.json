@@ -1,0 +1,26 @@
+{
+ "0fc4a8": {
+  "condition": "none",
+  "run": 1
+ },
+ "544c2a": {
+  "condition": "none",
+  "run": 2
+ },
+ "358ccc": {
+  "condition": "generalized",
+  "run": 1
+ },
+ "d86631": {
+  "condition": "generalized",
+  "run": 2
+ },
+ "6d585c": {
+  "condition": "original",
+  "run": 1
+ },
+ "5ab21c": {
+  "condition": "original",
+  "run": 2
+ }
+}

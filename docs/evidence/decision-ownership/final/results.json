@@ -1,0 +1,100 @@
+{
+ "model": {
+  "generation": "claude-sonnet (Claude Code subagent, 各回別Context)。final条件だけを新たに生成し、none・originalは初回の回答を凍結して再採点",
+  "scoring": "claude-opus (初回とは別の新しいContext、匿名ID・課題・観点のみ)"
+ },
+ "final_reads": {
+  "run1": [
+   "skills/decision-ownership/SKILL.md",
+   "skills/decision-ownership/references/conditions-and-counterexamples.md"
+  ],
+  "run2": [
+   "skills/decision-ownership/SKILL.md",
+   "skills/decision-ownership/references/conditions-and-counterexamples.md"
+  ]
+ },
+ "length_over_400": {
+  "final-run2": {
+   "F": 452,
+   "G": 413
+  }
+ },
+ "conditions": {
+  "original": {
+   "run1": {
+    "id": "14bd75",
+    "total": 31,
+    "missed": [
+     "B2"
+    ],
+    "unfounded": 0,
+    "over_refusal": 0,
+    "decided_for_owner": 1
+   },
+   "run2": {
+    "id": "3947b9",
+    "total": 32,
+    "missed": [],
+    "unfounded": 0,
+    "over_refusal": 0,
+    "decided_for_owner": 0
+   },
+   "sum": 63,
+   "max": 64
+  },
+  "none": {
+   "run1": {
+    "id": "347292",
+    "total": 29,
+    "missed": [
+     "B2",
+     "E4",
+     "F1"
+    ],
+    "unfounded": 1,
+    "over_refusal": 0,
+    "decided_for_owner": 1
+   },
+   "run2": {
+    "id": "e90621",
+    "total": 25,
+    "missed": [
+     "A1",
+     "B2",
+     "C1",
+     "C3",
+     "D1",
+     "E4",
+     "F1"
+    ],
+    "unfounded": 1,
+    "over_refusal": 0,
+    "decided_for_owner": 1
+   },
+   "sum": 54,
+   "max": 64
+  },
+  "final": {
+   "run2": {
+    "id": "57ac07",
+    "total": 32,
+    "missed": [],
+    "unfounded": 0,
+    "over_refusal": 0,
+    "decided_for_owner": 0
+   },
+   "run1": {
+    "id": "8e3ec9",
+    "total": 31,
+    "missed": [
+     "C1"
+    ],
+    "unfounded": 0,
+    "over_refusal": 0,
+    "decided_for_owner": 1
+   },
+   "sum": 63,
+   "max": 64
+  }
+ }
+}
