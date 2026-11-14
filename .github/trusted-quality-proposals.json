@@ -553,6 +553,29 @@
           "afterSha256": "6f4b6612125fb3a0daecd2799dfd6c9c299424fd920f9b308110a2c1fbd8f443"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-DECISION-OWNERSHIP-DISTRIBUTION-001",
+      "status": "staged",
+      "fromVersion": 21,
+      "toVersion": 22,
+      "owner": "repository maintainer (approval pending)",
+      "rationale": "Issue #1658 / PR #1661 のdecision-ownership Skillの配布に必要なpackage.jsonのfiles追加2件（本文とreference）を正規化hashで事前登録する。品質script、依存関係、validatorおよび権限境界は変更しない。",
+      "rollback": "適用前は有効化しない。適用後に配布対象を戻す場合は次versionのproposalを先行登録して適用し、登録済みproposalの削除や品質保護の解除は行わない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "package.json",
+          "beforeSha256": "b97ae8c254a753159d630615d6b6af869f50ad1f15551744a008049dc3460be5",
+          "afterSha256": "7e6ace8a82bb3a0df2fd735e986223cfef744ffe5348a2729861f0fe00eeb83b"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "6f4b6612125fb3a0daecd2799dfd6c9c299424fd920f9b308110a2c1fbd8f443",
+          "afterSha256": "785f3ec7eb32f30b90cd0fcf3657d388b5ff4297f2f9716ff66e9b69c05ddd09"
+        }
+      ]
     }
   ]
 }
