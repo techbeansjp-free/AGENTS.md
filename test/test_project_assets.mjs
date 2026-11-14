@@ -630,6 +630,17 @@ test('failed partial or complete apply restores deleted, added, updated entries 
  }
 });
 
+test('Git failures name the exit status or signal and keep the worktree check',t=>{
+ for(const [body,reason] of [['process.exit(3);','exit status 3'],["process.kill(process.pid,'SIGKILL');",'terminated by SIGKILL']]){
+  const f=fixture(t),tools=path.join(f.root,`tools-${reason.split(' ').pop()}`),originalPath=process.env.PATH;fs.mkdirSync(tools);
+  // Fail only the asset metadata init, which only the asset Git helper runs, and pass every other call to the real Git.
+  const realGit=execFileSync('which',['git'],{encoding:'utf8'}).trim();
+  fs.writeFileSync(path.join(tools,'git'),`#!${process.execPath}\nimport {spawnSync} from 'node:child_process';\nconst args=process.argv.slice(2);if(args.includes('--bare')){${body}}const r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(r.status??1);\n`,{mode:0o755});
+  try{process.env.PATH=tools+path.delimiter+originalPath;assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}),{message:`Asset Git operation failed (${reason}); inspect worktree before retry`});}finally{process.env.PATH=originalPath;}
+  assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain/distribution.json')),false);
+ }
+});
+
 test('owned Host entries edited to exactly the next release still conflict',t=>{
  const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,registerSkill:true,apply:true});
  const name='.agents/skills/verification-optimization/SKILL.md',source=path.join(f.pkg,'skills/verification-optimization/SKILL.md');
