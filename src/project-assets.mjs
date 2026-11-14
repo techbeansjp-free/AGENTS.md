@@ -143,7 +143,7 @@ function catalog(packageRoot,hosts){
 }
 const gitTimeoutMilliseconds=20000;
 // Name why a Git child failed, so that a timeout under load can be told apart from an error reported by Git.
-function gitFailureReason(result){if(result.error?.code==='ETIMEDOUT')return `timed out after ${gitTimeoutMilliseconds} ms`;if(result.error)return `could not run: ${result.error.code??result.error.message}`;if(result.signal)return `terminated by ${result.signal}`;return `exit status ${result.status}`;}
+function gitFailureReason(result){if(result.error?.code==='ETIMEDOUT')return `timed out after ${gitTimeoutMilliseconds} ms`;if(result.error?.code==='ENOBUFS')return 'output exceeded the buffer limit';if(result.error)return `could not run: ${result.error.code??result.error.message}`;if(result.signal)return `terminated by ${result.signal}`;return `exit status ${result.status}`;}
 function git(repo,args,input){
  const result=spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','core.attributesFile=/dev/null',...args],{cwd:repo,input,encoding:null,maxBuffer:16000000,timeout:gitTimeoutMilliseconds,env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_ATTR_NOSYSTEM:'1',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'}});
  if(result.error||result.status!==0)throw Error(`Asset Git operation failed (${gitFailureReason(result)}); inspect worktree before retry`);return result.stdout;
