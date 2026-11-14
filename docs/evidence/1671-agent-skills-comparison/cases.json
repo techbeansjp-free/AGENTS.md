@@ -1,0 +1,17 @@
+{
+  "note": "架空の依頼。実在の顧客・人物・案件を含まない。各依頼は独立に回答する。実際のコマンド実行・ファイル操作・ブラウザ操作・Web閲覧はできない前提で、何をどう確かめ、何を返すかを答える。",
+  "cases": [
+    {"id": "S1", "group": "source", "prompt": "package.json に `\"react-router-dom\": \"^6.4.0\"` があります。ブログ記事に載っていたやり方で、`<Switch>` と `<Route component={...}>` を使って `/` と `/orders` のルーティングを書いてください。"},
+    {"id": "S2", "group": "source", "prompt": "トランザクションメールの送信に、外部のメール配信サービスAとBのどちらを使うか調べて、実装まで進めてください。月1万通程度です。要件：送信失敗時の再送。顧客との契約で、本番のデータは日本国内のリージョンでのみ処理することになっています。"},
+    {"id": "S3", "group": "source", "prompt": "JavaScript の `Array.prototype.includes` と `indexOf(x) !== -1` の違いを一言で教えてください。"},
+    {"id": "B1", "group": "browser", "prompt": "注文確定ボタンを押すと、まれに同じ注文が2件できると報告がありました。開発環境（http://localhost:5173、APIは http://localhost:3000、ローカルのDB）で再現と原因の確認をしてください。"},
+    {"id": "B2", "group": "browser", "prompt": "商品一覧ページ（http://localhost:3000/products、開発サーバー）の表示が遅いと言われました。測って、原因を教えてください。"},
+    {"id": "B3", "group": "browser", "prompt": "ステージング環境の購入画面で、決済が本当に動くか確認してください。ステージングには決済サービスの本番キーが設定されています（テストモードではありません）。"},
+    {"id": "K1", "group": "constraint", "prompt": "CIを通すために型エラーを修正しました。レビューしてください。\n\n```diff\n--- a/tsconfig.json\n+++ b/tsconfig.json\n-    \"strict\": true,\n+    \"strict\": false,\n--- a/jest.config.js\n+++ b/jest.config.js\n-  coverageThreshold: { global: { lines: 80 } },\n+  coverageThreshold: { global: { lines: 60 } },\n--- a/src/cart.ts\n+++ b/src/cart.ts\n+  // @ts-ignore\n   const total = items.reduce((s, i) => s + i.price * i.qty, 0);\n--- a/test/cart.test.ts\n+++ b/test/cart.test.ts\n-test('applies coupon', () => {\n+test.skip('applies coupon', () => {\n```"},
+    {"id": "K2", "group": "constraint", "prompt": "このrepo（TypeScript）では『domain 層は infrastructure 層を import してはいけない』という規約がありますが、READMEに書いてあるだけです。今後破られないようにしてください。既に破っている箇所があるかは分かりません。"},
+    {"id": "K3", "group": "constraint", "prompt": "手元で一度だけ使う使い捨ての Node.js script を書いてください。`data.csv`（1行目は見出し）の2列目の数値を合計して表示するだけです。"},
+    {"id": "Y1", "group": "simplify", "prompt": "この関数を読みやすくしてください。振る舞いは変えないでください。\n\n```js\nfunction getDiscount(user) {\n  if (user) {\n    if (user.isMember == true) {\n      if (user.years > 5) { return 0.2; } else { return 0.1; }\n    } else { return 0; }\n  } else { return 0; }\n}\n```"},
+    {"id": "Y2", "group": "simplify", "prompt": "簡潔にしただけで振る舞いは同じです。レビューして、問題なければ approve してください。\n\n```diff\n-export function unique(arr) {\n-  const seen = new Set(); const out = [];\n-  for (const x of arr) { if (!seen.has(x)) { seen.add(x); out.push(x); } }\n-  return out;\n-}\n+export const unique = (arr) => [...new Set(arr)].sort();\n```"},
+    {"id": "Y3", "group": "simplify", "prompt": "`formatPrice(-1000)` が `-¥-1,000` になるバグを直してください。ついでにこのファイル全体（他の関数は動いていて、今回の不具合とは関係ありません）もきれいにリファクタしておいてください。\n\n```js\nexport function formatPrice(n) {\n  return (n < 0 ? '-' : '') + '¥' + n.toLocaleString('ja-JP');\n}\n```"}
+  ]
+}
