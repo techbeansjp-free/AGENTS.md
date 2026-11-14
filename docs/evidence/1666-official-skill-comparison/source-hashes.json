@@ -1,0 +1,45 @@
+{
+ "official": {
+  "review-agent": {
+   "repo": "openai/codex",
+   "path": "codex-rs/skills/src/assets/samples/review-agent",
+   "commit": "83a418783707f4446aa832b2799d6cacfef75011",
+   "SKILL.md sha256": "07079efd0dc76f05fade424e5dfb048dce1de2df7626e1a4f56292a4f3f92228",
+   "license": "Apache-2.0",
+   "redistributed": false
+  },
+  "gh-fix-ci": {
+   "repo": "openai/skills",
+   "path": "skills/.curated/gh-fix-ci",
+   "commit": "77963424cd7687fd52e5fcfdd3f08d826ab9b1ab",
+   "SKILL.md sha256": "7b326b4a2f0f5f85122144628ec02077e48841e0e0e82efce88b3415bcfb7c26",
+   "license": "Apache-2.0",
+   "redistributed": false
+  },
+  "webapp-testing": {
+   "repo": "anthropics/skills",
+   "path": "skills/webapp-testing",
+   "commit": "b9e19e6f44773509fbdd7001d77ff41a49a486c1",
+   "SKILL.md sha256": "51b7349e77ec63b7744a6f63647e7566a0b4d2e301121cc10e8c2113af6556a2",
+   "license": "Apache-2.0",
+   "redistributed": false
+  }
+ },
+ "asc_before": {
+  "skills/review-and-remediation/SKILL.md": "8c3e09eab69beffbb8de81da7fef457eb0856e5bae29ff3b0d74ec4b8dffd65c",
+  "skills/review-and-remediation/references/review-method.md": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+  "skills/execution-recovery/SKILL.md": "935b9660652f23ff2bd5153d2b40806c809df5c451adb10eb89f0c456d8e9316",
+  "skills/execution-recovery/references/owned-execution.md": "5c3bb85783660ce0738d38574adae19c8302d10de65d8d3404ddecc5393eeb30",
+  "skills/user-journey-acceptance/SKILL.md": "b09d8d3c54fd41ce5ef53eeb587483c916b4928dd46734ad4631d69dee4208af",
+  "skills/user-journey-acceptance/references/journeys.md": "7e8cca7efa2e146cc59bd41d15216ab137595eb6e54ba6630d4e3a97b8902738"
+ },
+ "asc_after": {
+  "skills/review-and-remediation/SKILL.md": "c46c4f666eac89431aabded14029b351205168d3abf98235efe103a5a24f24e1",
+  "skills/review-and-remediation/references/review-method.md": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+  "skills/execution-recovery/SKILL.md": "348f5e18009b247cd01c214e55360d046041d9945e74f4039f3f01b35cdd79f8",
+  "skills/execution-recovery/references/owned-execution.md": "5c3bb85783660ce0738d38574adae19c8302d10de65d8d3404ddecc5393eeb30",
+  "skills/user-journey-acceptance/SKILL.md": "b09d8d3c54fd41ce5ef53eeb587483c916b4928dd46734ad4631d69dee4208af",
+  "skills/user-journey-acceptance/references/journeys.md": "7e8cca7efa2e146cc59bd41d15216ab137595eb6e54ba6630d4e3a97b8902738"
+ },
+ "asc_before_commit": "d7eb13c9d36638f66b28e4cec394c1ab4bc9e847"
+}

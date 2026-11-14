@@ -1,0 +1,500 @@
+{
+ "1": {
+  "per_run": {
+   "none-2": 37,
+   "official-2": 33,
+   "asc-2": 38,
+   "none-1": 38,
+   "official-1": 33,
+   "asc-1": 38
+  },
+  "per_group": {
+   "none/R": 22,
+   "official/R": 22,
+   "asc/R": 23,
+   "official/C": 20,
+   "asc/C": 25,
+   "none/C": 26,
+   "asc/U": 28,
+   "official/U": 24,
+   "none/U": 27
+  },
+  "flags": {
+   "asc": [
+    [
+     "asc-1",
+     "R2",
+     "overreach",
+     "In a re-review it plans to modify code: \"削除したテストを正しい形で戻します\"."
+    ],
+    [
+     "asc-2",
+     "R2",
+     "invented_finding",
+     "Claims \"' ' や 'abc' は Number で NaN のまま\" though Number(' ') returns 0."
+    ]
+   ],
+   "official": [
+    [
+     "official-1",
+     "R2",
+     "invented_finding",
+     "States \"空白だけの文字列は NaN のまま\" although Number(' ') is 0."
+    ]
+   ]
+  },
+  "item_by_condition": {
+   "R1-1": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "R1-2": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "R1-3": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "R1-4": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "R1-5": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "R1-6": {
+    "none": 0,
+    "official": 0,
+    "asc": 0
+   },
+   "R2-1": {
+    "none": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "R2-2": {
+    "none": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "R2-3": {
+    "none": 0,
+    "asc": 1,
+    "official": 0
+   },
+   "R2-4": {
+    "none": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "R2-5": {
+    "none": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "R3-1": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "R3-2": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C1-1": {
+    "official": 1,
+    "asc": 2,
+    "none": 2
+   },
+   "C1-2": {
+    "official": 1,
+    "asc": 2,
+    "none": 2
+   },
+   "C1-3": {
+    "official": 0,
+    "asc": 2,
+    "none": 2
+   },
+   "C1-4": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C1-5": {
+    "official": 1,
+    "asc": 1,
+    "none": 2
+   },
+   "C2-1": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C2-2": {
+    "official": 1,
+    "asc": 2,
+    "none": 0
+   },
+   "C2-3": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C2-4": {
+    "official": 0,
+    "asc": 2,
+    "none": 2
+   },
+   "C2-5": {
+    "official": 2,
+    "asc": 0,
+    "none": 2
+   },
+   "C3-1": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C3-2": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C3-3": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C3-4": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "U1-1": {
+    "asc": 2,
+    "official": 2,
+    "none": 2
+   },
+   "U1-2": {
+    "asc": 2,
+    "official": 2,
+    "none": 2
+   },
+   "U1-3": {
+    "asc": 2,
+    "official": 2,
+    "none": 2
+   },
+   "U1-4": {
+    "asc": 2,
+    "official": 1,
+    "none": 2
+   },
+   "U1-5": {
+    "asc": 2,
+    "official": 0,
+    "none": 1
+   },
+   "U1-6": {
+    "asc": 2,
+    "official": 2,
+    "none": 2
+   },
+   "U1-7": {
+    "asc": 2,
+    "official": 2,
+    "none": 2
+   },
+   "U2-1": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "U2-2": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "U2-3": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "U2-4": {
+    "official": 1,
+    "asc": 2,
+    "none": 2
+   },
+   "U3-1": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "U3-2": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "U3-3": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   }
+  }
+ },
+ "2": {
+  "per_run": {
+   "none-2": 37,
+   "official-2": 34,
+   "asc-2": 38,
+   "none-1": 37,
+   "official-1": 32,
+   "asc-1": 38
+  },
+  "per_group": {
+   "none/R": 22,
+   "official/R": 22,
+   "asc/R": 23,
+   "official/C": 21,
+   "asc/C": 25,
+   "none/C": 25,
+   "asc/U": 28,
+   "official/U": 23,
+   "none/U": 27
+  },
+  "flags": {
+   "official": [
+    [
+     "official-1",
+     "R2",
+     "invented_finding",
+     "States '[P3] 空白だけの文字列は NaN のまま' though Number(' ') is 0."
+    ]
+   ],
+   "asc": [
+    [
+     "asc-2",
+     "R2",
+     "invented_finding",
+     "Claims \"' ' や 'abc' は Number で NaN のまま\" though Number(' ') is 0."
+    ]
+   ]
+  },
+  "item_by_condition": {
+   "R1-1": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "R1-2": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "R1-3": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "R1-4": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "R1-5": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "R1-6": {
+    "none": 0,
+    "official": 0,
+    "asc": 0
+   },
+   "R2-1": {
+    "none": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "R2-2": {
+    "none": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "R2-3": {
+    "none": 0,
+    "asc": 1,
+    "official": 0
+   },
+   "R2-4": {
+    "none": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "R2-5": {
+    "none": 2,
+    "asc": 2,
+    "official": 2
+   },
+   "R3-1": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "R3-2": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C1-1": {
+    "official": 1,
+    "asc": 2,
+    "none": 2
+   },
+   "C1-2": {
+    "official": 1,
+    "asc": 2,
+    "none": 2
+   },
+   "C1-3": {
+    "official": 0,
+    "asc": 2,
+    "none": 2
+   },
+   "C1-4": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C1-5": {
+    "official": 1,
+    "asc": 1,
+    "none": 2
+   },
+   "C2-1": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C2-2": {
+    "official": 2,
+    "asc": 2,
+    "none": 0
+   },
+   "C2-3": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C2-4": {
+    "official": 0,
+    "asc": 2,
+    "none": 1
+   },
+   "C2-5": {
+    "official": 2,
+    "asc": 0,
+    "none": 2
+   },
+   "C3-1": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C3-2": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C3-3": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "C3-4": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "U1-1": {
+    "asc": 2,
+    "official": 2,
+    "none": 2
+   },
+   "U1-2": {
+    "asc": 2,
+    "official": 2,
+    "none": 2
+   },
+   "U1-3": {
+    "asc": 2,
+    "official": 2,
+    "none": 2
+   },
+   "U1-4": {
+    "asc": 2,
+    "official": 1,
+    "none": 2
+   },
+   "U1-5": {
+    "asc": 2,
+    "official": 0,
+    "none": 1
+   },
+   "U1-6": {
+    "asc": 2,
+    "official": 2,
+    "none": 2
+   },
+   "U1-7": {
+    "asc": 2,
+    "official": 2,
+    "none": 2
+   },
+   "U2-1": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "U2-2": {
+    "official": 2,
+    "asc": 2,
+    "none": 2
+   },
+   "U2-3": {
+    "official": 1,
+    "asc": 2,
+    "none": 2
+   },
+   "U2-4": {
+    "official": 1,
+    "asc": 2,
+    "none": 2
+   },
+   "U3-1": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "U3-2": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   },
+   "U3-3": {
+    "none": 2,
+    "official": 2,
+    "asc": 2
+   }
+  }
+ }
+}
