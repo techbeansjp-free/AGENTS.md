@@ -1,5 +1,5 @@
 {
- "note": "各回答エージェントの完了通知に記録された subagent_tokens と duration_ms（12件の回答を1回生成）",
+ "note": "各回答エージェントの完了通知に記録された [subagent_tokens, duration_ms]。ascfix2-* は B の3件だけを生成、それ以外は12件を1回生成",
  "runs": {
   "none-1": [
    59782,
