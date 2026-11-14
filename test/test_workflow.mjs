@@ -1,12 +1,13 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {performance} from 'node:perf_hooks';
 import {setTimeout} from 'node:timers';
 import {parseReview} from '../src/review-result.mjs';
 const finding=message=>({location:'code.txt',condition:message,evidence:message,impact:'Fixture contract violated',action:message,counterevidence:'Fixture content directly violates the stated contract',severity:'P2',verification:'static-analysis',blocking:true});
 /** Real Git/verification with explicit Agent/provider test doubles. */
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';import {runWorkflow} from '../src/workflow.mjs';import {hash} from '../src/controller.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {runWorkflow} from '../src/workflow.mjs';import {hash} from '../src/controller.mjs';
 const enabled=process.platform==='linux'&&process.env.ASC_TEST_ISOLATION!=='0';
 function fixture(t){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-workflow-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-workflow-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const git=(...a)=>execFileSync('git',a,{cwd:root,encoding:'utf8',stdio:'pipe'}).trim();git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
  fs.writeFileSync(path.join(root,'code.txt'),'before');git('add','.');git('commit','-qm','base');
  const contract={intent:'Write after followed by newline',criteria:['after with newline'],allowedPaths:['code.txt'],testArgv:['/bin/sh','-c','test "$(cat code.txt)" = after'],riskTestArgv:[],requiredChecks:['test'],policyRevision:'fixture',risks:[],unresolved:[],design:'',requiresDesign:false};
@@ -214,7 +215,7 @@ test('remaining elapsed budget stops verification without dispatch or delivery a
 test('fresh execution after Controller kill preserves candidate boundaries and never imports old review',{skip:!enabled},async t=>{
  const {spawn}=await import('node:child_process');const {once}=await import('node:events');
  for(const phase of ['editing','committed']){
-  const f=fixture(t),control=fs.mkdtempSync(path.join(os.tmpdir(),'asc-kill-control-'));t.after(()=>fs.rmSync(control,{recursive:true,force:true}));
+  const f=fixture(t),control=tempDir('asc-kill-control-');t.after(()=>fs.rmSync(control,{recursive:true,force:true}));
   const marker=path.join(control,'ready'),runRoot=path.join(control,'run-root'),driver=path.join(control,'driver.mjs');
   fs.writeFileSync(driver,`import fs from 'node:fs';import path from 'node:path';import {runWorkflow} from ${JSON.stringify(new URL('../src/workflow.mjs',import.meta.url).href)};
 const stop=()=>{fs.writeFileSync(${JSON.stringify(marker)},'ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);};
@@ -231,7 +232,7 @@ await runWorkflow(${JSON.stringify(f.request)},{submit:false,provider:{intent:()
 
 test('approval expiry without progress stops renewal and does not poison a fresh invocation',{skip:!enabled},async t=>{
  const {generateKeyPairSync}=await import('node:crypto');const {keyFingerprint}=await import('../src/approval.mjs');
- const f=fixture(t),owner=fs.mkdtempSync(path.join(os.tmpdir(),'asc-expiring-owner-'));t.after(()=>fs.rmSync(owner,{recursive:true,force:true}));
+ const f=fixture(t),owner=tempDir('asc-expiring-owner-');t.after(()=>fs.rmSync(owner,{recursive:true,force:true}));
  Object.assign(f.request.contract,{requiresDesign:true,design:'Preserve exact fixture output'});f.request.budget={maxAgentCalls:2};
  const keys=generateKeyPairSync('ed25519'),publicKey=keys.publicKey.export({type:'spki',format:'pem'}),signer=path.join(owner,'sign.mjs'),keyFile=path.join(owner,'key.pem'),audit=path.join(owner,'requests'),clockFile=path.join(owner,'clock');
  fs.writeFileSync(clockFile,String(Date.now()));

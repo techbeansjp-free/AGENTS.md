@@ -1,6 +1,7 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {createHash} from 'node:crypto';import {execFileSync,spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+import {tempDir} from './helpers/temp-dir.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';import {execFileSync,spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 test('failed or missing integration oracle never starts acceptance reviewer',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-review-guard-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-review-guard-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const repo=path.join(root,'repo');fs.mkdirSync(repo);const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^GIT_/i.test(k)));
  const git=(...a)=>execFileSync('git',a,{cwd:repo,env,encoding:'utf8'}).trim();git('init','-q');git('config','user.name','Test');git('config','user.email','test@example.invalid');git('commit','-qm','base','--allow-empty');const base=git('rev-parse','HEAD');git('commit','-qm','integration','--allow-empty');const head=git('rev-parse','HEAD');
  fs.writeFileSync(path.join(root,'SKILL.md'),'fixture');fs.mkdirSync(path.join(root,'variant-logs'));

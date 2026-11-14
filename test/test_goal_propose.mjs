@@ -1,3 +1,4 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {validateProposal,proposeGoal} from '../src/goal-propose.mjs';
 const contract={intent:'Find inventory',criteria:['Search and explain empty results'],allowedPaths:['search.js','empty.js']};
@@ -8,7 +9,7 @@ test('scope expansion, changed intent, forged pins and unordered conflicts are r
 });
 test('unresolved questions cannot masquerade as an executable plan',()=>{const p=validateProposal({status:'needs-owner',questions:['Which tenant?'],goal:proposal().goal},contract);assert.equal(p.goal,undefined);assert.throws(()=>validateProposal({status:'needs-owner',questions:[]},contract),/questions/);});
 test('read-only proposal binds source and cannot mutate Git or use exhausted budget',{skip:process.platform!=='linux'},async t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-proposal-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-proposal-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const git=(...a)=>execFileSync('git',a,{cwd:root,encoding:'utf8',stdio:'pipe'}).trim();git('init','-q');git('config','user.name','Test');git('config','user.email','test@example.invalid');fs.writeFileSync(path.join(root,'search.js'),'before');git('add','.');git('commit','-qm','base');
  const head=git('rev-parse','HEAD'),request={repo:root,base:head,contract};let calls=0;
  const agent=async options=>{calls++;assert.equal(options.writable,false);assert(!fs.existsSync(path.join(options.workspace,'.git')));return {answer:JSON.stringify(proposal()),context:'planner',seconds:0,usage:[]};};
@@ -21,7 +22,7 @@ test('read-only proposal binds source and cannot mutate Git or use exhausted bud
 });
 
 test('proposal source observation never executes configured clean filters',{skip:process.platform!=='linux'},async t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-proposal-filter-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-proposal-filter-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const git=(...a)=>execFileSync('git',a,{cwd:root,encoding:'utf8',stdio:'pipe'}).trim();git('init','-q');git('config','user.name','Test');git('config','user.email','test@example.invalid');fs.writeFileSync(path.join(root,'search.js'),'before');fs.writeFileSync(path.join(root,'.gitattributes'),'search.js filter=trap\n');git('add','.');git('commit','-qm','base');
  const marker=path.join(os.tmpdir(),path.basename(root)+'-marker');t.after(()=>fs.rmSync(marker,{force:true}));git('config','filter.trap.clean',`touch '${marker}'; cat`);fs.utimesSync(path.join(root,'search.js'),new Date(),new Date());
  const r=await proposeGoal({repo:root,base:'HEAD',contract,model:'test-double',codexExecutable:process.execPath},{agent:async()=>({answer:JSON.stringify(proposal()),context:'read-only',usage:[]})});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));assert(!fs.existsSync(marker));
@@ -37,7 +38,7 @@ test('a policy document digest cannot become an unsupplied shared-contract pin',
 
 
 test('proposal retries capacity once without repairing code or losing failure accounting',{skip:process.platform!=='linux'},async t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-proposal-capacity-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-proposal-capacity-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const git=(...a)=>execFileSync('git',a,{cwd:root,encoding:'utf8',stdio:'pipe'}).trim();git('init','-q');git('config','user.name','Test');git('config','user.email','test@example.invalid');fs.writeFileSync(path.join(root,'search.js'),'before');git('add','.');git('commit','-qm','base');
  const request={repo:root,base:git('rev-parse','HEAD'),contract},capacity=()=>Object.assign(Error('busy'),{code:'ASC_PROVIDER_CAPACITY'});
  const clean=error=>{t.after(()=>fs.rmSync(error.proposalDiagnostic.root,{recursive:true,force:true}));return true;};

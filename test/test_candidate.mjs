@@ -1,7 +1,8 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
+import {tempDir} from './helpers/temp-dir.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {Controller} from '../src/controller.mjs';import {commitCandidate} from '../src/candidate.mjs';
 test('candidate commit never runs attribute filters or hooks',{skip:process.platform!=='linux'},t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-candidate-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-candidate-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const repo=path.join(root,'repo'),workspace=path.join(root,'worker');fs.mkdirSync(repo);fs.mkdirSync(workspace);
  const git=(...args)=>execFileSync('git',args,{cwd:repo,encoding:'utf8',stdio:'pipe'}).trim();
  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');

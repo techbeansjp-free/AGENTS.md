@@ -1,7 +1,8 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import {tempDir} from './helpers/temp-dir.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
 import {gitControlState,assertGitControlState} from '../scripts/native-git-boundary.mjs';
 test('synthetic Host rejects changed config/hooks and linked controls before executing Git',t=>{
- const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-git-control-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-git-control-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const git=path.join(root,'.git');fs.mkdirSync(path.join(git,'hooks'),{recursive:true});const config=path.join(git,'config');fs.writeFileSync(config,'[core]\n bare = false\n');
  const baseline=gitControlState(root);assert.doesNotThrow(()=>assertGitControlState(root,baseline));
  fs.writeFileSync(config,'[core]\n fsmonitor = /untrusted-command\n');assert.throws(()=>assertGitControlState(root,baseline),/changed/);
@@ -12,7 +13,7 @@ test('synthetic Host rejects changed config/hooks and linked controls before exe
 });
 
 test('Host pins the worktree pointer and administration without blocking unused worktrees',t=>{
- const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-git-pointer-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-git-pointer-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const admin=path.join(root,'.git/worktrees/current'),worktree=path.join(root,'.worktrees/current');fs.mkdirSync(admin,{recursive:true});fs.mkdirSync(worktree,{recursive:true});
  const pointer=path.join(worktree,'.git'),common=path.join(admin,'commondir'),gitdir=path.join(admin,'gitdir');
  fs.writeFileSync(pointer,`gitdir: ${admin}\n`);fs.writeFileSync(common,'../..\n');fs.writeFileSync(gitdir,pointer+'\n');
@@ -24,7 +25,7 @@ test('Host pins the worktree pointer and administration without blocking unused 
 });
 
 test('precreated empty worktree configuration is pinned rather than ignored',t=>{
- const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-empty-config-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-empty-config-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const admin=path.join(root,'.git/worktrees/current');fs.mkdirSync(admin,{recursive:true});
  const files=[path.join(root,'.git/config.worktree'),path.join(admin,'config.worktree')];
  for(const file of files)fs.writeFileSync(file,'',{flag:'wx'});
@@ -33,7 +34,7 @@ test('precreated empty worktree configuration is pinned rather than ignored',t=>
 });
 
 test('only newly materialized empty worker configs are neutral',t=>{
- const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-new-empty-config-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-new-empty-config-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const admin=path.join(root,'.git/worktrees/worker');fs.mkdirSync(admin,{recursive:true});
  const original=gitControlState(root),file=path.join(admin,'config.worktree');
  fs.writeFileSync(file,'');assert.doesNotThrow(()=>assertGitControlState(root,original));

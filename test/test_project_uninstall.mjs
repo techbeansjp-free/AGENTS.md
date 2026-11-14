@@ -1,7 +1,8 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -10,7 +11,7 @@ import {projectAssets,uninstallProjectAssets} from '../src/project-assets.mjs';
 const record='.agent-skill-chain/distribution.json',asset='.agent-skill-chain/templates/specs/01_要求定義.md';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 function fixture(t,selection={registerSkill:true,registerClaudeSkill:true}){
- const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-uninstall-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-uninstall-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const work=path.join(root,'project 日本語'),pkg=path.join(root,'package');fs.mkdirSync(work);fs.mkdirSync(pkg);
  for(const name of JSON.parse(fs.readFileSync('src/runtime-files.json'))){const file=path.join(pkg,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.copyFileSync(name,file);}
  const write=(name,bytes)=>{const file=path.join(work,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);};
@@ -131,7 +132,7 @@ test('record, managed file and parent symlinks and hardlinks stop before deletin
 
 // Normalization-insensitive file systems (APFS, HFS+) cannot hold both spellings at once.
 const distinctUnicodeNames=(()=>{
- const dir=fs.mkdtempSync(path.join(os.tmpdir(),'asc-unicode-probe-'));
+ const dir=tempDir('asc-unicode-probe-');
  try{fs.writeFileSync(path.join(dir,'probe-\u00e9'),'');return !fs.existsSync(path.join(dir,'probe-e\u0301'));}finally{fs.rmSync(dir,{recursive:true,force:true});}
 })();
 const nfdName='.agent-skill-chain/templates/specs/details/07_データ/00_データ一覧.md',nfdAlias=path.posix.join(path.posix.dirname(nfdName),path.posix.basename(nfdName).normalize('NFD'));

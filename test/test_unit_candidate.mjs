@@ -1,8 +1,9 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
+import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {Controller,digest} from '../src/controller.mjs';import {importUnitCandidate,candidateMatchesContract} from '../src/unit-candidate.mjs';
 test('restart imports actual SHA-256 candidate bytes without importing evidence',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-sha256-candidate-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-sha256-candidate-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=path.join(root,'source'),target=path.join(root,'target');fs.mkdirSync(source);
  const git=(repo,...args)=>execFileSync('git',args,{cwd:repo,encoding:'utf8',stdio:'pipe'}).trim();
  git(source,'init','-q','--object-format=sha256');git(source,'config','user.name','Fixture');git(source,'config','user.email','fixture@example.invalid');

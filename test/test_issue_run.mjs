@@ -1,7 +1,8 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {setTimeout} from 'node:timers';
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';import {compileIssues,runIssues} from '../src/issue-run.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {compileIssues,runIssues} from '../src/issue-run.mjs';
 function fixture(t){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-issues-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const source=path.join(root,'source');fs.mkdirSync(source);
+ const root=tempDir('asc-issues-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const source=path.join(root,'source');fs.mkdirSync(source);
  const git=(...a)=>execFileSync('git',a,{cwd:source,encoding:'utf8',stdio:'pipe'}).trim();git('init','-q');git('config','user.name','Dummy');git('config','user.email','dummy@example.invalid');fs.writeFileSync(path.join(source,'seed'),'base');git('add','.');git('commit','-qm','base');
  const issues=['a','b','c'].map((id,index)=>{const repo=path.join(root,id);git('worktree','add','--detach',repo,'HEAD');return {id,dependsOn:[],readPaths:[],request:{repo,base:git('rev-parse','HEAD'),contract:{intent:'Issue '+id,criteria:['done'],allowedPaths:[id+'.txt']},delivery:{repository:'dummy/project',issue:index+1,branch:'task-'+id}}};});
  return {source,git,plan:{schema:'asc-issues/v1',intent:'Authorized Issues',issues,parallelism:2}};

@@ -1,9 +1,10 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 /** Exercise the trusted checker against inert temporary configuration copies. */
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {createHash} from 'node:crypto';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';
 const source=fileURLToPath(new URL('../',import.meta.url)),checker=path.join(source,'scripts/check_project_quality.ts');
 function fixture(t){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-quality-contract-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-quality-contract-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const base=path.join(root,'base'),candidate=path.join(root,'candidate');
  const declaration=fs.readFileSync(checker,'utf8').match(/const V05_PROTECTED_FILES = \[([\s\S]*?)\] as const;/);assert.ok(declaration);
  const names=[...declaration[1].matchAll(/"([^"\n]+)"/g)].map(m=>m[1]);names.push('.github/trusted-quality-proposals.json');

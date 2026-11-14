@@ -1,9 +1,10 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {registrations,assertAdditionalSkills,assertAdditionalEntries} from './helpers/distributed-skills.mjs';
 import {foundationHashes,assertFoundation,assertFoundationEntry} from './helpers/foundation-skill.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import zlib from 'node:zlib';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -21,7 +22,7 @@ test('package file declarations exactly match the runtime inventory',()=>{
 });
 
 test('packing rejects decomposed source names and noncanonical declarations without emitting a candidate',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-package-unicode-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-package-unicode-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=path.join(root,'source'),destination=path.join(root,'output');fs.mkdirSync(source);fs.mkdirSync(destination);
  const manifest=JSON.parse(fs.readFileSync('package.json'));
  for(const name of [...manifest.files,'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
@@ -41,7 +42,7 @@ test('packing rejects decomposed source names and noncanonical declarations with
 });
 
 test('root and canonical package generation exclude unlisted files in runtime directories',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-package-inventory-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-package-inventory-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=path.join(root,'source');fs.mkdirSync(source);
  const manifest=JSON.parse(fs.readFileSync('package.json'));
  for(const name of [...manifest.files,'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
@@ -61,7 +62,7 @@ test('root and canonical package generation exclude unlisted files in runtime di
 });
 
 test('guarded root and canonical packing reject npm implicit files before creating an artifact',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-package-implicit-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-package-implicit-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=path.join(root,'source'),destination=path.join(root,'output');fs.mkdirSync(source);fs.mkdirSync(destination);
  const manifest=JSON.parse(fs.readFileSync('package.json'));
  for(const name of [...manifest.files,'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
@@ -88,7 +89,7 @@ test('guarded root and canonical packing reject npm implicit files before creati
 });
 
 test('packed Node distribution runs without source checkout, Python or dependencies',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-packed-'));
+ const root=tempDir('asc-packed-');
  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  // Use npm's real CLI module, without a shell or lifecycle scripts.
  const npm=process.env.npm_execpath || path.resolve(path.dirname(process.execPath),
@@ -267,7 +268,7 @@ function tarEntryNames(gzip){
 }
 
 for(const version of [null,'0.5.0','0.5.1-rc.0'])test(`canonical ${version??'source-version'} candidate installs both CLI names without enabling legacy commands or publication`,t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-canonical-package-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-canonical-package-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const packArgs=['scripts/pack-candidate.mjs',root,...(version?[`--version=${version}`]:[])];
  const output=JSON.parse(execFileSync(process.execPath,packArgs,{encoding:'utf8'}));
  assert.equal(output.name,'agent-skill-chain');assert.equal(output.publishAuthorized,false);
@@ -297,7 +298,7 @@ for(const version of [null,'0.5.0','0.5.1-rc.0'])test(`canonical ${version??'sou
 });
 
 test('canonical version override rejects invalid or out-of-line versions before packaging',t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-invalid-version-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-invalid-version-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  for(const version of ['../escape','0.4.9','0.5.01','0.6.0','0.5.0 --publish']){
   const result=spawnSync(process.execPath,['scripts/pack-candidate.mjs',root,`--version=${version}`],{encoding:'utf8'});assert.equal(result.status,1);assert.match(result.stderr,/Usage:/);assert.deepEqual(fs.readdirSync(root),[]);
  }
@@ -305,7 +306,7 @@ test('canonical version override rejects invalid or out-of-line versions before 
 
 test('repository root package installs only the v0.5 runtime through the canonical CLI',t=>{
  const repository=process.cwd();
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-root-package-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-root-package-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),'../lib/node_modules/npm/bin/npm-cli.js');
  // Normal pack/install: lifecycle scripts must not build the legacy runtime.
  const packed=JSON.parse(execFileSync(process.execPath,[npm,'pack','--json','--pack-destination',root],{cwd:repository,encoding:'utf8'}))[0];
@@ -344,7 +345,7 @@ test('repository root package installs only the v0.5 runtime through the canonic
 
 test('root release candidate stamps the sole manifest without modifying source or enabling publication',t=>{
  const repository=process.cwd();
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-root-release-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-root-release-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=fs.readFileSync('package.json'),rootSource=fs.readFileSync(path.join(repository,'package.json'));
  const output=JSON.parse(execFileSync(process.execPath,['scripts/pack-candidate.mjs',root,'--version=0.5.0'],{cwd:repository,encoding:'utf8'}));
  const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),'../lib/node_modules/npm/bin/npm-cli.js');

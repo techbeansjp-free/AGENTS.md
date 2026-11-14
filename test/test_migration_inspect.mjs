@@ -1,13 +1,14 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {inspectMigration} from '../migration_inspect.mjs';
 
 function fixture(t) {
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-migration-'));
+ const root=tempDir('asc-migration-');
  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const git=(...a)=>execFileSync('git',a,{cwd:root,stdio:'pipe'});
  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
@@ -92,7 +93,7 @@ test('unconfigured legacy install retains its inventory and requires owner polic
  assert.equal(result.policyFormat,'missing-policy');assert.equal(result.policySchema,null);
  assert(result.blockers.includes('missing-project-policy'));assert.equal(result.readyToMigrate,false);
  assert(result.configurationInventory.some(x=>x.path===entry));
- const {prepareMigration}=await import('../src/migration.mjs');const holder=fs.mkdtempSync(path.join(os.tmpdir(),'asc-missing-policy-'));t.after(()=>fs.rmSync(holder,{recursive:true,force:true}));const destination=path.join(holder,'transition');
+ const {prepareMigration}=await import('../src/migration.mjs');const holder=tempDir('asc-missing-policy-');t.after(()=>fs.rmSync(holder,{recursive:true,force:true}));const destination=path.join(holder,'transition');
  assert.throws(()=>prepareMigration(root,destination),/inspection blockers/);
  assert.equal(fs.existsSync(destination),false);assert.equal(git('status','--porcelain').toString(),before);assert.equal(git('rev-parse','HEAD').toString(),head);
 });

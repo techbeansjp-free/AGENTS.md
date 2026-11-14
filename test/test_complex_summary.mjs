@@ -1,3 +1,4 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -7,7 +8,7 @@ import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const script=fileURLToPath(new URL('../scripts/summarize-complex-context.mjs',import.meta.url));
 test('summary binds Git reads to the fixture and distinguishes current oracle hashes and missing usage',()=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-summary-test-'));
+ const root=tempDir('asc-summary-test-');
  const env={...process.env};for(const key of Object.keys(env))if(key.startsWith('GIT_'))delete env[key];
  const git=(...args)=>execFileSync('git',args,{cwd:root,env,encoding:'utf8'}).trim();
  try{

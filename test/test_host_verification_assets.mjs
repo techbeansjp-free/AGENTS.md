@@ -1,8 +1,9 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
+import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {inspectAssets} from '../src/verification-assets.mjs';import {stageHostVerificationAssets} from '../src/host-verification-assets.mjs';
 function fixture(t){
- const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-host-assets-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-host-assets-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const workspace=path.join(root,'workspace'),runtime=path.join(root,'runtime'),dependencies=path.join(root,'dependencies'),tools=path.join(root,'tools'),authority=path.join(root,'repo');
  for(const dir of [workspace,runtime,dependencies,tools,authority])fs.mkdirSync(dir);
  fs.mkdirSync(path.join(dependencies,'fixture'));fs.writeFileSync(path.join(dependencies,'fixture','index.js'),'module.exports=42');fs.writeFileSync(path.join(tools,'marker'),'runtime');

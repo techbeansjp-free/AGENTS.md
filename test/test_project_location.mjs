@@ -1,9 +1,10 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
+import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {startWorktree,verifyWorktree} from '../src/worktree-execution.mjs';
 import {projectAssets} from '../src/project-assets.mjs';
 import {projectLocation} from '../src/project-location.mjs';
-function directory(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-nongit-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;}
+function directory(t){const root=tempDir('asc-nongit-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;}
 test('non-Git start is read-only and does not claim commit verification or delivery',t=>{
  const root=directory(t);fs.writeFileSync(path.join(root,'app.js'),'owner content');
  const result=startWorktree(root);assert.equal(result.gitManaged,false);assert.equal(result.head,null);assert.equal(result.execution,'current-host-directory');assert.equal(result.providerLaunch,false);assert.equal(result.verified,false);assert.equal(result.deliveryAuthorized,false);
