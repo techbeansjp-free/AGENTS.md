@@ -1,10 +1,11 @@
+import {tempDir} from '../helpers/temp-dir.mjs';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';import assert from 'node:assert/strict';
 import {performance} from 'node:perf_hooks';
 import {inspectAssets} from '../../src/verification-assets.mjs';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 if(!process.env.ASC_TEST_CODEX)throw Error('Explicit native Codex test executable required');
-const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-host-deps-entry-')),workspace=path.join(root,'source'),home=path.join(root,'home'),tools=path.join(root,'tools');
+const root=tempDir('asc-host-deps-entry-'),workspace=path.join(root,'source'),home=path.join(root,'home'),tools=path.join(root,'tools');
 try{for(const d of [workspace,home,tools,path.join(workspace,'.codex'),path.join(workspace,'.agents')])fs.mkdirSync(d,{recursive:true});
 fs.writeFileSync(path.join(workspace,'.codex/config.toml'),'invalid candidate TOML = [');fs.writeFileSync(path.join(workspace,'.agents/data'),'retained');fs.writeFileSync(path.join(tools,'marker'),'runtime');
 const nodeName=process.platform==='win32'?'node.exe':'node';fs.copyFileSync(process.execPath,path.join(tools,nodeName));fs.chmodSync(path.join(tools,nodeName),0o755);

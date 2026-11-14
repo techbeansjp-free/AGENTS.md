@@ -1,15 +1,16 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {additionalSkills,registrations,skillFiles,assertAdditionalSkills,assertAdditionalEntries} from './helpers/distributed-skills.mjs';
 import {foundationHashes,assertFoundation,assertFoundationEntry} from './helpers/foundation-skill.mjs';
 import {createHash} from 'node:crypto';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import {execFileSync,spawn} from 'node:child_process';
 import {projectAssets} from '../src/project-assets.mjs';
 function fixture(t){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-assets-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-assets-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const repo=path.join(root,'repo');fs.mkdirSync(repo);
  const git=(...args)=>execFileSync('git',args,{cwd:repo,encoding:'utf8',stdio:'pipe'});
  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');

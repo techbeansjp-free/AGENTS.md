@@ -1,3 +1,4 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import {Github} from '../src/github.mjs';
 const head='a'.repeat(40),base='b'.repeat(40),repository='owner/dummy';
 function setup(overrides={}){
@@ -23,8 +24,8 @@ test('CI must be from expected repository, workflow, PR and HEAD',async()=>{
 });
 
 test('local Git transport substitution is rejected before external operations',async t=>{
- const fs=await import('node:fs'),os=await import('node:os'),path=await import('node:path'),{execFileSync}=await import('node:child_process');
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-transport-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const fs=await import('node:fs'),{execFileSync}=await import('node:child_process');
+ const root=tempDir('asc-transport-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const git=(...a)=>execFileSync('git',a,{cwd:root,encoding:'utf8',stdio:'pipe'});git('init','-q');
  for(const key of ['core.sshCommand','url.ssh://foreign/.insteadOf','include.path','extensions.worktreeConfig','remote.git@github.com:owner/dummy.git.url']){
   git('config',key,key==='extensions.worktreeConfig'?'true':'/dummy/untrusted');let external=0;

@@ -1,8 +1,9 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync,spawnSync} from 'node:child_process';
+import {tempDir} from './helpers/temp-dir.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync,spawnSync} from 'node:child_process';
 import {interruptSavedAttempt} from '../scripts/native-interrupted-attempt.mjs';
 import {workerCheckpointObserver} from '../scripts/native-worker-checkpoint.mjs';
 test('worker checkpoint requires distinct registered worktrees and rejects linked output',async t=>{
- const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-worker-checkpoint-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-worker-checkpoint-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^GIT_/i.test(k)));
  const git=(...args)=>execFileSync('git',['-c','user.name=Test','-c','user.email=test@example.invalid','-c','core.hooksPath=/dev/null',...args],{cwd:root,env,stdio:'pipe'});
  git('init');for(const name of ['a','b'])fs.writeFileSync(path.join(root,name),'original');git('add','.');git('commit','-m','fixture');

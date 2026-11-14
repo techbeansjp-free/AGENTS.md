@@ -1,6 +1,7 @@
-import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
+import {tempDir} from './temp-dir.mjs';
+import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';
 export function worktreeFixture(t){
- const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-native-worktree-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const root=tempDir('asc-native-worktree-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const repo=path.join(root,'repo'),work=path.join(root,'work');fs.mkdirSync(repo);
  const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',stdio:'pipe'}).trim();
  git(repo,'init','-q');git(repo,'config','user.name','Fixture');git(repo,'config','user.email','fixture@example.invalid');

@@ -1,7 +1,8 @@
+import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import fs from 'node:fs';import path from 'node:path';
 import {projectContext} from '../src/project-context.mjs';
-function fixture(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-context-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const write=(p,v)=>{fs.mkdirSync(path.dirname(path.join(root,p)),{recursive:true});fs.writeFileSync(path.join(root,p),v);};const config=rules=>write('.agent-skill-chain/project/context.json',JSON.stringify({schema:'asc-project-context/v1',rules}));return {root,write,config};}
+function fixture(t){const root=tempDir('asc-context-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const write=(p,v)=>{fs.mkdirSync(path.dirname(path.join(root,p)),{recursive:true});fs.writeFileSync(path.join(root,p),v);};const config=rules=>write('.agent-skill-chain/project/context.json',JSON.stringify({schema:'asc-project-context/v1',rules}));return {root,write,config};}
 test('scoped rules avoid irrelevant bodies and bind selected content without exposing it',t=>{
  const f=fixture(t);f.write('AGENTS.md','owner contract');f.write('src/ui/AGENTS.md','nested');f.write('rules/ui.md','sensitive UI rule');
  f.config([{path:'rules/ui.md',appliesTo:['src/ui']},{path:'missing-api.md',appliesTo:['src/api']}]);
