@@ -1,126 +1,197 @@
 {
  "minutes-handoff": {
   "expect": "decision-ownership",
+  "forbid": null,
   "skills_invoked": [
    "decision-ownership"
   ],
   "reads": [
-   ".agent-skill-chain/skills/decision-ownership/SKILL.md"
+   "<FIXTURE>/.agent-skill-chain/skills/decision-ownership/SKILL.md"
   ],
   "canonical_read": true,
   "references_read": [],
-  "result": "success",
-  "ok": true,
+  "other_tools": [],
+  "tool_errors": 0,
   "pass": true,
-  "output_tokens": 1543,
-  "seconds": 22
+  "seconds": 20
  },
  "client-request-owner": {
   "expect": "decision-ownership",
+  "forbid": null,
   "skills_invoked": [
    "decision-ownership"
   ],
   "reads": [
-   ".agent-skill-chain/skills/decision-ownership/SKILL.md",
-   ".agent-skill-chain/skills/decision-ownership/references/conditions-and-counterexamples.md"
-  ],
-  "canonical_read": true,
-  "references_read": [
-   ".agent-skill-chain/skills/decision-ownership/references/conditions-and-counterexamples.md"
-  ],
-  "result": "success",
-  "ok": true,
-  "pass": true,
-  "output_tokens": 2165,
-  "seconds": 33
- },
- "thread-gaps": {
-  "expect": "decision-ownership",
-  "skills_invoked": [
-   "decision-ownership"
-  ],
-  "reads": [
-   ".agent-skill-chain/skills/decision-ownership/SKILL.md"
+   "<FIXTURE>/.agent-skill-chain/skills/decision-ownership/SKILL.md"
   ],
   "canonical_read": true,
   "references_read": [],
-  "result": "success",
-  "ok": true,
+  "other_tools": [],
+  "tool_errors": 0,
   "pass": true,
-  "output_tokens": 2829,
-  "seconds": 33
+  "seconds": 26
+ },
+ "thread-gaps": {
+  "expect": "decision-ownership",
+  "forbid": null,
+  "skills_invoked": [
+   "decision-ownership"
+  ],
+  "reads": [
+   "<FIXTURE>/.agent-skill-chain/skills/decision-ownership/SKILL.md"
+  ],
+  "canonical_read": true,
+  "references_read": [],
+  "other_tools": [],
+  "tool_errors": 0,
+  "pass": true,
+  "seconds": 27
  },
  "estimate": {
   "expect": "estimate-and-scope",
+  "forbid": null,
   "skills_invoked": [
    "estimate-and-scope"
   ],
   "reads": [
-   ".agent-skill-chain/skills/estimate-and-scope/SKILL.md"
+   "<FIXTURE>/.agent-skill-chain/skills/estimate-and-scope/SKILL.md"
   ],
   "canonical_read": true,
   "references_read": [],
-  "result": "success",
-  "ok": true,
+  "other_tools": [
+   "Grep",
+   "Glob"
+  ],
+  "tool_errors": 0,
   "pass": true,
-  "output_tokens": 2638,
-  "seconds": 30
+  "seconds": 25
  },
  "handoff-text": {
   "expect": "work-coordination",
+  "forbid": null,
   "skills_invoked": [
    "work-coordination"
   ],
   "reads": [
-   "ERROR:<tool_use_error>Error: No such tool available: Bash. Bash is disabled for this s",
-   ".agent-skill-chain/skills/work-coordination/SKILL.md"
+   "<FIXTURE>/.agent-skill-chain/skills/work-coordination/SKILL.md",
+   "<FIXTURE>/.git",
+   "<SCRATCH>"
   ],
   "canonical_read": true,
   "references_read": [],
-  "result": "success",
-  "ok": true,
+  "other_tools": [
+   "Bash",
+   "Grep",
+   "Glob"
+  ],
+  "tool_errors": 2,
   "pass": true,
-  "output_tokens": 2172,
-  "seconds": 26
+  "seconds": 34
  },
  "design-compare": {
   "expect": "engineering-judgment",
+  "forbid": null,
   "skills_invoked": [
    "engineering-judgment"
   ],
   "reads": [
-   ".agent-skill-chain/skills/engineering-judgment/SKILL.md"
+   "<FIXTURE>/.agent-skill-chain/skills/engineering-judgment/SKILL.md"
   ],
   "canonical_read": true,
   "references_read": [],
-  "result": "success",
-  "ok": true,
+  "other_tools": [],
+  "tool_errors": 0,
   "pass": true,
-  "output_tokens": 1428,
-  "seconds": 24
+  "seconds": 22
  },
  "typo": {
   "expect": null,
+  "forbid": null,
   "skills_invoked": [],
   "reads": [],
   "canonical_read": null,
   "references_read": [],
-  "result": "success",
-  "ok": true,
+  "other_tools": [],
+  "tool_errors": 0,
   "pass": true,
-  "output_tokens": 64,
   "seconds": 5
  },
  "translate": {
   "expect": null,
+  "forbid": null,
   "skills_invoked": [],
   "reads": [],
   "canonical_read": null,
   "references_read": [],
-  "result": "success",
-  "ok": true,
+  "other_tools": [],
+  "tool_errors": 0,
   "pass": true,
-  "output_tokens": 65,
   "seconds": 7
+ },
+ "paraphrase-owner": {
+  "expect": "decision-ownership",
+  "forbid": null,
+  "skills_invoked": [
+   "decision-ownership"
+  ],
+  "reads": [
+   "<FIXTURE>/.agent-skill-chain/skills/decision-ownership/SKILL.md"
+  ],
+  "canonical_read": true,
+  "references_read": [],
+  "other_tools": [],
+  "tool_errors": 0,
+  "pass": true,
+  "seconds": 22
+ },
+ "maintenance-boundary": {
+  "expect": "estimate-and-scope",
+  "forbid": null,
+  "skills_invoked": [
+   "estimate-and-scope"
+  ],
+  "reads": [
+   "<FIXTURE>/.agent-skill-chain/skills/estimate-and-scope/SKILL.md"
+  ],
+  "canonical_read": true,
+  "references_read": [],
+  "other_tools": [
+   "Grep",
+   "Glob"
+  ],
+  "tool_errors": 0,
+  "pass": true,
+  "seconds": 27
+ },
+ "issue-drafting": {
+  "expect": "tracker-issue-writing",
+  "forbid": "decision-ownership",
+  "skills_invoked": [
+   "tracker-issue-writing"
+  ],
+  "reads": [
+   "<FIXTURE>/.agent-skill-chain/skills/tracker-issue-writing/SKILL.md"
+  ],
+  "canonical_read": true,
+  "references_read": [],
+  "other_tools": [
+   "Glob",
+   "Grep"
+  ],
+  "tool_errors": 0,
+  "pass": true,
+  "seconds": 24
+ },
+ "decided-change": {
+  "expect": null,
+  "forbid": "decision-ownership",
+  "skills_invoked": [],
+  "reads": [],
+  "canonical_read": null,
+  "references_read": [],
+  "other_tools": [],
+  "tool_errors": 0,
+  "pass": true,
+  "seconds": 9
  }
 }

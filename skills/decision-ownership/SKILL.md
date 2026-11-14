@@ -1,6 +1,6 @@
 ---
 name: decision-ownership
-description: 依頼・要望・議事録・チケット・会話の記録を点検し、未決事項と判断者、先に伝えるべきリスク、決めやすい仮置き案、相手ごとの渡し方を整理するときに使う。このまま進めてよいか、誰が決めるか、抜け漏れがないか、顧客にどう返すかを確かめる場面が対象。判断を代わりに確定しない。設計案の比較はengineering-judgment、見積・保守範囲はestimate-and-scope、確認事項の回答と反映の追跡はwork-coordination、起票はtracker-issue-writingが扱う。
+description: 依頼・要望・議事録・チケット・会話の記録を点検し、未決事項と判断者、先に伝えるべきリスク、決めやすい仮置き案、相手ごとの渡し方を整理するときに使う。このまま進めてよいか、誰が決めるか、抜け漏れがないか、顧客にどう返すかを確かめる場面が対象。判断を代わりに確定しない。工数・費用・保守範囲の判断はestimate-and-scope、設計案の比較はengineering-judgment、確認事項の回答と反映の追跡や引継ぎ文はwork-coordination、起票はtracker-issue-writingが扱う。決定済みの作業や誤字修正だけの依頼には使わない。
 ---
 
 # 未決事項と判断者の整理
@@ -74,7 +74,7 @@ description: 依頼・要望・議事録・チケット・会話の記録を点�
 渡し方：<相手> へ <渡す内容>
 ```
 
-条件によって判断が変わる事例や、運用の型をそのまま他案件へ持ち込みそうなときは、[適用条件と反例](references/conditions-and-counterexamples.md)を読む。
+条件によって判断が変わる事例や、運用の型をそのまま他案件へ持ち込みそうなとき、会議体・ルール・資料などの運用の整備を頼まれたときは、[適用条件と反例](references/conditions-and-counterexamples.md)を読む。
 
 ## 扱わないこと
 
