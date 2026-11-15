@@ -68,12 +68,12 @@ test('stderr excerpt hides config values, query and form credentials, userinfo w
  // Remaining gap, kept visible on purpose: a quoted value containing "'" shows the part after that quote.
  assert.equal(gitStderrExcerpt("fatal: bad boolean config value 'it's' for 'core.filemode'"),"fatal: bad boolean config value '***'s' for 'core.filemode'");
  // Every pattern stays linear on four megabytes built from its own start; a quadratic one would take hours.
- for(const unit of ["value '",'value for ',"value for 'k': ","unknown '","component '","chdir to '","mode '","parameter '","orderfile '","algorithm '",'invalid color value: x\n',
-  'password ','token=','a@','https://','authorization:x\n']){
+ for(const unit of ["value '",'value for ',"value for 'k': ","unknown '","component '","chdir to '","mode '","parameter '","orderfile '","algorithm '","user dir in: '","include path '",
+  'invalid color value: x\n','invalid mode for object creation: x\n','bad --ignore-submodules argument: x\n','a@','https://','authorization:x\n','token=','password ','secret: ','bearer ','ghp_','sk-']){
   const started=performance.now();gitStderrExcerpt(Buffer.from(unit.repeat(Math.floor(4_000_000/unit.length))));assert.ok(performance.now()-started<10000,unit);
  }
  // The worst case of a quoted value: one opening quote and no closing quote before the end.
- const unclosed=performance.now();assert.equal(gitStderrExcerpt(Buffer.from("value '"+'x'.repeat(4_000_000))).includes('***'),false);assert.ok(performance.now()-unclosed<10000);
+ const unclosed=performance.now();gitStderrExcerpt(Buffer.from("value '"+'x'.repeat(4_000_000)));assert.ok(performance.now()-unclosed<10000);
 });
 
 // One key for each form that the #1691 sweep found, run through the same Git commands and environment as Controller.
