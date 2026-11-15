@@ -32,20 +32,22 @@ test('stderr excerpt is one bounded line without control characters or credentia
 });
 
 test('stderr excerpt keeps the final fatal line and redacts before it cuts',()=>{
- const noisy=Buffer.from('hint: '+'x'.repeat(10000)+'\nfatal: the reason');
- assert.equal(gitStderrExcerpt(noisy),'…fatal: the reason');
- const words=gitStderrExcerpt(Buffer.from('w '.repeat(1000)+'fatal: end'));assert.match(words,/^…(w ){250,}fatal: end$/);assert.ok([...words].length<=513);
- // A long value whose context word falls at the window start shows none of its characters.
- for(const length of [2028,2030,2032,2035,2040]){const shown=gitStderrExcerpt(Buffer.from('Authorization: Bearer '+'A'.repeat(length)+' fatal: end'));assert.equal(shown.includes('A'.repeat(4)),false,String(length));assert.match(shown,/^….*fatal: end$/);}
- for(const prefix of ['1','...','-','x'.repeat(40)])assert.equal(gitStderrExcerpt(`fatal: ${prefix}https://u:s3cr3t@example.invalid/`).includes('s3cr3t'),false,prefix);
- // A credential that starts before the cut and ends inside it is redacted as a whole.
+ const noisy='hint: '+'x'.repeat(10000)+' fatal: the reason';
+ assert.equal(gitStderrExcerpt(Buffer.from(noisy.replace(' fatal','\nfatal'))),'…'+noisy.slice(-512));
+ // A credential that starts before the cut is redacted as a whole, wherever the cut falls.
  const boundary=Buffer.from('fatal: https://user:'+'p'.repeat(600)+'@example.invalid/ '+' '.repeat(3000)+'\n');
- const excerpt=gitStderrExcerpt(boundary);
- assert.equal(excerpt.includes('ppp'),false);assert.equal(excerpt,'fatal: https://***@example.invalid/');
- // Megabytes of stderr without spaces finish in bounded time and show nothing of a cut word.
- const started=performance.now(),huge=gitStderrExcerpt(Buffer.from('a.'.repeat(4_000_000)));
- assert.ok(performance.now()-started<2000);assert.equal(huge,'…');
- const tail=gitStderrExcerpt(Buffer.from('x'.repeat(5000)+' Authorization: Bearer abcdefghij fatal: end'));assert.equal(tail,'…Authorization: *** fatal: end');
+ assert.equal(gitStderrExcerpt(boundary),'fatal: https://***@example.invalid/');
+ for(const length of [100,500,1500,2028,2032,2040,5000]){
+  const bearer=gitStderrExcerpt(Buffer.from('x'.repeat(5000)+' Authorization: Bearer '+'A'.repeat(length)+' fatal: end'));
+  assert.equal(bearer.includes('AAAA'),false,String(length));assert.match(bearer,/Authorization: \*\*\* fatal: end$/);
+  const custom=gitStderrExcerpt(Buffer.from('Authorization: Custom eyJ'+'v'.repeat(length)+' '+Array.from({length:48},()=>'ghp_'+'a'.repeat(36)).join(' ')+' fatal: end'));
+  assert.equal(custom.includes('vvvv'),false,String(length));assert.match(custom,/\*\*\* fatal: end$/);
+ }
+ for(const prefix of ['1','...','-','x'.repeat(40)])assert.equal(gitStderrExcerpt(`fatal: ${prefix}https://u:s3cr3t@example.invalid/`).includes('s3cr3t'),false,prefix);
+ // Sixteen megabytes (the largest Controller stderr) of stderr without spaces stays linear.
+ const started=performance.now(),huge=gitStderrExcerpt(Buffer.from('a.'.repeat(8_000_000)));
+ assert.ok(performance.now()-started<10000);assert.equal(huge,'…'+'a.'.repeat(256));
+ assert.equal(gitStderrExcerpt('é'.repeat(600)),'…'+'é'.repeat(512));assert.equal(gitStderrExcerpt('😀'.repeat(600)),'…'+'😀'.repeat(512));
 });
 
 function repository(t){
