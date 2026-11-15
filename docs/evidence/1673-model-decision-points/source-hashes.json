@@ -1,0 +1,5 @@
+{
+ "file": "skills/subagent-model-selection/SKILL.md",
+ "before": {"commit": "f1e534375434f6d193ad75275bcddaef132ad0dd", "sha256": "fe5d9f25eca3379624a7b9225784b30169f232032fd9820b08229b3c269e882e", "bytes": 4104},
+ "after": {"commit": "fa074c8f", "sha256": "ab9f8558d686dadbc99b1f17316d541ad853415fb0495310134d04ea8b285031", "bytes": 4419}
+}

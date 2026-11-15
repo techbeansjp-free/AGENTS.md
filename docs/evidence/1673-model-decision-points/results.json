@@ -1,0 +1,162 @@
+{
+ "1": {
+  "total": {
+   "none": 20,
+   "before": 21,
+   "after": 24
+  },
+  "items": {
+   "M1-1": {
+    "none": 2,
+    "before": 2,
+    "after": 2
+   },
+   "M1-2": {
+    "none": 2,
+    "before": 2,
+    "after": 2
+   },
+   "M1-3": {
+    "none": 2,
+    "before": 2,
+    "after": 2
+   },
+   "M1-4": {
+    "none": 0,
+    "before": 0,
+    "after": 2
+   },
+   "M1-5": {
+    "none": 0,
+    "before": 2,
+    "after": 1
+   },
+   "M2-1": {
+    "before": 2,
+    "after": 2,
+    "none": 2
+   },
+   "M2-2": {
+    "before": 2,
+    "after": 2,
+    "none": 2
+   },
+   "M2-3": {
+    "before": 1,
+    "after": 2,
+    "none": 0
+   },
+   "M2-4": {
+    "before": 1,
+    "after": 1,
+    "none": 2
+   },
+   "M3-1": {
+    "after": 2,
+    "before": 2,
+    "none": 2
+   },
+   "M3-2": {
+    "after": 0,
+    "before": 0,
+    "none": 0
+   },
+   "M3-3": {
+    "after": 2,
+    "before": 1,
+    "none": 2
+   },
+   "M4-1": {
+    "after": 2,
+    "before": 2,
+    "none": 2
+   },
+   "M4-2": {
+    "after": 2,
+    "before": 2,
+    "none": 2
+   }
+  },
+  "flags": []
+ },
+ "2": {
+  "total": {
+   "none": 21,
+   "before": 23,
+   "after": 26
+  },
+  "items": {
+   "M1-1": {
+    "none": 2,
+    "before": 2,
+    "after": 2
+   },
+   "M1-2": {
+    "none": 2,
+    "before": 2,
+    "after": 2
+   },
+   "M1-3": {
+    "none": 2,
+    "before": 2,
+    "after": 2
+   },
+   "M1-4": {
+    "none": 0,
+    "before": 0,
+    "after": 2
+   },
+   "M1-5": {
+    "none": 0,
+    "before": 2,
+    "after": 1
+   },
+   "M2-1": {
+    "before": 2,
+    "after": 2,
+    "none": 2
+   },
+   "M2-2": {
+    "before": 2,
+    "after": 2,
+    "none": 2
+   },
+   "M2-3": {
+    "before": 1,
+    "after": 2,
+    "none": 0
+   },
+   "M2-4": {
+    "before": 1,
+    "after": 1,
+    "none": 2
+   },
+   "M3-1": {
+    "after": 2,
+    "before": 2,
+    "none": 2
+   },
+   "M3-2": {
+    "after": 2,
+    "before": 2,
+    "none": 1
+   },
+   "M3-3": {
+    "after": 2,
+    "before": 1,
+    "none": 2
+   },
+   "M4-1": {
+    "after": 2,
+    "before": 2,
+    "none": 2
+   },
+   "M4-2": {
+    "after": 2,
+    "before": 2,
+    "none": 2
+   }
+  },
+  "flags": []
+ }
+}
