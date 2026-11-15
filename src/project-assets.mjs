@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {hash,safeName} from './controller.mjs';
 import {projectLocation} from './project-location.mjs';
-import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage} from './source-limits.mjs';
+import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,GIT_NULL_DEVICE} from './source-limits.mjs';
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const hostNames=['.agents','.claude'];
 const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;
@@ -146,7 +146,7 @@ function catalog(packageRoot,hosts){
 // loaded macOS, Git was seen blocked reading stdin until the timeout (#1669);
 // pass bulk data as a file in the private temp directory.
 function git(repo,args){
- const result=spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','core.attributesFile=/dev/null',...args],{cwd:repo,stdio:['ignore','pipe','pipe'],encoding:null,maxBuffer:16000000,timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_ATTR_NOSYSTEM:'1',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'}});
+ const result=spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${GIT_NULL_DEVICE}`,'-c',`core.attributesFile=${GIT_NULL_DEVICE}`,...args],{cwd:repo,stdio:['ignore','pipe','pipe'],encoding:null,maxBuffer:16000000,timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:GIT_NULL_DEVICE,GIT_ATTR_NOSYSTEM:'1',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'}});
  if(result.error||result.status!==0)throw Error(`${gitFailureMessage('Asset Git operation failed',result)}; inspect worktree before retry`);return result.stdout;
 }
 function distributionState(repo){
@@ -219,7 +219,7 @@ export function projectAssets(directory,{apply=false,registerSkill=false,registe
   const write=(base,name,bytes)=>{if(bytes===null)return;const file=path.join(base,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);};
   for(const change of changes){const current=before.get(change.path);write(old,current.path,current.bytes);write(next,current.path,assets.get(change.path)??null);}
   if(result.recordChanged){write(old,record,priorBytes);write(next,record,nextRecord);}
-  const diff=spawnSync('git',['-c','core.attributesFile=/dev/null','diff','--no-index','--no-ext-diff','--no-textconv','--binary','--','old','new'],{cwd:temp,stdio:['ignore','pipe','pipe'],encoding:null,maxBuffer:16000000,timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,env:{PATH:process.env.PATH,HOME:temp,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}});
+  const diff=spawnSync('git',['-c',`core.attributesFile=${GIT_NULL_DEVICE}`,'diff','--no-index','--no-ext-diff','--no-textconv','--binary','--','old','new'],{cwd:temp,stdio:['ignore','pipe','pipe'],encoding:null,maxBuffer:16000000,timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,env:{PATH:process.env.PATH,HOME:temp,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:GIT_NULL_DEVICE}});
   if(diff.error||![0,1].includes(diff.status))throw Error(gitFailureMessage('Cannot prepare asset patch',diff));
   for(const [name,current] of [...before,[record,{path:record,bytes:priorBytes}]]){const now=inspect(repo,name);demand(current.path===now.path&&(current.bytes===null?now.bytes===null:now.bytes!==null&&current.bytes.equals(now.bytes)),'Asset changed after planning');}
   if(diff.stdout.length){

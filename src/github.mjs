@@ -1,6 +1,7 @@
 import {setTimeout} from 'node:timers';
 /** Host-owned Draft-only adapter; candidate code never receives GitHub credentials. */
 import {execFileSync} from 'node:child_process';
+import {GIT_NULL_DEVICE} from './source-limits.mjs';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function demand(ok,message){if(!ok)throw Error(message);}
 export class Github {
@@ -47,7 +48,7 @@ export class Github {
     demand(observedBase===this.base,'Remote base changed before submission');
     // Explicit destination; no candidate-controlled origin URL, no hooks, no force.
     this.assertTransportConfiguration();
-    this.command(['git','-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false','push',
+    this.command(['git','-c',`core.hooksPath=${GIT_NULL_DEVICE}`,'-c','core.fsmonitor=false','push',
       `git@github.com:${this.repository}.git`,`${head}:refs/heads/${this.branch}`],this.repo);
     demand(this.command(['git','rev-parse','HEAD'],this.repo)===head,'HEAD changed during push');
     const url=this.command(['gh','pr','create','--repo',this.repository,'--base',this.baseBranch,'--head',this.branch,'--draft',

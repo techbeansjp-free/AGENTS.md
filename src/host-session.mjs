@@ -5,6 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {spawn,spawnSync} from 'node:child_process';
 import {setTimeout,clearTimeout} from 'node:timers';
 import {sessionRpc} from './session-rpc.mjs';
+import {GIT_NULL_DEVICE} from './source-limits.mjs';
 
 export function sessionOptions(args){
  const options={ephemeral:false,timeout:900000},seen=new Set();
@@ -37,9 +38,9 @@ function sessionLocation(directory){
  }
  if(!gitManaged)return {cwd:target,targetDirectory:target,targetHead:null};
  const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('GIT_')));
- Object.assign(env,{GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:process.platform==='win32'?'NUL':'/dev/null',GIT_TERMINAL_PROMPT:'0',GIT_NO_LAZY_FETCH:'1',GIT_NO_REPLACE_OBJECTS:'1'});
+ Object.assign(env,{GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:GIT_NULL_DEVICE,GIT_TERMINAL_PROMPT:'0',GIT_NO_LAZY_FETCH:'1',GIT_NO_REPLACE_OBJECTS:'1'});
  const git=(cwd,args)=>{
-  const result=spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${process.platform==='win32'?'NUL':'/dev/null'}`,...args],{cwd,env,encoding:'utf8',timeout:10000,maxBuffer:1024*1024});
+  const result=spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${GIT_NULL_DEVICE}`,...args],{cwd,env,encoding:'utf8',timeout:10000,maxBuffer:1024*1024});
   if(result.error||result.status!==0)throw Error('Cannot resolve session repository; check the target and primary checkout');
   return result.stdout;
  };

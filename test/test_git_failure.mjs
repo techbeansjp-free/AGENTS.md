@@ -188,3 +188,14 @@ test('a migration Git failure names the exit status and the end of stderr',t=>{
  // Assumes os.tmpdir() is not inside a Git repository; the migration Git env is fixed, so GIT_CEILING_DIRECTORIES cannot be set.
  assert.throws(()=>assertWorkLocation(root),e=>/^Migration Git operation failed \(exit status 128; stderr: fatal: not a git repository/.test(e.message));
 });
+
+test('local Git children take the null device from one place (#1711)',async()=>{
+ const {GIT_NULL_DEVICE}=await import('../src/source-limits.mjs');
+ assert.equal(GIT_NULL_DEVICE,process.platform==='win32'?'NUL':'/dev/null');
+ // host-masked-paths stats the POSIX device on purpose: it identifies Linux sandbox mounts, not a Git path.
+ const allowed=new Set(['source-limits.mjs','host-masked-paths.mjs']);
+ const src=new URL('../src/',import.meta.url),spelled=[];
+ for(const name of fs.readdirSync(src).filter(n=>n.endsWith('.mjs')&&!allowed.has(n)))
+  for(const [i,line] of fs.readFileSync(new URL(name,src),'utf8').split('\n').entries())if(/\/dev\/null|'NUL'/.test(line))spelled.push(`${name}:${i+1}`);
+ assert.deepEqual(spelled,[]);
+});
