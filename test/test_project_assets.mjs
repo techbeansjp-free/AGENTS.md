@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import {execFileSync,spawn} from 'node:child_process';
+import {execFileSync,spawn,spawnSync} from 'node:child_process';
 import {projectAssets} from '../src/project-assets.mjs';
 function fixture(t){
  const root=tempDir('asc-assets-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -640,6 +640,32 @@ test('Git failures name the exit status or signal and keep the worktree check',t
   try{process.env.PATH=tools+path.delimiter+originalPath;assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}),{message:`Asset Git operation failed (${reason}); inspect worktree before retry`});}finally{process.env.PATH=originalPath;}
   assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain/distribution.json')),false);
  }
+});
+
+// #1702: since #1699 a project-assets failure carries a stderr excerpt. Two kinds of Git child run for the consumer:
+// the location check (migration Git) reads the consumer's repo-local config, so a malformed value reaches its message
+// and must be hidden; asset Git uses an explicit --git-dir of private metadata and never reads that config.
+const consumerConfig=f=>(key,value)=>execFileSync('git',['config','--file',path.join(f.repo,'.git','config'),key,value],{cwd:f.root,stdio:'pipe'});
+test('a malformed consumer config value reaches the project-assets message only masked',t=>{
+ for(const [key,value,form] of [['core.compression','S3CRETX https://u:S3CRETY@example.invalid/',"bad numeric config value '***' for 'core.compression'"],
+  ['core.compression',"S3CRETX\nS3CRETY it's","bad numeric config value '***' for 'core.compression'"],['core.checkStat',"S3CRETX\nS3CRETY","invalid value for 'core.checkstat': *** fatal: "],
+  ['include.path','~nouser/S3CRETX',"could not expand include path '***'"]]){
+  const f=fixture(t);consumerConfig(f)(key,value);
+  assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}),e=>{
+   assert.match(e.message,/^Migration Git operation failed \(exit status 128; stderr: /);assert.ok(e.message.includes(form),e.message);
+   assert.equal(/S3CRET/.test(e.message),false,e.message);return true;
+  });
+  assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain/distribution.json')),false);
+ }
+});
+
+test('asset Git does not read the consumer repository config',t=>{
+ // git apply in the consumer would reject these values; the location check does not read them.
+ const f=fixture(t);for(const key of ['apply.whitespace','apply.ignoreWhitespace'])consumerConfig(f)(key,'S3CRETX');
+ const probe=path.join(f.root,'probe.patch');fs.writeFileSync(probe,'diff --git a/x b/x\nnew file mode 100644\n--- /dev/null\n+++ b/x\n@@ -0,0 +1 @@\n+a\n');
+ assert.match(spawnSync('git',['apply','--check',probe],{cwd:f.work,encoding:'utf8'}).stderr,/S3CRETX/);
+ assert.equal(projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}).applied,true);
+ assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain/distribution.json')),true);
 });
 
 test('a failed asset patch preparation names the exit status and the end of stderr',t=>{
