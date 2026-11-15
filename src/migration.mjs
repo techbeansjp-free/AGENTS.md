@@ -1,7 +1,7 @@
 /** Non-destructive evaluation transition. Legacy source and approvals stay untouched. */
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {spawnSync} from 'node:child_process';
 import {inspectMigration} from '../migration_inspect.mjs';import {Controller,safeName,hash} from './controller.mjs';
-import {SOURCE_BATCH_BYTES} from './source-limits.mjs';
+import {SOURCE_BATCH_BYTES,LOCAL_GIT_TIMEOUT_MILLISECONDS} from './source-limits.mjs';
 const manifestName='transition.json',manifestByteLimit=16*1024*1024;
 function demand(ok,message){if(!ok)throw Error(message);}
 const contains=(a,b)=>{const r=path.relative(a,b);return !r || (!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
@@ -10,7 +10,7 @@ function gitOutput(root,args,output='pipe',input){
  const nul=process.platform==='win32'?'NUL':'/dev/null';
  const p=spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${nul}`,'-c','uploadpack.packObjectsHook=',
  '-c','core.alternateRefsCommand=','-c','protocol.allow=never','-c','protocol.file.allow=always',...args],
- {cwd:root,input,stdio:[input===undefined?'ignore':'pipe',output,'pipe'],env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:nul,GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'},timeout:120000,maxBuffer:16*1024*1024});
+ {cwd:root,input,stdio:[input===undefined?'ignore':'pipe',output,'pipe'],env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:nul,GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'},timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,maxBuffer:16*1024*1024});
  demand(!p.error&&p.status===0,'Migration Git operation failed');return p.stdout;
 }
 // Linked worktrees keep administration outside their source directory. Resolve

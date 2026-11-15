@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {hash,safeName} from './controller.mjs';
 import {projectLocation} from './project-location.mjs';
+import {LOCAL_GIT_TIMEOUT_MILLISECONDS as gitTimeoutMilliseconds} from './source-limits.mjs';
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const hostNames=['.agents','.claude'];
 const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;
@@ -141,7 +142,6 @@ function catalog(packageRoot,hosts){
  for(const host of hosts)for(const name of skillNames)assets.set(`${host}/skills/${name}/SKILL.md`,entryBytes(name,metadata.get(name)));
  demand(assets.size<=maxAssets&&[...assets.values()].every(v=>Buffer.isBuffer(v)),'Invalid distribution assets');return assets;
 }
-const gitTimeoutMilliseconds=20000;
 // Name why a Git child failed, so that a timeout under load can be told apart from an error reported by Git.
 function gitFailureReason(result){if(result.error?.code==='ETIMEDOUT')return `timed out after ${gitTimeoutMilliseconds} ms`;if(result.error?.code==='ENOBUFS')return 'output exceeded the buffer limit';if(result.error)return `could not run: ${result.error.code??result.error.message}`;if(result.signal)return `terminated by ${result.signal}`;return `exit status ${result.status}`;}
 function git(repo,args,input){
