@@ -45,7 +45,7 @@ export async function mergedPullRequest({api,repo,sha}){
   found.push(...batch.filter(matches));if(found.length||batch.length<100)break;
  }
  demand(found.length<=1,'Ambiguous merged PR for source');
- demand(found[0],`No merged same-repository PR for source (association empty; scanned ${scanned} of at most ${pullScanPages} pages of recently updated closed PRs into main)`);
+ demand(found[0],`No merged same-repository PR for source (no matching associated PR; scanned ${scanned} of at most ${pullScanPages} pages of recently updated closed PRs into main)`);
  return found[0];
 }
 export async function verify({api,repo,sha,version,wait={}}){
