@@ -23,6 +23,9 @@ export function nodeRuntimeRoots(platform=process.platform){return platform==='d
 
 /** POSIX temporaries that every user can write. The Agent preflight probes them, and macOS denies them (#1695, #1701). */
 export const POSIX_SHARED_TEMPORARIES=Object.freeze(['/tmp','/var/tmp']);
+/** Oldest Codex whose macOS sandbox applies the shared-temporary denial (measured: 0.153.4 to 0.155.1 ignore it, #1701).
+ * Not enforced by a version check: the Agent preflight observes the denial itself. CI pins this version. */
+export const MACOS_MIN_CODEX_VERSION='0.156.0';
 /** Codex's macOS profile leaves the shared temporaries writable despite ':root'='deny' (measured for /tmp and /var/tmp),
  * so they are denied under both spellings. Linux needs none: Codex mounts private /tmp, /var/tmp and /dev/shm there
  * (measured, #1701). Codex 0.155.1 and earlier ignore this denial on macOS; the Agent preflight then stops. */

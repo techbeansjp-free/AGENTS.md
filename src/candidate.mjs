@@ -7,10 +7,12 @@ export function commitCandidate(controller,workspace,{name='ASC evaluation',emai
  demand(!/[\r\n\0]/.test(name+email)&&name&&email,'Invalid commit identity');
  const before=controller.target({allowEmpty:true}),original=controller.blobs(before.head);
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'asc-candidate-index-'));
+ // Git for Windows maps /dev/null itself, but NUL is the platform name, as in the Controller and migration Git children.
+ const nul=process.platform==='win32'?'NUL':'/dev/null';
  const git=(args,input,index=true)=>{
-  const env={PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_NO_REPLACE_OBJECTS:'1',
+  const env={PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:nul,GIT_NO_REPLACE_OBJECTS:'1',
    GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0',...(index?{GIT_INDEX_FILE:path.join(temp,'index')}:{})};
-  const p=withStdinFile(input,stdin=>spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','protocol.allow=never',
+  const p=withStdinFile(input,stdin=>spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${nul}`,'-c','protocol.allow=never',
    '-c','commit.gpgsign=false','-c',`user.name=${name}`,'-c',`user.email=${email}`,...args],
    {cwd:controller.repo,env,stdio:[stdin,'pipe','pipe'],timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,maxBuffer:16*1024*1024}));
   if(p.error||p.status!==0)throw Error(gitFailureMessage('Candidate Git operation failed',p));return p.stdout.toString().trim();

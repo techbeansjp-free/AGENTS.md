@@ -1,7 +1,7 @@
 import {tempDir} from './helpers/temp-dir.mjs';
 import {performance} from 'node:perf_hooks';
 import {setTimeout} from 'node:timers';
-import {test} from 'node:test';
+import {test,mock} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
@@ -53,6 +53,16 @@ test('a sentinel that cannot be placed stops the run and names the location',t=>
  assert.throws(()=>createSentinels(logs2,()=>{throw Object.assign(Error('denied'),{code:'EACCES'});}),e=>e.message==='Isolation not established (cannot place a sentinel in the temporary directories: EACCES)'&&e.cause?.code==='EACCES');
  assert.throws(()=>createSentinels(path.join(root,'logs3-missing'),()=>[]),e=>e.code==='ENOENT','the logs sentinel keeps its original error');
  assert.throws(()=>{fs.mkdirSync(path.join(root,'logs4'));createSentinels(path.join(root,'logs4'),()=>{throw Object.assign(Error('gone'),{code:'ENOENT',path:'/var/tmp'});});},e=>e.message==='Isolation not established (cannot place a sentinel in /var/tmp: ENOENT)');
+});
+test('a sentinel file that cannot be written stops the run and removes its directory',t=>{
+ const root=tempDir('asc-sentinel-write-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const logs=path.join(root,'logs'),base=path.join(root,'base');fs.mkdirSync(logs);fs.mkdirSync(base);
+ // Fail only the sentinel inside the location; the logs sentinel is written first.
+ const write=fs.writeFileSync;
+ const stub=mock.method(fs,'writeFileSync',(file,...rest)=>{if(String(file).startsWith(base+path.sep))throw Object.assign(Error('read-only'),{code:'EROFS'});return write(file,...rest);});
+ try{assert.throws(()=>createSentinels(logs,()=>[base]),e=>e.message===`Isolation not established (cannot place a sentinel in ${base}: EROFS)`&&e.cause?.code==='EROFS');}
+ finally{stub.mock.restore();}
+ assert.deepEqual(fs.readdirSync(base),[]);
 });
 const agentFixture=t=>{
  const root=tempDir('asc-agent-preflight-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));

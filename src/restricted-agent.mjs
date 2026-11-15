@@ -5,7 +5,7 @@ import {assertExecutionHost} from './execution-host.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {codexRuntimeRoots,sandboxFilesystemBase,sharedTemporaryRoots,POSIX_SHARED_TEMPORARIES} from './codex-runtime.mjs';
+import {codexRuntimeRoots,sandboxFilesystemBase,sharedTemporaryRoots,POSIX_SHARED_TEMPORARIES,MACOS_MIN_CODEX_VERSION} from './codex-runtime.mjs';
 import {networkPreflight} from './agent-network-preflight.mjs';
 import {runServiceProcess} from './agent-lifecycle.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
@@ -50,7 +50,7 @@ export function assertPreflight(result,hostValues,targets=[]) {
   const reached=data.targets.flatMap((t,i)=>t?.read==='denied' && ['denied','private-write-completed'].includes(t.write) && hostValues[i]==='trusted'?[]:[targets[i]??`target ${i}`]);
   if(!reached.length)return;
   const shared=sharedTemporaryRoots();
-  const hint=reached.some(p=>shared.some(root=>p.startsWith(root+'/')))?'; on macOS, Codex before 0.156.0 ignores the shared-temporary denial: check the Codex version, and report it if it is already 0.156.0 or later':'';
+  const hint=reached.some(p=>shared.some(root=>p.startsWith(root+'/')))?`; Codex before ${MACOS_MIN_CODEX_VERSION} ignores the shared-temporary denial: check the Codex version, and report it if it is already ${MACOS_MIN_CODEX_VERSION} or later`:'';
   throw Error(`Isolation not established (sandbox reached ${reached.join(', ')}${hint})`);
 }
 /** Directories that receive a sentinel, canonical and without duplicates: the Controller temporary directory (stdin files,
