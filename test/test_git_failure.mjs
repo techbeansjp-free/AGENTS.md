@@ -268,10 +268,11 @@ test('a migration Git failure names the exit status and the end of stderr',t=>{
  // The first rev-parse fails the way a non-Git start did without a reason before (#1688). A .git file that names a
  // missing directory stops Git at this directory, so the result does not depend on whether os.tmpdir() is inside a
  // repository (#1702); the migration Git env is fixed, so GIT_CEILING_DIRECTORIES cannot be set instead.
- // The target sits inside a repository on purpose, as when os.tmpdir() is inside one.
+ // The target sits inside a repository on purpose, as when os.tmpdir() is inside one. Git versions word the error
+ // differently (2.54: 'not a git repository'; Ubuntu 24.04: 'gitfile does not point to a valid repository').
  execFileSync('git',['init','-q',root]);const inner=path.join(root,'inner');fs.mkdirSync(inner);
  fs.writeFileSync(path.join(inner,'.git'),`gitdir: ${path.join(root,'missing')}\n`);
  // Not asserted on purpose (#1702): that migration passes its 120000 ms bound to the helper. Only a real timeout shows
  // it, which takes two minutes; the reason text for any bound is covered by the gitFailureReason tests above.
- assert.throws(()=>assertWorkLocation(inner),e=>/^Migration Git operation failed \(exit status 128; stderr: fatal: not a git repository/.test(e.message));
+ assert.throws(()=>assertWorkLocation(inner),e=>/^Migration Git operation failed \(exit status 128; stderr: fatal: (?:not a git repository|gitfile does not point to a valid repository)/.test(e.message));
 });
