@@ -44,7 +44,10 @@ test('dedicated resource verification rejects caught OOM and subsequent healthy 
  const code='import os,signal\np=os.fork()\nif p==0:\n a=[bytearray(16*1024*1024) for _ in range(80)]\n os._exit(23)\n_,s=os.waitpid(p,0)\nassert os.WIFSIGNALED(s) and os.WTERMSIG(s)==signal.SIGKILL\n';
  const bad=new AssetController({...f,contract:{...contract,testArgv:['/usr/bin/python3','-c',code]},implementer:'worker'});
  assert.throws(()=>bad.verify(),/Verification failed/);
- const rejected=bad.events.at(-1).results[0];assert.equal(rejected.exit,125);assert.equal(rejected.resourceBoundary.processExit,0);assert.equal(rejected.resourceBoundary.exhausted,true);
+ const rejected=bad.events.at(-1).results[0];assert.equal(rejected.exit,125);assert.equal(rejected.resourceBoundary.exhausted,true);
+ // While the first victim's last pages are still charged, the kernel may select
+ // a second victim. It must be the verification tree, never the observer.
+ if(rejected.resourceBoundary.processExit!==0)assert(rejected.resourceBoundary.delta['memory.events'].oom_kill>=2,'non-zero exit without a second OOM kill');
  good.verify();const last=good.events.at(-1).results[0];assert.equal(last.exit,0);assert.notEqual(first.resourceBoundary.unit,last.resourceBoundary.unit);assert.notEqual(rejected.resourceBoundary.unit,last.resourceBoundary.unit);
 });
 test('bounded output overflow is typed after cleanup and does not block next verification',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},t=>{
@@ -173,11 +176,41 @@ test('owner memory budget is observed by kernel and OOM cannot become success',{
 });
 
 
+test('observer runs outside the limited verification cgroup',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
+ const {runBoundedVerification}=await import('../src/verification-resources.mjs');
+ // prlimit execs in place, so the verification process's parent is the observer.
+ const result=runBoundedVerification(['--','/usr/bin/python3','-c','import os;t=open("/proc/self/cgroup").read().strip();print(t,open(f"/proc/{os.getppid()}/cgroup").read().strip(),os.path.realpath(f"/proc/{os.getppid()}/exe"),open("/sys/fs/cgroup"+os.path.dirname(t[3:])+"/memory.max").read().strip())'],5000);
+ const [tree,observer,exe,unitMax]=result.stdout.toString().trim().split(' ');
+ // The unit backstop leaves observer headroom above the tree's owner limit.
+ assert.equal(unitMax,String(1073741824+268435456));
+ assert.equal(result.resourceBoundary.unitCgroup,path.dirname(result.resourceBoundary.before.cgroup));assert.equal(fs.existsSync(path.join('/sys/fs/cgroup',result.resourceBoundary.unitCgroup)),false);
+ assert.equal(result.status,0);assert.equal(exe,fs.realpathSync(process.execPath));
+ assert.equal(tree,`0::${result.resourceBoundary.before.cgroup}`);assert.match(tree,/\/asc-verify-[a-f0-9-]+\.service\/tree$/);
+ assert.equal(observer,tree.replace(/\/tree$/,'/observer'));
+ assert.equal(result.resourceBoundary.before.limits['memory.max'],'1073741824');
+});
+test('OOM kill of the verification process itself is rejected exhaustion, other signals stay execution failures',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
+ const {runBoundedVerification}=await import('../src/verification-resources.mjs');
+ // A single-process tree leaves no other OOM candidate in the limited cgroup;
+ // the observer survives only because it is outside that cgroup (#1683).
+ const code='a=[bytearray(16*1024*1024) for _ in range(80)]';
+ const killed=runBoundedVerification(['--','/usr/bin/python3','-c',code],20000,268435456);
+ assert.equal(killed.status,125);assert.equal(killed.resourceBoundary.exhausted,true);assert.equal(killed.resourceBoundary.processExit,null);assert.equal(killed.resourceBoundary.processSignal,'SIGKILL');
+ assert(killed.resourceBoundary.delta['memory.events'].oom_kill>0);assert.equal(killed.resourceBoundary.cleanupConfirmed,true);
+ // A non-exhaustion signal is rejected by the observer itself (exit 1), not by
+ // the observer being killed (status 255, the #1683 symptom).
+ assert.throws(()=>runBoundedVerification(['--','/usr/bin/python3','-c','import os,signal;os.kill(os.getpid(),signal.SIGTERM)'],5000),error=>{
+  assert.match(error.message,/Bounded verification observer failed/);
+  assert.equal(error.verificationDiagnostic.status,1);assert.equal(error.verificationDiagnostic.service.Result,'exit-code');
+  assert.match(error.verificationDiagnostic.stderr,/Verification execution failed: signal SIGTERM/);
+  return true;
+ });
+});
 test('normal exit waits for finite teardown but rejects a surviving descendant',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
  const {runBoundedVerification}=await import('../src/verification-resources.mjs');
  const invoke=seconds=>runBoundedVerification(['--','/bin/sh','-c',`sleep ${seconds} >/dev/null 2>&1 & exit 0`],5000);
  const delayed=runBoundedVerification(['--','/bin/sh','-c','(sleep 0.2; echo important) & exit 0'],null);assert.equal(delayed.stdout.toString(),'important\n');assert.equal(delayed.status,0);
- const good=invoke('0.15');assert.equal(good.status,0);assert.equal(good.resourceBoundary.after.processes.length,1);assert.equal(good.resourceBoundary.cleanupConfirmed,true);
+ const good=invoke('0.15');assert.equal(good.status,0);assert.equal(good.resourceBoundary.after.processes.length,0);assert.equal(good.resourceBoundary.cleanupConfirmed,true);
  assert.throws(()=>invoke('30'),/Verification descendants remain/);
  const retry=invoke('0.05');assert.equal(retry.status,0);assert.notEqual(retry.resourceBoundary.unit,good.resourceBoundary.unit);
 });
@@ -192,7 +225,7 @@ test('unlimited verification stops when its Controller is killed',{skip:!enabled
  const pause=()=>new Promise(r=>setTimeout(r,50));
  for(let i=0;i<200&&!fs.existsSync(marker);i++)await pause();
  assert(fs.existsSync(marker),'verification did not start');const observed=JSON.parse(fs.readFileSync(marker,'utf8'));
- const unit=path.basename(observed.cgroup.trim().split('::')[1]);
+ const unit=path.basename(path.dirname(observed.cgroup.trim().split('::')[1]));
  t.after(()=>{try{execFileSync('systemctl',['--user','stop',unit],{stdio:'ignore'});}catch{/* Already stopped. */}});
  child.kill('SIGKILL');
  const dir=path.join('/sys/fs/cgroup',observed.cgroup.trim().split('::')[1]);
