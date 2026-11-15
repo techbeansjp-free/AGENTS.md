@@ -18,7 +18,6 @@ jobs:
           node-version: 24
       - name: Install pinned test dependencies
         run: npm ci --ignore-scripts
-      # 0.156.0 is the oldest Codex that applies the shared-temporary denial on macOS (#1701); older versions stop at the preflight.
       - name: Install explicit Codex sandbox runtime (no model calls)
         run: npm install --prefix "$RUNNER_TEMP/asc-native-codex" --ignore-scripts --no-audit --no-fund @openai/codex@0.156.0
       - name: Verify tracked control files and actual dependencies inside sandbox
