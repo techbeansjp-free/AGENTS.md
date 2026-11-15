@@ -19,6 +19,8 @@ jobs:
       - name: Install pinned test dependencies
         run: npm ci --ignore-scripts
       - name: Install explicit Codex sandbox runtime (no model calls)
-        run: npm install --prefix "$RUNNER_TEMP/asc-native-codex" --ignore-scripts --no-audit --no-fund @openai/codex@0.153.4
+        run: npm install --prefix "$RUNNER_TEMP/asc-native-codex" --ignore-scripts --no-audit --no-fund @openai/codex@0.156.0
       - name: Verify tracked control files and actual dependencies inside sandbox
         run: ASC_TEST_CODEX="$RUNNER_TEMP/asc-native-codex/node_modules/@openai/codex/bin/codex.js" node test/native/host-assets.mjs
+      - name: Keep Controller temporary files out of the sandbox without TMPDIR
+        run: env -u TMPDIR ASC_TEST_CODEX="$RUNNER_TEMP/asc-native-codex/node_modules/@openai/codex/bin/codex.js" node test/native/temp-isolation.mjs
