@@ -8,8 +8,8 @@ import {test} from 'node:test';import assert from 'node:assert/strict';
 import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';
 const source=fileURLToPath(new URL('../',import.meta.url)),checker=path.join(source,'scripts/check_source_quality.ts');
 function check(root){
- const p=spawnSync(process.execPath,['--import','tsx',checker,`--root=${root}`],{cwd:source,encoding:'utf8'});
- assert.equal(p.error,undefined);return {status:p.status,output:p.stdout+p.stderr,result:p.stdout.trim()?JSON.parse(p.stdout):undefined};
+ const p=spawnSync(process.execPath,['--import','tsx',checker,`--root=${root}`],{cwd:source,encoding:'utf8',timeout:60_000});
+ assert.equal(p.error,undefined);assert.equal(p.signal,null);return {status:p.status,output:p.stdout+p.stderr,result:p.stdout.trim()?JSON.parse(p.stdout):undefined};
 }
 test('repository sources pass the source-language checker used by trusted CI',()=>{
  const {status,output,result}=check(source);
