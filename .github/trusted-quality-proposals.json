@@ -576,6 +576,29 @@
           "afterSha256": "785f3ec7eb32f30b90cd0fcf3657d388b5ff4297f2f9716ff66e9b69c05ddd09"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-WINDOWS-STDIN-FILE-CI-001",
+      "status": "staged",
+      "fromVersion": 22,
+      "toVersion": 23,
+      "owner": "repository maintainer (explicit approval for Issue #1698)",
+      "rationale": "Issue #1698: Windows を含む host-protocol job（.github/workflows/ci.yml 57行目の run）に test/test_stdin_file.mjs を1件追加する。Windows では、本物の Git で Controller・candidate・migration の stdin を渡す経路が正しい内容を返すかの test が動く。偽 Git で stdin の種類を記録する構造検査は POSIX だけのまま。test の追加だけで、品質検査・依存関係・validator・権限境界は変更しない。",
+      "rollback": "適用前は有効化しない。適用後に戻す場合は次versionのproposalを先行登録して適用し、登録済みproposalの削除や品質保護の解除は行わない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": ".github/workflows/ci.yml",
+          "beforeSha256": "89e84379df5e3717cc1442e87c6d55a4e27ea29c3a4399637c6dbfe2c1b0a314",
+          "afterSha256": "d9986025f1c59826ba3c466150b2d213c5ab46f4c8f16c274ac9e6d1f73d6172"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "785f3ec7eb32f30b90cd0fcf3657d388b5ff4297f2f9716ff66e9b69c05ddd09",
+          "afterSha256": "535fa30d7e25dd8a49f1536779734ec8286108d115da5045d77f3b4185d8f790"
+        }
+      ]
     }
   ]
 }
