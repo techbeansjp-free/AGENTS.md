@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {hash,safeName} from './controller.mjs';
 import {projectLocation} from './project-location.mjs';
+import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage} from './source-limits.mjs';
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const hostNames=['.agents','.claude'];
 const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;
@@ -141,15 +142,12 @@ function catalog(packageRoot,hosts){
  for(const host of hosts)for(const name of skillNames)assets.set(`${host}/skills/${name}/SKILL.md`,entryBytes(name,metadata.get(name)));
  demand(assets.size<=maxAssets&&[...assets.values()].every(v=>Buffer.isBuffer(v)),'Invalid distribution assets');return assets;
 }
-const gitTimeoutMilliseconds=20000;
-// Name why a Git child failed, so that a timeout under load can be told apart from an error reported by Git.
-function gitFailureReason(result){if(result.error?.code==='ETIMEDOUT')return `timed out after ${gitTimeoutMilliseconds} ms`;if(result.error?.code==='ENOBUFS')return 'output exceeded the buffer limit';if(result.error)return `could not run: ${result.error.code??result.error.message}`;if(result.signal)return `terminated by ${result.signal}`;return `exit status ${result.status}`;}
 // Asset Git children never read stdin. With a large spawnSync input on a
 // loaded macOS, Git was seen blocked reading stdin until the timeout (#1669);
 // pass bulk data as a file in the private temp directory.
 function git(repo,args){
- const result=spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','core.attributesFile=/dev/null',...args],{cwd:repo,stdio:['ignore','pipe','pipe'],encoding:null,maxBuffer:16000000,timeout:gitTimeoutMilliseconds,env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_ATTR_NOSYSTEM:'1',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'}});
- if(result.error||result.status!==0)throw Error(`Asset Git operation failed (${gitFailureReason(result)}); inspect worktree before retry`);return result.stdout;
+ const result=spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','core.attributesFile=/dev/null',...args],{cwd:repo,stdio:['ignore','pipe','pipe'],encoding:null,maxBuffer:16000000,timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_ATTR_NOSYSTEM:'1',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'}});
+ if(result.error||result.status!==0)throw Error(`${gitFailureMessage('Asset Git operation failed',result)}; inspect worktree before retry`);return result.stdout;
 }
 function distributionState(repo){
  const priorRecord=inspect(repo,record),priorBytes=priorRecord.bytes,previous=Object.create(null),selected=new Set(),owned=new Set(),ownershipConflicts=[];
@@ -221,8 +219,8 @@ export function projectAssets(directory,{apply=false,registerSkill=false,registe
   const write=(base,name,bytes)=>{if(bytes===null)return;const file=path.join(base,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);};
   for(const change of changes){const current=before.get(change.path);write(old,current.path,current.bytes);write(next,current.path,assets.get(change.path)??null);}
   if(result.recordChanged){write(old,record,priorBytes);write(next,record,nextRecord);}
-  const diff=spawnSync('git',['-c','core.attributesFile=/dev/null','diff','--no-index','--no-ext-diff','--no-textconv','--binary','--','old','new'],{cwd:temp,stdio:['ignore','pipe','pipe'],encoding:null,maxBuffer:16000000,timeout:gitTimeoutMilliseconds,env:{PATH:process.env.PATH,HOME:temp,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}});
-  if(diff.error||![0,1].includes(diff.status))throw Error(`Cannot prepare asset patch (${gitFailureReason(diff)})`);
+  const diff=spawnSync('git',['-c','core.attributesFile=/dev/null','diff','--no-index','--no-ext-diff','--no-textconv','--binary','--','old','new'],{cwd:temp,stdio:['ignore','pipe','pipe'],encoding:null,maxBuffer:16000000,timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,env:{PATH:process.env.PATH,HOME:temp,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}});
+  if(diff.error||![0,1].includes(diff.status))throw Error(gitFailureMessage('Cannot prepare asset patch',diff));
   for(const [name,current] of [...before,[record,{path:record,bytes:priorBytes}]]){const now=inspect(repo,name);demand(current.path===now.path&&(current.bytes===null?now.bytes===null:now.bytes!==null&&current.bytes.equals(now.bytes)),'Asset changed after planning');}
   if(diff.stdout.length){
    // git apply in the consumer repository would run its configured clean/smudge

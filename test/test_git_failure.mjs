@@ -2,7 +2,7 @@ import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import {performance} from 'node:perf_hooks';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,gitFailureReason,gitStderrExcerpt} from '../src/source-limits.mjs';
-import {Controller} from '../src/controller.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createVerificationGit} from '../src/verification-git.mjs';
+import {Controller} from '../src/controller.mjs';import {assertWorkLocation} from '../src/migration.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createVerificationGit} from '../src/verification-git.mjs';
 
 test('failure reason tells a timeout, a buffer overflow, a spawn error, a signal and an exit status apart',()=>{
  assert.equal(LOCAL_GIT_TIMEOUT_MILLISECONDS,20000);
@@ -180,4 +180,11 @@ test('verification Git index names the exit status or signal of read-tree',{skip
   const view=path.join(root,`view-${index}`);fs.mkdirSync(view);
   withFailingGit(root,'read-tree',body,()=>assert.throws(()=>createVerificationGit(view,head,commit,blobs),{message}));
  }
+});
+
+test('a migration Git failure names the exit status and the end of stderr',t=>{
+ const root=tempDir('asc-migration-git-failure-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ // Outside any repository, the first rev-parse fails the way a non-Git start did without a reason before (#1688).
+ // Assumes os.tmpdir() is not inside a Git repository; the migration Git env is fixed, so GIT_CEILING_DIRECTORIES cannot be set.
+ assert.throws(()=>assertWorkLocation(root),e=>/^Migration Git operation failed \(exit status 128; stderr: fatal: not a git repository/.test(e.message));
 });
