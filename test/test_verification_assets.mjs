@@ -44,7 +44,10 @@ test('dedicated resource verification rejects caught OOM and subsequent healthy 
  const code='import os,signal\np=os.fork()\nif p==0:\n a=[bytearray(16*1024*1024) for _ in range(80)]\n os._exit(23)\n_,s=os.waitpid(p,0)\nassert os.WIFSIGNALED(s) and os.WTERMSIG(s)==signal.SIGKILL\n';
  const bad=new AssetController({...f,contract:{...contract,testArgv:['/usr/bin/python3','-c',code]},implementer:'worker'});
  assert.throws(()=>bad.verify(),/Verification failed/);
- const rejected=bad.events.at(-1).results[0];assert.equal(rejected.exit,125);assert.equal(rejected.resourceBoundary.processExit,0);assert.equal(rejected.resourceBoundary.exhausted,true);
+ const rejected=bad.events.at(-1).results[0];assert.equal(rejected.exit,125);assert.equal(rejected.resourceBoundary.exhausted,true);
+ // While the first victim's last pages are still charged, the kernel may select
+ // a second victim. It must be the verification tree, never the observer.
+ if(rejected.resourceBoundary.processExit!==0)assert(rejected.resourceBoundary.delta['memory.events'].oom_kill>=2,'non-zero exit without a second OOM kill');
  good.verify();const last=good.events.at(-1).results[0];assert.equal(last.exit,0);assert.notEqual(first.resourceBoundary.unit,last.resourceBoundary.unit);assert.notEqual(rejected.resourceBoundary.unit,last.resourceBoundary.unit);
 });
 test('bounded output overflow is typed after cleanup and does not block next verification',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},t=>{
@@ -173,6 +176,24 @@ test('owner memory budget is observed by kernel and OOM cannot become success',{
 });
 
 
+test('verification tree is the preferred OOM victim and the observer is not',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
+ const {runBoundedVerification}=await import('../src/verification-resources.mjs');
+ // choom and prlimit exec in place, so the verification process's parent is the observer.
+ const result=runBoundedVerification(['--','/usr/bin/python3','-c','import os;print(open("/proc/self/oom_score_adj").read().strip(),open(f"/proc/{os.getppid()}/oom_score_adj").read().strip(),os.path.realpath(f"/proc/{os.getppid()}/exe"))'],5000);
+ const [tree,observer,exe]=result.stdout.toString().trim().split(' ');
+ assert.equal(result.status,0);assert.equal(tree,'1000');assert.equal(exe,fs.realpathSync(process.execPath));assert(Number(observer)<1000,`observer oom_score_adj ${observer}`);
+});
+test('OOM kill of the verification process itself is rejected exhaustion, other signals stay execution failures',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
+ const {runBoundedVerification}=await import('../src/verification-resources.mjs');
+ // A small sibling keeps another score-1000 candidate in the tree, so a second
+ // OOM during the first victim's teardown cannot fall back to the observer. It
+ // exits on EOF once the allocating top process is killed.
+ const code='import os\nr,w=os.pipe()\nif os.fork()==0:\n os.close(w);os.read(r,1);os._exit(0)\nos.close(r)\na=[bytearray(16*1024*1024) for _ in range(80)]\n';
+ const killed=runBoundedVerification(['--','/usr/bin/python3','-c',code],20000,268435456);
+ assert.equal(killed.status,125);assert.equal(killed.resourceBoundary.exhausted,true);assert.equal(killed.resourceBoundary.processExit,null);assert.equal(killed.resourceBoundary.processSignal,'SIGKILL');
+ assert(killed.resourceBoundary.delta['memory.events'].oom_kill>0);assert.equal(killed.resourceBoundary.cleanupConfirmed,true);
+ assert.throws(()=>runBoundedVerification(['--','/usr/bin/python3','-c','import os,signal;os.kill(os.getpid(),signal.SIGTERM)'],5000),/Bounded verification observer failed/);
+});
 test('normal exit waits for finite teardown but rejects a surviving descendant',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
  const {runBoundedVerification}=await import('../src/verification-resources.mjs');
  const invoke=seconds=>runBoundedVerification(['--','/bin/sh','-c',`sleep ${seconds} >/dev/null 2>&1 & exit 0`],5000);
