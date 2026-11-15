@@ -14,7 +14,7 @@ function fileBehind(fd){
  const {ino,dev}=fs.fstatSync(fd);
  for(const name of fs.readdirSync(os.tmpdir()).filter(name=>name.startsWith('asc-stdin-'))){
   const file=path.join(os.tmpdir(),name,'input');
-  try{const s=fs.statSync(file);if(s.ino===ino&&s.dev===dev)return file;}catch(error){if(error.code!=='ENOENT')throw error;}
+  try{const s=fs.statSync(file);if(s.ino===ino&&s.dev===dev)return file;}catch(error){if(!['ENOENT','EACCES','EPERM'].includes(error.code))throw error;}
  }
  throw Error('stdin file not found');
 }
