@@ -27,8 +27,7 @@ function withRecordingGit(root,run){
 }
 
 test('Controller, candidate and migration Git paths that feed stdin return the right content',t=>{
- // Not skipped on Windows, where the recording test below cannot run. Windows CI does not run this file yet: adding it
- // changes .github/workflows/ci.yml, which the quality validator pins until the owner approves a new version (#1698).
+ // Not skipped on Windows, where the recording test below cannot run. The host-protocol job runs this file on Windows (#1698).
  const {c,root,repo,git}=repository(t);const head=git('rev-parse','HEAD');
  const workspace=path.join(root,'worker');fs.mkdirSync(workspace);fs.writeFileSync(path.join(workspace,'code.txt'),'after');
  const blobs=c.blobs(head);assert.equal(blobs.get('code.txt').bytes.toString(),'before');assert.equal(blobs.get('other.txt').bytes.toString(),'other');
