@@ -21,10 +21,14 @@ export const GIT_STDERR_EXCERPT_CHARACTERS=512;
    Known gaps (#1691, #1696): a later line of a multi-line value that itself starts like a Git message is shown; a
    quoted value that contains the rest of Git's wording (such as "' for ") shows what follows that part; a wording
    that another Git version adds, or that a key read only under a subsection name, value shape or argument not in the
-   survey produces (scripts/survey-git-config-stderr.mjs); a URL password with both '/' and ':'; credential formats
-   not listed here. Over-redaction: long words after 'basic' or 'token'; an authority with a ':' before a '/' and
-   a later '@' (https://h:443/a@b); and any message worded 'invalid <word> value: ' or 'invalid <word> mode ', config or
-   not, which is hidden up to the next message line. */
+   survey produces (scripts/survey-git-config-stderr.mjs); a URL password with both '/' and ':', or with a '/' and more
+   than 128 characters around it (the bound keeps that scan linear); 'code=', 'auth=' and 'sig=' outside a query or
+   form (after a space, which main hid), kept readable so that "exit code=128" is not hidden; credential formats not
+   listed here. Over-redaction: long words after 'basic' or 'token'; an authority with a ':' before a '/' and a later
+   '@' (https://h:443/a@b); any message worded 'invalid <word> value: ' or 'invalid <word> mode ', config or not, which
+   is hidden up to the next message line; and a quoted word after one of the starts below whose closing quote is
+   followed by neither Git's config wording nor a line end, which is hidden up to the next message line
+   ("fatal: invalid mode '100645' in tree" shows "invalid mode '***"). */
 // The start of the next Git message line. Upload-pack output that Git relays (clone) starts each line with "remote: ".
 const nextMessageLine=/\n[^\S\n]*(?:remote:[^\S\n]*)?(?:fatal|error|warning|hint|usage):/g;
 const messageLineAfter=(text,from)=>{nextMessageLine.lastIndex=from;const next=nextMessageLine.exec(text);return next?next.index:text.length;};
