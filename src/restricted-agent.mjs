@@ -72,7 +72,7 @@ export function createSentinels(logRoot,locate=sentinelBases) {
   const unplaced=(where,error)=>Error(`Isolation not established (cannot place a sentinel in ${where}: ${error.code??error.message})`,{cause:error});
   try{
     fs.writeFileSync(files[0],'trusted',{flag:'wx'});
-    let bases;try{bases=locate();}catch(error){throw unplaced('the shared temporary directories',error);}
+    let bases;try{bases=locate();}catch(error){throw unplaced(error.path??'the temporary directories',error);}
     for(const base of bases){
       try{
         const dir=fs.mkdtempSync(path.join(base,'asc-v05-sentinel-'));dirs.push(dir);

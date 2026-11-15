@@ -50,7 +50,9 @@ test('a sentinel that cannot be placed stops the run and names the location',t=>
  // The directory already made under the first location is removed.
  assert.deepEqual(fs.readdirSync(good),[]);
  const logs2=path.join(root,'logs2');fs.mkdirSync(logs2);
- assert.throws(()=>createSentinels(logs2,()=>{throw Object.assign(Error('denied'),{code:'EACCES'});}),e=>e.message==='Isolation not established (cannot place a sentinel in the shared temporary directories: EACCES)');
+ assert.throws(()=>createSentinels(logs2,()=>{throw Object.assign(Error('denied'),{code:'EACCES'});}),e=>e.message==='Isolation not established (cannot place a sentinel in the temporary directories: EACCES)'&&e.cause?.code==='EACCES');
+ assert.throws(()=>createSentinels(path.join(root,'logs3-missing'),()=>[]),e=>e.code==='ENOENT','the logs sentinel keeps its original error');
+ assert.throws(()=>{fs.mkdirSync(path.join(root,'logs4'));createSentinels(path.join(root,'logs4'),()=>{throw Object.assign(Error('gone'),{code:'ENOENT',path:'/var/tmp'});});},e=>e.message==='Isolation not established (cannot place a sentinel in /var/tmp: ENOENT)');
 });
 const agentFixture=t=>{
  const root=tempDir('asc-agent-preflight-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
