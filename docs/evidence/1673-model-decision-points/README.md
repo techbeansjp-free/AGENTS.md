@@ -72,8 +72,8 @@
 
 ## 製品検査
 
-- `npm run quality`：macOS 上で 562件中 424成功・失敗0・138 skip（fa074c8f と 5f7639dc）。最終版の本文の修正後は PR に記す。
-- `npm run package:check`：fa074c8f と 5f7639dc で成功。
+- `npm run quality`：macOS 上で 562件中 424成功・失敗0・138 skip（fa074c8f・5f7639dc・f1adf1f4）。
+- `npm run package:check`：fa074c8f・5f7639dc・f1adf1f4 で成功。
 
 ## 限界
 
