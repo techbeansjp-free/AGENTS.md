@@ -7,7 +7,7 @@ export function commitCandidate(controller,workspace,{name='ASC evaluation',emai
  demand(!/[\r\n\0]/.test(name+email)&&name&&email,'Invalid commit identity');
  const before=controller.target({allowEmpty:true}),original=controller.blobs(before.head);
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'asc-candidate-index-'));
- // Git for Windows maps /dev/null itself, but NUL is the platform name, as in the Controller and migration Git children.
+ // NUL is the Windows null device, as in the Controller and migration Git children.
  const nul=process.platform==='win32'?'NUL':'/dev/null';
  const git=(args,input,index=true)=>{
   const env={PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:nul,GIT_NO_REPLACE_OBJECTS:'1',
