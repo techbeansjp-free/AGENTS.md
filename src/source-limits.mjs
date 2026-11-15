@@ -13,12 +13,14 @@ export const GIT_STDERR_EXCERPT_CHARACTERS=512;
    or a header copied from config could also carry a credential. Patterns run on the raw stderr, before line breaks
    are folded, so a header is hidden up to the end of its line.
    Known gaps: a quoted config value that itself contains "'" shows the part after it; a wording that another Git
-   version adds; credential formats not listed here (#1691). Long words after 'basic' or 'token' are hidden even
+   version adds, or that a key read only under a matching subsection name, value shape or argument not in the sweep
+   produces; credential formats not listed here (#1691). Long words after 'basic' or 'token' are hidden even
    when they are not secrets. */
 const secretPatterns=[
- // Config values quoted by Git. The forms below are every one that a sweep of all 992 documented config keys produced
- // on Git 2.54 for the commands that Controller and candidate run (#1691); a value after a colon runs to the line end.
- [/(\b(?:value|component|mode|parameter|orderfile|algorithm|chdir to) )'[^']*'/gi,"$1'***'"],
+ // Config values quoted by Git. The forms below are every one that a sweep produced on Git 2.54 (#1691): all 992
+ // documented config keys, three value shapes (words with a space, '~nouser/...', a bad regex) and the 20 argument forms
+ // that Controller and candidate pass. A value after a colon runs to the line end.
+ [/(\b(?:value|component|mode|parameter|orderfile|algorithm|chdir to|user dir in:|include path) )'[^']*'/gi,"$1'***'"],
  [/(\bunknown )'[^']*'( value for)/gi,"$1'***'$2"],
  [/(\bvalue for (?:config )?'?[^'\s]{1,256}'?(?: config (?:variable|option))?: )[^\n]*/gi,'$1***'],
  [/(\b(?:invalid color value|invalid mode for object creation|bad --ignore-submodules argument): )[^\n]*/gi,'$1***'],

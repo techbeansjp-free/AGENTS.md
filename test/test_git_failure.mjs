@@ -52,6 +52,8 @@ test('stderr excerpt hides config values, query and form credentials, userinfo w
   ["  Unknown dirstat parameter 'a s3cret'","Unknown dirstat parameter '***'"],
   ["fatal: failed to read orderfile 'a s3cret': No such file or directory","fatal: failed to read orderfile '***': No such file or directory"],
   ["fatal: unknown fetch negotiation algorithm 'a s3cret'","fatal: unknown fetch negotiation algorithm '***'"],
+  ["fatal: failed to expand user dir in: '~nouser/s3cret'","fatal: failed to expand user dir in: '***'"],
+  ["error: could not expand include path '~nouser/s3cret'\nfatal: bad config line 9 in file .git/config","error: could not expand include path '***' fatal: bad config line 9 in file .git/config"],
   ["fatal: bad boolean config value 'a\ns3cret' for 'core.filemode'","fatal: bad boolean config value '***' for 'core.filemode'"],
   ["error: unknown value for config 'pack.foo': s3cret","error: unknown value for config 'pack.foo': ***"],
   ['fatal: https://user:p@ss@s3cret@example.invalid/repo','fatal: https://***@example.invalid/repo'],
@@ -65,10 +67,13 @@ test('stderr excerpt hides config values, query and form credentials, userinfo w
  assert.equal(gitStderrExcerpt('Authorization: Bearer s3cret fatal: end'),'Authorization: ***');
  // Remaining gap, kept visible on purpose: a quoted value containing "'" shows the part after that quote.
  assert.equal(gitStderrExcerpt("fatal: bad boolean config value 'it's' for 'core.filemode'"),"fatal: bad boolean config value '***'s' for 'core.filemode'");
- // Every new pattern stays linear on sixteen megabytes built from its own trigger.
- for(const unit of ["value '",'value for ',"unknown '",'password ','token=','a@','https://','authorization:x\n']){
-  const started=performance.now();gitStderrExcerpt(Buffer.from(unit.repeat(Math.floor(16_000_000/unit.length))));assert.ok(performance.now()-started<10000,unit);
+ // Every pattern stays linear on four megabytes built from its own start; a quadratic one would take hours.
+ for(const unit of ["value '",'value for ',"value for 'k': ","unknown '","component '","chdir to '","mode '","parameter '","orderfile '","algorithm '",'invalid color value: x\n',
+  'password ','token=','a@','https://','authorization:x\n']){
+  const started=performance.now();gitStderrExcerpt(Buffer.from(unit.repeat(Math.floor(4_000_000/unit.length))));assert.ok(performance.now()-started<10000,unit);
  }
+ // The worst case of a quoted value: one opening quote and no closing quote before the end.
+ const unclosed=performance.now();assert.equal(gitStderrExcerpt(Buffer.from("value '"+'x'.repeat(4_000_000))).includes('***'),false);assert.ok(performance.now()-unclosed<10000);
 });
 
 // One key for each form that the #1691 sweep found, run through the same Git commands and environment as Controller.
@@ -79,12 +84,12 @@ test('real Git output for each config value wording found by the sweep does not 
  const env={PATH:process.env.PATH,HOME:root,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0'};
  const run=args=>spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','protocol.allow=never',...args],{cwd:repo,env});
  const diff=['diff','--no-ext-diff','--no-textconv','--binary','HEAD~1','HEAD'];let quoted=0;
- for(const [key,args] of [['core.compression',['rev-parse','HEAD']],['core.filemode',['ls-tree','HEAD']],['core.checkStat',diff],['color.diff.meta',diff],['core.createObject',diff],['core.fsync',diff],
+ for(const [key,args,value='S3CRETX https://u:S3CRETY@example.invalid/'] of [['core.compression',['rev-parse','HEAD']],['core.filemode',['ls-tree','HEAD']],['core.checkStat',diff],['color.diff.meta',diff],['core.createObject',diff],['core.fsync',diff],
   ['core.fsyncMethod',diff],['core.worktree',diff],['diff.algorithm',diff],['diff.colorMovedWS',diff],['diff.dirstat',diff],['diff.ignoreSubmodules',diff],['diff.orderFile',diff],
-  ['diff.submodule',diff],['fetch.negotiationAlgorithm',diff],['push.default',diff]]){
+  ['diff.submodule',diff],['fetch.negotiationAlgorithm',diff],['push.default',diff],['core.excludesFile',diff,'~nouser/S3CRETX'],['include.path',diff,'~nouser/S3CRETX']]){
   // Through --file from outside the repository: a bad core.worktree also stops a plain 'git config' in the repository.
   const config=(...rest)=>execFileSync('git',['config','--file',path.join(repo,'.git','config'),...rest],{cwd:root,stdio:'pipe'});
-  config(key,'S3CRETX https://u:S3CRETY@example.invalid/');
+  config(key,value);
   const p=run(args),stderr=p.stderr.toString();config('--unset',key);
   if(stderr.includes('S3CRET'))quoted++;
   assert.equal(/S3CRET/.test(gitStderrExcerpt(p.stderr)),false,`${key}: ${gitStderrExcerpt(p.stderr)}`);
