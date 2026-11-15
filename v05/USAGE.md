@@ -532,7 +532,7 @@ sandbox内で切り離して起動されたプロセスの扱い（#1703）：
 - 実測（Codex 0.169.0、モデル呼出しなし、`codex sandbox`の中で起動したものが3秒後に作業領域へ書く）
   - macOS：変更前は3種類とも生き残って書き込んだ。変更後は、shellのbackground job（`cmd &`）と`nohup`は止まり、書き込まなかった。`setsid`でgroupを出たもの（Nodeの`detached:true`など）は生き残り、書き込んだ。
   - Linux（Debianのcontainer）：変更前から3種類とも、sandboxの終了とともに止まった。
-  - Windows：未確認（実機がないため）。Windowsではprocess groupを使わず、これまでどおり直接の子だけを止める。
+  - Windows：未確認（実機がないため）。Windowsではprocess groupを使わず、これまでどおり直接の子だけを止める。ただし期限切れと出力上限のときは、Windowsでも出力を最大1秒待ってから返す。
 - 止められないもの
   - `setsid`や`setpgid`でgroupを出たもの（daemon化、Nodeの`detached:true`、job controlを有効にしたshellのjob）。macOSでは、自分で終わるまでCPUとmemoryを使い続け得る。他のプロセスのenvはmacOSでは読めないため（実測）、印で探して止める方法は取れない。
   - Host自身がSIGKILLや異常終了で止まった場合。後始末は動かない。Controllerは期限切れのとき、同期の検証ではHostへSIGKILLを送るので、後始末は動かない。非同期のAgentではSIGTERMを送るので、Hostは先にgroupを止めてから終わる。

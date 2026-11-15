@@ -21,14 +21,14 @@ function disown(pgid){
  if(!ownedGroups.size){process.removeListener('exit',killOwned);for(const name of relayed)process.removeListener(name,relay);}
 }
 
-export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pid,signal)=>process.kill(pid,signal),platform=process.platform}={}){
+export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pid,signal)=>process.kill(pid,signal),platform=process.platform,drainMilliseconds=OUTPUT_DRAIN_MILLISECONDS}={}){
  return new Promise((resolve,reject)=>{
   const script=/\.m?js$/i.test(binary),grouped=platform!=='win32';
   const p=spawn(script?process.execPath:binary,script?[binary,...args]:args,{env,windowsHide:true,stdio:['pipe','pipe','pipe'],detached:grouped});
   // A group number must name the child's own group: never 0, 1 or a negative value, which would reach other processes.
   const pgid=grouped&&Number.isSafeInteger(p.pid)&&p.pid>1?p.pid:undefined;
   if(pgid)own(pgid);
-  const out=[],err=[];let size=0,done=false,accepting=true,exited=false,exitCode=null,killed=false;
+  const out=[],err=[];let size=0,done=false,accepting=true,overLimit=false,exited=false,exitCode=null,killed=false;
   const timers=new Set(),later=(ms,fn)=>{const t=setTimeout(()=>{timers.delete(t);fn();},ms);timers.add(t);return t;};
   // Sent once, synchronously, right after the child exits or fails. Members still in the group keep its number from
   // reuse; a group that held only the child is already empty, so the kill reports ESRCH (a very small reuse window).
@@ -59,7 +59,7 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
    if(open.length)await new Promise(settle=>{
     let left=open.length;
     for(const stream of open){let counted=false;const one=()=>{if(counted)return;counted=true;if(--left===0)settle();};stream.once('end',one);stream.once('close',one);}
-    later(OUTPUT_DRAIN_MILLISECONDS,settle);
+    later(drainMilliseconds,settle);
    });
    accepting=false;
    for(const t of timers)clearTimeout(t);
@@ -69,10 +69,12 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
     const cleanup=Object.assign(Error('Host process group cleanup unconfirmed'),{code:'ASC_HOST_CLEANUP_UNCONFIRMED',cause:killError??error,...result});
     reject(cleanup);return;
    }
+   // The limit can also be passed while draining, after a successful exit; truncated output is never a success.
+   if(!error&&overLimit)error=Error('Host process output limit');
    if(error){Object.assign(error,result);reject(error);}else resolve(result);
   };
   const timer=timeout===null?undefined:setTimeout(()=>finish(Object.assign(Error('Host process deadline exceeded'),{code:'ASC_HOST_TRANSPORT_TIMEOUT'})),timeout);
-  for(const [stream,chunks] of [[p.stdout,out],[p.stderr,err]])stream.on('data',b=>{if(!accepting)return;size+=b.length;if(size>8*1024*1024){accepting=false;finish(Error('Host process output limit'));}else chunks.push(b);});
+  for(const [stream,chunks] of [[p.stdout,out],[p.stderr,err]])stream.on('data',b=>{if(!accepting)return;size+=b.length;if(size>8*1024*1024){accepting=false;overLimit=true;finish(Error('Host process output limit'));}else chunks.push(b);});
   p.on('error',()=>finish(Error('Host executable could not start')));p.stdin.on('error',()=>finish(Error('Host input failed')));
   const settle=()=>finish(exitCode===0?undefined:Object.assign(Error('Host process failed: '+exitCode),{code:'ASC_PROVIDER_EXIT'}));
   // The direct child's exit, not the pipes closing, starts the cleanup: a leftover may keep the pipes open.

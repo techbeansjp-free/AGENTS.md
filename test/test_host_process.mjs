@@ -25,7 +25,7 @@ const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ign
 const sh=cmd=>Number(spawnSync('/bin/sh',['-c',cmd+' >/dev/null 2>&1 & echo $!'],{encoding:'utf8'}).stdout.trim());
 const pids={child:child.pid,background:sh(${JSON.stringify(forever)}),nohup:sh('nohup '+${JSON.stringify(forever)})};
 ${escape?"const away=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});away.unref();pids.setsid=away.pid;":''}
-fs.writeFileSync(${JSON.stringify(file)},JSON.stringify(pids));`;
+fs.writeFileSync(${JSON.stringify(file+'.tmp')},JSON.stringify(pids));fs.renameSync(${JSON.stringify(file+'.tmp')},${JSON.stringify(file)});`;
 };
 test('the Host child process group stops with the child: plain, background and nohup leftovers',posix,async t=>{
  const root=tempDir('asc-host-group-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -106,6 +106,23 @@ runHostProcess(process.execPath,['-e',${JSON.stringify(leftovers(file)+';setInte
 test('output that arrives after the Host child exits is still collected while the pipes stay open',posix,async()=>{
  // A child outside the group keeps stdout and writes 200 ms after the direct child exited, then ends.
  const code="require('node:child_process').spawn(process.execPath,['-e',\"setTimeout(()=>process.stdout.write('late'),200)\"],{detached:true,stdio:['ignore','inherit','inherit']}).unref();process.stdout.write('early')";
- const result=await runHostProcess(process.execPath,['-e',code],{env:{},input:''});
+ // A generous drain keeps the test independent of machine load.
+ const result=await runHostProcess(process.execPath,['-e',code],{env:{},input:''},{drainMilliseconds:5000});
  assert.equal(result.stdout,'earlylate');
+});
+test('the output limit fails the call and stops the group, also when passed while draining',posix,async t=>{
+ const root=tempDir('asc-host-limit-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const file=path.join(root,'pids.json');
+ await assert.rejects(runHostProcess(process.execPath,['-e',leftovers(file)+";process.stdout.write(Buffer.alloc(9*1024*1024,97));setInterval(()=>{},1000)"],{env:{PATH:process.env.PATH},input:''}),/output limit/);
+ const pids=JSON.parse(fs.readFileSync(file,'utf8'));
+ t.after(()=>{for(const pid of Object.values(pids))try{process.kill(pid,'SIGKILL');}catch{ /* Already stopped. */ }});
+ for(const [kind,pid] of Object.entries(pids))assert.equal(alive(pid),false,`${kind} ${pid} must be stopped`);
+ // A child outside the group writes past the limit after the direct child exited successfully.
+ const late="require('node:child_process').spawn(process.execPath,['-e',\"setTimeout(()=>process.stdout.write(Buffer.alloc(9*1024*1024,98)),100)\"],{detached:true,stdio:['ignore','inherit','inherit']}).unref()";
+ await assert.rejects(runHostProcess(process.execPath,['-e',late],{env:{},input:''},{drainMilliseconds:5000}),/output limit/);
+});
+test('a Host executable that cannot start fails at once',async()=>{
+ const started=Date.now();
+ await assert.rejects(runHostProcess('/nonexistent/asc-host-binary',[],{env:{},input:''}),/could not start/);
+ assert.ok(Date.now()-started<1500,'no drain wait after a failed start');
 });
