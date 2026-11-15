@@ -3,10 +3,11 @@ import {test} from 'node:test';
 import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';import {createHash} from 'node:crypto';
 import {Controller} from '../src/controller.mjs';
 import {hostExecution} from '../src/host-execution.mjs';
 import {runWorkflow} from '../src/workflow.mjs';
+import {withStdinFile} from '../src/source-limits.mjs';
 
 function fixture(t){
  const root=tempDir('asc-host-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -121,4 +122,50 @@ test('Host capacity preserves partial implementation through real verification a
  assert.deepEqual(result.calls.map(c=>c.status),['failed','completed','completed']);
  assert.equal(result.calls[0].usage,null);assert.equal(result.events.filter(e=>e.type==='provider-retry').length,1);
  assert.notEqual(result.calls[1].context,result.calls[2].context);
+});
+
+// withStdinFile gives the Host transport, the approval command and local Git their stdin (#1682). It is tested here
+// because Windows CI runs this file (#1694); the Git paths are in test_stdin_file.mjs.
+const kindOfStdin="const s=fs.fstatSync(0),kind=s.isFile()?'file':s.isFIFO()?'fifo':s.isSocket()?'socket':s.isCharacterDevice()?'char':'other';";
+/** Run with os.tmpdir() pointed at a directory of this test, so the helper's private directory can be listed directly
+    on every OS (Windows reads TEMP and TMP, POSIX reads TMPDIR). */
+function withTestTmpdir(t,run){
+ const dir=tempDir('asc-stdin-tmpdir-'),saved=Object.fromEntries(['TMPDIR','TEMP','TMP'].map(k=>[k,process.env[k]]));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ for(const k of Object.keys(saved))process.env[k]=dir;
+ try{return run(dir);}finally{for(const [k,v] of Object.entries(saved))if(v===undefined)delete process.env[k];else process.env[k]=v;}
+}
+const stdinDirs=dir=>fs.readdirSync(dir).filter(name=>name.startsWith('asc-stdin-')).map(name=>path.join(dir,name));
+
+test('withStdinFile gives the child a private regular file with the whole input and removes it afterwards',t=>{
+ assert.equal(withStdinFile(undefined,stdin=>stdin),'ignore');
+ const input=Buffer.alloc(2*1024*1024,7);
+ withTestTmpdir(t,dir=>{
+  const result=withStdinFile(input,stdin=>{
+   assert.equal(typeof stdin,'number');
+   const dirs=stdinDirs(dir);assert.equal(dirs.length,1);const file=path.join(dirs[0],'input');
+   assert.equal(fs.statSync(file).size,input.length);
+   // Windows has no POSIX permission bits; there the directory is private only through the user's temp directory.
+   if(process.platform!=='win32'){assert.equal(fs.statSync(file).mode&0o777,0o600);assert.equal(fs.statSync(dirs[0]).mode&0o777,0o700);}
+   return spawnSync(process.execPath,['--input-type=module','-e',`import fs from 'node:fs';import {createHash} from 'node:crypto';${kindOfStdin}
+const bytes=fs.readFileSync(0);process.stdout.write(JSON.stringify({kind,size:bytes.length,sha:createHash('sha256').update(bytes).digest('hex')}));`],{stdio:[stdin,'pipe','pipe'],encoding:'utf8'});
+  });
+  assert.equal(result.status,0,result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout),{kind:'file',size:input.length,sha:createHash('sha256').update(input).digest('hex')});
+  assert.deepEqual(stdinDirs(dir),[]);
+  // The file is removed when the child cannot run or the caller throws.
+  assert.throws(()=>withStdinFile('x',()=>{assert.equal(stdinDirs(dir).length,1);throw Error('stop');}),/stop/);
+  assert.deepEqual(stdinDirs(dir),[]);
+ });
+});
+
+test('synchronous Host verification reads its request from a regular file, never a pipe',t=>{
+ const {c,root,repo}=fixture(t);const script=path.join(root,'stdin-host.mjs'),log=path.join(root,'host-stdin.json');
+ fs.writeFileSync(script,`import fs from 'node:fs';${kindOfStdin}
+const q=JSON.parse(fs.readFileSync(0,'utf8'));fs.writeFileSync(${JSON.stringify(log)},JSON.stringify({kind,operation:q.operation}));
+process.stdout.write(JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,result:{exit:0,stdout:'ok',stderr:''}}));`);
+ const host=hostExecution(c,{protocol:'asc-host-execution/v1',command:[process.execPath,script]});
+ const result=host.verify({argv:[process.execPath,'-e','0'],workspace:repo,timeout:20000});
+ assert.equal(result.status,0);assert.equal(result.stdout.toString(),'ok');
+ assert.deepEqual(JSON.parse(fs.readFileSync(log,'utf8')),{kind:'file',operation:'verify'});
 });
