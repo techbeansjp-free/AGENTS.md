@@ -32,6 +32,22 @@ export async function nextVersion({api,repo,sha}){
 // A merge can land while a required check is re-running (for example after ready_for_review); wait for it to settle.
 export const checkWait={timeoutMs:20*60_000,intervalMs:15_000,sleep:ms=>new Promise(r=>setTimeout(r,ms)),now:()=>Date.now()};
 const workflowFor=name=>name.startsWith('worktree (')?'worktree-execution.yml':name.startsWith('Mac native')?'native-verification.yml':name.startsWith('base validator')?'trusted-quality.yml':'ci.yml';
+// The commit-to-PR association can stay empty long after a merge (#1684); fall back to the recently updated closed PRs into main.
+export const pullScanPages=3;
+export async function mergedPullRequest({api,repo,sha}){
+ const prefix=`/repos/${repo}`,matches=p=>Boolean(p.merged_at)&&p.merge_commit_sha===sha&&p.base?.ref==='main'&&p.head?.repo?.full_name===repo;
+ const associated=(await api(`${prefix}/commits/${sha}/pulls?per_page=100`)).filter(matches);
+ demand(associated.length<=1,'Ambiguous merged PR for source');
+ if(associated[0])return associated[0];
+ const found=[];
+ for(let page=1;page<=pullScanPages;page++){
+  const batch=await api(`${prefix}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=100&page=${page}`);
+  found.push(...batch.filter(matches));if(found.length||batch.length<100)break;
+ }
+ demand(found.length<=1,'Ambiguous merged PR for source');
+ demand(found[0],'No merged same-repository PR for source');
+ return found[0];
+}
 export async function verify({api,repo,sha,version,wait={}}){
  const {timeoutMs,intervalMs,sleep,now}={...checkWait,...wait};
  releaseVersion(version);demand(/^[0-9a-f]{40}$/.test(sha),'Invalid source SHA');
@@ -41,9 +57,7 @@ export async function verify({api,repo,sha,version,wait={}}){
  const sourceVersion=JSON.parse(Buffer.from(manifest.content,'base64')).version;
  releaseVersion(sourceVersion);
  demand(Number(version.split('.')[2].split('-')[0])>=Number(sourceVersion.split('.')[2].split('-')[0]),'Distribution version predates source');
- const prs=await api(`${prefix}/commits/${sha}/pulls?per_page=100`);
- const pr=prs.find(p=>p.merged_at&&p.merge_commit_sha===sha&&p.base.ref==='main'&&p.head.repo?.full_name===repo);
- demand(pr,'No merged same-repository PR for source');
+ const pr=await mergedPullRequest({api,repo,sha});
  const head=await api(`${prefix}/commits/${pr.head.sha}`);
  demand(head.commit.tree.sha===main.commit.tree.sha,'Merged tree differs from tested PR head');
  // CI checkout must bind to the PR HEAD, not an implicit synthetic merge ref.
