@@ -21,8 +21,9 @@ export function codexRuntimeRoots(executable){
 /** Node's system OpenSSL configuration is runtime data, never user configuration. */
 export function nodeRuntimeRoots(platform=process.platform){return platform==='darwin'?['/System/Library/OpenSSL']:[];}
 
-/** Shared system temporaries that Codex's macOS profile leaves writable despite ':root'='deny' (#1695). */
-export function sharedTemporaryRoots(platform=process.platform){return platform==='darwin'?['/tmp','/private/tmp']:[];}
+/** Shared system temporaries that Codex's macOS profile leaves writable despite ':root'='deny' (#1695, #1701: measured
+ * for /tmp and /var/tmp). Linux needs none: Codex mounts private /tmp, /var/tmp and /dev/shm there (measured, #1701). */
+export function sharedTemporaryRoots(platform=process.platform){return platform==='darwin'?['/tmp','/private/tmp','/var/tmp','/private/var/tmp']:[];}
 
 /** Filesystem grants shared by Agent, verification and the native diagnostic. Callers add their own write roots.
  * Explicit denial of the shared temporaries keeps a Controller without TMPDIR (whose temporary files then live

@@ -48,18 +48,24 @@ export function assertPreflight(result,hostValues) {
   demand(data.completed===true && Array.isArray(data.targets) && Array.isArray(hostValues) && hostValues.length>0 && data.targets.length===hostValues.length &&
     data.targets.every(t=>t?.read==='denied' && ['denied','private-write-completed'].includes(t.write)) && hostValues.every(v=>v==='trusted'),'Isolation not established');
 }
-/** Controller-owned locations an Agent must not reach: logs, the Controller temporary directory (stdin files,
- * candidate index, Git output) and, outside Windows, /tmp, where those files live when TMPDIR is absent (#1695). */
+/** Directories that receive a sentinel, canonical and without duplicates: the Controller temporary directory (stdin files,
+ * candidate index, Git output) and, outside Windows, the shared /tmp and /var/tmp, where those files live when TMPDIR is
+ * absent or points there (#1695). Only an equal path is a duplicate: a TMPDIR below /tmp does not prove /tmp itself
+ * is denied (#1701). A missing shared directory is skipped. */
+export function sentinelBases({tmpdir=os.tmpdir(),platform=process.platform,realpath=fs.realpathSync}={}) {
+  const bases=[realpath(tmpdir)];
+  if(platform!=='win32')for(const shared of ['/tmp','/var/tmp']){
+    let canonical;try{canonical=realpath(shared);}catch(error){if(error.code==='ENOENT')continue;throw error;}
+    if(!bases.includes(canonical))bases.push(canonical);
+  }
+  return bases;
+}
+/** Controller-owned locations an Agent must not reach: logs and every sentinelBases() directory. */
 function createSentinels(logRoot) {
   const files=[path.join(logRoot,'controller-sentinel')],dirs=[];
-  const tmpdir=fs.realpathSync(os.tmpdir()),bases=[tmpdir];
-  if(process.platform!=='win32'){
-    let shared=null;try{shared=fs.realpathSync('/tmp');}catch(error){if(error.code!=='ENOENT')throw error;}
-    if(shared&&!contains(shared,tmpdir))bases.push(shared);
-  }
   try{
     fs.writeFileSync(files[0],'trusted',{flag:'wx'});
-    for(const base of bases){const dir=fs.mkdtempSync(path.join(base,'asc-v05-sentinel-'));dirs.push(dir);const file=path.join(dir,'controller-sentinel');fs.writeFileSync(file,'trusted',{flag:'wx',mode:0o600});files.push(file);}
+    for(const base of sentinelBases()){const dir=fs.mkdtempSync(path.join(base,'asc-v05-sentinel-'));dirs.push(dir);const file=path.join(dir,'controller-sentinel');fs.writeFileSync(file,'trusted',{flag:'wx',mode:0o600});files.push(file);}
   }catch(error){removeSentinels(dirs);throw error;}
   return {files,dirs};
 }

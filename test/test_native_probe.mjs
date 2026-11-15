@@ -26,7 +26,7 @@ test('Mac Node runtime grants only system OpenSSL read dependency',async()=>{
 test('shared sandbox filesystem denies the Mac system temporaries only on Mac',async()=>{
  const {sandboxFilesystemBase,sharedTemporaryRoots}=await import('../src/codex-runtime.mjs');
  const base=sandboxFilesystemBase({providerRoots:['/opt/codex'],node:'/opt/node/bin/node',platform:'darwin'});
- assert.equal(base['/tmp'],'deny');assert.equal(base['/private/tmp'],'deny');assert.equal(base[':root'],'deny');
+ for(const shared of ['/tmp','/private/tmp','/var/tmp','/private/var/tmp'])assert.equal(base[shared],'deny',shared);assert.equal(base[':root'],'deny');
  assert.equal(base['/System/Library/OpenSSL'],'read');assert.equal(base['/opt/codex'],'read');assert.equal(base['/opt/node/bin/node'],'read');
  for(const platform of ['linux','win32']){
   assert.deepEqual(sharedTemporaryRoots(platform),[]);
