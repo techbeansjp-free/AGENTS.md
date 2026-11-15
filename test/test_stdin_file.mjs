@@ -1,40 +1,12 @@
 import {tempDir} from './helpers/temp-dir.mjs';
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {createHash} from 'node:crypto';import {execFileSync,spawnSync} from 'node:child_process';
-import {withStdinFile} from '../src/source-limits.mjs';
+import {kindOfStdin} from './helpers/stdin-kind.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
+import {execFileSync} from 'node:child_process';
 import {Controller} from '../src/controller.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createWorktree} from '../src/migration.mjs';
-import {hostExecution} from '../src/host-execution.mjs';
 
 // #1682: a large spawnSync input was seen leaving a loaded macOS child blocked on its stdin pipe.
 // A hang is rare (thousands of calls), so these tests check the structure: stdin is a regular file, never a pipe or socket.
-const kindOfStdin="const s=fs.fstatSync(0),kind=s.isFile()?'file':s.isFIFO()?'fifo':s.isSocket()?'socket':s.isCharacterDevice()?'char':'other';";
-
-/** The private file behind a stdin descriptor, found by inode among this helper's temp directories. */
-function fileBehind(fd){
- const {ino,dev}=fs.fstatSync(fd);
- for(const name of fs.readdirSync(os.tmpdir()).filter(name=>name.startsWith('asc-stdin-'))){
-  const file=path.join(os.tmpdir(),name,'input');
-  try{const s=fs.statSync(file);if(s.ino===ino&&s.dev===dev)return file;}catch(error){if(!['ENOENT','EACCES','EPERM'].includes(error.code))throw error;}
- }
- throw Error('stdin file not found');
-}
-
-test('withStdinFile gives the child a private regular file with the whole input and removes it afterwards',{skip:process.platform==='win32'},()=>{
- assert.equal(withStdinFile(undefined,stdin=>stdin),'ignore');
- const input=Buffer.alloc(2*1024*1024,7);let file;
- const result=withStdinFile(input,stdin=>{
-  assert.equal(typeof stdin,'number');file=fileBehind(stdin);
-  assert.equal(fs.statSync(file).mode&0o777,0o600);assert.equal(fs.statSync(path.dirname(file)).mode&0o777,0o700);
-  return spawnSync(process.execPath,['--input-type=module','-e',`import fs from 'node:fs';import {createHash} from 'node:crypto';${kindOfStdin}
-const bytes=fs.readFileSync(0);process.stdout.write(JSON.stringify({kind,size:bytes.length,sha:createHash('sha256').update(bytes).digest('hex')}));`],{stdio:[stdin,'pipe','pipe'],encoding:'utf8'});
- });
- assert.equal(result.status,0,result.stderr);
- assert.deepEqual(JSON.parse(result.stdout),{kind:'file',size:input.length,sha:createHash('sha256').update(input).digest('hex')});
- assert.equal(fs.existsSync(path.dirname(file)),false);
- // The file is removed when the child cannot run or the caller throws.
- assert.throws(()=>withStdinFile('x',stdin=>{file=fileBehind(stdin);throw Error('stop');}),/stop/);
- assert.equal(fs.existsSync(path.dirname(file)),false);
-});
+// The helper itself and the Host transport are tested in test_host_execution.mjs, which Windows CI also runs (#1694).
 
 function repository(t){
  const root=tempDir('asc-stdin-file-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -54,6 +26,19 @@ function withRecordingGit(root,run){
  return fs.readFileSync(log,'utf8').trim().split('\n').map(line=>JSON.parse(line));
 }
 
+test('Controller, candidate and migration Git paths that feed stdin return the right content',t=>{
+ // Not skipped on Windows, where the recording test below cannot run. Windows CI does not run this file yet: adding it
+ // changes .github/workflows/ci.yml, which the quality validator pins until the owner approves a new version (#1698).
+ const {c,root,repo,git}=repository(t);const head=git('rev-parse','HEAD');
+ const workspace=path.join(root,'worker');fs.mkdirSync(workspace);fs.writeFileSync(path.join(workspace,'code.txt'),'after');
+ const blobs=c.blobs(head);assert.equal(blobs.get('code.txt').bytes.toString(),'before');assert.equal(blobs.get('other.txt').bytes.toString(),'other');
+ commitCandidate(c,workspace);assert.equal(git('show','HEAD:code.txt'),'after');
+ const worktree=createWorktree(repo,{issue:1694,type:'test',slug:'stdin-file',base:head});
+ assert.equal(fs.readFileSync(path.join(worktree.repo,'other.txt'),'utf8'),'other');assert.equal(fs.readFileSync(path.join(worktree.repo,'code.txt'),'utf8'),'before');
+});
+
+// POSIX only: the fake Git is a script with a shebang, which spawnSync runs without a shell only on POSIX.
+// On Windows it would need a .cmd wrapper, and spawnSync cannot start a .cmd without a shell.
 test('Controller, candidate and migration Git children read stdin from a regular file, never a pipe',{skip:process.platform==='win32'},t=>{
  const {c,root,repo,git}=repository(t);const head=git('rev-parse','HEAD');
  const workspace=path.join(root,'worker');fs.mkdirSync(workspace);fs.writeFileSync(path.join(workspace,'code.txt'),'after');
@@ -70,15 +55,4 @@ test('Controller, candidate and migration Git children read stdin from a regular
  assert.ok(fed.filter(({args})=>args.includes('--batch')).length>=2,JSON.stringify(calls));
  for(const call of fed)assert.equal(call.kind,'file',JSON.stringify(call));
  for(const call of calls)assert.ok(call.kind==='file'||call.kind==='char',JSON.stringify(call));
-});
-
-test('synchronous Host verification reads its request from a regular file, never a pipe',{skip:process.platform==='win32'},t=>{
- const {c,root,repo}=repository(t);const script=path.join(root,'host.mjs'),log=path.join(root,'host-stdin.json');
- fs.writeFileSync(script,`import fs from 'node:fs';${kindOfStdin}
-const q=JSON.parse(fs.readFileSync(0,'utf8'));fs.writeFileSync(${JSON.stringify(log)},JSON.stringify({kind,operation:q.operation}));
-process.stdout.write(JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,result:{exit:0,stdout:'ok',stderr:''}}));`);
- const host=hostExecution(c,{protocol:'asc-host-execution/v1',command:[process.execPath,script]});
- const result=host.verify({argv:['/bin/true'],workspace:repo,timeout:20000});
- assert.equal(result.status,0);assert.equal(result.stdout.toString(),'ok');
- assert.deepEqual(JSON.parse(fs.readFileSync(log,'utf8')),{kind:'file',operation:'verify'});
 });
