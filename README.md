@@ -28,7 +28,7 @@ snapshot Controllerは明示選択の別経路です。利用する場合だけ 
 
 ## 標準経路の流れ
 
-Git管理済みrepoでの1 Issueの流れです。各段階の詳細は[ASC Skill](skills/asc/SKILL.md)、[独立レビューとmerge直前の確認](skills/asc/references/review.md)、[同期と整理](skills/asc/references/post-merge.md)が正本です。Git未管理のフォルダーでは専用worktree・PR提出・merge後の整理を使わず、実装・実テスト・独立レビューで完了します。commit・push・PR提出・mergeはどれも利用者の許可がある場合だけ行います。
+Git管理済みrepoでの1 Issueの流れです。各段階の詳細は[ASC Skill](skills/asc/SKILL.md)、[独立レビューとmerge直前の確認](skills/asc/references/review.md)、[同期と整理](skills/asc/references/post-merge.md)が正本です。Git未管理のフォルダーでは専用worktree・PR提出・merge後の整理を使わず、実装・実テスト・独立レビューで完了できます。Gitでの提出を求められた場合だけ、許可されたGit導入と専用worktreeへの移行を行います。commit・push・PR提出・mergeはどれも利用者の許可がある場合だけ行います。
 
 ```mermaid
 flowchart TD
@@ -55,6 +55,7 @@ sequenceDiagram
   participant R as 独立レビューのContext
   participant G as GitHub（PR・CI）
   U->>H: Issueの開発を依頼
+  Note over U,H: commit・push・Draft PR提出とmergeは利用者の許可が必要
   H->>C: start・worktree-create
   C-->>H: 作業場所と規約の参照
   H->>H: 実装・実テスト
@@ -65,7 +66,6 @@ sequenceDiagram
     H->>R: 再レビュー
     R-->>H: 解消と回帰の確認
   end
-  Note over U,H: commit・push・Draft PR提出とmergeは利用者の許可が必要
   H->>G: Draft PR提出
   G-->>H: CI結果
   H-->>U: 対象commit・検証結果・指摘と是正を報告
