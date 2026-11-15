@@ -1,7 +1,7 @@
 /** Materialize bounded Agent output in an exclusively Controller-owned worktree. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';
 import {readSnapshotFile} from './snapshot.mjs';
-import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage} from './source-limits.mjs';
+import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,withStdinFile} from './source-limits.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 export function commitCandidate(controller,workspace,{name='ASC evaluation',email='controller@example.invalid'}={}) {
  demand(!/[\r\n\0]/.test(name+email)&&name&&email,'Invalid commit identity');
@@ -10,9 +10,9 @@ export function commitCandidate(controller,workspace,{name='ASC evaluation',emai
  const git=(args,input,index=true)=>{
   const env={PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_NO_REPLACE_OBJECTS:'1',
    GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0',...(index?{GIT_INDEX_FILE:path.join(temp,'index')}:{})};
-  const p=spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','protocol.allow=never',
+  const p=withStdinFile(input,stdin=>spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','protocol.allow=never',
    '-c','commit.gpgsign=false','-c',`user.name=${name}`,'-c',`user.email=${email}`,...args],
-   {cwd:controller.repo,env,input,timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,maxBuffer:16*1024*1024});
+   {cwd:controller.repo,env,stdio:[stdin,'pipe','pipe'],timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,maxBuffer:16*1024*1024}));
   if(p.error||p.status!==0)throw Error(gitFailureMessage('Candidate Git operation failed',p));return p.stdout.toString().trim();
  };
  try{

@@ -4,6 +4,7 @@ import {createExecutionBudget} from './execution-budget.mjs';
 import {runUnitThread} from './unit-thread.mjs';
 import {importUnitCandidate,candidateMatchesContract} from './unit-candidate.mjs';
 import {authorityCommandValidator} from './authority-command.mjs';
+import {withStdinFile} from './source-limits.mjs';
 /** Bounded owner-supplied Goal execution. No imported approval/review receipts. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';
 import {compileGoal} from './goal-plan.mjs';import {AssetController} from './verification-assets.mjs';import {hash,digest,safeName} from './controller.mjs';
@@ -65,7 +66,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
  if(c.needsDesign()){
   const argv=request.approvalCommand;demand(Array.isArray(argv)&&argv.length&&argv.every(x=>typeof x==='string')&&path.isAbsolute(argv[0]),'Goal owner approval required');
   demand(!fs.realpathSync(argv[0]).startsWith(c.repo+path.sep),'Candidate cannot supply Goal authority');
-  const result=spawnSync(argv[0],argv.slice(1),{input:JSON.stringify({purpose:'design',contract:c.contract,binding:c.binding()}),encoding:'utf8',timeout:60000,maxBuffer:65536});
+  const result=withStdinFile(JSON.stringify({purpose:'design',contract:c.contract,binding:c.binding()}),stdin=>spawnSync(argv[0],argv.slice(1),{stdio:[stdin,'pipe','pipe'],encoding:'utf8',timeout:60000,maxBuffer:65536}));
   demand(!result.error&&result.status===0,'Goal owner approval unavailable');budget.check();c.approveDesign(JSON.parse(result.stdout));
  }
  const remote=provider??new Github({...request.delivery,repo:c.repo,base:c.base});
