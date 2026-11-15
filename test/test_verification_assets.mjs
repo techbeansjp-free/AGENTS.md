@@ -197,7 +197,14 @@ test('OOM kill of the verification process itself is rejected exhaustion, other 
  const killed=runBoundedVerification(['--','/usr/bin/python3','-c',code],20000,268435456);
  assert.equal(killed.status,125);assert.equal(killed.resourceBoundary.exhausted,true);assert.equal(killed.resourceBoundary.processExit,null);assert.equal(killed.resourceBoundary.processSignal,'SIGKILL');
  assert(killed.resourceBoundary.delta['memory.events'].oom_kill>0);assert.equal(killed.resourceBoundary.cleanupConfirmed,true);
- assert.throws(()=>runBoundedVerification(['--','/usr/bin/python3','-c','import os,signal;os.kill(os.getpid(),signal.SIGTERM)'],5000),/Bounded verification observer failed/);
+ // A non-exhaustion signal is rejected by the observer itself (exit 1), not by
+ // the observer being killed (status 255, the #1683 symptom).
+ assert.throws(()=>runBoundedVerification(['--','/usr/bin/python3','-c','import os,signal;os.kill(os.getpid(),signal.SIGTERM)'],5000),error=>{
+  assert.match(error.message,/Bounded verification observer failed/);
+  assert.equal(error.verificationDiagnostic.status,1);assert.equal(error.verificationDiagnostic.service.Result,'exit-code');
+  assert.match(error.verificationDiagnostic.stderr,/Verification execution failed: signal SIGTERM/);
+  return true;
+ });
 });
 test('normal exit waits for finite teardown but rejects a surviving descendant',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
  const {runBoundedVerification}=await import('../src/verification-resources.mjs');

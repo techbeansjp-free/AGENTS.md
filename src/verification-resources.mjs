@@ -52,6 +52,7 @@ async function verificationProcess(argv,timeout,owner,tree){
   // The launcher waits on fd 3 until the observer has moved it into the
   // limited tree, so no verification code ever runs outside the owner limits.
   const child=spawn('/bin/sh',['-c','IFS= read -r _ <&3 || exit 125; exec 3<&-; exec /usr/bin/prlimit "$@"','asc-verify',...argv],{env:{PATH:'/usr/bin:/bin'},stdio:['ignore','pipe','pipe','pipe']});
+  const stdout=[],stderr=[];let error,settled=false,drain;
   try{
    demand(Number.isSafeInteger(child.pid),'Verification launcher did not start');
    fs.writeFileSync(path.join('/sys/fs/cgroup',tree,'cgroup.procs'),String(child.pid));
@@ -60,7 +61,6 @@ async function verificationProcess(argv,timeout,owner,tree){
    child.stdio[3].on('error',e=>{error??=Object.assign(Error('Verification launcher signal failed'),{code:'EPLACEMENT',cause:e});child.kill('SIGKILL');});
    child.stdio[3].end('go\n');
   }catch(e){child.kill('SIGKILL');throw Object.assign(Error(`Verification execution failed: cgroup placement (${e.code??e.message})`),{cause:e});}
-  const stdout=[],stderr=[];let error,settled=false,drain;
   // A later timeout or stream event must not replace the original failure.
   const timer=timeout===null?undefined:setTimeout(()=>{error??=Object.assign(Error('Verification timeout'),{code:'ETIMEDOUT'});child.kill('SIGKILL');},timeout);
   for(const [stream,chunks] of [[child.stdout,stdout],[child.stderr,stderr]]){let size=0;stream.on('data',b=>{size+=b.length;if(size>1048576){error??=Object.assign(Error('Verification output limit'),{code:'ENOBUFS'});child.kill('SIGKILL');}else chunks.push(b);});}
