@@ -48,6 +48,8 @@ test('stderr excerpt keeps the final fatal line and redacts before it cuts',()=>
  const started=performance.now(),huge=gitStderrExcerpt(Buffer.from('a.'.repeat(8_000_000)));
  assert.ok(performance.now()-started<10000);assert.equal(huge,'…'+'a.'.repeat(256));
  assert.equal(gitStderrExcerpt('é'.repeat(600)),'…'+'é'.repeat(512));assert.equal(gitStderrExcerpt('😀'.repeat(600)),'…'+'😀'.repeat(512));
+ // An odd cut starts the tail at a lone low surrogate, which must not be shown.
+ assert.equal(gitStderrExcerpt('😀'.repeat(600)+'x'),'…'+'😀'.repeat(511)+'x');
 });
 
 function repository(t){
