@@ -65,12 +65,12 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
    for(const t of timers)clearTimeout(t);
    p.stdin.destroy();p.stdout.destroy();p.stderr.destroy();
    const result={stdout:Buffer.concat(out).toString(),stderr:Buffer.concat(err).toString()};
+   // The limit can also be passed while draining, after a successful exit; truncated output is never a success.
+   if(!error&&overLimit)error=Error('Host process output limit');
    if(!gone){
     const cleanup=Object.assign(Error('Host process group cleanup unconfirmed'),{code:'ASC_HOST_CLEANUP_UNCONFIRMED',cause:killError??error,...result});
     reject(cleanup);return;
    }
-   // The limit can also be passed while draining, after a successful exit; truncated output is never a success.
-   if(!error&&overLimit)error=Error('Host process output limit');
    if(error){Object.assign(error,result);reject(error);}else resolve(result);
   };
   const timer=timeout===null?undefined:setTimeout(()=>finish(Object.assign(Error('Host process deadline exceeded'),{code:'ASC_HOST_TRANSPORT_TIMEOUT'})),timeout);
