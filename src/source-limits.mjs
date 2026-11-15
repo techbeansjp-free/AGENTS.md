@@ -78,8 +78,9 @@ const secretPatterns=[
  [/(?<![A-Za-z0-9_])((?:access_?token|refresh_?token|id_?token|token|password|passwd|pwd|pass|secret|client_?secret|api_?key|apikey|private_?token|signature)=)[^\s&#;'"]+/gi,'$1***'],
  [/([?&;](?:auth|code|sig)=)[^\s&#;'"]+/gi,'$1***'],
  [/\b(password|passwd|secret)[^\S\n]*:[^\S\n]*\S+/gi,'$1: ***'],
- [/\b(bearer|basic|token)\s+[A-Za-z0-9._~+/=_-]{8,}/gi,'$1 ***'],
- [/\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b/g,'***'],
+ // 'X{n}X*' rather than 'X{n,}': V8 overflows its stack on a long run under a counted open quantifier (16 MB of 'sk-').
+ [/\b(bearer|basic|token)\s+[A-Za-z0-9._~+/=_-]{8}[A-Za-z0-9._~+/=_-]*/gi,'$1 ***'],
+ [/\b(?:gh[pousr]_[A-Za-z0-9]{20}[A-Za-z0-9]*|github_pat_[A-Za-z0-9_]{20}[A-Za-z0-9_]*|sk-[A-Za-z0-9_-]{20}[A-Za-z0-9_-]*|xox[abprs]-[A-Za-z0-9-]{10}[A-Za-z0-9-]*|AKIA[0-9A-Z]{16}\b)/g,'***'],
 ];
 
 /** Name why a Git child failed, so that a timeout under load can be told apart from an error reported by Git. */
