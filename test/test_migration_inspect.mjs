@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawn} from 'node:child_process';import {pathToFileURL} from 'node:url';import {setTimeout,clearTimeout} from 'node:timers';
 import {inspectMigration} from '../migration_inspect.mjs';
 
 function fixture(t) {
@@ -46,10 +46,29 @@ test('staged-only changes cannot appear clean',t=>{
  fs.writeFileSync(file,'staged-only');git('add','AGENTS.md');fs.writeFileSync(file,original);
  assert(inspectMigration(root).dirty.includes('AGENTS.md'));
 });
-test('FIFO cannot block inspection',{skip:process.platform==='win32'},t=>{
+// A blocking FIFO read would hang this process too, so the inspection runs in a child. Only the inspection is timed:
+// the child reports "started" once Node and the modules are loaded, which under load alone took more than the old
+// 5 s bound for the whole child (#1705). A FIFO block never ends, so any inspection bound tells it apart.
+const inspectionMilliseconds=10000,startMilliseconds=120000;
+function inspectInChild(root){
+ const source=`import fs from 'node:fs';import {inspectMigration} from ${JSON.stringify(pathToFileURL(path.resolve('migration_inspect.mjs')).href)};
+fs.writeSync(1,'started\\n');const result=inspectMigration(process.argv[1]);fs.writeSync(1,JSON.stringify(result)+'\\n');`;
+ return new Promise((resolve,reject)=>{
+  const child=spawn(process.execPath,['--input-type=module','-e',source,root],{stdio:['ignore','pipe','pipe']});
+  let stdout='',stderr='',timer=setTimeout(()=>{child.kill('SIGKILL');reject(Error(`child did not start within ${startMilliseconds} ms`));},startMilliseconds);
+  child.stdout.on('data',chunk=>{
+   const before=stdout.includes('started\n');stdout+=chunk;
+   if(!before&&stdout.includes('started\n')){clearTimeout(timer);timer=setTimeout(()=>{child.kill('SIGKILL');reject(Error(`inspection did not finish within ${inspectionMilliseconds} ms`));},inspectionMilliseconds);}
+  });
+  child.stderr.on('data',chunk=>{stderr+=chunk;});
+  child.on('error',error=>{clearTimeout(timer);reject(error);});
+  child.on('close',status=>{clearTimeout(timer);if(status!==0)reject(Error(`inspection exited with ${status}: ${stderr}`));else resolve(JSON.parse(stdout.slice(stdout.indexOf('started\n')+8)));});
+ });
+}
+test('FIFO cannot block inspection',{skip:process.platform==='win32'},async t=>{
  const {root}=fixture(t);const file=path.join(root,'AGENTS.md');fs.unlinkSync(file);
  execFileSync('mkfifo',[file]);
- const result=JSON.parse(execFileSync(process.execPath,[path.resolve('migration_inspect.mjs'),root],{timeout:5000}).toString());
+ const result=await inspectInChild(root);
  assert(result.unsupported.includes('AGENTS.md'));
 });
 test('executable mode changes are reported',{skip:process.platform==='win32'},t=>{
