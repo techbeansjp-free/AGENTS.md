@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import {configuration,assertPreflight,runAgent,sentinelBases} from '../src/restricted-agent.mjs';
+import {configuration,assertPreflight,runAgent,sentinelBases,createSentinels} from '../src/restricted-agent.mjs';
 import os from 'node:os';
 import {execFileSync} from 'node:child_process';
 test('preflight requires explicit completed denial and unchanged host for every sentinel',()=>{
@@ -24,8 +24,8 @@ test('preflight requires explicit completed denial and unchanged host for every 
  const reached=report([denied,{read:'accessible',write:'private-write-completed'}]);
  assert.throws(()=>assertPreflight(reached,['trusted','changed'],['/logs/controller-sentinel','/private/tmp/asc-v05-sentinel-x/controller-sentinel']),e=>
   e.message.startsWith('Isolation not established (sandbox reached /private/tmp/asc-v05-sentinel-x/controller-sentinel')&&!e.message.includes('/logs/')&&
-  e.message.includes('Codex 0.156.0')===(process.platform==='darwin'));
- assert.throws(()=>assertPreflight(report([{read:'accessible',write:'denied'}]),['trusted'],['/logs/controller-sentinel']),e=>!e.message.includes('Codex 0.156.0'));
+  e.message.includes('Codex before 0.156.0')===(process.platform==='darwin'));
+ assert.throws(()=>assertPreflight(report([{read:'accessible',write:'denied'}]),['trusted'],['/logs/controller-sentinel']),e=>!e.message.includes('0.156.0'));
 });
 test('sentinel directories are deduplicated only when their canonical paths are equal',()=>{
  // A macOS-like layout: /tmp and /var/tmp are links into /private.
@@ -41,6 +41,16 @@ test('sentinel directories are deduplicated only when their canonical paths are 
  const missing=p=>{if(p==='/var/tmp')throw Object.assign(Error('missing'),{code:'ENOENT'});return p;};
  assert.deepEqual(sentinelBases({tmpdir:'/tmp',platform:'linux',realpath:missing}),['/tmp']);
  assert.throws(()=>sentinelBases({tmpdir:'/tmp',platform:'linux',realpath:p=>{if(p==='/var/tmp')throw Object.assign(Error('denied'),{code:'EACCES'});return p;}}),/denied/);
+});
+test('a sentinel that cannot be placed stops the run and names the location',t=>{
+ const root=tempDir('asc-sentinel-place-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const missing=path.join(root,'missing'),good=path.join(root,'good');fs.mkdirSync(good);
+ const logs=path.join(root,'logs');fs.mkdirSync(logs);
+ assert.throws(()=>createSentinels(logs,()=>[good,missing]),e=>e.message===`Isolation not established (cannot place a sentinel in ${missing}: ENOENT)`&&e.cause?.code==='ENOENT');
+ // The directory already made under the first location is removed.
+ assert.deepEqual(fs.readdirSync(good),[]);
+ const logs2=path.join(root,'logs2');fs.mkdirSync(logs2);
+ assert.throws(()=>createSentinels(logs2,()=>{throw Object.assign(Error('denied'),{code:'EACCES'});}),e=>e.message==='Isolation not established (cannot place a sentinel in the shared temporary directories: EACCES)');
 });
 const agentFixture=t=>{
  const root=tempDir('asc-agent-preflight-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));

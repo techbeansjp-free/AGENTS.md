@@ -50,7 +50,7 @@ export function assertPreflight(result,hostValues,targets=[]) {
   const reached=data.targets.flatMap((t,i)=>t?.read==='denied' && ['denied','private-write-completed'].includes(t.write) && hostValues[i]==='trusted'?[]:[targets[i]??`target ${i}`]);
   if(!reached.length)return;
   const shared=sharedTemporaryRoots();
-  const hint=reached.some(p=>shared.some(root=>p.startsWith(root+'/')))?'; on macOS this needs Codex 0.156.0 or later, which applies the shared-temporary denial':'';
+  const hint=reached.some(p=>shared.some(root=>p.startsWith(root+'/')))?'; on macOS, Codex before 0.156.0 ignores the shared-temporary denial: check the Codex version, and report it if it is already 0.156.0 or later':'';
   throw Error(`Isolation not established (sandbox reached ${reached.join(', ')}${hint})`);
 }
 /** Directories that receive a sentinel, canonical and without duplicates: the Controller temporary directory (stdin files,
@@ -65,15 +65,19 @@ export function sentinelBases({tmpdir=os.tmpdir(),platform=process.platform,real
   }
   return bases;
 }
-/** Controller-owned locations an Agent must not reach: logs and every sentinelBases() directory. */
-function createSentinels(logRoot) {
+/** Controller-owned locations an Agent must not reach: logs and every sentinelBases() directory. A sentinel that
+ * cannot be placed or a location that cannot be resolved also stops the run, naming the location. */
+export function createSentinels(logRoot,locate=sentinelBases) {
   const files=[path.join(logRoot,'controller-sentinel')],dirs=[];
+  const unplaced=(where,error)=>Error(`Isolation not established (cannot place a sentinel in ${where}: ${error.code??error.message})`,{cause:error});
   try{
     fs.writeFileSync(files[0],'trusted',{flag:'wx'});
-    for(const base of sentinelBases()){
-      let dir;try{dir=fs.mkdtempSync(path.join(base,'asc-v05-sentinel-'));}
-      catch(error){throw Error(`Isolation not established (cannot place a sentinel in ${base}: ${error.code??error.message})`,{cause:error});}
-      dirs.push(dir);const file=path.join(dir,'controller-sentinel');fs.writeFileSync(file,'trusted',{flag:'wx',mode:0o600});files.push(file);
+    let bases;try{bases=locate();}catch(error){throw unplaced('the shared temporary directories',error);}
+    for(const base of bases){
+      try{
+        const dir=fs.mkdtempSync(path.join(base,'asc-v05-sentinel-'));dirs.push(dir);
+        const file=path.join(dir,'controller-sentinel');fs.writeFileSync(file,'trusted',{flag:'wx',mode:0o600});files.push(file);
+      }catch(error){throw unplaced(base,error);}
     }
   }catch(error){removeSentinels(dirs);throw error;}
   return {files,dirs};
