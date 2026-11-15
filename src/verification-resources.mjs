@@ -13,16 +13,18 @@ export function verificationMemoryLimit(value=1073741824){
 // the observer (the kernel scans only the OOMing memcg subtree).
 function limitsFor(memoryBytes){return {'memory.max':String(verificationMemoryLimit(memoryBytes)),'memory.swap.max':'0','pids.max':'256'};}
 function partition(unit,memoryBytes){
- const relative=fs.readFileSync('/proc/self/cgroup','utf8').trim().match(/^0::(\/[^\n]+)$/)?.[1];
- demand(relative&&path.basename(relative)===unit,'Verification cgroup identity mismatch');
- const root=path.join('/sys/fs/cgroup',relative);
- demand(fs.readFileSync(path.join(root,'cgroup.procs'),'utf8').split('\n').filter(Boolean).map(Number).join()===String(process.pid),'Verification cgroup is not exclusive');
+ // systemd starts the worker directly in <unit>/observer (DelegateSubgroup), so
+ // no process is ever migrated and the unit itself holds no process when the
+ // controllers are enabled for the tree.
+ const observer=fs.readFileSync('/proc/self/cgroup','utf8').trim().match(/^0::(\/[^\n]+)$/)?.[1];
+ demand(observer&&path.basename(observer)==='observer'&&path.basename(path.dirname(observer))===unit,'Verification cgroup identity mismatch');
+ const relative=path.dirname(observer),root=path.join('/sys/fs/cgroup',relative),procs=dir=>fs.readFileSync(path.join(dir,'cgroup.procs'),'utf8').split('\n').filter(Boolean).map(Number).join();
+ demand(procs(root)===''&&procs(path.join(root,'observer'))===String(process.pid),'Verification cgroup is not exclusive');
  // mkdir fails on an existing directory, so a pre-made subtree is never adopted.
- for(const leaf of ['observer','tree'])fs.mkdirSync(path.join(root,leaf));
- fs.writeFileSync(path.join(root,'observer','cgroup.procs'),String(process.pid));
+ fs.mkdirSync(path.join(root,'tree'));
  fs.writeFileSync(path.join(root,'cgroup.subtree_control'),'+memory +pids');
  for(const [name,value] of Object.entries(limitsFor(memoryBytes)))fs.writeFileSync(path.join(root,'tree',name),value);
- return {unit:relative,observer:path.join(relative,'observer'),tree:path.join(relative,'tree')};
+ return {unit:relative,observer,tree:path.join(relative,'tree')};
 }
 function observe(cgroups,memoryBytes){
  const limits=limitsFor(memoryBytes);
@@ -54,6 +56,8 @@ async function verificationProcess(argv,timeout,owner,tree){
    demand(Number.isSafeInteger(child.pid),'Verification launcher did not start');
    fs.writeFileSync(path.join('/sys/fs/cgroup',tree,'cgroup.procs'),String(child.pid));
    demand(fs.readFileSync(`/proc/${child.pid}/cgroup`,'utf8').trim()===`0::${tree}`,'Verification process is outside its cgroup');
+   // Report a failed start signal as a placement failure, not an observer crash.
+   child.stdio[3].on('error',e=>{error??=Object.assign(Error('Verification launcher signal failed'),{code:'EPLACEMENT',cause:e});child.kill('SIGKILL');});
    child.stdio[3].end('go\n');
   }catch(e){child.kill('SIGKILL');throw Object.assign(Error(`Verification execution failed: cgroup placement (${e.code??e.message})`),{cause:e});}
   const stdout=[],stderr=[];let error,settled=false,drain;
@@ -97,7 +101,7 @@ async function worker(requestPath){
  // The tree's OOM killer may select the top verification process itself.
  // That is the same rejected exhaustion; any other signal stays an execution failure.
  demand(!signaled||exhausted,`Verification execution failed: signal ${p.signal}`);
- process.stdout.write(JSON.stringify({status:exhausted||timedOut||outputLimited?125:p.status,stdout:p.stdout.toString('base64'),stderr:p.stderr.toString('base64'),resourceBoundary:{unit:request.unit,before,after,delta,exhausted,processExit:p.status,processSignal:p.signal,executionError:p.error?.code??null}}));
+ process.stdout.write(JSON.stringify({status:exhausted||timedOut||outputLimited?125:p.status,stdout:p.stdout.toString('base64'),stderr:p.stderr.toString('base64'),resourceBoundary:{unit:request.unit,unitCgroup:cgroups.unit,observerCgroup:cgroups.observer,before,after,delta,exhausted,processExit:p.status,processSignal:p.signal,executionError:p.error?.code??null}}));
 }
 export function runBoundedVerification(argv,timeout=null,memoryBytes=1073741824){
  verificationMemoryLimit(memoryBytes);
@@ -109,7 +113,7 @@ export function runBoundedVerification(argv,timeout=null,memoryBytes=1073741824)
  let result,cleanup,failure;
  try{
   fs.writeFileSync(request,JSON.stringify({unit,argv,timeout,memoryBytes,owner:{pid:process.pid,start:ownerIdentity(process.pid)}}),{flag:'wx',mode:0o600});
-  const p=spawnSync('/usr/bin/systemd-run',['--user','--wait','--pipe',`--unit=${unit}`,'--working-directory=/','--property=Delegate=memory pids',`--property=MemoryMax=${memoryBytes+268435456}`,'--property=MemorySwapMax=0','--property=TasksMax=512',...(timeout===null?[]:[`--property=RuntimeMaxSec=${Math.ceil(timeout/1000)+5}`]),'--property=KillMode=control-group','--property=OOMPolicy=continue',process.execPath,self,'--resource-worker',request],{env,encoding:'utf8',timeout:timeout===null?0:timeout+10000,maxBuffer:3145728,killSignal:'SIGKILL'});
+  const p=spawnSync('/usr/bin/systemd-run',['--user','--wait','--pipe',`--unit=${unit}`,'--working-directory=/','--property=Delegate=memory pids','--property=DelegateSubgroup=observer',`--property=MemoryMax=${memoryBytes+268435456}`,'--property=MemorySwapMax=0','--property=TasksMax=512',...(timeout===null?[]:[`--property=RuntimeMaxSec=${Math.ceil(timeout/1000)+5}`]),'--property=KillMode=control-group','--property=OOMPolicy=continue',process.execPath,self,'--resource-worker',request],{env,encoding:'utf8',timeout:timeout===null?0:timeout+10000,maxBuffer:3145728,killSignal:'SIGKILL'});
   if(p.error||p.status!==0){
    failure=Error(`Bounded verification observer failed (status=${p.status}, error=${p.error?.code??'none'}). Untrusted observer stderr: ${String(p.stderr??'').slice(-2048)}`);
    const state=ctl(['show',unit,'--property=Result','--property=ExecMainCode','--property=ExecMainStatus','--property=ControlGroup']);
@@ -133,7 +137,9 @@ export function runBoundedVerification(argv,timeout=null,memoryBytes=1073741824)
   if(failure)failure.verificationDiagnostic.cleanupConfirmed=cleanup;
   demand(cleanup,'Bounded verification cleanup unconfirmed',failure?{cause:failure,verificationDiagnostic:failure.verificationDiagnostic}:undefined);
  }
- demand(!fs.existsSync(path.join('/sys/fs/cgroup',result.resourceBoundary.after.cgroup)),'Verification cgroup remains');
+ demand(typeof result.resourceBoundary.unitCgroup==='string'&&path.basename(result.resourceBoundary.unitCgroup)===unit&&result.resourceBoundary.after.cgroup===path.join(result.resourceBoundary.unitCgroup,'tree'),'Invalid bounded verification result');
+ // The whole delegated subtree (unit, observer and tree) must be gone.
+ demand(!fs.existsSync(path.join('/sys/fs/cgroup',result.resourceBoundary.unitCgroup)),'Verification cgroup remains');
  if(result.resourceBoundary.executionError==='ENOBUFS')throw Object.assign(Error('Verification output exceeded 1 MiB'),{code:'ASC_VERIFICATION_OUTPUT_LIMIT',verificationDiagnostic:{...result.resourceBoundary,cleanupConfirmed:cleanup,authority:'diagnostic only; no successful verification or approval'}});
  return {status:result.status,stdout:Buffer.from(result.stdout,'base64'),stderr:Buffer.from(result.stderr,'base64'),resourceBoundary:{...result.resourceBoundary,cleanupConfirmed:cleanup}};
 }

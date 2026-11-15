@@ -179,8 +179,11 @@ test('owner memory budget is observed by kernel and OOM cannot become success',{
 test('observer runs outside the limited verification cgroup',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
  const {runBoundedVerification}=await import('../src/verification-resources.mjs');
  // prlimit execs in place, so the verification process's parent is the observer.
- const result=runBoundedVerification(['--','/usr/bin/python3','-c','import os;print(open("/proc/self/cgroup").read().strip(),open(f"/proc/{os.getppid()}/cgroup").read().strip(),os.path.realpath(f"/proc/{os.getppid()}/exe"))'],5000);
- const [tree,observer,exe]=result.stdout.toString().trim().split(' ');
+ const result=runBoundedVerification(['--','/usr/bin/python3','-c','import os;t=open("/proc/self/cgroup").read().strip();print(t,open(f"/proc/{os.getppid()}/cgroup").read().strip(),os.path.realpath(f"/proc/{os.getppid()}/exe"),open("/sys/fs/cgroup"+os.path.dirname(t[3:])+"/memory.max").read().strip())'],5000);
+ const [tree,observer,exe,unitMax]=result.stdout.toString().trim().split(' ');
+ // The unit backstop leaves observer headroom above the tree's owner limit.
+ assert.equal(unitMax,String(1073741824+268435456));
+ assert.equal(result.resourceBoundary.unitCgroup,path.dirname(result.resourceBoundary.before.cgroup));assert.equal(fs.existsSync(path.join('/sys/fs/cgroup',result.resourceBoundary.unitCgroup)),false);
  assert.equal(result.status,0);assert.equal(exe,fs.realpathSync(process.execPath));
  assert.equal(tree,`0::${result.resourceBoundary.before.cgroup}`);assert.match(tree,/\/asc-verify-[a-f0-9-]+\.service\/tree$/);
  assert.equal(observer,tree.replace(/\/tree$/,'/observer'));
