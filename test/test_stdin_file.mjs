@@ -1,4 +1,5 @@
 import {tempDir} from './helpers/temp-dir.mjs';
+import {kindOfStdin} from './helpers/stdin-kind.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {Controller} from '../src/controller.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createWorktree} from '../src/migration.mjs';
@@ -6,7 +7,6 @@ import {Controller} from '../src/controller.mjs';import {commitCandidate} from '
 // #1682: a large spawnSync input was seen leaving a loaded macOS child blocked on its stdin pipe.
 // A hang is rare (thousands of calls), so these tests check the structure: stdin is a regular file, never a pipe or socket.
 // The helper itself and the Host transport are tested in test_host_execution.mjs, which Windows CI also runs (#1694).
-const kindOfStdin="const s=fs.fstatSync(0),kind=s.isFile()?'file':s.isFIFO()?'fifo':s.isSocket()?'socket':s.isCharacterDevice()?'char':'other';";
 
 function repository(t){
  const root=tempDir('asc-stdin-file-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -28,7 +28,7 @@ function withRecordingGit(root,run){
 
 test('Controller, candidate and migration Git paths that feed stdin return the right content',t=>{
  // Not skipped on Windows, where the recording test below cannot run. Windows CI does not run this file yet: adding it
- // changes .github/workflows/ci.yml, which the quality validator pins until the owner approves a new version (#1694).
+ // changes .github/workflows/ci.yml, which the quality validator pins until the owner approves a new version (#1698).
  const {c,root,repo,git}=repository(t);const head=git('rev-parse','HEAD');
  const workspace=path.join(root,'worker');fs.mkdirSync(workspace);fs.writeFileSync(path.join(workspace,'code.txt'),'after');
  const blobs=c.blobs(head);assert.equal(blobs.get('code.txt').bytes.toString(),'before');assert.equal(blobs.get('other.txt').bytes.toString(),'other');

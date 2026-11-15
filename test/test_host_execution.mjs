@@ -1,4 +1,5 @@
 import {tempDir} from './helpers/temp-dir.mjs';
+import {kindOfStdin} from './helpers/stdin-kind.mjs';
 import {test} from 'node:test';
 import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
@@ -126,11 +127,10 @@ test('Host capacity preserves partial implementation through real verification a
 
 // withStdinFile gives the Host transport, the approval command and local Git their stdin (#1682). It is tested here
 // because Windows CI runs this file (#1694); the Git paths are in test_stdin_file.mjs.
-const kindOfStdin="const s=fs.fstatSync(0),kind=s.isFile()?'file':s.isFIFO()?'fifo':s.isSocket()?'socket':s.isCharacterDevice()?'char':'other';";
 /** Run with os.tmpdir() pointed at a directory of this test, so the helper's private directory can be listed directly
     on every OS (Windows reads TEMP and TMP, POSIX reads TMPDIR). */
 function withTestTmpdir(t,run){
- const dir=tempDir('asc-stdin-tmpdir-'),saved=Object.fromEntries(['TMPDIR','TEMP','TMP'].map(k=>[k,process.env[k]]));
+ const dir=tempDir('asc-host-tmpdir-'),saved=Object.fromEntries(['TMPDIR','TEMP','TMP'].map(k=>[k,process.env[k]]));
  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  for(const k of Object.keys(saved))process.env[k]=dir;
  try{return run(dir);}finally{for(const [k,v] of Object.entries(saved))if(v===undefined)delete process.env[k];else process.env[k]=v;}
@@ -144,6 +144,8 @@ test('withStdinFile gives the child a private regular file with the whole input 
   const result=withStdinFile(input,stdin=>{
    assert.equal(typeof stdin,'number');
    const dirs=stdinDirs(dir);assert.equal(dirs.length,1);const file=path.join(dirs[0],'input');
+   // The descriptor is that file (POSIX; Windows inode numbers are not checked here).
+   if(process.platform!=='win32'){const a=fs.fstatSync(stdin),b=fs.statSync(file);assert.equal(a.ino,b.ino);assert.equal(a.dev,b.dev);}
    assert.equal(fs.statSync(file).size,input.length);
    // Windows has no POSIX permission bits; there the directory is private only through the user's temp directory.
    if(process.platform!=='win32'){assert.equal(fs.statSync(file).mode&0o777,0o600);assert.equal(fs.statSync(dirs[0]).mode&0o777,0o700);}
