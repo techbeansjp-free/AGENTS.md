@@ -583,7 +583,7 @@
       "fromVersion": 22,
       "toVersion": 23,
       "owner": "repository maintainer (explicit approval for Issue #1698)",
-      "rationale": "Issue #1698: Windows を含む host-protocol job（.github/workflows/ci.yml 57行目の run）に test/test_stdin_file.mjs を1件追加し、Controller・candidate・migration の stdin file 経路の本物の Git による test を Windows でも実行する。test の追加だけで、品質検査・依存関係・validator・権限境界は変更しない。",
+      "rationale": "Issue #1698: Windows を含む host-protocol job（.github/workflows/ci.yml 57行目の run）に test/test_stdin_file.mjs を1件追加する。Windows では、本物の Git で Controller・candidate・migration の stdin を渡す経路が正しい内容を返すかの test が動く。偽 Git で stdin の種類を記録する構造検査は POSIX だけのまま。test の追加だけで、品質検査・依存関係・validator・権限境界は変更しない。",
       "rollback": "適用前は有効化しない。適用後に戻す場合は次versionのproposalを先行登録して適用し、登録済みproposalの削除や品質保護の解除は行わない。",
       "targets": [
         {
