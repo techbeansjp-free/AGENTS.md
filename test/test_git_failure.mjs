@@ -65,14 +65,16 @@ test('stderr excerpt hides config values, query and form credentials, userinfo w
  ]){const shown=gitStderrExcerpt(Buffer.from(input));assert.equal(shown,expected,input);assert.equal(shown.includes('s3cret'),false,input);}
  // The cost of hiding a header to the line end: text after it on the same line is hidden too.
  assert.equal(gitStderrExcerpt('Authorization: Bearer s3cret fatal: end'),'Authorization: ***');
- // Every pattern stays linear on four megabytes built from its own start; a quadratic one would take hours.
+ // Every pattern stays linear, and within the stack, on sixteen megabytes (the largest Controller stderr) built from its
+ // own start; a quadratic one would take hours, and a backtracking run to the next message line overflowed the stack.
  for(const unit of ["value '",'value for ',"value for 'k': ","unknown '","component '","chdir to '","mode '","parameter '","orderfile '","algorithm '","user dir in: '","include path '",
   "value 'x\nfatal: ","value 'x' y","value 'x'\n","value 'x' for ","value '\n'","value for 'k': x\nfatal: ",'invalid color value: x\n','invalid color value: x\nerror: ','invalid mode for object creation: x\n','bad --ignore-submodules argument: x\n',
+  "invalid refspec '","unsupported option '",'unrecognized value k: x\n','invalid k value: x\n','invalid k mode x\n','invalid ','\nremote: x',
   'a@','https://','https://a:','https://a:b/','authorization:x\n','token=','?code=','password ','secret: ','bearer ','ghp_','sk-']){
-  const started=performance.now();gitStderrExcerpt(Buffer.from(unit.repeat(Math.floor(4_000_000/unit.length))));assert.ok(performance.now()-started<10000,unit);
+  const started=performance.now();gitStderrExcerpt(Buffer.from(unit.repeat(Math.floor(16_000_000/unit.length))));assert.ok(performance.now()-started<10000,unit);
  }
  // The worst case of a quoted value: one opening quote and no closing quote before the end.
- const unclosed=performance.now();gitStderrExcerpt(Buffer.from("value '"+'x'.repeat(4_000_000)));assert.ok(performance.now()-unclosed<10000);
+ const unclosed=performance.now();gitStderrExcerpt(Buffer.from("value '"+'x'.repeat(16_000_000)));assert.ok(performance.now()-unclosed<10000);
 });
 
 // #1696: a config value may hold a newline or a quote, and a control character may stand between a scheme and its token.
@@ -96,6 +98,11 @@ test('stderr excerpt hides multi-line and quoted config values up to the next Gi
   ["fatal: bad numeric config value 'x'\ns3cret' for 'core.compression' in file .git/config","fatal: bad numeric config value '***' for 'core.compression' in file .git/config"],
   ["error: could not expand include path '~nouser/a'\ns3cret'\nfatal: bad config line 9","error: could not expand include path '***' fatal: bad config line 9"],
   ["fatal: bad boolean config value 'a' for 'core.filemode' and value 's3cret' for 'core.x'","fatal: bad boolean config value '***' for 'core.filemode' and value '***' for 'core.x'"],
+  // Wordings that only the migration argument forms produced in the survey (#1702).
+  ["fatal: invalid refspec 'a\ns3cret it's'","fatal: invalid refspec '***'"],
+  ["fatal: unrecognized value transfer.credentialsInUrl: 'a\ns3cret'","fatal: unrecognized value transfer.credentialsInUrl: ***"],
+  ["error: unsupported option 'a s3cret'\nerror: invalid column.branch mode a\ns3cret\nfatal: bad config variable 'column.branch'","error: unsupported option '***' error: invalid column.branch mode *** fatal: bad config variable 'column.branch'"],
+  ["remote: fatal: invalid pack.allowPackReuse value: 'a\nremote: s3cret'   \nerror: git upload-pack: git-pack-objects died","remote: fatal: invalid pack.allowPackReuse value: *** error: git upload-pack: git-pack-objects died"],
  ]){const shown=gitStderrExcerpt(Buffer.from(input));assert.equal(shown,expected,input);assert.equal(shown.includes('s3cret'),false,input);}
  // Known gaps, kept visible on purpose: a later value line that starts like a Git message, and a quoted value that
  // holds the rest of Git's wording, show what follows.
@@ -147,11 +154,20 @@ const surveyedForms=[
  ['push.default','diff','malformed value for push.default: *** error: must be one of'],
  ['core.excludesFile','diff',"failed to expand user dir in: '***'",'~nouser/'],
  ['include.path','diff',"could not expand include path '***' fatal: ",'~nouser/'],
+ // Only the migration argument forms produce these (#1702); out is a fresh path for each run.
+ ['remote.x.push',{migration:()=>['remote','remove','origin']},"invalid refspec '***'"],
+ ['transfer.credentialsInUrl',{migration:()=>['remote','remove','origin']},'unrecognized value transfer.credentialsInUrl: ***'],
+ ['column.branch',{migration:out=>['worktree','add','--no-checkout','-b',path.basename(out),out,'HEAD']},"unsupported option '***' error: invalid column.branch mode ***"],
+ ['pack.allowPackReuse',{migration:out=>['clone','--no-local','--no-hardlinks','--no-checkout','.',out]},'remote: fatal: invalid pack.allowPackReuse value: ***'],
 ];
 test('real Git output for each config value wording found by the survey shows its masked form and no value',{skip:process.platform==='win32'},t=>{
  const {root,repo,git}=repository(t);fs.writeFileSync(path.join(repo,'code.txt'),'after');git('commit','-qam','second');
  const env={PATH:process.env.PATH,HOME:root,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0'};
  const run=args=>spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','protocol.allow=never',...args],{cwd:repo,env});
+ // The -c options and environment of src/migration.mjs.
+ const migrationEnv={...env};delete migrationEnv.GIT_ALLOW_PROTOCOL;let runs=0;
+ const runMigration=args=>spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','uploadpack.packObjectsHook=','-c','core.alternateRefsCommand=',
+  '-c','protocol.allow=never','-c','protocol.file.allow=always',...args(path.join(root,`out-${++runs}`))],{cwd:repo,env:migrationEnv});
  const diff=['diff','--no-ext-diff','--no-textconv','--binary','HEAD~1','HEAD'];
  const version=execFileSync('git',['--version'],{encoding:'utf8'}).match(/(\d+)\.(\d+)/).slice(1).map(Number);
  const surveyed=version[0]>surveyedGit[0]||(version[0]===surveyedGit[0]&&version[1]>=surveyedGit[1]);
@@ -159,7 +175,7 @@ test('real Git output for each config value wording found by the survey shows it
  const config=(...rest)=>execFileSync('git',['config','--file',path.join(repo,'.git','config'),...rest],{cwd:root,stdio:'pipe'});
  const quoted=new Set();
  for(const [key,args,form,path_=''] of surveyedForms)for(const value of [`${path_}S3CRETX https://u:S3CRETY@example.invalid/`,`${path_}S3CRETX\nS3CRETY it's`]){
-  config(key,value);const p=run(args==='diff'?diff:args),stderr=p.stderr.toString();config('--unset',key);
+  config(key,value);const p=args.migration?runMigration(args.migration):run(args==='diff'?diff:args),stderr=p.stderr.toString();config('--unset',key);
   const shown=gitStderrExcerpt(p.stderr),label=`${key} ${JSON.stringify(value)}: ${shown}`;
   assert.equal(/S3CRET/.test(shown),false,label);
   if(stderr.includes('S3CRETX'))quoted.add(key);

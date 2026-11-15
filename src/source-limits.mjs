@@ -24,26 +24,27 @@ export const GIT_STDERR_EXCERPT_CHARACTERS=512;
    survey produces (scripts/survey-git-config-stderr.mjs); a URL password with both '/' and ':'; credential formats
    not listed here. Over-redaction: long words after 'basic' or 'token', and an authority with a ':' before a '/' and
    a later '@' (https://h:443/a@b). */
-const messageLine=String.raw`\n[^\S\n]*(?:fatal|error|warning|hint|usage):`;
-// Text up to (not into) the next line that starts a Git message. The lookahead per character is bounded.
-const toMessageLine=String.raw`(?:(?!${messageLine})[\s\S])*`;
-// Config values that Git quotes. The forms are every one that the survey produced on Git 2.54 (#1691, #1696): all
+// The start of the next Git message line. Upload-pack output that Git relays (clone) starts each line with "remote: ".
+const nextMessageLine=/\n[^\S\n]*(?:remote:[^\S\n]*)?(?:fatal|error|warning|hint|usage):/g;
+const messageLineAfter=(text,from)=>{nextMessageLine.lastIndex=from;const next=nextMessageLine.exec(text);return next?next.index:text.length;};
+// Config values that Git prints. The forms are every one that the survey produced on Git 2.54 (#1691, #1696): all
 // documented config keys, the value shapes and the Controller, candidate and migration argument forms of the script.
-const quotedValueStart=/\b(?:value|component|mode|parameter|orderfile|algorithm|chdir to|user dir in:|include path|unknown) '/gi;
-const nextMessageLine=new RegExp(messageLine,'g');
+const quotedValueStart=/\b(?:value|component|mode|parameter|orderfile|algorithm|chdir to|user dir in:|include path|unknown|invalid refspec|unsupported option) '/gi;
+// A value after these runs to the next message line, quoted or not. '<key>' is a config key in the last three.
+const unquotedValueStart=new RegExp(String.raw`\b(?:value for (?:config )?'?[^'\s]{1,256}'?(?: config (?:variable|option))?: |(?:invalid color value|invalid mode for object creation|bad --ignore-submodules argument): |unrecognized value [^'\s]{1,256}: |invalid [^'\s]{1,256} value: |invalid [^'\s]{1,256} mode )`,'gi');
 const quoteBeforeWording=/'(?= for | value for|: |, possible values)/g,quoteAtLineEnd=/'(?=[^\S\n]*(?:\n|$))/g;
 const quotePositions=(pattern,text,offset)=>{const found=[];pattern.lastIndex=0;for(let m;(m=pattern.exec(text));)found.push(offset+m.index);return found;};
-/** Hide each quoted config value as described above. Not a regular expression: a backtracking one either overflows
-    the stack or turns quadratic on long stderr. Each message-line segment is scanned once for its quotes, and the
-    pointers into them only move forward, so the whole pass is linear. */
+/* The two passes below are code, not regular expressions: a backtracking expression that runs to the next message line
+   overflows the stack on 16 MB of stderr, and one that searches for the closing quote turns quadratic. Each pass moves
+   only forward and scans each message-line segment once, so it is linear. */
+/** Hide each quoted config value as described above. */
 function hideQuotedValues(text){
  let shown='',done=0,segmentEnd=-1,wording=[],lineEnds=[],w=0;
  quotedValueStart.lastIndex=0;
  for(let m;(m=quotedValueStart.exec(text));){
   const start=m.index+m[0].length;
   if(start>segmentEnd){
-   nextMessageLine.lastIndex=start;const next=nextMessageLine.exec(text);segmentEnd=next?next.index:text.length;
-   const segment=text.slice(start,segmentEnd);
+   segmentEnd=messageLineAfter(text,start);const segment=text.slice(start,segmentEnd);
    wording=quotePositions(quoteBeforeWording,segment,start);lineEnds=quotePositions(quoteAtLineEnd,segment,start);w=0;
   }
   while(w<wording.length&&wording[w]<start)w++;
@@ -54,9 +55,17 @@ function hideQuotedValues(text){
  }
  return shown+text.slice(done);
 }
+/** Hide each value that follows an unquotedValueStart wording, up to the next message line. */
+function hideUnquotedValues(text){
+ let shown='',done=0;
+ unquotedValueStart.lastIndex=0;
+ for(let m;(m=unquotedValueStart.exec(text));){
+  const start=m.index+m[0].length;shown+=text.slice(done,start)+'***';done=messageLineAfter(text,start);
+  unquotedValueStart.lastIndex=done;
+ }
+ return shown+text.slice(done);
+}
 const secretPatterns=[
- [new RegExp(String.raw`(\bvalue for (?:config )?'?[^'\s]{1,256}'?(?: config (?:variable|option))?: )${toMessageLine}`,'gi'),'$1***'],
- [new RegExp(String.raw`(\b(?:invalid color value|invalid mode for object creation|bad --ignore-submodules argument): )${toMessageLine}`,'gi'),'$1***'],
  // Userinfo up to the last '@' of the authority, so a literal '@' in a password does not end it early.
  [/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/?#]*@/gi,'$1***@'],
  // A password with '/' is not valid userinfo, but Git still prints such a URL: a ':' before the first '/' and the last
@@ -92,7 +101,7 @@ export function gitStderrExcerpt(stderr,limit=GIT_STDERR_EXCERPT_CHARACTERS){
  // A carriage return ends a line like a newline (progress output); other control characters separate words, so
  // "Bearer\0<token>" is still a Bearer token.
  text=text.replace(/\r\n?/g,'\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g,' ');
- text=hideQuotedValues(text);
+ text=hideUnquotedValues(hideQuotedValues(text));
  for(const [pattern,replacement] of secretPatterns)text=text.replace(pattern,replacement);
  text=text.replace(/[\u0000-\u001f\u007f-\u009f\s]+/g,' ').trim();
  // A code point takes at most two code units, so this tail holds more than limit code points when text is longer.
