@@ -196,6 +196,6 @@ test('local Git children take the null device from one place (#1711)',async()=>{
  const allowed=new Set(['source-limits.mjs','host-masked-paths.mjs']);
  const src=new URL('../src/',import.meta.url),spelled=[];
  for(const name of fs.readdirSync(src).filter(n=>n.endsWith('.mjs')&&!allowed.has(n)))
-  for(const [i,line] of fs.readFileSync(new URL(name,src),'utf8').split('\n').entries())if(/\/dev\/null|'NUL'/.test(line))spelled.push(`${name}:${i+1}`);
+  for(const [i,line] of fs.readFileSync(new URL(name,src),'utf8').split('\n').entries())if(/\/dev\/null|['"`]NUL['"`]|=NUL\b/.test(line))spelled.push(`${name}:${i+1}`);
  assert.deepEqual(spelled,[]);
 });
