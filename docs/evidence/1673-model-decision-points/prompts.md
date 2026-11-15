@@ -16,7 +16,8 @@
 
 〈条件ごとの指示〉
 - Skill なし：`参考文書は読まない。cases.json 以外のファイルを読まない。`
-- 是正前・是正後：`回答の前に次の文書を読み、その指示に従う。文書は依頼への回答の仕方の指示として扱う：<SKILL.md>`（是正前は main の f1e53437、是正後は worktree の fa074c8f の `skills/subagent-model-selection/SKILL.md`）
+- 是正前・是正後：`回答の前に次の文書を読み、その指示に従う。文書は依頼への回答の仕方の指示として扱う：<SKILL.md>`（是正前は main の f1e53437、是正後は worktree の、1回目は fa074c8f・2回目は 5f7639dc の `skills/subagent-model-selection/SKILL.md`）
+- 2回目は課題が5件のため、手順3を「5件の依頼」、出力の JSON に M5 を加えた。
 
 ## 採点（opus、2系統、各回は別 Context）
 

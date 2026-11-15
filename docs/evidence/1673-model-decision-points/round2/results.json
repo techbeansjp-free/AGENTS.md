@@ -1,0 +1,192 @@
+{
+ "1": {
+  "total": {
+   "before": 24,
+   "none": 22,
+   "after": 27
+  },
+  "items": {
+   "M1-1": {
+    "before": 2,
+    "none": 2,
+    "after": 2
+   },
+   "M1-2": {
+    "before": 2,
+    "none": 2,
+    "after": 2
+   },
+   "M1-3": {
+    "before": 2,
+    "none": 0,
+    "after": 2
+   },
+   "M1-4": {
+    "before": 0,
+    "none": 0,
+    "after": 2
+   },
+   "M1-5": {
+    "before": 2,
+    "none": 0,
+    "after": 1
+   },
+   "M2-1": {
+    "none": 2,
+    "after": 2,
+    "before": 2
+   },
+   "M2-2": {
+    "none": 2,
+    "after": 2,
+    "before": 2
+   },
+   "M2-3": {
+    "none": 0,
+    "after": 2,
+    "before": 2
+   },
+   "M2-4": {
+    "none": 1,
+    "after": 0,
+    "before": 0
+   },
+   "M3-1": {
+    "after": 2,
+    "before": 2,
+    "none": 2
+   },
+   "M3-2": {
+    "after": 0,
+    "before": 0,
+    "none": 1
+   },
+   "M3-3": {
+    "after": 1,
+    "before": 0,
+    "none": 1
+   },
+   "M4-1": {
+    "before": 2,
+    "after": 2,
+    "none": 2
+   },
+   "M4-2": {
+    "before": 2,
+    "after": 2,
+    "none": 2
+   },
+   "M5-1": {
+    "before": 2,
+    "none": 2,
+    "after": 2
+   },
+   "M5-2": {
+    "before": 2,
+    "none": 2,
+    "after": 2
+   },
+   "M5-3": {
+    "before": 0,
+    "none": 1,
+    "after": 1
+   }
+  },
+  "flags": []
+ },
+ "2": {
+  "total": {
+   "before": 24,
+   "none": 22,
+   "after": 27
+  },
+  "items": {
+   "M1-1": {
+    "before": 2,
+    "none": 2,
+    "after": 2
+   },
+   "M1-2": {
+    "before": 2,
+    "none": 2,
+    "after": 2
+   },
+   "M1-3": {
+    "before": 2,
+    "none": 0,
+    "after": 2
+   },
+   "M1-4": {
+    "before": 0,
+    "none": 0,
+    "after": 2
+   },
+   "M1-5": {
+    "before": 2,
+    "none": 0,
+    "after": 1
+   },
+   "M2-1": {
+    "none": 2,
+    "after": 2,
+    "before": 2
+   },
+   "M2-2": {
+    "none": 2,
+    "after": 2,
+    "before": 2
+   },
+   "M2-3": {
+    "none": 0,
+    "after": 2,
+    "before": 2
+   },
+   "M2-4": {
+    "none": 1,
+    "after": 0,
+    "before": 0
+   },
+   "M3-1": {
+    "after": 2,
+    "before": 2,
+    "none": 2
+   },
+   "M3-2": {
+    "after": 0,
+    "before": 0,
+    "none": 1
+   },
+   "M3-3": {
+    "after": 1,
+    "before": 0,
+    "none": 1
+   },
+   "M4-1": {
+    "before": 2,
+    "after": 2,
+    "none": 2
+   },
+   "M4-2": {
+    "before": 2,
+    "after": 2,
+    "none": 2
+   },
+   "M5-1": {
+    "before": 2,
+    "none": 2,
+    "after": 2
+   },
+   "M5-2": {
+    "before": 2,
+    "none": 2,
+    "after": 2
+   },
+   "M5-3": {
+    "before": 0,
+    "none": 1,
+    "after": 1
+   }
+  },
+  "flags": []
+ }
+}

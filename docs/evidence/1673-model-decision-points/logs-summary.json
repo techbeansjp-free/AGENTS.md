@@ -1,0 +1,63 @@
+{
+ "note": "この PC の Claude Code のセッションログのうち、ASC の目印（skills/asc/、asc-v05.mjs、.agent-skill-chain 等）を含む 5,818 件を、読取りだけの script で集計した。本文・path・プロジェクト名は含めない。作業の種類は依頼文の語による機械的な分類で、この調査を行った会話のセッションも含む。",
+ "sessions": 5818,
+ "output_tokens_share": {
+  "main": {
+   "opus-5-5": 156065806,
+   "sonnet-5-5": 20364831,
+   "fable-5-1": 29493282,
+   "sonnet-5": 1714164,
+   "opus-5": 907089,
+   "haiku-5-5": 23059,
+   "fable-5-2": 56280
+  },
+  "subagent": {
+   "opus-5-5": 205484769,
+   "sonnet-5-5": 22108772,
+   "fable-5-1": 4061216,
+   "sonnet-5": 243962,
+   "haiku-5-5": 662957,
+   "fable-5-2": 400792,
+   "opus-5": 44838
+  }
+ },
+ "subagent_model_param": {
+  "sonnet": 674,
+  "fable": 84,
+  "(inherit/default)": 1547,
+  "opus": 1536
+ },
+ "subagent_by_kind_and_model": {
+  "search": {
+   "opus（指定）": 153,
+   "opus（継承）": 195,
+   "sonnet（指定）": 183,
+   "sonnet（継承）": 39,
+   "fable（指定）": 47,
+   "不明（継承）": 29
+  },
+  "review": {
+   "opus（指定）": 619,
+   "opus（継承）": 302,
+   "sonnet（指定）": 175,
+   "sonnet（継承）": 29
+  },
+  "implement": {
+   "opus（指定）": 506,
+   "opus（継承）": 416,
+   "sonnet（指定）": 184,
+   "sonnet（継承）": 75
+  }
+ },
+ "same_command_failed_3plus_in_a_row": 7,
+ "pass_claims": {
+  "total": 1215,
+  "no_test_command_earlier_in_session": 231,
+  "of_which": {
+   "CI等の結果を引用": 43,
+   "サブエージェント等の報告を伝達": 40,
+   "未実行と明記": 46,
+   "その他（独自の検査の実行など）": 102
+  }
+ }
+}
