@@ -27,4 +27,3 @@ test('candidate commit never runs attribute filters or hooks',{skip:process.plat
  fs.unlinkSync(path.join(workspace,'code.txt'));fs.symlinkSync(path.join(repo,'.git/config'),path.join(workspace,'code.txt'));
  assert.throws(()=>commitCandidate(c,workspace));assert.equal(git('rev-parse','HEAD'),target.head);
 });
-
