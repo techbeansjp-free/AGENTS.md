@@ -93,9 +93,9 @@ export function gitFailureReason(result,timeoutMilliseconds=LOCAL_GIT_TIMEOUT_MI
 }
 
 /** The end of stderr on one line, where Git prints its fatal message. Credential-like values are removed before it is cut.
-   Every pattern starts at a literal or a bounded scheme. A match ends at a separator, a line end or the next Git
-   message line, and a failed attempt scans no further than the match that follows it, so redacting the whole stderr
-   (at most maxBuffer) stays linear. */
+   Config values are hidden by two forward-only passes, and every pattern after them starts at a literal or a bounded
+   scheme and ends at a separator or a line end, so redacting the whole stderr (at most maxBuffer, 16 MB) stays linear
+   and within the regular expression stack. */
 export function gitStderrExcerpt(stderr,limit=GIT_STDERR_EXCERPT_CHARACTERS){
  if(stderr===null||stderr===undefined)return '';
  let text=Buffer.isBuffer(stderr)?stderr.toString('utf8'):String(stderr);

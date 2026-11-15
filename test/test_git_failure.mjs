@@ -70,7 +70,7 @@ test('stderr excerpt hides config values, query and form credentials, userinfo w
  for(const unit of ["value '",'value for ',"value for 'k': ","unknown '","component '","chdir to '","mode '","parameter '","orderfile '","algorithm '","user dir in: '","include path '",
   "value 'x\nfatal: ","value 'x' y","value 'x'\n","value 'x' for ","value '\n'","value for 'k': x\nfatal: ",'invalid color value: x\n','invalid color value: x\nerror: ','invalid mode for object creation: x\n','bad --ignore-submodules argument: x\n',
   "invalid refspec '","unsupported option '",'unrecognized value k: x\n','invalid k value: x\n','invalid k mode x\n','invalid ','\nremote: x',
-  'a@','https://','https://a:','https://a:b/','authorization:x\n','token=','?code=','password ','secret: ','bearer ','ghp_','sk-']){
+  'a@','https://','https://a:','https://a:b/','authorization:x\n','token=','?code=','password ','secret: ','bearer ','ghp_','sk-','xoxb-','github_pat_','AKIA']){
   const started=performance.now();gitStderrExcerpt(Buffer.from(unit.repeat(Math.floor(16_000_000/unit.length))));assert.ok(performance.now()-started<10000,unit);
  }
  // The worst case of a quoted value: one opening quote and no closing quote before the end.
