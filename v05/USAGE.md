@@ -530,9 +530,14 @@ sandbox内で切り離して起動されたプロセス（`spawn(...,{detached:t
   - macOS：`codex sandbox`の終了後も生き残り、3秒後に作業領域のファイルを書き換えた。
   - Linux（Debianのcontainer）：sandboxの終了とともに止まり、書き込まなかった。
   - Windows：未確認（実機がないため）。
-- 残ったプロセスには同じsandboxの制限がかかる。Controllerの一時ファイルには届かず（EPERM）、通信もできない。書けるのは、そのAgentに許可された作業領域とAgent専用の一時領域だけである。
-- Controllerは、Agentの終了後に作業領域を1回だけ読む（`checkOutput`と`commitCandidate`）。読むのは許可されたpathだけで、symlink・hardlink・差し替えは拒否する。検証はcommitのsnapshotで、レビューはcommitから書き出した新しい領域で行う。修復は新しい作業領域で行う。このため、commitの後に作業領域を書き換えても、candidate・検証・レビューには影響しない（testで確かめている）。
-- 残る影響：macOSでは、残ったプロセスが自分で終わるまで、CPUとmemoryを使い続け得る。同梱Codex Hostはプロセスの終了管理をCodexに委ねており、ASCは子孫の停止を保証しない。Linuxの従来backendは、呼出しごとのcgroupで止める。
+- 残ったプロセスには同じsandboxの制限がかかる。Controllerの一時ファイルには届かない（EPERMを実測）。書けるのは、そのAgentに許可された作業領域とAgent専用の一時領域だけである。通信できないのは設定（`network.enabled=false`）からの推論で、残ったプロセスでは実測していない。
+- Controllerは、Agentの終了後に作業領域を2段階で読む。
+  1. `checkOutput`：全ファイルを走査し、許可外のpathや、読取り専用ファイルの変更がないことを確かめる。
+  2. `commitCandidate`：許可されたpathだけを読み、commitする。
+  - どちらも`readSnapshotFile`で読み、symlinkとhardlinkを拒否する。macOSでは、読む前後で同一性（dev・ino・mtime・ctime・size）が変わると止まる。
+  - `checkOutput`の後、`commitCandidate`が読むまでの間に許可されたpathへ書き込まれた内容は、そのままcandidateになる。その内容がそのまま検証とレビューの対象になるので、対象はずれない。同じ間に許可外のpathへ書き込まれても、commitには入らない。
+- 検証はcommitのsnapshotで、レビューはcommitから書き出した新しい領域で行う。修復と中断からの再開は、新しい作業領域で行う（中断時に保存した`checkpoint`の内容を使う）。このため、commitの後に作業領域を書き換えても、検証とレビューには届かない。これは`runWorkflow`を通したtestで確かめている。なお、中断時のerrorが示す`interruptedCandidate.workspace`は、まだ書き込まれ得る作業領域なので、確かめるときは`checkpoint`を使う。
+- 残る影響：macOSでは、残ったプロセスが自分で終わるまで、CPUとmemoryを使い続け得る。同梱Codex Hostはプロセスの終了管理をCodexに委ねており、ASCは子孫の停止を保証しない。同梱Codex Hostの検証も同じ`runHostProcess`で`codex sandbox`を起動するので、検証コマンドが切り離したプロセスも残り得る（未実測）。検証の領域は毎回新しく作って消すので、対象には影響しない。Linuxの従来backendは、呼出しごとのcgroupで止める。
 
 Hostの検証起動・通信・応答形式の失敗はコードのテスト失敗とは区別し、`verification-unavailable` に理由とstderr末尾をローカル記録して停止する。実装を変えても直らない環境障害で修復Agentを繰り返し起動しない。診断には利用環境のpath等が含まれ得るため、外部共有時は必要な箇所を匿名化する。
 

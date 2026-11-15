@@ -35,6 +35,37 @@ test('Host path completes actual verification and independent contexts without L
  t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));
  assert.equal(result.status,'draft-ci-passed');assert.equal(result.calls.length,2);assert.notEqual(result.calls[0].context,result.calls[1].context);
 });
+// #1703: on macOS a process detached inside the Agent sandbox can outlive the Agent and keep writing its workspace.
+// The workflow must take the candidate from the commit and verify and review that commit, not the Agent workspace.
+test('workspace writes after the implementation Agent reach neither verification nor review',async t=>{
+ const f=fixture(t),seen=path.join(f.root,'agent-workspaces.jsonl');
+ fs.writeFileSync(f.script,`import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';
+const q=JSON.parse(fs.readFileSync(0,'utf8')),p=q.payload;let result;
+if(q.operation==='agent'){
+ fs.appendFileSync(${JSON.stringify(seen)},JSON.stringify({writable:p.writable,workspace:p.workspace})+'\\n');
+ if(p.writable){fs.writeFileSync(path.join(p.workspace,'code.txt'),'after');result={context:q.id,seconds:0,usage:[],answer:''};}
+ else{const clean=fs.readFileSync(path.join(p.workspace,'code.txt'),'utf8')==='after'&&!fs.existsSync(path.join(p.workspace,'planted.txt'));
+  result={context:q.id,seconds:0,usage:[],answer:JSON.stringify(clean?{verdict:'pass',findings:[]}:{verdict:'fail',findings:[{severity:'P1',location:'code.txt',condition:'leftover content reached review',evidence:'leftover',impact:'wrong target',action:'none',counterevidence:'none',verification:'static-analysis'}]})};}
+}else{const r=spawnSync(p.argv[0],p.argv.slice(1),{cwd:p.workspace,env:{},timeout:p.timeout});result={exit:r.status,stdout:String(r.stdout),stderr:String(r.stderr)};}
+process.stdout.write(JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,result}));`);
+ // Verification fails if it sees what a leftover process wrote into the implementation workspace.
+ f.request.contract.testArgv=[process.execPath,'-e',"const fs=require('node:fs');if(fs.readFileSync('code.txt','utf8')!=='after'||fs.existsSync('planted.txt'))process.exit(1)"];
+ let planted=0;
+ const leftover=e=>{
+  if(e.type!=='work-selected'||!['verify','independent-review'].includes(e.work))return;
+  // Stand-in for the leftover process: rewrite the implementation workspace after the Controller committed it.
+  for(const line of fs.readFileSync(seen,'utf8').trim().split('\n')){const {writable,workspace}=JSON.parse(line);if(!writable)continue;
+   fs.writeFileSync(path.join(workspace,'code.txt'),'leftover');fs.writeFileSync(path.join(workspace,'planted.txt'),'leftover');planted++;}
+ };
+ const result=await runWorkflow(f.request,{onEvent:leftover,provider:{intent:()=>f.request.contract.intent,createDraft:()=>1,observe:()=>({head:f.git('rev-parse','HEAD'),draft:true,merged:false,boundToPr:true,checks:{test:'success'}})}});
+ t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));
+ assert.ok(planted>=2,'the leftover writes happened before verification and before review');
+ assert.equal(result.status,'draft-ci-passed');
+ assert.equal(f.git('show','HEAD:code.txt'),'after');assert.equal(f.git('ls-tree','--name-only','HEAD','planted.txt'),'');
+ const review=fs.readFileSync(seen,'utf8').trim().split('\n').map(l=>JSON.parse(l)).find(x=>!x.writable);
+ assert.ok(review,'review ran');
+});
+
 test('candidate cannot supply Host executable or operand; wrong invocation cannot become evidence',async t=>{
  const f=fixture(t);
  fs.writeFileSync(path.join(f.repo,'evil.mjs'),'');
