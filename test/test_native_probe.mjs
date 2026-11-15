@@ -23,6 +23,18 @@ test('Mac Node runtime grants only system OpenSSL read dependency',async()=>{
  assert.deepEqual(nodeRuntimeRoots('linux'),[]);assert.deepEqual(nodeRuntimeRoots('win32'),[]);
 });
 
+test('shared sandbox filesystem denies the Mac system temporaries only on Mac',async()=>{
+ const {sandboxFilesystemBase,sharedTemporaryRoots}=await import('../src/codex-runtime.mjs');
+ const base=sandboxFilesystemBase({providerRoots:['/opt/codex'],node:'/opt/node/bin/node',platform:'darwin'});
+ assert.equal(base['/tmp'],'deny');assert.equal(base['/private/tmp'],'deny');assert.equal(base[':root'],'deny');
+ assert.equal(base['/System/Library/OpenSSL'],'read');assert.equal(base['/opt/codex'],'read');assert.equal(base['/opt/node/bin/node'],'read');
+ for(const platform of ['linux','win32']){
+  assert.deepEqual(sharedTemporaryRoots(platform),[]);
+  const denied=Object.entries(sandboxFilesystemBase({providerRoots:[],node:'/n',platform})).filter(([,v])=>v==='deny').map(([k])=>k);
+  assert.deepEqual(denied,[':root']);
+ }
+});
+
 test('Codex runtime roots reject an unrelated executable parent',async t=>{
  const fs=await import('node:fs'),path=await import('node:path');
  const {codexRuntimeRoots}=await import('../src/codex-runtime.mjs');
