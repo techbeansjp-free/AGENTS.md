@@ -1,0 +1,17 @@
+{
+ "note": "生の採点（round2/blind-scores-*.json）は変えず、採点後に見つかった誤りをここで裁定する。README の2回目の点は裁定後の値。",
+ "items": [
+  {
+   "round": "round2",
+   "answer_id": "M3-b37e0b",
+   "run": "none-1",
+   "item": "M3-2",
+   "raw": [
+    1,
+    1
+   ],
+   "adjusted": 0,
+   "reason": "観点は test のコマンド・結果・対象の版の確認を求めるが、回答は「テストを実際に自分で実行し、結果を確認」だけで、コマンドと版がない。rubric の「部分的・曖昧なら 0」に従う。PR #1675 の CodeRabbit の指摘による"
+  }
+ ]
+}

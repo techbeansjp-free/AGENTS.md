@@ -21,4 +21,4 @@
 
 ## 採点（opus、2系統、各回は別 Context）
 
-#1671 の Evidence（`docs/evidence/1671-agent-skills-comparison/prompts.md`）の採点の依頼文と同じ。回答数を24件とし、技術的な正しさの確認の一文を除いた。採点用の directory には対応キーを置かなかった。
+#1671 の Evidence（`docs/evidence/1671-agent-skills-comparison/prompts.md`）の採点の依頼文と同じ。回答数を1回目は24件、2回目は30件とし、技術的な正しさの確認の一文を除いた。採点用の directory には対応キーを置かなかった。
