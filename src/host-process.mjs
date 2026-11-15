@@ -28,9 +28,10 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
   // A group number must name the child's own group: never 0, 1 or a negative value, which would reach other processes.
   const pgid=grouped&&Number.isSafeInteger(p.pid)&&p.pid>1?p.pid:undefined;
   if(pgid)own(pgid);
-  const out=[],err=[];let size=0,done=false,exited=false,exitCode=null,killed=false;
+  const out=[],err=[];let size=0,done=false,accepting=true,exited=false,exitCode=null,killed=false;
   const timers=new Set(),later=(ms,fn)=>{const t=setTimeout(()=>{timers.delete(t);fn();},ms);timers.add(t);return t;};
-  // Sent once, while the group still has members, so its number cannot have been reused yet.
+  // Sent once, synchronously, right after the child exits or fails. Members still in the group keep its number from
+  // reuse; a group that held only the child is already empty, so the kill reports ESRCH (a very small reuse window).
   const killGroup=()=>{
    if(killed)return;killed=true;
    if(!pgid){p.kill();return;}
@@ -53,11 +54,14 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
    const gone=killError?false:await groupGone();
    if(pgid)disown(pgid);
    // Output from a descendant outside the group may hold the pipes open; do not wait for it indefinitely.
-   if(!p.stdout.readableEnded||!p.stderr.readableEnded)await new Promise(settle=>{
-    let left=2;const one=()=>{if(--left===0)settle();};
-    for(const stream of [p.stdout,p.stderr])if(stream.readableEnded)one();else stream.once('end',one);
+   // Output written before the child exited may still be in the pipes; keep collecting it until both streams end.
+   const open=[p.stdout,p.stderr].filter(stream=>!stream.readableEnded&&!stream.destroyed);
+   if(open.length)await new Promise(settle=>{
+    let left=open.length;
+    for(const stream of open){let counted=false;const one=()=>{if(counted)return;counted=true;if(--left===0)settle();};stream.once('end',one);stream.once('close',one);}
     later(OUTPUT_DRAIN_MILLISECONDS,settle);
    });
+   accepting=false;
    for(const t of timers)clearTimeout(t);
    p.stdin.destroy();p.stdout.destroy();p.stderr.destroy();
    const result={stdout:Buffer.concat(out).toString(),stderr:Buffer.concat(err).toString()};
@@ -68,7 +72,7 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
    if(error){Object.assign(error,result);reject(error);}else resolve(result);
   };
   const timer=timeout===null?undefined:setTimeout(()=>finish(Object.assign(Error('Host process deadline exceeded'),{code:'ASC_HOST_TRANSPORT_TIMEOUT'})),timeout);
-  for(const [stream,chunks] of [[p.stdout,out],[p.stderr,err]])stream.on('data',b=>{if(done)return;size+=b.length;if(size>8*1024*1024)finish(Error('Host process output limit'));else chunks.push(b);});
+  for(const [stream,chunks] of [[p.stdout,out],[p.stderr,err]])stream.on('data',b=>{if(!accepting)return;size+=b.length;if(size>8*1024*1024){accepting=false;finish(Error('Host process output limit'));}else chunks.push(b);});
   p.on('error',()=>finish(Error('Host executable could not start')));p.stdin.on('error',()=>finish(Error('Host input failed')));
   const settle=()=>finish(exitCode===0?undefined:Object.assign(Error('Host process failed: '+exitCode),{code:'ASC_PROVIDER_EXIT'}));
   // The direct child's exit, not the pipes closing, starts the cleanup: a leftover may keep the pipes open.
