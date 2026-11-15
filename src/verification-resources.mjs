@@ -31,14 +31,19 @@ async function verificationProcess(argv,timeout,owner){
  const alive=()=>{if(ownerIdentity(owner.pid)!==owner.start)process.exit(125);};alive();
  const watch=setInterval(alive,100);
  try{return await new Promise((resolve,reject)=>{
-  const child=spawn('/usr/bin/prlimit',argv,{env:{PATH:'/usr/bin:/bin'},stdio:['ignore','pipe','pipe']});
+  // The observer shares the memory cgroup with the verification tree. A cgroup
+  // OOM can select another victim while an earlier victim's pages are still
+  // charged (the victim is marked MMF_OOM_SKIP before its memory is uncharged).
+  // Raising only the verification tree to the maximum score keeps the kernel
+  // from preferring the observer, which must survive to report the exhaustion.
+  const child=spawn('/usr/bin/choom',['-n','1000','--','/usr/bin/prlimit',...argv],{env:{PATH:'/usr/bin:/bin'},stdio:['ignore','pipe','pipe']});
   const stdout=[],stderr=[];let error,settled=false,drain;
   // A later timeout or stream event must not replace the original failure.
   const timer=timeout===null?undefined:setTimeout(()=>{error??=Object.assign(Error('Verification timeout'),{code:'ETIMEDOUT'});child.kill('SIGKILL');},timeout);
   for(const [stream,chunks] of [[child.stdout,stdout],[child.stderr,stderr]]){let size=0;stream.on('data',b=>{size+=b.length;if(size>1048576){error??=Object.assign(Error('Verification output limit'),{code:'ENOBUFS'});child.kill('SIGKILL');}else chunks.push(b);});}
-  const finish=status=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(drain);child.stdout.destroy();child.stderr.destroy();resolve({status,error,stdout:Buffer.concat(stdout),stderr:Buffer.concat(stderr)});};
+  const finish=(status,signal)=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(drain);child.stdout.destroy();child.stderr.destroy();resolve({status,signal:signal??null,error,stdout:Buffer.concat(stdout),stderr:Buffer.concat(stderr)});};
   child.once('error',e=>{clearTimeout(timer);clearTimeout(drain);reject(e);});
-  child.once('exit',status=>{drain=setTimeout(()=>{error??=Object.assign(Error('Verification output did not close'),{code:'EINCOMPLETE'});finish(status);},1000);});
+  child.once('exit',(status,signal)=>{drain=setTimeout(()=>{error??=Object.assign(Error('Verification output did not close'),{code:'EINCOMPLETE'});finish(status,signal);},1000);});
   child.once('close',finish);
  });}finally{clearInterval(watch);}
 }
@@ -49,8 +54,8 @@ async function worker(requestPath){
  const before=observe(request.unit,request.memoryBytes);
  demand(before.processes.length===1&&before.processes[0]===process.pid,'Verification cgroup is not exclusive');
  const p=await verificationProcess(request.argv,request.timeout,request.owner);
- const timedOut=p.error?.code==='ETIMEDOUT',outputLimited=p.error?.code==='ENOBUFS';
- demand((!p.error&&Number.isInteger(p.status))||timedOut||outputLimited,`Verification execution failed: ${p.error?.code??'invalid-exit-status'}`);
+ const timedOut=p.error?.code==='ETIMEDOUT',outputLimited=p.error?.code==='ENOBUFS',signaled=!p.error&&p.status===null&&typeof p.signal==='string';
+ demand((!p.error&&Number.isInteger(p.status))||timedOut||outputLimited||signaled,`Verification execution failed: ${p.error?.code??'invalid-exit-status'}`);
  // Killing the namespace leader and reaping its descendants are not atomic.
  // Normal exit also races namespace teardown. Confirm actual emptiness within
  // the existing service grace; a surviving descendant still rejects the result.
@@ -68,7 +73,10 @@ async function worker(requestPath){
   }
  }
  const exhausted=['max','oom','oom_kill'].some(k=>delta['memory.events'][k]>0)||delta['pids.events'].max>0;
- process.stdout.write(JSON.stringify({status:exhausted||timedOut||outputLimited?125:p.status,stdout:p.stdout.toString('base64'),stderr:p.stderr.toString('base64'),resourceBoundary:{unit:request.unit,before,after,delta,exhausted,processExit:p.status,executionError:p.error?.code??null}}));
+ // The cgroup OOM killer may also select the top of the verification tree.
+ // That is the same rejected exhaustion; any other signal stays an execution failure.
+ demand(!signaled||exhausted,`Verification execution failed: signal ${p.signal}`);
+ process.stdout.write(JSON.stringify({status:exhausted||timedOut||outputLimited?125:p.status,stdout:p.stdout.toString('base64'),stderr:p.stderr.toString('base64'),resourceBoundary:{unit:request.unit,before,after,delta,exhausted,processExit:p.status,processSignal:p.signal,executionError:p.error?.code??null}}));
 }
 export function runBoundedVerification(argv,timeout=null,memoryBytes=1073741824){
  verificationMemoryLimit(memoryBytes);
