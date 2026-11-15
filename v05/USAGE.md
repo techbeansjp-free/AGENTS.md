@@ -525,19 +525,27 @@ macOSでこの`deny`が効くのはCodex 0.156.0以降である。0.153.4・0.15
 
 Agentの起動前の隔離診断は、logsに加えて、Controllerの一時ディレクトリと（Windows以外では）`/tmp`・`/var/tmp`に置いた見張り用ファイルを読めず、書き換えられないことを確かめる。重複を省くのは、正準pathが等しい場合だけである（`TMPDIR`が`/tmp`の下の別ディレクトリでも、`/tmp`自体を調べる）。どれかに届けば`Isolation not established`で停止する。Codexの版が変わって上の拒否が効かなくなっても、無隔離では実行しない。sandboxが見張り用ファイルに届いた場合、停止のmessageにその場所を示す。macOSで共有の一時領域に届いた場合は、Codex 0.156.0より前の版が拒否を無視することも示す。この停止は設定では回避できない。Codexの版を確かめ、0.156.0以降でも止まるなら、`preflight.json`の`targets`と結果を添えてIssueで報告する。見張り用ファイルを置けない場合（`/var/tmp`はあるが書けないcontainerなど）も、置けなかった場所を示して停止する。この場合は`preflight.json`を作る前に止まり、原因はCodexの版によらない。この検査は省略しない（#1709）。`/tmp`または`/var/tmp`があるのに書けない環境では、Controllerを実行する利用者が書ける共有一時領域（`chmod 1777`）にするか、その環境では作らない（存在しなければ調べない）。それでも止まる場合は、停止のmessageを添えて報告する。利用者が自分で用意したHostのsandboxは対象外である。
 
-sandbox内で切り離して起動されたプロセス（`spawn(...,{detached:true})`など）の扱い（#1703。ownerの判断で、門は変えずに記録する）：
-- 実測（同梱Codex Hostの経路`runHostProcess`、Codex 0.169.0、モデル呼出しなし）
-  - macOS：`codex sandbox`の終了後も生き残り、3秒後に作業領域のファイルを書き換えた。
-  - Linux（Debianのcontainer）：sandboxの終了とともに止まり、書き込まなかった。
-  - Windows：未確認（実機がないため）。
-- 残ったプロセスには同じsandboxの制限がかかる。Controllerの一時ファイルには届かない（EPERMを実測）。書けるのは、そのAgentに許可された作業領域とAgent専用の一時領域だけである。通信できないのは設定（`network.enabled=false`）からの推論で、残ったプロセスでは実測していない。
+sandbox内で切り離して起動されたプロセスの扱い（#1703）：
+- 同梱Codex Hostは、`codex sandbox`（Agentの診断と検証）と`codex exec`（Agent）を、Windows以外では新しいprocess groupの先頭として起動する。直接の子が終わると、正常終了・失敗・期限切れのどの場合も、そのgroupにSIGKILLを送り、groupが空になったことを確かめてから結果を返す。
+  - 空になったと確かめられない場合は、`ASC_HOST_CLEANUP_UNCONFIRMED`で失敗にする。
+  - HostがSIGINT・SIGTERM・SIGHUPを受けた場合も、先にgroupを止める。
+- 実測（Codex 0.169.0、モデル呼出しなし、`codex sandbox`の中で起動したものが3秒後に作業領域へ書く）
+  - macOS：変更前は3種類とも生き残って書き込んだ。変更後は、shellのbackground job（`cmd &`）と`nohup`は止まり、書き込まなかった。`setsid`でgroupを出たもの（Nodeの`detached:true`など）は生き残り、書き込んだ。
+  - Linux（Debianのcontainer）：変更前から3種類とも、sandboxの終了とともに止まった。
+  - Windows：未確認（実機がないため）。Windowsではprocess groupを使わず、これまでどおり直接の子だけを止める。
+- 止められないもの
+  - `setsid`や`setpgid`でgroupを出たもの（daemon化、Nodeの`detached:true`、job controlを有効にしたshellのjob）。macOSでは、自分で終わるまでCPUとmemoryを使い続け得る。他のプロセスのenvはmacOSでは読めないため（実測）、印で探して止める方法は取れない。
+  - Host自身がSIGKILLや異常終了で止まった場合。後始末は動かない。Controllerは、同期の検証では期限切れのときにHostへSIGKILLを送る。
+  - `codex exec`のtoolがgroupを出るかは未確認。モデルを呼ばないと測れないため。
+- groupが空になったことは、「groupに残っていない」ことだけを示す。「子孫が残っていない」ことは示さない。
+- 残ったプロセスにも同じsandboxの制限がかかる。Controllerの一時ファイルには届かない（EPERMを実測）。書けるのは、そのAgentに許可された作業領域とAgent専用の一時領域だけである。通信できないのは設定（`network.enabled=false`）からの推論で、残ったプロセスでは実測していない。
 - Controllerは、Agentの終了後に作業領域を2段階で読む。
   1. `checkOutput`：全ファイルを走査し、許可外のpathや、読取り専用ファイルの変更がないことを確かめる。
   2. `commitCandidate`：許可されたpathだけを読み、commitする。
   - どちらも`readSnapshotFile`で読み、symlinkとhardlinkを拒否する。Linux以外（macOSなど）では、読む前後で同一性（dev・ino・mode・size・mtime・ctime）が変わると止まる。
   - `checkOutput`の後、`commitCandidate`が読むまでの間に許可されたpathへ書き込まれた内容は、そのままcandidateになる。その内容がそのまま検証とレビューの対象になるので、対象はずれない。同じ間に許可外のpathへ書き込まれても、commitには入らない。同じ間に許可されたpathがsymlink・hardlink・ディレクトリに替えられた場合は、`readSnapshotFile`が拒否し、candidateにならずに止まる（コードからの推論）。
-- 検証はcommitのsnapshotで、レビューはcommitから書き出した新しい領域で行う。修復と中断からの再開は、新しい作業領域で行う（中断時に保存した`checkpoint`の内容を使う）。このため、commitの後に作業領域を書き換えても、検証とレビューには届かない。これは`runWorkflow`を通したtestで確かめている。なお、中断時のerrorが示す`interruptedCandidate.workspace`は、まだ書き込まれ得る作業領域なので、確かめるときは`checkpoint`を使う。
-- 残る影響：macOSでは、残ったプロセスが自分で終わるまで、CPUとmemoryを使い続け得る。同梱Codex Hostはプロセスの終了管理をCodexに委ねており、ASCは子孫の停止を保証しない。同梱Codex Hostの検証も同じ`runHostProcess`で`codex sandbox`を起動するので、検証コマンドが切り離したプロセスも残り得る（未実測）。検証の領域は毎回新しく作って消すので、対象には影響しない。Linuxの従来backendは、呼出しごとのcgroupで止める。
+- 検証はcommitのsnapshotで、レビューはcommitから書き出した新しい領域で行う。修復と中断からの再開は、新しい作業領域で行う（中断時に保存した`checkpoint`の内容を使う）。このため、残ったプロセスが作業領域を書き換えても、検証とレビューには届かない。これは`runWorkflow`を通したtestで確かめている。なお、中断時のerrorが示す`interruptedCandidate.workspace`は、まだ書き込まれ得る作業領域なので、確かめるときは`checkpoint`を使う。
+- Linuxの従来backendは、呼出しごとのcgroupで止める。
 
 Hostの検証起動・通信・応答形式の失敗はコードのテスト失敗とは区別し、`verification-unavailable` に理由とstderr末尾をローカル記録して停止する。実装を変えても直らない環境障害で修復Agentを繰り返し起動しない。診断には利用環境のpath等が含まれ得るため、外部共有時は必要な箇所を匿名化する。
 
