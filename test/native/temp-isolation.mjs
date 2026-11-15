@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';import fs from 'node:fs';import os from 
 import {spawnSync} from 'node:child_process';
 import {configuration,runAgent} from '../../src/restricted-agent.mjs';
 import {probeNativeSandbox} from '../../src/native-probe.mjs';
-import {sharedTemporaryRoots} from '../../src/codex-runtime.mjs';
+import {sharedTemporaryRoots,POSIX_SHARED_TEMPORARIES} from '../../src/codex-runtime.mjs';
 import {runHostProcess} from '../../src/host-process.mjs';
 if(!process.env.ASC_TEST_CODEX)throw Error('Explicit native Codex test executable required');
 if(process.platform!=='darwin')throw Error('This check reproduces the macOS shared-temporary exposure');
@@ -24,7 +24,7 @@ const roots=[home];
 try{
  const workspace=path.join(home,'workspace');fs.mkdirSync(workspace);fs.writeFileSync(path.join(workspace,'a.txt'),'x');
  const runtime=tempDir('asc-v05-tool-');roots.push(runtime);
- const targets=['/tmp','/var/tmp'].map(parent=>{const dir=tempDir('asc-temp-isolation-target-',parent);roots.push(dir);const file=path.join(dir,'file');fs.writeFileSync(file,'trusted',{mode:0o600});return file;});
+ const targets=POSIX_SHARED_TEMPORARIES.map(parent=>{const dir=tempDir('asc-temp-isolation-target-',parent);roots.push(dir);const file=path.join(dir,'file');fs.writeFileSync(file,'trusted',{mode:0o600});return file;});
  const probe=`const fs=require('node:fs');const out=[];for(const f of process.argv.slice(1)){try{fs.writeFileSync(f,'changed');out.push('written');}catch(e){out.push(e.code);}}fs.writeSync(1,JSON.stringify(out));`;
  const attempt=c=>{
   const r=spawnSync(c.binary,['sandbox','-P',c.profile,...c.options,'-C',c.launchDirectory,'--',c.node,'-e',probe,...targets],{env:c.env,encoding:'utf8',timeout:30000,stdio:['ignore','pipe','pipe']});

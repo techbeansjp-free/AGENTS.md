@@ -20,6 +20,12 @@ test('preflight requires explicit completed denial and unchanged host for every 
  assert.throws(()=>assertPreflight(good,['trusted','changed']));
  assert.throws(()=>assertPreflight(report([]),[]));
  assert.throws(()=>assertPreflight(good,'trusted'));
+ // The failure names where the sandbox reached; on macOS a shared temporary also points at the Codex version.
+ const reached=report([denied,{read:'accessible',write:'private-write-completed'}]);
+ assert.throws(()=>assertPreflight(reached,['trusted','changed'],['/logs/controller-sentinel','/private/tmp/asc-v05-sentinel-x/controller-sentinel']),e=>
+  e.message.startsWith('Isolation not established (sandbox reached /private/tmp/asc-v05-sentinel-x/controller-sentinel')&&!e.message.includes('/logs/')&&
+  e.message.includes('Codex 0.156.0')===(process.platform==='darwin'));
+ assert.throws(()=>assertPreflight(report([{read:'accessible',write:'denied'}]),['trusted'],['/logs/controller-sentinel']),e=>!e.message.includes('Codex 0.156.0'));
 });
 test('sentinel directories are deduplicated only when their canonical paths are equal',()=>{
  // A macOS-like layout: /tmp and /var/tmp are links into /private.
