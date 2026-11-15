@@ -8,11 +8,26 @@ function demand(ok,message,details){if(!ok)throw Object.assign(Error(message),de
 export function verificationMemoryLimit(value=1073741824){
  demand(Number.isSafeInteger(value)&&value>=67108864&&value<=4294967296&&value%1048576===0,'Invalid verification memory limit');return value;
 }
-function observe(unit,memoryBytes){
- const limits={'memory.max':String(verificationMemoryLimit(memoryBytes)),'memory.swap.max':'0','pids.max':'256'};
+// The observer and the verification tree are sibling cgroups inside the unit.
+// Owner limits apply only to the tree, so a memory-cgroup OOM can never select
+// the observer (the kernel scans only the OOMing memcg subtree).
+function limitsFor(memoryBytes){return {'memory.max':String(verificationMemoryLimit(memoryBytes)),'memory.swap.max':'0','pids.max':'256'};}
+function partition(unit,memoryBytes){
  const relative=fs.readFileSync('/proc/self/cgroup','utf8').trim().match(/^0::(\/[^\n]+)$/)?.[1];
  demand(relative&&path.basename(relative)===unit,'Verification cgroup identity mismatch');
- const dir=path.join('/sys/fs/cgroup',relative),read=name=>fs.readFileSync(path.join(dir,name),'utf8').trim();
+ const root=path.join('/sys/fs/cgroup',relative);
+ demand(fs.readFileSync(path.join(root,'cgroup.procs'),'utf8').split('\n').filter(Boolean).map(Number).join()===String(process.pid),'Verification cgroup is not exclusive');
+ // mkdir fails on an existing directory, so a pre-made subtree is never adopted.
+ for(const leaf of ['observer','tree'])fs.mkdirSync(path.join(root,leaf));
+ fs.writeFileSync(path.join(root,'observer','cgroup.procs'),String(process.pid));
+ fs.writeFileSync(path.join(root,'cgroup.subtree_control'),'+memory +pids');
+ for(const [name,value] of Object.entries(limitsFor(memoryBytes)))fs.writeFileSync(path.join(root,'tree',name),value);
+ return {unit:relative,observer:path.join(relative,'observer'),tree:path.join(relative,'tree')};
+}
+function observe(cgroups,memoryBytes){
+ const limits=limitsFor(memoryBytes);
+ demand(fs.readFileSync('/proc/self/cgroup','utf8').trim()===`0::${cgroups.observer}`,'Verification observer left its cgroup');
+ const dir=path.join('/sys/fs/cgroup',cgroups.tree),read=name=>fs.readFileSync(path.join(dir,name),'utf8').trim();
  const actual=Object.fromEntries(Object.keys(limits).map(name=>[name,read(name)]));
  demand(Object.entries(limits).every(([name,value])=>actual[name]===value),'Verification cgroup limits changed');
  const counters={};for(const name of ['memory.events','pids.events']){
@@ -21,30 +36,31 @@ function observe(unit,memoryBytes){
   counters[name]=Object.fromEntries(pairs.map(([key,value])=>[key,Number(value)]));
  }
  demand(['max','oom','oom_kill'].every(k=>Number.isSafeInteger(counters['memory.events'][k]))&&Number.isSafeInteger(counters['pids.events'].max),'Missing resource counters');
- return {observedAt:Date.now(),cgroup:relative,limits:actual,counters,processes:read('cgroup.procs').split('\n').filter(Boolean).map(Number)};
+ const observerProcesses=fs.readFileSync(path.join('/sys/fs/cgroup',cgroups.observer,'cgroup.procs'),'utf8').split('\n').filter(Boolean).map(Number);
+ return {observedAt:Date.now(),cgroup:cgroups.tree,limits:actual,counters,processes:read('cgroup.procs').split('\n').filter(Boolean).map(Number),observerProcesses};
 }
 function ownerIdentity(pid){try{const fields=fs.readFileSync(`/proc/${pid}/stat`,'utf8').split(') ').at(-1).split(' ');return fields[0]==='Z'?null:fields[19];}catch{return null;}}
-async function verificationProcess(argv,timeout,owner){
+async function verificationProcess(argv,timeout,owner,tree){
  demand(Number.isSafeInteger(owner?.pid)&&owner.pid>0&&typeof owner.start==='string','Invalid verification owner');
  // The service is killed as a group when its main worker exits. Checking the
  // process generation prevents PID reuse from keeping an orphan alive.
  const alive=()=>{if(ownerIdentity(owner.pid)!==owner.start)process.exit(125);};alive();
  const watch=setInterval(alive,100);
  try{return await new Promise((resolve,reject)=>{
-  // The observer shares the memory cgroup with the verification tree. A cgroup
-  // OOM can select another victim while an earlier victim's pages are still
-  // charged (the victim is marked MMF_OOM_SKIP before its memory is uncharged).
-  // Raising only the verification tree to the maximum score keeps the kernel
-  // from preferring the observer, which must survive to report the exhaustion.
-  // This holds while an eligible verification process remains (a tree may also
-  // lower its own score to its minimum); otherwise the observer can still be
-  // killed, which stays a fail-closed observer failure, never a success.
-  const child=spawn('/usr/bin/choom',['-n','1000','--','/usr/bin/prlimit',...argv],{env:{PATH:'/usr/bin:/bin'},stdio:['ignore','pipe','pipe']});
+  // The launcher waits on fd 3 until the observer has moved it into the
+  // limited tree, so no verification code ever runs outside the owner limits.
+  const child=spawn('/bin/sh',['-c','IFS= read -r _ <&3 || exit 125; exec 3<&-; exec /usr/bin/prlimit "$@"','asc-verify',...argv],{env:{PATH:'/usr/bin:/bin'},stdio:['ignore','pipe','pipe','pipe']});
+  try{
+   demand(Number.isSafeInteger(child.pid),'Verification launcher did not start');
+   fs.writeFileSync(path.join('/sys/fs/cgroup',tree,'cgroup.procs'),String(child.pid));
+   demand(fs.readFileSync(`/proc/${child.pid}/cgroup`,'utf8').trim()===`0::${tree}`,'Verification process is outside its cgroup');
+   child.stdio[3].end('go\n');
+  }catch(e){child.kill('SIGKILL');throw Object.assign(Error(`Verification execution failed: cgroup placement (${e.code??e.message})`),{cause:e});}
   const stdout=[],stderr=[];let error,settled=false,drain;
   // A later timeout or stream event must not replace the original failure.
   const timer=timeout===null?undefined:setTimeout(()=>{error??=Object.assign(Error('Verification timeout'),{code:'ETIMEDOUT'});child.kill('SIGKILL');},timeout);
   for(const [stream,chunks] of [[child.stdout,stdout],[child.stderr,stderr]]){let size=0;stream.on('data',b=>{size+=b.length;if(size>1048576){error??=Object.assign(Error('Verification output limit'),{code:'ENOBUFS'});child.kill('SIGKILL');}else chunks.push(b);});}
-  const finish=(status,signal)=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(drain);child.stdout.destroy();child.stderr.destroy();resolve({status,signal:signal??null,error,stdout:Buffer.concat(stdout),stderr:Buffer.concat(stderr)});};
+  const finish=(status,signal)=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(drain);child.stdout.destroy();child.stderr.destroy();child.stdio[3]?.destroy();resolve({status,signal:signal??null,error,stdout:Buffer.concat(stdout),stderr:Buffer.concat(stderr)});};
   child.once('error',e=>{clearTimeout(timer);clearTimeout(drain);reject(e);});
   child.once('exit',(status,signal)=>{drain=setTimeout(()=>{error??=Object.assign(Error('Verification output did not close'),{code:'EINCOMPLETE'});finish(status,signal);},1000);});
   child.once('close',finish);
@@ -54,29 +70,31 @@ async function worker(requestPath){
  const request=JSON.parse(fs.readFileSync(requestPath,'utf8'));
  demand(/^asc-verify-[a-f0-9-]+\.service$/.test(request.unit)&&Array.isArray(request.argv)&&request.argv.every(v=>typeof v==='string'),'Invalid resource request');
  demand(request.timeout===null||(Number.isSafeInteger(request.timeout)&&request.timeout>0&&request.timeout<=2147483647),'Invalid verification timeout');
- const before=observe(request.unit,request.memoryBytes);
- demand(before.processes.length===1&&before.processes[0]===process.pid,'Verification cgroup is not exclusive');
- const p=await verificationProcess(request.argv,request.timeout,request.owner);
+ const cgroups=partition(request.unit,request.memoryBytes);
+ const before=observe(cgroups,request.memoryBytes);
+ demand(before.processes.length===0&&before.observerProcesses.join()===String(process.pid),'Verification cgroup is not exclusive');
+ const p=await verificationProcess(request.argv,request.timeout,request.owner,cgroups.tree);
  const timedOut=p.error?.code==='ETIMEDOUT',outputLimited=p.error?.code==='ENOBUFS',signaled=!p.error&&p.status===null&&typeof p.signal==='string';
  demand((!p.error&&Number.isInteger(p.status))||timedOut||outputLimited||signaled,`Verification execution failed: ${p.error?.code??'invalid-exit-status'}`);
  // Killing the namespace leader and reaping its descendants are not atomic.
  // Normal exit also races namespace teardown. Confirm actual emptiness within
  // the existing service grace; a surviving descendant still rejects the result.
- let after=observe(request.unit,request.memoryBytes);
- if(after.processes.some(pid=>pid!==process.pid)){
+ const busy=o=>o.processes.length>0||o.observerProcesses.join()!==String(process.pid);
+ let after=observe(cgroups,request.memoryBytes);
+ if(busy(after)){
   const deadline=performance.now()+1000,pause=new Int32Array(new SharedArrayBuffer(4));
-  while(after.processes.some(pid=>pid!==process.pid)&&performance.now()<deadline){
-   Atomics.wait(pause,0,0,20);after=observe(request.unit,request.memoryBytes);
+  while(busy(after)&&performance.now()<deadline){
+   Atomics.wait(pause,0,0,20);after=observe(cgroups,request.memoryBytes);
   }
  }
- demand(after.cgroup===before.cgroup&&after.processes.length===1&&after.processes[0]===process.pid,'Verification descendants remain or identity changed');
+ demand(after.cgroup===before.cgroup&&!busy(after),'Verification descendants remain or identity changed');
  const delta={};for(const name of Object.keys(before.counters)){
   delta[name]={};for(const [key,value] of Object.entries(before.counters[name])){
    const current=after.counters[name][key];demand(Number.isSafeInteger(current)&&current>=value,'Resource counter missing or reset');delta[name][key]=current-value;
   }
  }
  const exhausted=['max','oom','oom_kill'].some(k=>delta['memory.events'][k]>0)||delta['pids.events'].max>0;
- // The cgroup OOM killer may also select the top of the verification tree.
+ // The tree's OOM killer may select the top verification process itself.
  // That is the same rejected exhaustion; any other signal stays an execution failure.
  demand(!signaled||exhausted,`Verification execution failed: signal ${p.signal}`);
  process.stdout.write(JSON.stringify({status:exhausted||timedOut||outputLimited?125:p.status,stdout:p.stdout.toString('base64'),stderr:p.stderr.toString('base64'),resourceBoundary:{unit:request.unit,before,after,delta,exhausted,processExit:p.status,processSignal:p.signal,executionError:p.error?.code??null}}));
@@ -91,7 +109,7 @@ export function runBoundedVerification(argv,timeout=null,memoryBytes=1073741824)
  let result,cleanup,failure;
  try{
   fs.writeFileSync(request,JSON.stringify({unit,argv,timeout,memoryBytes,owner:{pid:process.pid,start:ownerIdentity(process.pid)}}),{flag:'wx',mode:0o600});
-  const p=spawnSync('/usr/bin/systemd-run',['--user','--wait','--pipe',`--unit=${unit}`,'--working-directory=/',`--property=MemoryMax=${memoryBytes}`,'--property=MemorySwapMax=0','--property=TasksMax=256',...(timeout===null?[]:[`--property=RuntimeMaxSec=${Math.ceil(timeout/1000)+5}`]),'--property=KillMode=control-group','--property=OOMPolicy=continue',process.execPath,self,'--resource-worker',request],{env,encoding:'utf8',timeout:timeout===null?0:timeout+10000,maxBuffer:3145728,killSignal:'SIGKILL'});
+  const p=spawnSync('/usr/bin/systemd-run',['--user','--wait','--pipe',`--unit=${unit}`,'--working-directory=/','--property=Delegate=memory pids',`--property=MemoryMax=${memoryBytes+268435456}`,'--property=MemorySwapMax=0','--property=TasksMax=512',...(timeout===null?[]:[`--property=RuntimeMaxSec=${Math.ceil(timeout/1000)+5}`]),'--property=KillMode=control-group','--property=OOMPolicy=continue',process.execPath,self,'--resource-worker',request],{env,encoding:'utf8',timeout:timeout===null?0:timeout+10000,maxBuffer:3145728,killSignal:'SIGKILL'});
   if(p.error||p.status!==0){
    failure=Error(`Bounded verification observer failed (status=${p.status}, error=${p.error?.code??'none'}). Untrusted observer stderr: ${String(p.stderr??'').slice(-2048)}`);
    const state=ctl(['show',unit,'--property=Result','--property=ExecMainCode','--property=ExecMainStatus','--property=ControlGroup']);
