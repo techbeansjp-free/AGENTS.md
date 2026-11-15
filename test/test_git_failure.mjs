@@ -1,6 +1,6 @@
 import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import {performance} from 'node:perf_hooks';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
-import {execFileSync,spawnSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,gitFailureReason,gitStderrExcerpt} from '../src/source-limits.mjs';
 import {Controller} from '../src/controller.mjs';import {assertWorkLocation} from '../src/migration.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createVerificationGit} from '../src/verification-git.mjs';
 
@@ -65,36 +65,133 @@ test('stderr excerpt hides config values, query and form credentials, userinfo w
  ]){const shown=gitStderrExcerpt(Buffer.from(input));assert.equal(shown,expected,input);assert.equal(shown.includes('s3cret'),false,input);}
  // The cost of hiding a header to the line end: text after it on the same line is hidden too.
  assert.equal(gitStderrExcerpt('Authorization: Bearer s3cret fatal: end'),'Authorization: ***');
- // Remaining gap, kept visible on purpose: a quoted value containing "'" shows the part after that quote.
- assert.equal(gitStderrExcerpt("fatal: bad boolean config value 'it's' for 'core.filemode'"),"fatal: bad boolean config value '***'s' for 'core.filemode'");
- // Every pattern stays linear on four megabytes built from its own start; a quadratic one would take hours.
+ // Every pattern stays linear, and within the stack, on sixteen megabytes (the largest Controller stderr) built from its
+ // own start; a quadratic one would take hours, and a backtracking run to the next message line overflowed the stack.
  for(const unit of ["value '",'value for ',"value for 'k': ","unknown '","component '","chdir to '","mode '","parameter '","orderfile '","algorithm '","user dir in: '","include path '",
-  'invalid color value: x\n','invalid mode for object creation: x\n','bad --ignore-submodules argument: x\n','a@','https://','authorization:x\n','token=','password ','secret: ','bearer ','ghp_','sk-']){
-  const started=performance.now();gitStderrExcerpt(Buffer.from(unit.repeat(Math.floor(4_000_000/unit.length))));assert.ok(performance.now()-started<10000,unit);
+  "value 'x\nfatal: ","value 'x' y","value 'x'\n","value 'x' for ","value '\n'","value for 'k': x\nfatal: ",'invalid color value: x\n','invalid color value: x\nerror: ','invalid mode for object creation: x\n','bad --ignore-submodules argument: x\n',
+  "invalid refspec '","unsupported option '",'unrecognized value k: x\n','invalid k value: x\n','invalid k mode x\n','invalid ','\nremote: x',
+  'a@','https://','https://a:','https://a:b/','authorization:x\n','token=','?code=','password ','secret: ','bearer ','ghp_','sk-','xoxb-','github_pat_','AKIA']){
+  const started=performance.now();gitStderrExcerpt(Buffer.from(unit.repeat(Math.floor(16_000_000/unit.length))));assert.ok(performance.now()-started<10000,unit);
  }
  // The worst case of a quoted value: one opening quote and no closing quote before the end.
- const unclosed=performance.now();gitStderrExcerpt(Buffer.from("value '"+'x'.repeat(4_000_000)));assert.ok(performance.now()-unclosed<10000);
+ const unclosed=performance.now();gitStderrExcerpt(Buffer.from("value '"+'x'.repeat(16_000_000)));assert.ok(performance.now()-unclosed<10000);
 });
 
-// One key for each form that the #1691 sweep found, run through the same Git commands and environment as Controller.
-// Only "no leak" is asserted per key, so a Git version that words or skips a message differently still passes; the
-// first two keys must be quoted by every supported Git, which shows that the check reaches real Git output.
-test('real Git output for each config value wording found by the sweep does not reach the excerpt',{skip:process.platform==='win32'},t=>{
+// #1696: a config value may hold a newline or a quote, and a control character may stand between a scheme and its token.
+test('stderr excerpt hides multi-line and quoted config values up to the next Git message line',()=>{
+ for(const [input,expected] of [
+  // Quoted: up to the first quote followed by the rest of Git's wording, across lines and quotes inside the value.
+  ["fatal: bad boolean config value 'it's' for 'core.filemode'","fatal: bad boolean config value '***' for 'core.filemode'"],
+  ["fatal: bad boolean config value 'a\ns3cret' it's' for 'core.filemode'","fatal: bad boolean config value '***' for 'core.filemode'"],
+  ["fatal: cannot chdir to 'a\ns3cret': No such file or directory","fatal: cannot chdir to '***': No such file or directory"],
+  ["error: unknown color-moved-ws mode 'a's3cret', possible values are 'x'","error: unknown color-moved-ws mode '***', possible values are 'x'"],
+  ["error: could not expand include path '~nouser/a\ns3cret'\r\nfatal: bad config line 9","error: could not expand include path '***' fatal: bad config line 9"],
+  // After a colon, quoted or not: up to the next line that starts a Git message.
+  ["error: invalid value for 'core.checkstat': 'first\ns3cret'\nfatal: bad config variable 'core.checkstat'","error: invalid value for 'core.checkstat': *** fatal: bad config variable 'core.checkstat'"],
+  ['error: invalid color value: first\ns3cret\n  more s3cret\nfatal: bad config variable','error: invalid color value: *** fatal: bad config variable'],
+  ['error: malformed value for push.default: a\ns3cret\nerror: must be one of nothing\nhint: x','error: malformed value for push.default: *** error: must be one of nothing hint: x'],
+  // An unclosed quote stops at the next Git message line, so a following fatal: line stays readable.
+  ["fatal: bad numeric config value 'a s3cret\nfatal: the reason","fatal: bad numeric config value '*** fatal: the reason"],
+  ["warning: ignoring unknown core.fsync component 'a s3cret\nusage: git diff","warning: ignoring unknown core.fsync component '*** usage: git diff"],
+  // A line of the value that ends with a quote does not end the value: the wording after a later quote does, and without
+  // that wording the last quote at a line end (review of #1696).
+  ["fatal: bad numeric config value 'x'\ns3cret' for 'core.compression' in file .git/config","fatal: bad numeric config value '***' for 'core.compression' in file .git/config"],
+  ["error: could not expand include path '~nouser/a'\ns3cret'\nfatal: bad config line 9","error: could not expand include path '***' fatal: bad config line 9"],
+  ["fatal: bad boolean config value 'a' for 'core.filemode' and value 's3cret' for 'core.x'","fatal: bad boolean config value '***' for 'core.filemode' and value '***' for 'core.x'"],
+  // Wordings that only the migration argument forms produced in the survey (#1702).
+  ["fatal: invalid refspec 'a\ns3cret it's'","fatal: invalid refspec '***'"],
+  ["fatal: unrecognized value transfer.credentialsInUrl: 'a\ns3cret'","fatal: unrecognized value transfer.credentialsInUrl: ***"],
+  ["error: unsupported option 'a s3cret'\nerror: invalid column.branch mode a\ns3cret\nfatal: bad config variable 'column.branch'","error: unsupported option '***' error: invalid column.branch mode *** fatal: bad config variable 'column.branch'"],
+  ["remote: fatal: invalid pack.allowPackReuse value: 'a\nremote: s3cret'   \nerror: git upload-pack: git-pack-objects died","remote: fatal: invalid pack.allowPackReuse value: *** error: git upload-pack: git-pack-objects died"],
+ ]){const shown=gitStderrExcerpt(Buffer.from(input));assert.equal(shown,expected,input);assert.equal(shown.includes('s3cret'),false,input);}
+ // Known gaps, kept visible on purpose: a later value line that starts like a Git message, and a quoted value that
+ // holds the rest of Git's wording, show what follows.
+ assert.equal(gitStderrExcerpt("fatal: bad boolean config value 'a\nerror: s3cret' for 'core.filemode'"),"fatal: bad boolean config value '*** error: s3cret' for 'core.filemode'");
+ assert.equal(gitStderrExcerpt("fatal: bad boolean config value 'a' for s3cret' for 'core.filemode'"),"fatal: bad boolean config value '***' for s3cret' for 'core.filemode'");
+});
+
+test('stderr excerpt treats control characters as separators before it redacts, and limits short parameter names to a query',()=>{
+ // Before #1696 the patterns ran before control characters were folded, so a NUL or a tab after Bearer kept the token.
+ for(const separator of ['\u0000','\t','\u001b','\u0085','\r'])for(const word of ['Bearer','token','basic']){
+  const shown=gitStderrExcerpt(Buffer.from(`fatal: ${word}${separator}S3CRETabcdefgh`));assert.equal(shown,`fatal: ${word} ***`,JSON.stringify(separator));
+ }
+ // A carriage return ends a line: a header after progress output is hidden only to that line end.
+ assert.equal(gitStderrExcerpt('Receiving 10%\rAuthorization: Bearer s3cret\rfatal: end'),'Receiving 10% Authorization: *** fatal: end');
+ // A password with '/' is not valid userinfo; it is hidden when a ':' comes before the first '/' and an '@' follows.
+ assert.equal(gitStderrExcerpt("fatal: unable to access 'https://user:pa/ss@example.invalid/repo/'"),"fatal: unable to access 'https://***@example.invalid/repo/'");
+ assert.equal(gitStderrExcerpt('https://user:pa/s@s3cret@example.invalid/'),'https://***@example.invalid/');
+ // The cost: a port before a path that holds an '@' is hidden too. A path '@' without a ':' is kept.
+ assert.equal(gitStderrExcerpt('https://example.invalid:443/a@b'),'https://***@b');
+ assert.equal(gitStderrExcerpt('https://example.invalid/@scope/pkg'),'https://example.invalid/@scope/pkg');
+ // Known gap: a password with both '/' and ':' is shown, so that no run crosses a ':' and the scan stays linear.
+ assert.equal(gitStderrExcerpt('https://user:pa/s:s@example.invalid/'),'https://user:pa/s:s@example.invalid/');
+ // code, auth and sig are credentials only as query or form parameters.
+ assert.equal(gitStderrExcerpt('error: exit code=128 auth=none sig=none'),'error: exit code=128 auth=none sig=none');
+ assert.equal(gitStderrExcerpt('https://example.invalid/cb?code=s3cret&auth=s3cret;sig=s3cret'),'https://example.invalid/cb?code=***&auth=***;sig=***');
+});
+
+// One key for each form that the survey found (scripts/survey-git-config-stderr.mjs, #1691, #1696), run through the same
+// Git commands and environment as Controller, with a one-line value and a multi-line value that holds a quote.
+// No key may leak on any Git. On Git 2.54 or later, where the survey ran, every key must also be quoted and shown in
+// its own masked form; an older Git may word or skip a message differently, so there only two keys must be quoted.
+const surveyedGit=[2,54];
+const surveyedForms=[
+ ['core.compression',['rev-parse','HEAD'],"bad numeric config value '***' for 'core.compression'"],
+ ['core.filemode',['ls-tree','HEAD'],"bad boolean config value '***' for 'core.filemode'"],
+ ['core.checkStat','diff',"invalid value for 'core.checkstat': *** fatal: bad config variable 'core.checkstat'"],
+ ['color.diff.meta','diff','invalid color value: *** fatal: bad config variable'],
+ ['core.createObject','diff','invalid mode for object creation: ***'],
+ ['core.fsync','diff',"ignoring unknown core.fsync component '***'"],
+ ['core.fsyncMethod','diff',"ignoring unknown core.fsyncMethod value '***'"],
+ ['core.worktree','diff',"cannot chdir to '***': "],
+ ['diff.algorithm','diff',"unknown value for config 'diff.algorithm': *** fatal: "],
+ ['diff.colorMovedWS','diff',"unknown color-moved-ws mode '***', possible values are"],
+ ['diff.dirstat','diff',"Unknown dirstat parameter '***'"],
+ ['diff.ignoreSubmodules','diff','bad --ignore-submodules argument: ***'],
+ ['diff.orderFile','diff',"failed to read orderfile '***': "],
+ ['diff.submodule','diff',"Unknown value for 'diff.submodule' config variable: ***"],
+ ['fetch.negotiationAlgorithm','diff',"unknown fetch negotiation algorithm '***'"],
+ ['push.default','diff','malformed value for push.default: *** error: must be one of'],
+ ['core.excludesFile','diff',"failed to expand user dir in: '***'",'~nouser/'],
+ ['include.path','diff',"could not expand include path '***' fatal: ",'~nouser/'],
+ // Only the migration argument forms produce these (#1702); out is a fresh path for each run.
+ ['remote.x.push',{migration:()=>['remote','remove','origin']},"invalid refspec '***'"],
+ ['transfer.credentialsInUrl',{migration:()=>['remote','remove','origin']},'unrecognized value transfer.credentialsInUrl: ***'],
+ ['column.branch',{migration:out=>['worktree','add','--no-checkout','-b',path.basename(out),out,'HEAD']},"unsupported option '***' error: invalid column.branch mode ***"],
+ ['pack.allowPackReuse',{migration:out=>['clone','--no-local','--no-hardlinks','--no-checkout','.',out]},'remote: fatal: invalid pack.allowPackReuse value: ***'],
+];
+test('real Git output for each config value wording found by the survey shows its masked form and no value',{skip:process.platform==='win32'},t=>{
  const {root,repo,git}=repository(t);fs.writeFileSync(path.join(repo,'code.txt'),'after');git('commit','-qam','second');
  const env={PATH:process.env.PATH,HOME:root,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0'};
  const run=args=>spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','protocol.allow=never',...args],{cwd:repo,env});
- const diff=['diff','--no-ext-diff','--no-textconv','--binary','HEAD~1','HEAD'];let quoted=0;
- for(const [key,args,value='S3CRETX https://u:S3CRETY@example.invalid/'] of [['core.compression',['rev-parse','HEAD']],['core.filemode',['ls-tree','HEAD']],['core.checkStat',diff],['color.diff.meta',diff],['core.createObject',diff],['core.fsync',diff],
-  ['core.fsyncMethod',diff],['core.worktree',diff],['diff.algorithm',diff],['diff.colorMovedWS',diff],['diff.dirstat',diff],['diff.ignoreSubmodules',diff],['diff.orderFile',diff],
-  ['diff.submodule',diff],['fetch.negotiationAlgorithm',diff],['push.default',diff],['core.excludesFile',diff,'~nouser/S3CRETX'],['include.path',diff,'~nouser/S3CRETX']]){
-  // Through --file from outside the repository: a bad core.worktree also stops a plain 'git config' in the repository.
-  const config=(...rest)=>execFileSync('git',['config','--file',path.join(repo,'.git','config'),...rest],{cwd:root,stdio:'pipe'});
-  config(key,value);
-  const p=run(args),stderr=p.stderr.toString();config('--unset',key);
-  if(stderr.includes('S3CRET'))quoted++;
-  assert.equal(/S3CRET/.test(gitStderrExcerpt(p.stderr)),false,`${key}: ${gitStderrExcerpt(p.stderr)}`);
+ // The -c options and environment of src/migration.mjs.
+ const migrationEnv={...env};delete migrationEnv.GIT_ALLOW_PROTOCOL;let runs=0;
+ const runMigration=args=>spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','uploadpack.packObjectsHook=','-c','core.alternateRefsCommand=',
+  '-c','protocol.allow=never','-c','protocol.file.allow=always',...args(path.join(root,`out-${++runs}`))],{cwd:repo,env:migrationEnv});
+ const diff=['diff','--no-ext-diff','--no-textconv','--binary','HEAD~1','HEAD'];
+ const version=execFileSync('git',['--version'],{encoding:'utf8'}).match(/(\d+)\.(\d+)/).slice(1).map(Number);
+ const surveyed=version[0]>surveyedGit[0]||(version[0]===surveyedGit[0]&&version[1]>=surveyedGit[1]);
+ // Through --file from outside the repository: a bad core.worktree also stops a plain 'git config' in the repository.
+ const config=(...rest)=>execFileSync('git',['config','--file',path.join(repo,'.git','config'),...rest],{cwd:root,stdio:'pipe'});
+ const quoted=new Set();
+ for(const [key,args,form,path_=''] of surveyedForms)for(const value of [`${path_}S3CRETX https://u:S3CRETY@example.invalid/`,`${path_}S3CRETX\nS3CRETY it's`]){
+  config(key,value);const p=args.migration?runMigration(args.migration):run(args==='diff'?diff:args),stderr=p.stderr.toString();config('--unset',key);
+  const shown=gitStderrExcerpt(p.stderr),label=`${key} ${JSON.stringify(value)}: ${shown}`;
+  assert.equal(/S3CRET/.test(shown),false,label);
+  if(stderr.includes('S3CRETX'))quoted.add(key);
+  if(surveyed){assert.ok(stderr.includes('S3CRETX'),`Git ${version.join('.')} did not quote ${label}`);assert.ok(shown.includes(form),label);}
  }
- assert.ok(quoted>=2,`Git quoted ${quoted} values`);
+ if(!surveyed)t.diagnostic(`Git ${version.join('.')} is older than the survey; it quoted ${quoted.size} of ${surveyedForms.length} keys`);
+ assert.ok(quoted.size>=(surveyed?surveyedForms.length:2),`Git quoted ${quoted.size} keys`);
+});
+
+// The survey script reproduces the pinned forms; two keys keep this fast, the full run is documented in the script.
+test('the config survey script finds the quoted wordings of two keys and reports no leak',{skip:process.platform==='win32'},()=>{
+ const p=spawnSync(process.execPath,[fileURLToPath(new URL('../scripts/survey-git-config-stderr.mjs',import.meta.url)),'--keys','core.compression,color.diff.meta','--values','["S3CRETX\\nS3CRETY it\'s"]'],{encoding:'utf8'});
+ assert.equal(p.status,0,p.stdout+p.stderr);
+ const report=JSON.parse(p.stdout);assert.equal(report.keys,2);assert.deepEqual(report.leaked,[]);
+ assert.ok(report.forms.some(f=>f.key==='core.compression'&&f.form.startsWith("fatal: bad numeric config value '<v>")),p.stdout);
+ assert.ok(report.forms.some(f=>f.key==='color.diff.meta'&&f.form.startsWith('error: invalid color value: <v>')),p.stdout);
 });
 
 test('real Git quotes a malformed repo-local config value, and the Controller message hides it',{skip:process.platform==='win32'},t=>{
@@ -184,9 +281,16 @@ test('verification Git index names the exit status or signal of read-tree',{skip
 
 test('a migration Git failure names the exit status and the end of stderr',t=>{
  const root=tempDir('asc-migration-git-failure-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- // Outside any repository, the first rev-parse fails the way a non-Git start did without a reason before (#1688).
- // Assumes os.tmpdir() is not inside a Git repository; the migration Git env is fixed, so GIT_CEILING_DIRECTORIES cannot be set.
- assert.throws(()=>assertWorkLocation(root),e=>/^Migration Git operation failed \(exit status 128; stderr: fatal: not a git repository/.test(e.message));
+ // The first rev-parse fails the way a non-Git start did without a reason before (#1688). A .git file that names a
+ // missing directory stops Git at this directory, so the result does not depend on whether os.tmpdir() is inside a
+ // repository (#1702); the migration Git env is fixed, so GIT_CEILING_DIRECTORIES cannot be set instead.
+ // The target sits inside a repository on purpose, as when os.tmpdir() is inside one. Git versions word the error
+ // differently (2.54: 'not a git repository'; Ubuntu 24.04: 'gitfile does not point to a valid repository').
+ execFileSync('git',['init','-q',root]);const inner=path.join(root,'inner');fs.mkdirSync(inner);
+ fs.writeFileSync(path.join(inner,'.git'),`gitdir: ${path.join(root,'missing')}\n`);
+ // Not asserted on purpose (#1702): that migration passes its 120000 ms bound to the helper. Only a real timeout shows
+ // it, which takes two minutes; the reason text for any bound is covered by the gitFailureReason tests above.
+ assert.throws(()=>assertWorkLocation(inner),e=>/^Migration Git operation failed \(exit status 128; stderr: fatal: (?:not a git repository|gitfile does not point to a valid repository)/.test(e.message));
 });
 
 test('local Git children take the null device from one place (#1711)',async()=>{

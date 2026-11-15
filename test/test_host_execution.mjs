@@ -128,14 +128,34 @@ test('Host capacity preserves partial implementation through real verification a
 // withStdinFile gives the Host transport, the approval command and local Git their stdin (#1682). It is tested here
 // because Windows CI runs this file (#1694); the Git paths are in test_stdin_file.mjs.
 /** Run with os.tmpdir() pointed at a directory of this test, so the helper's private directory can be listed directly
-    on every OS (Windows reads TEMP and TMP, POSIX reads TMPDIR). */
+    on every OS (Windows reads TEMP and TMP, POSIX reads TMPDIR).
+    run must be synchronous: the variables are restored when it returns, so an async callback would read the real
+    temporary directory after its first await, and a test running meanwhile would see this one (#1702). */
 function withTestTmpdir(t,run){
  const dir=tempDir('asc-host-tmpdir-'),saved=Object.fromEntries(['TMPDIR','TEMP','TMP'].map(k=>[k,process.env[k]]));
  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  for(const k of Object.keys(saved))process.env[k]=dir;
- try{return run(dir);}finally{for(const [k,v] of Object.entries(saved))if(v===undefined)delete process.env[k];else process.env[k]=v;}
+ let result;
+ try{result=run(dir);}finally{for(const [k,v] of Object.entries(saved))if(v===undefined)delete process.env[k];else process.env[k]=v;}
+ if(typeof result?.then==='function')throw Error('withTestTmpdir needs a synchronous callback');
+ return result;
 }
 const stdinDirs=dir=>fs.readdirSync(dir).filter(name=>name.startsWith('asc-stdin-')).map(name=>path.join(dir,name));
+/** Windows has no POSIX permission bits: list the SIDs that the file's ACL allows anything to, and the current user's.
+    The rules are read as SIDs directly, so an account name that cannot be translated does not fail the check, and
+    through .NET rather than Get-Acl, whose module Windows PowerShell may fail to load under a pwsh PSModulePath. */
+function windowsAccess(file){
+ const script=`$ErrorActionPreference='Stop';[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;
+[IO.File]::GetAccessControl($env:ASC_ACL_FILE).GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|Where-Object {$_.AccessControlType -eq 'Allow'}|ForEach-Object {$_.IdentityReference.Value}`;
+ const p=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',env:{...process.env,ASC_ACL_FILE:file}});
+ assert.equal(p.status,0,p.stderr);const [user,...allowed]=p.stdout.trim().split(/\r?\n/).map(s=>s.trim());return {user,allowed};
+}
+
+test('withTestTmpdir refuses an async callback and restores the temporary directory variables',async t=>{
+ const before=['TMPDIR','TEMP','TMP'].map(k=>process.env[k]);
+ assert.throws(()=>withTestTmpdir(t,async()=>{}),/synchronous callback/);
+ assert.deepEqual(['TMPDIR','TEMP','TMP'].map(k=>process.env[k]),before);
+});
 
 test('withStdinFile gives the child a private regular file with the whole input and removes it afterwards',t=>{
  assert.equal(withStdinFile(undefined,stdin=>stdin),'ignore');
@@ -147,8 +167,14 @@ test('withStdinFile gives the child a private regular file with the whole input 
    // The descriptor is that file (POSIX; Windows inode numbers are not checked here).
    if(process.platform!=='win32'){const a=fs.fstatSync(stdin),b=fs.statSync(file);assert.equal(a.ino,b.ino);assert.equal(a.dev,b.dev);}
    assert.equal(fs.statSync(file).size,input.length);
-   // Windows has no POSIX permission bits; there the directory is private only through the user's temp directory.
    if(process.platform!=='win32'){assert.equal(fs.statSync(file).mode&0o777,0o600);assert.equal(fs.statSync(dirs[0]).mode&0o777,0o700);}
+   else{
+    // Windows has no POSIX permission bits; the file is private through the ACL it inherits from the user's temp
+    // directory (#1702). No broad group may be allowed: Everyone, Users, Authenticated Users, Guests.
+    const {user,allowed}=windowsAccess(file);
+    assert.ok(allowed.includes(user),JSON.stringify({user,allowed}));
+    for(const broad of ['S-1-1-0','S-1-5-32-545','S-1-5-11','S-1-5-32-546'])assert.equal(allowed.includes(broad),false,JSON.stringify({broad,allowed}));
+   }
    return spawnSync(process.execPath,['--input-type=module','-e',`import fs from 'node:fs';import {createHash} from 'node:crypto';${kindOfStdin}
 const bytes=fs.readFileSync(0);process.stdout.write(JSON.stringify({kind,size:bytes.length,sha:createHash('sha256').update(bytes).digest('hex')}));`],{stdio:[stdin,'pipe','pipe'],encoding:'utf8'});
   });
