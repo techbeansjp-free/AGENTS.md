@@ -28,7 +28,7 @@ snapshot Controllerは明示選択の別経路です。利用する場合だけ 
 
 ## 標準経路の流れ
 
-Git管理済みrepoでの1 Issueの流れです。各段階の詳細は[ASC Skill](skills/asc/SKILL.md)、[独立レビューとmerge直前の確認](skills/asc/references/review.md)、[同期と整理](skills/asc/references/post-merge.md)が正本です。Git未管理のフォルダーでは専用worktreeとPR提出を使いません。
+Git管理済みrepoでの1 Issueの流れです。各段階の詳細は[ASC Skill](skills/asc/SKILL.md)、[独立レビューとmerge直前の確認](skills/asc/references/review.md)、[同期と整理](skills/asc/references/post-merge.md)が正本です。Git未管理のフォルダーでは専用worktree・PR提出・merge後の整理を使わず、実装・実テスト・独立レビューで完了します。commit・push・PR提出・mergeはどれも利用者の許可がある場合だけ行います。
 
 ```mermaid
 flowchart TD
@@ -36,12 +36,14 @@ flowchart TD
   B --> C["現在のHostが実装・実テスト"]
   C --> D["別Contextで独立レビュー"]
   D -->|指摘あり| E["重要度別に是正・影響する検証を再実行"]
-  E -->|"High・Medium、または振る舞いが変わるLow"| D
-  E -->|"影響しないLowだけ"| F
-  D -->|指摘なし| F["許可されたDraft PR提出とCI確認"]
+  E -->|"High・Medium、または振る舞い・契約・権限が変わる／影響不明のLow"| D
+  E -->|"影響しないと確認できたLowだけ"| P
+  D -->|指摘なし| P{"利用者が提出を許可したか"}
+  P -->|いいえ| Q["検証結果を報告"]
+  P -->|はい| F["Draft PR提出とCI確認"]
   F --> G{"利用者がmergeを許可したか"}
   G -->|いいえ| H["PRまでで報告"]
-  G -->|はい| I["直前確認：CI・未解決thread・HEAD<br/>確認済みHEADに固定してmerge"]
+  G -->|はい| I["直前確認：CI・未解決thread・HEAD<br/>確認済みHEADに固定してmerge<br/>MERGED状態・merge commitを読み戻す"]
   I --> J["マージ先の同期と完了worktreeの整理"]
 ```
 
@@ -59,16 +61,22 @@ sequenceDiagram
   H->>R: 手順・要求・対象commitの参照を渡す
   R-->>H: 指摘・未確認事項
   H->>H: 是正・再検証
-  H->>G: Draft PR（提出の許可がある場合）
+  opt High・Medium等の是正後
+    H->>R: 再レビュー
+    R-->>H: 解消と回帰の確認
+  end
+  Note over U,H: commit・push・Draft PR提出とmergeは利用者の許可が必要
+  H->>G: Draft PR提出
   G-->>H: CI結果
   H-->>U: 対象commit・検証結果・指摘と是正を報告
   U->>H: mergeを許可
   H->>G: 直前確認とHEAD固定のmerge
+  G-->>H: MERGED状態・merge commit・マージ先
   H->>H: 同期と整理
   H-->>U: 同期・削除・保持した対象を報告
 ```
 
-目的別Skill（検証高速化・受入・レビュー是正など）は、依頼に該当する作業があるときだけこの流れの中で読みます（[目的別一覧](skills/README.md)）。mainへのmerge後の[自動リリース](#自動リリース)はこのリポジトリ自身の配布手順であり、利用者プロジェクトの流れには含みません。
+独立レビューではReviewerが[変更のレビューと是正](skills/review-and-remediation/SKILL.md)を読みます。それ以外の目的別Skill（検証高速化・実操作受入など）は、依頼に該当する作業があるときだけこの流れの中で読みます（[目的別一覧](skills/README.md)）。mainへのmerge後の[自動リリース](#自動リリース)はこのリポジトリ自身の配布手順であり、利用者プロジェクトの流れには含みません。
 
 ## 利用者プロジェクトの配置と更新
 
