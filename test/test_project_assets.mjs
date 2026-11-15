@@ -641,6 +641,20 @@ test('Git failures name the exit status or signal and keep the worktree check',t
  }
 });
 
+test('asset Git children read the patch from a private file instead of a stdin pipe',t=>{
+ // A large spawnSync input can stall on a loaded macOS and leave Git blocked in read() (#1669).
+ const f=fixture(t),tools=path.join(f.root,'tools-observe'),log=path.join(f.root,'git-calls.jsonl'),originalPath=process.env.PATH;fs.mkdirSync(tools);
+ const realGit=execFileSync('which',['git'],{encoding:'utf8'}).trim();
+ fs.writeFileSync(path.join(tools,'git'),`#!${process.execPath}\nimport fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';\nconst args=process.argv.slice(2),stdin=fs.fstatSync(0),patch=args.includes('apply')&&args.at(-1)!=='-'?args.at(-1):null;\nfs.appendFileSync(${JSON.stringify(log)},JSON.stringify({args,stdinStream:stdin.isFIFO()||stdin.isSocket(),patchMode:patch&&fs.statSync(patch).mode&0o777,patchDirMode:patch&&fs.statSync(path.dirname(patch)).mode&0o777})+'\\n');\nconst r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(r.status??1);\n`,{mode:0o755});
+ try{process.env.PATH=tools+path.delimiter+originalPath;assert.equal(projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}).applied,true);}finally{process.env.PATH=originalPath;}
+ const calls=fs.readFileSync(log,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+ const asset=calls.filter(call=>call.args.includes('apply')||call.args.includes('--bare')||call.args.includes('--no-index'));
+ assert.equal(asset.length,3);for(const call of asset)assert.equal(call.stdinStream,false,call.args.join(' '));
+ const [apply]=asset.filter(call=>call.args.includes('apply'));
+ assert.ok(path.isAbsolute(apply.args.at(-1))&&apply.args.at(-2)==='--'&&!apply.args.includes('-'));assert.equal(apply.patchMode,0o600);assert.equal(apply.patchDirMode,0o700);
+ assert.equal(fs.existsSync(apply.args.at(-1)),false);
+});
+
 test('owned Host entries edited to exactly the next release still conflict',t=>{
  const f=fixture(t),options={packageRoot:f.pkg};projectAssets(f.work,{...options,registerSkill:true,apply:true});
  const name='.agents/skills/verification-optimization/SKILL.md',source=path.join(f.pkg,'skills/verification-optimization/SKILL.md');
