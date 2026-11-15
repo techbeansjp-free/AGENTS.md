@@ -5,7 +5,7 @@ import {assertExecutionHost} from './execution-host.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {codexRuntimeRoots,nodeRuntimeRoots} from './codex-runtime.mjs';
+import {codexRuntimeRoots,sandboxFilesystemBase} from './codex-runtime.mjs';
 import {networkPreflight} from './agent-network-preflight.mjs';
 import {runServiceProcess} from './agent-lifecycle.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
@@ -28,7 +28,7 @@ export function configuration({workspace,runtime,executable,writable,purpose='ag
   for(const name of (purpose==='verification'?['.git']:['.git','.codex','.agents'])) demand(!fs.existsSync(path.join(root,name)),'Control directory in snapshot');
   walk(root);
   const profile='asc_minimal_agent';
-  const filesystem={':root':'deny',':minimal':'read',...Object.fromEntries(nodeRuntimeRoots().map(p=>[p,'read'])),...Object.fromEntries(providerRoots.map(p=>[p,'read'])),[node]:'read',[root]:writable?'write':'read',[temp]:'write',...Object.fromEntries(readOnlyRoots.map(r=>[r,'read']))};
+  const filesystem={...sandboxFilesystemBase({providerRoots,node}),[root]:writable?'write':'read',[temp]:'write',...Object.fromEntries(readOnlyRoots.map(r=>[r,'read']))};
   const table=object=>'{ '+Object.entries(object).map(([k,v])=>JSON.stringify(k)+'='+JSON.stringify(v)).join(', ')+' }';
   const toolEnv={PATH:[path.dirname(node),...(process.platform==='win32'?[path.join(process.env.SystemRoot??'C:\\Windows','System32')]:['/usr/bin','/bin'])].join(path.delimiter),HOME:temp,USERPROFILE:temp,TMPDIR:temp,TEMP:temp,TMP:temp,LANG:'C.UTF-8'};
   if(process.platform==='win32')for(const key of ['SystemRoot','WINDIR'])if(process.env[key])toolEnv[key]=process.env[key];
@@ -41,11 +41,29 @@ export function configuration({workspace,runtime,executable,writable,purpose='ag
   for(const name of ['PATH','HOME','CODEX_HOME','OPENAI_API_KEY','CODEX_API_KEY','CODEX_ACCESS_TOKEN']) if(process.env[name])env[name]=process.env[name];
   return {root,launchDirectory:purpose==='verification'?temp:root,node,binary,profile,options:values.flatMap(v=>['-c',v]),env};
 }
-export function assertPreflight(result,hostValue) {
+/** Every sentinel must be unreadable, and any completed write must have stayed private to the sandbox. */
+export function assertPreflight(result,hostValues) {
   demand(result.status===0 && !result.error,'Isolation diagnostic failed');
   const data=JSON.parse(result.stdout);
-  demand(data.completed===true && data.read==='denied' && ['denied','private-write-completed'].includes(data.write) && hostValue==='trusted','Isolation not established');
+  demand(data.completed===true && Array.isArray(data.targets) && Array.isArray(hostValues) && hostValues.length>0 && data.targets.length===hostValues.length &&
+    data.targets.every(t=>t?.read==='denied' && ['denied','private-write-completed'].includes(t.write)) && hostValues.every(v=>v==='trusted'),'Isolation not established');
 }
+/** Controller-owned locations an Agent must not reach: logs, the Controller temporary directory (stdin files,
+ * candidate index, Git output) and, outside Windows, /tmp, where those files live when TMPDIR is absent (#1695). */
+function createSentinels(logRoot) {
+  const files=[path.join(logRoot,'controller-sentinel')],dirs=[];
+  const tmpdir=fs.realpathSync(os.tmpdir()),bases=[tmpdir];
+  if(process.platform!=='win32'){
+    let shared=null;try{shared=fs.realpathSync('/tmp');}catch(error){if(error.code!=='ENOENT')throw error;}
+    if(shared&&!contains(shared,tmpdir))bases.push(shared);
+  }
+  try{
+    fs.writeFileSync(files[0],'trusted',{flag:'wx'});
+    for(const base of bases){const dir=fs.mkdtempSync(path.join(base,'asc-v05-sentinel-'));dirs.push(dir);const file=path.join(dir,'controller-sentinel');fs.writeFileSync(file,'trusted',{flag:'wx',mode:0o600});files.push(file);}
+  }catch(error){removeSentinels(dirs);throw error;}
+  return {files,dirs};
+}
+function removeSentinels(dirs){for(const dir of dirs)fs.rmSync(dir,{recursive:true,force:true});}
 export async function runAgent({workspace,logs,executable,model,prompt,writable=true,schema,timeout=null},processRunner=runBoundedProcess) {
   assertExecutionHost();
   demand(timeout===null||(Number.isSafeInteger(timeout)&&timeout>0&&timeout<=2147483647),'Invalid Agent deadline');
@@ -53,21 +71,23 @@ export async function runAgent({workspace,logs,executable,model,prompt,writable=
   demand(typeof model==='string' && model.length && typeof prompt==='string','Explicit model and prompt required');
   const logRoot=fs.realpathSync(logs),root=fs.realpathSync(workspace);
   demand(!contains(root,logRoot),'Logs must be outside source');
-  const runtime=fs.mkdtempSync(path.join(os.tmpdir(),'asc-v05-tool-'));
+  const runtime=fs.mkdtempSync(path.join(os.tmpdir(),'asc-v05-tool-'));let sentinels={dirs:[]};
   try {
     const c=configuration({workspace,runtime,executable,writable});
     const sandbox=['sandbox','-P',c.profile,...c.options,'-C',root,'--'];
     const preflightRun=(binary,args,options)=>processRunner(binary,args,{...options,timeout:Math.min(options.timeout,remainingDeadline(deadline)??Infinity)});
     await preflightRun(c.binary,[...sandbox,c.node,'-e','process.exit(0)'],{env:c.env,input:'',timeout:20000});
-    const sentinel=path.join(logRoot,'controller-sentinel');fs.writeFileSync(sentinel,'trusted',{flag:'wx'});
-    const code=`const fs=require('node:fs');let read='denied',write='denied';
-try{fs.readFileSync(process.argv[1]);read='accessible';}catch(e){if(!['EACCES','EPERM','ENOENT'].includes(e.code))throw e;}
-try{fs.writeFileSync(process.argv[1],'changed');write='private-write-completed';}catch(e){if(!['EACCES','EPERM','ENOENT'].includes(e.code))throw e;}
-fs.writeSync(1,JSON.stringify({completed:true,read,write}));`;
-    const probe={status:0,...await preflightRun(c.binary,[...sandbox,c.node,'-e',code,sentinel],{env:c.env,input:'',timeout:20000})};
-    const hostValue=fs.readFileSync(sentinel,'utf8');
-    fs.writeFileSync(path.join(logRoot,'preflight.json'),JSON.stringify({status:probe.status,stdout:probe.stdout,stderr:probe.stderr,hostUnchanged:hostValue==='trusted'},null,2));
-    assertPreflight(probe,hostValue);
+    sentinels=createSentinels(logRoot);
+    const code=`const fs=require('node:fs');const targets=[];
+for(const file of process.argv.slice(1)){let read='denied',write='denied';
+try{fs.readFileSync(file);read='accessible';}catch(e){if(!['EACCES','EPERM','ENOENT'].includes(e.code))throw e;}
+try{fs.writeFileSync(file,'changed');write='private-write-completed';}catch(e){if(!['EACCES','EPERM','ENOENT'].includes(e.code))throw e;}
+targets.push({read,write});}
+fs.writeSync(1,JSON.stringify({completed:true,targets}));`;
+    const probe={status:0,...await preflightRun(c.binary,[...sandbox,c.node,'-e',code,...sentinels.files],{env:c.env,input:'',timeout:20000})};
+    const hostValues=sentinels.files.map(file=>fs.readFileSync(file,'utf8'));
+    fs.writeFileSync(path.join(logRoot,'preflight.json'),JSON.stringify({status:probe.status,stdout:probe.stdout,stderr:probe.stderr,targets:sentinels.files,hostUnchanged:hostValues.map(v=>v==='trusted')},null,2));
+    assertPreflight(probe,hostValues);
     const network=await networkPreflight({executable:c.binary,sandbox,env:c.env,run:preflightRun});
     fs.writeFileSync(path.join(logRoot,'network-preflight.json'),JSON.stringify(network,null,2));
     const answerPath=path.join(logRoot,'answer.txt');
@@ -93,11 +113,11 @@ fs.writeSync(1,JSON.stringify({completed:true,read,write}));`;
     const records=output.split('\n').filter(x=>x.startsWith('{')).map(x=>JSON.parse(x));
     const contexts=records.filter(x=>x.type==='thread.started').map(x=>x.thread_id);
     demand(contexts.length===1 && typeof contexts[0]==='string' && contexts[0],'Fresh context not observed');
-    demand(fs.readFileSync(sentinel,'utf8')==='trusted','Host sentinel changed during Agent run');
+    demand(sentinels.files.every(file=>fs.readFileSync(file,'utf8')==='trusted'),'Host sentinel changed during Agent run');
     const answer=fs.readFileSync(answerPath,'utf8');
     return {context:contexts[0],answer,seconds:(performance.now()-started)/1000,
       usage:records.filter(x=>x.type==='turn.completed').map(x=>x.usage??null)};
-  }finally{fs.rmSync(runtime,{recursive:true,force:true});}
+  }finally{removeSentinels(sentinels.dirs);fs.rmSync(runtime,{recursive:true,force:true});}
 }
 
 function remainingDeadline(deadline){if(deadline===Infinity)return null;const remaining=Math.ceil(deadline-performance.now());demand(remaining>0,'Agent deadline exceeded during preflight');return remaining;}

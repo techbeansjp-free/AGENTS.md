@@ -6,7 +6,7 @@ import net from 'node:net';
 import {spawn} from 'node:child_process';
 import {setTimeout,clearTimeout} from 'node:timers';
 import {performance} from 'node:perf_hooks';
-import {codexRuntimeRoots,nodeRuntimeRoots} from './codex-runtime.mjs';
+import {codexRuntimeRoots,sandboxFilesystemBase} from './codex-runtime.mjs';
 
 export function probeVerdict({positive,negative,hostUnchanged,connections}) {
  return positive?.completed===true && positive.read==='allowed' && positive.write==='allowed' && positive.network==='connected' &&
@@ -40,7 +40,8 @@ export async function probeNativeSandbox(executable) {
  if(!path.isAbsolute(executable)||!fs.statSync(executable).isFile())throw Error('Absolute native Codex executable required (not a shell command)');
  const binary=fs.realpathSync(executable),node=fs.realpathSync(process.execPath);
  if(/\.(cmd|bat)$/i.test(binary))throw Error('Use the native codex.exe or npm package bin/codex.js, not a command shell wrapper');
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-native-probe-'));
+ // Canonical paths: the shared-temporary denial and the workspace grant must name the same location.
+ const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'asc-native-probe-')));
  const workspace=path.join(root,'workspace'),sentinel=path.join(root,'host-dummy');
  fs.mkdirSync(workspace);fs.writeFileSync(sentinel,'trusted',{mode:0o600});
  const env={};
@@ -50,7 +51,7 @@ export async function probeNativeSandbox(executable) {
  Object.assign(env,{HOME:workspace,USERPROFILE:workspace,CODEX_HOME:workspace,TMPDIR:workspace,TEMP:workspace,TMP:workspace});
  const roots=codexRuntimeRoots(binary);
  if(roots.some(r=>path.parse(r).root===r)){fs.rmSync(root,{recursive:true,force:true});throw Error('Codex runtime root is too broad');}
- const permissions={':root':'deny',':minimal':'read',...Object.fromEntries(nodeRuntimeRoots().map(p=>[p,'read'])),...Object.fromEntries(roots.map(r=>[r,'read'])),[node]:'read',[workspace]:'write'};
+ const permissions={...sandboxFilesystemBase({providerRoots:roots,node}),[workspace]:'write'};
  const table='{ '+Object.entries(permissions).map(([k,v])=>JSON.stringify(k)+'='+JSON.stringify(v)).join(', ')+' }';
  const options=['-c',`permissions.asc_native_probe.filesystem=${table}`,'-c','permissions.asc_native_probe.network.enabled=false'];
  const server=net.createServer(s=>{connections++;s.end();});let connections=0;

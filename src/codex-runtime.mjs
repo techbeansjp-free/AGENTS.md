@@ -20,3 +20,14 @@ export function codexRuntimeRoots(executable){
 
 /** Node's system OpenSSL configuration is runtime data, never user configuration. */
 export function nodeRuntimeRoots(platform=process.platform){return platform==='darwin'?['/System/Library/OpenSSL']:[];}
+
+/** Shared system temporaries that Codex's macOS profile leaves writable despite ':root'='deny' (#1695). */
+export function sharedTemporaryRoots(platform=process.platform){return platform==='darwin'?['/tmp','/private/tmp']:[];}
+
+/** Filesystem grants shared by Agent, verification and the native diagnostic. Callers add their own write roots.
+ * Explicit denial of the shared temporaries keeps a Controller without TMPDIR (whose temporary files then live
+ * under /tmp) out of reach; a more specific grant, such as the private tool directory, still applies. */
+export function sandboxFilesystemBase({providerRoots,node,platform=process.platform}){
+ return {':root':'deny',':minimal':'read',...Object.fromEntries(sharedTemporaryRoots(platform).map(p=>[p,'deny'])),
+  ...Object.fromEntries(nodeRuntimeRoots(platform).map(p=>[p,'read'])),...Object.fromEntries(providerRoots.map(p=>[p,'read'])),[node]:'read'};
+}
