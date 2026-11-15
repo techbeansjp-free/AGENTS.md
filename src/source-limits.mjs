@@ -22,8 +22,9 @@ export const GIT_STDERR_EXCERPT_CHARACTERS=512;
    quoted value that contains the rest of Git's wording (such as "' for ") shows what follows that part; a wording
    that another Git version adds, or that a key read only under a subsection name, value shape or argument not in the
    survey produces (scripts/survey-git-config-stderr.mjs); a URL password with both '/' and ':'; credential formats
-   not listed here. Over-redaction: long words after 'basic' or 'token', and an authority with a ':' before a '/' and
-   a later '@' (https://h:443/a@b). */
+   not listed here. Over-redaction: long words after 'basic' or 'token'; an authority with a ':' before a '/' and
+   a later '@' (https://h:443/a@b); and any message worded 'invalid <word> value: ' or 'invalid <word> mode ', config or
+   not, which is hidden up to the next message line. */
 // The start of the next Git message line. Upload-pack output that Git relays (clone) starts each line with "remote: ".
 const nextMessageLine=/\n[^\S\n]*(?:remote:[^\S\n]*)?(?:fatal|error|warning|hint|usage):/g;
 const messageLineAfter=(text,from)=>{nextMessageLine.lastIndex=from;const next=nextMessageLine.exec(text);return next?next.index:text.length;};
@@ -33,23 +34,26 @@ const quotedValueStart=/\b(?:value|component|mode|parameter|orderfile|algorithm|
 // A value after these runs to the next message line, quoted or not. '<key>' is a config key in the last three.
 const unquotedValueStart=new RegExp(String.raw`\b(?:value for (?:config )?'?[^'\s]{1,256}'?(?: config (?:variable|option))?: |(?:invalid color value|invalid mode for object creation|bad --ignore-submodules argument): |unrecognized value [^'\s]{1,256}: |invalid [^'\s]{1,256} value: |invalid [^'\s]{1,256} mode )`,'gi');
 const quoteBeforeWording=/'(?= for | value for|: |, possible values)/g,quoteAtLineEnd=/'(?=[^\S\n]*(?:\n|$))/g;
-const quotePositions=(pattern,text,offset)=>{const found=[];pattern.lastIndex=0;for(let m;(m=pattern.exec(text));)found.push(offset+m.index);return found;};
+/** The last match of pattern (global) in text, or -1. */
+const lastMatch=(pattern,text)=>{let last=-1;pattern.lastIndex=0;for(let m;(m=pattern.exec(text));)last=m.index;return last;};
 /* The two passes below are code, not regular expressions: a backtracking expression that runs to the next message line
    overflows the stack on 16 MB of stderr, and one that searches for the closing quote turns quadratic. Each pass moves
-   only forward and scans each message-line segment once, so it is linear. */
+   only forward and scans each message-line segment once, so it is linear, and it keeps only one position per kind. */
 /** Hide each quoted config value as described above. */
 function hideQuotedValues(text){
- let shown='',done=0,segmentEnd=-1,wording=[],lineEnds=[],w=0;
+ let shown='',done=0,segmentStart=0,segmentEnd=-1,segment='',lastLineEnd=-1,nextWording=-1;
  quotedValueStart.lastIndex=0;
  for(let m;(m=quotedValueStart.exec(text));){
   const start=m.index+m[0].length;
   if(start>segmentEnd){
-   segmentEnd=messageLineAfter(text,start);const segment=text.slice(start,segmentEnd);
-   wording=quotePositions(quoteBeforeWording,segment,start);lineEnds=quotePositions(quoteAtLineEnd,segment,start);w=0;
+   segmentStart=start;segmentEnd=messageLineAfter(text,start);segment=text.slice(start,segmentEnd);
+   const last=lastMatch(quoteAtLineEnd,segment);lastLineEnd=last<0?-1:segmentStart+last;nextWording=-1;quoteBeforeWording.lastIndex=0;
   }
-  while(w<wording.length&&wording[w]<start)w++;
-  const last=lineEnds.length?lineEnds[lineEnds.length-1]:-1;
-  const close=w<wording.length?wording[w]:last>=start?last:-1;
+  // The first quote before Git's wording at or after start; the search only moves forward within the segment.
+  if(nextWording!==Infinity&&nextWording<start){
+   quoteBeforeWording.lastIndex=start-segmentStart;const w=quoteBeforeWording.exec(segment);nextWording=w?segmentStart+w.index:Infinity;
+  }
+  const close=nextWording!==Infinity?nextWording:lastLineEnd>=start?lastLineEnd:-1;
   shown+=text.slice(done,start)+(close<0?'***':"***'");done=close<0?segmentEnd:close+1;
   quotedValueStart.lastIndex=done;
  }
