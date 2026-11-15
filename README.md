@@ -26,6 +26,50 @@ snapshot Controllerは明示選択の別経路です。利用する場合だけ 
 
 入力・前提条件は[実行手順](v05/USAGE.md)、権限は[承認契約](v05/OWNER_APPROVAL.md)、分解と統合は[Goal実行](v05/GOAL_EXECUTION.md)を参照してください。[ASC Skill](skills/asc/SKILL.md)は同じ配布物内のCLIを利用します。
 
+## 標準経路の流れ
+
+Git管理済みrepoでの1 Issueの流れです。各段階の詳細は[ASC Skill](skills/asc/SKILL.md)、[独立レビューとmerge直前の確認](skills/asc/references/review.md)、[同期と整理](skills/asc/references/post-merge.md)が正本です。Git未管理のフォルダーでは専用worktreeとPR提出を使いません。
+
+```mermaid
+flowchart TD
+  A["start：作業場所と規約の参照を返す<br/>Agentは起動しない"] --> B["専用worktreeとbranchを作成"]
+  B --> C["現在のHostが実装・実テスト"]
+  C --> D["別Contextで独立レビュー"]
+  D -->|指摘あり| E["重要度別に是正・影響する検証を再実行"]
+  E -->|"High・Medium、または振る舞いが変わるLow"| D
+  E -->|"影響しないLowだけ"| F
+  D -->|指摘なし| F["許可されたDraft PR提出とCI確認"]
+  F --> G{"利用者がmergeを許可したか"}
+  G -->|いいえ| H["PRまでで報告"]
+  G -->|はい| I["直前確認：CI・未解決thread・HEAD<br/>確認済みHEADに固定してmerge"]
+  I --> J["マージ先の同期と完了worktreeの整理"]
+```
+
+```mermaid
+sequenceDiagram
+  actor U as 利用者
+  participant H as Host（Claude Code／Codex）
+  participant C as ASC CLI
+  participant R as 独立レビューのContext
+  participant G as GitHub（PR・CI）
+  U->>H: Issueの開発を依頼
+  H->>C: start・worktree-create
+  C-->>H: 作業場所と規約の参照
+  H->>H: 実装・実テスト
+  H->>R: 手順・要求・対象commitの参照を渡す
+  R-->>H: 指摘・未確認事項
+  H->>H: 是正・再検証
+  H->>G: Draft PR（提出の許可がある場合）
+  G-->>H: CI結果
+  H-->>U: 対象commit・検証結果・指摘と是正を報告
+  U->>H: mergeを許可
+  H->>G: 直前確認とHEAD固定のmerge
+  H->>H: 同期と整理
+  H-->>U: 同期・削除・保持した対象を報告
+```
+
+目的別Skill（検証高速化・受入・レビュー是正など）は、依頼に該当する作業があるときだけこの流れの中で読みます（[目的別一覧](skills/README.md)）。mainへのmerge後の[自動リリース](#自動リリース)はこのリポジトリ自身の配布手順であり、利用者プロジェクトの流れには含みません。
+
 ## 利用者プロジェクトの配置と更新
 
 利用者側の入口は従来と同じ`.agent-skill-chain/`です。このリポジトリの`v05/`は開発・配布元の配置であり、利用者プロジェクトに`v05/`を作る必要はありません。
