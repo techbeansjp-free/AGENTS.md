@@ -1,6 +1,6 @@
 import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import {performance} from 'node:perf_hooks';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
-import {execFileSync,spawnSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,gitFailureReason,gitStderrExcerpt} from '../src/source-limits.mjs';
 import {Controller} from '../src/controller.mjs';import {assertWorkLocation} from '../src/migration.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createVerificationGit} from '../src/verification-git.mjs';
 
@@ -67,7 +67,7 @@ test('stderr excerpt hides config values, query and form credentials, userinfo w
  assert.equal(gitStderrExcerpt('Authorization: Bearer s3cret fatal: end'),'Authorization: ***');
  // Every pattern stays linear on four megabytes built from its own start; a quadratic one would take hours.
  for(const unit of ["value '",'value for ',"value for 'k': ","unknown '","component '","chdir to '","mode '","parameter '","orderfile '","algorithm '","user dir in: '","include path '",
-  "value 'x\nfatal: ","value 'x' y","value for 'k': x\nfatal: ",'invalid color value: x\n','invalid color value: x\nerror: ','invalid mode for object creation: x\n','bad --ignore-submodules argument: x\n',
+  "value 'x\nfatal: ","value 'x' y","value 'x'\n","value 'x' for ","value '\n'","value for 'k': x\nfatal: ",'invalid color value: x\n','invalid color value: x\nerror: ','invalid mode for object creation: x\n','bad --ignore-submodules argument: x\n',
   'a@','https://','https://a:','https://a:b/','authorization:x\n','token=','?code=','password ','secret: ','bearer ','ghp_','sk-']){
   const started=performance.now();gitStderrExcerpt(Buffer.from(unit.repeat(Math.floor(4_000_000/unit.length))));assert.ok(performance.now()-started<10000,unit);
  }
@@ -91,6 +91,11 @@ test('stderr excerpt hides multi-line and quoted config values up to the next Gi
   // An unclosed quote stops at the next Git message line, so a following fatal: line stays readable.
   ["fatal: bad numeric config value 'a s3cret\nfatal: the reason","fatal: bad numeric config value '*** fatal: the reason"],
   ["warning: ignoring unknown core.fsync component 'a s3cret\nusage: git diff","warning: ignoring unknown core.fsync component '*** usage: git diff"],
+  // A line of the value that ends with a quote does not end the value: the wording after a later quote does, and without
+  // that wording the last quote at a line end (review of #1696).
+  ["fatal: bad numeric config value 'x'\ns3cret' for 'core.compression' in file .git/config","fatal: bad numeric config value '***' for 'core.compression' in file .git/config"],
+  ["error: could not expand include path '~nouser/a'\ns3cret'\nfatal: bad config line 9","error: could not expand include path '***' fatal: bad config line 9"],
+  ["fatal: bad boolean config value 'a' for 'core.filemode' and value 's3cret' for 'core.x'","fatal: bad boolean config value '***' for 'core.filemode' and value '***' for 'core.x'"],
  ]){const shown=gitStderrExcerpt(Buffer.from(input));assert.equal(shown,expected,input);assert.equal(shown.includes('s3cret'),false,input);}
  // Known gaps, kept visible on purpose: a later value line that starts like a Git message, and a quoted value that
  // holds the rest of Git's wording, show what follows.
@@ -107,6 +112,7 @@ test('stderr excerpt treats control characters as separators before it redacts, 
  assert.equal(gitStderrExcerpt('Receiving 10%\rAuthorization: Bearer s3cret\rfatal: end'),'Receiving 10% Authorization: *** fatal: end');
  // A password with '/' is not valid userinfo; it is hidden when a ':' comes before the first '/' and an '@' follows.
  assert.equal(gitStderrExcerpt("fatal: unable to access 'https://user:pa/ss@example.invalid/repo/'"),"fatal: unable to access 'https://***@example.invalid/repo/'");
+ assert.equal(gitStderrExcerpt('https://user:pa/s@s3cret@example.invalid/'),'https://***@example.invalid/');
  // The cost: a port before a path that holds an '@' is hidden too. A path '@' without a ':' is kept.
  assert.equal(gitStderrExcerpt('https://example.invalid:443/a@b'),'https://***@b');
  assert.equal(gitStderrExcerpt('https://example.invalid/@scope/pkg'),'https://example.invalid/@scope/pkg');
@@ -165,7 +171,7 @@ test('real Git output for each config value wording found by the survey shows it
 
 // The survey script reproduces the pinned forms; two keys keep this fast, the full run is documented in the script.
 test('the config survey script finds the quoted wordings of two keys and reports no leak',{skip:process.platform==='win32'},()=>{
- const p=spawnSync(process.execPath,['scripts/survey-git-config-stderr.mjs','--keys','core.compression,color.diff.meta','--values','["S3CRETX\\nS3CRETY it\'s"]'],{encoding:'utf8'});
+ const p=spawnSync(process.execPath,[fileURLToPath(new URL('../scripts/survey-git-config-stderr.mjs',import.meta.url)),'--keys','core.compression,color.diff.meta','--values','["S3CRETX\\nS3CRETY it\'s"]'],{encoding:'utf8'});
  assert.equal(p.status,0,p.stdout+p.stderr);
  const report=JSON.parse(p.stdout);assert.equal(report.keys,2);assert.deepEqual(report.leaked,[]);
  assert.ok(report.forms.some(f=>f.key==='core.compression'&&f.form.startsWith("fatal: bad numeric config value '<v>")),p.stdout);

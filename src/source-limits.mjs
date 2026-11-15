@@ -12,9 +12,12 @@ export const GIT_STDERR_EXCERPT_CHARACTERS=512;
    "bad numeric config value '<value>' for 'core.compression'"), so any config value can reach stderr; a remote URL
    or a header copied from config could also carry a credential. Patterns run on the raw stderr with its line breaks,
    after other control characters become spaces, so a header is hidden up to the end of its line.
-   A config value can hold a newline or a quote, so a quoted value is hidden up to the first quote that is followed by
-   the rest of Git's wording, and an unquoted or unclosed one up to the next line that starts a Git message (fatal:,
-   error:, warning:, hint:, usage:). The cost: lines after an unquoted value are hidden until that message line.
+   A config value can hold a newline or a quote, and nothing that a later line of the value shows ends it. So a quoted
+   value is hidden up to the first quote that is followed by the rest of Git's wording on the same line (" for ",
+   " value for", ": ", ", possible values"); failing that, up to the last quote that ends a line; failing that (an
+   unclosed quote), and for an unquoted value, up to the next line that starts a Git message (fatal:, error:, warning:,
+   hint:, usage:). Every case stops before that next message line. The cost: lines after an unquoted value are hidden
+   until that message line.
    Known gaps (#1691, #1696): a later line of a multi-line value that itself starts like a Git message is shown; a
    quoted value that contains the rest of Git's wording (such as "' for ") shows what follows that part; a wording
    that another Git version adds, or that a key read only under a subsection name, value shape or argument not in the
@@ -23,23 +26,43 @@ export const GIT_STDERR_EXCERPT_CHARACTERS=512;
    a later '@' (https://h:443/a@b). */
 const messageLine=String.raw`\n[^\S\n]*(?:fatal|error|warning|hint|usage):`;
 // Text up to (not into) the next line that starts a Git message. The lookahead per character is bounded.
-const toMessageLine=String.raw`(?:(?!${messageLine})[\s\S])*`,toMessageLineLazy=toMessageLine+'?';
-// What follows the closing quote of a value in Git's own wording, including the end of the line.
-const afterQuote=String.raw`(?: for | value for|: |, possible values|[^\S\n]*(?:\n|$))`;
+const toMessageLine=String.raw`(?:(?!${messageLine})[\s\S])*`;
+// Config values that Git quotes. The forms are every one that the survey produced on Git 2.54 (#1691, #1696): all
+// documented config keys, the value shapes and the Controller, candidate and migration argument forms of the script.
+const quotedValueStart=/\b(?:value|component|mode|parameter|orderfile|algorithm|chdir to|user dir in:|include path|unknown) '/gi;
+const nextMessageLine=new RegExp(messageLine,'g');
+const quoteBeforeWording=/'(?= for | value for|: |, possible values)/g,quoteAtLineEnd=/'(?=[^\S\n]*(?:\n|$))/g;
+const quotePositions=(pattern,text,offset)=>{const found=[];pattern.lastIndex=0;for(let m;(m=pattern.exec(text));)found.push(offset+m.index);return found;};
+/** Hide each quoted config value as described above. Not a regular expression: a backtracking one either overflows
+    the stack or turns quadratic on long stderr. Each message-line segment is scanned once for its quotes, and the
+    pointers into them only move forward, so the whole pass is linear. */
+function hideQuotedValues(text){
+ let shown='',done=0,segmentEnd=-1,wording=[],lineEnds=[],w=0;
+ quotedValueStart.lastIndex=0;
+ for(let m;(m=quotedValueStart.exec(text));){
+  const start=m.index+m[0].length;
+  if(start>segmentEnd){
+   nextMessageLine.lastIndex=start;const next=nextMessageLine.exec(text);segmentEnd=next?next.index:text.length;
+   const segment=text.slice(start,segmentEnd);
+   wording=quotePositions(quoteBeforeWording,segment,start);lineEnds=quotePositions(quoteAtLineEnd,segment,start);w=0;
+  }
+  while(w<wording.length&&wording[w]<start)w++;
+  const last=lineEnds.length?lineEnds[lineEnds.length-1]:-1;
+  const close=w<wording.length?wording[w]:last>=start?last:-1;
+  shown+=text.slice(done,start)+(close<0?'***':"***'");done=close<0?segmentEnd:close+1;
+  quotedValueStart.lastIndex=done;
+ }
+ return shown+text.slice(done);
+}
 const secretPatterns=[
- // Config values quoted by Git. The forms below are every one that the survey produced on Git 2.54 (#1691): all 992
- // documented config keys, three value shapes (words with a space, '~nouser/...', a bad regex) and the 20 argument forms
- // that Controller and candidate pass. A value after a colon runs to the next Git message line.
- [new RegExp(String.raw`(\b(?:value|component|mode|parameter|orderfile|algorithm|chdir to|user dir in:|include path|unknown) )'(?:(${toMessageLineLazy})'(?=${afterQuote})|${toMessageLine})`,'gi'),
-  (_,lead,closed)=>closed===undefined?`${lead}'***`:`${lead}'***'`],
  [new RegExp(String.raw`(\bvalue for (?:config )?'?[^'\s]{1,256}'?(?: config (?:variable|option))?: )${toMessageLine}`,'gi'),'$1***'],
  [new RegExp(String.raw`(\b(?:invalid color value|invalid mode for object creation|bad --ignore-submodules argument): )${toMessageLine}`,'gi'),'$1***'],
  // Userinfo up to the last '@' of the authority, so a literal '@' in a password does not end it early.
  [/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/?#]*@/gi,'$1***@'],
- // A password with '/' is not valid userinfo, but Git still prints such a URL: a ':' before the first '/' and an '@'
- // later in the same word are taken as userinfo. Neither run crosses a ':', so a word of many '://' stays linear; a
- // password that holds both '/' and ':' is not hidden.
- [/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/?#@:]{0,128}:[^\s@:]{0,128}@/gi,'$1***@'],
+ // A password with '/' is not valid userinfo, but Git still prints such a URL: a ':' before the first '/' and the last
+ // '@' within 128 characters after it are taken as userinfo. Neither run crosses a ':', so a word of many '://' stays
+ // linear; a password that holds both '/' and ':' is not hidden.
+ [/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/?#@:]{0,128}:[^\s:]{0,128}@/gi,'$1***@'],
  [/\b((?:proxy-)?authorization)[^\S\n]*:[^\n]*/gi,'$1: ***'],
  // Query or form parameters and "password: value" pairs. Short or common names (auth, code, sig) count only after
  // '?', '&' or ';', so "exit code=128" stays readable.
@@ -69,6 +92,7 @@ export function gitStderrExcerpt(stderr,limit=GIT_STDERR_EXCERPT_CHARACTERS){
  // A carriage return ends a line like a newline (progress output); other control characters separate words, so
  // "Bearer\0<token>" is still a Bearer token.
  text=text.replace(/\r\n?/g,'\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g,' ');
+ text=hideQuotedValues(text);
  for(const [pattern,replacement] of secretPatterns)text=text.replace(pattern,replacement);
  text=text.replace(/[\u0000-\u001f\u007f-\u009f\s]+/g,' ').trim();
  // A code point takes at most two code units, so this tail holds more than limit code points when text is longer.

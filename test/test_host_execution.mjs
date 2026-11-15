@@ -141,10 +141,11 @@ function withTestTmpdir(t,run){
  return result;
 }
 const stdinDirs=dir=>fs.readdirSync(dir).filter(name=>name.startsWith('asc-stdin-')).map(name=>path.join(dir,name));
-/** Windows has no POSIX permission bits: list the SIDs that the file's ACL grants anything to, and the current user's. */
+/** Windows has no POSIX permission bits: list the SIDs that the file's ACL allows anything to, and the current user's.
+    The rules are read as SIDs directly, so an account name that cannot be translated does not fail the check. */
 function windowsAccess(file){
  const script=`$ErrorActionPreference='Stop';[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;
-(Get-Acl -LiteralPath $env:ASC_ACL_FILE).Access|Where-Object {$_.AccessControlType -eq 'Allow'}|ForEach-Object {$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value}`;
+(Get-Acl -LiteralPath $env:ASC_ACL_FILE).GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|Where-Object {$_.AccessControlType -eq 'Allow'}|ForEach-Object {$_.IdentityReference.Value}`;
  const p=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',env:{...process.env,ASC_ACL_FILE:file}});
  assert.equal(p.status,0,p.stderr);const [user,...allowed]=p.stdout.trim().split(/\r?\n/).map(s=>s.trim());return {user,allowed};
 }
