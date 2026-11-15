@@ -1,8 +1,7 @@
 import {performance} from 'node:perf_hooks';
 /** Node evaluation engine. Host owns this object and all adapters; Agents never do. */
 import {createVerificationGit} from './verification-git.mjs';
-import {SOURCE_BATCH_BYTES} from './source-limits.mjs';
-import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage} from './git-failure.mjs';
+import {LOCAL_GIT_TIMEOUT_MILLISECONDS,SOURCE_BATCH_BYTES,gitFailureMessage} from './source-limits.mjs';
 import {runBoundedVerification,verificationMemoryLimit} from './verification-resources.mjs';
 import fs from 'node:fs';
 import path from 'node:path';

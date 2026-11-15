@@ -1,7 +1,7 @@
 /** Materialize bounded Agent output in an exclusively Controller-owned worktree. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';
 import {readSnapshotFile} from './snapshot.mjs';
-import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage} from './git-failure.mjs';
+import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage} from './source-limits.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 export function commitCandidate(controller,workspace,{name='ASC evaluation',email='controller@example.invalid'}={}) {
  demand(!/[\r\n\0]/.test(name+email)&&name&&email,'Invalid commit identity');

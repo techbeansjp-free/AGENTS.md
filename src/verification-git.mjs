@@ -4,7 +4,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {deflateSync} from 'node:zlib';
 import {spawnSync} from 'node:child_process';
-import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage} from './git-failure.mjs';
+import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage} from './source-limits.mjs';
 export function createVerificationGit(root,head,commit,blobs) {
  const algorithm=head.length===40?'sha1':head.length===64?'sha256':null;
  if(!algorithm||!/^[a-f0-9]+$/.test(head))throw Error('Invalid verification commit');

@@ -1,7 +1,7 @@
 import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
-import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,gitFailureReason,gitStderrExcerpt} from '../src/git-failure.mjs';
+import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,gitFailureReason,gitStderrExcerpt} from '../src/source-limits.mjs';
 import {Controller} from '../src/controller.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createVerificationGit} from '../src/verification-git.mjs';
 
 test('failure reason tells a timeout, a buffer overflow, a spawn error, a signal and an exit status apart',()=>{
@@ -23,13 +23,21 @@ test('a real spawnSync timeout is reported as a timeout with the limit that was 
 
 test('stderr excerpt is one bounded line without control characters or credential-like values',()=>{
  const secret=['fatal: unable to access \'https://user:s3cr3t-pass@example.invalid/repo.git/\'',
-  'Authorization: Bearer abcdefghijklmnop','token ghp_'+'a'.repeat(36),'key sk-'+'b'.repeat(24),'\u001b[31mred\u001b[0m'].join('\n');
+  'Authorization: Bearer abcdefghijklmnop','Bearer abcdefghij_REST','token ghp_'+'a'.repeat(36),'key sk-'+'b'.repeat(24),'\u001b[31mred\u001b[0m'].join('\n');
  const excerpt=gitStderrExcerpt(Buffer.from(secret));
- for(const leaked of ['s3cr3t-pass','abcdefghijklmnop','a'.repeat(36),'b'.repeat(24),'\u001b','\n'])assert.equal(excerpt.includes(leaked),false,leaked);
- assert.match(excerpt,/^fatal: unable to access 'https:\/\/\*\*\*@example\.invalid\/repo\.git\/' Authorization: \*\*\* token \*\*\* key \*\*\* \[31mred \[0m$/);
- const long=gitStderrExcerpt(Buffer.from('x'.repeat(10000)));assert.equal(long,'x'.repeat(512)+'…');
+ for(const leaked of ['s3cr3t-pass','abcdefghijklmnop','_REST','a'.repeat(36),'b'.repeat(24),'\u001b','\n'])assert.equal(excerpt.includes(leaked),false,leaked);
+ assert.equal(excerpt,"fatal: unable to access 'https://***@example.invalid/repo.git/' Authorization: *** Bearer *** token *** key *** [31mred [0m");
  assert.equal(gitStderrExcerpt(null),'');assert.equal(gitStderrExcerpt(Buffer.alloc(0)),'');
  assert.equal(gitFailureMessage('Candidate Git operation failed',{error:null,signal:null,status:1,stderr:Buffer.from('  \n')}),'Candidate Git operation failed (exit status 1)');
+});
+
+test('stderr excerpt keeps the final fatal line and redacts before it cuts',()=>{
+ const noisy=Buffer.from('hint: '+'x'.repeat(10000)+'\nfatal: the reason');
+ assert.equal(gitStderrExcerpt(noisy),'…'+('hint: '+'x'.repeat(10000)+' fatal: the reason').slice(-512));
+ // A credential that starts before the cut and ends inside it is redacted as a whole.
+ const boundary=Buffer.from('fatal: https://user:'+'p'.repeat(600)+'@example.invalid/ '+' '.repeat(3000)+'\n');
+ const excerpt=gitStderrExcerpt(boundary);
+ assert.equal(excerpt.includes('ppp'),false);assert.equal(excerpt,'fatal: https://***@example.invalid/');
 });
 
 function repository(t){
@@ -57,6 +65,8 @@ test('Controller Git observation names the exit status and a redacted stderr exc
  assert.throws(()=>c.git('rev-parse','--verify','missing^{commit}'),{message:/^Git observation failed \(exit status 128; stderr: fatal: .+\)$/});
  withFailingGit(root,'ls-tree',exitWithSecret,()=>assert.throws(()=>c.git('ls-tree','HEAD'),{message:'Git observation failed (exit status 3; stderr: fatal: cannot reach https://***@example.invalid/)'}));
  withFailingGit(root,'ls-tree',killSelf,()=>assert.throws(()=>c.git('ls-tree','HEAD'),{message:'Git observation failed (terminated by SIGKILL)'}));
+ // gitLarge sends stdout to a file descriptor; stderr is still piped and reported.
+ withFailingGit(root,'diff',exitWithSecret,()=>assert.throws(()=>c.gitLarge('diff','HEAD','HEAD'),{message:'Git observation failed (exit status 3; stderr: fatal: cannot reach https://***@example.invalid/)'}));
 });
 
 test('candidate Git operation names the exit status or signal of the failed step',{skip:process.platform==='win32'},t=>{

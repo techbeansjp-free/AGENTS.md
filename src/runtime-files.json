@@ -46,7 +46,6 @@
   "src/provider-failure.mjs",
   "src/review-result.mjs",
   "src/snapshot.mjs",
-  "src/git-failure.mjs",
   "src/source-limits.mjs",
   "src/unit-candidate.mjs",
   "src/unit-thread.mjs",
