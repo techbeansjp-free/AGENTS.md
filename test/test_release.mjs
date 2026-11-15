@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {checks,verify,publish,nextVersion,releaseVersion} from '../scripts/release.mjs';
+import {checks,verify,publish,nextVersion,releaseVersion,pullScanPages} from '../scripts/release.mjs';
 const sha='a'.repeat(40),head='b'.repeat(40),repo='example/repo';
 const content=value=>({content:Buffer.from(value).toString('base64')});
 function verification(overrides={}){
@@ -21,10 +21,35 @@ test('release reuses only matching merged tree and completed checks',async()=>{
  for(const overrides of [
   {[`/repos/${repo}/commits/main`]:{sha:'c'.repeat(40)}},
   {[`/repos/${repo}/commits/${head}`]:{commit:{tree:{sha:'different'}}}},
-  {[`/repos/${repo}/commits/${sha}/pulls?per_page=100`]:[]},
+  {[`/repos/${repo}/commits/${sha}/pulls?per_page=100`]:[],[`/repos/${repo}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=100&page=1`]:[]},
   {[`/repos/${repo}/commits/${head}/check-runs?filter=latest&per_page=100&page=1`]:{check_runs:[]}},
   {[`/repos/${repo}/contents/.github/workflows/ci.yml?ref=${sha}`]:content('implicit merge checkout')}
  ])await assert.rejects(verify({api:verification(overrides),repo,sha,version:'0.5.1',wait:{timeoutMs:0,sleep:async()=>{}}}));
+});
+test('release identifies the merged PR when the commit association is empty (#1684)',async()=>{
+ const associated=`/repos/${repo}/commits/${sha}/pulls?per_page=100`,closed=page=>`/repos/${repo}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=100&page=${page}`;
+ const merged={number:12,merged_at:'date',merge_commit_sha:sha,base:{ref:'main'},head:{sha:head,repo:{full_name:repo}}};
+ const other={...merged,number:13,merge_commit_sha:'d'.repeat(40)},fork={...merged,number:14,head:{sha:head,repo:{full_name:'fork/repo'}}},branch={...merged,number:15,base:{ref:'develop'}},unmerged={...merged,number:16,merged_at:null},noRepo={...merged,number:17,head:{sha:head,repo:null}};
+ const filler=Array.from({length:100},(_,i)=>({...other,number:1000+i}));
+ const run=(pages,association=[])=>{const routes=[];const base=verification();const api=async route=>{routes.push(route);if(route===associated)return association;const page=/\/pulls\?state=closed.*&page=(\d+)$/.exec(route)?.[1];return page?pages[Number(page)-1]??[]:base(route);};return {api,routes};};
+ for(const pages of [[[other,merged]],[filler,[merged]]]){
+  const lookup=run(pages);const result=await verify({api:lookup.api,repo,sha,version:'0.5.1'});
+  assert.equal(result.pr,12);assert.equal(result.testedHead,head);
+  assert.deepEqual(lookup.routes.filter(r=>r.includes('/pulls?state=closed')),pages.map((_,i)=>closed(i+1)));
+ }
+ assert.equal((await verify({api:run([[merged]],[other]).api,repo,sha,version:'0.5.1'})).pr,12,'non-matching association falls back to the scan');
+ const preferred=run([[merged]],[merged]);assert.equal((await verify({api:preferred.api,repo,sha,version:'0.5.1'})).pr,12);
+ assert(!preferred.routes.some(r=>r.includes('/pulls?state=closed')),'association hit must not scan closed PRs');
+ for(const candidates of [[other],[fork],[branch],[unmerged],[noRepo],[other,fork,branch,unmerged,noRepo]]){
+  await assert.rejects(verify({api:run([candidates],candidates).api,repo,sha,version:'0.5.1'}),/No merged same-repository PR for source/);
+ }
+ const beyond=run([...Array.from({length:pullScanPages},()=>filler),[merged]]);
+ await assert.rejects(verify({api:beyond.api,repo,sha,version:'0.5.1'}),new RegExp(`No merged same-repository PR for source .*scanned ${pullScanPages} of at most ${pullScanPages} pages`));
+ assert.equal(beyond.routes.filter(r=>r.includes('/pulls?state=closed')).length,pullScanPages);
+ await assert.rejects(verify({api:run([[merged,{...merged,number:18}]]).api,repo,sha,version:'0.5.1'}),/Ambiguous merged PR/);
+ await assert.rejects(verify({api:run([],[merged,{...merged,number:18}]).api,repo,sha,version:'0.5.1'}),/Ambiguous merged PR/);
+ const tree=run([[merged]]),treeApi=async route=>route.endsWith(`/commits/${head}`)?{commit:{tree:{sha:'different'}}}:tree.api(route);
+ await assert.rejects(verify({api:treeApi,repo,sha,version:'0.5.1'}),/Merged tree differs from tested PR head/);
 });
 test('release waits for re-running required checks and keeps failing closed',async()=>{
  const checkRoute=`/repos/${repo}/commits/${head}/check-runs?filter=latest&per_page=100&page=1`;
