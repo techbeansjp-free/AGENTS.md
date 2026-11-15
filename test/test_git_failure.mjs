@@ -1,5 +1,5 @@
 import {tempDir} from './helpers/temp-dir.mjs';
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
+import {test} from 'node:test';import {performance} from 'node:perf_hooks';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,gitFailureReason,gitStderrExcerpt} from '../src/source-limits.mjs';
 import {Controller} from '../src/controller.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createVerificationGit} from '../src/verification-git.mjs';
@@ -33,11 +33,16 @@ test('stderr excerpt is one bounded line without control characters or credentia
 
 test('stderr excerpt keeps the final fatal line and redacts before it cuts',()=>{
  const noisy=Buffer.from('hint: '+'x'.repeat(10000)+'\nfatal: the reason');
- assert.equal(gitStderrExcerpt(noisy),'…'+('hint: '+'x'.repeat(10000)+' fatal: the reason').slice(-512));
+ assert.equal(gitStderrExcerpt(noisy),'…fatal: the reason');
+ assert.equal(gitStderrExcerpt(Buffer.from('w '.repeat(1000)+'fatal: end')),'…'+('w '.repeat(1000)+'fatal: end').slice(-512));
  // A credential that starts before the cut and ends inside it is redacted as a whole.
  const boundary=Buffer.from('fatal: https://user:'+'p'.repeat(600)+'@example.invalid/ '+' '.repeat(3000)+'\n');
  const excerpt=gitStderrExcerpt(boundary);
  assert.equal(excerpt.includes('ppp'),false);assert.equal(excerpt,'fatal: https://***@example.invalid/');
+ // Megabytes of stderr without spaces finish in bounded time and show nothing of a cut word.
+ const started=performance.now(),huge=gitStderrExcerpt(Buffer.from('a.'.repeat(4_000_000)));
+ assert.ok(performance.now()-started<2000);assert.equal(huge,'…');
+ const tail=gitStderrExcerpt(Buffer.from('x'.repeat(5000)+' Authorization: Bearer abcdefghij fatal: end'));assert.equal(tail,'…Authorization: *** fatal: end');
 });
 
 function repository(t){
