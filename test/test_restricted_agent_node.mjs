@@ -6,14 +6,50 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import {configuration,assertPreflight} from '../src/restricted-agent.mjs';
-test('preflight requires explicit completed denial and unchanged host',()=>{
- const good={status:0,stdout:JSON.stringify({completed:true,read:'denied',write:'private-write-completed'})};
- assertPreflight(good,'trusted');
+import {configuration,assertPreflight,runAgent} from '../src/restricted-agent.mjs';
+import os from 'node:os';
+import {execFileSync} from 'node:child_process';
+test('preflight requires explicit completed denial and unchanged host for every sentinel',()=>{
+ const denied={read:'denied',write:'denied'},privateWrite={read:'denied',write:'private-write-completed'};
+ const report=targets=>({status:0,stdout:JSON.stringify({completed:true,targets})});
+ const good=report([denied,privateWrite]);
+ assertPreflight(good,['trusted','trusted']);
  for(const bad of [{...good,status:1},{...good,stdout:''},{...good,stdout:'{}'},
-  {...good,stdout:JSON.stringify({completed:true,read:'accessible',write:'denied'})},
-  {...good,stdout:JSON.stringify({completed:true,read:'denied',write:'unknown'})}]) assert.throws(()=>assertPreflight(bad,'trusted'));
- assert.throws(()=>assertPreflight(good,'changed'));
+  {...good,stdout:JSON.stringify({completed:true,read:'denied',write:'denied'})},report([]),report([denied]),
+  report([denied,{read:'accessible',write:'denied'}]),report([denied,{read:'denied',write:'unknown'}])]) assert.throws(()=>assertPreflight(bad,['trusted','trusted']));
+ assert.throws(()=>assertPreflight(good,['trusted','changed']));
+ assert.throws(()=>assertPreflight(report([]),[]));
+ assert.throws(()=>assertPreflight(good,'trusted'));
+});
+const agentFixture=t=>{
+ const root=tempDir('asc-agent-preflight-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const workspace=path.join(root,'source'),logs=path.join(root,'logs'),binary=path.join(root,'provider','bin','codex.js');
+ for(const dir of [workspace,logs,path.dirname(binary)])fs.mkdirSync(dir,{recursive:true});
+ // Configuration-only fixture binary. The fake runner below never executes it as Codex.
+ fs.writeFileSync(binary,'fixture');fs.writeFileSync(path.join(path.dirname(path.dirname(binary)),'package.json'),JSON.stringify({name:'@openai/codex'}));
+ return {workspace,logs,executable:binary,model:'fixture-model',prompt:'fixture'};
+};
+// Only the sentinel directories this run passed to its runner are checked, so concurrent runs cannot disturb the result.
+const probedSentinelDirs=(args,logs)=>args.slice(args.indexOf('-e')+2).filter(f=>path.dirname(f)!==fs.realpathSync(logs)).map(f=>path.dirname(f));
+test('Agent preflight stops when the sandbox can change Controller temporary files',async t=>{
+ const calls=[],request=agentFixture(t);
+ // Unconfined stand-in for a sandbox that leaves the Controller temporary directory and /tmp writable (#1695).
+ const unconfined=(binary,args)=>{calls.push(args);const at=args.indexOf('--');
+  return {stdout:execFileSync(args[at+1],args.slice(at+2),{encoding:'utf8'}),stderr:''};};
+ await assert.rejects(runAgent(request,unconfined),/Isolation not established/);
+ const dirs=probedSentinelDirs(calls[1],request.logs),tmpdir=fs.realpathSync(os.tmpdir());
+ assert(dirs.some(d=>path.dirname(d)===tmpdir),'Controller tmpdir sentinel must be probed');
+ if(process.platform!=='win32')assert(dirs.some(d=>path.dirname(d)===fs.realpathSync('/tmp')),'/tmp sentinel must be probed');
+ assert.deepEqual(dirs.filter(d=>fs.existsSync(d)),[],'sentinel directories must be removed');
+});
+test('Agent preflight passes denied sentinels on to the network check',async t=>{
+ const request=agentFixture(t);let call=0,dirs=[];
+ const confined=(binary,args)=>{call++;
+  if(call===1)return {stdout:'',stderr:''};
+  if(call===2){dirs=probedSentinelDirs(args,request.logs);const files=args.slice(args.indexOf('-e')+2);return {stdout:JSON.stringify({completed:true,targets:files.map(()=>({read:'denied',write:'denied'}))}),stderr:''};}
+  throw Error('network check reached');};
+ await assert.rejects(runAgent(request,confined),/network check reached/);
+ assert(dirs.length>0);assert.deepEqual(dirs.filter(d=>fs.existsSync(d)),[]);
 });
 test('profile keeps provider credentials out of tool environment and rejects aliases',t=>{
  const root=tempDir('asc-node-profile-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -49,6 +85,9 @@ test('split npm native runtime is narrowly included and cannot contain candidate
  const permissions=config.options.find(v=>v.startsWith('permissions.asc_minimal_agent.filesystem='));
  assert(permissions.includes(JSON.stringify(fs.realpathSync(native))+'="read"'));
  assert(!permissions.includes(JSON.stringify(path.join(root,'node_modules'))+'="read"'));
+ for(const shared of ['/tmp','/private/tmp'])assert.equal(permissions.includes(JSON.stringify(shared)+'="deny"'),process.platform==='darwin');
+ // The caller's own grants stay in the same table as the shared-temporary denial (the more specific path applies in Codex).
+ assert(permissions.includes(JSON.stringify(fs.realpathSync(workspace))+'="read"')&&permissions.includes(JSON.stringify(fs.realpathSync(runtime))+'="write"'));
  assert.throws(()=>configuration({workspace:native,runtime,executable:binary,writable:true}),/overlaps/);
 });
 

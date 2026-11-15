@@ -519,6 +519,10 @@ Agent時間・検証時間・CPU時間・生成ファイル容量・修正回数
 
 Host起動時にはControllerが解決した一時ディレクトリを `TMPDIR`・`TEMP`・`TMP` として渡す。開発者の環境全体や認証情報は引き継がない。macOSで `TMPDIR` を失って `/tmp` へ切り替わると、sandboxの暗黙の許可範囲と診断対象が重なり得るため、この経路でも単独診断と同じ一時領域を維持する。診断の不合格を無視しない。
 
+Codex sandboxはmacOSで`':root'='deny'`を指定しても`/tmp`への書込みを許す。`TMPDIR`のないController（launchdや`env -i`からの起動など）は一時ファイルを`/tmp`に置くため、AgentがstdinのファイルやGitの出力を書き換え得る（#1695）。このため、Agent・検証・単独診断の共通設定で、macOSでは`/tmp`と`/private/tmp`を明示的に`deny`にする。Agent専用の一時領域と作業領域は、より具体的な許可として引き続き書ける。Agentや検証のコマンドは、`/tmp`を直接使わず、渡された`TMPDIR`を使う。直接書くと失敗する。
+
+Agentの起動前の隔離診断は、logsに加えて、Controllerの一時ディレクトリと（Windows以外では）`/tmp`に置いた見張り用ファイルを読めず、書き換えられないことを確かめる。どれかに届けば`Isolation not established`で停止する。Codexの版が変わって上の拒否が効かなくなっても、無隔離では実行しない。LinuxとWindowsでの`/tmp`・一時ディレクトリの扱いは実機で未確認であり、この診断で検出する。Linuxでは`TMPDIR`を`/tmp`以外にしていても`/tmp`を調べ、届けば停止する（ほかのControllerの一時ファイルが置かれ得るため）。この停止は設定では回避できないので、`preflight.json`の`targets`と結果を添えてIssueで報告する。利用者が自分で用意したHostのsandboxは対象外である。
+
 Hostの検証起動・通信・応答形式の失敗はコードのテスト失敗とは区別し、`verification-unavailable` に理由とstderr末尾をローカル記録して停止する。実装を変えても直らない環境障害で修復Agentを繰り返し起動しない。診断には利用環境のpath等が含まれ得るため、外部共有時は必要な箇所を匿名化する。
 
 
