@@ -185,5 +185,6 @@ test('verification Git index names the exit status or signal of read-tree',{skip
 test('a migration Git failure names the exit status and the end of stderr',t=>{
  const root=tempDir('asc-migration-git-failure-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  // Outside any repository, the first rev-parse fails the way a non-Git start did without a reason before (#1688).
+ // Assumes os.tmpdir() is not inside a Git repository; the migration Git env is fixed, so GIT_CEILING_DIRECTORIES cannot be set.
  assert.throws(()=>assertWorkLocation(root),e=>/^Migration Git operation failed \(exit status 128; stderr: fatal: not a git repository/.test(e.message));
 });

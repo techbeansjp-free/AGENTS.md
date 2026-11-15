@@ -642,6 +642,15 @@ test('Git failures name the exit status or signal and keep the worktree check',t
  }
 });
 
+test('a failed asset patch preparation names the exit status and the end of stderr',t=>{
+ const f=fixture(t),tools=path.join(f.root,'tools-no-index'),originalPath=process.env.PATH;fs.mkdirSync(tools);
+ // Fail only git diff --no-index, which only the patch preparation runs; exit status 1 means a difference and is accepted.
+ const realGit=execFileSync('which',['git'],{encoding:'utf8'}).trim();
+ fs.writeFileSync(path.join(tools,'git'),`#!${process.execPath}\nimport {spawnSync} from 'node:child_process';\nconst args=process.argv.slice(2);if(args.includes('--no-index')){process.stderr.write('fatal: patch preparation refused\\n');process.exit(2);}const r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(r.status??1);\n`,{mode:0o755});
+ try{process.env.PATH=tools+path.delimiter+originalPath;assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}),{message:'Cannot prepare asset patch (exit status 2; stderr: fatal: patch preparation refused)'});}finally{process.env.PATH=originalPath;}
+ assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain/distribution.json')),false);
+});
+
 test('asset Git children read the patch from a private file instead of a stdin pipe',t=>{
  // A large spawnSync input can stall on a loaded macOS and leave Git blocked in read() (#1669).
  const f=fixture(t),tools=path.join(f.root,'tools-observe'),log=path.join(f.root,'git-calls.jsonl'),originalPath=process.env.PATH;fs.mkdirSync(tools);

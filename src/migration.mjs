@@ -3,8 +3,9 @@ import fs from 'node:fs';import path from 'node:path';import os from 'node:os';i
 import {inspectMigration} from '../migration_inspect.mjs';import {Controller,safeName,hash} from './controller.mjs';
 import {SOURCE_BATCH_BYTES,gitFailureMessage,withStdinFile} from './source-limits.mjs';
 const manifestName='transition.json',manifestByteLimit=16*1024*1024;
-/* Longer than LOCAL_GIT_TIMEOUT_MILLISECONDS: creating a worktree runs worktree add and streams every blob of the base tree
-   through cat-file. The value predates the shared bound and is kept until a measurement justifies a change (#1688). */
+/* Bound of one Git child, longer than LOCAL_GIT_TIMEOUT_MILLISECONDS mainly for whole-repository clone --no-local and for
+   streaming one blob larger than SOURCE_BATCH_BYTES through cat-file. The value predates the shared bound and is kept
+   until a measurement justifies a change (#1688). */
 const MIGRATION_GIT_TIMEOUT_MILLISECONDS=120000;
 function demand(ok,message){if(!ok)throw Error(message);}
 const contains=(a,b)=>{const r=path.relative(a,b);return !r || (!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
