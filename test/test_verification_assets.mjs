@@ -185,7 +185,11 @@ test('verification tree is the preferred OOM victim and the observer is not',{sk
 });
 test('OOM kill of the verification process itself is rejected exhaustion, other signals stay execution failures',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
  const {runBoundedVerification}=await import('../src/verification-resources.mjs');
- const killed=runBoundedVerification(['--','/usr/bin/python3','-c','a=[bytearray(16*1024*1024) for _ in range(80)]'],20000,268435456);
+ // A small sibling keeps another score-1000 candidate in the tree, so a second
+ // OOM during the first victim's teardown cannot fall back to the observer. It
+ // exits on EOF once the allocating top process is killed.
+ const code='import os\nr,w=os.pipe()\nif os.fork()==0:\n os.close(w);os.read(r,1);os._exit(0)\nos.close(r)\na=[bytearray(16*1024*1024) for _ in range(80)]\n';
+ const killed=runBoundedVerification(['--','/usr/bin/python3','-c',code],20000,268435456);
  assert.equal(killed.status,125);assert.equal(killed.resourceBoundary.exhausted,true);assert.equal(killed.resourceBoundary.processExit,null);assert.equal(killed.resourceBoundary.processSignal,'SIGKILL');
  assert(killed.resourceBoundary.delta['memory.events'].oom_kill>0);assert.equal(killed.resourceBoundary.cleanupConfirmed,true);
  assert.throws(()=>runBoundedVerification(['--','/usr/bin/python3','-c','import os,signal;os.kill(os.getpid(),signal.SIGTERM)'],5000),/Bounded verification observer failed/);

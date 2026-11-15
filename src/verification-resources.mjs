@@ -36,6 +36,9 @@ async function verificationProcess(argv,timeout,owner){
   // charged (the victim is marked MMF_OOM_SKIP before its memory is uncharged).
   // Raising only the verification tree to the maximum score keeps the kernel
   // from preferring the observer, which must survive to report the exhaustion.
+  // This holds while an eligible verification process remains (a tree may also
+  // lower its own score to its minimum); otherwise the observer can still be
+  // killed, which stays a fail-closed observer failure, never a success.
   const child=spawn('/usr/bin/choom',['-n','1000','--','/usr/bin/prlimit',...argv],{env:{PATH:'/usr/bin:/bin'},stdio:['ignore','pipe','pipe']});
   const stdout=[],stderr=[];let error,settled=false,drain;
   // A later timeout or stream event must not replace the original failure.
