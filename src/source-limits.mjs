@@ -11,14 +11,16 @@ export const GIT_STDERR_EXCERPT_CHARACTERS=512;
    "bad numeric config value '<value>' for 'core.compression'"), so any config value can reach stderr; a remote URL
    or a header copied from config could also carry a credential. Patterns run on the raw stderr, before line breaks
    are folded, so a header is hidden up to the end of its line.
-   Known gaps: a quoted config value that itself contains "'" shows the part after it; credential formats not listed
-   here (#1691). Long words after 'basic' or 'token' are hidden even when they are not secrets. */
+   Known gaps: a quoted config value that itself contains "'" shows the part after it; a wording that another Git
+   version adds; credential formats not listed here (#1691). Long words after 'basic' or 'token' are hidden even
+   when they are not secrets. */
 const secretPatterns=[
- // Config values quoted by Git: "config value '<v>'", "unknown value '<v>' for key", "unknown '<v>' value for".
- [/(\bvalue )'[^'\n]*'/gi,"$1'***'"],
- [/(\bunknown )'[^'\n]*'( value for)/gi,"$1'***'$2"],
- // "invalid value for '<key>': '<v>'", "malformed value for <key>: <v>", "unknown value for config '<key>': <v>".
- [/(\bvalue for (?:config )?'?[^'\s]{1,256}'?(?: config (?:variable|option))?: )(?:'[^'\n]*'|\S+)/gi,'$1***'],
+ // Config values quoted by Git. The forms below are every one that a sweep of all 992 documented config keys produced
+ // on Git 2.54 for the commands that Controller and candidate run (#1691); a value after a colon runs to the line end.
+ [/(\b(?:value|component|mode|parameter|orderfile|algorithm|chdir to) )'[^']*'/gi,"$1'***'"],
+ [/(\bunknown )'[^']*'( value for)/gi,"$1'***'$2"],
+ [/(\bvalue for (?:config )?'?[^'\s]{1,256}'?(?: config (?:variable|option))?: )[^\n]*/gi,'$1***'],
+ [/(\b(?:invalid color value|invalid mode for object creation|bad --ignore-submodules argument): )[^\n]*/gi,'$1***'],
  // Userinfo up to the last '@' of the authority, so a literal '@' in a password does not end it early.
  [/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/?#]*@/gi,'$1***@'],
  [/\b((?:proxy-)?authorization)[^\S\n]*:[^\n]*/gi,'$1: ***'],
@@ -39,7 +41,8 @@ export function gitFailureReason(result,timeoutMilliseconds=LOCAL_GIT_TIMEOUT_MI
 }
 
 /** The end of stderr on one line, where Git prints its fatal message. Credential-like values are removed before it is cut.
-   Every pattern starts at a literal or a bounded scheme and stops at a quote, a separator or the end of a line, so\n   redacting the whole stderr (at most maxBuffer) stays linear. */
+   Every pattern starts at a literal or a bounded scheme and stops at a quote, a separator or the end of a line, so
+   redacting the whole stderr (at most maxBuffer) stays linear. */
 export function gitStderrExcerpt(stderr,limit=GIT_STDERR_EXCERPT_CHARACTERS){
  if(stderr===null||stderr===undefined)return '';
  let text=Buffer.isBuffer(stderr)?stderr.toString('utf8'):String(stderr);

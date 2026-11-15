@@ -40,7 +40,19 @@ test('stderr excerpt hides config values, query and form credentials, userinfo w
   ["Unknown value for 'diff.submodule' config variable: 's3cret'","Unknown value for 'diff.submodule' config variable: ***"],
   ["error: unknown 's3cret' value for 'x' config option","error: unknown '***' value for 'x' config option"],
   ["error: unknown value 's3cret' for key 'x'","error: unknown value '***' for key 'x'"],
-  ['error: malformed value for core.foo: s3cret','error: malformed value for core.foo: ***'],
+  ['error: malformed value for core.foo: abc s3cret\nfatal: end','error: malformed value for core.foo: *** fatal: end'],
+  ["error: unknown value for config 'diff.algorithm': a s3cret","error: unknown value for config 'diff.algorithm': ***"],
+  ['error: invalid color value: a s3cret\nfatal: bad config variable','error: invalid color value: *** fatal: bad config variable'],
+  ['fatal: invalid mode for object creation: a s3cret','fatal: invalid mode for object creation: ***'],
+  ['fatal: bad --ignore-submodules argument: a s3cret','fatal: bad --ignore-submodules argument: ***'],
+  ["warning: ignoring unknown core.fsync component 'a s3cret'","warning: ignoring unknown core.fsync component '***'"],
+  ["warning: ignoring unknown core.fsyncmethod value 'a s3cret'","warning: ignoring unknown core.fsyncmethod value '***'"],
+  ["fatal: cannot chdir to 'a s3cret': No such file or directory","fatal: cannot chdir to '***': No such file or directory"],
+  ["error: unknown color-moved-ws mode 'a s3cret', possible values are 'ignore-space-change'","error: unknown color-moved-ws mode '***', possible values are 'ignore-space-change'"],
+  ["  Unknown dirstat parameter 'a s3cret'","Unknown dirstat parameter '***'"],
+  ["fatal: failed to read orderfile 'a s3cret': No such file or directory","fatal: failed to read orderfile '***': No such file or directory"],
+  ["fatal: unknown fetch negotiation algorithm 'a s3cret'","fatal: unknown fetch negotiation algorithm '***'"],
+  ["fatal: bad boolean config value 'a\ns3cret' for 'core.filemode'","fatal: bad boolean config value '***' for 'core.filemode'"],
   ["error: unknown value for config 'pack.foo': s3cret","error: unknown value for config 'pack.foo': ***"],
   ['fatal: https://user:p@ss@s3cret@example.invalid/repo','fatal: https://***@example.invalid/repo'],
   ['fatal: https://example.invalid/repo?access_token=s3cret&x=1#a','fatal: https://example.invalid/repo?access_token=***&x=1#a'],
@@ -49,12 +61,35 @@ test('stderr excerpt hides config values, query and form credentials, userinfo w
   ['Authorization: Custom a b c s3cret\r\nfatal: end','Authorization: *** fatal: end'],
   ['Proxy-Authorization:Negotiate s3cret','Proxy-Authorization: ***'],
  ]){const shown=gitStderrExcerpt(Buffer.from(input));assert.equal(shown,expected,input);assert.equal(shown.includes('s3cret'),false,input);}
+ // The cost of hiding a header to the line end: text after it on the same line is hidden too.
+ assert.equal(gitStderrExcerpt('Authorization: Bearer s3cret fatal: end'),'Authorization: ***');
  // Remaining gap, kept visible on purpose: a quoted value containing "'" shows the part after that quote.
  assert.equal(gitStderrExcerpt("fatal: bad boolean config value 'it's' for 'core.filemode'"),"fatal: bad boolean config value '***'s' for 'core.filemode'");
  // Every new pattern stays linear on sixteen megabytes built from its own trigger.
  for(const unit of ["value '",'value for ',"unknown '",'password ','token=','a@','https://','authorization:x\n']){
   const started=performance.now();gitStderrExcerpt(Buffer.from(unit.repeat(Math.floor(16_000_000/unit.length))));assert.ok(performance.now()-started<10000,unit);
  }
+});
+
+// One key for each form that the #1691 sweep found, run through the same Git commands and environment as Controller.
+// Only "no leak" is asserted per key, so a Git version that words or skips a message differently still passes; the
+// first two keys must be quoted by every supported Git, which shows that the check reaches real Git output.
+test('real Git output for each config value wording found by the sweep does not reach the excerpt',{skip:process.platform==='win32'},t=>{
+ const {root,repo,git}=repository(t);fs.writeFileSync(path.join(repo,'code.txt'),'after');git('commit','-qam','second');
+ const env={PATH:process.env.PATH,HOME:root,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0'};
+ const run=args=>spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','protocol.allow=never',...args],{cwd:repo,env});
+ const diff=['diff','--no-ext-diff','--no-textconv','--binary','HEAD~1','HEAD'];let quoted=0;
+ for(const [key,args] of [['core.compression',['rev-parse','HEAD']],['core.filemode',['ls-tree','HEAD']],['core.checkStat',diff],['color.diff.meta',diff],['core.createObject',diff],['core.fsync',diff],
+  ['core.fsyncMethod',diff],['core.worktree',diff],['diff.algorithm',diff],['diff.colorMovedWS',diff],['diff.dirstat',diff],['diff.ignoreSubmodules',diff],['diff.orderFile',diff],
+  ['diff.submodule',diff],['fetch.negotiationAlgorithm',diff],['push.default',diff]]){
+  // Through --file from outside the repository: a bad core.worktree also stops a plain 'git config' in the repository.
+  const config=(...rest)=>execFileSync('git',['config','--file',path.join(repo,'.git','config'),...rest],{cwd:root,stdio:'pipe'});
+  config(key,'S3CRETX https://u:S3CRETY@example.invalid/');
+  const p=run(args),stderr=p.stderr.toString();config('--unset',key);
+  if(stderr.includes('S3CRET'))quoted++;
+  assert.equal(/S3CRET/.test(gitStderrExcerpt(p.stderr)),false,`${key}: ${gitStderrExcerpt(p.stderr)}`);
+ }
+ assert.ok(quoted>=2,`Git quoted ${quoted} values`);
 });
 
 test('real Git quotes a malformed repo-local config value, and the Controller message hides it',{skip:process.platform==='win32'},t=>{
