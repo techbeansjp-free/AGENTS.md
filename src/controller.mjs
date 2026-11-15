@@ -1,7 +1,7 @@
 import {performance} from 'node:perf_hooks';
 /** Node evaluation engine. Host owns this object and all adapters; Agents never do. */
 import {createVerificationGit} from './verification-git.mjs';
-import {LOCAL_GIT_TIMEOUT_MILLISECONDS,SOURCE_BATCH_BYTES,gitFailureMessage} from './source-limits.mjs';
+import {LOCAL_GIT_TIMEOUT_MILLISECONDS,SOURCE_BATCH_BYTES,gitFailureMessage,withStdinFile} from './source-limits.mjs';
 import {runBoundedVerification,verificationMemoryLimit} from './verification-resources.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -46,8 +46,8 @@ export class Controller {
     const env={PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',
       GIT_CONFIG_GLOBAL:process.platform==='win32'?'NUL':'/dev/null',GIT_NO_REPLACE_OBJECTS:'1',
       GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0'};
-    const p=spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${process.platform==='win32'?'NUL':'/dev/null'}`,
-      '-c','protocol.allow=never',...args],{cwd:this.repo,env,input,stdio:['pipe',output,'pipe'],timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,maxBuffer:16*1024*1024});
+    const p=withStdinFile(input,stdin=>spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${process.platform==='win32'?'NUL':'/dev/null'}`,
+      '-c','protocol.allow=never',...args],{cwd:this.repo,env,stdio:[stdin,output,'pipe'],timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,maxBuffer:16*1024*1024}));
     if(p.error || p.status!==0)throw Error(gitFailureMessage('Git observation failed',p));return p.stdout;
   }
   gitLarge(...args) {

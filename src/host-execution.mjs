@@ -6,6 +6,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {setTimeout,clearTimeout} from 'node:timers';
 import {authorityCommandValidator,authorityCommandRootsValidator} from './authority-command.mjs';
+import {withStdinFile} from './source-limits.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 function validateHostCommand(controller,command,additionalRoots=[]){
  authorityCommandValidator(controller)(command);
@@ -42,7 +43,7 @@ export function hostExecution(controller,configuration,authorityRoots=[]){
    demand(response.result&&typeof response.result==='object','Host result missing');return response.result;
   };
   const options={cwd:path.dirname(command[0]),env,windowsHide:true,maxBuffer:8*1024*1024};
-  if(!asynchronous){const p=spawnSync(command[0],command.slice(1),{...options,input,timeout:timeout??0,killSignal:'SIGKILL'});demand(!p.error,'Host verification transport failed');return decode(p.status,p.stdout,p.stderr);}
+  if(!asynchronous){const p=withStdinFile(input,stdin=>spawnSync(command[0],command.slice(1),{...options,stdio:[stdin,'pipe','pipe'],timeout:timeout??0,killSignal:'SIGKILL'}));demand(!p.error,'Host verification transport failed');return decode(p.status,p.stdout,p.stderr);}
   return new Promise((resolve,reject)=>{
    const p=spawn(command[0],command.slice(1),{...options,stdio:['pipe','pipe','pipe']});const output=[],errors=[];let bytes=0,settled=false;
    const finish=(error,code)=>{if(settled)return;settled=true;clearTimeout(timer);p.stdin.destroy();p.stdout.destroy();p.stderr.destroy();p.kill();if(error)reject(error);else{try{resolve(decode(code,Buffer.concat(output).toString(),Buffer.concat(errors).toString()));}catch(e){reject(e);}}};

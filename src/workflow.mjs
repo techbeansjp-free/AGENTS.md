@@ -6,6 +6,7 @@ import {importUnitCandidate} from './unit-candidate.mjs';
 import {reviewSchema,parseReview,reviewDiagnostics,reviewDiagnosticContext} from './review-result.mjs';
 import {createExecutionBudget} from './execution-budget.mjs';
 import {authorityCommandValidator} from './authority-command.mjs';
+import {withStdinFile} from './source-limits.mjs';
 
 /** Host-owned orchestration of proof obligations. No Step counter or receipt import. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';
@@ -111,7 +112,7 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
     demand(!approvalWithoutProgress,'Owner approval expired without workflow progress; owner action required');
     const argv=request.approvalCommand;demand(Array.isArray(argv)&&argv.length&&argv.every(x=>typeof x==='string')&&path.isAbsolute(argv[0]),'Owner approval command must be explicit');
     const executable=fs.realpathSync(argv[0]);demand(!executable.startsWith(c.repo+path.sep),'Candidate cannot supply owner authority');
-    const p=spawnSync(executable,argv.slice(1),{input:JSON.stringify({purpose:'design',contract:c.contract,binding:c.binding()}),encoding:'utf8',timeout:60000,maxBuffer:65536});
+    const p=withStdinFile(JSON.stringify({purpose:'design',contract:c.contract,binding:c.binding()}),stdin=>spawnSync(executable,argv.slice(1),{stdio:[stdin,'pipe','pipe'],encoding:'utf8',timeout:60000,maxBuffer:65536}));
     demand(!p.error&&p.status===0,'Owner authority unavailable');c.approveDesign(JSON.parse(p.stdout));approvalWithoutProgress=true;continue;
    }
    if(candidateReuse&&!candidateAttempted&&work.work==='implementation'){
