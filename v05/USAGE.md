@@ -67,7 +67,7 @@ snapshot方式の `run` / `review` / `goal-propose` / `run-adaptive` / `run-goal
 CI観測は既定では時間上限を持たず、対象PR・commitに拘束されたCIの完了まで待つ。ownerが待機期限を必要とする場合だけ `delivery.ciTimeoutMilliseconds` に非負の整数（ミリ秒）を指定する。`null` または省略は無期限、`0` は一度だけ観測する。期限到達はCI失敗や合格とは別の観測終了である。OS・プロセス自体の終了や通信障害は別途起こり得る。
 
 
-以下は明示選択のLinux snapshot経路の条件。過去の要求からDraft PR/CIまでの実証は受入記録の対象commit・条件に限る。同梱のLinux Codex自動実行アダプターにはNode.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。これは全Host共通の必要条件ではない。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
+以下は明示選択のLinux snapshot経路の条件。過去の要求からDraft PR/CIまでの実証は受入記録の対象commit・条件に限る。同梱のLinux Codex自動実行アダプターにはNode.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要（`browser-cgroup-v1`を選ぶ場合はsystemd 254以上）。これは全Host共通の必要条件ではない。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
 
 `agent-skill-chain --help`（別名`asc-v05 --help`）で開始・再開・移行の入口と、この手順書の配布先を確認できます。引数なしも案内のみを表示し、Agent起動やGit変更は行いません。
 
@@ -280,7 +280,7 @@ OwnerはContractの`verificationLimits`で検証の有限予算を指定でき�
 
 検証設定はContract digestへ拘束し、変更後は以前のEvidenceを再利用しない。Goalの各Unitは親と同じverificationLimitsを継承する。実効timeoutはowner値と現在の残予算の小さい方。cgroupは実効timeoutに起動・観測猶予5秒、observerは10秒を加え、失敗時も固有unitをcleanupする。既定値を無断で拡大せず、実projectのbuild/full検証に必要な場合だけownerが明示する。
 
-`verificationLimits.memoryBytes`は既定1GiB。明示指定は64MiB〜4GiBの1MiB単位に限定し、`verificationResourceProfile: "browser-cgroup-v1"`を必須とする。プロファイル名は互換性のため維持するが、buildやLintにも同じcgroup境界を使用できる。通常経路で指定を無視して続行しない。workerは実行前後の`memory.max`をowner値と照合し、swapなし・256タスク・固有unitのcleanupを維持する。メモリ上限到達・OOM・cleanup未確認は不合格。検証コマンドは`/usr/bin/choom`（util-linux）で`oom_score_adj=1000`として起動し、同じcgroupで結果を報告するworkerより先にOOMの対象とする。対象となる検証プロセスが残っていない場合や、検証コマンドが自らスコアを下げた場合はworkerが強制終了され得るが、その場合も観測失敗として停止し合格にはしない。検証コマンド自体がOOMで強制終了された場合も資源超過の不合格（125）とし、それ以外のシグナル終了は実行失敗として停止する。設定変更はContract digestに含まれ、各Unitが親より勝手に増枠することはできない。
+`verificationLimits.memoryBytes`は既定1GiB。明示指定は64MiB〜4GiBの1MiB単位に限定し、`verificationResourceProfile: "browser-cgroup-v1"`を必須とする。プロファイル名は互換性のため維持するが、buildやLintにも同じcgroup境界を使用できる。通常経路で指定を無視して続行しない。workerは実行前後の`memory.max`をowner値と照合し、swapなし・256タスク・固有unitのcleanupを維持する。メモリ上限到達・OOM・cleanup未確認は不合格。制限は一時サービス内の検証用cgroup（`tree`）だけに適用し、結果を報告するworkerは兄弟のcgroup（`observer`）で起動する（systemdの`DelegateSubgroup=`を使うため、systemd 254以上が必要）。cgroupのOOMは制限したcgroupの中からだけ犠牲者を選ぶため、workerは検証コマンドのOOMで強制終了されない。検証コマンドは`tree`へ移されてから起動し、移動を確認できなければ実行失敗として停止する。サービス全体にはworker分の余裕（256MiB）を加えた上限を別に設ける。この全体上限に達した場合はworkerも強制終了され得るが、観測失敗として停止し合格にはしない。検証コマンド自体がOOMで強制終了された場合も資源超過の不合格（125）とし、それ以外のシグナル終了は実行失敗として停止する。設定変更はContract digestに含まれ、各Unitが親より勝手に増枠することはできない。
 
 低水準の`Controller` APIでは仮想アドレス上限1GiBも独立して適用される。memoryBytesは実cgroup上限であり、この別上限を引き上げる指定ではない。通常CLIの`AssetController`とbrowser-cgroup profileは既存の仮想アドレス上限8TiBを使う。実メモリ4GiB指定が、すべてのAPI経路で単一processに4GiB確保可能という意味ではない。
 
