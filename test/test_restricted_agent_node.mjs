@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import {configuration,assertPreflight,runAgent} from '../src/restricted-agent.mjs';
+import {configuration,assertPreflight,runAgent,sentinelBases,createSentinels} from '../src/restricted-agent.mjs';
 import os from 'node:os';
 import {execFileSync} from 'node:child_process';
 test('preflight requires explicit completed denial and unchanged host for every sentinel',()=>{
@@ -20,6 +20,39 @@ test('preflight requires explicit completed denial and unchanged host for every 
  assert.throws(()=>assertPreflight(good,['trusted','changed']));
  assert.throws(()=>assertPreflight(report([]),[]));
  assert.throws(()=>assertPreflight(good,'trusted'));
+ // The failure names where the sandbox reached; on macOS a shared temporary also points at the Codex version.
+ const reached=report([denied,{read:'accessible',write:'private-write-completed'}]);
+ assert.throws(()=>assertPreflight(reached,['trusted','changed'],['/logs/controller-sentinel','/private/tmp/asc-v05-sentinel-x/controller-sentinel']),e=>
+  e.message.startsWith('Isolation not established (sandbox reached /private/tmp/asc-v05-sentinel-x/controller-sentinel')&&!e.message.includes('/logs/')&&
+  e.message.includes('Codex before 0.156.0')===(process.platform==='darwin'));
+ assert.throws(()=>assertPreflight(report([{read:'accessible',write:'denied'}]),['trusted'],['/logs/controller-sentinel']),e=>!e.message.includes('0.156.0'));
+});
+test('sentinel directories are deduplicated only when their canonical paths are equal',()=>{
+ // A macOS-like layout: /tmp and /var/tmp are links into /private.
+ const links={'/tmp':'/private/tmp','/var/tmp':'/private/var/tmp'};
+ const realpath=p=>{for(const [link,target] of Object.entries(links))if(p===link||p.startsWith(link+'/'))return target+p.slice(link.length);return p;};
+ const bases=tmpdir=>sentinelBases({tmpdir,platform:'darwin',realpath});
+ // A TMPDIR below /tmp does not prove /tmp itself is denied (#1701).
+ assert.deepEqual(bases('/tmp/controller'),['/private/tmp/controller','/private/tmp','/private/var/tmp']);
+ assert.deepEqual(bases('/tmp'),['/private/tmp','/private/var/tmp']);
+ assert.deepEqual(bases('/private/var/tmp'),['/private/var/tmp','/private/tmp']);
+ assert.deepEqual(bases('/var/folders/x/T'),['/var/folders/x/T','/private/tmp','/private/var/tmp']);
+ assert.deepEqual(sentinelBases({tmpdir:'C:\\Temp',platform:'win32',realpath:p=>p}),['C:\\Temp']);
+ const missing=p=>{if(p==='/var/tmp')throw Object.assign(Error('missing'),{code:'ENOENT'});return p;};
+ assert.deepEqual(sentinelBases({tmpdir:'/tmp',platform:'linux',realpath:missing}),['/tmp']);
+ assert.throws(()=>sentinelBases({tmpdir:'/tmp',platform:'linux',realpath:p=>{if(p==='/var/tmp')throw Object.assign(Error('denied'),{code:'EACCES'});return p;}}),/denied/);
+});
+test('a sentinel that cannot be placed stops the run and names the location',t=>{
+ const root=tempDir('asc-sentinel-place-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const missing=path.join(root,'missing'),good=path.join(root,'good');fs.mkdirSync(good);
+ const logs=path.join(root,'logs');fs.mkdirSync(logs);
+ assert.throws(()=>createSentinels(logs,()=>[good,missing]),e=>e.message===`Isolation not established (cannot place a sentinel in ${missing}: ENOENT)`&&e.cause?.code==='ENOENT');
+ // The directory already made under the first location is removed.
+ assert.deepEqual(fs.readdirSync(good),[]);
+ const logs2=path.join(root,'logs2');fs.mkdirSync(logs2);
+ assert.throws(()=>createSentinels(logs2,()=>{throw Object.assign(Error('denied'),{code:'EACCES'});}),e=>e.message==='Isolation not established (cannot place a sentinel in the temporary directories: EACCES)'&&e.cause?.code==='EACCES');
+ assert.throws(()=>createSentinels(path.join(root,'logs3-missing'),()=>[]),e=>e.code==='ENOENT','the logs sentinel keeps its original error');
+ assert.throws(()=>{fs.mkdirSync(path.join(root,'logs4'));createSentinels(path.join(root,'logs4'),()=>{throw Object.assign(Error('gone'),{code:'ENOENT',path:'/var/tmp'});});},e=>e.message==='Isolation not established (cannot place a sentinel in /var/tmp: ENOENT)');
 });
 const agentFixture=t=>{
  const root=tempDir('asc-agent-preflight-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -39,7 +72,7 @@ test('Agent preflight stops when the sandbox can change Controller temporary fil
  await assert.rejects(runAgent(request,unconfined),/Isolation not established/);
  const dirs=probedSentinelDirs(calls[1],request.logs),tmpdir=fs.realpathSync(os.tmpdir());
  assert(dirs.some(d=>path.dirname(d)===tmpdir),'Controller tmpdir sentinel must be probed');
- if(process.platform!=='win32')assert(dirs.some(d=>path.dirname(d)===fs.realpathSync('/tmp')),'/tmp sentinel must be probed');
+ if(process.platform!=='win32')for(const shared of ['/tmp','/var/tmp'])if(fs.existsSync(shared))assert(dirs.some(d=>path.dirname(d)===fs.realpathSync(shared)),`${shared} sentinel must be probed`);
  assert.deepEqual(dirs.filter(d=>fs.existsSync(d)),[],'sentinel directories must be removed');
 });
 test('Agent preflight passes denied sentinels on to the network check',async t=>{
@@ -85,7 +118,7 @@ test('split npm native runtime is narrowly included and cannot contain candidate
  const permissions=config.options.find(v=>v.startsWith('permissions.asc_minimal_agent.filesystem='));
  assert(permissions.includes(JSON.stringify(fs.realpathSync(native))+'="read"'));
  assert(!permissions.includes(JSON.stringify(path.join(root,'node_modules'))+'="read"'));
- for(const shared of ['/tmp','/private/tmp'])assert.equal(permissions.includes(JSON.stringify(shared)+'="deny"'),process.platform==='darwin');
+ for(const shared of ['/tmp','/private/tmp','/var/tmp','/private/var/tmp'])assert.equal(permissions.includes(JSON.stringify(shared)+'="deny"'),process.platform==='darwin');
  // The caller's own grants stay in the same table as the shared-temporary denial (the more specific path applies in Codex).
  assert(permissions.includes(JSON.stringify(fs.realpathSync(workspace))+'="read"')&&permissions.includes(JSON.stringify(fs.realpathSync(runtime))+'="write"'));
  assert.throws(()=>configuration({workspace:native,runtime,executable:binary,writable:true}),/overlaps/);

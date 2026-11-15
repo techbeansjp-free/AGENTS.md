@@ -5,7 +5,7 @@ import {assertExecutionHost} from './execution-host.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {codexRuntimeRoots,sandboxFilesystemBase} from './codex-runtime.mjs';
+import {codexRuntimeRoots,sandboxFilesystemBase,sharedTemporaryRoots,POSIX_SHARED_TEMPORARIES} from './codex-runtime.mjs';
 import {networkPreflight} from './agent-network-preflight.mjs';
 import {runServiceProcess} from './agent-lifecycle.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
@@ -41,25 +41,44 @@ export function configuration({workspace,runtime,executable,writable,purpose='ag
   for(const name of ['PATH','HOME','CODEX_HOME','OPENAI_API_KEY','CODEX_API_KEY','CODEX_ACCESS_TOKEN']) if(process.env[name])env[name]=process.env[name];
   return {root,launchDirectory:purpose==='verification'?temp:root,node,binary,profile,options:values.flatMap(v=>['-c',v]),env};
 }
-/** Every sentinel must be unreadable, and any completed write must have stayed private to the sandbox. */
-export function assertPreflight(result,hostValues) {
+/** Every sentinel must be unreadable, and any completed write must have stayed private to the sandbox. `targets` names
+ * the sentinel paths in the same order; it only makes the failure say where the sandbox reached. */
+export function assertPreflight(result,hostValues,targets=[]) {
   demand(result.status===0 && !result.error,'Isolation diagnostic failed');
   const data=JSON.parse(result.stdout);
-  demand(data.completed===true && Array.isArray(data.targets) && Array.isArray(hostValues) && hostValues.length>0 && data.targets.length===hostValues.length &&
-    data.targets.every(t=>t?.read==='denied' && ['denied','private-write-completed'].includes(t.write)) && hostValues.every(v=>v==='trusted'),'Isolation not established');
+  demand(data.completed===true && Array.isArray(data.targets) && Array.isArray(hostValues) && hostValues.length>0 && data.targets.length===hostValues.length,'Isolation not established');
+  const reached=data.targets.flatMap((t,i)=>t?.read==='denied' && ['denied','private-write-completed'].includes(t.write) && hostValues[i]==='trusted'?[]:[targets[i]??`target ${i}`]);
+  if(!reached.length)return;
+  const shared=sharedTemporaryRoots();
+  const hint=reached.some(p=>shared.some(root=>p.startsWith(root+'/')))?'; on macOS, Codex before 0.156.0 ignores the shared-temporary denial: check the Codex version, and report it if it is already 0.156.0 or later':'';
+  throw Error(`Isolation not established (sandbox reached ${reached.join(', ')}${hint})`);
 }
-/** Controller-owned locations an Agent must not reach: logs, the Controller temporary directory (stdin files,
- * candidate index, Git output) and, outside Windows, /tmp, where those files live when TMPDIR is absent (#1695). */
-function createSentinels(logRoot) {
-  const files=[path.join(logRoot,'controller-sentinel')],dirs=[];
-  const tmpdir=fs.realpathSync(os.tmpdir()),bases=[tmpdir];
-  if(process.platform!=='win32'){
-    let shared=null;try{shared=fs.realpathSync('/tmp');}catch(error){if(error.code!=='ENOENT')throw error;}
-    if(shared&&!contains(shared,tmpdir))bases.push(shared);
+/** Directories that receive a sentinel, canonical and without duplicates: the Controller temporary directory (stdin files,
+ * candidate index, Git output) and, outside Windows, the shared /tmp and /var/tmp, where those files live when TMPDIR is
+ * absent or points there (#1695). Only an equal path is a duplicate: a TMPDIR below /tmp does not prove /tmp itself
+ * is denied (#1701). A missing shared directory is skipped. */
+export function sentinelBases({tmpdir=os.tmpdir(),platform=process.platform,realpath=fs.realpathSync}={}) {
+  const bases=[realpath(tmpdir)];
+  if(platform!=='win32')for(const shared of POSIX_SHARED_TEMPORARIES){
+    let canonical;try{canonical=realpath(shared);}catch(error){if(error.code==='ENOENT')continue;throw error;}
+    if(!bases.includes(canonical))bases.push(canonical);
   }
+  return bases;
+}
+/** Controller-owned locations an Agent must not reach: logs and every sentinelBases() directory. A sentinel that
+ * cannot be placed or a location that cannot be resolved also stops the run, naming the location. */
+export function createSentinels(logRoot,locate=sentinelBases) {
+  const files=[path.join(logRoot,'controller-sentinel')],dirs=[];
+  const unplaced=(where,error)=>Error(`Isolation not established (cannot place a sentinel in ${where}: ${error.code??error.message})`,{cause:error});
   try{
     fs.writeFileSync(files[0],'trusted',{flag:'wx'});
-    for(const base of bases){const dir=fs.mkdtempSync(path.join(base,'asc-v05-sentinel-'));dirs.push(dir);const file=path.join(dir,'controller-sentinel');fs.writeFileSync(file,'trusted',{flag:'wx',mode:0o600});files.push(file);}
+    let bases;try{bases=locate();}catch(error){throw unplaced(error.path??'the temporary directories',error);}
+    for(const base of bases){
+      try{
+        const dir=fs.mkdtempSync(path.join(base,'asc-v05-sentinel-'));dirs.push(dir);
+        const file=path.join(dir,'controller-sentinel');fs.writeFileSync(file,'trusted',{flag:'wx',mode:0o600});files.push(file);
+      }catch(error){throw unplaced(base,error);}
+    }
   }catch(error){removeSentinels(dirs);throw error;}
   return {files,dirs};
 }
@@ -87,7 +106,7 @@ fs.writeSync(1,JSON.stringify({completed:true,targets}));`;
     const probe={status:0,...await preflightRun(c.binary,[...sandbox,c.node,'-e',code,...sentinels.files],{env:c.env,input:'',timeout:20000})};
     const hostValues=sentinels.files.map(file=>fs.readFileSync(file,'utf8'));
     fs.writeFileSync(path.join(logRoot,'preflight.json'),JSON.stringify({status:probe.status,stdout:probe.stdout,stderr:probe.stderr,targets:sentinels.files,hostUnchanged:hostValues.map(v=>v==='trusted')},null,2));
-    assertPreflight(probe,hostValues);
+    assertPreflight(probe,hostValues,sentinels.files);
     const network=await networkPreflight({executable:c.binary,sandbox,env:c.env,run:preflightRun});
     fs.writeFileSync(path.join(logRoot,'network-preflight.json'),JSON.stringify(network,null,2));
     const answerPath=path.join(logRoot,'answer.txt');
