@@ -37,13 +37,14 @@ test('release identifies the merged PR when the commit association is empty (#16
   assert.equal(result.pr,12);assert.equal(result.testedHead,head);
   assert.deepEqual(lookup.routes.filter(r=>r.includes('/pulls?state=closed')),pages.map((_,i)=>closed(i+1)));
  }
+ assert.equal((await verify({api:run([[merged]],[other]).api,repo,sha,version:'0.5.1'})).pr,12,'non-matching association falls back to the scan');
  const preferred=run([[merged]],[merged]);assert.equal((await verify({api:preferred.api,repo,sha,version:'0.5.1'})).pr,12);
  assert(!preferred.routes.some(r=>r.includes('/pulls?state=closed')),'association hit must not scan closed PRs');
  for(const candidates of [[other],[fork],[branch],[unmerged],[noRepo],[other,fork,branch,unmerged,noRepo]]){
   await assert.rejects(verify({api:run([candidates],candidates).api,repo,sha,version:'0.5.1'}),/No merged same-repository PR for source/);
  }
  const beyond=run([...Array.from({length:pullScanPages},()=>filler),[merged]]);
- await assert.rejects(verify({api:beyond.api,repo,sha,version:'0.5.1'}),/No merged same-repository PR for source/);
+ await assert.rejects(verify({api:beyond.api,repo,sha,version:'0.5.1'}),new RegExp(`No merged same-repository PR for source .*scanned ${pullScanPages} of at most ${pullScanPages} pages`));
  assert.equal(beyond.routes.filter(r=>r.includes('/pulls?state=closed')).length,pullScanPages);
  await assert.rejects(verify({api:run([[merged,{...merged,number:18}]]).api,repo,sha,version:'0.5.1'}),/Ambiguous merged PR/);
  await assert.rejects(verify({api:run([],[merged,{...merged,number:18}]).api,repo,sha,version:'0.5.1'}),/Ambiguous merged PR/);

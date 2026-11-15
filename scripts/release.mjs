@@ -39,13 +39,13 @@ export async function mergedPullRequest({api,repo,sha}){
  const associated=(await api(`${prefix}/commits/${sha}/pulls?per_page=100`)).filter(matches);
  demand(associated.length<=1,'Ambiguous merged PR for source');
  if(associated[0])return associated[0];
- const found=[];
+ const found=[];let scanned=0;
  for(let page=1;page<=pullScanPages;page++){
-  const batch=await api(`${prefix}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=100&page=${page}`);
+  scanned=page;const batch=await api(`${prefix}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=100&page=${page}`);
   found.push(...batch.filter(matches));if(found.length||batch.length<100)break;
  }
  demand(found.length<=1,'Ambiguous merged PR for source');
- demand(found[0],'No merged same-repository PR for source');
+ demand(found[0],`No merged same-repository PR for source (association empty; scanned ${scanned} of at most ${pullScanPages} pages of recently updated closed PRs into main)`);
  return found[0];
 }
 export async function verify({api,repo,sha,version,wait={}}){
