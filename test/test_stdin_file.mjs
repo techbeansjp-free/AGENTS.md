@@ -5,7 +5,8 @@ import {execFileSync} from 'node:child_process';
 import {Controller} from '../src/controller.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createWorktree} from '../src/migration.mjs';
 
 // #1682: a large spawnSync input was seen leaving a loaded macOS child blocked on its stdin pipe.
-// A hang is rare (thousands of calls), so these tests check the structure: stdin is a regular file, never a pipe or socket.
+// A hang is rare (thousands of calls), so no test reproduces it. The first test checks that each Git path returns the right
+// content on every OS; the second checks the structure on POSIX: stdin is a regular file, never a pipe or socket.
 // The helper itself and the Host transport are tested in test_host_execution.mjs, which Windows CI also runs (#1694).
 
 function repository(t){

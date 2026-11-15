@@ -7,12 +7,13 @@ import {performance} from 'node:perf_hooks';
 import {createHash} from 'node:crypto';
 import {projectLocation} from './project-location.mjs';
 import {hostMaskedPaths} from './host-masked-paths.mjs';
+import {GIT_NULL_DEVICE} from './source-limits.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const gitEnvironment=()=>Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.toUpperCase().startsWith('GIT_')));
 // These non-interactive commands have no stdin payload. Avoid an unnecessary
 // stdin socket/pipe, which restricted Hosts can reject even after child success.
 const gitMaxBuffer=16*1024*1024;
-const git=(repo,...args)=>execFileSync('git',['-c','core.hooksPath=/dev/null',...args],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',maxBuffer:gitMaxBuffer}).trim();
+const git=(repo,...args)=>execFileSync('git',['-c',`core.hooksPath=${GIT_NULL_DEVICE}`,...args],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',maxBuffer:gitMaxBuffer}).trim();
 export function startWorktree(directory,paths=[]){
  return describeProject(projectLocation(directory),paths);
 }

@@ -35,6 +35,14 @@ test('shared sandbox filesystem denies the Mac system temporaries only on Mac',a
  }
 });
 
+test('the macOS minimum Codex version is the CI pin and the documented minimum',async()=>{
+ const fs=await import('node:fs');
+ const {MACOS_MIN_CODEX_VERSION}=await import('../src/codex-runtime.mjs');
+ const workflow=fs.readFileSync(new URL('../.github/workflows/native-verification.yml',import.meta.url),'utf8');
+ assert.deepEqual([...workflow.matchAll(/@openai\/codex@(\S+)/g)].map(m=>m[1]),[MACOS_MIN_CODEX_VERSION]);
+ assert.ok(fs.readFileSync(new URL('../v05/USAGE.md',import.meta.url),'utf8').includes(`Codex ${MACOS_MIN_CODEX_VERSION}以降`));
+});
+
 test('Codex runtime roots reject an unrelated executable parent',async t=>{
  const fs=await import('node:fs'),path=await import('node:path');
  const {codexRuntimeRoots}=await import('../src/codex-runtime.mjs');

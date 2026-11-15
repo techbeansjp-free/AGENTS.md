@@ -1,7 +1,7 @@
 /** Non-destructive evaluation transition. Legacy source and approvals stay untouched. */
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {spawnSync} from 'node:child_process';
 import {inspectMigration} from '../migration_inspect.mjs';import {Controller,safeName,hash} from './controller.mjs';
-import {SOURCE_BATCH_BYTES,gitFailureMessage,withStdinFile} from './source-limits.mjs';
+import {SOURCE_BATCH_BYTES,gitFailureMessage,withStdinFile,GIT_NULL_DEVICE} from './source-limits.mjs';
 const manifestName='transition.json',manifestByteLimit=16*1024*1024;
 /* Bound of one Git child, longer than LOCAL_GIT_TIMEOUT_MILLISECONDS mainly for whole-repository clone --no-local and for
    streaming one blob larger than SOURCE_BATCH_BYTES through cat-file. The value predates the shared bound and is kept
@@ -11,10 +11,9 @@ function demand(ok,message){if(!ok)throw Error(message);}
 const contains=(a,b)=>{const r=path.relative(a,b);return !r || (!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
 function git(root,...args){return gitOutput(root,args);}
 function gitOutput(root,args,output='pipe',input){
- const nul=process.platform==='win32'?'NUL':'/dev/null';
- const p=withStdinFile(input,stdin=>spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${nul}`,'-c','uploadpack.packObjectsHook=',
+ const p=withStdinFile(input,stdin=>spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${GIT_NULL_DEVICE}`,'-c','uploadpack.packObjectsHook=',
  '-c','core.alternateRefsCommand=','-c','protocol.allow=never','-c','protocol.file.allow=always',...args],
- {cwd:root,stdio:[stdin,output,'pipe'],env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:nul,GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'},timeout:MIGRATION_GIT_TIMEOUT_MILLISECONDS,maxBuffer:16*1024*1024}));
+ {cwd:root,stdio:[stdin,output,'pipe'],env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:GIT_NULL_DEVICE,GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'},timeout:MIGRATION_GIT_TIMEOUT_MILLISECONDS,maxBuffer:16*1024*1024}));
  if(p.error||p.status!==0)throw Error(gitFailureMessage('Migration Git operation failed',p,MIGRATION_GIT_TIMEOUT_MILLISECONDS));return p.stdout;
 }
 // Linked worktrees keep administration outside their source directory. Resolve
