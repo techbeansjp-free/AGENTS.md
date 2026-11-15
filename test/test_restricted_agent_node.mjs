@@ -1,12 +1,13 @@
 import {tempDir} from './helpers/temp-dir.mjs';
 import {performance} from 'node:perf_hooks';
 import {setTimeout} from 'node:timers';
-import {test,mock} from 'node:test';
+import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import path from 'node:path';
 import {configuration,assertPreflight,runAgent,sentinelBases,createSentinels} from '../src/restricted-agent.mjs';
+import {MACOS_MIN_CODEX_VERSION} from '../src/codex-runtime.mjs';
 import os from 'node:os';
 import {execFileSync} from 'node:child_process';
 test('preflight requires explicit completed denial and unchanged host for every sentinel',()=>{
@@ -24,8 +25,8 @@ test('preflight requires explicit completed denial and unchanged host for every 
  const reached=report([denied,{read:'accessible',write:'private-write-completed'}]);
  assert.throws(()=>assertPreflight(reached,['trusted','changed'],['/logs/controller-sentinel','/private/tmp/asc-v05-sentinel-x/controller-sentinel']),e=>
   e.message.startsWith('Isolation not established (sandbox reached /private/tmp/asc-v05-sentinel-x/controller-sentinel')&&!e.message.includes('/logs/')&&
-  e.message.includes('Codex before 0.156.0')===(process.platform==='darwin'));
- assert.throws(()=>assertPreflight(report([{read:'accessible',write:'denied'}]),['trusted'],['/logs/controller-sentinel']),e=>!e.message.includes('0.156.0'));
+  e.message.includes(`Codex before ${MACOS_MIN_CODEX_VERSION}`)===(process.platform==='darwin'));
+ assert.throws(()=>assertPreflight(report([{read:'accessible',write:'denied'}]),['trusted'],['/logs/controller-sentinel']),e=>!e.message.includes(MACOS_MIN_CODEX_VERSION));
 });
 test('sentinel directories are deduplicated only when their canonical paths are equal',()=>{
  // A macOS-like layout: /tmp and /var/tmp are links into /private.
@@ -59,7 +60,7 @@ test('a sentinel file that cannot be written stops the run and removes its direc
  const logs=path.join(root,'logs'),base=path.join(root,'base');fs.mkdirSync(logs);fs.mkdirSync(base);
  // Fail only the sentinel inside the location; the logs sentinel is written first.
  const write=fs.writeFileSync;
- const stub=mock.method(fs,'writeFileSync',(file,...rest)=>{if(String(file).startsWith(base+path.sep))throw Object.assign(Error('read-only'),{code:'EROFS'});return write(file,...rest);});
+ const stub=t.mock.method(fs,'writeFileSync',(file,...rest)=>{if(String(file).startsWith(base+path.sep))throw Object.assign(Error('read-only'),{code:'EROFS'});return write(file,...rest);});
  try{assert.throws(()=>createSentinels(logs,()=>[base]),e=>e.message===`Isolation not established (cannot place a sentinel in ${base}: EROFS)`&&e.cause?.code==='EROFS');}
  finally{stub.mock.restore();}
  assert.deepEqual(fs.readdirSync(base),[]);

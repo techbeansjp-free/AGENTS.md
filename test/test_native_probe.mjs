@@ -39,7 +39,7 @@ test('the macOS minimum Codex version is the CI pin and the documented minimum',
  const fs=await import('node:fs');
  const {MACOS_MIN_CODEX_VERSION}=await import('../src/codex-runtime.mjs');
  const workflow=fs.readFileSync(new URL('../.github/workflows/native-verification.yml',import.meta.url),'utf8');
- assert.deepEqual([...workflow.matchAll(/@openai\/codex@([0-9.]+)/g)].map(m=>m[1]),[MACOS_MIN_CODEX_VERSION]);
+ assert.deepEqual([...workflow.matchAll(/@openai\/codex@(\S+)/g)].map(m=>m[1]),[MACOS_MIN_CODEX_VERSION]);
  assert.ok(fs.readFileSync(new URL('../v05/USAGE.md',import.meta.url),'utf8').includes(`Codex ${MACOS_MIN_CODEX_VERSION}以降`));
 });
 
