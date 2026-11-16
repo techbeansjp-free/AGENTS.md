@@ -599,6 +599,35 @@
           "afterSha256": "535fa30d7e25dd8a49f1536779734ec8286108d115da5045d77f3b4185d8f790"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-PR-CI-CONCURRENCY-001",
+      "status": "staged",
+      "fromVersion": 23,
+      "toVersion": 24,
+      "owner": "repository maintainer (explicit approval for Issue #1714)",
+      "rationale": "Issue #1714: PR で動く workflow（ci.yml、trusted-quality.yml、native-verification.yml、worktree-execution.yml）に concurrency（group は workflow 名と PR 番号、cancel-in-progress: true）を加え、同じ PR の古い commit に対する実行を止める。最新の head commit では全 job が動き、scripts/release.mjs が求める head SHA の check 成功の条件も変わらない。job・step・trigger・permissions・品質検査・validator・権限境界は変更しない。保護対象は ci.yml と trusted-quality.yml の2つ。",
+      "rollback": "適用前は有効化しない。適用後に戻す場合は次versionのproposalを先行登録して適用し、登録済みproposalの削除や品質保護の解除は行わない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": ".github/workflows/ci.yml",
+          "beforeSha256": "d9986025f1c59826ba3c466150b2d213c5ab46f4c8f16c274ac9e6d1f73d6172",
+          "afterSha256": "6cf64bb7cbd44b24f7def0f2147a9cfa3d1cbc9486f6a0011a7c2dedec78ed26"
+        },
+        {
+          "kind": "file",
+          "name": ".github/workflows/trusted-quality.yml",
+          "beforeSha256": "4db2dffa88db797f6a5946b9fa57aaee77f0494ed000fa12a7cfbea6211f80b0",
+          "afterSha256": "5b24e0932b9f9b0d183dde4fee7541e6d579601df24f58f72963073a104ef78a"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "535fa30d7e25dd8a49f1536779734ec8286108d115da5045d77f3b4185d8f790",
+          "afterSha256": "c2356069e9d1e79ca924378153cfbbfb4d4416b1f99d41a2940bfdb66c5319db"
+        }
+      ]
     }
   ]
 }
