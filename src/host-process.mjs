@@ -28,16 +28,17 @@ relay[RELAY]=true;
 // Host listener is ahead of it, at most once per signal per tick, and the events raised by the move itself are
 // ignored, so a Host that reacts to newListener or removeListener cannot start an endless loop. The new relay is
 // added before the old one is removed (removeListener drops the last instance), so the signal is never unwatched.
-// A listener the Host prepends from its own removeListener handler during the move stays ahead of relay.
-let moving=false;const pending=new Set();
+// A listener the Host prepends from its own removeListener handler during the move stays ahead of relay. The flag is
+// shared by every loaded copy, so the move of one copy does not schedule a move of another.
+const order=process[Symbol.for('asc.host-process.order')]??={moving:false};const pending=new Set();
 function keepFirst(name,listener){
- if(moving||!relayed.includes(name)||listener?.[RELAY]||pending.has(name))return;
+ if(order.moving||!relayed.includes(name)||listener?.[RELAY]||pending.has(name))return;
  pending.add(name);
  process.nextTick(()=>{
   pending.delete(name);
   const list=process.listeners(name),at=list.indexOf(relay);
   if(!ownedGroups.size||at<=0||list.slice(0,at).every(l=>l[RELAY]))return;
-  moving=true;try{process.prependListener(name,relay);process.removeListener(name,relay);}finally{moving=false;}
+  order.moving=true;try{process.prependListener(name,relay);process.removeListener(name,relay);}finally{order.moving=false;}
  });
 }
 function own(pgid){
