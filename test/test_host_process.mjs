@@ -23,7 +23,7 @@ const runStandIn=async(host,started)=>{
  const p=spawn(process.execPath,['--input-type=module','-e',host],{stdio:['ignore','ignore','pipe']});started?.(p);
  let stderr='';p.stderr.setEncoding('utf8').on('data',d=>{stderr+=d;});
  const [code,signal]=await new Promise(r=>p.on('close',(code,signal)=>r([code,signal])));
- return {code,signal,stderr};
+ return {code,signal,stderr,why:`code=${code} signal=${signal} stderr=${stderr}`};
 };
 // The Host child starts one leftover of each kind and writes their pids before it exits.
 const leftovers=(file,{escape=false}={})=>{
@@ -105,8 +105,8 @@ runHostProcess(process.execPath,['-e',${JSON.stringify(leftovers(file)+';setInte
  for(let i=0;i<200&&!fs.existsSync(file);i++)await new Promise(r=>setTimeout(r,25));
  const pids=JSON.parse(fs.readFileSync(file,'utf8'));
  t.after(()=>{for(const pid of Object.values(pids))try{process.kill(pid,'SIGKILL');}catch{ /* Already stopped. */ }});
- p.kill('SIGTERM');const {signal,stderr}=await ended;
- assert.equal(signal,'SIGTERM',`the Host still ends by the signal it received: ${stderr}`);
+ p.kill('SIGTERM');const {signal,why}=await ended;
+ assert.equal(signal,'SIGTERM',`the Host still ends by the signal it received: ${why}`);
  for(let i=0;i<40&&Object.values(pids).some(alive);i++)await new Promise(r=>setTimeout(r,25));
  for(const [kind,pid] of Object.entries(pids))assert.equal(alive(pid),false,`${kind} ${pid} must be stopped with the Host`);
 });
@@ -158,8 +158,8 @@ const real=process.kill.bind(process);let polls=0;
 process.kill=(pid,signal)=>{fs.appendFileSync(${JSON.stringify(log)},JSON.stringify([pid,signal])+'\\n');
  if(pid<0&&signal===0){if(++polls===3)real(process.pid,'SIGTERM');return true;}return real(pid,signal);};
 runHostProcess(process.execPath,['-e','0'],{env:{},input:''}).catch(()=>{});`;
- const {signal,stderr}=await runStandIn(host);
- assert.equal(signal,'SIGTERM',stderr);
+ const {signal,why}=await runStandIn(host);
+ assert.equal(signal,'SIGTERM',why);
  const kills=fs.readFileSync(log,'utf8').trim().split('\n').map(l=>JSON.parse(l));
  assert.ok(kills.some(([pid,signal])=>pid<0&&signal===0),'the wait polled the group');
  assert.equal(kills.filter(([pid,signal])=>pid<0&&signal==='SIGKILL').length,1,'the group is signalled once');
@@ -177,9 +177,24 @@ setTimeout(()=>process.kill(process.pid,'SIGTERM'),300);await first;const afterS
 await runHostProcess(process.execPath,['-e','0'],{env:{},input:''});
 await new Promise(r=>setTimeout(r,200));
 fs.writeFileSync(${JSON.stringify(out)},JSON.stringify({before,afterSignal,afterNext:count(),received}));`;
- const {code,stderr}=await runStandIn(host);
- assert.equal(code,0,stderr);
+ const {code,why}=await runStandIn(host);
+ assert.equal(code,0,why);
  const {before,afterSignal,afterNext,received}=JSON.parse(fs.readFileSync(out,'utf8'));
  assert.deepEqual(afterSignal,before);assert.deepEqual(afterNext,before);
  assert.equal(received,1,'the own listener of the Host gets the signal once; the relay does not raise it again');
+});
+test('a once listener registered before a call decides the end, for each relayed signal',posix,async t=>{
+ const root=tempDir('asc-host-once-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const module=new URL('../src/host-process.mjs',import.meta.url).href;
+ // The once listener is registered before the call adds the relay; it finishes its own cleanup, then exits with 23.
+ for(const name of ['SIGINT','SIGTERM','SIGHUP']){
+  const out=path.join(root,`${name}.txt`);
+  const host=`import fs from 'node:fs';import {runHostProcess} from ${JSON.stringify(module)};
+process.once(${JSON.stringify(name)},()=>setTimeout(()=>{fs.writeFileSync(${JSON.stringify(out)},'cleaned');process.exit(23);},150));
+runHostProcess(process.execPath,['-e','setInterval(()=>{},1000)'],{env:{},input:''}).catch(()=>{});
+setTimeout(()=>process.kill(process.pid,${JSON.stringify(name)}),300);setInterval(()=>{},1000);`;
+  const {code,why}=await runStandIn(host);
+  assert.equal(code,23,`${name}: ${why}`);
+  assert.equal(fs.readFileSync(out,'utf8'),'cleaned',name);
+ }
 });

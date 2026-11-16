@@ -15,12 +15,13 @@ const relayed=['SIGINT','SIGTERM','SIGHUP'];
 function unlisten(){process.removeListener('exit',killOwned);for(const name of relayed)process.removeListener(name,relay);}
 // The set is empty afterwards, so the listeners go too, even when the Host keeps running after the signal.
 function killOwned(){for(const pgid of ownedGroups){try{process.kill(-pgid,'SIGKILL');}catch{ /* Already empty. */ }}ownedGroups.clear();unlisten();}
-// Re-raising restores the default end only when relay was the sole listener. With a listener of its own, the Host has
-// already received this signal and keeps running; a re-raised copy would reach it again and, when it arrives late,
-// could stop a call started after this one (#1720).
+// Re-raising restores the default end only when relay is the sole listener, as Node does without this transport. With
+// a listener of its own, the Host receives this signal and decides; a re-raised copy would reach it again and, arriving
+// late, could stop a call started after this one (#1720). relay is prepended so that it runs before the Host's
+// listeners: a once listener is removed only when it runs, so it is still counted here.
 function relay(signal){const alone=process.listenerCount(signal)===1;killOwned();if(alone)process.kill(process.pid,signal);}
 function own(pgid){
- if(!ownedGroups.size){process.once('exit',killOwned);for(const name of relayed)process.on(name,relay);}
+ if(!ownedGroups.size){process.once('exit',killOwned);for(const name of relayed)process.prependListener(name,relay);}
  ownedGroups.add(pgid);
 }
 function disown(pgid){
