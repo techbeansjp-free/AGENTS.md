@@ -526,9 +526,9 @@ macOSでこの`deny`が効くのはCodex 0.156.0以降である。0.153.4・0.15
 Agentの起動前の隔離診断は、logsに加えて、Controllerの一時ディレクトリと（Windows以外では）`/tmp`・`/var/tmp`に置いた見張り用ファイルを読めず、書き換えられないことを確かめる。重複を省くのは、正準pathが等しい場合だけである（`TMPDIR`が`/tmp`の下の別ディレクトリでも、`/tmp`自体を調べる）。どれかに届けば`Isolation not established`で停止する。Codexの版が変わって上の拒否が効かなくなっても、無隔離では実行しない。sandboxが見張り用ファイルに届いた場合、停止のmessageにその場所を示す。macOSで共有の一時領域に届いた場合は、Codex 0.156.0より前の版が拒否を無視することも示す。この停止は設定では回避できない。Codexの版を確かめ、0.156.0以降でも止まるなら、`preflight.json`の`targets`と結果を添えてIssueで報告する。見張り用ファイルを置けない場合（`/var/tmp`はあるが書けないcontainerなど）も、置けなかった場所を示して停止する。この場合は`preflight.json`を作る前に止まり、原因はCodexの版によらない。この検査は省略しない（#1709）。`/tmp`または`/var/tmp`があるのに書けない環境では、Controllerを実行する利用者が書ける共有一時領域（`chmod 1777`）にするか、その環境では作らない（存在しなければ調べない）。それでも止まる場合は、停止のmessageを添えて報告する。利用者が自分で用意したHostのsandboxは対象外である。
 
 sandbox内で切り離して起動されたプロセスの扱い（#1703）：
-- 同梱Codex Hostは、`codex sandbox`（Agentの診断と検証）と`codex exec`（Agent）を、Windows以外では新しいprocess groupの先頭として起動する。直接の子の終了・失敗・期限切れ・出力上限のどの場合も、そのgroupにSIGKILLを送り、groupが空になったことを確かめてから結果を返す。期限切れと出力上限の場合は、直接の子が終わる前にgroupごと止める。この後始末には、groupが空になるまで最大2秒と、出力を読み終えるまで最大1秒かかり得るため、設定したdeadlineは後始末込みの厳密な上限ではない。
-  - 空になったと確かめられない場合は、`ASC_HOST_CLEANUP_UNCONFIRMED`で失敗にする（元の失敗は`cause`に残す）。同梱Hostはこの場合に異常終了するので、Controllerからは通常のHost実行の失敗に見え、provider容量の失敗には分類されない。
-  - HostがSIGINT・SIGTERM・SIGHUPを受けた場合も、先にgroupを止める。
+- 同梱Codex Hostは、`codex sandbox`（Agentの診断と検証）と`codex exec`（Agent）を、Windows以外では新しいprocess groupの先頭として起動する。直接の子の終了・失敗・期限切れ・出力上限のどの場合も、そのgroupにSIGKILLを1回だけ送り、groupが空になったことを確かめてから結果を返す。送った後はsignal 0で確かめるだけで、同じgroupへsignalを送り直さない（groupの番号が再利用されても、無関係のプロセスに届かない）。終了中でまだ刈り取られていないmemberがいると、macOSはSIGKILLの送信にEPERMを返すことがある。この場合も失敗にせず、groupが空になるのを待つ。期限切れと出力上限の場合は、直接の子が終わる前にgroupごと止める。この後始末には、groupが空になるまで最大2秒と、出力を読み終えるまで最大1秒かかり得るため、設定したdeadlineは後始末込みの厳密な上限ではない。
+  - 空になったと確かめられない場合は、`ASC_HOST_CLEANUP_UNCONFIRMED`で失敗にする（元の失敗は`cause`に残す。元の失敗がなければ、SIGKILLの送信で起きたerrorを`cause`に入れる。送信のerrorは`signalError`にも残す）。同梱Hostはこの場合に異常終了するので、Controllerからは通常のHost実行の失敗に見え、provider容量の失敗には分類されない。
+  - HostがSIGINT・SIGTERM・SIGHUPを受けた場合も、まだSIGKILLを送っていないgroupを先に止める。
 - 実測（Codex 0.169.0、モデル呼出しなし、`codex sandbox`の中で起動したものが3秒後に作業領域へ書く）
   - macOS：変更前は3種類とも生き残って書き込んだ。変更後は、shellのbackground job（`cmd &`）と`nohup`は止まり、書き込まなかった。`setsid`でgroupを出たもの（Nodeの`detached:true`など）は生き残り、書き込んだ。
   - Linux（Debianのcontainer）：変更前から3種類とも、sandboxの終了とともに止まった。
