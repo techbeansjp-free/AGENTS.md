@@ -17,7 +17,8 @@ const gitMaxBuffer=16*1024*1024;
 const git=(repo,...args)=>execFileSync('git',['-c',`core.hooksPath=${GIT_NULL_DEVICE}`,...args],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',maxBuffer:gitMaxBuffer}).trim();
 export function startWorktree(directory,paths=[]){
  // Facts are shown only by start; verification keeps its own result unchanged.
- return {...describeProject(projectLocation(directory),paths),facts:startFacts(directory)};
+ const location=projectLocation(directory);
+ return {...describeProject(location,paths),facts:startFacts(location)};
 }
 function describeProject({repo,gitManaged},paths){
  const context=projectContext(repo,paths);

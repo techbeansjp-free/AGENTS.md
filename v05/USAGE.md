@@ -93,21 +93,23 @@ pathはproject root相対、`appliesTo`はglobではなく完全一致またはd
 
 ## くり返し出た失敗から分かったリポジトリの事実（#1722）
 
-作業中にくり返し出た失敗と、その解決のしかたを「リポジトリの事実」として記録できる。記録した事実は、別の作業の`start`で示される。
+作業中に同じ失敗をくり返し、解決を確かめた環境・手順の事実を記録できる。記録した事実は、次の作業の`start`で示される。
 
 ```bash
+asc-v05 fact-list <worktree>
 asc-v05 fact-record <worktree> --id npm-ci-first --kind setup --text "New worktrees have no node_modules; run npm ci before npm run quality"
 asc-v05 fact-contradict <worktree> --id npm-ci-first --note "npm ci is now part of quality"
-asc-v05 fact-list <worktree>
 ```
 
-- **対象は環境と手順の事実だけ**：`--kind`は`command`（動くコマンドの書き方）、`setup`（事前準備）、`artifact-location`（生成物の場所）、`environment-variable`（必要な環境変数の名前。値は書かない）のどれか。仕様・業務・品質基準の判断を表す種類はなく、それらはownerが決める。
-- **示す条件**：別々のworktree2か所で記録された事実だけを、`start`の`facts.confirmed`に示す。同じworktreeで何度記録しても1か所と数える。2は「1回の観測ではない」という定義の最小値で、計測で調整した値ではない。
-- **隠す条件**：`fact-contradict`で矛盾を記録すると、その事実は示されなくなる。その後に別々のworktree2か所で記録し直されると、再び示される。内容を変えるときは、矛盾を記録してから別のidで記録する。
+- **記録する条件**：その作業の中で同じ失敗をくり返し、原因が環境・手順だと確かめ、解決後に成功したとき。1回だけの失敗や、確かめていない推測は記録しない。記録の前に`fact-list`を見て、同じ事実があれば同じidと文で記録する。
+- **対象は環境と手順の事実だけ**：`--kind`は`command`（動くコマンドの書き方）、`setup`（事前準備）、`artifact-location`（生成物の場所）、`environment-variable`（必要な環境変数の名前。値は書かない）のどれか。仕様・業務・品質基準の判断を表す種類はなく、それらはownerが決める。ただし自由文を完全には分類できないため、種類の制限と下の拒否、レビューで範囲を保ち、記録する人が責任を持つ。
+- **示す条件**：記録された事実は、次の`start`の`facts.shown`に示される（記録の時点で、その作業がくり返しと解決を確かめているため）。
+- **隠す条件**：`fact-contradict`で矛盾を記録すると、示されなくなる。もう一度記録されると、再び示される。内容を変えるときは、矛盾を記録してから別のidで記録する。同じworktreeでの再記録は、最後の矛盾の後では1回と数える。
 - **規約ではない**：事実は参考情報で、権限を与えず、AGENTS.mdやownerの指示より優先されない。頼る前に確かめ、違っていれば`fact-contradict`で記録する。`start`は記録の内容を自動で確かめ直さない（`start`は読取りのみで、コマンドを実行しない）。
-- **秘密は記録しない**：認証情報に見える値（URLの利用者情報、token・passwordの値、既知の鍵の形）を含む文は、伏せ字にせず拒否する。他projectの情報や個人情報も書かない。
-- **置き場所**：Gitの共通ディレクトリ（`git rev-parse --git-common-dir`）の`agent-skill-chain/repository-facts.json`。同じcloneのworktreeすべてで共有され、commitされず、Claude CodeとCodexが同じものを読む。cloneを作り直すと消える。Git管理外のディレクトリでは記録できず、`start`は`facts.available: false`を返す。
-- 同時に書く場合は1件ずつ処理する。5秒待っても書けなければ、lockのpathを示して止まる。lockは自動では消さない。
+- **秘密は記録しない**：認証情報に見える文は、伏せ字にせず拒否する。対象は、URLの利用者情報、tokenやpasswordなどの名前の後に`=`・`:`・引数で値が続く形、Bearer等の値、JWT・秘密鍵・既知のtokenの形。検出できるのは既知の形だけで、書く人の責任は残る。秘密に見えるだけの普通の文も拒否されることがあるので、その場合は言い換える。他projectの情報や個人情報も書かない。
+- **置き場所**：Gitの共通ディレクトリ（`git rev-parse --git-common-dir`）の`agent-skill-chain/repository-facts.json`。同じcloneのworktreeすべてで共有され、commitされず、Claude CodeとCodexが同じものを読む。cloneごとの記録で、別の端末・別の人・cloneし直した後には引き継がれない。symbolic linkは辿らずに拒否する。Git管理外のディレクトリでは記録できず、`start`は`facts.available: false`を返す。
+- **壊れた記録**：読めない・形の違う記録でも`start`は止まらず、`facts.available: false`と理由を返す。記録・矛盾の書込みは拒否する。
+- 同時に書く場合は1件ずつ処理する。5秒待っても書けなければ、lockのpathと書込み中のプロセス（pid・開始時刻・worktree）を示して止まる。lockは自動では消さない。
 
 ## マージ後の後始末
 
