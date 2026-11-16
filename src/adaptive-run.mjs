@@ -21,7 +21,7 @@ export function validateDelegation(request){
 }
 const PACKAGE_MANAGERS=new Set(['npm','pnpm','yarn']),CHECK_SCRIPT=/^(?:test|lint|check|typecheck|types|verify|quality)(?:[:._-][A-Za-z0-9:._-]+)?$/;
 // Name parts that suggest writing, publishing or installing; such scripts never enter the catalog.
-const MUTATING_PART=new Set(['fix','update','write','deploy','publish','release','upload','push','format','fmt','clean','install','snapshot','u','w']);
+const MUTATING_PART=new Set(['fix','autofix','update','write','deploy','publish','release','upload','push','format','fmt','clean','install','snapshot','watch','u','w']);
 const checkScript=name=>CHECK_SCRIPT.test(name)&&!name.toLowerCase().split(/[:._-]/).some(part=>MUTATING_PART.has(part));
 /**
  * Commands a planner may select for a Unit. Built by the Controller from the owner contract and
@@ -72,7 +72,16 @@ export function adoptProposal(request,proposal){
   // No Agent-supplied executable, authority, risk exemption, assets or Delivery setting.
   return [u.id,{contract:{...structuredClone(request.contract),intent:u.intent,criteria:u.criteria,allowedPaths:u.writePaths,testArgv,riskTestArgv}}];
  }));
- return {...structuredClone(request),goal:checked.goal,unitRequests};
+ const adopted={...structuredClone(request),goal:checked.goal,unitRequests};
+ // Record the provenance explicitly; runGoal never infers it from the request shape.
+ if(catalog)adopted.unitVerificationSource='controller-catalog';else delete adopted.unitVerificationSource;
+ return adopted;
+}
+export const adoptionNote=catalog=>catalog?'owner-delegated scope; Unit checks selected by the planner from the Controller catalog; whole-Goal verification unchanged; not model approval':'owner-delegated scope and verification policy; not model approval';
+/** Per-Unit record of the adopted Unit checks for result.json. */
+export function unitVerificationReport(adopted,proposal){
+ const catalog=adopted.unitVerificationSource==='controller-catalog',selection=proposal?.verification??{};
+ return Object.fromEntries(adopted.goal.units.map(u=>[u.id,{source:catalog?(Object.hasOwn(selection,u.id)?'proposal':'default'):'owner',testArgv:adopted.unitRequests[u.id].contract.testArgv,riskTestArgv:adopted.unitRequests[u.id].contract.riskTestArgv}]));
 }
 export async function runAdaptive(input,options={}){
  const request=structuredClone(input);validateDelegation(request);
@@ -83,11 +92,11 @@ export async function runAdaptive(input,options={}){
  try{proposal=await proposeGoal(request,{agent:options.agent,executionBudget:budget,authorityRoots:options.authorityRoots,verificationCatalog:verificationCatalogEntries});}
  catch(error){if(error.proposalDiagnostic){const p=error.proposalDiagnostic;error.goalDiagnostic={status:'blocked',root:p.root,units:[],proposal:p,error:String(error),budget:budget.snapshot(),wallSeconds:(performance.now()-started)/1000,allAgentTotalTokens:null};}throw error;}
  if(proposal.status==='needs-owner')return {...proposal,status:'owner-work-required',work:{work:'clarify',actor:'owner',questions:proposal.questions},wallSeconds:(performance.now()-started)/1000};
- let unitVerificationReport;
- const save=result=>{const output={...result,proposal,...(unitVerificationReport?{unitVerification:unitVerificationReport}:{}),wallSeconds:(performance.now()-started)/1000,budget:budget.snapshot(),adoption:verificationCatalogEntries?'owner-delegated scope; Unit checks selected by the planner from the Controller catalog; whole-Goal verification unchanged; not model approval':'owner-delegated scope and verification policy; not model approval'};fs.writeFileSync(path.join(result.root,'result.json'),JSON.stringify(output,null,2));return output;};
+ let unitVerificationRecord;
+ const save=result=>{const output={...result,proposal,...(unitVerificationRecord?{unitVerification:unitVerificationRecord}:{}),wallSeconds:(performance.now()-started)/1000,budget:budget.snapshot(),adoption:adoptionNote(!!verificationCatalogEntries)};fs.writeFileSync(path.join(result.root,'result.json'),JSON.stringify(output,null,2));return output;};
  try{
   const adopted=adoptProposal(request,proposal);
-  unitVerificationReport=Object.fromEntries(adopted.goal.units.map(u=>[u.id,{source:verificationCatalogEntries?(Object.hasOwn(proposal.verification??{},u.id)?'proposal':'default'):'owner',testArgv:adopted.unitRequests[u.id].contract.testArgv,riskTestArgv:adopted.unitRequests[u.id].contract.riskTestArgv}]));
+  unitVerificationRecord=unitVerificationReport(adopted,proposal);
   const contexts=proposal.calls.filter(call=>!(call.status==='failed'&&call.code==='ASC_PROVIDER_CAPACITY'&&call.context===null)).map(call=>call.context);demand(contexts.every(c=>typeof c==='string'&&c),'Proposal context missing');
   return save(await runGoal(adopted,{...options,executionBudget:budget,priorContexts:contexts}));
  }catch(error){error.goalDiagnostic=save(error.goalDiagnostic??{status:'blocked',root:proposal.root,units:[],error:String(error)});throw error;}

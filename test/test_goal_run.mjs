@@ -781,7 +781,7 @@ test('restart accepts more than 64 prior results without inheriting completion',
 
 test('the verification catalog lists owner commands and named package checks only',()=>{
  const contract={testArgv:['npm','test'],riskTestArgv:[['npm','run','lint'],['npm','test']]};
- const pkg=JSON.stringify({scripts:{test:'node --test','test:unit':'node --test u','lint':'eslint .',typecheck:'tsc',deploy:'rsync',release:'x','prepare':'y','lint:fix':'eslint --fix .','test:update':'x','verify:release':'x','check-publish':'x','test:e2e':'x'}});
+ const pkg=JSON.stringify({scripts:{test:'node --test','test:unit':'node --test u','lint':'eslint .',typecheck:'tsc',deploy:'rsync',release:'x','prepare':'y','lint:fix':'eslint --fix .','test:update':'x','verify:release':'x','check-publish':'x','test:e2e':'x','test:watch':'x'}});
  const catalog=verificationCatalog(contract,new Map([['package.json',{bytes:Buffer.from(pkg)}]]));
  assert.deepEqual(catalog.map(e=>e.id),['contract-test','contract-risk-1','script:test','script:test:e2e','script:test:unit','script:typecheck']);
  assert.deepEqual(catalog.find(e=>e.id==='script:typecheck').argv,['npm','run','typecheck']);
@@ -796,7 +796,7 @@ test('delegation without owner unit rules adopts only catalog checks proposed by
  const adopted=adoptProposal(request,{status:'proposed',goal,binding,verification:{a:['contract-test']}});
  assert.deepEqual(adopted.unitRequests.a.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.unitRequests.a.contract.riskTestArgv,[]);
  // A Unit without a selection falls back to the whole-Goal test; the Goal contract never changes.
- assert.deepEqual(adopted.unitRequests.b.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.contract,request.contract);
+ assert.deepEqual(adopted.unitRequests.b.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.contract,request.contract);assert.equal(adopted.unitVerificationSource,'controller-catalog');
  for(const verification of [{a:['/bin/evil']},{a:[['/bin/evil']]},{a:[]},{a:['contract-test','contract-test']},{ghost:['contract-test']},['contract-test']])
   assert.throws(()=>adoptProposal(request,{status:'proposed',goal,binding,verification}),/verification/);
  const baseline=structuredClone(request);baseline.decomposition.unitTestArgv=['/bin/sh','-c','test -s contract.txt'];
@@ -810,7 +810,8 @@ test('delegation without owner unit rules adopts only catalog checks proposed by
  const riskyAdopted=adoptProposal(risky,{status:'proposed',goal,binding:riskyBinding,verification:{a:['contract-test']}});
  assert.deepEqual(riskyAdopted.unitRequests.a.contract.riskTestArgv,[risky.contract.testArgv]);assert.deepEqual(riskyAdopted.unitRequests.b.contract.riskTestArgv,[risky.contract.testArgv]);
  const ownerRisky=structuredClone(risky);ownerRisky.decomposition={mode:'within-owner-contract',unitChecks:[{paths:risky.contract.allowedPaths,argvs:[risky.contract.testArgv]}]};
- assert.deepEqual(adoptProposal(ownerRisky,{status:'proposed',goal,binding:riskyBinding}).unitRequests.a.contract.riskTestArgv,[risky.contract.testArgv]);
+ const ownerAdopted=adoptProposal({...ownerRisky,unitVerificationSource:'controller-catalog'},{status:'proposed',goal,binding:riskyBinding});
+ assert.deepEqual(ownerAdopted.unitRequests.a.contract.riskTestArgv,[risky.contract.testArgv]);assert.equal(ownerAdopted.unitVerificationSource,undefined);
 });
 test('proposed verification uses own Unit ids only',()=>{
  const catalog=[{id:'contract-test',argv:['/bin/true']}],units=[{id:'constructor'},{id:'toString'}];
@@ -845,13 +846,23 @@ test('restart keeps the planner Unit check selection of a failed delegated run',
  assert(failure);const prior=failure.goalDiagnostic;t.after(()=>fs.rmSync(prior.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(prior.proposal.root,{recursive:true,force:true}));
  const destination=tempDir('asc-restart-verification-');t.after(()=>fs.rmSync(destination,{recursive:true,force:true}));
  const prepared=prepareGoalRestart({...request,restart:{directory:path.join(destination,'work'),resultFile:path.join(prior.root,'result.json')}});
- assert.deepEqual(prepared.proposal.verification,verification);assert.deepEqual(prepared.request.unitRequests.a.contract.testArgv,['/bin/false']);
+ assert.deepEqual(prepared.proposal.verification,verification);assert.equal(prepared.request.unitVerificationSource,'controller-catalog');assert.deepEqual(prepared.request.unitRequests.a.contract.testArgv,['/bin/false']);
  assert.deepEqual(prepared.request.unitRequests.b.contract.testArgv,request.contract.testArgv);
 });
 test('only owner Unit checks remain obligations after integration',()=>{
  const contract={testArgv:['npm','run','test:unit'],riskTestArgv:[['npm','run','lint']]};
  assert.deepEqual(unitObligations({},contract),[contract.testArgv,...contract.riskTestArgv]);
  assert.deepEqual(unitObligations({decomposition:{mode:'within-owner-contract',unitChecks:[]}},contract),[contract.testArgv,...contract.riskTestArgv]);
- assert.deepEqual(unitObligations({decomposition:{mode:'within-owner-contract'}},contract),[]);
- assert.deepEqual(unitObligations({decomposition:{mode:'within-owner-contract',unitTestArgv:['/bin/true']}},contract),[['/bin/true']]);
+ // Owner-written unitRequests next to a decomposition without rules stay obligations: no shape inference.
+ assert.deepEqual(unitObligations({decomposition:{mode:'within-owner-contract'}},contract),[contract.testArgv,...contract.riskTestArgv]);
+ assert.deepEqual(unitObligations({unitVerificationSource:'controller-catalog',decomposition:{mode:'within-owner-contract'}},contract),[]);
+ assert.deepEqual(unitObligations({unitVerificationSource:'controller-catalog',decomposition:{mode:'within-owner-contract',unitTestArgv:['/bin/true']}},contract),[['/bin/true']]);
+});
+test('a single delegated Unit with planner-selected checks keeps its own Unit run',t=>{
+ const f=singleFixture(t),r=structuredClone(f.request);
+ r.decomposition={mode:'within-owner-contract'};r.unitVerificationSource='controller-catalog';r.unitRequests.a.contract.riskTestArgv=[['/bin/sh','-c','exit 1']];
+ // The combined contract would drop the Unit-only check, so the shortcut is refused.
+ assert.equal(singleUnitContract(r,r.goal),null);
+ const parentOnly=structuredClone(r);parentOnly.unitRequests.a.contract.testArgv=parentOnly.contract.testArgv;parentOnly.unitRequests.a.contract.riskTestArgv=[];
+ const combined=singleUnitContract(parentOnly,parentOnly.goal);assert(combined);assert.deepEqual(combined.riskTestArgv,parentOnly.contract.riskTestArgv);
 });

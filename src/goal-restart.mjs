@@ -6,7 +6,7 @@ import {createExecutionBudget} from './execution-budget.mjs';
 import {authorityCommandRootsValidator} from './authority-command.mjs';
 import {Controller,digest} from './controller.mjs';import {cloneSource} from './migration.mjs';
 import {proposeGoal} from './goal-propose.mjs';
-import {compileGoal} from './goal-plan.mjs';import {adoptProposal,delegationCatalog,validateDelegation} from './adaptive-run.mjs';import {runGoal} from './goal-run.mjs';
+import {compileGoal} from './goal-plan.mjs';import {adoptProposal,adoptionNote,delegationCatalog,unitVerificationReport,validateDelegation} from './adaptive-run.mjs';import {runGoal} from './goal-run.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 function candidateReferences(previous,plan){
  const ids=new Set(plan.units.map(u=>u.id)),candidates={};
@@ -84,13 +84,15 @@ export async function restartGoal(input,options={}){
  const started=performance.now(),prepared=prepareGoalRestart(input);
  const budget=options.executionBudget??createExecutionBudget(prepared.request.budget);
  let proposal=prepared.proposal;
- const save=result=>{const output={...result,...(proposal?{proposal}:{}),wallSeconds:(performance.now()-started)/1000,budget:budget.snapshot(),restart:{sourceRepo:input.repo,source:prepared.source,candidate:prepared.request.repo,authority:prepared.authority,replanned:!!prepared.replanning}};fs.writeFileSync(path.join(result.root,'result.json'),JSON.stringify(output,null,2));return output;};
+ // A delegated restart reuses (prepared.proposal) or replans an adopted request; record its Unit checks.
+ let adoptedRequest=prepared.proposal?prepared.request:undefined;
+ const save=result=>{const output={...result,...(proposal?{proposal}:{}),...(adoptedRequest?{unitVerification:unitVerificationReport(adoptedRequest,proposal),adoption:adoptionNote(adoptedRequest.unitVerificationSource==='controller-catalog')}:{}),wallSeconds:(performance.now()-started)/1000,budget:budget.snapshot(),restart:{sourceRepo:input.repo,source:prepared.source,candidate:prepared.request.repo,authority:prepared.authority,replanned:!!prepared.replanning}};fs.writeFileSync(path.join(result.root,'result.json'),JSON.stringify(output,null,2));return output;};
  try{
   let next=prepared.request,contexts=options.priorContexts??[];
   if(prepared.replanning){
    proposal=await proposeGoal(next,{agent:options.agent,executionBudget:budget,replanning:prepared.replanning,authorityRoots:options.authorityRoots,verificationCatalog:delegationCatalog(next)});
    if(proposal.status==='needs-owner')return save({...proposal,status:'owner-work-required',units:[],work:{work:'clarify',actor:'owner',questions:proposal.questions}});
-   next=adoptProposal(next,proposal);
+   next=adoptProposal(next,proposal);adoptedRequest=next;
    next.unitCandidates=candidateReferences(prepared.previous,compileGoal(next.goal).plan);
    const plannerContexts=proposal.calls.filter(call=>!(call.status==='failed'&&call.code==='ASC_PROVIDER_CAPACITY'&&call.context===null)).map(call=>call.context);demand(plannerContexts.every(c=>typeof c==='string'&&c),'Proposal context missing');
    contexts=[...contexts,...plannerContexts];
