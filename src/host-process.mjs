@@ -24,10 +24,21 @@ function killOwned(){for(const pgid of ownedGroups){try{process.kill(-pgid,'SIGK
 function relay(signal){const alone=process.listenerCount(signal)===1;killOwned();if(alone)process.kill(process.pid,signal);}
 relay[RELAY]=true;
 // A Host listener added later may be prepended ahead of relay. Move relay back to the front before any signal is
-// dispatched: signals are delivered from the event loop, after the pending microtasks.
+// dispatched: signals are delivered from the event loop, after process.nextTick callbacks. relay is moved only when a
+// Host listener is ahead of it, at most once per signal per tick, and the events raised by the move itself are
+// ignored, so a Host that reacts to newListener or removeListener cannot start an endless loop. The new relay is
+// added before the old one is removed (removeListener drops the last instance), so the signal is never unwatched.
+// A listener the Host prepends from its own removeListener handler during the move stays ahead of relay.
+let moving=false;const pending=new Set();
 function keepFirst(name,listener){
- if(!relayed.includes(name)||listener?.[RELAY])return;
- queueMicrotask(()=>{if(!ownedGroups.size)return;process.removeListener(name,relay);process.prependListener(name,relay);});
+ if(moving||!relayed.includes(name)||listener?.[RELAY]||pending.has(name))return;
+ pending.add(name);
+ process.nextTick(()=>{
+  pending.delete(name);
+  const list=process.listeners(name),at=list.indexOf(relay);
+  if(!ownedGroups.size||at<=0||list.slice(0,at).every(l=>l[RELAY]))return;
+  moving=true;try{process.prependListener(name,relay);process.removeListener(name,relay);}finally{moving=false;}
+ });
 }
 function own(pgid){
  if(!ownedGroups.size){process.once('exit',killOwned);process.on('newListener',keepFirst);for(const name of relayed)process.prependListener(name,relay);}
