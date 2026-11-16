@@ -29,7 +29,7 @@ const refusedSecrets=[
  // case only, so ordinary words (compass=north) still pass.
  /(?<![A-Za-z0-9_])[A-Z0-9_]*(?:PASS(?:WORD|WD|PHRASE)?|PWD|SECRET|TOKEN|CREDENTIALS?|KEY)[A-Z0-9_]*=\S/,
  // The same words inside an identifier in any case (dbPassword=x, an .npmrc _authToken=x).
- /[A-Za-z0-9_]*(?:password|passwd|passphrase|secret|token|credential)[A-Za-z0-9_]*=\S/i,
+ /(?<![A-Za-z0-9_])[A-Za-z0-9_]*(?:password|passwd|passphrase|secret|token|credential)[A-Za-z0-9_]*=\S/i,
 ];
 // One check for every text this module stores or shows: fact text, contradiction notes and a lock's worktree path.
 const secretLike=value=>hideCredentials(value)!==value||refusedSecrets.some(p=>p.test(value));
