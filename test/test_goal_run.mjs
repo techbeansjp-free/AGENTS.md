@@ -4,7 +4,7 @@ import {generateKeyPairSync} from 'node:crypto';
 import {keyFingerprint} from '../src/approval.mjs';
 import {executionHost} from '../src/execution-host.mjs';
 import {prepareGoalRestart,restartGoal} from '../src/goal-restart.mjs';
-import {runAdaptive,adoptProposal} from '../src/adaptive-run.mjs';
+import {runAdaptive,adoptProposal,validateDelegation,verificationCatalog} from '../src/adaptive-run.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {runGoal,singleUnitContract} from '../src/goal-run.mjs';import {hash,digest} from '../src/controller.mjs';
 const enabled=process.platform==='linux'&&process.env.ASC_TEST_ISOLATION!=='0';
 function fixture(t){
@@ -777,4 +777,41 @@ test('restart accepts more than 64 prior results without inheriting completion',
  fs.writeFileSync(resultFile,JSON.stringify({units:Array.from({length:65},(_,i)=>({id:'old-'+i,result:{status:'draft-ci-passed'}}))}));
  const prepared=prepareGoalRestart({...f.request,restart:{directory,resultFile}});
  assert.deepEqual(prepared.request.unitCandidates,{});assert.match(prepared.authority,/new verification and review/);
+});
+
+test('the verification catalog lists owner commands and named package checks only',()=>{
+ const contract={testArgv:['npm','test'],riskTestArgv:[['npm','run','lint'],['npm','test']]};
+ const pkg=JSON.stringify({scripts:{test:'node --test','test:unit':'node --test u','lint':'eslint .',typecheck:'tsc',deploy:'rsync',release:'x','prepare':'y'}});
+ const catalog=verificationCatalog(contract,new Map([['package.json',{bytes:Buffer.from(pkg)}]]));
+ assert.deepEqual(catalog.map(e=>e.id),['contract-test','contract-risk-1','script:test','script:test:unit','script:typecheck']);
+ assert.deepEqual(catalog.find(e=>e.id==='script:typecheck').argv,['npm','run','typecheck']);
+ // A non package-manager command never exposes package scripts; malformed package.json is ignored.
+ assert.deepEqual(verificationCatalog({testArgv:['/bin/sh','-c','true'],riskTestArgv:[]},new Map([['package.json',{bytes:Buffer.from(pkg)}]])).map(e=>e.id),['contract-test']);
+ assert.deepEqual(verificationCatalog(contract,new Map([['package.json',{bytes:Buffer.from('{')}]])).map(e=>e.id),['contract-test','contract-risk-1']);
+});
+test('delegation without owner unit rules adopts only catalog checks proposed by the planner',{skip:!enabled},async t=>{
+ const f=fixture(t),goal=f.request.goal,request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+ request.decomposition={mode:'within-owner-contract'};validateDelegation(request);
+ const binding={head:request.base,contract:digest(request.contract),contractFiles:digest(request.contractFiles)};
+ const adopted=adoptProposal(request,{status:'proposed',goal,binding,verification:{a:['contract-test']}});
+ assert.deepEqual(adopted.unitRequests.a.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.unitRequests.a.contract.riskTestArgv,[]);
+ // A Unit without a selection falls back to the whole-Goal test; the Goal contract never changes.
+ assert.deepEqual(adopted.unitRequests.b.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.contract,request.contract);
+ for(const verification of [{a:['/bin/evil']},{a:[['/bin/evil']]},{a:[]},{a:['contract-test','contract-test']},{ghost:['contract-test']},['contract-test']])
+  assert.throws(()=>adoptProposal(request,{status:'proposed',goal,binding,verification}),/verification/);
+ const baseline=structuredClone(request);baseline.decomposition.unitTestArgv=['/bin/sh','-c','test -s contract.txt'];
+ const scoped=adoptProposal(baseline,{status:'proposed',goal,binding,verification:{a:['contract-test']}});
+ assert.deepEqual(scoped.unitRequests.a.contract.testArgv,baseline.decomposition.unitTestArgv);assert.deepEqual(scoped.unitRequests.a.contract.riskTestArgv,[request.contract.testArgv]);
+});
+test('delegated decomposition runs planner-selected Unit checks and the unchanged Goal suite',{skip:!enabled},async t=>{
+ const f=fixture(t),goal=f.request.goal;const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+ request.decomposition={mode:'within-owner-contract',unitTestArgv:['/bin/sh','-c','test -s contract.txt']};request.budget={maxAgentCalls:8};let n=0,catalog;
+ const agent=async({workspace,writable,prompt})=>{const context='selected-'+(++n),p=prompt.startsWith('{')?JSON.parse(prompt):{};
+  if(p.pins){catalog=p.verificationCatalog;return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:{a:['contract-test']}})};}
+  if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}
+  return {context,seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};};
+ const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
+ assert.deepEqual(catalog,[{id:'contract-test',argv:request.contract.testArgv}]);
+ assert.equal(r.status,'draft-ci-passed');assert.equal(f.deliveries(),1);
+ assert.equal(r.unitVerification.a.source,'proposal');assert.equal(r.unitVerification.b.source,'default');assert.match(r.adoption,/Controller catalog/);
 });

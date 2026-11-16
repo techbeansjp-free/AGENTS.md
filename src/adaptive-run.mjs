@@ -10,6 +10,8 @@ export function validateDelegation(request){
  demand(policy?.mode==='within-owner-contract','Explicit owner decomposition delegation required');
  demand(!request.goal&&!request.unitRequests&&!request.unitCandidates,'Delegation cannot override an existing unit plan');
  if(policy.unitTestArgv!==undefined)demand(Array.isArray(policy.unitTestArgv)&&policy.unitTestArgv.length>0&&policy.unitTestArgv.every(v=>typeof v==='string'&&v&&!v.includes('\0')),'Explicit owner unit baseline command required');
+ // Without owner rules, the planner selects Unit checks from verificationCatalog; the Goal checks stay fixed.
+ if(policy.unitChecks===undefined)return;
  demand(Array.isArray(policy.unitChecks)&&policy.unitChecks.length>0,'Owner unit verification rules required');
  for(const rule of policy.unitChecks){
   demand(Array.isArray(rule.paths)&&rule.paths.length>0&&rule.paths.every(p=>request.contract.allowedPaths.includes(p)),'Verification rule exceeds owner scope');rule.paths.forEach(safeName);
@@ -17,17 +19,40 @@ export function validateDelegation(request){
  }
  demand(request.contract.allowedPaths.every(p=>policy.unitChecks.some(r=>r.paths.includes(p))),'Owner unit verification coverage missing');
 }
+const PACKAGE_MANAGERS=new Set(['npm','pnpm','yarn']),CHECK_SCRIPT=/^(?:test|lint|check|typecheck|types|verify|quality)(?:[:._-][A-Za-z0-9:._-]+)?$/;
+/**
+ * Commands a planner may select for a Unit. Built by the Controller from the owner contract and
+ * the observed base package scripts; the planner names entries and never supplies argv.
+ */
+export function verificationCatalog(contract,blobs){
+ const entries=new Map(),add=(id,argv)=>{const key=JSON.stringify(argv);if(![...entries.values()].some(e=>JSON.stringify(e.argv)===key))entries.set(id,{id,argv:structuredClone(argv)});};
+ add('contract-test',contract.testArgv);contract.riskTestArgv.forEach((argv,i)=>add('contract-risk-'+(i+1),argv));
+ const manager=contract.testArgv[0];
+ if(PACKAGE_MANAGERS.has(path.basename(manager))&&blobs.has('package.json')){
+  let scripts;try{scripts=JSON.parse(blobs.get('package.json').bytes.toString('utf8')).scripts;}catch{scripts=undefined;}
+  if(scripts&&typeof scripts==='object'&&!Array.isArray(scripts))for(const name of Object.keys(scripts).sort())if(CHECK_SCRIPT.test(name)&&typeof scripts[name]==='string')add('script:'+name,[manager,'run',name]);
+ }
+ return [...entries.values()];
+}
+function unitVerification(request,unit,catalog,selection){
+ const policy=request.decomposition,byId=new Map(catalog?.map(e=>[e.id,e.argv])??[]);
+ const commands=catalog?(selection[unit.id]??['contract-test']).map(id=>byId.get(id)):[...new Map(policy.unitChecks.filter(r=>r.paths.some(p=>unit.writePaths.includes(p))).flatMap(r=>r.argvs).map(a=>[JSON.stringify(a),a])).values()];
+ const testArgv=structuredClone(policy.unitTestArgv??(catalog?commands[0]:request.contract.testArgv));
+ const riskTestArgv=commands.filter(a=>JSON.stringify(a)!==JSON.stringify(testArgv)).map(a=>structuredClone(a));
+ return {testArgv,riskTestArgv};
+}
 export function adoptProposal(request,proposal){
  validateDelegation(request);
  const c=new Controller({...request,implementer:'proposal-adoption'});c.assertContract();const head=c.observeSource(),blobs=c.blobs(head),pins={};
  demand(head===c.base&&proposal.binding?.head===head&&proposal.binding.contract===digest(request.contract)&&proposal.binding.contractFiles===digest(request.contractFiles??{}),'Stale proposal binding');
  for(const [name,ref] of Object.entries(request.contractFiles??{})){safeName(ref.path);demand(blobs.has(ref.path),'Missing shared contract');pins[name]=hash(blobs.get(ref.path).bytes);}
- const checked=validateProposal(proposal,request.contract,pins);demand(checked.status==='proposed','Unresolved proposal cannot execute');
+ // The catalog is rebuilt from the observed base, never taken from the proposal.
+ const catalog=request.decomposition.unitChecks===undefined?verificationCatalog(request.contract,blobs):undefined;
+ const checked=validateProposal(proposal,request.contract,pins,catalog);demand(checked.status==='proposed','Unresolved proposal cannot execute');
  const unitRequests=Object.fromEntries(checked.goal.units.map(u=>{
-  const selected=request.decomposition.unitChecks.filter(r=>r.paths.some(p=>u.writePaths.includes(p)));
-  const commands=[...new Map(selected.flatMap(r=>r.argvs).map(a=>[JSON.stringify(a),a])).values()];
+  const {testArgv,riskTestArgv}=unitVerification(request,u,catalog,checked.verification??{});
   // No Agent-supplied executable, authority, risk exemption, assets or Delivery setting.
-  return [u.id,{contract:{...structuredClone(request.contract),intent:u.intent,criteria:u.criteria,allowedPaths:u.writePaths,testArgv:structuredClone(request.decomposition.unitTestArgv??request.contract.testArgv),riskTestArgv:commands}}];
+  return [u.id,{contract:{...structuredClone(request.contract),intent:u.intent,criteria:u.criteria,allowedPaths:u.writePaths,testArgv,riskTestArgv}}];
  }));
  return {...structuredClone(request),goal:checked.goal,unitRequests};
 }
@@ -36,12 +61,15 @@ export async function runAdaptive(input,options={}){
  const c=new Controller({...request,implementer:'delegation-preflight'});c.assertContract();demand(c.observeSource()===c.base,'Delegation requires starting HEAD');
  const budget=options.executionBudget??createExecutionBudget(request.budget),started=performance.now();
  let proposal;
- try{proposal=await proposeGoal(request,{agent:options.agent,executionBudget:budget,authorityRoots:options.authorityRoots});}
+ const verificationCatalogEntries=request.decomposition.unitChecks===undefined?verificationCatalog(request.contract,c.blobs(c.base)):undefined;
+ try{proposal=await proposeGoal(request,{agent:options.agent,executionBudget:budget,authorityRoots:options.authorityRoots,verificationCatalog:verificationCatalogEntries});}
  catch(error){if(error.proposalDiagnostic){const p=error.proposalDiagnostic;error.goalDiagnostic={status:'blocked',root:p.root,units:[],proposal:p,error:String(error),budget:budget.snapshot(),wallSeconds:(performance.now()-started)/1000,allAgentTotalTokens:null};}throw error;}
  if(proposal.status==='needs-owner')return {...proposal,status:'owner-work-required',work:{work:'clarify',actor:'owner',questions:proposal.questions},wallSeconds:(performance.now()-started)/1000};
- const save=result=>{const output={...result,proposal,wallSeconds:(performance.now()-started)/1000,budget:budget.snapshot(),adoption:'owner-delegated scope and verification policy; not model approval'};fs.writeFileSync(path.join(result.root,'result.json'),JSON.stringify(output,null,2));return output;};
+ let unitVerificationReport;
+ const save=result=>{const output={...result,proposal,...(unitVerificationReport?{unitVerification:unitVerificationReport}:{}),wallSeconds:(performance.now()-started)/1000,budget:budget.snapshot(),adoption:verificationCatalogEntries?'owner-delegated scope; Unit checks selected by the planner from the Controller catalog; whole-Goal verification unchanged; not model approval':'owner-delegated scope and verification policy; not model approval'};fs.writeFileSync(path.join(result.root,'result.json'),JSON.stringify(output,null,2));return output;};
  try{
   const adopted=adoptProposal(request,proposal);
+  unitVerificationReport=Object.fromEntries(adopted.goal.units.map(u=>[u.id,{source:verificationCatalogEntries?(Object.hasOwn(proposal.verification??{},u.id)?'proposal':'default'):'owner',testArgv:adopted.unitRequests[u.id].contract.testArgv,riskTestArgv:adopted.unitRequests[u.id].contract.riskTestArgv}]));
   const contexts=proposal.calls.filter(call=>!(call.status==='failed'&&call.code==='ASC_PROVIDER_CAPACITY'&&call.context===null)).map(call=>call.context);demand(contexts.every(c=>typeof c==='string'&&c),'Proposal context missing');
   return save(await runGoal(adopted,{...options,executionBudget:budget,priorContexts:contexts}));
  }catch(error){error.goalDiagnostic=save(error.goalDiagnostic??{status:'blocked',root:proposal.root,units:[],error:String(error)});throw error;}

@@ -113,8 +113,9 @@ units without dependencies are rejected. Snapshot changes are rejected.
 The owner must adopt the proposal into the existing `run-goal` request, including
 explicit unit verification contracts. Structural validation does not establish
 semantic coverage of the original acceptance criteria; independent review must
-still assess it. Automated adoption, automatic unit test-command synthesis and
-cross-session continuation are not provided by this command. One isolated real-Agent inventory trial proposed search and reservation slices
+still assess it. Automated adoption and cross-session continuation are not
+provided by this command. Unit check selection from a Controller catalog is
+available only through `run-adaptive` (see Owner-delegated decomposition). One isolated real-Agent inventory trial proposed search and reservation slices
 in 32.79 seconds (1 call, 32,043 observed processed tokens). See
 `NODE_GOAL_PROPOSAL_EVIDENCE.json`. This tests proposal output only; semantic
 coverage beyond this fixture and general autonomous adoption remain unverified.
@@ -160,6 +161,25 @@ baseline. After integration the original whole-Goal `testArgv` and
 `riskTestArgv` run unchanged, followed by fresh whole-Goal review. No passing
 unit check replaces this integration evidence. A failed check stops execution
 rather than being relaxed.
+
+When the owner omits `decomposition.unitChecks`, the planner selects each Unit's
+checks instead of the owner writing them. The Controller builds a catalog from
+the observed base: the contract `testArgv` (`contract-test`), each contract
+`riskTestArgv` entry (`contract-risk-N`), and, when `testArgv[0]` is `npm`,
+`pnpm` or `yarn`, the base `package.json` scripts whose names are verification
+names (`test`, `lint`, `check`, `typecheck`, `types`, `verify`, `quality`, or
+those followed by `:`, `.`, `_` or `-` and a suffix) as `<manager> run <name>`.
+Identical argv appear once. The proposal returns
+`verification:{<unit id>:[catalog id,...]}`. Adoption rebuilds the catalog from
+the base instead of trusting the proposal, and rejects unknown ids, argv,
+duplicates, empty selections and unknown Units. A Unit without a selection uses
+`contract-test`. The first selected command becomes the Unit `testArgv` unless
+the owner set `unitTestArgv`; the others become Unit `riskTestArgv`. The
+whole-Goal `testArgv` and `riskTestArgv` are unchanged and still run after
+integration, so a too-narrow selection delays detection but cannot pass the Goal.
+The result records `unitVerification` per Unit with `source` `proposal`,
+`default` or `owner`. Which files a selected script exercises is not checked by
+the Controller; the Unit and whole-Goal reviewers see the selected commands.
 
 The proposal can choose units and dependencies only within the original scope.
 It cannot replace authority, assets, policy, risk requirements or Delivery.
