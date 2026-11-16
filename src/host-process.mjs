@@ -15,7 +15,10 @@ const relayed=['SIGINT','SIGTERM','SIGHUP'];
 function unlisten(){process.removeListener('exit',killOwned);for(const name of relayed)process.removeListener(name,relay);}
 // The set is empty afterwards, so the listeners go too, even when the Host keeps running after the signal.
 function killOwned(){for(const pgid of ownedGroups){try{process.kill(-pgid,'SIGKILL');}catch{ /* Already empty. */ }}ownedGroups.clear();unlisten();}
-function relay(signal){killOwned();process.kill(process.pid,signal);}
+// Re-raising restores the default end only when relay was the sole listener. With a listener of its own, the Host has
+// already received this signal and keeps running; a re-raised copy would reach it again and, when it arrives late,
+// could stop a call started after this one (#1720).
+function relay(signal){const alone=process.listenerCount(signal)===1;killOwned();if(alone)process.kill(process.pid,signal);}
 function own(pgid){
  if(!ownedGroups.size){process.once('exit',killOwned);for(const name of relayed)process.on(name,relay);}
  ownedGroups.add(pgid);

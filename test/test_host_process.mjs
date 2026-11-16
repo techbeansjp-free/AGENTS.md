@@ -17,6 +17,14 @@ test('unspecified Host time budget does not create an immediate deadline',async(
 import fs from 'node:fs';import path from 'node:path';import {tempDir} from './helpers/temp-dir.mjs';
 const alive=pid=>{try{process.kill(pid,0);return true;}catch(error){return error.code!=='ESRCH';}};
 const posix={skip:process.platform==='win32'};
+// A Host stand-in runs as its own process; its stderr is kept so that a failure says why it ended (#1720).
+const runStandIn=async(host,started)=>{
+ const {spawn}=await import('node:child_process');
+ const p=spawn(process.execPath,['--input-type=module','-e',host],{stdio:['ignore','ignore','pipe']});started?.(p);
+ let stderr='';p.stderr.setEncoding('utf8').on('data',d=>{stderr+=d;});
+ const [code,signal]=await new Promise(r=>p.on('close',(code,signal)=>r([code,signal])));
+ return {code,signal,stderr};
+};
 // The Host child starts one leftover of each kind and writes their pids before it exits.
 const leftovers=(file,{escape=false}={})=>{
  const forever=`${JSON.stringify(process.execPath)} -e 'setInterval(()=>{},1000)'`;
@@ -93,13 +101,12 @@ test('a signal that ends the Host stops its owned groups, and finished calls lea
  const file=path.join(root,'pids.json'),module=new URL('../src/host-process.mjs',import.meta.url).href;
  const host=`import {runHostProcess} from ${JSON.stringify(module)};
 runHostProcess(process.execPath,['-e',${JSON.stringify(leftovers(file)+';setInterval(()=>{},1000)')}],{env:{PATH:process.env.PATH},input:''}).catch(()=>{});`;
- const {spawn}=await import('node:child_process');
- const p=spawn(process.execPath,['--input-type=module','-e',host],{stdio:'ignore'});
+ let p;const ended=runStandIn(host,child=>{p=child;});
  for(let i=0;i<200&&!fs.existsSync(file);i++)await new Promise(r=>setTimeout(r,25));
  const pids=JSON.parse(fs.readFileSync(file,'utf8'));
  t.after(()=>{for(const pid of Object.values(pids))try{process.kill(pid,'SIGKILL');}catch{ /* Already stopped. */ }});
- const ended=new Promise(r=>p.on('exit',(code,signal)=>r(signal)));p.kill('SIGTERM');
- assert.equal(await ended,'SIGTERM','the Host still ends by the signal it received');
+ p.kill('SIGTERM');const {signal,stderr}=await ended;
+ assert.equal(signal,'SIGTERM',`the Host still ends by the signal it received: ${stderr}`);
  for(let i=0;i<40&&Object.values(pids).some(alive);i++)await new Promise(r=>setTimeout(r,25));
  for(const [kind,pid] of Object.entries(pids))assert.equal(alive(pid),false,`${kind} ${pid} must be stopped with the Host`);
 });
@@ -151,28 +158,28 @@ const real=process.kill.bind(process);let polls=0;
 process.kill=(pid,signal)=>{fs.appendFileSync(${JSON.stringify(log)},JSON.stringify([pid,signal])+'\\n');
  if(pid<0&&signal===0){if(++polls===3)real(process.pid,'SIGTERM');return true;}return real(pid,signal);};
 runHostProcess(process.execPath,['-e','0'],{env:{},input:''}).catch(()=>{});`;
- const {spawn}=await import('node:child_process');
- const p=spawn(process.execPath,['--input-type=module','-e',host],{stdio:'ignore'});
- const ended=await new Promise(r=>p.on('exit',(code,signal)=>r(signal)));
- assert.equal(ended,'SIGTERM');
+ const {signal,stderr}=await runStandIn(host);
+ assert.equal(signal,'SIGTERM',stderr);
  const kills=fs.readFileSync(log,'utf8').trim().split('\n').map(l=>JSON.parse(l));
  assert.ok(kills.some(([pid,signal])=>pid<0&&signal===0),'the wait polled the group');
  assert.equal(kills.filter(([pid,signal])=>pid<0&&signal==='SIGKILL').length,1,'the group is signalled once');
 });
-test('a Host that keeps running after a relayed signal is left with no cleanup listeners',posix,async t=>{
+test('a Host that keeps running after a relayed signal is left with no cleanup listeners and gets the signal once',posix,async t=>{
  const root=tempDir('asc-host-listeners-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const out=path.join(root,'counts.json'),module=new URL('../src/host-process.mjs',import.meta.url).href;
  // The stand-in has its own SIGTERM listener, so the relayed SIGTERM does not end it; then it runs a second call.
  const host=`import fs from 'node:fs';import {runHostProcess} from ${JSON.stringify(module)};
-process.on('SIGTERM',()=>{});
+let received=0;process.on('SIGTERM',()=>{received++;});
 const count=()=>['SIGINT','SIGTERM','SIGHUP','exit'].map(n=>process.listenerCount(n));const before=count();
 const first=runHostProcess(process.execPath,['-e','setInterval(()=>{},1000)'],{env:{},input:''}).catch(()=>{});
 setTimeout(()=>process.kill(process.pid,'SIGTERM'),300);await first;const afterSignal=count();
+// A copy re-raised by the relay would arrive here, or during the next call and stop its group (#1720).
 await runHostProcess(process.execPath,['-e','0'],{env:{},input:''});
-fs.writeFileSync(${JSON.stringify(out)},JSON.stringify({before,afterSignal,afterNext:count()}));`;
- const {spawn}=await import('node:child_process');
- const p=spawn(process.execPath,['--input-type=module','-e',host],{stdio:'ignore'});
- assert.equal(await new Promise(r=>p.on('exit',code=>r(code))),0);
- const {before,afterSignal,afterNext}=JSON.parse(fs.readFileSync(out,'utf8'));
+await new Promise(r=>setTimeout(r,200));
+fs.writeFileSync(${JSON.stringify(out)},JSON.stringify({before,afterSignal,afterNext:count(),received}));`;
+ const {code,stderr}=await runStandIn(host);
+ assert.equal(code,0,stderr);
+ const {before,afterSignal,afterNext,received}=JSON.parse(fs.readFileSync(out,'utf8'));
  assert.deepEqual(afterSignal,before);assert.deepEqual(afterNext,before);
+ assert.equal(received,1,'the own listener of the Host gets the signal once; the relay does not raise it again');
 });

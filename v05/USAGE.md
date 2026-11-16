@@ -528,7 +528,7 @@ Agentの起動前の隔離診断は、logsに加えて、Controllerの一時デ�
 sandbox内で切り離して起動されたプロセスの扱い（#1703）：
 - 同梱Codex Hostは、`codex sandbox`（Agentの診断と検証）と`codex exec`（Agent）を、Windows以外では新しいprocess groupの先頭として起動する。直接の子の終了・失敗・期限切れ・出力上限のどの場合も、そのgroupにSIGKILLを1回だけ送り、groupが空になったことを確かめてから結果を返す。送った後はsignal 0で確かめるだけで、同じgroupへsignalを送り直さない（groupの番号が再利用されても、無関係のプロセスに届かない）。終了中でまだ刈り取られていないmemberがいると、macOSはSIGKILLの送信にEPERMを返すことがある。この場合も失敗にせず、groupが空になるのを待つ。期限切れと出力上限の場合は、直接の子が終わる前にgroupごと止める。この後始末には、groupが空になるまで最大2秒と、出力を読み終えるまで最大1秒かかり得るため、設定したdeadlineは後始末込みの厳密な上限ではない。
   - 空になったと確かめられない場合は、`ASC_HOST_CLEANUP_UNCONFIRMED`で失敗にする（元の失敗は`cause`に残す。元の失敗がなければ、SIGKILLの送信で起きたerrorを`cause`に入れる。送信のerrorは`signalError`にも残す）。同梱Hostはこの場合に異常終了するので、Controllerからは通常のHost実行の失敗に見え、provider容量の失敗には分類されない。
-  - HostがSIGINT・SIGTERM・SIGHUPを受けた場合も、まだSIGKILLを送っていないgroupを先に止める。
+  - HostがSIGINT・SIGTERM・SIGHUPを受けた場合も、まだSIGKILLを送っていないgroupを先に止める。その後、同じsignalを自分へ送り直し、既定の動作で終わる。ただし、Hostが同じsignalに自分のlistenerを持つ場合は送り直さない。Hostは既にそのsignalを受け取っており、送り直すと同じsignalが2回届く。また、遅れて届いた分が、その後に始めた別の呼出しのgroupを止めてしまう（#1720）。
 - 実測（Codex 0.169.0、モデル呼出しなし、`codex sandbox`の中で起動したものが3秒後に作業領域へ書く）
   - macOS：変更前は3種類とも生き残って書き込んだ。変更後は、shellのbackground job（`cmd &`）と`nohup`は止まり、書き込まなかった。`setsid`でgroupを出たもの（Nodeの`detached:true`など）は生き残り、書き込んだ。
   - Linux（Debianのcontainer）：変更前から3種類とも、sandboxの終了とともに止まった。
