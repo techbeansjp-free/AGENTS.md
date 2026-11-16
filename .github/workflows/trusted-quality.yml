@@ -8,9 +8,10 @@ on:
 permissions:
   contents: read
 
-# 同じPRの古いcommitに対する実行だけを止める。最新のhead commitでは全jobが動く（#1714）。
+# 同じPRへの新しいpushで、古いcommitの実行を止める（#1714）。
+# 手動の再実行（run_attempt > 1）は固有のgroupに入れ、最新commitの実行を取り消さない。
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 jobs:
