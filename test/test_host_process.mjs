@@ -126,3 +126,32 @@ test('a Host executable that cannot start fails at once',async()=>{
  await assert.rejects(runHostProcess('/nonexistent/asc-host-binary',[],{env:{},input:''}),/could not start/);
  assert.ok(Date.now()-started<1500,'no drain wait after a failed start');
 });
+const errno=code=>Object.assign(Error(code),{code});
+test('EPERM from the group SIGKILL while a member is exiting waits for the group instead of failing',posix,async()=>{
+ // macOS reports EPERM while a killed member is not yet reaped; the bounded wait, not the send, decides.
+ const sent=[];let polls=0;
+ const kill=(pid,signal)=>{sent.push(signal);if(pid>0)return process.kill(pid,signal);if(signal==='SIGKILL')throw errno('EPERM');if(++polls<3)throw errno('EPERM');throw errno('ESRCH');};
+ const result=await runHostProcess(process.execPath,['-e',"process.stdout.write('ok')"],{env:{},input:''},{kill});
+ assert.equal(result.stdout,'ok');assert.deepEqual(sent.filter(s=>s==='SIGKILL'),['SIGKILL']);
+ // Another send error still fails as unconfirmed, and the child's own error stays the cause.
+ const broken=(pid,signal)=>{if(pid<0&&signal==='SIGKILL')throw errno('EINVAL');return process.kill(pid,signal);};
+ await assert.rejects(runHostProcess(process.execPath,['-e','process.exit(3)'],{env:{},input:''},{kill:broken}),
+  e=>e.code==='ASC_HOST_CLEANUP_UNCONFIRMED'&&e.cause?.code==='ASC_PROVIDER_EXIT');
+});
+test('a signal that arrives during the cleanup wait sends no second SIGKILL to the group',posix,async t=>{
+ const root=tempDir('asc-host-resend-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const log=path.join(root,'kills.log'),module=new URL('../src/host-process.mjs',import.meta.url).href;
+ // A Host stand-in records every kill; while it waits for the group to empty, it receives SIGTERM.
+ const host=`import fs from 'node:fs';import {runHostProcess} from ${JSON.stringify(module)};
+const real=process.kill.bind(process);let polls=0;
+process.kill=(pid,signal)=>{fs.appendFileSync(${JSON.stringify(log)},JSON.stringify([pid,signal])+'\\n');
+ if(pid<0&&signal===0){if(++polls===3)real(process.pid,'SIGTERM');return true;}return real(pid,signal);};
+runHostProcess(process.execPath,['-e','0'],{env:{},input:''}).catch(()=>{});`;
+ const {spawn}=await import('node:child_process');
+ const p=spawn(process.execPath,['--input-type=module','-e',host],{stdio:'ignore'});
+ const ended=await new Promise(r=>p.on('exit',(code,signal)=>r(signal)));
+ assert.equal(ended,'SIGTERM');
+ const kills=fs.readFileSync(log,'utf8').trim().split('\n').map(l=>JSON.parse(l));
+ assert.ok(kills.some(([pid,signal])=>pid<0&&signal===0),'the wait polled the group');
+ assert.equal(kills.filter(([pid,signal])=>pid<0&&signal==='SIGKILL').length,1,'the group is signalled once');
+});
