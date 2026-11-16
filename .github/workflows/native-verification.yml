@@ -3,6 +3,11 @@ on:
   pull_request:
 permissions:
   contents: read
+# 同じPRへの新しいpushで、古いcommitの実行を止める（#1714）。
+# 手動の再実行（run_attempt > 1）と PR 番号のない event は固有の group に入れ、最新 commit の実行を取り消さない。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.run_id) || '' }}
+  cancel-in-progress: true
 jobs:
   mac-native-verification:
     name: Mac native sandbox and dependencies
