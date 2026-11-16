@@ -12,16 +12,25 @@ const GROUP_GONE_MILLISECONDS=2000,GROUP_POLL_MILLISECONDS=20,OUTPUT_DRAIN_MILLI
 // again, so a group number reused after that is never reached (#1703).
 const ownedGroups=new Set();
 const relayed=['SIGINT','SIGTERM','SIGHUP'];
-function unlisten(){process.removeListener('exit',killOwned);for(const name of relayed)process.removeListener(name,relay);}
+// Marks the relay of every loaded copy of this module, so that copies do not move each other's relay.
+const RELAY=Symbol.for('asc.host-process.relay');
+function unlisten(){process.removeListener('exit',killOwned);process.removeListener('newListener',keepFirst);for(const name of relayed)process.removeListener(name,relay);}
 // The set is empty afterwards, so the listeners go too, even when the Host keeps running after the signal.
 function killOwned(){for(const pgid of ownedGroups){try{process.kill(-pgid,'SIGKILL');}catch{ /* Already empty. */ }}ownedGroups.clear();unlisten();}
 // Re-raising restores the default end only when relay is the sole listener, as Node does without this transport. With
 // a listener of its own, the Host receives this signal and decides; a re-raised copy would reach it again and, arriving
-// late, could stop a call started after this one (#1720). relay is prepended so that it runs before the Host's
-// listeners: a once listener is removed only when it runs, so it is still counted here.
+// late, could stop a call started after this one (#1720). relay runs before the Host's listeners, so a once or
+// self-removing listener is still counted here. With several loaded copies, only the last relay to run re-raises.
 function relay(signal){const alone=process.listenerCount(signal)===1;killOwned();if(alone)process.kill(process.pid,signal);}
+relay[RELAY]=true;
+// A Host listener added later may be prepended ahead of relay. Move relay back to the front before any signal is
+// dispatched: signals are delivered from the event loop, after the pending microtasks.
+function keepFirst(name,listener){
+ if(!relayed.includes(name)||listener?.[RELAY])return;
+ queueMicrotask(()=>{if(!ownedGroups.size)return;process.removeListener(name,relay);process.prependListener(name,relay);});
+}
 function own(pgid){
- if(!ownedGroups.size){process.once('exit',killOwned);for(const name of relayed)process.prependListener(name,relay);}
+ if(!ownedGroups.size){process.once('exit',killOwned);process.on('newListener',keepFirst);for(const name of relayed)process.prependListener(name,relay);}
  ownedGroups.add(pgid);
 }
 function disown(pgid){

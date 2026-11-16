@@ -22,8 +22,10 @@ const runStandIn=async(host,started)=>{
  const {spawn}=await import('node:child_process');
  const p=spawn(process.execPath,['--input-type=module','-e',host],{stdio:['ignore','ignore','pipe']});started?.(p);
  let stderr='';p.stderr.setEncoding('utf8').on('data',d=>{stderr+=d;});
- const [code,signal]=await new Promise(r=>p.on('close',(code,signal)=>r([code,signal])));
- return {code,signal,stderr,why:`code=${code} signal=${signal} stderr=${stderr}`};
+ // A stand-in that does not end within the limit is stopped, so a regression fails with its stderr, not a CI timeout.
+ let timedOut=false;const limit=setTimeout(()=>{timedOut=true;p.kill('SIGKILL');},30000);
+ const [code,signal]=await new Promise(r=>p.on('close',(code,signal)=>r([code,signal])));clearTimeout(limit);
+ return {code,signal,stderr,why:`code=${code} signal=${signal}${timedOut?' (stopped after 30 s)':''} stderr=${stderr}`};
 };
 // The Host child starts one leftover of each kind and writes their pids before it exits.
 const leftovers=(file,{escape=false}={})=>{
@@ -183,18 +185,34 @@ fs.writeFileSync(${JSON.stringify(out)},JSON.stringify({before,afterSignal,after
  assert.deepEqual(afterSignal,before);assert.deepEqual(afterNext,before);
  assert.equal(received,1,'the own listener of the Host gets the signal once; the relay does not raise it again');
 });
-test('a once listener registered before a call decides the end, for each relayed signal',posix,async t=>{
+test('a Host listener decides the end however it is registered, and without one the signal ends the Host',posix,async t=>{
  const root=tempDir('asc-host-once-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const module=new URL('../src/host-process.mjs',import.meta.url).href;
- // The once listener is registered before the call adds the relay; it finishes its own cleanup, then exits with 23.
+ // Each listener finishes its own cleanup 150 ms after the signal, then exits with 23. A once listener is removed when
+ // it runs, and the last one removes itself; the relay must still see that the Host handles the signal.
+ const forms={
+  'once before the call':(sig,done)=>({before:`process.once(${sig},${done});`,after:''}),
+  'prependOnce after the call':(sig,done)=>({before:'',after:`process.prependOnceListener(${sig},${done});`}),
+  'prepended, removes itself':(sig,done)=>({before:'',after:`const own=()=>{process.removeListener(${sig},own);(${done})();};process.prependListener(${sig},own);`}),
+ };
  for(const name of ['SIGINT','SIGTERM','SIGHUP']){
-  const out=path.join(root,`${name}.txt`);
-  const host=`import fs from 'node:fs';import {runHostProcess} from ${JSON.stringify(module)};
-process.once(${JSON.stringify(name)},()=>setTimeout(()=>{fs.writeFileSync(${JSON.stringify(out)},'cleaned');process.exit(23);},150));
+  const sig=JSON.stringify(name);
+  for(const [form,place] of Object.entries(forms)){
+   const out=path.join(root,`${name}-${Object.keys(forms).indexOf(form)}.txt`);
+   const done=`()=>setTimeout(()=>{require('node:fs').writeFileSync(${JSON.stringify(out)},'cleaned');process.exit(23);},150)`;
+   const {before,after}=place(sig,done);
+   const host=`import {createRequire} from 'node:module';const require=createRequire(import.meta.url);import {runHostProcess} from ${JSON.stringify(module)};
+${before}runHostProcess(process.execPath,['-e','setInterval(()=>{},1000)'],{env:{},input:''}).catch(()=>{});${after}
+setTimeout(()=>process.kill(process.pid,${sig}),300);setInterval(()=>{},1000);`;
+   const {code,why}=await runStandIn(host);
+   assert.equal(code,23,`${name} ${form}: ${why}`);
+   assert.equal(fs.readFileSync(out,'utf8'),'cleaned',`${name} ${form}`);
+  }
+  // Without a listener of its own, the Host still ends by the signal it received.
+  const host=`import {runHostProcess} from ${JSON.stringify(module)};
 runHostProcess(process.execPath,['-e','setInterval(()=>{},1000)'],{env:{},input:''}).catch(()=>{});
-setTimeout(()=>process.kill(process.pid,${JSON.stringify(name)}),300);setInterval(()=>{},1000);`;
-  const {code,why}=await runStandIn(host);
-  assert.equal(code,23,`${name}: ${why}`);
-  assert.equal(fs.readFileSync(out,'utf8'),'cleaned',name);
+setTimeout(()=>process.kill(process.pid,${sig}),300);setInterval(()=>{},1000);`;
+  const {signal,why}=await runStandIn(host);
+  assert.equal(signal,name,`${name} without a listener: ${why}`);
  }
 });
