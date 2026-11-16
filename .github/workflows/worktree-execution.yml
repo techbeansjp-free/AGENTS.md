@@ -3,6 +3,10 @@ on:
   pull_request:
 permissions:
   contents: read
+# 同じPRの古いcommitに対する実行だけを止める。最新のhead commitでは全jobが動く（#1714）。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
   worktree:
     strategy:
