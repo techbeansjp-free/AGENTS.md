@@ -174,7 +174,8 @@ publishing (for example `fix`, `update`, `format`, `deploy`, `publish`,
 `release`, `install`, `watch`) is excluded. Identical argv appear once. The catalog fixes
 script names only; the script body comes from the candidate, and the package
 manager also runs its `pre<name>`/`post<name>` scripts, all inside the normal
-isolated verification.
+isolated verification. The excluded name parts are a heuristic, not a security
+boundary; the boundary is that isolation, as for the owner's own test command.
 
 The proposal returns `verification:{<unit id>:[catalog id,...]}`. Adoption
 rebuilds the catalog from the base instead of trusting the proposal, and rejects
@@ -191,14 +192,17 @@ whole-Goal `testArgv` and `riskTestArgv` run unchanged, plus the owner
 `unitTestArgv` when given; catalog selections are not added, so the final
 verification commands do not depend on the model (the final criteria and
 design still include Unit intents, as for any decomposition). A single-Unit Goal whose
-Unit has such checks does not use the combined single-Unit contract; it keeps
-the separate Unit run and integration, so the selected checks still run once.
+Unit has a selected check that the Goal checks (and owner `unitTestArgv`) do
+not already include does not use the combined single-Unit contract; it keeps
+the separate Unit run and integration, so that check still runs once.
 A too-narrow selection
 delays detection but cannot pass the Goal. The result records
 `unitVerification` per Unit with `source` `proposal`, `default` or `owner`.
 Adoption marks the request `unitVerificationSource: "controller-catalog"`;
 `runGoal` decides Unit-only checks from this mark, never from the request
-shape, so owner-written `unitRequests` keep their obligations.
+shape, so owner-written `unitRequests` keep their obligations. Only the Controller
+sets this field; do not write it by hand in a request or an edited
+`.restart-request.json`.
 `restart-goal` keeps the selection when reusing a proposal, passes the catalog
 to replanning, and records `unitVerification` and `adoption` in its result. Which files a selected script exercises is not checked
 by the Controller. The Unit review receives `unitAssignment.unitChecks`
