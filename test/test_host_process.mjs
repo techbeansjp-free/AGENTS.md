@@ -136,7 +136,11 @@ test('EPERM from the group SIGKILL while a member is exiting waits for the group
  // Another send error still fails as unconfirmed, and the child's own error stays the cause.
  const broken=(pid,signal)=>{if(pid<0&&signal==='SIGKILL')throw errno('EINVAL');return process.kill(pid,signal);};
  await assert.rejects(runHostProcess(process.execPath,['-e','process.exit(3)'],{env:{},input:''},{kill:broken}),
-  e=>e.code==='ASC_HOST_CLEANUP_UNCONFIRMED'&&e.cause?.code==='ASC_PROVIDER_EXIT');
+  e=>e.code==='ASC_HOST_CLEANUP_UNCONFIRMED'&&e.cause?.code==='ASC_PROVIDER_EXIT'&&e.signalError?.code==='EINVAL');
+ // EPERM that never clears is kept too, so an unconfirmed cleanup says how the send went.
+ const stuck=(pid,signal)=>{if(pid>0)return process.kill(pid,signal);throw errno('EPERM');};
+ await assert.rejects(runHostProcess(process.execPath,['-e','0'],{env:{},input:''},{kill:stuck}),
+  e=>e.code==='ASC_HOST_CLEANUP_UNCONFIRMED'&&e.cause?.code==='EPERM'&&e.signalError?.code==='EPERM');
 });
 test('a signal that arrives during the cleanup wait sends no second SIGKILL to the group',posix,async t=>{
  const root=tempDir('asc-host-resend-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -154,4 +158,21 @@ runHostProcess(process.execPath,['-e','0'],{env:{},input:''}).catch(()=>{});`;
  const kills=fs.readFileSync(log,'utf8').trim().split('\n').map(l=>JSON.parse(l));
  assert.ok(kills.some(([pid,signal])=>pid<0&&signal===0),'the wait polled the group');
  assert.equal(kills.filter(([pid,signal])=>pid<0&&signal==='SIGKILL').length,1,'the group is signalled once');
+});
+test('a Host that keeps running after a relayed signal is left with no cleanup listeners',posix,async t=>{
+ const root=tempDir('asc-host-listeners-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const out=path.join(root,'counts.json'),module=new URL('../src/host-process.mjs',import.meta.url).href;
+ // The stand-in has its own SIGTERM listener, so the relayed SIGTERM does not end it; then it runs a second call.
+ const host=`import fs from 'node:fs';import {runHostProcess} from ${JSON.stringify(module)};
+process.on('SIGTERM',()=>{});
+const count=()=>['SIGINT','SIGTERM','SIGHUP','exit'].map(n=>process.listenerCount(n));const before=count();
+const first=runHostProcess(process.execPath,['-e','setInterval(()=>{},1000)'],{env:{},input:''}).catch(()=>{});
+setTimeout(()=>process.kill(process.pid,'SIGTERM'),300);await first;const afterSignal=count();
+await runHostProcess(process.execPath,['-e','0'],{env:{},input:''});
+fs.writeFileSync(${JSON.stringify(out)},JSON.stringify({before,afterSignal,afterNext:count()}));`;
+ const {spawn}=await import('node:child_process');
+ const p=spawn(process.execPath,['--input-type=module','-e',host],{stdio:'ignore'});
+ assert.equal(await new Promise(r=>p.on('exit',code=>r(code))),0);
+ const {before,afterSignal,afterNext}=JSON.parse(fs.readFileSync(out,'utf8'));
+ assert.deepEqual(afterSignal,before);assert.deepEqual(afterNext,before);
 });
