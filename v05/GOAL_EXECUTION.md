@@ -113,8 +113,9 @@ units without dependencies are rejected. Snapshot changes are rejected.
 The owner must adopt the proposal into the existing `run-goal` request, including
 explicit unit verification contracts. Structural validation does not establish
 semantic coverage of the original acceptance criteria; independent review must
-still assess it. Automated adoption, automatic unit test-command synthesis and
-cross-session continuation are not provided by this command. One isolated real-Agent inventory trial proposed search and reservation slices
+still assess it. Automated adoption and cross-session continuation are not
+provided by this command. Unit check selection from a Controller catalog is
+available only through `run-adaptive` (see Owner-delegated decomposition). One isolated real-Agent inventory trial proposed search and reservation slices
 in 32.79 seconds (1 call, 32,043 observed processed tokens). See
 `NODE_GOAL_PROPOSAL_EVIDENCE.json`. This tests proposal output only; semantic
 coverage beyond this fixture and general autonomous adoption remain unverified.
@@ -160,6 +161,53 @@ baseline. After integration the original whole-Goal `testArgv` and
 `riskTestArgv` run unchanged, followed by fresh whole-Goal review. No passing
 unit check replaces this integration evidence. A failed check stops execution
 rather than being relaxed.
+
+When the owner omits `decomposition.unitChecks`, the planner selects each Unit's
+checks instead of the owner writing them. The Controller builds a catalog from
+the observed base: the contract `testArgv` (`contract-test`), each contract
+`riskTestArgv` entry (`contract-risk-N`), and, when the basename of `testArgv[0]`
+is `npm`, `pnpm` or `yarn`, the base `package.json` scripts whose names are
+verification names (`test`, `lint`, `check`, `typecheck`, `types`, `verify`,
+`quality`, or those followed by `:`, `.`, `_` or `-` and a suffix) as
+`<testArgv[0]> run <name>`. A name with a part that suggests writing or
+publishing (for example `fix`, `update`, `format`, `deploy`, `publish`,
+`release`, `install`, `watch`) is excluded. Identical argv appear once. The catalog fixes
+script names only; the script body comes from the candidate, and the package
+manager also runs its `pre<name>`/`post<name>` scripts, all inside the normal
+isolated verification. The excluded name parts are a heuristic, not a security
+boundary; the boundary is that isolation, as for the owner's own test command.
+
+The proposal returns `verification:{<unit id>:[catalog id,...]}`. Adoption
+rebuilds the catalog from the base instead of trusting the proposal, and rejects
+unknown ids, argv, duplicates, empty selections and unknown Units. Without an
+owner `unitTestArgv`, the first selected check becomes the Unit `testArgv` and
+the others its `riskTestArgv`; a Unit without a selection uses `contract-test`.
+With an owner `unitTestArgv`, that command is the Unit `testArgv`, the selected
+checks become its `riskTestArgv`, and a Unit without a selection adds none. If
+the contract declares risks and no distinct check remains, the Unit `testArgv`
+is repeated as its risk check.
+
+Planner-selected checks are Unit-only. After integration the owner's
+whole-Goal `testArgv` and `riskTestArgv` run unchanged, plus the owner
+`unitTestArgv` when given; catalog selections are not added, so the final
+verification commands do not depend on the model (the final criteria and
+design still include Unit intents, as for any decomposition). A single-Unit Goal whose
+Unit has a selected check that the Goal checks (and owner `unitTestArgv`) do
+not already include does not use the combined single-Unit contract; it keeps
+the separate Unit run and integration, so that check still runs once.
+A too-narrow selection
+delays detection but cannot pass the Goal. The result records
+`unitVerification` per Unit with `source` `proposal`, `default` or `owner`.
+Adoption marks the request `unitVerificationSource: "controller-catalog"`;
+`runGoal` decides Unit-only checks from this mark, never from the request
+shape, so owner-written `unitRequests` keep their obligations. Only the Controller
+sets this field; do not write it by hand in a request or an edited
+`.restart-request.json`.
+`restart-goal` keeps the selection when reusing a proposal, passes the catalog
+to replanning, and records `unitVerification` and `adoption` in its result. Which files a selected script exercises is not checked
+by the Controller. The Unit review receives `unitAssignment.unitChecks`
+stating that the checks are planner-selected, and must report a blocking
+finding when they are too narrow for the Unit.
 
 The proposal can choose units and dependencies only within the original scope.
 It cannot replace authority, assets, policy, risk requirements or Delivery.
@@ -259,7 +307,8 @@ trial does not prove automatic integration or parallel live-model acceptance.
 
 
 Final integration retains the parent's verification commands and adds distinct
-Unit test and risk-test commands. They run against the integrated candidate and
+Unit test and risk-test commands (for a delegation without owner `unitChecks`,
+only the owner `unitTestArgv`; see Owner-delegated decomposition). They run against the integrated candidate and
 again after any final repair, before whole-Goal review and Delivery. Earlier Unit
 success does not authorize changed integrated bytes. Identical additional argv
 are deduplicated; the parent's explicit checks are preserved. This adds no Agent,

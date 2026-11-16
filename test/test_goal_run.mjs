@@ -4,8 +4,8 @@ import {generateKeyPairSync} from 'node:crypto';
 import {keyFingerprint} from '../src/approval.mjs';
 import {executionHost} from '../src/execution-host.mjs';
 import {prepareGoalRestart,restartGoal} from '../src/goal-restart.mjs';
-import {runAdaptive,adoptProposal} from '../src/adaptive-run.mjs';
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {runGoal,singleUnitContract} from '../src/goal-run.mjs';import {hash,digest} from '../src/controller.mjs';
+import {runAdaptive,adoptProposal,validateDelegation,verificationCatalog} from '../src/adaptive-run.mjs';import {validateVerification} from '../src/goal-propose.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {runGoal,singleUnitContract,unitObligations} from '../src/goal-run.mjs';import {hash,digest} from '../src/controller.mjs';
 const enabled=process.platform==='linux'&&process.env.ASC_TEST_ISOLATION!=='0';
 function fixture(t){
  const root=tempDir('asc-goal-test-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -777,4 +777,92 @@ test('restart accepts more than 64 prior results without inheriting completion',
  fs.writeFileSync(resultFile,JSON.stringify({units:Array.from({length:65},(_,i)=>({id:'old-'+i,result:{status:'draft-ci-passed'}}))}));
  const prepared=prepareGoalRestart({...f.request,restart:{directory,resultFile}});
  assert.deepEqual(prepared.request.unitCandidates,{});assert.match(prepared.authority,/new verification and review/);
+});
+
+test('the verification catalog lists owner commands and named package checks only',()=>{
+ const contract={testArgv:['npm','test'],riskTestArgv:[['npm','run','lint'],['npm','test']]};
+ const pkg=JSON.stringify({scripts:{test:'node --test','test:unit':'node --test u','lint':'eslint .',typecheck:'tsc',deploy:'rsync',release:'x','prepare':'y','lint:fix':'eslint --fix .','test:update':'x','verify:release':'x','check-publish':'x','test:e2e':'x','test:watch':'x'}});
+ const catalog=verificationCatalog(contract,new Map([['package.json',{bytes:Buffer.from(pkg)}]]));
+ assert.deepEqual(catalog.map(e=>e.id),['contract-test','contract-risk-1','script:test','script:test:e2e','script:test:unit','script:typecheck']);
+ assert.deepEqual(catalog.find(e=>e.id==='script:typecheck').argv,['npm','run','typecheck']);
+ // A non package-manager command never exposes package scripts; malformed package.json is ignored.
+ assert.deepEqual(verificationCatalog({testArgv:['/bin/sh','-c','true'],riskTestArgv:[]},new Map([['package.json',{bytes:Buffer.from(pkg)}]])).map(e=>e.id),['contract-test']);
+ assert.deepEqual(verificationCatalog(contract,new Map([['package.json',{bytes:Buffer.from('{')}]])).map(e=>e.id),['contract-test','contract-risk-1']);
+});
+test('delegation without owner unit rules adopts only catalog checks proposed by the planner',async t=>{
+ const f=fixture(t),goal=f.request.goal,request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+ request.decomposition={mode:'within-owner-contract'};validateDelegation(request);
+ const binding={head:request.base,contract:digest(request.contract),contractFiles:digest(request.contractFiles)};
+ const adopted=adoptProposal(request,{status:'proposed',goal,binding,verification:{a:['contract-test']}});
+ assert.deepEqual(adopted.unitRequests.a.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.unitRequests.a.contract.riskTestArgv,[]);
+ // A Unit without a selection falls back to the whole-Goal test; the Goal contract never changes.
+ assert.deepEqual(adopted.unitRequests.b.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.contract,request.contract);assert.equal(adopted.unitVerificationSource,'controller-catalog');
+ for(const verification of [{a:['/bin/evil']},{a:[['/bin/evil']]},{a:[]},{a:['contract-test','contract-test']},{ghost:['contract-test']},['contract-test']])
+  assert.throws(()=>adoptProposal(request,{status:'proposed',goal,binding,verification}),/verification/);
+ const baseline=structuredClone(request);baseline.decomposition.unitTestArgv=['/bin/sh','-c','test -s contract.txt'];
+ const scoped=adoptProposal(baseline,{status:'proposed',goal,binding,verification:{a:['contract-test']}});
+ assert.deepEqual(scoped.unitRequests.a.contract.testArgv,baseline.decomposition.unitTestArgv);assert.deepEqual(scoped.unitRequests.a.contract.riskTestArgv,[request.contract.testArgv]);
+ // With an owner baseline, an unselected Unit does not get the whole-Goal test back.
+ assert.deepEqual(scoped.unitRequests.b.contract.testArgv,baseline.decomposition.unitTestArgv);assert.deepEqual(scoped.unitRequests.b.contract.riskTestArgv,[]);
+ // Declared risks keep a risk check even when the selection equals the baseline.
+ const risky=structuredClone(request);risky.contract.risks=['authorization'];risky.contract.riskTestArgv=[risky.contract.testArgv];risky.contract.design='Authorization is checked by the existing contract test.';
+ const riskyBinding={...binding,contract:digest(risky.contract)};
+ const riskyAdopted=adoptProposal(risky,{status:'proposed',goal,binding:riskyBinding,verification:{a:['contract-test']}});
+ assert.deepEqual(riskyAdopted.unitRequests.a.contract.riskTestArgv,[risky.contract.testArgv]);assert.deepEqual(riskyAdopted.unitRequests.b.contract.riskTestArgv,[risky.contract.testArgv]);
+ const ownerRisky=structuredClone(risky);ownerRisky.decomposition={mode:'within-owner-contract',unitChecks:[{paths:risky.contract.allowedPaths,argvs:[risky.contract.testArgv]}]};
+ const ownerAdopted=adoptProposal({...ownerRisky,unitVerificationSource:'controller-catalog'},{status:'proposed',goal,binding:riskyBinding});
+ assert.deepEqual(ownerAdopted.unitRequests.a.contract.riskTestArgv,[risky.contract.testArgv]);assert.equal(ownerAdopted.unitVerificationSource,undefined);
+});
+test('proposed verification uses own Unit ids only',()=>{
+ const catalog=[{id:'contract-test',argv:['/bin/true']}],units=[{id:'constructor'},{id:'toString'}];
+ assert.deepEqual({...validateVerification({},units,catalog)},{});assert.deepEqual({...validateVerification(undefined,units,catalog)},{});
+ assert.deepEqual({...validateVerification({constructor:['contract-test']},units,catalog)},{constructor:['contract-test']});
+ assert.throws(()=>validateVerification(JSON.parse('{"__proto__":["contract-test"]}'),units,catalog),/unknown unit/);
+});
+test('delegated decomposition runs planner-selected Unit checks and the unchanged Goal suite',{skip:!enabled},async t=>{
+ const f=fixture(t),goal=f.request.goal;const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+ // The whole-Goal test needs every Unit; the planner picks the narrower owner risk check for each Unit.
+ const unitCheck=['/bin/sh','-c','test -s contract.txt'];request.contract.riskTestArgv=[unitCheck];
+ request.decomposition={mode:'within-owner-contract'};request.budget={maxAgentCalls:8};let n=0,catalog;
+ const agent=async({workspace,writable,prompt})=>{const context='selected-'+(++n),p=prompt.startsWith('{')?JSON.parse(prompt):{};
+  if(p.pins){catalog=p.verificationCatalog;return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:Object.fromEntries(goal.units.map(u=>[u.id,['contract-risk-1']]))})};}
+  if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}
+  return {context,seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};};
+ const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
+ assert.deepEqual(catalog,[{id:'contract-test',argv:request.contract.testArgv},{id:'contract-risk-1',argv:unitCheck}]);
+ assert.equal(r.status,'draft-ci-passed');assert.equal(f.deliveries(),1);
+ for(const u of goal.units){assert.equal(r.unitVerification[u.id].source,'proposal');assert.deepEqual(r.unitVerification[u.id].testArgv,unitCheck);}
+ assert.match(r.adoption,/Controller catalog/);
+});
+test('restart keeps the planner Unit check selection of a failed delegated run',{skip:!enabled},async t=>{
+ const f=fixture(t),goal=f.request.goal;const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+ request.contract.riskTestArgv=[['/bin/false']];request.decomposition={mode:'within-owner-contract'};request.maxRepairs=0;
+ const verification={a:['contract-risk-1']};
+ const agent=async({workspace,writable,prompt})=>{const p=prompt.startsWith('{')?JSON.parse(prompt):{};
+  if(p.pins)return {context:'planner',seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification})};
+  if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),'1');}
+  return {context:'w-'+Math.random(),seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};};
+ let failure;try{await runAdaptive(request,{agent,provider:f.provider});}catch(e){failure=e;}
+ assert(failure);const prior=failure.goalDiagnostic;t.after(()=>fs.rmSync(prior.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(prior.proposal.root,{recursive:true,force:true}));
+ const destination=tempDir('asc-restart-verification-');t.after(()=>fs.rmSync(destination,{recursive:true,force:true}));
+ const prepared=prepareGoalRestart({...request,restart:{directory:path.join(destination,'work'),resultFile:path.join(prior.root,'result.json')}});
+ assert.deepEqual(prepared.proposal.verification,verification);assert.equal(prepared.request.unitVerificationSource,'controller-catalog');assert.deepEqual(prepared.request.unitRequests.a.contract.testArgv,['/bin/false']);
+ assert.deepEqual(prepared.request.unitRequests.b.contract.testArgv,request.contract.testArgv);
+});
+test('only owner Unit checks remain obligations after integration',()=>{
+ const contract={testArgv:['npm','run','test:unit'],riskTestArgv:[['npm','run','lint']]};
+ assert.deepEqual(unitObligations({},contract),[contract.testArgv,...contract.riskTestArgv]);
+ assert.deepEqual(unitObligations({decomposition:{mode:'within-owner-contract',unitChecks:[]}},contract),[contract.testArgv,...contract.riskTestArgv]);
+ // Owner-written unitRequests next to a decomposition without rules stay obligations: no shape inference.
+ assert.deepEqual(unitObligations({decomposition:{mode:'within-owner-contract'}},contract),[contract.testArgv,...contract.riskTestArgv]);
+ assert.deepEqual(unitObligations({unitVerificationSource:'controller-catalog',decomposition:{mode:'within-owner-contract'}},contract),[]);
+ assert.deepEqual(unitObligations({unitVerificationSource:'controller-catalog',decomposition:{mode:'within-owner-contract',unitTestArgv:['/bin/true']}},contract),[['/bin/true']]);
+});
+test('a single delegated Unit with planner-selected checks keeps its own Unit run',t=>{
+ const f=singleFixture(t),r=structuredClone(f.request);
+ r.decomposition={mode:'within-owner-contract'};r.unitVerificationSource='controller-catalog';r.unitRequests.a.contract.riskTestArgv=[['/bin/sh','-c','exit 1']];
+ // The combined contract would drop the Unit-only check, so the shortcut is refused.
+ assert.equal(singleUnitContract(r,r.goal),null);
+ const parentOnly=structuredClone(r);parentOnly.unitRequests.a.contract.testArgv=parentOnly.contract.testArgv;parentOnly.unitRequests.a.contract.riskTestArgv=[];
+ const combined=singleUnitContract(parentOnly,parentOnly.goal);assert(combined);assert.deepEqual(combined.riskTestArgv,parentOnly.contract.riskTestArgv);
 });

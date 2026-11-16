@@ -10,6 +10,14 @@ import fs from 'node:fs';import os from 'node:os';import path from 'node:path';i
 import {compileGoal} from './goal-plan.mjs';import {AssetController} from './verification-assets.mjs';import {hash,digest,safeName} from './controller.mjs';
 import {cloneSource} from './migration.mjs';import {commitCandidate} from './candidate.mjs';import {runWorkflow} from './workflow.mjs';import {runAgent} from './restricted-agent.mjs';import {Github} from './github.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
+/**
+ * Unit checks that stay obligations after integration. Checks a planner selected from the Controller
+ * catalog (delegation without owner unitChecks) are Unit-only; the owner Goal checks run unchanged.
+ */
+export function unitObligations(request,contract){
+ if(request.unitVerificationSource!=='controller-catalog')return [contract.testArgv,...contract.riskTestArgv];
+ const baseline=request.decomposition?.unitTestArgv;return baseline?[baseline]:[];
+}
 // A single unit needs no integration copy when it has the same execution authority.
 // Keep all semantic obligations and verification commands in one fresh contract.
 export function singleUnitContract(request,plan){
@@ -25,7 +33,10 @@ export function singleUnitContract(request,plan){
  if(digest(policy(parent))!==digest(policy(child)))return null;
  if(Object.keys(unit.contracts).some(name=>parent.allowedPaths.includes(request.contractFiles?.[name]?.path)))return null;
  const checks=[...parent.riskTestArgv],seen=new Set([parent.testArgv,...checks].map(digest));
- for(const argv of [child.testArgv,...child.riskTestArgv])if(!seen.has(digest(argv))){seen.add(digest(argv));checks.push(argv);}
+ const obligations=unitObligations(request,child),kept=new Set([...seen,...obligations.map(digest)]);
+ // Unit-only checks (planner-selected) must run at Unit level; the combined contract would skip them.
+ if([child.testArgv,...child.riskTestArgv].some(argv=>!kept.has(digest(argv))))return null;
+ for(const argv of obligations)if(!seen.has(digest(argv))){seen.add(digest(argv));checks.push(argv);}
  return {...parent,criteria:[...new Set([...parent.criteria,...(child.intent===parent.intent?[]:['Work Unit intent: '+child.intent]),...child.criteria])],riskTestArgv:checks};
 }
 export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},executionBudget,priorContexts=[],authorityRoots=[]}={}){
@@ -128,6 +139,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
     const unitRequest={...request,...spec,repo:candidate,base:before.head,priorReviews:request.unitCandidates?.[id]?.priorReviews};
     // Explain an owner-compiled partial assignment; this never waives whole-Goal gates.
     const unitAssignment={planDigest:compiled.digest,goalIntent:c.contract.intent,deliveryAllowed:false,
+     ...(request.unitVerificationSource==='controller-catalog'?{unitChecks:{source:'planner-selected from the Controller catalog; not owner-written',review:'Judge whether contract testArgv and riskTestArgv exercise this Unit writePaths and criteria. Report a blocking finding when they are too narrow. The owner whole-Goal checks run after integration regardless.'}}:{}),
      current:units.get(id),units:compiled.plan.units.map(u=>({id:u.id,intent:u.intent,criteria:u.criteria,dependsOn:u.dependsOn,writePaths:u.writePaths,
       status:u.id===id?'current':results.some(r=>r.id===u.id&&r.result?.status==='reviewed-candidate')?'integrated':'pending'}))};
     const result=threadedUnits
@@ -172,7 +184,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
   // Unit checks remain obligations after integration and every final repair.
   // Deduplicate identical argv only; the parent check is never removed.
   const checks=[...request.contract.riskTestArgv],seen=new Set([request.contract.testArgv,...checks].map(digest));
-  for(const argv of compiled.plan.units.flatMap(u=>{const contract=request.unitRequests[u.id].contract;return [contract.testArgv,...contract.riskTestArgv];})){
+  for(const argv of compiled.plan.units.flatMap(u=>unitObligations(request,request.unitRequests[u.id].contract))){
    const key=digest(argv);if(!seen.has(key)){seen.add(key);checks.push(argv);}
   }
   // Whole-Goal repair and review must preserve child semantics, not only tests.

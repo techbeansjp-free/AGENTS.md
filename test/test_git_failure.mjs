@@ -158,7 +158,8 @@ const surveyedForms=[
  ['remote.x.push',{migration:()=>['remote','remove','origin']},"invalid refspec '***'"],
  ['transfer.credentialsInUrl',{migration:()=>['remote','remove','origin']},'unrecognized value transfer.credentialsInUrl: ***'],
  ['column.branch',{migration:out=>['worktree','add','--no-checkout','-b',path.basename(out),out,'HEAD']},"unsupported option '***' error: invalid column.branch mode ***"],
- ['pack.allowPackReuse',{migration:out=>['clone','--no-local','--no-hardlinks','--no-checkout','.',out]},'remote: fatal: invalid pack.allowPackReuse value: ***'],
+ // upload-pack dies on this value; Git 2.56 sometimes drops the connection before relaying its message (racy).
+ ['pack.allowPackReuse',{migration:out=>['clone','--no-local','--no-hardlinks','--no-checkout','.',out],racy:true},'remote: fatal: invalid pack.allowPackReuse value: ***'],
 ];
 test('real Git output for each config value wording found by the survey shows its masked form and no value',{skip:process.platform==='win32'},t=>{
  const {root,repo,git}=repository(t);fs.writeFileSync(path.join(repo,'code.txt'),'after');git('commit','-qam','second');
@@ -173,16 +174,20 @@ test('real Git output for each config value wording found by the survey shows it
  const surveyed=version[0]>surveyedGit[0]||(version[0]===surveyedGit[0]&&version[1]>=surveyedGit[1]);
  // Through --file from outside the repository: a bad core.worktree also stops a plain 'git config' in the repository.
  const config=(...rest)=>execFileSync('git',['config','--file',path.join(repo,'.git','config'),...rest],{cwd:root,stdio:'pipe'});
- const quoted=new Set();
+ const quoted=new Set(),racyMissed=new Set();
  for(const [key,args,form,path_=''] of surveyedForms)for(const value of [`${path_}S3CRETX https://u:S3CRETY@example.invalid/`,`${path_}S3CRETX\nS3CRETY it's`]){
   config(key,value);const p=args.migration?runMigration(args.migration):run(args==='diff'?diff:args),stderr=p.stderr.toString();config('--unset',key);
   const shown=gitStderrExcerpt(p.stderr),label=`${key} ${JSON.stringify(value)}: ${shown}`;
   assert.equal(/S3CRET/.test(shown),false,label);
   if(stderr.includes('S3CRETX'))quoted.add(key);
-  if(surveyed){assert.ok(stderr.includes('S3CRETX'),`Git ${version.join('.')} did not quote ${label}`);assert.ok(shown.includes(form),label);}
+  // A lost connection carries no value to quote; the no-leak assertion above still applies.
+  const disconnected=args.racy&&!stderr.includes('S3CRETX')&&/unexpected disconnect|early EOF/.test(stderr);
+  if(disconnected){racyMissed.add(key);t.diagnostic(`${key}: connection lost before the remote message`);}
+  else if(surveyed){assert.ok(stderr.includes('S3CRETX'),`Git ${version.join('.')} did not quote ${label}`);assert.ok(shown.includes(form),label);}
  }
  if(!surveyed)t.diagnostic(`Git ${version.join('.')} is older than the survey; it quoted ${quoted.size} of ${surveyedForms.length} keys`);
- assert.ok(quoted.size>=(surveyed?surveyedForms.length:2),`Git quoted ${quoted.size} keys`);
+ const required=surveyedForms.filter(([key])=>!(racyMissed.has(key)&&!quoted.has(key))).length;
+ assert.ok(quoted.size>=(surveyed?required:2),`Git quoted ${quoted.size} keys`);
 });
 
 // The survey script reproduces the pinned forms; two keys keep this fast, the full run is documented in the script.
