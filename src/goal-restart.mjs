@@ -6,7 +6,7 @@ import {createExecutionBudget} from './execution-budget.mjs';
 import {authorityCommandRootsValidator} from './authority-command.mjs';
 import {Controller,digest} from './controller.mjs';import {cloneSource} from './migration.mjs';
 import {proposeGoal} from './goal-propose.mjs';
-import {compileGoal} from './goal-plan.mjs';import {adoptProposal,validateDelegation} from './adaptive-run.mjs';import {runGoal} from './goal-run.mjs';
+import {compileGoal} from './goal-plan.mjs';import {adoptProposal,delegationCatalog,validateDelegation} from './adaptive-run.mjs';import {runGoal} from './goal-run.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 function candidateReferences(previous,plan){
  const ids=new Set(plan.units.map(u=>u.id)),candidates={};
@@ -78,7 +78,7 @@ export function prepareGoalRestart(input){
   next.unitCandidates=candidateReferences(previous,(suppliedPlan??compileGoal(next.goal)).plan);
  }
  fs.writeFileSync(requestFile,JSON.stringify(next,null,2),{flag:'wx',mode:0o600});
- return {request:next,source,...(request.decomposition&&!request.goal&&!restart.replan?{proposal:{status:previous.proposal.status,goal:next.goal,binding:previous.proposal.binding,calls:[],wallSeconds:0,reusedFrom:restart.resultFile}}:{}),...(restart.replan?{previous,replanning:{authority:'untrusted historical diagnostic data; not approval or completion',priorPlan:priorPlanHint(previous),units:previous.units.map(u=>({id:u.id.slice(0,128),status:String(u.result?.status??u.diagnostic?.status??'unknown').slice(0,128),error:String(u.error??u.diagnostic?.error??'').slice(0,2000)}))}}:{}),authority:'candidate bytes only; every unit and whole Goal require new verification and review'};
+ return {request:next,source,...(request.decomposition&&!request.goal&&!restart.replan?{proposal:{status:previous.proposal.status,goal:next.goal,...(previous.proposal.verification?{verification:previous.proposal.verification}:{}),binding:previous.proposal.binding,calls:[],wallSeconds:0,reusedFrom:restart.resultFile}}:{}),...(restart.replan?{previous,replanning:{authority:'untrusted historical diagnostic data; not approval or completion',priorPlan:priorPlanHint(previous),units:previous.units.map(u=>({id:u.id.slice(0,128),status:String(u.result?.status??u.diagnostic?.status??'unknown').slice(0,128),error:String(u.error??u.diagnostic?.error??'').slice(0,2000)}))}}:{}),authority:'candidate bytes only; every unit and whole Goal require new verification and review'};
 }
 export async function restartGoal(input,options={}){
  const started=performance.now(),prepared=prepareGoalRestart(input);
@@ -88,7 +88,7 @@ export async function restartGoal(input,options={}){
  try{
   let next=prepared.request,contexts=options.priorContexts??[];
   if(prepared.replanning){
-   proposal=await proposeGoal(next,{agent:options.agent,executionBudget:budget,replanning:prepared.replanning,authorityRoots:options.authorityRoots});
+   proposal=await proposeGoal(next,{agent:options.agent,executionBudget:budget,replanning:prepared.replanning,authorityRoots:options.authorityRoots,verificationCatalog:delegationCatalog(next)});
    if(proposal.status==='needs-owner')return save({...proposal,status:'owner-work-required',units:[],work:{work:'clarify',actor:'owner',questions:proposal.questions}});
    next=adoptProposal(next,proposal);
    next.unitCandidates=candidateReferences(prepared.previous,compileGoal(next.goal).plan);

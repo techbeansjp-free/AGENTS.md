@@ -13,11 +13,11 @@ import {createExecutionBudget} from './execution-budget.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 /** Optional Unit verification selection: names from a Controller-built catalog, never Agent-supplied argv. */
 export function validateVerification(selection,units,catalog){
- const ids=new Set(catalog.map(entry=>entry.id)),out={};
+ const ids=new Set(catalog.map(entry=>entry.id)),out=Object.create(null);
  demand(selection===undefined||(selection&&typeof selection==='object'&&!Array.isArray(selection)),'Invalid proposed unit verification');
  for(const key of Object.keys(selection??{}))demand(units.some(u=>u.id===key),'Proposed verification for unknown unit');
  for(const unit of units){
-  const chosen=selection?.[unit.id];if(chosen===undefined)continue;
+  if(!selection||!Object.hasOwn(selection,unit.id))continue;const chosen=selection[unit.id];
   demand(Array.isArray(chosen)&&chosen.length>0&&chosen.every(id=>typeof id==='string'&&ids.has(id))&&new Set(chosen).size===chosen.length,'Invalid proposed unit verification');
   out[unit.id]=[...chosen];
  }

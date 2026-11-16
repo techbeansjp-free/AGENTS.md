@@ -165,21 +165,35 @@ rather than being relaxed.
 When the owner omits `decomposition.unitChecks`, the planner selects each Unit's
 checks instead of the owner writing them. The Controller builds a catalog from
 the observed base: the contract `testArgv` (`contract-test`), each contract
-`riskTestArgv` entry (`contract-risk-N`), and, when `testArgv[0]` is `npm`,
-`pnpm` or `yarn`, the base `package.json` scripts whose names are verification
-names (`test`, `lint`, `check`, `typecheck`, `types`, `verify`, `quality`, or
-those followed by `:`, `.`, `_` or `-` and a suffix) as `<manager> run <name>`.
-Identical argv appear once. The proposal returns
-`verification:{<unit id>:[catalog id,...]}`. Adoption rebuilds the catalog from
-the base instead of trusting the proposal, and rejects unknown ids, argv,
-duplicates, empty selections and unknown Units. A Unit without a selection uses
-`contract-test`. The first selected command becomes the Unit `testArgv` unless
-the owner set `unitTestArgv`; the others become Unit `riskTestArgv`. The
-whole-Goal `testArgv` and `riskTestArgv` are unchanged and still run after
-integration, so a too-narrow selection delays detection but cannot pass the Goal.
-The result records `unitVerification` per Unit with `source` `proposal`,
-`default` or `owner`. Which files a selected script exercises is not checked by
-the Controller; the Unit and whole-Goal reviewers see the selected commands.
+`riskTestArgv` entry (`contract-risk-N`), and, when the basename of `testArgv[0]`
+is `npm`, `pnpm` or `yarn`, the base `package.json` scripts whose names are
+verification names (`test`, `lint`, `check`, `typecheck`, `types`, `verify`,
+`quality`, or those followed by `:`, `.`, `_` or `-` and a suffix) as
+`<testArgv[0]> run <name>`. A name with a part that suggests writing or
+publishing (for example `fix`, `update`, `format`, `deploy`, `publish`,
+`release`, `install`) is excluded. Identical argv appear once. The catalog fixes
+script names only; the script body comes from the candidate and runs in the
+normal isolated verification.
+
+The proposal returns `verification:{<unit id>:[catalog id,...]}`. Adoption
+rebuilds the catalog from the base instead of trusting the proposal, and rejects
+unknown ids, argv, duplicates, empty selections and unknown Units. Without an
+owner `unitTestArgv`, the first selected check becomes the Unit `testArgv` and
+the others its `riskTestArgv`; a Unit without a selection uses `contract-test`.
+With an owner `unitTestArgv`, that command is the Unit `testArgv`, the selected
+checks become its `riskTestArgv`, and a Unit without a selection adds none. If
+the contract declares risks and no distinct check remains, the Unit `testArgv`
+is repeated as its risk check.
+
+Planner-selected checks are Unit-only. After integration the owner's
+whole-Goal `testArgv` and `riskTestArgv` run unchanged, plus the owner
+`unitTestArgv` when given; catalog selections are not added, so the final
+contract and its digest do not depend on the model. A too-narrow selection
+delays detection but cannot pass the Goal. The result records
+`unitVerification` per Unit with `source` `proposal`, `default` or `owner`.
+`restart-goal` keeps the selection when reusing a proposal and passes the
+catalog to replanning. Which files a selected script exercises is not checked
+by the Controller; the Unit reviewer sees the selected commands.
 
 The proposal can choose units and dependencies only within the original scope.
 It cannot replace authority, assets, policy, risk requirements or Delivery.
@@ -279,7 +293,8 @@ trial does not prove automatic integration or parallel live-model acceptance.
 
 
 Final integration retains the parent's verification commands and adds distinct
-Unit test and risk-test commands. They run against the integrated candidate and
+Unit test and risk-test commands (for a delegation without owner `unitChecks`,
+only the owner `unitTestArgv`; see Owner-delegated decomposition). They run against the integrated candidate and
 again after any final repair, before whole-Goal review and Delivery. Earlier Unit
 success does not authorize changed integrated bytes. Identical additional argv
 are deduplicated; the parent's explicit checks are preserved. This adds no Agent,
