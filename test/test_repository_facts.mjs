@@ -48,7 +48,7 @@ test('only environment and procedure kinds are accepted; specification and busin
 test('credential-like values and environment variable values are refused, not stored masked',t=>{
  const {one}=clone(t);
  for(const text of ['use token=abcdefghijklmnop','npm test --password="dummy-sensitive-value"','run with --api-key abc123','set API_KEY: abc','clone https://user:pass@example.com/repo.git',
-  'export ghp_abcdefghijklmnopqrstuvwxyz0123','write {"password":"dummy-sensitive-value"} to config','PGPASSWORD=hunter2 psql -h localhost -U app','SECRET_KEY_BASE=abc123 bin/rails test','GHTOKEN=abc npm run release','PASSPHRASE=x make',"set 'api_key': 'x'",'password: hunter22','Authorization: Bearer abcdefghijklmnop','header eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.x','-----BEGIN RSA PRIVATE KEY-----'])
+  'export ghp_abcdefghijklmnopqrstuvwxyz0123','write {"password":"dummy-sensitive-value"} to config','PGPASSWORD=hunter2 psql -h localhost -U app','SECRET_KEY_BASE=abc123 bin/rails test','GHTOKEN=abc npm run release','PASSPHRASE=x make','npm config set //registry.npmjs.org/:_authToken=npm_abcdef','export dbPassword=x',"set 'api_key': 'x'",'password: hunter22','Authorization: Bearer abcdefghijklmnop','header eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.x','-----BEGIN RSA PRIVATE KEY-----'])
   assert.throws(()=>recordFact(one,{id:'secret',kind:'command',text}),/credential or secret/,text);
  recordFact(one,NPM);assert.throws(()=>contradictFact(one,{id:NPM.id,note:'password=abc'}),/credential or secret/);
  for(const text of ['use the bypass: flag','compass=north is set by setup','NODE_ENV=test npm test'])assert.equal(recordFact(one,{id:'plain-'+text.length,kind:'command',text}).state,'shown',text);
@@ -73,14 +73,14 @@ test('the store is shared in the Git common directory, never inside a worktree o
  assert(!fs.existsSync(store+'.lock'),'the lock is released');
  fs.writeFileSync(store+'.lock','{}');
  assert.throws(()=>recordFact(one,{...NPM,id:'other'}),/locked by another writer/);assert(fs.existsSync(store+'.lock'),'another writer\'s lock is not removed');
- // A lock that is a link to another file is not read into the message.
  // Fields that are not a lock's own shape are not echoed either.
- for(const lock of [{pid:1,startedAt:'password=dummy-sensitive-value',place:'/x'},{pid:1,startedAt:'2026-11-17T00:00:00.000Z',place:'/x\ninjected'},{pid:-1,startedAt:'2026-11-17T00:00:00.000Z',place:'/x'},{pid:1,startedAt:'2026-11-17T00:00:00.000Z',place:'relative'}]){
+ for(const lock of [{pid:1,startedAt:'password=dummy-sensitive-value',place:'/x'},{pid:1,startedAt:'2026-11-17T00:00:00.000Z',place:'/tmp/PGPASSWORD=dummy-sensitive-value'},{pid:1,startedAt:'2026-11-17T00:00:00.000Z',place:'/tmp/SECRET_KEY_BASE=dummy-sensitive-value'},{pid:1,startedAt:'2026-11-17T00:00:00.000Z',place:'/x\ninjected'},{pid:-1,startedAt:'2026-11-17T00:00:00.000Z',place:'/x'},{pid:1,startedAt:'2026-11-17T00:00:00.000Z',place:'relative'}]){
   fs.writeFileSync(store+'.lock',JSON.stringify(lock));
   assert.throws(()=>recordFact(one,{...NPM,id:'other'}),e=>/unknown writer/.test(e.message)&&!/dummy-sensitive|injected/.test(e.message),JSON.stringify(lock));
  }
  fs.writeFileSync(store+'.lock',JSON.stringify({pid:4242,startedAt:'2026-11-17T00:00:00.000Z',place:'/elsewhere'}));
  assert.throws(()=>recordFact(one,{...NPM,id:'other'}),/locked by another writer \(pid 4242, started 2026-11-17T00:00:00.000Z, worktree \/elsewhere\)/);
+ // A lock that is a link to another file is not read into the message.
  const secret=path.join(repo,'..','secret.txt');fs.writeFileSync(secret,'TOP-SECRET-CONTENT');fs.rmSync(store+'.lock');fs.symlinkSync(secret,store+'.lock');
  assert.throws(()=>recordFact(one,{...NPM,id:'other'}),e=>/unknown writer/.test(e.message)&&!/TOP-SECRET/.test(e.message));
 });

@@ -28,7 +28,11 @@ const refusedSecrets=[
  // An environment assignment such as PGPASSWORD=x or SECRET_KEY_BASE=x, as a recorded command would contain it. Upper
  // case only, so ordinary words (compass=north) still pass.
  /(?<![A-Za-z0-9_])[A-Z0-9_]*(?:PASS(?:WORD|WD|PHRASE)?|PWD|SECRET|TOKEN|CREDENTIALS?|KEY)[A-Z0-9_]*=\S/,
+ // The same words inside an identifier in any case (dbPassword=x, an .npmrc _authToken=x).
+ /[A-Za-z0-9_]*(?:password|passwd|passphrase|secret|token|credential)[A-Za-z0-9_]*=\S/i,
 ];
+// One check for every text this module stores or shows: fact text, contradiction notes and a lock's worktree path.
+const secretLike=value=>hideCredentials(value)!==value||refusedSecrets.some(p=>p.test(value));
 
 const gitEnvironment=()=>Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.toUpperCase().startsWith('GIT_')));
 const git=(cwd,...args)=>execFileSync('git',['-c',`core.hooksPath=${GIT_NULL_DEVICE}`,...args],{cwd,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS}).trim();
@@ -59,7 +63,8 @@ function validFact(fact){
  try{factText(fact.kind,fact.text);for(const c of fact.contradictions)if(c.note!==undefined)text(c.note,'Contradiction note');return fact.text===fact.text.trim();}catch{return false;}
 }
 function load({directory,store}){
- noLink(directory);
+ // O_NOFOLLOW does not exist on Windows, so the store is also checked for a link before it is opened.
+ noLink(directory);noLink(store);
  const bytes=readRegular(store);if(bytes===null)return {schema:SCHEMA,facts:[]};
  // The parser's message quotes the start of the file, which could be a value: report the path only.
  let data;try{data=JSON.parse(bytes);}catch(error){throw Error('Unsupported or damaged repository facts store (not JSON): '+store,{cause:error});}
@@ -80,7 +85,7 @@ function withLock(where,change){
     try{
      const h=JSON.parse(readRegular(lock));
      const started=typeof h?.startedAt==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(h.startedAt)&&!Number.isNaN(Date.parse(h.startedAt));
-     const place=typeof h?.place==='string'&&h.place.length<=4096&&path.isAbsolute(h.place)&&!/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(h.place)&&hideCredentials(h.place)===h.place;
+     const place=typeof h?.place==='string'&&h.place.length<=4096&&path.isAbsolute(h.place)&&!/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(h.place)&&!secretLike(h.place);
      if(Number.isSafeInteger(h?.pid)&&h.pid>0&&started&&place)holder=`pid ${h.pid}, started ${h.startedAt}, worktree ${h.place}`;
     }catch{ /* Released meanwhile or not a lock written here. */ }
     throw Error(`Repository facts are locked by another writer (${holder}): ${lock}. Remove it only after confirming that process no longer runs.`,{cause:error});}
@@ -105,7 +110,7 @@ function text(value,label){
  const trimmed=value.trim();
  if(!trimmed||[...trimmed].length>TEXT_LIMIT||/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(trimmed))throw Error(`${label} must be one line of 1-${TEXT_LIMIT} characters`);
  // Refused rather than stored masked. Some ordinary wording ("token <long word>") matches too: rephrase it.
- if(hideCredentials(trimmed)!==trimmed||refusedSecrets.some(p=>p.test(trimmed)))throw Error(`${label} must not contain a credential or secret value; name what is needed without its value (a sentence that only looks like one must be rephrased)`);
+ if(secretLike(trimmed))throw Error(`${label} must not contain a credential or secret value; name what is needed without its value (a sentence that only looks like one must be rephrased)`);
  return trimmed;
 }
 function validId(id){if(typeof id!=='string'||!ID.test(id))throw Error('Fact id must be lowercase letters, digits and hyphens (at most 63)');return id;}
