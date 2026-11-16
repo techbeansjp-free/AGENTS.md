@@ -19,8 +19,9 @@ const DIRECTORY='agent-skill-chain',FILE='repository-facts.json',SCHEMA='asc-rep
 // A fact never needs a secret, so recording refuses more than stderr masking hides: quoted values, a secret-like name
 // followed by a value, and token shapes. Detection covers known shapes only; the writer remains responsible.
 const SECRET_NAME='(?:password|passwd|pwd|pass|secret|token|api[_-]?key|apikey|private[_-]?key|access[_-]?key|client[_-]?secret|credential)s?';
+// The name stands alone (a word boundary on its left), may be quoted as in JSON, and is followed by ':' or '='.
 const refusedSecrets=[
- new RegExp(`${SECRET_NAME}[^\\S\\n]*[:=]`,'i'),
+ new RegExp(`(?<![A-Za-z0-9])["']?${SECRET_NAME}["']?[^\\S\\n]*[:=]`,'i'),
  new RegExp(`--${SECRET_NAME}(?:[=\\s]+)\\S`,'i'),
  /\beyJ[A-Za-z0-9_-]{8}[A-Za-z0-9_-]*\.[A-Za-z0-9_-]{8}/,
  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
@@ -40,13 +41,23 @@ function noLink(file){
  try{if(fs.lstatSync(file).isSymbolicLink())throw Error('Repository facts must not be a symbolic link: '+file);}
  catch(error){if(error.code!=='ENOENT')throw error;}
 }
+// Read a regular file only, without following a link or blocking on a FIFO; null when it does not exist.
+function readRegular(file){
+ let fd;
+ try{fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);}
+ catch(error){if(error.code==='ENOENT')return null;if(error.code==='ELOOP')throw Error('Repository facts must not be a symbolic link: '+file,{cause:error});throw error;}
+ try{if(!fs.fstatSync(fd).isFile())throw Error('Repository facts must be a regular file: '+file);return fs.readFileSync(fd,'utf8');}
+ finally{fs.closeSync(fd);}
+}
+// A stored fact passes the same checks as a recorded one, so a hand-edited store never shows what recording refuses.
 function validFact(fact){
- const sequences=list=>Array.isArray(list)&&list.every(e=>e&&typeof e.place==='string'&&Number.isSafeInteger(e.sequence)&&e.sequence>0);
- return fact&&typeof fact.id==='string'&&ID.test(fact.id)&&FACT_KINDS.includes(fact.kind)&&typeof fact.text==='string'&&sequences(fact.observations)&&sequences(fact.contradictions);
+ const sequences=list=>Array.isArray(list)&&list.every(e=>e&&typeof e.place==='string'&&Number.isSafeInteger(e.sequence)&&e.sequence>0&&(e.note===undefined||typeof e.note==='string'));
+ if(!fact||typeof fact.id!=='string'||!ID.test(fact.id)||!sequences(fact.observations)||!sequences(fact.contradictions))return false;
+ try{factText(fact.kind,fact.text);for(const c of fact.contradictions)if(c.note!==undefined)text(c.note,'Contradiction note');return fact.text===fact.text.trim();}catch{return false;}
 }
 function load({directory,store}){
- noLink(directory);noLink(store);
- let bytes;try{bytes=fs.readFileSync(store,'utf8');}catch(error){if(error.code==='ENOENT')return {schema:SCHEMA,facts:[]};throw error;}
+ noLink(directory);
+ const bytes=readRegular(store);if(bytes===null)return {schema:SCHEMA,facts:[]};
  const data=JSON.parse(bytes);
  if(data?.schema!==SCHEMA||!Array.isArray(data.facts)||!data.facts.every(validFact)||new Set(data.facts.map(f=>f.id)).size!==data.facts.length)throw Error('Unsupported or damaged repository facts store: '+store);
  return data;
@@ -59,7 +70,10 @@ function withLock(where,change){
   try{const fd=fs.openSync(lock,'wx',0o600);fs.writeSync(fd,JSON.stringify({pid:process.pid,startedAt:new Date().toISOString(),place:where.place}));fs.closeSync(fd);break;}
   catch(error){
    if(error.code!=='EEXIST')throw error;
-   if(Date.now()>=deadline){let holder='unknown writer';try{holder=fs.readFileSync(lock,'utf8');}catch{ /* Released meanwhile. */ }
+   if(Date.now()>=deadline){
+    // Only the expected fields are shown, from a regular file, so a lock never echoes other contents.
+    let holder='unknown writer';
+    try{const h=JSON.parse(readRegular(lock));if(Number.isSafeInteger(h?.pid)&&typeof h.startedAt==='string'&&typeof h.place==='string')holder=`pid ${h.pid}, started ${h.startedAt.slice(0,40)}, worktree ${h.place.slice(0,300)}`;}catch{ /* Released meanwhile or not a lock written here. */ }
     throw Error(`Repository facts are locked by another writer (${holder}): ${lock}. Remove it only after confirming that process no longer runs.`,{cause:error});}
    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,50);
   }
@@ -67,40 +81,49 @@ function withLock(where,change){
  try{
   const data=load(where),result=change(data),temporary=`${where.store}.${process.pid}.tmp`;
   // Created exclusively, so an existing file or link at that name is never written through.
-  const fd=fs.openSync(temporary,fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_EXCL|fs.constants.O_NOFOLLOW,0o600);
-  try{fs.writeSync(fd,JSON.stringify(data,null,2)+'\n');}finally{fs.closeSync(fd);}
-  fs.renameSync(temporary,where.store);
+  let fd;
+  try{fd=fs.openSync(temporary,fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_EXCL|fs.constants.O_NOFOLLOW,0o600);}
+  catch(error){if(error.code==='EEXIST')throw Error(`A temporary repository facts file already exists: ${temporary}. Remove it after confirming no ASC command with pid ${process.pid} runs.`,{cause:error});throw error;}
+  try{
+   try{fs.writeSync(fd,JSON.stringify(data,null,2)+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+   fs.renameSync(temporary,where.store);
+  }catch(error){fs.rmSync(temporary,{force:true});throw error;}
   return result;
  }finally{fs.rmSync(lock,{force:true});}
 }
 function text(value,label){
  if(typeof value!=='string')throw Error(`Expected ${label}`);
  const trimmed=value.trim();
- if(!trimmed||[...trimmed].length>TEXT_LIMIT||/[\u0000-\u001f\u007f]/.test(trimmed))throw Error(`${label} must be one line of 1-${TEXT_LIMIT} characters`);
+ if(!trimmed||[...trimmed].length>TEXT_LIMIT||/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(trimmed))throw Error(`${label} must be one line of 1-${TEXT_LIMIT} characters`);
  // Refused rather than stored masked. Some ordinary wording ("token <long word>") matches too: rephrase it.
  if(hideCredentials(trimmed)!==trimmed||refusedSecrets.some(p=>p.test(trimmed)))throw Error(`${label} must not contain a credential or secret value; name what is needed without its value (a sentence that only looks like one must be rephrased)`);
  return trimmed;
 }
 function validId(id){if(typeof id!=='string'||!ID.test(id))throw Error('Fact id must be lowercase letters, digits and hyphens (at most 63)');return id;}
-function status(fact){
- const after=Math.max(0,...fact.contradictions.map(c=>c.sequence)),current=fact.observations.filter(o=>o.sequence>after);
- return {state:current.length?'shown':'contradicted',places:new Set(current.map(o=>o.place)).size};
+function factText(kind,value){
+ if(!FACT_KINDS.includes(kind))throw Error(`Fact kind must be one of ${FACT_KINDS.join(', ')}; specification, business and quality decisions belong to the owner`);
+ value=text(value,'Fact text');
+ if(kind==='environment-variable'&&(!/^[A-Za-z_][A-Za-z0-9_]*(?:\s|$)/.test(value)||/=/.test(value)))throw Error('An environment-variable fact names the variable first and never holds its value');
+ return value;
 }
+const afterContradiction=fact=>Math.max(0,...fact.contradictions.map(c=>c.sequence));
+// Observations keep where and when work recorded the fact, for audit; one recording after the last contradiction shows it.
+const status=fact=>({state:fact.observations.some(o=>o.sequence>afterContradiction(fact))?'shown':'contradicted'});
 const nextSequence=data=>1+Math.max(0,...data.facts.flatMap(f=>[...f.observations,...f.contradictions].map(e=>e.sequence)));
 const requireStore=location=>{const w=where(location);if(!w.store)throw Error('Repository facts need a Git repository; this directory is not managed by Git');return w;};
 
 /** Record a fact after this work hit the same failure repeatedly and confirmed the fix. The next start shows it. */
 export function recordFact(directory,{id,kind,text:value}){
  const w=requireStore(projectLocation(directory));
- validId(id);if(!FACT_KINDS.includes(kind))throw Error(`Fact kind must be one of ${FACT_KINDS.join(', ')}; specification, business and quality decisions belong to the owner`);
- value=text(value,'Fact text');
- if(kind==='environment-variable'&&(!/^[A-Za-z_][A-Za-z0-9_]*(?:\s|$)/.test(value)||/=/.test(value)))throw Error('An environment-variable fact names the variable first and never holds its value');
+ validId(id);value=factText(kind,value);
  return withLock(w,data=>{
   let fact=data.facts.find(f=>f.id===id);
+  const same=data.facts.find(f=>f.id!==id&&f.kind===kind&&f.text===value);
+  if(same)throw Error(`The same fact is already recorded as ${same.id}; record it with that id`);
   if(fact&&(fact.kind!==kind||fact.text!==value))throw Error(`Fact ${id} already says (${fact.kind}) "${fact.text}". If that is the same fact, record it with exactly that kind and text; if it is wrong, contradict it and record the new fact under a new id`);
   if(!fact)data.facts.push(fact={id,kind,text:value,observations:[],contradictions:[]});
   // The same worktree confirming it again after the last contradiction adds nothing.
-  const after=Math.max(0,...fact.contradictions.map(c=>c.sequence));
+  const after=afterContradiction(fact);
   if(!fact.observations.some(o=>o.place===w.place&&o.sequence>after))fact.observations.push({place:w.place,sequence:nextSequence(data),at:new Date().toISOString()});
   return {schema:'asc-repository-fact-record/v1',id,...status(fact)};
  });

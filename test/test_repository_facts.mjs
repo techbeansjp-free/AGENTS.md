@@ -12,6 +12,7 @@ function clone(t){
  const work=name=>{const place=path.join(root,name);git('worktree','add','-q',place,'-b',name);return place;};
  return {root,repo,one:work('one'),two:work('two'),work};
 }
+const posix={skip:process.platform==='win32'};
 const NPM={id:'npm-ci-first',kind:'setup',text:'New worktrees have no node_modules; run npm ci before npm run quality'};
 const shown=place=>startWorktree(place).facts.shown;
 
@@ -28,7 +29,7 @@ test('the second work sees a fact the first work recorded, at its very first sta
 
 test('a contradiction hides the fact until work records it again; the same worktree counts once',t=>{
  const {one,two}=clone(t);recordFact(one,NPM);
- assert.equal(recordFact(one,NPM).places,1);assert.equal(listFacts(one).facts.length,1);
+ recordFact(one,NPM);assert.equal(listFacts(one).facts.length,1);
  const stored=()=>JSON.parse(fs.readFileSync(listFacts(one).store,'utf8')).facts[0];
  assert.equal(stored().observations.length,1,'repeating it in the same worktree adds no observation');
  assert.equal(contradictFact(two,{id:NPM.id,note:'npm ci is now part of quality'}).state,'contradicted');
@@ -47,12 +48,13 @@ test('only environment and procedure kinds are accepted; specification and busin
 test('credential-like values and environment variable values are refused, not stored masked',t=>{
  const {one}=clone(t);
  for(const text of ['use token=abcdefghijklmnop','npm test --password="dummy-sensitive-value"','run with --api-key abc123','set API_KEY: abc','clone https://user:pass@example.com/repo.git',
-  'export ghp_abcdefghijklmnopqrstuvwxyz0123','password: hunter22','Authorization: Bearer abcdefghijklmnop','header eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.x','-----BEGIN RSA PRIVATE KEY-----'])
+  'export ghp_abcdefghijklmnopqrstuvwxyz0123','write {"password":"dummy-sensitive-value"} to config',"set 'api_key': 'x'",'password: hunter22','Authorization: Bearer abcdefghijklmnop','header eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.x','-----BEGIN RSA PRIVATE KEY-----'])
   assert.throws(()=>recordFact(one,{id:'secret',kind:'command',text}),/credential or secret/,text);
- assert.throws(()=>contradictFact(one,{id:'x',note:'password=abc'}),/credential or secret|No repository fact/);
+ recordFact(one,NPM);assert.throws(()=>contradictFact(one,{id:NPM.id,note:'password=abc'}),/credential or secret/);
+ for(const text of ['use the bypass: flag','compass=north is set by setup'])assert.equal(recordFact(one,{id:'plain-'+text.length,kind:'command',text}).state,'shown',text);
  for(const text of ['API_URL=https://example.com','=value','1BAD is not a name'])assert.throws(()=>recordFact(one,{id:'env',kind:'environment-variable',text}),/environment-variable fact|credential/,text);
  assert.equal(recordFact(one,{id:'env',kind:'environment-variable',text:'DATABASE_URL must be set for npm test'}).state,'shown');
- assert.deepEqual(listFacts(one).facts.map(f=>f.id),['env']);
+ assert.deepEqual(listFacts(one).facts.map(f=>f.id).sort(),['env',NPM.id,'plain-20','plain-29'].sort());
 });
 
 test('ids, text shape and conflicting text are checked; the conflict names the existing fact',t=>{
@@ -60,6 +62,8 @@ test('ids, text shape and conflicting text are checked; the conflict names the e
  for(const id of ['','Upper','has space','../x','a'.repeat(64)])assert.throws(()=>recordFact(one,{...NPM,id}),/Fact id/,id);
  for(const text of ['','  ','two\nlines','x'.repeat(301)])assert.throws(()=>recordFact(one,{...NPM,text}),/one line/,JSON.stringify(text));
  recordFact(one,NPM);assert.throws(()=>recordFact(one,{...NPM,text:'npm install works too'}),new RegExp(`already says \\(setup\\) "${NPM.text}"`));
+ assert.throws(()=>recordFact(one,{...NPM,id:'npm-ci-again'}),/already recorded as npm-ci-first/);
+ for(const text of ['line\u2028break','c1\u0085control'])assert.throws(()=>recordFact(one,{...NPM,id:'x',text}),/one line/);
 });
 
 test('the store is shared in the Git common directory, never inside a worktree or committed, and a held lock names its writer',t=>{
@@ -68,7 +72,10 @@ test('the store is shared in the Git common directory, never inside a worktree o
  assert.equal(execFileSync('git',['status','--porcelain','--untracked-files=all'],{cwd:one,encoding:'utf8'}),'');
  assert(!fs.existsSync(store+'.lock'),'the lock is released');
  fs.writeFileSync(store+'.lock',JSON.stringify({pid:4242,startedAt:'then',place:'elsewhere'}));
- assert.throws(()=>recordFact(one,{...NPM,id:'other'}),/locked by another writer \(.*4242.*\)/);assert(fs.existsSync(store+'.lock'),'another writer\'s lock is not removed');
+ assert.throws(()=>recordFact(one,{...NPM,id:'other'}),/locked by another writer \(pid 4242, started then, worktree elsewhere\)/);assert(fs.existsSync(store+'.lock'),'another writer\'s lock is not removed');
+ // A lock that is a link to another file is not read into the message.
+ const secret=path.join(repo,'..','secret.txt');fs.writeFileSync(secret,'TOP-SECRET-CONTENT');fs.rmSync(store+'.lock');fs.symlinkSync(secret,store+'.lock');
+ assert.throws(()=>recordFact(one,{...NPM,id:'other'}),e=>/unknown writer/.test(e.message)&&!/TOP-SECRET/.test(e.message));
 });
 
 test('links in the store path are refused, and a temporary file is never written through',t=>{
@@ -80,7 +87,7 @@ test('links in the store path are refused, and a temporary file is never written
  fs.unlinkSync(path.join(directory,'repository-facts.json'));
  // A pre-placed link at a temporary name is not followed: the exclusive create fails instead.
  fs.symlinkSync(outside,path.join(directory,`repository-facts.json.${process.pid}.tmp`));
- assert.throws(()=>recordFact(one,NPM),/EEXIST/);assert.equal(fs.readFileSync(outside,'utf8'),'keep');
+ assert.throws(()=>recordFact(one,NPM),/temporary repository facts file already exists/);assert.equal(fs.readFileSync(outside,'utf8'),'keep');
  fs.rmSync(directory,{recursive:true});fs.symlinkSync(path.dirname(outside),directory);
  assert.throws(()=>recordFact(one,NPM),/symbolic link/);
 });
@@ -88,11 +95,29 @@ test('links in the store path are refused, and a temporary file is never written
 test('a damaged store never stops start, but recording into it is refused',t=>{
  const {repo,one}=clone(t),directory=path.join(repo,'.git/agent-skill-chain');fs.mkdirSync(directory);
  for(const bytes of ['not json',JSON.stringify({schema:'other',facts:[]}),JSON.stringify({schema:'asc-repository-facts/v1',facts:[{}]}),
-  JSON.stringify({schema:'asc-repository-facts/v1',facts:[{id:'x',kind:'business',text:'Refunds need approval',observations:[{place:'p',sequence:1}],contradictions:[]}]})]){
+  JSON.stringify({schema:'asc-repository-facts/v1',facts:[{id:'x',kind:'business',text:'Refunds need approval',observations:[{place:'p',sequence:1}],contradictions:[]}]}),
+  JSON.stringify({schema:'asc-repository-facts/v1',facts:[{id:'x',kind:'environment-variable',text:'PASSWORD=dummy-sensitive-value\nsecond line',observations:[{place:'p',sequence:1}],contradictions:[]}]}),
+  JSON.stringify({schema:'asc-repository-facts/v1',facts:[{id:'x',kind:'setup',text:'fine',observations:[{place:'p',sequence:1}],contradictions:[{place:'p',sequence:2,note:'token=abcdefghijklmnop'}]}]})]){
   fs.writeFileSync(path.join(directory,'repository-facts.json'),bytes);
   const start=startWorktree(one);assert.equal(start.facts.available,false,bytes);assert.deepEqual(start.facts.shown,[]);assert.ok(start.facts.error,bytes);assert.ok(start.head,'the rest of start still works');
   assert.throws(()=>recordFact(one,NPM),/./,bytes);
  }
+});
+
+test('a store that is not a regular file never blocks start',posix,t=>{
+ const {repo,one}=clone(t),directory=path.join(repo,'.git/agent-skill-chain');fs.mkdirSync(directory);
+ execFileSync('mkfifo',[path.join(directory,'repository-facts.json')]);
+ const start=startWorktree(one);assert.equal(start.facts.available,false);assert.match(start.facts.error,/regular file/);
+ assert.throws(()=>recordFact(one,NPM),/regular file/);
+});
+
+test('a failed write leaves no temporary file behind',t=>{
+ const {repo,one}=clone(t);recordFact(one,NPM);
+ const directory=path.join(repo,'.git/agent-skill-chain'),store=path.join(directory,'repository-facts.json');
+ // A directory at the store name makes the rename fail after the temporary file was written.
+ fs.rmSync(store);fs.mkdirSync(store);fs.writeFileSync(path.join(store,'keep'),'x');
+ assert.throws(()=>recordFact(one,{...NPM,id:'other',text:'other fact'}));
+ assert.deepEqual(fs.readdirSync(directory).filter(n=>n.endsWith('.tmp')),[]);
 });
 
 test('directories outside Git have no store and start reports that facts are unavailable',t=>{
