@@ -25,6 +25,9 @@ const refusedSecrets=[
  new RegExp(`--${SECRET_NAME}(?:[=\\s]+)\\S`,'i'),
  /\beyJ[A-Za-z0-9_-]{8}[A-Za-z0-9_-]*\.[A-Za-z0-9_-]{8}/,
  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+ // An environment assignment such as PGPASSWORD=x or SECRET_KEY_BASE=x, as a recorded command would contain it. Upper
+ // case only, so ordinary words (compass=north) still pass.
+ /(?<![A-Za-z0-9_])[A-Z0-9_]*(?:PASS(?:WORD|WD|PHRASE)?|PWD|SECRET|TOKEN|CREDENTIALS?|KEY)[A-Z0-9_]*=\S/,
 ];
 
 const gitEnvironment=()=>Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.toUpperCase().startsWith('GIT_')));
@@ -58,7 +61,8 @@ function validFact(fact){
 function load({directory,store}){
  noLink(directory);
  const bytes=readRegular(store);if(bytes===null)return {schema:SCHEMA,facts:[]};
- const data=JSON.parse(bytes);
+ // The parser's message quotes the start of the file, which could be a value: report the path only.
+ let data;try{data=JSON.parse(bytes);}catch(error){throw Error('Unsupported or damaged repository facts store (not JSON): '+store,{cause:error});}
  if(data?.schema!==SCHEMA||!Array.isArray(data.facts)||!data.facts.every(validFact)||new Set(data.facts.map(f=>f.id)).size!==data.facts.length)throw Error('Unsupported or damaged repository facts store: '+store);
  return data;
 }
@@ -73,7 +77,12 @@ function withLock(where,change){
    if(Date.now()>=deadline){
     // Only the expected fields are shown, from a regular file, so a lock never echoes other contents.
     let holder='unknown writer';
-    try{const h=JSON.parse(readRegular(lock));if(Number.isSafeInteger(h?.pid)&&typeof h.startedAt==='string'&&typeof h.place==='string')holder=`pid ${h.pid}, started ${h.startedAt.slice(0,40)}, worktree ${h.place.slice(0,300)}`;}catch{ /* Released meanwhile or not a lock written here. */ }
+    try{
+     const h=JSON.parse(readRegular(lock));
+     const started=typeof h?.startedAt==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(h.startedAt)&&!Number.isNaN(Date.parse(h.startedAt));
+     const place=typeof h?.place==='string'&&h.place.length<=4096&&path.isAbsolute(h.place)&&!/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(h.place)&&hideCredentials(h.place)===h.place;
+     if(Number.isSafeInteger(h?.pid)&&h.pid>0&&started&&place)holder=`pid ${h.pid}, started ${h.startedAt}, worktree ${h.place}`;
+    }catch{ /* Released meanwhile or not a lock written here. */ }
     throw Error(`Repository facts are locked by another writer (${holder}): ${lock}. Remove it only after confirming that process no longer runs.`,{cause:error});}
    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,50);
   }
