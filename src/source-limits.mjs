@@ -93,6 +93,13 @@ const secretPatterns=[
  [/\b(?:gh[pousr]_[A-Za-z0-9]{20}[A-Za-z0-9]*|github_pat_[A-Za-z0-9_]{20}[A-Za-z0-9_]*|sk-[A-Za-z0-9_-]{20}[A-Za-z0-9_-]*|xox[abprs]-[A-Za-z0-9-]{10}[A-Za-z0-9-]*|AKIA[0-9A-Z]{16}\b)/g,'***'],
 ];
 
+/** Hide credential-like values (URL userinfo, authorization headers, token and password parameters, known key shapes).
+   Callers that must never store such a value compare the result with the input and refuse a changed text (#1722). */
+export function hideCredentials(text){
+ for(const [pattern,replacement] of secretPatterns)text=text.replace(pattern,replacement);
+ return text;
+}
+
 /** Name why a Git child failed, so that a timeout under load can be told apart from an error reported by Git. */
 export function gitFailureReason(result,timeoutMilliseconds=LOCAL_GIT_TIMEOUT_MILLISECONDS){
  if(result.error?.code==='ETIMEDOUT')return `timed out after ${timeoutMilliseconds} ms`;
@@ -112,8 +119,7 @@ export function gitStderrExcerpt(stderr,limit=GIT_STDERR_EXCERPT_CHARACTERS){
  // A carriage return ends a line like a newline (progress output); other control characters separate words, so
  // "Bearer\0<token>" is still a Bearer token.
  text=text.replace(/\r\n?/g,'\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g,' ');
- text=hideUnquotedValues(hideQuotedValues(text));
- for(const [pattern,replacement] of secretPatterns)text=text.replace(pattern,replacement);
+ text=hideCredentials(hideUnquotedValues(hideQuotedValues(text)));
  text=text.replace(/[\u0000-\u001f\u007f-\u009f\s]+/g,' ').trim();
  // A code point takes at most two code units, so this tail holds more than limit code points when text is longer.
  const characters=[...text.slice(-(limit*2+2))];

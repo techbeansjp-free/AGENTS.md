@@ -1,5 +1,6 @@
 /** Current Host execution in the real worktree; no snapshot or provider launch. */
 import {projectContext} from './project-context.mjs';
+import {startFacts} from './repository-facts.mjs';
 import fs from 'node:fs';import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -15,7 +16,8 @@ const gitEnvironment=()=>Object.fromEntries(Object.entries(process.env).filter((
 const gitMaxBuffer=16*1024*1024;
 const git=(repo,...args)=>execFileSync('git',['-c',`core.hooksPath=${GIT_NULL_DEVICE}`,...args],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',maxBuffer:gitMaxBuffer}).trim();
 export function startWorktree(directory,paths=[]){
- return describeProject(projectLocation(directory),paths);
+ // Facts are shown only by start; verification keeps its own result unchanged.
+ return {...describeProject(projectLocation(directory),paths),facts:startFacts(directory)};
 }
 function describeProject({repo,gitManaged},paths){
  const context=projectContext(repo,paths);

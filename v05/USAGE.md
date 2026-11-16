@@ -91,6 +91,24 @@ pathはproject root相対、`appliesTo`はglobではなく完全一致またはd
 
 新しい設定の登録は任意。既存のproject directoryに索引設定がなければnoticeを返し、Hostが適用規約を確認する。旧project-policyは解釈・移行対象として提示し、旧版の設定エンジンを暗黙実行しない。親の統合directoryの共通規約はHostが別途確認する。専用worktreeに存在しない未追跡の共通設定を自動コピーしない。追加Agent・モデル通信・全repo走査は行わず、設定の参照と必要なfileのhash計算だけを行う。
 
+## くり返し出た失敗から分かったリポジトリの事実（#1722）
+
+作業中にくり返し出た失敗と、その解決のしかたを「リポジトリの事実」として記録できる。記録した事実は、別の作業の`start`で示される。
+
+```bash
+asc-v05 fact-record <worktree> --id npm-ci-first --kind setup --text "New worktrees have no node_modules; run npm ci before npm run quality"
+asc-v05 fact-contradict <worktree> --id npm-ci-first --note "npm ci is now part of quality"
+asc-v05 fact-list <worktree>
+```
+
+- **対象は環境と手順の事実だけ**：`--kind`は`command`（動くコマンドの書き方）、`setup`（事前準備）、`artifact-location`（生成物の場所）、`environment-variable`（必要な環境変数の名前。値は書かない）のどれか。仕様・業務・品質基準の判断を表す種類はなく、それらはownerが決める。
+- **示す条件**：別々のworktree2か所で記録された事実だけを、`start`の`facts.confirmed`に示す。同じworktreeで何度記録しても1か所と数える。2は「1回の観測ではない」という定義の最小値で、計測で調整した値ではない。
+- **隠す条件**：`fact-contradict`で矛盾を記録すると、その事実は示されなくなる。その後に別々のworktree2か所で記録し直されると、再び示される。内容を変えるときは、矛盾を記録してから別のidで記録する。
+- **規約ではない**：事実は参考情報で、権限を与えず、AGENTS.mdやownerの指示より優先されない。頼る前に確かめ、違っていれば`fact-contradict`で記録する。`start`は記録の内容を自動で確かめ直さない（`start`は読取りのみで、コマンドを実行しない）。
+- **秘密は記録しない**：認証情報に見える値（URLの利用者情報、token・passwordの値、既知の鍵の形）を含む文は、伏せ字にせず拒否する。他projectの情報や個人情報も書かない。
+- **置き場所**：Gitの共通ディレクトリ（`git rev-parse --git-common-dir`）の`agent-skill-chain/repository-facts.json`。同じcloneのworktreeすべてで共有され、commitされず、Claude CodeとCodexが同じものを読む。cloneを作り直すと消える。Git管理外のディレクトリでは記録できず、`start`は`facts.available: false`を返す。
+- 同時に書く場合は1件ずつ処理する。5秒待っても書けなければ、lockのpathを示して止まる。lockは自動では消さない。
+
 ## マージ後の後始末
 
 配布Skillは、許可されたPRのmerge確認後に、現在のHostが実際のマージ先（`main`、`develop`等）を確認し、対象remoteの取得、cleanなマージ先local branchのfast-forward同期、完了worktreeとそのDockerの資源の安全な整理まで行うよう指示する。PR作成だけの依頼からmergeを推定しない。CLIによる自動cleanupではない。
