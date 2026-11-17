@@ -6,6 +6,15 @@ test('native Host transport handles output, failure and timeout without a shell'
  await assert.rejects(run('process.exit(3)'),/failed: 3/);
  await assert.rejects(run('setInterval(()=>{},1000)',100),error=>{assert.match(error.message,/deadline/);assert.equal(error.code,'ASC_HOST_TRANSPORT_TIMEOUT');return true;});
 });
+test('a child that exits without reading its input reports its exit status, and lost input still fails a success',async()=>{
+ // A megabyte cannot fit in the pipe, so the write fails with EPIPE every time; before #1725 that error won the race.
+ const input='x'.repeat(1024*1024),run=code=>runHostProcess(process.execPath,['-e',code],{env:{},input,timeout:10000});
+ await assert.rejects(run('process.exit(3)'),error=>{assert.match(error.message,/failed: 3/,`${error.message} (cause ${error.cause?.code})`);assert.equal(error.code,'ASC_PROVIDER_EXIT');assert.match(String(error.cause?.code),/EPIPE|ECONNRESET|EOF/);return true;});
+ await assert.rejects(run('process.exit(0)'),error=>{assert.equal(error.message,'Host input failed');assert.match(String(error.cause?.code),/EPIPE|ECONNRESET|EOF/);return true;});
+ // A child that reads all of it succeeds.
+ const read=await runHostProcess(process.execPath,['-e',"let n=0;process.stdin.on('data',d=>{n+=d.length;}).on('end',()=>process.stdout.write(String(n)))"],{env:{},input,timeout:10000});
+ assert.equal(read.stdout,String(input.length));
+});
 
 
 test('unspecified Host time budget does not create an immediate deadline',async()=>{
@@ -246,4 +255,34 @@ fs.writeFileSync(${JSON.stringify(out)},JSON.stringify({appended,afterAppend,aft
   if(refill==='once')assert.equal(first,true,'a relay is first again');
   assert.equal(unwatched,0,`${copies} copies: the signal always keeps a listener while a relay moves`);
  }
+});
+test('lost input bounds the wait for a child that keeps running or whose pipes stay open, and empty input never fails a run',posix,async t=>{
+ const root=tempDir('asc-host-input-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const out=path.join(root,'result.json'),module=new URL('../src/host-process.mjs',import.meta.url).href;
+ // Each case runs in a stand-in, so a call that never ends fails at the stand-in limit instead of hanging the suite (#1725).
+ const host=`import fs from 'node:fs';import {spawn} from 'node:child_process';import {runHostProcess} from ${JSON.stringify(module)};
+const result={},describe=e=>({message:e.message,code:e.code??null,cause:e.cause?.code??null});
+const call=async(name,...a)=>{const started=Date.now();try{const r=await runHostProcess(...a);result[name]={stdout:r.stdout};}catch(e){result[name]=describe(e);}result[name].ms=Date.now()-started;};
+const inject=code=>(...a)=>{const child=spawn(...a);process.nextTick(()=>child.stdin.emit('error',Object.assign(Error(code),{code})));return child;};
+const input='x'.repeat(1024*1024),keep="require('node:fs').closeSync(0);setInterval(()=>{},1000)";
+await call('alive',process.execPath,['-e',keep],{env:{},input},{inputExitMilliseconds:200});
+// The deadline comes after the child closed stdin, so the EPIPE is the input error, not a result of the stop.
+await call('deadline',process.execPath,['-e',keep],{env:{},input,timeout:1500},{inputExitMilliseconds:60000});
+await call('eio',process.execPath,['-e','setInterval(()=>{},1000)'],{env:{},input:'x'},{spawnChild:inject('EIO')});
+await call('empty3',process.execPath,['-e','process.exit(3)'],{env:{},input:''},{spawnChild:inject('EPIPE')});
+await call('empty0',process.execPath,['-e','setTimeout(()=>process.stdout.write("ok"),300)'],{env:{},input:''},{spawnChild:inject('EPIPE'),inputExitMilliseconds:50});
+// The Windows path settles on close; a descendant keeps the output pipes open for 3 s after the child exits with 3.
+// The descendant starts first, so the exit follows the EPIPE closely; 1 s keeps that margin under load, below the 3 s hold.
+const held="require('node:child_process').spawn(process.execPath,['-e','setTimeout(()=>{},3000)'],{stdio:['ignore','inherit','inherit']}).unref();require('node:fs').closeSync(0);process.exit(3)";
+await call('windows',process.execPath,['-e',held],{env:{},input},{platform:'win32',inputExitMilliseconds:1000,drainMilliseconds:100});
+fs.writeFileSync(${JSON.stringify(out)},JSON.stringify(result));process.exit(0);`;
+ const {code,why}=await runStandIn(host);
+ assert.equal(code,0,why);
+ const r=JSON.parse(fs.readFileSync(out,'utf8'));
+ assert.equal(r.alive.message,'Host input failed',JSON.stringify(r.alive));assert.match(String(r.alive.cause),/EPIPE|ECONNRESET|EOF/);
+ assert.equal(r.deadline.code,'ASC_HOST_TRANSPORT_TIMEOUT');assert.match(String(r.deadline.cause),/EPIPE|ECONNRESET|EOF/,'a deadline keeps the input error as its cause');
+ assert.equal(r.eio.message,'Host input failed');assert.equal(r.eio.cause,'EIO','other write errors fail at once');
+ assert.match(r.empty3.message,/failed: 3/);assert.equal(r.empty3.cause,'EPIPE','empty input: the exit status decides');
+ assert.equal(r.empty0.stdout,'ok','empty input with EPIPE still succeeds, past the input bound');
+ assert.match(r.windows.message,/failed: 3/,JSON.stringify(r.windows));assert.ok(r.windows.ms<2500,`the exit status settles before the pipes close: ${r.windows.ms} ms`);
 });
