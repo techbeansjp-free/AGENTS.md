@@ -42,6 +42,7 @@
   "src/project-context.mjs",
   "src/project-launcher.mjs",
   "src/project-location.mjs",
+  "src/repository-facts.mjs",
   "src/restricted-agent.mjs",
   "src/provider-failure.mjs",
   "src/review-result.mjs",

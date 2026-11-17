@@ -11,7 +11,7 @@ Goalと許可範囲に従い、Claude CodeではClaude Code、CodexではCodex�
 
 このSkillは配布パッケージ内の場所で使用する。HostのNodeで`../../bin/asc-v05.mjs`を起動する。解決不能なら停止して導入先を確認し、PATH上の別版や旧`workflow advance`へ切り替えない。
 
-標準入口は `start <project-directory>`。Git管理済みなら専用worktree、未管理なら通常フォルダーで開始する。`start`は作業場所と規約参照を返すだけでAgentを起動しない。対象repo・Issue・branch・baseを照合し、別Issueの未保存成果を保護する。新規worktree作成、Git未管理の作業、複数repoの統合親からの作業、既存worktreeの再開では、操作前に[作業場所の手順](references/workspace.md)を読む。Git初期化・commit・外部公開を暗黙に許可せず、未管理ファイルを勝手に追加・削除しない。
+標準入口は `start <project-directory>`。Git管理済みなら専用worktree、未管理なら通常フォルダーで開始する。`start`は作業場所と規約参照、以前の作業が記録したリポジトリの事実（参考情報）を返すだけでAgentを起動しない。対象repo・Issue・branch・baseを照合し、別Issueの未保存成果を保護する。新規worktree作成、Git未管理の作業、複数repoの統合親からの作業、既存worktreeの再開では、操作前に[作業場所の手順](references/workspace.md)を読む。Git初期化・commit・外部公開を暗黙に許可せず、未管理ファイルを勝手に追加・削除しない。
 
 新規worktreeの標準は`.worktrees/<YYYYMMDD_HHMMSS>-<Issue番号>-<slug>`、branchは`<type>/<Issue番号>-<slug>`。プロジェクト独自規約を優先し、標準作成は`worktree-create`を使う。既存名だけを理由に拒否・自動改名しない。作成済みworktreeで通常の実装を続けるだけなら作成手順の再読込みは不要。
 
