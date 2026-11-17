@@ -119,7 +119,10 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
   p.stdin.on('error',error=>{
    if(!['EPIPE','ECONNRESET'].includes(error?.code))return finish(Object.assign(Error('Host input failed'),{cause:error}));
    inputError??=error;
-   if(!exited)later(inputExitMilliseconds,()=>{if(!exited)finish(Object.assign(Error('Host input failed'),{cause:inputError}));});
+   // Only lost input needs a bound: with empty input the child is waited on as if the write had not failed. When the
+   // bound passes, a child still running is an input failure; one that exited but whose pipes stay open (on Windows,
+   // where close decides) is settled by its exit status.
+   if(Buffer.byteLength(input)>0)later(inputExitMilliseconds,()=>exited?settle():finish(Object.assign(Error('Host input failed'),{cause:inputError})));
   });
   const inputLost=()=>inputError&&Buffer.byteLength(input)>0;
   const settle=()=>finish(exitCode!==0?Object.assign(Error('Host process failed: '+exitCode),{code:'ASC_PROVIDER_EXIT'}):undefined);
