@@ -15,6 +15,22 @@ test('a child that exits without reading its input reports its exit status, and 
  const read=await runHostProcess(process.execPath,['-e',"let n=0;process.stdin.on('data',d=>{n+=d.length;}).on('end',()=>process.stdout.write(String(n)))"],{env:{},input,timeout:10000});
  assert.equal(read.stdout,String(input.length));
 });
+test('a child that closes its input and keeps running is stopped as an input failure, and other write errors fail at once',{skip:process.platform==='win32'},async()=>{
+ const input='x'.repeat(1024*1024);
+ // No deadline: the bounded wait after EPIPE, not a timeout, must end the call.
+ const started=Date.now();
+ await assert.rejects(runHostProcess(process.execPath,['-e',"require('node:fs').closeSync(0);setInterval(()=>{},1000)"],{env:{},input},{inputExitMilliseconds:200}),
+  error=>{assert.equal(error.message,'Host input failed');assert.match(String(error.cause?.code),/EPIPE|ECONNRESET/);return true;});
+ assert.ok(Date.now()-started<10000,'the call ends without a deadline');
+ // A deadline that passes first keeps the input error as its cause.
+ await assert.rejects(runHostProcess(process.execPath,['-e',"require('node:fs').closeSync(0);setInterval(()=>{},1000)"],{env:{},input,timeout:100},{inputExitMilliseconds:60000}),
+  error=>{assert.equal(error.code,'ASC_HOST_TRANSPORT_TIMEOUT');assert.match(String(error.cause?.code),/EPIPE|ECONNRESET/);return true;});
+ // A write error other than EPIPE or ECONNRESET fails at once, while the child still runs.
+ const {spawn}=await import('node:child_process');
+ const failing=(...a)=>{const child=spawn(...a);process.nextTick(()=>child.stdin.emit('error',Object.assign(Error('io'),{code:'EIO'})));return child;};
+ await assert.rejects(runHostProcess(process.execPath,['-e','setInterval(()=>{},1000)'],{env:{},input:'x'},{spawnChild:failing}),
+  error=>{assert.equal(error.message,'Host input failed');assert.equal(error.cause?.code,'EIO');return true;});
+});
 
 
 test('unspecified Host time budget does not create an immediate deadline',async()=>{

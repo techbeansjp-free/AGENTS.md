@@ -6,7 +6,9 @@
 import {spawn} from 'node:child_process';
 import {setTimeout,clearTimeout} from 'node:timers';
 
-const GROUP_GONE_MILLISECONDS=2000,GROUP_POLL_MILLISECONDS=20,OUTPUT_DRAIN_MILLISECONDS=1000;
+// After a write to stdin fails with EPIPE, the exit that explains it normally follows within milliseconds; a child that
+// closed stdin and keeps running is stopped after the same 2 s budget as the group wait (#1725).
+const GROUP_GONE_MILLISECONDS=2000,GROUP_POLL_MILLISECONDS=20,OUTPUT_DRAIN_MILLISECONDS=1000,INPUT_EXIT_MILLISECONDS=2000;
 // Groups owned by this process that have not been sent their stop signal yet; a signal that ends the Host first kills
 // them, so leftovers do not outlive it. A group leaves this set before its one SIGKILL is sent and is never signalled
 // again, so a group number reused after that is never reached (#1703).
@@ -50,14 +52,14 @@ function disown(pgid){
  if(!ownedGroups.size)unlisten();
 }
 
-export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pid,signal)=>process.kill(pid,signal),platform=process.platform,drainMilliseconds=OUTPUT_DRAIN_MILLISECONDS}={}){
+export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pid,signal)=>process.kill(pid,signal),platform=process.platform,drainMilliseconds=OUTPUT_DRAIN_MILLISECONDS,inputExitMilliseconds=INPUT_EXIT_MILLISECONDS,spawnChild=spawn}={}){
  return new Promise((resolve,reject)=>{
   const script=/\.m?js$/i.test(binary),grouped=platform!=='win32';
-  const p=spawn(script?process.execPath:binary,script?[binary,...args]:args,{env,windowsHide:true,stdio:['pipe','pipe','pipe'],detached:grouped});
+  const p=spawnChild(script?process.execPath:binary,script?[binary,...args]:args,{env,windowsHide:true,stdio:['pipe','pipe','pipe'],detached:grouped});
   // A group number must name the child's own group: never 0, 1 or a negative value, which would reach other processes.
   const pgid=grouped&&Number.isSafeInteger(p.pid)&&p.pid>1?p.pid:undefined;
   if(pgid)own(pgid);
-  const out=[],err=[];let size=0,done=false,accepting=true,overLimit=false,exited=false,exitCode=null,killed=false,signalError;
+  const out=[],err=[];let size=0,done=false,accepting=true,overLimit=false,exited=false,exitCode=null,killed=false,signalError,inputError;
   const timers=new Set(),later=(ms,fn)=>{const t=setTimeout(()=>{timers.delete(t);fn();},ms);timers.add(t);return t;};
   // Sent once, synchronously, right after the child exits or fails. Members still in the group keep its number from
   // reuse; a group that held only the child is already empty, so the kill reports ESRCH (a very small reuse window).
@@ -99,6 +101,9 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
    const result={stdout:Buffer.concat(out).toString(),stderr:Buffer.concat(err).toString()};
    // The limit can also be passed while draining, after a successful exit; truncated output is never a success.
    if(!error&&overLimit)error=Error('Host process output limit');
+   // The EPIPE of undelivered input can arrive after the exit was seen; it still fails a zero status.
+   if(!error&&inputLost())error=Object.assign(Error('Host input failed'),{cause:inputError});
+   if(error&&inputError&&error.cause===undefined)error.cause=inputError;
    if(!gone){
     const cleanup=Object.assign(Error('Host process group cleanup unconfirmed'),{code:'ASC_HOST_CLEANUP_UNCONFIRMED',cause:error??signalError,...(signalError&&{signalError}),...result});
     reject(cleanup);return;
@@ -111,10 +116,13 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
   // A child may exit without reading its input: the write then fails with EPIPE (or ECONNRESET), sometimes before the
   // exit is seen. Its exit status decides then, so a failing child reports its own status, not the lost input (#1725).
   // A child that exits 0 while non-empty input was not delivered still fails; an empty input loses nothing.
-  let inputError;
-  p.stdin.on('error',error=>{if(['EPIPE','ECONNRESET'].includes(error?.code)){inputError=error;return;}finish(Error('Host input failed'));});
+  p.stdin.on('error',error=>{
+   if(!['EPIPE','ECONNRESET'].includes(error?.code))return finish(Object.assign(Error('Host input failed'),{cause:error}));
+   inputError??=error;
+   if(!exited)later(inputExitMilliseconds,()=>{if(!exited)finish(Object.assign(Error('Host input failed'),{cause:inputError}));});
+  });
   const inputLost=()=>inputError&&Buffer.byteLength(input)>0;
-  const settle=()=>finish(exitCode!==0?Object.assign(Error('Host process failed: '+exitCode),{code:'ASC_PROVIDER_EXIT',...(inputError&&{cause:inputError})}):inputLost()?Object.assign(Error('Host input failed'),{cause:inputError}):undefined);
+  const settle=()=>finish(exitCode!==0?Object.assign(Error('Host process failed: '+exitCode),{code:'ASC_PROVIDER_EXIT'}):undefined);
   // The direct child's exit, not the pipes closing, starts the cleanup: a leftover may keep the pipes open.
   p.on('exit',code=>{exited=true;exitCode=code;if(grouped)settle();});
   p.on('close',code=>{if(!exited)exitCode=code;settle();});
