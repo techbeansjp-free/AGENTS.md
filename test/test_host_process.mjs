@@ -266,7 +266,8 @@ const call=async(name,...a)=>{const started=Date.now();try{const r=await runHost
 const inject=code=>(...a)=>{const child=spawn(...a);process.nextTick(()=>child.stdin.emit('error',Object.assign(Error(code),{code})));return child;};
 const input='x'.repeat(1024*1024),keep="require('node:fs').closeSync(0);setInterval(()=>{},1000)";
 await call('alive',process.execPath,['-e',keep],{env:{},input},{inputExitMilliseconds:200});
-await call('deadline',process.execPath,['-e',keep],{env:{},input,timeout:100},{inputExitMilliseconds:60000});
+// The deadline comes after the child closed stdin, so the EPIPE is the input error, not a result of the stop.
+await call('deadline',process.execPath,['-e',keep],{env:{},input,timeout:1500},{inputExitMilliseconds:60000});
 await call('eio',process.execPath,['-e','setInterval(()=>{},1000)'],{env:{},input:'x'},{spawnChild:inject('EIO')});
 await call('empty3',process.execPath,['-e','process.exit(3)'],{env:{},input:''},{spawnChild:inject('EPIPE')});
 await call('empty0',process.execPath,['-e','setTimeout(()=>process.stdout.write("ok"),300)'],{env:{},input:''},{spawnChild:inject('EPIPE'),inputExitMilliseconds:50});
