@@ -9,8 +9,8 @@ test('native Host transport handles output, failure and timeout without a shell'
 test('a child that exits without reading its input reports its exit status, and lost input still fails a success',async()=>{
  // A megabyte cannot fit in the pipe, so the write fails with EPIPE every time; before #1725 that error won the race.
  const input='x'.repeat(1024*1024),run=code=>runHostProcess(process.execPath,['-e',code],{env:{},input,timeout:10000});
- await assert.rejects(run('process.exit(3)'),error=>{assert.match(error.message,/failed: 3/);assert.equal(error.code,'ASC_PROVIDER_EXIT');assert.match(String(error.cause?.code),/EPIPE|ECONNRESET/);return true;});
- await assert.rejects(run('process.exit(0)'),error=>{assert.equal(error.message,'Host input failed');assert.match(String(error.cause?.code),/EPIPE|ECONNRESET/);return true;});
+ await assert.rejects(run('process.exit(3)'),error=>{assert.match(error.message,/failed: 3/,`${error.message} (cause ${error.cause?.code})`);assert.equal(error.code,'ASC_PROVIDER_EXIT');assert.match(String(error.cause?.code),/EPIPE|ECONNRESET|EOF/);return true;});
+ await assert.rejects(run('process.exit(0)'),error=>{assert.equal(error.message,'Host input failed');assert.match(String(error.cause?.code),/EPIPE|ECONNRESET|EOF/);return true;});
  // A child that reads all of it succeeds.
  const read=await runHostProcess(process.execPath,['-e',"let n=0;process.stdin.on('data',d=>{n+=d.length;}).on('end',()=>process.stdout.write(String(n)))"],{env:{},input,timeout:10000});
  assert.equal(read.stdout,String(input.length));
@@ -278,8 +278,8 @@ fs.writeFileSync(${JSON.stringify(out)},JSON.stringify(result));process.exit(0);
  const {code,why}=await runStandIn(host);
  assert.equal(code,0,why);
  const r=JSON.parse(fs.readFileSync(out,'utf8'));
- assert.equal(r.alive.message,'Host input failed',JSON.stringify(r.alive));assert.match(String(r.alive.cause),/EPIPE|ECONNRESET/);
- assert.equal(r.deadline.code,'ASC_HOST_TRANSPORT_TIMEOUT');assert.match(String(r.deadline.cause),/EPIPE|ECONNRESET/,'a deadline keeps the input error as its cause');
+ assert.equal(r.alive.message,'Host input failed',JSON.stringify(r.alive));assert.match(String(r.alive.cause),/EPIPE|ECONNRESET|EOF/);
+ assert.equal(r.deadline.code,'ASC_HOST_TRANSPORT_TIMEOUT');assert.match(String(r.deadline.cause),/EPIPE|ECONNRESET|EOF/,'a deadline keeps the input error as its cause');
  assert.equal(r.eio.message,'Host input failed');assert.equal(r.eio.cause,'EIO','other write errors fail at once');
  assert.match(r.empty3.message,/failed: 3/);assert.equal(r.empty3.cause,'EPIPE','empty input: the exit status decides');
  assert.equal(r.empty0.stdout,'ok','empty input with EPIPE still succeeds, past the input bound');

@@ -113,11 +113,12 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
   const timer=timeout===null?undefined:setTimeout(()=>finish(Object.assign(Error('Host process deadline exceeded'),{code:'ASC_HOST_TRANSPORT_TIMEOUT'})),timeout);
   for(const [stream,chunks] of [[p.stdout,out],[p.stderr,err]])stream.on('data',b=>{if(!accepting)return;size+=b.length;if(size>8*1024*1024){accepting=false;overLimit=true;finish(Error('Host process output limit'));}else chunks.push(b);});
   p.on('error',()=>finish(Error('Host executable could not start')));
-  // A child may exit without reading its input: the write then fails with EPIPE (or ECONNRESET), sometimes before the
+  // A child may exit without reading its input: the write then fails with EPIPE (ECONNRESET, or EOF on Windows), sometimes before the
   // exit is seen. Its exit status decides then, so a failing child reports its own status, not the lost input (#1725).
   // A child that exits 0 while non-empty input was not delivered still fails; an empty input loses nothing.
   p.stdin.on('error',error=>{
-   if(!['EPIPE','ECONNRESET'].includes(error?.code))return finish(Object.assign(Error('Host input failed'),{cause:error}));
+   // Windows reports a write to a pipe its reader closed as EOF (ERROR_BROKEN_PIPE) rather than EPIPE.
+   if(!['EPIPE','ECONNRESET','EOF'].includes(error?.code))return finish(Object.assign(Error('Host input failed'),{cause:error}));
    inputError??=error;
    // Only lost input needs a bound: with empty input the child is waited on as if the write had not failed. When the
    // bound passes, a child still running is an input failure; one that exited but whose pipes stay open (on Windows,
