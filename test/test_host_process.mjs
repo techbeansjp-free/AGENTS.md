@@ -271,8 +271,9 @@ await call('eio',process.execPath,['-e','setInterval(()=>{},1000)'],{env:{},inpu
 await call('empty3',process.execPath,['-e','process.exit(3)'],{env:{},input:''},{spawnChild:inject('EPIPE')});
 await call('empty0',process.execPath,['-e','setTimeout(()=>process.stdout.write("ok"),300)'],{env:{},input:''},{spawnChild:inject('EPIPE'),inputExitMilliseconds:50});
 // The Windows path settles on close; a descendant keeps the output pipes open for 3 s after the child exits with 3.
-const held="require('node:fs').closeSync(0);require('node:child_process').spawn(process.execPath,['-e','setTimeout(()=>{},3000)'],{stdio:['ignore','inherit','inherit']}).unref();process.exit(3)";
-await call('windows',process.execPath,['-e',held],{env:{},input},{platform:'win32',inputExitMilliseconds:200,drainMilliseconds:100});
+// The descendant starts first, so the exit follows the EPIPE closely; 1 s keeps that margin under load, below the 3 s hold.
+const held="require('node:child_process').spawn(process.execPath,['-e','setTimeout(()=>{},3000)'],{stdio:['ignore','inherit','inherit']}).unref();require('node:fs').closeSync(0);process.exit(3)";
+await call('windows',process.execPath,['-e',held],{env:{},input},{platform:'win32',inputExitMilliseconds:1000,drainMilliseconds:100});
 fs.writeFileSync(${JSON.stringify(out)},JSON.stringify(result));process.exit(0);`;
  const {code,why}=await runStandIn(host);
  assert.equal(code,0,why);

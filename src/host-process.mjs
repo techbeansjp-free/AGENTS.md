@@ -101,7 +101,7 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
    const result={stdout:Buffer.concat(out).toString(),stderr:Buffer.concat(err).toString()};
    // The limit can also be passed while draining, after a successful exit; truncated output is never a success.
    if(!error&&overLimit)error=Error('Host process output limit');
-   // The EPIPE of undelivered input can arrive after the exit was seen; it still fails a zero status.
+   // An EPIPE recorded for undelivered input fails a zero status, whichever of the exit and the error was seen first.
    if(!error&&inputLost())error=Object.assign(Error('Host input failed'),{cause:inputError});
    if(error&&inputError&&error.cause===undefined)error.cause=inputError;
    if(!gone){
