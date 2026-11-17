@@ -6,6 +6,15 @@ test('native Host transport handles output, failure and timeout without a shell'
  await assert.rejects(run('process.exit(3)'),/failed: 3/);
  await assert.rejects(run('setInterval(()=>{},1000)',100),error=>{assert.match(error.message,/deadline/);assert.equal(error.code,'ASC_HOST_TRANSPORT_TIMEOUT');return true;});
 });
+test('a child that exits without reading its input reports its exit status, and lost input still fails a success',async()=>{
+ // A megabyte cannot fit in the pipe, so the write fails with EPIPE every time; before #1725 that error won the race.
+ const input='x'.repeat(1024*1024),run=code=>runHostProcess(process.execPath,['-e',code],{env:{},input,timeout:10000});
+ await assert.rejects(run('process.exit(3)'),error=>{assert.match(error.message,/failed: 3/);assert.equal(error.code,'ASC_PROVIDER_EXIT');assert.match(String(error.cause?.code),/EPIPE|ECONNRESET/);return true;});
+ await assert.rejects(run('process.exit(0)'),error=>{assert.equal(error.message,'Host input failed');assert.match(String(error.cause?.code),/EPIPE|ECONNRESET/);return true;});
+ // A child that reads all of it succeeds.
+ const read=await runHostProcess(process.execPath,['-e',"let n=0;process.stdin.on('data',d=>{n+=d.length;}).on('end',()=>process.stdout.write(String(n)))"],{env:{},input,timeout:10000});
+ assert.equal(read.stdout,String(input.length));
+});
 
 
 test('unspecified Host time budget does not create an immediate deadline',async()=>{

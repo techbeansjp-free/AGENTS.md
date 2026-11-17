@@ -107,8 +107,14 @@ export function runHostProcess(binary,args,{env,input='',timeout=null},{kill=(pi
   };
   const timer=timeout===null?undefined:setTimeout(()=>finish(Object.assign(Error('Host process deadline exceeded'),{code:'ASC_HOST_TRANSPORT_TIMEOUT'})),timeout);
   for(const [stream,chunks] of [[p.stdout,out],[p.stderr,err]])stream.on('data',b=>{if(!accepting)return;size+=b.length;if(size>8*1024*1024){accepting=false;overLimit=true;finish(Error('Host process output limit'));}else chunks.push(b);});
-  p.on('error',()=>finish(Error('Host executable could not start')));p.stdin.on('error',()=>finish(Error('Host input failed')));
-  const settle=()=>finish(exitCode===0?undefined:Object.assign(Error('Host process failed: '+exitCode),{code:'ASC_PROVIDER_EXIT'}));
+  p.on('error',()=>finish(Error('Host executable could not start')));
+  // A child may exit without reading its input: the write then fails with EPIPE (or ECONNRESET), sometimes before the
+  // exit is seen. Its exit status decides then, so a failing child reports its own status, not the lost input (#1725).
+  // A child that exits 0 while non-empty input was not delivered still fails; an empty input loses nothing.
+  let inputError;
+  p.stdin.on('error',error=>{if(['EPIPE','ECONNRESET'].includes(error?.code)){inputError=error;return;}finish(Error('Host input failed'));});
+  const inputLost=()=>inputError&&Buffer.byteLength(input)>0;
+  const settle=()=>finish(exitCode!==0?Object.assign(Error('Host process failed: '+exitCode),{code:'ASC_PROVIDER_EXIT',...(inputError&&{cause:inputError})}):inputLost()?Object.assign(Error('Host input failed'),{cause:inputError}):undefined);
   // The direct child's exit, not the pipes closing, starts the cleanup: a leftover may keep the pipes open.
   p.on('exit',code=>{exited=true;exitCode=code;if(grouped)settle();});
   p.on('close',code=>{if(!exited)exitCode=code;settle();});
