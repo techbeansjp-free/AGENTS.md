@@ -116,7 +116,7 @@ v0.5.64〜v0.5.66で配布した`fact-record`・`fact-contradict`・`fact-list`�
 
 ### Codexのsandboxで作業場所を作る（#1730）
 
-Codexを`workspace-write`のsandboxで起動すると、書込みを許した領域の中でも`.git`は読み取り専用になる。`worktree-create`は新しいbranchとworktreeの記録をGitの共通の管理領域（`git rev-parse --path-format=absolute --git-common-dir`の結果）に書くため、このままでは作成できない。`worktree-create`は、作成を始める前にこの領域へ書けるかを確かめる。書けなければ`Git metadata is not writable: <dir>`と対処を示し、終了コード1で止まる。このとき`.worktrees`もbranchも作らない。
+Codexを`workspace-write`のsandboxで起動すると、書込みを許した領域の中でも`.git`は読み取り専用になる。`worktree-create`は新しいbranchとworktreeの記録をGitの共通の管理領域（`git rev-parse --path-format=absolute --git-common-dir`の結果）に書くため、このままでは作成できない。`worktree-create`は、作成を始める前にこの領域へ書けるかを確かめる。書けなければ`Git metadata is not writable: <dir>`と対処を示し、終了コード1で止まる。sandboxのほか、通常のファイル権限や読み取り専用のmountでも同じmessageになる。このとき`.worktrees`もbranchも作らない。
 
 Agentに作業場所の作成とcommitまで任せる場合は、Codexをrepository rootで起動し、この領域を`writable_roots`に加える。
 
@@ -124,7 +124,7 @@ Agentに作業場所の作成とcommitまで任せる場合は、Codexをreposit
 codex -C <repo-root> --sandbox workspace-write -c 'sandbox_workspace_write.writable_roots=["<git-common-dir>"]'
 ```
 
-- 加えると、Agentはrefs・hooks・configも書き換えられる。hooksとconfigは、後で利用者が実行するGitの操作にも影響する。信頼できる作業だけに使い、作業後に`.git/hooks`と`git config --local --list`を確認する。
+- 加えると、Agentはrefs・hooks・configに加えて、同じcloneのすべてのworktreeとbranchの管理情報も書き換えられる。並行して動く別の作業にも及ぶ。hooksとconfigは、後で利用者が実行するGitの操作にも影響する。信頼できる作業だけに使い、作業後に`.git/hooks`と`git config --local --list`を確認する。
 - Codexをworktreeの中で起動すると、そのworktree用の管理領域（`<git-common-dir>/worktrees/<name>`）が読み取り専用のままになり、共通の管理領域を加えてもcommitできなかった。repository rootで起動する。
 - 書込みを許さない場合、Agentは作業場所の作成もcommitもできない。それらは利用者がsandboxの外で行う。
 - 実測はmacOS・codex-cli 0.169.0の`codex sandbox`と`codex exec`で行った。LinuxとWindowsは実機がないため未確認である。ASCの同梱Codex Hostが起動するAgentの設定（#682）とは別の話である。

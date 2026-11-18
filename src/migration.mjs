@@ -168,6 +168,16 @@ export function assertWorkLocation(directory,mode='worktree'){
  return {repo:root,mode};
 }
 
+/** Explain a read-only Git common directory without building a shell command (#1730). */
+export function gitMetadataNotWritableMessage(common,code){
+ // JSON string escapes are valid TOML basic-string escapes, so Windows paths and quotes stay parseable.
+ return `Git metadata is not writable: ${common} (${code}). worktree-create writes the new branch and worktree record there. `+
+  'A Host sandbox, file permissions or a read-only mount can cause this. In a Codex workspace-write sandbox .git stays read-only; '+
+  `the user can start Codex at the repository root with the setting sandbox_workspace_write.writable_roots = ${JSON.stringify([common])} `+
+  '(passed with -c or in config.toml). This lets the Agent change refs, hooks, config and every worktree and branch of this clone. '+
+  'An Agent must not widen its own sandbox or permissions; ask the user to decide. See v05/USAGE.md.';
+}
+
 /**
  * Fail before any side effect when the Git common directory is not writable, as under
  * Codex workspace-write, which keeps .git read-only even inside a writable root (#1730).
@@ -176,14 +186,14 @@ export function assertWorkLocation(directory,mode='worktree'){
 function assertGitMetadataWritable(origin){
  const common=fs.realpathSync.native(git(origin,'rev-parse','--path-format=absolute','--git-common-dir').toString().trim());
  const probe=path.join(common,`asc-write-probe-${process.pid}-${randomUUID()}`);
- try{fs.closeSync(fs.openSync(probe,'wx'));}catch(error){
+ let fd;
+ try{fd=fs.openSync(probe,'wx');}catch(error){
   if(!['EPERM','EACCES','EROFS'].includes(error?.code))throw error;
-  throw Object.assign(Error(`Git metadata is not writable: ${common} (${error.code}). worktree-create writes the new branch and worktree record there. `+
-   'In a Codex workspace-write sandbox .git stays read-only; start Codex at the repository root and add this directory to '+
-   `sandbox_workspace_write.writable_roots (for example -c 'sandbox_workspace_write.writable_roots=["${common}"]'). `+
-   'This lets the Agent change refs, hooks and config; see v05/USAGE.md.'),{cause:error,code:'ASC_GIT_METADATA_NOT_WRITABLE'});
+  throw Object.assign(Error(gitMetadataNotWritableMessage(common,error.code)),{cause:error,code:'ASC_GIT_METADATA_NOT_WRITABLE'});
  }
- fs.unlinkSync(probe);
+ let closeError;try{fs.closeSync(fd);}catch(error){closeError=error;}
+ try{fs.unlinkSync(probe);}catch(error){throw Object.assign(Error(`Remove the Git metadata write probe left at ${probe} (${error.code})`),{cause:error});}
+ if(closeError)throw closeError;
 }
 
 /** Create, never repurpose, an owner-requested linked worktree. No checkout filters. */
