@@ -10,6 +10,8 @@ const MIGRATION_GIT_TIMEOUT_MILLISECONDS=120000;
 function demand(ok,message){if(!ok)throw Error(message);}
 const contains=(a,b)=>{const r=path.relative(a,b);return !r || (!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
 function git(root,...args){return gitOutput(root,args);}
+/** A path Git prints on one line; strip only its line ending, since a path may end with a space. */
+function gitPath(root,...args){return fs.realpathSync.native(git(root,...args).toString().replace(/\r?\n$/,''));}
 function gitOutput(root,args,output='pipe',input){
  const p=withStdinFile(input,stdin=>spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${GIT_NULL_DEVICE}`,'-c','uploadpack.packObjectsHook=',
  '-c','core.alternateRefsCommand=','-c','protocol.allow=never','-c','protocol.file.allow=always',...args],
@@ -20,7 +22,7 @@ function gitOutput(root,args,output='pipe',input){
 // both metadata roots before any destination write, including parent aliases.
 function assertOutsideGitMetadata(origin,destination){
  for(const flag of ['--absolute-git-dir','--git-common-dir']){
-  const metadata=fs.realpathSync.native(git(origin,'rev-parse','--path-format=absolute',flag).toString().trim());
+  const metadata=gitPath(origin,'rev-parse','--path-format=absolute',flag);
   demand(!contains(metadata,destination)&&!contains(destination,metadata),'Migration destination overlaps Git metadata');
  }
 }
@@ -160,9 +162,9 @@ export function stageMigration(source,destination,plan){
 export function assertWorkLocation(directory,mode='worktree'){
  demand(['worktree','isolated-clone'].includes(mode),'Unknown workspace mode');
  const root=fs.realpathSync.native(directory);
- demand(fs.realpathSync.native(git(root,'rev-parse','--show-toplevel').toString().trim())===root,'Repository root required');
- const metadata=fs.realpathSync.native(git(root,'rev-parse','--absolute-git-dir').toString().trim());
- const common=fs.realpathSync.native(git(root,'rev-parse','--path-format=absolute','--git-common-dir').toString().trim());
+ demand(gitPath(root,'rev-parse','--show-toplevel')===root,'Repository root required');
+ const metadata=gitPath(root,'rev-parse','--absolute-git-dir');
+ const common=gitPath(root,'rev-parse','--path-format=absolute','--git-common-dir');
  if(mode==='worktree')demand(metadata!==common,'Use a dedicated Git worktree, or explicitly select isolated-clone');
  else demand(metadata===common&&metadata===fs.realpathSync.native(path.join(root,'.git'))&&fs.lstatSync(metadata).isDirectory(),'Independent clone required');
  return {repo:root,mode};
@@ -184,7 +186,7 @@ export function gitMetadataNotWritableMessage(common,code){
  * Git itself would fail later with a lock error and leave an empty .worktrees behind.
  */
 function assertGitMetadataWritable(origin){
- const common=fs.realpathSync.native(git(origin,'rev-parse','--path-format=absolute','--git-common-dir').toString().trim());
+ const common=gitPath(origin,'rev-parse','--path-format=absolute','--git-common-dir');
  const probe=path.join(common,`asc-write-probe-${process.pid}-${randomUUID()}`);
  let fd;
  try{fd=fs.openSync(probe,'wx');}catch(error){
@@ -203,7 +205,7 @@ export function createWorktree(source,{issue,slug,type='feature',base='HEAD'}={}
  demand(['feature','fix','refactor','test','docs','chore'].includes(type),'Unsupported standard branch type');
  demand(typeof base==='string'&&base&&!base.startsWith('-'),'Explicit base revision required');
  const origin=fs.realpathSync.native(source);
- demand(fs.realpathSync.native(git(origin,'rev-parse','--show-toplevel').toString().trim())===origin,'Repository root required');
+ demand(gitPath(origin,'rev-parse','--show-toplevel')===origin,'Repository root required');
  const head=git(origin,'rev-parse','--verify',`${base}^{commit}`).toString().trim(),branch=`${type}/${issue}-${slug}`;
  assertGitMetadataWritable(origin);
  git(origin,'check-ref-format','--branch',branch);

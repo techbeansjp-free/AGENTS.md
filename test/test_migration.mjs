@@ -176,6 +176,14 @@ test('a write probe that cannot be removed is reported with its path and stops c
  assert.deepEqual(fs.readdirSync(path.join(f.source,'.git')).filter(name=>name.startsWith('asc-write-probe-')).length,1,'only the probe whose removal failed remains');
 });
 
+test('worktree creation keeps a trailing space in a separate Git directory path (#1731)',{skip:process.platform==='win32'},t=>{
+ const f=fixture(t),separate=path.join(f.root,'meta ');
+ execFileSync('git',['init','-q',`--separate-git-dir=${separate}`],{cwd:f.source,stdio:'pipe'});
+ const created=createWorktree(f.source,{issue:1731,slug:'separate-space'});
+ assert.equal(created.branch,'feature/1731-separate-space');
+ assert.deepEqual(fs.readdirSync(separate).filter(name=>name.startsWith('asc-write-probe-')),[]);
+});
+
 test('worktree batch materialization preserves binary bytes, empty files and executable modes',t=>{
  const f=fixture(t),expected=new Map();
  for(let i=0;i<100;i++){const name=`nested/file-${i}.bin`,bytes=Buffer.from([0,10,13,255,i]);expected.set(name,bytes);fs.mkdirSync(path.join(f.source,'nested'),{recursive:true});fs.writeFileSync(path.join(f.source,name),bytes);}

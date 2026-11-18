@@ -116,7 +116,7 @@ v0.5.64〜v0.5.66で配布した`fact-record`・`fact-contradict`・`fact-list`�
 
 ### Codexのsandboxで作業場所を作る（#1730）
 
-Codexを`workspace-write`のsandboxで起動すると、書込みを許した領域の中でも`.git`は読み取り専用になる。`worktree-create`は新しいbranchとworktreeの記録をGitの共通の管理領域（`git rev-parse --path-format=absolute --git-common-dir`の結果）に書くため、このままでは作成できない。`worktree-create`は、作成を始める前にこの領域へ書けるかを確かめる。書けなければ`Git metadata is not writable: <dir>`と対処を示し、終了コード1で止まる。sandboxのほか、通常のファイル権限や読み取り専用のmountでも同じmessageになる。このとき`.worktrees`もbranchも作らない。
+Codexを`workspace-write`のsandboxで起動すると、書込みを許した領域の中でも`.git`は読み取り専用になる。`worktree-create`は新しいbranchとworktreeの記録をGitの共通の管理領域（`git rev-parse --path-format=absolute --git-common-dir`の結果）に書くため、このままでは作成できない。`worktree-create`は、作成を始める前に、この領域の直下に確認用のファイルを作れるかを確かめる。作れなければ`Git metadata is not writable: <dir>`と対処を示し、終了コード1で止まる。このとき`.worktrees`もbranchも作らない。sandboxのほか、通常のファイル権限や読み取り専用のmountでも同じmessageになる。直下には書けるが、その下の`worktrees`や`refs`だけを書けない場合は、この確認を通り、Git自身のエラーで止まる。その場合は、作業先の`.worktrees`が残り得る。
 
 Agentに作業場所の作成とcommitまで任せる場合は、Codexをrepository rootで起動し、この領域を`writable_roots`に加える。
 
