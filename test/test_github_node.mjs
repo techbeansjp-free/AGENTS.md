@@ -1,5 +1,5 @@
 import {tempDir} from './helpers/temp-dir.mjs';
-import {test} from 'node:test';import assert from 'node:assert/strict';import {Github} from '../src/github.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {execFileSync,spawnSync} from 'node:child_process';import {Github} from '../src/github.mjs';
 const head='a'.repeat(40),base='b'.repeat(40),repository='owner/dummy';
 function setup(overrides={}){
  const calls=[];const data={state:'open',draft:true,merged:false,head:{repo:{full_name:repository},ref:'trial',sha:head},base:{repo:{full_name:repository},ref:'main',sha:base},...overrides};
@@ -147,4 +147,13 @@ test('new Draft binds the submitted commit without claiming synthetic or Control
  };
  const result=await provider.observe(1,{timeout:1000,interval:0});
  assert.equal(result.checks.check,'success');assert.equal(result.transportFailures.length,3);assert.equal(observations,6);assert.equal(calls.length,0);
+});
+
+// #1734: the default command leaves Git's stderr out of its error; a delivery error reaches events and result.json.
+test('the default delivery command names a Git failure without Git stderr',{skip:process.platform==='win32'},t=>{
+ const root=tempDir('asc-github-git-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ execFileSync('git',['init','-q',root]);execFileSync('git',['config','core.compression',"first\nerror: SYNTHETIC_SECRET"],{cwd:root});
+ assert.match(spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).stderr,/SYNTHETIC_SECRET/);
+ const provider=new Github({repository,issue:1,repo:root,branch:'trial',baseBranch:'main',base,workflowPath:'.github/workflows/safety.yml'});
+ assert.throws(()=>provider.command(['git','rev-parse','HEAD'],root),{message:'Delivery Git operation failed (exit status 128)'});
 });

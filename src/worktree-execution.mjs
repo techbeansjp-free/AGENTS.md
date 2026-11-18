@@ -2,18 +2,23 @@
 import {projectContext} from './project-context.mjs';
 import fs from 'node:fs';import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {execFileSync,spawnSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import {performance} from 'node:perf_hooks';
 import {createHash} from 'node:crypto';
 import {projectLocation} from './project-location.mjs';
 import {hostMaskedPaths} from './host-masked-paths.mjs';
-import {GIT_NULL_DEVICE} from './source-limits.mjs';
+import {GIT_NULL_DEVICE,gitFailureMessage} from './source-limits.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const gitEnvironment=()=>Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.toUpperCase().startsWith('GIT_')));
 // These non-interactive commands have no stdin payload. Avoid an unnecessary
 // stdin socket/pipe, which restricted Hosts can reject even after child success.
 const gitMaxBuffer=16*1024*1024;
-const git=(repo,...args)=>execFileSync('git',['-c',`core.hooksPath=${GIT_NULL_DEVICE}`,...args],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',maxBuffer:gitMaxBuffer}).trim();
+// A failure names only its kind: Git's stderr can quote repo-local config values and reaches the Agent (#1734).
+const gitRaw=(repo,args,encoding)=>{
+ const p=spawnSync('git',['-c',`core.hooksPath=${GIT_NULL_DEVICE}`,...args],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding,maxBuffer:gitMaxBuffer});
+ if(p.error||p.status!==0)throw Error(gitFailureMessage('Worktree Git operation failed',p));return p.stdout;
+};
+const git=(repo,...args)=>gitRaw(repo,args,'utf8').trim();
 export function startWorktree(directory,paths=[]){
  return describeProject(projectLocation(directory),paths);
 }
@@ -40,10 +45,10 @@ export function verifyWorktree(directory,base,ownerFile){
  if(!Array.isArray(permittedMasks)||permittedMasks.some(p=>typeof p!=='string'||!p||path.isAbsolute(p)||p.split('/').some(s=>!s||s==='.'||s==='..')||contract.allowedPaths.some(a=>a===p||a.startsWith(p+'/')||p.startsWith(a+'/')))||new Set(permittedMasks).size!==permittedMasks.length)throw Error('Expected exact owner hostMaskedPaths outside change scope');
  const masks=permittedMasks.length?hostMaskedPaths(repo):[],maskedNames=new Set(masks.filter(mask=>permittedMasks.includes(mask.path)).map(mask=>mask.path));
  const state=()=>{
-  const entries=execFileSync('git',['ls-files','-v','-z'],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
+  const entries=gitRaw(repo,['ls-files','-v','-z']).toString().split('\0').filter(Boolean);
   if(entries.some(e=>e[0]==='S'||e[0]===e[0].toLowerCase()))throw Error('Hidden index flags prevent verification of tracked source');
   if(permittedMasks.length&&JSON.stringify(hostMaskedPaths(repo))!==JSON.stringify(masks))throw Error('Host protection mounts changed during verification; result is invalid');
-  const status=execFileSync('git',['status','--porcelain=v1','-z','--untracked-files=all'],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),encoding:'utf8',maxBuffer:gitMaxBuffer});
+  const status=gitRaw(repo,['status','--porcelain=v1','-z','--untracked-files=all'],'utf8');
   return status.split('\0').filter(Boolean).filter(entry=>!(entry.startsWith('?? ')&&maskedNames.has(entry.slice(3)))).join('\0');
  };
  const initialState=state();
@@ -56,7 +61,7 @@ export function verifyWorktree(directory,base,ownerFile){
   }
   throw Error('Commit intended changes before verification; preserve unrelated work separately');
  }
- const names=execFileSync('git',['diff','--name-only','--no-renames','-z',baseHead,start.head],{cwd:repo,stdio:['ignore','pipe','pipe'],env:gitEnvironment(),maxBuffer:gitMaxBuffer}).toString().split('\0').filter(Boolean);
+ const names=gitRaw(repo,['diff','--name-only','--no-renames','-z',baseHead,start.head]).toString().split('\0').filter(Boolean);
  const allowedNames=new Set(contract.allowedPaths);
  if(names.some(p=>!allowedNames.has(p)))throw Error('Changes exceed owner scope');
  // Owner-selected commands run in the current Host environment, unlike internal Git observations.
