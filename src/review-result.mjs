@@ -2,10 +2,15 @@
 const text={type:'string',minLength:1,maxLength:4000};
 const properties={location:text,condition:text,evidence:text,impact:text,action:text,counterevidence:text,severity:{type:'string',enum:['P0','P1','P2','P3']},verification:{type:'string',enum:['static-analysis','unverified-risk']},blocking:{type:'boolean'}};
 export const reviewSchema={type:'object',properties:{verdict:{type:'string',enum:['pass','fail']},findings:{type:'array',maxItems:64,items:{type:'object',properties,required:Object.keys(properties),additionalProperties:false}}},required:['verdict','findings'],additionalProperties:false};
-export function parseReview(value){
+/* A Unit whose checks the planner selected also answers whether they exercise its writePaths and criteria (#1733).
+   A repair cannot change the checks, so a narrow selection is reported here, not as a blocking finding. */
+export const unitCheckReviewSchema={...reviewSchema,properties:{...reviewSchema.properties,unitChecksSufficient:{type:'boolean'}},required:[...reviewSchema.required,'unitChecksSufficient']};
+export function parseReview(value,{unitChecks=false}={}){
  const demand=(ok,message)=>{if(!ok)throw Error('Invalid review: '+message);};
  demand(value&&typeof value==='object'&&!Array.isArray(value),'object required');
- demand(Object.keys(value).every(k=>['verdict','findings'].includes(k))&&['pass','fail'].includes(value.verdict)&&Array.isArray(value.findings)&&value.findings.length<=64,'verdict/findings required');
+ const keys=unitChecks?['verdict','findings','unitChecksSufficient']:['verdict','findings'];
+ demand(Object.keys(value).every(k=>keys.includes(k))&&['pass','fail'].includes(value.verdict)&&Array.isArray(value.findings)&&value.findings.length<=64,'verdict/findings required');
+ demand(!unitChecks||typeof value.unitChecksSufficient==='boolean','unitChecksSufficient required');
  const findings=value.findings.map(f=>{
   demand(f&&typeof f==='object'&&!Array.isArray(f)&&Object.keys(f).length===Object.keys(properties).length,'finding fields required');
   for(const [key,schema] of Object.entries(properties)){
@@ -16,7 +21,7 @@ export function parseReview(value){
  });
  const blockers=findings.filter(f=>f.blocking);
  demand((value.verdict==='fail')===(blockers.length>0),'verdict contradicts findings');
- return {verdict:value.verdict,findings,blockers:blockers.map(f=>`${f.severity} ${f.location}: ${f.condition}; ${f.impact}; ${f.action}`),evidenceAuthority:'reviewer assessment; not host-reproduced evidence'};
+ return {verdict:value.verdict,findings,...(unitChecks?{unitChecksSufficient:value.unitChecksSufficient}:{}),blockers:blockers.map(f=>`${f.severity} ${f.location}: ${f.condition}; ${f.impact}; ${f.action}`),evidenceAuthority:'reviewer assessment; not host-reproduced evidence'};
 }
 
 /** Bounded historical claims only; never a review receipt or an authority source. */

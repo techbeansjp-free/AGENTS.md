@@ -139,7 +139,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
     const unitRequest={...request,...spec,repo:candidate,base:before.head,priorReviews:request.unitCandidates?.[id]?.priorReviews};
     // Explain an owner-compiled partial assignment; this never waives whole-Goal gates.
     const unitAssignment={planDigest:compiled.digest,goalIntent:c.contract.intent,deliveryAllowed:false,
-     ...(request.unitVerificationSource==='controller-catalog'?{unitChecks:{source:'planner-selected from the Controller catalog; not owner-written',review:'Judge whether contract testArgv and riskTestArgv exercise this Unit writePaths and criteria. Report a blocking finding when they are too narrow. The owner whole-Goal checks run after integration regardless.'}}:{}),
+     ...(request.unitVerificationSource==='controller-catalog'?{unitChecks:{source:'planner-selected from the Controller catalog; not owner-written',review:'Judge whether contract testArgv and riskTestArgv exercise this Unit writePaths and criteria, and answer unitChecksSufficient. When they are too narrow, set it to false instead of a blocking finding: a repair cannot change the checks. The Controller then runs the owner whole-Goal checks on this Unit before integration, and they run after integration regardless.'}}:{}),
      current:units.get(id),units:compiled.plan.units.map(u=>({id:u.id,intent:u.intent,criteria:u.criteria,dependsOn:u.dependsOn,writePaths:u.writePaths,
       status:u.id===id?'current':results.some(r=>r.id===u.id&&r.result?.status==='reviewed-candidate')?'integrated':'pending'}))};
     const result=threadedUnits
@@ -147,6 +147,17 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
      :await runWorkflow(unitRequest,{submit:false,unitAssignment,candidateReuse,executionBudget:budget,hostVerification:host?.verify,authorityRoots,agent:freshAgent,onEvent:event=>emit('unit-event',{id,event}),provider:{intent:async()=>{await checkIntent();return units.get(id).intent;}}});
     if(threadedUnits)for(const call of result.calls??[]){demand(typeof call.context==='string'&&!contexts.has(call.context),'Goal requires fresh Agent contexts');contexts.add(call.context);}
     if(result.status!=='reviewed-candidate'){const failure=Error('Unit did not satisfy its obligations: '+id);failure.workflowDiagnostic=result;throw failure;}
+    // #1733: no Controller check can tell which files a planner-selected check exercises. When the reviewer finds the
+    // selection too narrow, verify this Unit with the owner whole-Goal checks, the default for an unselected Unit,
+    // before integration. A failure keeps the Unit out of the Goal.
+    if(request.unitVerificationSource==='controller-catalog'&&result.unitChecksSufficient===false){
+     emit('unit-checks-fallback',{id,head:result.target.head,testArgv:c.contract.testArgv,riskTestArgv:c.contract.riskTestArgv});
+     const fallback=new AssetController({...unitRequest,contract:{...spec.contract,testArgv:structuredClone(c.contract.testArgv),riskTestArgv:structuredClone(c.contract.riskTestArgv)},implementer:'unit-checks-fallback'});
+     if(host)fallback.setHostVerification(host.verify);
+     try{fallback.verify({timeout:()=>budget.verificationTimeout(fallback.verificationLimits().timeoutMilliseconds)});}
+     catch(error){const failure=Error('Unit failed the owner whole-Goal checks after its selected checks were found too narrow: '+id,{cause:error});failure.workflowDiagnostic={...result,fallbackVerification:fallback.events.filter(e=>e.operation==='verify').slice(-1)};throw failure;}
+     result.fallbackVerification=fallback.events.filter(e=>e.operation==='verify').slice(-1);
+    }
     return {id,repo:candidate,result};
    }));
    for(let index=0;index<executions.length;index++){

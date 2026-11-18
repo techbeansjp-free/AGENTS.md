@@ -205,9 +205,13 @@ sets this field; do not write it by hand in a request or an edited
 `.restart-request.json`.
 `restart-goal` keeps the selection when reusing a proposal, passes the catalog
 to replanning, and records `unitVerification` and `adoption` in its result. Which files a selected script exercises is not checked
-by the Controller. The Unit review receives `unitAssignment.unitChecks`
-stating that the checks are planner-selected, and must report a blocking
-finding when they are too narrow for the Unit.
+by the Controller: no catalog entry says which files it exercises (#1733). The Unit review receives
+`unitAssignment.unitChecks` stating that the checks are planner-selected, and also answers
+`unitChecksSufficient`. A repair cannot change the checks, so a too-narrow selection is reported
+there, not as a blocking finding. When the passing review answers `false`, the Controller runs the
+owner whole-Goal `testArgv` and `riskTestArgv` (the default of an unselected Unit) on that Unit
+before integration, emits `unit-checks-fallback`, and records the result as
+`fallbackVerification`; if they fail, the Unit is not integrated and the Goal stops.
 
 The proposal can choose units and dependencies only within the original scope.
 It cannot replace authority, assets, policy, risk requirements or Delivery.
