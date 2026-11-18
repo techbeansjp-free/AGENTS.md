@@ -258,6 +258,17 @@ export class Controller {
     demand(equal(this.target(),target) && results.length===1+this.contract.riskTestArgv.length && results.every(x=>x.exit===0),'Verification failed or changed target');
     this.#tests=target;
   }
+  /** Run more owner commands on the verified and reviewed target, with this Controller's approval, scope and isolation,
+     without changing its verification or review state (#1733: whole-Goal checks for a too-narrow Unit selection). */
+  verifyAlso(argvs,message,{timeout=()=>this.verificationLimits().timeoutMilliseconds}={}) {
+    const target=this.target();demand(equal(this.#tests,target) && equal(this.#review,target),'Current verification or review missing');
+    demand(Array.isArray(argvs) && argvs.length>0 && argvs.every(a=>Array.isArray(a) && a.length>0 && a.every(v=>typeof v==='string' && v)),'Verification commands missing');
+    const results=[];
+    for(const argv of argvs){const result=this.sandbox(target,argv,timeout);results.push(result);if(result.exit!==0)break;}
+    this.#events.push({operation:'verify-also',target,results});
+    demand(equal(this.target(),target),'Additional verification changed target');
+    demand(results.length===argvs.length && results.every(x=>x.exit===0),message);
+  }
   async review(freshReviewer) {
     const generation=++this.#generation;
     this.#review=undefined;

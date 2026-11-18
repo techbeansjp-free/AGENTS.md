@@ -853,8 +853,35 @@ test('a Unit whose selected checks the reviewer finds too narrow passes the whol
   return {context,seconds:0,usage:[],answer:passingReview(workspace,id=>id!=='a')};};
  const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
  assert.equal(r.status,'draft-ci-passed');
- const fallbacks=r.events.filter(e=>e.type==='unit-checks-fallback');
- assert.deepEqual(fallbacks.map(e=>e.id),['a']);assert.deepEqual(fallbacks[0].testArgv,request.contract.testArgv);
+ const fallbacks=r.events.filter(e=>e.type==='unit-event'&&e.event.type==='unit-checks-fallback');
+ assert.deepEqual(fallbacks.map(e=>e.id),['a']);assert.deepEqual(fallbacks[0].event.testArgv,request.contract.testArgv);
+ // The checks ran: both owner commands passed on Unit a, and the Goal was delivered.
+ const ran=r.units.find(u=>u.id==='a').result.controllerEvents.filter(e=>e.operation==='verify-also');
+ assert.equal(ran.length,1);assert.equal(ran[0].results.length,2);assert.ok(ran[0].results.every(x=>x.exit===0));assert.equal(f.deliveries(),1);
+});
+
+// The fallback runs inside the Unit run, with the Unit's own design approval (#1733 review): a risky contract needs it.
+test('the too-narrow fallback runs with the Unit approval when the contract declares a risk',{skip:!enabled},async t=>{
+ const f=fixture(t),goal=f.request.goal,owner=tempDir('asc-goal-owner-');t.after(()=>fs.rmSync(owner,{recursive:true,force:true}));
+ const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+ Object.assign(request.contract,{testArgv:['/bin/sh','-c','test -s contract.txt'],riskTestArgv:[['/bin/true']],risks:['public-contract'],requiresDesign:true,design:'Keep the fixture value contracts.'});
+ const keys=generateKeyPairSync('ed25519'),publicKey=keys.publicKey.export({type:'spki',format:'pem'}),keyFile=path.join(owner,'key.pem'),signer=path.join(owner,'sign.mjs');
+ fs.writeFileSync(keyFile,keys.privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600});
+ fs.writeFileSync(signer,`import fs from 'node:fs';import {sign} from 'node:crypto';import {approvalBytes} from ${JSON.stringify(new URL('../src/approval.mjs',import.meta.url).href)};
+const input=JSON.parse(fs.readFileSync(0));if(input.purpose!=='design')throw Error('Only design approval');
+const now=Date.now(),payload={schema:'asc-owner-approval/v1',purpose:'design',authority:'fixture-owner',binding:input.binding,issuedAt:now,expiresAt:now+60000};
+console.log(JSON.stringify({payload,signature:sign(null,approvalBytes(payload),fs.readFileSync(${JSON.stringify(keyFile)})).toString('base64')}));`);
+ request.approvalCommand=[process.execPath,signer];request.trustedKeys=[{authority:'fixture-owner',purpose:'design',publicKey,fingerprint:keyFingerprint(publicKey)}];
+ request.decomposition={mode:'within-owner-contract'};request.budget={maxAgentCalls:12};let n=0;
+ const agent=async({workspace,writable,prompt})=>{const context='risky-narrow-'+(++n),p=prompt.startsWith('{')?JSON.parse(prompt):{};
+  if(p.pins)return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:Object.fromEntries(goal.units.map(u=>[u.id,['contract-risk-1']]))})};
+  if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}
+  return {context,seconds:0,usage:[],answer:passingReview(workspace,id=>id!=='a')};};
+ const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
+ assert.equal(r.status,'draft-ci-passed');
+ assert.deepEqual(r.events.filter(e=>e.type==='unit-event'&&e.event.type==='unit-checks-fallback').map(e=>e.id),['a']);
+ const ran=r.units.find(u=>u.id==='a').result.controllerEvents.filter(e=>e.operation==='verify-also');
+ assert.equal(ran.length,1);assert.ok(ran[0].results.every(x=>x.exit===0));
 });
 
 test('a Unit whose selected checks are too narrow and that fails the whole-Goal checks is not integrated',{skip:!enabled},async t=>{
@@ -869,8 +896,9 @@ test('a Unit whose selected checks are too narrow and that fails the whole-Goal 
  let failure;try{await runAdaptive(request,{agent,provider:f.provider});}catch(e){failure=e;}
  assert(failure);const diagnostic=failure.goalDiagnostic;t.after(()=>fs.rmSync(diagnostic.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(diagnostic.proposal.root,{recursive:true,force:true}));
  assert.equal(f.deliveries(),0);
- const unitA=diagnostic.units.find(u=>u.id==='a');assert.match(unitA.error,/whole-Goal checks after its selected checks were found too narrow: a/);
- assert.equal(unitA.diagnostic.fallbackVerification[0].results.at(-1).exit===0,false);
+ const unitA=diagnostic.units.find(u=>u.id==='a');assert.match(unitA.error,/whole-Goal checks after its selected checks were found too narrow/);
+ assert.notEqual(unitA.diagnostic.controllerEvents.filter(e=>e.operation==='verify-also').at(-1).results.at(-1).exit,0);
+ assert.equal(f.git('rev-parse','HEAD'),request.base);
 });
 
 test('restart keeps the planner Unit check selection of a failed delegated run',{skip:!enabled},async t=>{

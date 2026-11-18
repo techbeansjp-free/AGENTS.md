@@ -208,10 +208,13 @@ to replanning, and records `unitVerification` and `adoption` in its result. Whic
 by the Controller: no catalog entry says which files it exercises (#1733). The Unit review receives
 `unitAssignment.unitChecks` stating that the checks are planner-selected, and also answers
 `unitChecksSufficient`. A repair cannot change the checks, so a too-narrow selection is reported
-there, not as a blocking finding. When the passing review answers `false`, the Controller runs the
-owner whole-Goal `testArgv` and `riskTestArgv` (the default of an unselected Unit) on that Unit
-before integration, emits `unit-checks-fallback`, and records the result as
-`fallbackVerification`; if they fail, the Unit is not integrated and the Goal stops.
+there, not as a blocking finding. When the passing review answers `false`, the Unit's Controller
+runs the owner whole-Goal `testArgv` and `riskTestArgv` (also the default of an unselected Unit
+without an owner `unitTestArgv`) on the reviewed Unit target before integration, with that Unit's approval, scope and isolation. The Unit
+emits `unit-checks-fallback` and records a `verify-also` Controller event; if a check fails, the
+Unit is blocked, is not integrated, and the Goal stops. A timeout, an unavailable Host or an output
+limit keeps its own error. When the whole-Goal checks need every Unit, a Unit found too narrow
+fails this fallback, as an unselected Unit fails its default `contract-test`.
 
 The proposal can choose units and dependencies only within the original scope.
 It cannot replace authority, assets, policy, risk requirements or Delivery.

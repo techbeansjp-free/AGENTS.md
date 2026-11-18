@@ -238,7 +238,17 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
     continue;
    }
    if(work.work==='delivery'){
-    if(!submit)return save({status:'reviewed-candidate',root,target:c.ready(await remote.intent()),...(unitChecks?{unitChecksSufficient}:{}),calls,events,controllerEvents:c.events,repairs,allAgentTotalTokens:null});
+    if(!submit){
+     // #1733: no Controller check can tell which files a planner-selected check exercises. Unless the reviewer finds
+     // the selection sufficient, run the owner whole-Goal checks on this reviewed target, with this Unit's approval,
+     // scope and isolation. A failing check blocks the Unit, so it is not integrated.
+     if(unitChecks&&unitChecksSufficient!==true){
+      const fallback=unitAssignment.unitChecks.fallback;
+      emit('unit-checks-fallback',{target:c.target(),testArgv:fallback.testArgv,riskTestArgv:fallback.riskTestArgv});
+      c.verifyAlso([fallback.testArgv,...fallback.riskTestArgv],'Unit failed the owner whole-Goal checks after its selected checks were found too narrow',{timeout:()=>budget.verificationTimeout(c.verificationLimits().timeoutMilliseconds)});
+     }
+     return save({status:'reviewed-candidate',root,target:c.ready(await remote.intent()),...(unitChecks?{unitChecksSufficient}:{}),calls,events,controllerEvents:c.events,repairs,allAgentTotalTokens:null});
+    }
     const deliveryProvider=new Proxy(remote,{get(target,key){
      const value=Reflect.get(target,key,target);
      if(!['intent','createDraft','observe'].includes(key)||typeof value!=='function')return value;
