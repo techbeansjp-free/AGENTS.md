@@ -211,8 +211,8 @@ by the Controller: no catalog entry says which files it exercises (#1733). The r
 planner-selected, and also answers
 `unitChecksSufficient`. A repair cannot change the checks, so a too-narrow selection is reported
 there, not as a blocking finding. When the passing review answers `false`, the Unit's Controller
-runs the owner whole-Goal `testArgv` and `riskTestArgv` (also the default of an unselected Unit
-without an owner `unitTestArgv`) on the reviewed Unit target before integration, with that Unit's approval, scope and isolation. The Unit
+runs the owner whole-Goal `testArgv` (the `contract-test` default of an unselected Unit without an
+owner `unitTestArgv`) and `riskTestArgv` on the reviewed Unit target before integration, with that Unit's approval, scope and isolation. The Unit
 emits `unit-checks-fallback` and records a `verify-also` Controller event; if a check fails, the
 Unit is blocked, is not integrated, and the Goal stops. A timeout, an unavailable Host or an output
 limit keeps its own error. When the whole-Goal checks need every Unit, a Unit found too narrow

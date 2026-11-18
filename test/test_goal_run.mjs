@@ -846,13 +846,13 @@ test('delegated decomposition runs planner-selected Unit checks and the unchange
 // Unit before integration; the Goal still runs its unchanged suite after integration.
 test('a Unit whose selected checks the reviewer finds too narrow passes the whole-Goal checks before integration',{skip:!enabled},async t=>{
  const f=fixture(t),goal=f.request.goal;const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
- // A whole-Goal test that a single Unit can satisfy, so the fallback passes.
+ // A whole-Goal test that a single Unit can satisfy, so the fallback passes. Only Unit a has a planner selection.
  request.contract.testArgv=['/bin/sh','-c','test -s contract.txt'];request.contract.riskTestArgv=[['/bin/true']];
  request.decomposition={mode:'within-owner-contract'};request.budget={maxAgentCalls:8};let n=0;
  const agent=async({workspace,writable,prompt})=>{const context='narrow-'+(++n),p=prompt.startsWith('{')?JSON.parse(prompt):{};
-  if(p.pins)return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:Object.fromEntries(goal.units.map(u=>[u.id,['contract-risk-1']]))})};
+  if(p.pins)return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:{a:['contract-risk-1']}})};
   if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}
-  return {context,seconds:0,usage:[],answer:passingReview(workspace,id=>id!=='a')};};
+  return {context,seconds:0,usage:[],answer:passingReview(workspace,()=>false)};};
  const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
  assert.equal(r.status,'draft-ci-passed');
  const fallbacks=r.events.filter(e=>e.type==='unit-event'&&e.event.type==='unit-checks-fallback');
@@ -860,6 +860,8 @@ test('a Unit whose selected checks the reviewer finds too narrow passes the whol
  // The checks ran: both owner commands passed on Unit a, and the Goal was delivered.
  const ran=r.units.find(u=>u.id==='a').result.controllerEvents.filter(e=>e.operation==='verify-also');
  assert.equal(ran.length,1);assert.equal(ran[0].results.length,2);assert.ok(ran[0].results.every(x=>x.exit===0));assert.equal(f.deliveries(),1);
+ // Units b and sum have no planner selection: they run their default and are neither asked nor backed up.
+ for(const id of ['b','sum']){const unit=r.units.find(u=>u.id===id).result;assert.equal(Object.hasOwn(unit,'unitChecksSufficient'),false);assert.equal(unit.controllerEvents.some(e=>e.operation==='verify-also'),false);}
 });
 
 // The fallback runs inside the Unit run, with the Unit's own design approval (#1733 review): a risky contract needs it.

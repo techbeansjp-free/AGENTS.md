@@ -41,7 +41,9 @@ test('additional verification needs a verified and reviewed target',t=>{
  assert.equal(c.events.some(e=>e.operation==='verify-also'),false);
 });
 test('additional verification rejects bad commands, a failing command and a changed target, and keeps verify and review',{skip:!linux},async t=>{
- const {c,root,git,change}=fixture(t);change();c.verify();await c.review(review);
+ const {c,root,git,change}=fixture(t);change();c.verify();
+ assert.throws(()=>c.verifyAlso([['/bin/true']],'fallback failed'),/Current verification or review missing/);
+ await c.review(review);
  for(const argvs of [[],[[]],[['']],'x'])assert.throws(()=>c.verifyAlso(argvs,'fallback failed'),/Verification commands missing/);
  c.verifyAlso([['/bin/true'],['/bin/sh','-c','test "$(cat code.txt)" = after']],'fallback failed');
  assert.deepEqual(c.events.filter(e=>e.operation==='verify-also').at(-1).results.map(r=>r.exit),[0,0]);
