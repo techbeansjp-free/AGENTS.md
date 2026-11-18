@@ -124,6 +124,8 @@ Agentに作業場所の作成とcommitまで任せる場合は、Codexをreposit
 codex -C <repo-root> --sandbox workspace-write -c 'sandbox_workspace_write.writable_roots=["<git-common-dir>"]'
 ```
 
+値は、`worktree-create`のmessageが示す`writable_roots = [...]`をそのまま使う（Windowsのpathの`\`などはescape済み）。shellの引用が難しいpathは、`config.toml`の`[sandbox_workspace_write]`に書く。
+
 - 加えると、Agentはrefs・hooks・configに加えて、同じcloneのすべてのworktreeとbranchの管理情報も書き換えられる。並行して動く別の作業にも及ぶ。hooksとconfigは、後で利用者が実行するGitの操作にも影響する。信頼できる作業だけに使い、作業後に`.git/hooks`と`git config --local --list`を確認する。
 - Codexをworktreeの中で起動すると、そのworktree用の管理領域（`<git-common-dir>/worktrees/<name>`）が読み取り専用のままになり、共通の管理領域を加えてもcommitできなかった。repository rootで起動する。
 - 書込みを許さない場合、Agentは作業場所の作成もcommitもできない。それらは利用者がsandboxの外で行う。
