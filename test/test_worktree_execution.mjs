@@ -104,3 +104,30 @@ test('owner mask permission does not require masks outside the sandbox or exempt
  fs.mkdirSync(path.join(f.work,'.claude'));fs.writeFileSync(path.join(f.work,'.claude/settings.json'),'uncommitted owner settings');
  assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/Commit intended changes/);
 });
+
+// #1734: Git's stderr can quote repo-local config values, and the CLI prints the message to the Agent that runs it.
+test('a worktree Git failure names its kind and never shows Git stderr, in the module or the CLI',{skip:process.platform==='win32'},t=>{
+ const f=fixture(t),realGit=spawnSync('which',['git'],{encoding:'utf8'}).stdout.trim(),originalPath=process.env.PATH;
+ // Fail only the worktree execution call (its argv starts with core.hooksPath), and pass every other call to the real Git.
+ const failing=(name,subcommand)=>{
+  const tools=path.join(f.root,name);fs.mkdirSync(tools);
+  fs.writeFileSync(path.join(tools,'git'),`#!${process.execPath}\nimport {spawnSync} from 'node:child_process';\nconst args=process.argv.slice(2);if(String(args[1]).startsWith('core.hooksPath=')&&args.includes(${JSON.stringify(subcommand)})){process.stderr.write("fatal: bad numeric config value 'first\\nerror: SYNTHETIC_SECRET' for 'core.compression'\\n");process.exit(128);}const r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(r.status??1);\n`,{mode:0o755});
+  return tools+path.delimiter+originalPath;
+ };
+ const start=failing('tools-start','rev-parse'),verify=failing('tools-verify','ls-files');
+ try{
+  process.env.PATH=start;assert.throws(()=>startWorktree(f.work),{message:'Worktree Git operation failed (exit status 128)'});
+  process.env.PATH=verify;assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),{message:'Worktree Git operation failed (exit status 128)'});
+ }finally{process.env.PATH=originalPath;}
+ const cli=spawnSync(process.execPath,['bin/asc-v05.mjs','start',f.work],{encoding:'utf8',env:{...process.env,PATH:start}});
+ assert.equal(cli.status,1,cli.stderr);assert.match(cli.stderr,/Worktree Git operation failed \(exit status 128\)/);
+ assert.equal(/SYNTHETIC_SECRET/.test(cli.stdout+cli.stderr),false,cli.stderr);
+});
+
+test('worktree verification names a base that is not a commit or not an ancestor, without Git stderr (#1734)',t=>{
+ const f=fixture(t);
+ assert.throws(()=>verifyWorktree(f.work,'f'.repeat(40),f.owner),{message:'Base is not a commit in this repository (exit status 128)'});
+ const head=f.git(f.work,'rev-parse','HEAD');f.git(f.work,'checkout','-q','--orphan','unrelated');f.git(f.work,'commit','-q','--allow-empty','-m','unrelated');
+ const unrelated=f.git(f.work,'rev-parse','HEAD');f.git(f.work,'checkout','-q',head);
+ assert.throws(()=>verifyWorktree(f.work,unrelated,f.owner),{message:'Base is not an ancestor of HEAD (exit status 1)'});
+});

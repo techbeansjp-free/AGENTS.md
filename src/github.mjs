@@ -1,9 +1,19 @@
 import {setTimeout} from 'node:timers';
 /** Host-owned Draft-only adapter; candidate code never receives GitHub credentials. */
-import {execFileSync} from 'node:child_process';
-import {GIT_NULL_DEVICE} from './source-limits.mjs';
+import {execFileSync,spawnSync} from 'node:child_process';
+import {GIT_NULL_DEVICE,gitFailureMessage} from './source-limits.mjs';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function demand(ok,message){if(!ok)throw Error(message);}
+const commandOptions={encoding:'utf8',timeout:90000,maxBuffer:4*1024*1024};
+/** Git's stderr can quote repo-local config values, and a delivery error reaches events and result.json, so a Git
+   failure names only its kind (#1734). gh keeps its error, whose stderr the CI observation reads for transport retries. */
+function defaultCommand(argv,cwd){
+ if(argv[0]!=='git')return execFileSync(argv[0],argv.slice(1),{cwd,...commandOptions}).trim();
+ const p=spawnSync('git',argv.slice(1),{cwd,stdio:['ignore','pipe','pipe'],...commandOptions});
+ // The subcommand comes from this adapter's own fixed argv, so naming it shows no repository data.
+ const subcommand=argv.slice(1).find((arg,i,rest)=>arg!=='-c'&&rest[i-1]!=='-c')??'command';
+ if(p.error||p.status!==0)throw Error(gitFailureMessage(`Delivery Git ${subcommand} failed`,p,commandOptions.timeout));return p.stdout.trim();
+}
 export class Github {
   constructor({repository,issue,repo,branch,baseBranch,base,workflowPath,command,ciTimeoutMilliseconds=null}) {
     demand(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository),'Invalid repository');
@@ -13,7 +23,7 @@ export class Github {
     demand(/^\.github\/workflows\/[A-Za-z0-9_-]+\.ya?ml$/.test(workflowPath),'Invalid workflow');
     demand(ciTimeoutMilliseconds===null||(Number.isSafeInteger(ciTimeoutMilliseconds)&&ciTimeoutMilliseconds>=0),'Invalid CI observation timeout');
     Object.assign(this,{repository,issue,repo,branch,baseBranch,base,workflowPath,ciTimeoutMilliseconds});
-    this.command=command ?? ((argv,cwd)=>execFileSync(argv[0],argv.slice(1),{cwd,encoding:'utf8',timeout:90000,maxBuffer:4*1024*1024}).trim());
+    this.command=command ?? defaultCommand;
   }
   api(route){return JSON.parse(this.command(['gh','api',route]));}
   intent(){return this.api(`repos/${this.repository}/issues/${this.issue}`).body;}

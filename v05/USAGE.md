@@ -296,6 +296,8 @@ stderrのエラーと終了コード1は維持する。`status: blocked`は成�
 呼出し側は終了コードとstatusの両方を確認し、失敗した検証・Agent起動・観測usageを保存する。
 入力検査などController開始前の失敗では構造化診断がない場合もあり、欠測をゼロと扱わない。
 
+ASCが実行したGitの失敗は、`Git observation failed (exit status 128)`のように、操作の名前と失敗の種類（timeout、出力上限、起動失敗、signal、終了コード）だけを示す。Gitのstderrは、repository固有の設定値やremote URLを引用することがあり、エラー文はCLIを実行したAgentへ届くため、エラー文・イベント・`result.json`に含めない（#1734）。エラー文の操作名（例: `Delivery Git push failed`、`Base is not an ancestor of HEAD`）から該当するGitコマンドを特定し、Git自身のエラーは利用者が同じrepositoryで手元で実行して確かめる（例: `git rev-parse HEAD`、`git status`）。pushの失敗はそのまま再実行するとASCの外で送信されるため、`git push --dry-run`や`git ls-remote`で確かめる。
+
 Linux snapshot Controllerの検証コマンド出力には、通常経路はstdout/stderr合計、`browser-cgroup-v1`は各streamに1MiBのバッファ保護上限がある。超過時は`ASC_VERIFICATION_OUTPUT_LIMIT`で停止し、検証成功や修復対象のテスト失敗として扱わない。出力量を抑えて再実行する。これは実行時間などのowner指定予算とは別であり、現在のHostで実行する`worktree-verify`のコマンド出力にはこの上限を設けていない。
 
 LinuxのProvider subprocessと隔離preflightの寿命管理は、上記「Agentの寿命管理」の呼出しごとのsystemd user service・cgroupとController専有pipeを使用する。Toolのfilesystem/network隔離は別のCodex profileが担当する。途中終了時のsnapshot・ログは残り得る。次の実行はGitの実状態から検証・独立レビューをやり直し、未完成ログを承認として使わない。
