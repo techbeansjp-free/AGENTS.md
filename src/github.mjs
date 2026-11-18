@@ -10,7 +10,9 @@ const commandOptions={encoding:'utf8',timeout:90000,maxBuffer:4*1024*1024};
 function defaultCommand(argv,cwd){
  if(argv[0]!=='git')return execFileSync(argv[0],argv.slice(1),{cwd,...commandOptions}).trim();
  const p=spawnSync('git',argv.slice(1),{cwd,stdio:['ignore','pipe','pipe'],...commandOptions});
- if(p.error||p.status!==0)throw Error(gitFailureMessage('Delivery Git operation failed',p,commandOptions.timeout));return p.stdout.trim();
+ // The subcommand comes from this adapter's own fixed argv, so naming it shows no repository data.
+ const subcommand=argv.slice(1).find((arg,i,rest)=>arg!=='-c'&&rest[i-1]!=='-c')??'command';
+ if(p.error||p.status!==0)throw Error(gitFailureMessage(`Delivery Git ${subcommand} failed`,p,commandOptions.timeout));return p.stdout.trim();
 }
 export class Github {
   constructor({repository,issue,repo,branch,baseBranch,base,workflowPath,command,ciTimeoutMilliseconds=null}) {

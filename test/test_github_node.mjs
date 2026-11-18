@@ -155,5 +155,5 @@ test('the default delivery command names a Git failure without Git stderr',{skip
  execFileSync('git',['init','-q',root]);execFileSync('git',['config','core.compression',"first\nerror: SYNTHETIC_SECRET"],{cwd:root});
  assert.match(spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).stderr,/SYNTHETIC_SECRET/);
  const provider=new Github({repository,issue:1,repo:root,branch:'trial',baseBranch:'main',base,workflowPath:'.github/workflows/safety.yml'});
- assert.throws(()=>provider.command(['git','rev-parse','HEAD'],root),{message:'Delivery Git operation failed (exit status 128)'});
+ assert.throws(()=>provider.command(['git','rev-parse','HEAD'],root),{message:'Delivery Git rev-parse failed (exit status 128)'});
 });
