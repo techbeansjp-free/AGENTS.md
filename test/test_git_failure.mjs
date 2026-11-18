@@ -1,5 +1,5 @@
 import {tempDir} from './helpers/temp-dir.mjs';
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,gitFailureReason,gitPathOutput} from '../src/source-limits.mjs';
 import {Controller} from '../src/controller.mjs';import {assertWorkLocation} from '../src/migration.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createVerificationGit} from '../src/verification-git.mjs';
@@ -36,7 +36,10 @@ test('real Git quotes a malformed repo-local config value, and the Controller me
  const {c,repo,git}=repository(t);
  for(const value of leakingValues){
   git('config','core.compression',value);
-  assert.match(spawnSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8'}).stderr,/SYNTHETIC_SECRET/);
+  // The precondition runs Git with the Controller's options and environment (src/controller.mjs gitOutput).
+  const env={PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0'};
+  const raw=spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','protocol.allow=never','rev-parse','HEAD'],{cwd:repo,env,encoding:'utf8'});
+  assert.equal(raw.status,128);assert.match(raw.stderr,/SYNTHETIC_SECRET/);
   assert.throws(()=>c.git('rev-parse','HEAD'),{message:'Git observation failed (exit status 128)'});
   git('config','--unset','core.compression');
  }
