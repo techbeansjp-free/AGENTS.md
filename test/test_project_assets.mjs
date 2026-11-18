@@ -630,10 +630,11 @@ test('failed partial or complete apply restores deleted, added, updated entries 
  }
 });
 
+let toolRuns=0;
 test('Git failures name the exit status or signal and keep the worktree check',t=>{
  for(const [body,reason] of [['process.exit(3);','exit status 3'],["process.kill(process.pid,'SIGKILL');",'terminated by SIGKILL'],
-  ["process.stderr.write('fatal: asset metadata init refused\\n');process.exit(128);",'exit status 128; stderr: fatal: asset metadata init refused']]){
-  const f=fixture(t),tools=path.join(f.root,`tools-${reason.split(';')[0].split(' ').pop()}`),originalPath=process.env.PATH;fs.mkdirSync(tools);
+  ["process.stderr.write('fatal: asset metadata init refused\\n');process.exit(128);",'exit status 128']]){
+  const f=fixture(t),tools=path.join(f.root,`tools-${reason.split(' ').pop()}-${toolRuns++}`),originalPath=process.env.PATH;fs.mkdirSync(tools);
   // Fail only the asset metadata init, which only the asset Git helper runs, and pass every other call to the real Git.
   const realGit=execFileSync('which',['git'],{encoding:'utf8'}).trim();
   fs.writeFileSync(path.join(tools,'git'),`#!${process.execPath}\nimport {spawnSync} from 'node:child_process';\nconst args=process.argv.slice(2);if(args.includes('--bare')){${body}}const r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(r.status??1);\n`,{mode:0o755});
@@ -642,19 +643,16 @@ test('Git failures name the exit status or signal and keep the worktree check',t
  }
 });
 
-// #1702: since #1699 a project-assets failure carries a stderr excerpt. Two kinds of Git child run for the consumer:
-// the location check (migration Git) reads the consumer's repo-local config, so a malformed value reaches its message
-// and must be hidden; asset Git uses an explicit --git-dir of private metadata and never reads that config.
+// #1702, #1734: two kinds of Git child run for the consumer. The location check (migration Git) reads the consumer's
+// repo-local config, and real Git quotes a malformed value in its stderr; the message leaves stderr out. Asset Git uses
+// an explicit --git-dir of private metadata and never reads that config.
 const consumerConfig=f=>(key,value)=>execFileSync('git',['config','--file',path.join(f.repo,'.git','config'),key,value],{cwd:f.root,stdio:'pipe'});
-test('a malformed consumer config value reaches the project-assets message only masked',t=>{
- for(const [key,value,form] of [['core.compression','S3CRETX https://u:S3CRETY@example.invalid/',"bad numeric config value '***' for 'core.compression'"],
-  ['core.compression',"S3CRETX\nS3CRETY it's","bad numeric config value '***' for 'core.compression'"],['core.checkStat',"S3CRETX\nS3CRETY","invalid value for 'core.checkstat': *** fatal: "],
-  ['include.path','~nouser/S3CRETX',"could not expand include path '***'"]]){
+test('a malformed consumer config value never reaches the project-assets message',t=>{
+ for(const [key,value] of [['core.compression','S3CRETX https://u:S3CRETY@example.invalid/'],['core.compression',"S3CRETX\nerror: S3CRETY it's"],
+  ['core.checkStat',"S3CRETX\nS3CRETY"],['include.path','~nouser/S3CRETX']]){
   const f=fixture(t);consumerConfig(f)(key,value);
-  assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}),e=>{
-   assert.match(e.message,/^Migration Git operation failed \(exit status 128; stderr: /);assert.ok(e.message.includes(form),e.message);
-   assert.equal(/S3CRET/.test(e.message),false,e.message);return true;
-  });
+  assert.match(spawnSync('git',['rev-parse','--show-toplevel'],{cwd:f.work,encoding:'utf8'}).stderr,/S3CRETX/,key);
+  assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}),{message:'Migration Git operation failed (exit status 128)'});
   assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain/distribution.json')),false);
  }
 });
@@ -668,12 +666,12 @@ test('asset Git does not read the consumer repository config',t=>{
  assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain/distribution.json')),true);
 });
 
-test('a failed asset patch preparation names the exit status and the end of stderr',t=>{
+test('a failed asset patch preparation names the exit status',t=>{
  const f=fixture(t),tools=path.join(f.root,'tools-no-index'),originalPath=process.env.PATH;fs.mkdirSync(tools);
  // Fail only git diff --no-index, which only the patch preparation runs; exit status 1 means a difference and is accepted.
  const realGit=execFileSync('which',['git'],{encoding:'utf8'}).trim();
  fs.writeFileSync(path.join(tools,'git'),`#!${process.execPath}\nimport {spawnSync} from 'node:child_process';\nconst args=process.argv.slice(2);if(args.includes('--no-index')){process.stderr.write('fatal: patch preparation refused\\n');process.exit(2);}const r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(r.status??1);\n`,{mode:0o755});
- try{process.env.PATH=tools+path.delimiter+originalPath;assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}),{message:'Cannot prepare asset patch (exit status 2; stderr: fatal: patch preparation refused)'});}finally{process.env.PATH=originalPath;}
+ try{process.env.PATH=tools+path.delimiter+originalPath;assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}),{message:'Cannot prepare asset patch (exit status 2)'});}finally{process.env.PATH=originalPath;}
  assert.equal(fs.existsSync(path.join(f.work,'.agent-skill-chain/distribution.json')),false);
 });
 
