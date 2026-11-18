@@ -651,6 +651,29 @@
           "afterSha256": "b7a56873cd771f2c446d369b649430b65a756ba278ff97ec81bb6f55b2e73569"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-REPOSITORY-FACTS-REMOVAL-001",
+      "status": "staged",
+      "fromVersion": 25,
+      "toVersion": 26,
+      "owner": "repository maintainer (explicit approval for Issue #1727)",
+      "rationale": "Issue #1727: #1722 で配布した src/repository-facts.mjs を取り除くため、package.json の files からその1行を消す（新しい Agent での試験で効果を確認できなかったため、owner が機能を戻すと決めた）。package.json の変更は files の1行と qualityContractVersion だけで、scripts・dependencies・devDependencies・engines・type・品質検査・validator・権限境界は変更しない。登録済みの TQP-REPOSITORY-FACTS-DISTRIBUTION-001 は消さない。",
+      "rollback": "適用前は有効化しない。適用後に戻す場合は次versionのproposalを先行登録して適用し、登録済みproposalの削除や品質保護の解除は行わない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "package.json",
+          "beforeSha256": "cf72d24feb568b1159942f624cbabddc3bc9f5d64936c3907d3ea72745a19cf8",
+          "afterSha256": "7e6ace8a82bb3a0df2fd735e986223cfef744ffe5348a2729861f0fe00eeb83b"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "b7a56873cd771f2c446d369b649430b65a756ba278ff97ec81bb6f55b2e73569",
+          "afterSha256": "5f9c4ab08cac7457e9111a30e4664920607ea2c115a1433d7be98e97e64244ca"
+        }
+      ]
     }
   ]
 }
