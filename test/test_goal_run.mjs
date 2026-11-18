@@ -17,6 +17,12 @@ function fixture(t){
  let deliveries=0;const provider={intent:()=>contract.intent,createDraft:()=>{deliveries++;return 1;},observe:()=>({head:git('rev-parse','HEAD'),draft:true,merged:false,boundToPr:true,checks:{test:'success'}})};
  return {root,request,provider,deliveries:()=>deliveries,git};
 }
+// A passing review. A Unit review of planner-selected checks also answers unitChecksSufficient (#1733); the Controller
+// marks such a review through unitAssignment.unitChecks in the review metadata.
+function passingReview(workspace,sufficient=()=>true){
+ const meta=workspace&&fs.existsSync(path.join(workspace,'.asc-review.json'))?JSON.parse(fs.readFileSync(path.join(workspace,'.asc-review.json'),'utf8')):null;
+ return JSON.stringify({verdict:'pass',findings:[],...(meta?.unitAssignment?.unitChecks?{unitChecksSufficient:sufficient(meta.unitAssignment.current.id)}:{})});
+}
 test('disjoint units run concurrently; dependencies and final review gate delivery',{skip:!enabled},async t=>{
  const f=fixture(t);f.request.unitAssignment={current:{id:'forged'},deliveryAllowed:true};let counter=0,active=0,maxActive=0,reviews=0;const workspaces=[];
  const agent=async({workspace,writable,prompt})=>{const context='fresh-'+(++counter);
@@ -797,6 +803,8 @@ test('delegation without owner unit rules adopts only catalog checks proposed by
  assert.deepEqual(adopted.unitRequests.a.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.unitRequests.a.contract.riskTestArgv,[]);
  // A Unit without a selection falls back to the whole-Goal test; the Goal contract never changes.
  assert.deepEqual(adopted.unitRequests.b.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.contract,request.contract);assert.equal(adopted.unitVerificationSource,'controller-catalog');
+ // Only Unit a has a planner selection, so only it answers unitChecksSufficient and gets the fallback (#1733).
+ assert.deepEqual(adopted.plannerSelectedUnits,['a']);
  for(const verification of [{a:['/bin/evil']},{a:[['/bin/evil']]},{a:[]},{a:['contract-test','contract-test']},{ghost:['contract-test']},['contract-test']])
   assert.throws(()=>adoptProposal(request,{status:'proposed',goal,binding,verification}),/verification/);
  const baseline=structuredClone(request);baseline.decomposition.unitTestArgv=['/bin/sh','-c','test -s contract.txt'];
@@ -827,13 +835,100 @@ test('delegated decomposition runs planner-selected Unit checks and the unchange
  const agent=async({workspace,writable,prompt})=>{const context='selected-'+(++n),p=prompt.startsWith('{')?JSON.parse(prompt):{};
   if(p.pins){catalog=p.verificationCatalog;return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:Object.fromEntries(goal.units.map(u=>[u.id,['contract-risk-1']]))})};}
   if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}
-  return {context,seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};};
+  return {context,seconds:0,usage:[],answer:passingReview(workspace)};};
  const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
  assert.deepEqual(catalog,[{id:'contract-test',argv:request.contract.testArgv},{id:'contract-risk-1',argv:unitCheck}]);
  assert.equal(r.status,'draft-ci-passed');assert.equal(f.deliveries(),1);
  for(const u of goal.units){assert.equal(r.unitVerification[u.id].source,'proposal');assert.deepEqual(r.unitVerification[u.id].testArgv,unitCheck);}
  assert.match(r.adoption,/Controller catalog/);
 });
+// #1733: a planner-selected check that the reviewer finds too narrow is backed by the owner whole-Goal checks on that
+// Unit before integration; the Goal still runs its unchanged suite after integration.
+test('a Unit whose selected checks the reviewer finds too narrow passes the whole-Goal checks before integration',{skip:!enabled},async t=>{
+ const f=fixture(t),goal=f.request.goal;const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+ // A whole-Goal test that a single Unit can satisfy, so the fallback passes. Only Unit a has a planner selection.
+ request.contract.testArgv=['/bin/sh','-c','test -s contract.txt'];request.contract.riskTestArgv=[['/bin/true']];
+ request.decomposition={mode:'within-owner-contract'};request.budget={maxAgentCalls:8};let n=0;
+ const agent=async({workspace,writable,prompt})=>{const context='narrow-'+(++n),p=prompt.startsWith('{')?JSON.parse(prompt):{};
+  if(p.pins)return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:{a:['contract-risk-1']}})};
+  if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}
+  return {context,seconds:0,usage:[],answer:passingReview(workspace,()=>false)};};
+ const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
+ assert.equal(r.status,'draft-ci-passed');
+ const fallbacks=r.events.filter(e=>e.type==='unit-event'&&e.event.type==='unit-checks-fallback');
+ assert.deepEqual(fallbacks.map(e=>e.id),['a']);assert.deepEqual(fallbacks[0].event.testArgv,request.contract.testArgv);
+ // The checks ran: both owner commands passed on Unit a, and the Goal was delivered.
+ const ran=r.units.find(u=>u.id==='a').result.controllerEvents.filter(e=>e.operation==='verify-also');
+ assert.equal(ran.length,1);assert.equal(ran[0].results.length,2);assert.ok(ran[0].results.every(x=>x.exit===0));assert.equal(f.deliveries(),1);
+ // Units b and sum have no planner selection: they run their default and are neither asked nor backed up.
+ for(const id of ['b','sum']){const unit=r.units.find(u=>u.id===id).result;assert.equal(Object.hasOwn(unit,'unitChecksSufficient'),false);assert.equal(unit.controllerEvents.some(e=>e.operation==='verify-also'),false);}
+});
+
+// The last passing review decides, not an earlier failed one (#1733 review): a repair runs between the two reviews.
+test('the last passing Unit review decides the fallback after a repair',{skip:!enabled},async t=>{
+ for(const [failed,passed] of [[true,false],[false,true]]){
+  const f=fixture(t),goal=f.request.goal;const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+  request.contract.testArgv=['/bin/sh','-c','test -s contract.txt'];request.contract.riskTestArgv=[['/bin/true']];
+  request.decomposition={mode:'within-owner-contract'};request.budget={maxAgentCalls:14};request.maxRepairs=1;let n=0,writesA=0,reviewsA=0;
+  const blocker={location:'a.txt',condition:'First attempt rejected',evidence:'fixture',impact:'fixture',action:'Repair a.txt',counterevidence:'none',severity:'P2',verification:'static-analysis',blocking:true};
+  const agent=async({workspace,writable,prompt})=>{const context=`last-review-${failed}-${++n}`,p=prompt.startsWith('{')?JSON.parse(prompt):{};
+   if(p.pins)return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:{a:['contract-risk-1']}})};
+   if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='a'?'1'.repeat(++writesA):id==='sum'?'2':'1');return {context,seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};}
+   const meta=JSON.parse(fs.readFileSync(path.join(workspace,'.asc-review.json'),'utf8'));
+   if(meta.unitAssignment?.current?.id!=='a')return {context,seconds:0,usage:[],answer:passingReview(workspace)};
+   const first=++reviewsA===1;
+   return {context,seconds:0,usage:[],answer:JSON.stringify(first?{verdict:'fail',findings:[blocker],unitChecksSufficient:failed}:{verdict:'pass',findings:[],unitChecksSufficient:passed})};};
+  const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
+  assert.equal(r.status,'draft-ci-passed');assert.equal(reviewsA,2);assert.equal(writesA,2);
+  const unitA=r.units.find(u=>u.id==='a').result;assert.equal(unitA.unitChecksSufficient,passed);
+  const fallbacks=r.events.filter(e=>e.type==='unit-event'&&e.event.type==='unit-checks-fallback');
+  if(passed){assert.deepEqual(fallbacks,[]);assert.equal(unitA.controllerEvents.some(e=>e.operation==='verify-also'),false);}
+  // The fallback ran on the repaired target, the one that was integrated.
+  else {assert.deepEqual(fallbacks.map(e=>e.id),['a']);assert.equal(fallbacks[0].event.target.head,unitA.target.head);}
+ }
+});
+
+// The fallback runs inside the Unit run, with the Unit's own design approval (#1733 review): a risky contract needs it.
+test('the too-narrow fallback runs with the Unit approval when the contract declares a risk',{skip:!enabled},async t=>{
+ const f=fixture(t),goal=f.request.goal,owner=tempDir('asc-goal-owner-');t.after(()=>fs.rmSync(owner,{recursive:true,force:true}));
+ const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+ Object.assign(request.contract,{testArgv:['/bin/sh','-c','test -s contract.txt'],riskTestArgv:[['/bin/true']],risks:['public-contract'],requiresDesign:true,design:'Keep the fixture value contracts.'});
+ const keys=generateKeyPairSync('ed25519'),publicKey=keys.publicKey.export({type:'spki',format:'pem'}),keyFile=path.join(owner,'key.pem'),signer=path.join(owner,'sign.mjs');
+ fs.writeFileSync(keyFile,keys.privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600});
+ fs.writeFileSync(signer,`import fs from 'node:fs';import {sign} from 'node:crypto';import {approvalBytes} from ${JSON.stringify(new URL('../src/approval.mjs',import.meta.url).href)};
+const input=JSON.parse(fs.readFileSync(0));if(input.purpose!=='design')throw Error('Only design approval');
+const now=Date.now(),payload={schema:'asc-owner-approval/v1',purpose:'design',authority:'fixture-owner',binding:input.binding,issuedAt:now,expiresAt:now+60000};
+console.log(JSON.stringify({payload,signature:sign(null,approvalBytes(payload),fs.readFileSync(${JSON.stringify(keyFile)})).toString('base64')}));`);
+ request.approvalCommand=[process.execPath,signer];request.trustedKeys=[{authority:'fixture-owner',purpose:'design',publicKey,fingerprint:keyFingerprint(publicKey)}];
+ request.decomposition={mode:'within-owner-contract'};request.budget={maxAgentCalls:12};let n=0;
+ const agent=async({workspace,writable,prompt})=>{const context='risky-narrow-'+(++n),p=prompt.startsWith('{')?JSON.parse(prompt):{};
+  if(p.pins)return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:Object.fromEntries(goal.units.map(u=>[u.id,['contract-risk-1']]))})};
+  if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}
+  return {context,seconds:0,usage:[],answer:passingReview(workspace,id=>id!=='a')};};
+ const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
+ assert.equal(r.status,'draft-ci-passed');
+ assert.deepEqual(r.events.filter(e=>e.type==='unit-event'&&e.event.type==='unit-checks-fallback').map(e=>e.id),['a']);
+ const ran=r.units.find(u=>u.id==='a').result.controllerEvents.filter(e=>e.operation==='verify-also');
+ assert.equal(ran.length,1);assert.ok(ran[0].results.every(x=>x.exit===0));
+});
+
+test('a Unit whose selected checks are too narrow and that fails the whole-Goal checks is not integrated',{skip:!enabled},async t=>{
+ const f=fixture(t),goal=f.request.goal;const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+ // The fixture's whole-Goal test needs every Unit, so it fails on Unit a alone.
+ const unitCheck=['/bin/sh','-c','test -s contract.txt'];request.contract.riskTestArgv=[unitCheck];
+ request.decomposition={mode:'within-owner-contract'};request.budget={maxAgentCalls:8};let n=0;
+ const agent=async({workspace,writable,prompt})=>{const context='narrow-fail-'+(++n),p=prompt.startsWith('{')?JSON.parse(prompt):{};
+  if(p.pins)return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:Object.fromEntries(goal.units.map(u=>[u.id,['contract-risk-1']]))})};
+  if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}
+  return {context,seconds:0,usage:[],answer:passingReview(workspace,id=>id!=='a')};};
+ let failure;try{await runAdaptive(request,{agent,provider:f.provider});}catch(e){failure=e;}
+ assert(failure);const diagnostic=failure.goalDiagnostic;t.after(()=>fs.rmSync(diagnostic.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(diagnostic.proposal.root,{recursive:true,force:true}));
+ assert.equal(f.deliveries(),0);
+ const unitA=diagnostic.units.find(u=>u.id==='a');assert.match(unitA.error,/whole-Goal checks after its selected checks were found too narrow/);
+ assert.notEqual(unitA.diagnostic.controllerEvents.filter(e=>e.operation==='verify-also').at(-1).results.at(-1).exit,0);
+ assert.equal(f.git('rev-parse','HEAD'),request.base);
+});
+
 test('restart keeps the planner Unit check selection of a failed delegated run',{skip:!enabled},async t=>{
  const f=fixture(t),goal=f.request.goal;const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
  request.contract.riskTestArgv=[['/bin/false']];request.decomposition={mode:'within-owner-contract'};request.maxRepairs=0;
@@ -841,7 +936,7 @@ test('restart keeps the planner Unit check selection of a failed delegated run',
  const agent=async({workspace,writable,prompt})=>{const p=prompt.startsWith('{')?JSON.parse(prompt):{};
   if(p.pins)return {context:'planner',seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification})};
   if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),'1');}
-  return {context:'w-'+Math.random(),seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};};
+  return {context:'w-'+Math.random(),seconds:0,usage:[],answer:passingReview(workspace)};};
  let failure;try{await runAdaptive(request,{agent,provider:f.provider});}catch(e){failure=e;}
  assert(failure);const prior=failure.goalDiagnostic;t.after(()=>fs.rmSync(prior.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(prior.proposal.root,{recursive:true,force:true}));
  const destination=tempDir('asc-restart-verification-');t.after(()=>fs.rmSync(destination,{recursive:true,force:true}));

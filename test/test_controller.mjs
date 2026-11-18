@@ -34,6 +34,26 @@ test('proof selection starts implementation, not a Step; unknown facts stop',t=>
  assert.throws(()=>c.ready(c.contract.intent));
  assert.throws(()=>{c.contract.intent='silently changed';},TypeError);
 });
+// #1733: verifyAlso runs extra owner commands only on a verified and reviewed target, and leaves that state alone.
+test('additional verification needs a verified and reviewed target',t=>{
+ const {c,change}=fixture(t);change();
+ assert.throws(()=>c.verifyAlso([['/bin/true']],'fallback failed'),/Current verification or review missing/);
+ assert.equal(c.events.some(e=>e.operation==='verify-also'),false);
+});
+test('additional verification rejects bad commands, a failing command and a changed target, and keeps verify and review',{skip:!linux},async t=>{
+ const {c,root,git,change}=fixture(t);change();c.verify();
+ assert.throws(()=>c.verifyAlso([['/bin/true']],'fallback failed'),/Current verification or review missing/);
+ await c.review(review);
+ for(const argvs of [[],[[]],[['']],'x'])assert.throws(()=>c.verifyAlso(argvs,'fallback failed'),/Verification commands missing/);
+ c.verifyAlso([['/bin/true'],['/bin/sh','-c','test "$(cat code.txt)" = after']],'fallback failed');
+ assert.deepEqual(c.events.filter(e=>e.operation==='verify-also').at(-1).results.map(r=>r.exit),[0,0]);
+ assert.throws(()=>c.verifyAlso([['/bin/false'],['/bin/true']],'fallback failed'),{message:'fallback failed'});
+ assert.deepEqual(c.events.filter(e=>e.operation==='verify-also').at(-1).results.map(r=>r.exit),[1]);
+ // The verification and review state is unchanged, so the target is still ready.
+ assert.deepEqual(c.ready(c.contract.intent),c.target());
+ fs.writeFileSync(path.join(root,'code.txt'),'later');git('commit','-qam','later');
+ assert.throws(()=>c.verifyAlso([['/bin/true']],'fallback failed'),/Current verification or review missing/);
+});
 test('actual isolated verification, independent review, Draft and idempotent reobservation',{skip:!linux},async t=>{
  const {c,change}=fixture(t);change();c.verify();
  assert.equal(c.nextWork(c.contract.intent).work,'independent-review');

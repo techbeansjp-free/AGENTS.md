@@ -1,7 +1,7 @@
 import {tempDir} from './helpers/temp-dir.mjs';
 import {performance} from 'node:perf_hooks';
 import {setTimeout} from 'node:timers';
-import {parseReview} from '../src/review-result.mjs';
+import {parseReview,reviewSchema,unitCheckReviewSchema} from '../src/review-result.mjs';
 const finding=message=>({location:'code.txt',condition:message,evidence:message,impact:'Fixture contract violated',action:message,counterevidence:'Fixture content directly violates the stated contract',severity:'P2',verification:'static-analysis',blocking:true});
 /** Real Git/verification with explicit Agent/provider test doubles. */
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {runWorkflow} from '../src/workflow.mjs';import {hash} from '../src/controller.mjs';
@@ -165,6 +165,17 @@ test('review shape refuses contradictory pass and unsupported reproduction claim
  assert.throws(()=>parseReview({verdict:'pass',blockers:[]}),/findings/);
  const risk=parseReview({verdict:'fail',findings:[{...f,verification:'unverified-risk'}]});
  assert.equal(risk.findings[0].verification,'unverified-risk');assert.match(risk.evidenceAuthority,/not host-reproduced/);assert.equal(risk.blockers.length,1);
+});
+
+// #1733: a Unit review of planner-selected checks says whether they suffice; other reviews keep the plain shape.
+test('a planner-selected Unit review must answer unitChecksSufficient, and other reviews cannot',()=>{
+ assert.deepEqual(unitCheckReviewSchema.required,['verdict','findings','unitChecksSufficient']);assert.deepEqual(reviewSchema.required,['verdict','findings']);
+ assert.equal(parseReview({verdict:'pass',findings:[],unitChecksSufficient:false},{unitChecks:true}).unitChecksSufficient,false);
+ assert.equal(parseReview({verdict:'pass',findings:[],unitChecksSufficient:true},{unitChecks:true}).unitChecksSufficient,true);
+ assert.throws(()=>parseReview({verdict:'pass',findings:[]},{unitChecks:true}),/unitChecksSufficient/);
+ assert.throws(()=>parseReview({verdict:'pass',findings:[],unitChecksSufficient:'no'},{unitChecks:true}),/unitChecksSufficient/);
+ assert.throws(()=>parseReview({verdict:'pass',findings:[],unitChecksSufficient:true}),/findings/);
+ assert.equal(Object.hasOwn(parseReview({verdict:'pass',findings:[]}),'unitChecksSufficient'),false);
 });
 
 test('owner control candidate can be reviewed without installing controls, repair or delivery',{skip:!enabled},async t=>{

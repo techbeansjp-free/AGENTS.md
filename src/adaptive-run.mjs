@@ -75,6 +75,9 @@ export function adoptProposal(request,proposal){
  const adopted={...structuredClone(request),goal:checked.goal,unitRequests};
  // Record the provenance explicitly; runGoal never infers it from the request shape.
  if(catalog)adopted.unitVerificationSource='controller-catalog';else delete adopted.unitVerificationSource;
+ // The Units whose checks the planner selected (#1733). Only these answer unitChecksSufficient and get the whole-Goal
+ // fallback; an unselected Unit runs its default (contract-test or the owner unitTestArgv), which is not planner-written.
+ if(catalog)adopted.plannerSelectedUnits=checked.goal.units.map(u=>u.id).filter(id=>Object.hasOwn(checked.verification??{},id));else delete adopted.plannerSelectedUnits;
  return adopted;
 }
 export const adoptionNote=catalog=>catalog?'owner-delegated scope; Unit checks selected by the planner from the Controller catalog; whole-Goal verification unchanged; not model approval':'owner-delegated scope and verification policy; not model approval';
