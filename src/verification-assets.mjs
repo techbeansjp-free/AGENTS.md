@@ -1,5 +1,6 @@
 /** Owner-pinned runtime/dependency inputs. No install hooks or candidate config. */
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';
+import {gitPathOutput} from './source-limits.mjs';
 import {Controller,digest,safeName} from './controller.mjs';import {pinAssetFile} from './snapshot.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 const contains=(a,b)=>{const r=path.relative(a,b);return !r||(!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
@@ -29,7 +30,7 @@ export class AssetController extends Controller{
   const temp=snapshot?fs.mkdtempSync(path.join(os.tmpdir(),'asc-verification-assets-')):undefined;let ordinal=0;
   try{
   const tracked=this.blobs(this.git('rev-parse','HEAD').toString().trim());
-  const gitDirs=['--absolute-git-dir','--git-common-dir'].map(arg=>path.resolve(this.repo,this.git('rev-parse','--path-format=absolute',arg).toString().trim()));
+  const gitDirs=['--absolute-git-dir','--git-common-dir'].map(arg=>path.resolve(this.repo,gitPathOutput(this.git('rev-parse','--path-format=absolute',arg))));
   const bind=(entry,target,isRuntime)=>{
    demand(entry&&Object.keys(entry).sort().join(',')===(isRuntime?'digest,source':'digest,source,target')&&typeof entry.source==='string'&&/^[a-f0-9]{64}$/.test(entry.digest),'Invalid asset pin');
    if(!isRuntime){safeName(target);demand(!['.codex','.agents'].includes(target.split('/')[0].toLowerCase()),'Asset cannot be Agent control data');

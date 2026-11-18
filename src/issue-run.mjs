@@ -2,6 +2,7 @@ import {performance} from 'node:perf_hooks';
 /** Owner-enumerated Issues only. No discovery daemon, merge or imported completion receipts. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Controller} from './controller.mjs';
+import {gitPathOutput} from './source-limits.mjs';
 import {authorityCommandRootsValidator} from './authority-command.mjs';
 import {compileGoal} from './goal-plan.mjs';import {createExecutionBudget} from './execution-budget.mjs';
 import {assertWorkLocation} from './migration.mjs';import {runControllerThread} from './unit-thread.mjs';
@@ -42,7 +43,7 @@ export async function runIssues(input,{onEvent=()=>{},execute}={}){
  for(const i of plan.issues){
   try{authorityRoots.add(fs.realpathSync.native(i.request.repo));}catch{ /* Keep conservative authority boundaries; launch validates repository and base. */ }
   try{const c={repo:fs.realpathSync.native(i.request.repo)};
-   for(const arg of ['--absolute-git-dir','--git-common-dir'])authorityRoots.add(fs.realpathSync.native(Controller.prototype.gitOutput.call(c,undefined,['rev-parse','--path-format=absolute',arg]).toString().trim()));
+   for(const arg of ['--absolute-git-dir','--git-common-dir'])authorityRoots.add(fs.realpathSync.native(gitPathOutput(Controller.prototype.gitOutput.call(c,undefined,['rev-parse','--path-format=absolute',arg]))));
   }catch{ /* Keep conservative authority boundaries; launch validates repository and base. */ } // Its own launch still rejects an invalid repository/base.
  }
  const assertAuthority=authorityCommandRootsValidator([...authorityRoots]);

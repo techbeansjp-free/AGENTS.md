@@ -1,7 +1,7 @@
 /** Non-destructive evaluation transition. Legacy source and approvals stay untouched. */
-import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {spawnSync} from 'node:child_process';
+import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {spawnSync} from 'node:child_process';import {randomUUID} from 'node:crypto';
 import {inspectMigration} from '../migration_inspect.mjs';import {Controller,safeName,hash} from './controller.mjs';
-import {SOURCE_BATCH_BYTES,gitFailureMessage,withStdinFile,GIT_NULL_DEVICE} from './source-limits.mjs';
+import {SOURCE_BATCH_BYTES,gitFailureMessage,withStdinFile,GIT_NULL_DEVICE,gitPathOutput} from './source-limits.mjs';
 const manifestName='transition.json',manifestByteLimit=16*1024*1024;
 /* Bound of one Git child, longer than LOCAL_GIT_TIMEOUT_MILLISECONDS mainly for whole-repository clone --no-local and for
    streaming one blob larger than SOURCE_BATCH_BYTES through cat-file. The value predates the shared bound and is kept
@@ -10,6 +10,7 @@ const MIGRATION_GIT_TIMEOUT_MILLISECONDS=120000;
 function demand(ok,message){if(!ok)throw Error(message);}
 const contains=(a,b)=>{const r=path.relative(a,b);return !r || (!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
 function git(root,...args){return gitOutput(root,args);}
+function gitPath(root,...args){return fs.realpathSync.native(gitPathOutput(git(root,...args)));}
 function gitOutput(root,args,output='pipe',input){
  const p=withStdinFile(input,stdin=>spawnSync('git',['-c','core.fsmonitor=false','-c',`core.hooksPath=${GIT_NULL_DEVICE}`,'-c','uploadpack.packObjectsHook=',
  '-c','core.alternateRefsCommand=','-c','protocol.allow=never','-c','protocol.file.allow=always',...args],
@@ -20,7 +21,7 @@ function gitOutput(root,args,output='pipe',input){
 // both metadata roots before any destination write, including parent aliases.
 function assertOutsideGitMetadata(origin,destination){
  for(const flag of ['--absolute-git-dir','--git-common-dir']){
-  const metadata=fs.realpathSync.native(git(origin,'rev-parse','--path-format=absolute',flag).toString().trim());
+  const metadata=gitPath(origin,'rev-parse','--path-format=absolute',flag);
   demand(!contains(metadata,destination)&&!contains(destination,metadata),'Migration destination overlaps Git metadata');
  }
 }
@@ -160,12 +161,40 @@ export function stageMigration(source,destination,plan){
 export function assertWorkLocation(directory,mode='worktree'){
  demand(['worktree','isolated-clone'].includes(mode),'Unknown workspace mode');
  const root=fs.realpathSync.native(directory);
- demand(fs.realpathSync.native(git(root,'rev-parse','--show-toplevel').toString().trim())===root,'Repository root required');
- const metadata=fs.realpathSync.native(git(root,'rev-parse','--absolute-git-dir').toString().trim());
- const common=fs.realpathSync.native(git(root,'rev-parse','--path-format=absolute','--git-common-dir').toString().trim());
+ demand(gitPath(root,'rev-parse','--show-toplevel')===root,'Repository root required');
+ const metadata=gitPath(root,'rev-parse','--absolute-git-dir');
+ const common=gitPath(root,'rev-parse','--path-format=absolute','--git-common-dir');
  if(mode==='worktree')demand(metadata!==common,'Use a dedicated Git worktree, or explicitly select isolated-clone');
  else demand(metadata===common&&metadata===fs.realpathSync.native(path.join(root,'.git'))&&fs.lstatSync(metadata).isDirectory(),'Independent clone required');
  return {repo:root,mode};
+}
+
+/** Explain a read-only Git common directory without building a shell command (#1730). */
+export function gitMetadataNotWritableMessage(common,code){
+ // JSON string escapes are valid TOML basic-string escapes, so Windows paths and quotes stay parseable.
+ return `Git metadata is not writable: ${common} (${code}). worktree-create writes the new branch and worktree record there. `+
+  'A Host sandbox, file permissions or a read-only mount can cause this. In a Codex workspace-write sandbox .git stays read-only; '+
+  `the user can start Codex at the repository root with the setting sandbox_workspace_write.writable_roots = ${JSON.stringify([common])} `+
+  '(passed with -c or in config.toml). This lets the Agent change refs, hooks, config and every worktree and branch of this clone. '+
+  'An Agent must not widen its own sandbox or permissions; ask the user to decide. See v05/USAGE.md.';
+}
+
+/**
+ * Fail before any side effect when the Git common directory is not writable, as under
+ * Codex workspace-write, which keeps .git read-only even inside a writable root (#1730).
+ * Git itself would fail later with a lock error and leave an empty .worktrees behind.
+ */
+function assertGitMetadataWritable(origin){
+ const common=gitPath(origin,'rev-parse','--path-format=absolute','--git-common-dir');
+ const probe=path.join(common,`asc-write-probe-${process.pid}-${randomUUID()}`);
+ let fd;
+ try{fd=fs.openSync(probe,'wx');}catch(error){
+  if(!['EPERM','EACCES','EROFS'].includes(error?.code))throw error;
+  throw Object.assign(Error(gitMetadataNotWritableMessage(common,error.code)),{cause:error,code:'ASC_GIT_METADATA_NOT_WRITABLE'});
+ }
+ let closeError;try{fs.closeSync(fd);}catch(error){closeError=error;}
+ try{fs.unlinkSync(probe);}catch(error){throw Object.assign(Error(`Remove the Git metadata write probe left at ${probe} (${error.code})`),{cause:error});}
+ if(closeError)throw closeError;
 }
 
 /** Create, never repurpose, an owner-requested linked worktree. No checkout filters. */
@@ -175,8 +204,9 @@ export function createWorktree(source,{issue,slug,type='feature',base='HEAD'}={}
  demand(['feature','fix','refactor','test','docs','chore'].includes(type),'Unsupported standard branch type');
  demand(typeof base==='string'&&base&&!base.startsWith('-'),'Explicit base revision required');
  const origin=fs.realpathSync.native(source);
- demand(fs.realpathSync.native(git(origin,'rev-parse','--show-toplevel').toString().trim())===origin,'Repository root required');
+ demand(gitPath(origin,'rev-parse','--show-toplevel')===origin,'Repository root required');
  const head=git(origin,'rev-parse','--verify',`${base}^{commit}`).toString().trim(),branch=`${type}/${issue}-${slug}`;
+ assertGitMetadataWritable(origin);
  git(origin,'check-ref-format','--branch',branch);
  const refs=git(origin,'for-each-ref','--format=%(refname)',`refs/heads/${branch}`).toString().trim();demand(!refs,'Work branch already exists; choose a distinct slug');
  // Worktree materialization is not an Agent snapshot: validate metadata, then stream

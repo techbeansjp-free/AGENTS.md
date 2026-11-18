@@ -1,7 +1,7 @@
 import {tempDir} from './helpers/temp-dir.mjs';
 import {setTimeout} from 'node:timers';
 import {Controller} from '../src/controller.mjs';
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {prepareMigration,rollbackMigration,createWorktree} from '../src/migration.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {prepareMigration,rollbackMigration,createWorktree,gitMetadataNotWritableMessage} from '../src/migration.mjs';
 function fixture(t,format='sha1'){
  const root=tempDir('asc-transition-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=path.join(root,'legacy');fs.mkdirSync(path.join(source,'.agent-skill-chain'),{recursive:true});
@@ -137,6 +137,52 @@ test('standard worktree creation preserves source edits and never repurposes bra
 });
 
 
+
+test('worktree creation stops before any side effect when Git metadata is not writable (#1730)',{skip:process.platform==='win32'||process.getuid?.()===0},t=>{
+ const f=fixture(t),common=path.join(f.source,'.git'),mode=fs.statSync(common).mode&0o777;
+ const run=()=>execFileSync(process.execPath,[path.resolve('bin/asc-v05.mjs'),'worktree-create',f.source,'1730','fix','read-only-git','HEAD'],{encoding:'utf8',stdio:'pipe'});
+ fs.chmodSync(common,0o555);
+ try{
+  assert.throws(run,error=>{
+   assert.equal(error.status,1);const message=String(error.stderr);
+   assert.match(message,/Git metadata is not writable: .*\.git \(EACCES\)/);
+   assert.match(message,/sandbox_workspace_write\.writable_roots = \[/);assert.match(message,/every worktree and branch of this clone/);
+   assert.match(message,/must not widen its own sandbox/);return true;});
+ }finally{fs.chmodSync(common,mode);}
+ assert(!fs.existsSync(path.join(f.source,'.worktrees')),'no .worktrees directory is left behind');
+ assert.equal(f.git('branch','--list','fix/1730-read-only-git'),'');
+ assert.deepEqual(fs.readdirSync(common).filter(name=>name.startsWith('asc-write-probe-')),[]);
+ const created=createWorktree(f.source,{issue:1730,type:'fix',slug:'read-only-git'});
+ assert.equal(created.branch,'fix/1730-read-only-git');
+ assert.deepEqual(fs.readdirSync(common).filter(name=>name.startsWith('asc-write-probe-')),[],'the probe file is removed after success');
+});
+
+test('the read-only Git metadata message keeps Windows and quoted paths parseable (#1730)',()=>{
+ for(const common of ['C:\\Users\\alice\\repo\\.git','/srv/it\'s "repo"/.git']){
+  const message=gitMetadataNotWritableMessage(common,'EPERM'),value=message.match(/writable_roots = (\[.*?\]) \(passed/)[1];
+  assert.deepEqual(JSON.parse(value),[common]);assert(!/\\[^\\"]/.test(value.replaceAll('\\\\','')),'only TOML-valid escapes');
+ }
+});
+
+test('a write probe that cannot be removed is reported with its path and stops creation (#1730)',t=>{
+ const f=fixture(t),original=fs.unlinkSync,originalClose=fs.closeSync;let closed=0;
+ fs.closeSync=fd=>{closed++;originalClose(fd);throw Object.assign(Error('close failed'),{code:'EIO'});};
+ fs.unlinkSync=file=>{if(path.basename(String(file)).startsWith('asc-write-probe-'))throw Object.assign(Error('denied'),{code:'EACCES'});return original(file);};
+ try{assert.throws(()=>createWorktree(f.source,{issue:1731,slug:'probe-left'}),/Remove the Git metadata write probe left at .*asc-write-probe-.* \(EACCES\)/);}
+ finally{fs.unlinkSync=original;fs.closeSync=originalClose;}
+ assert.equal(closed,1);assert(!fs.existsSync(path.join(f.source,'.worktrees')));
+ fs.closeSync=fd=>{originalClose(fd);throw Object.assign(Error('close failed'),{code:'EIO'});};
+ try{assert.throws(()=>createWorktree(f.source,{issue:1731,slug:'probe-close'}),/close failed/);}finally{fs.closeSync=originalClose;}
+ assert.deepEqual(fs.readdirSync(path.join(f.source,'.git')).filter(name=>name.startsWith('asc-write-probe-')).length,1,'only the probe whose removal failed remains');
+});
+
+test('worktree creation keeps a trailing space in a separate Git directory path (#1731)',{skip:process.platform==='win32'},t=>{
+ const f=fixture(t),separate=path.join(f.root,'meta ');
+ execFileSync('git',['init','-q',`--separate-git-dir=${separate}`],{cwd:f.source,stdio:'pipe'});
+ const created=createWorktree(f.source,{issue:1731,slug:'separate-space'});
+ assert.equal(created.branch,'feature/1731-separate-space');
+ assert.deepEqual(fs.readdirSync(separate).filter(name=>name.startsWith('asc-write-probe-')),[]);
+});
 
 test('worktree batch materialization preserves binary bytes, empty files and executable modes',t=>{
  const f=fixture(t),expected=new Map();

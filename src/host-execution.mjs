@@ -6,7 +6,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {setTimeout,clearTimeout} from 'node:timers';
 import {authorityCommandValidator,authorityCommandRootsValidator} from './authority-command.mjs';
-import {withStdinFile} from './source-limits.mjs';
+import {withStdinFile,gitPathOutput} from './source-limits.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 function validateHostCommand(controller,command,additionalRoots=[]){
  authorityCommandValidator(controller)(command);
@@ -14,7 +14,7 @@ function validateHostCommand(controller,command,additionalRoots=[]){
  const records=controller.git('worktree','list','--porcelain','-z').toString().split('\0');
  const roots=[...additionalRoots,...records.filter(r=>r.startsWith('worktree ')).map(r=>r.slice(9))];
  authorityCommandRootsValidator(roots)(command);
- return [...roots,...['--absolute-git-dir','--git-common-dir'].map(arg=>path.resolve(controller.repo,controller.git('rev-parse','--path-format=absolute',arg).toString().trim()))];
+ return [...roots,...['--absolute-git-dir','--git-common-dir'].map(arg=>path.resolve(controller.repo,gitPathOutput(controller.git('rev-parse','--path-format=absolute',arg))))];
 }
 
 export function hostExecution(controller,configuration,authorityRoots=[]){

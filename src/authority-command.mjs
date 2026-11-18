@@ -1,8 +1,9 @@
 /** Host authority inputs must never resolve to candidate code, including future aliases. */
 import fs from 'node:fs';import path from 'node:path';
+import {gitPathOutput} from './source-limits.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 export function authorityCommandValidator(c){
- const authorityRoots=[c.repo,...['--absolute-git-dir','--git-common-dir'].map(arg=>fs.realpathSync.native(c.git('rev-parse','--path-format=absolute',arg).toString().trim()))];
+ const authorityRoots=[c.repo,...['--absolute-git-dir','--git-common-dir'].map(arg=>fs.realpathSync.native(gitPathOutput(c.git('rev-parse','--path-format=absolute',arg))))];
  return authorityCommandRootsValidator(authorityRoots);
 }
 export function authorityCommandRootsValidator(authorityRoots){
