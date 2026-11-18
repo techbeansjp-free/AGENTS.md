@@ -85,6 +85,14 @@ test('a sibling registered worktree cannot provide Host code',t=>{
  assert.throws(()=>hostExecution(f.c,{...f.configuration,command:[process.execPath,script]}),/Candidate/);
 });
 
+test('Host authority roots keep a separate Git directory whose path ends with a space (#1731)',{skip:process.platform==='win32'},async t=>{
+ const f=fixture(t),separate=path.join(f.root,'meta ');f.git('init','-q',`--separate-git-dir=${separate}`);
+ fs.writeFileSync(f.script,`import fs from 'node:fs';const q=JSON.parse(fs.readFileSync(0,'utf8'));process.stdout.write(JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,result:{answer:JSON.stringify(q.authorityRoots)}}));`);
+ const roots=JSON.parse((await hostExecution(f.c,f.configuration).agent({timeout:3000})).answer);
+ // The last two roots come from rev-parse --absolute-git-dir and --git-common-dir.
+ const expected=path.join(fs.realpathSync(f.root),'meta ');assert.deepEqual(roots.slice(-2),[expected,expected]);
+});
+
 test('Host transport preserves Japanese across split UTF-8 output chunks',async t=>{
  const f=fixture(t);fs.writeFileSync(f.script,`import fs from 'node:fs';const q=JSON.parse(fs.readFileSync(0,'utf8'));const b=Buffer.from(JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,result:{answer:'日本語'}}));const i=b.indexOf(Buffer.from('日'))+1;fs.writeSync(1,b.subarray(0,i));setTimeout(()=>fs.writeSync(1,b.subarray(i)),30);`);
  assert.equal((await hostExecution(f.c,f.configuration).agent({timeout:3000})).answer,'日本語');
