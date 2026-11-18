@@ -10,9 +10,10 @@ import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,GIT_NULL_DEVICE} from '
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const hostNames=['.agents','.claude'];
 const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;
-// Sixteen registered Skills plus two optional assets use 292 assets; reserve 12 preimages
-// for retained canonical/runtime assets. Retired owned Host entries are removed.
-const maxAssets=304;
+// Sixteen registered Skills plus two optional assets use 292 assets; reserve 13 preimages
+// for retained canonical/runtime assets. Retired owned Host entries are removed. The bound stays at 305, the
+// v0.5.64-v0.5.66 value, so a record that also keeps the retired src/repository-facts.mjs stays valid (#1727).
+const maxAssets=305;
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
 // Exact retired distribution paths, maintained by trusted package releases.
 // src/repository-facts.mjs was distributed by v0.5.64-v0.5.66 and removed by #1727.

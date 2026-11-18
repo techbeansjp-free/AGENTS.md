@@ -196,3 +196,18 @@ test('CLI exposes uninstall help and capabilities, defaults to preview and uses 
  f.write(asset,'Edited');assert.equal(run('uninstall',f.work,'--apply').status,2);assert.equal(run('uninstall',f.work,'--force').status,1);assert.equal(run('uninstall',f.work,'--apply','--apply').status,1);assert.equal(run('uninstall').status,1);
  f.write(record,'{');assert.equal(run('uninstall',f.work,'--apply').status,1);
 });
+
+test('the retired repository facts runtime file stays on update and is removed by uninstall unless edited (#1727)',t=>{
+ // A project installed by v0.5.64-v0.5.66 records this file; the release catalog no longer distributes it.
+ const name='.agent-skill-chain/managed-runtime/src/repository-facts.mjs',bytes='export const old=true;\n';
+ const install=f=>{f.write(name,bytes);const m=f.manifest();m.files[name]=sha(Buffer.from(bytes));fs.writeFileSync(path.join(f.work,record),JSON.stringify(m));};
+ const f=fixture(t);install(f);
+ // The real retiredAssetPaths of this package is used: no override.
+ assert.equal(projectAssets(f.work,{...f.options,apply:true}).applied,true);
+ assert.equal(fs.readFileSync(path.join(f.work,name),'utf8'),bytes,'a normal update keeps the retired file');
+ const plan=uninstallProjectAssets(f.work,f.options);
+ assert.deepEqual(plan.conflicts,[]);assert.ok(plan.changes.some(c=>c.path===name&&c.action==='delete'),JSON.stringify(plan.changes.filter(c=>c.path===name)));
+ assert.equal(uninstallProjectAssets(f.work,{...f.options,apply:true}).applied,true);assert.equal(fs.existsSync(path.join(f.work,name)),false);
+ const edited=fixture(t);install(edited);fs.writeFileSync(path.join(edited.work,name),'export const old=false;\n');
+ assert.ok(uninstallProjectAssets(edited.work,edited.options).conflicts.includes(name),'an edited retired file is a conflict');
+});

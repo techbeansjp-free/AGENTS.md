@@ -95,7 +95,7 @@ pathはproject root相対、`appliesTo`はglobではなく完全一致またはd
 
 v0.5.64〜v0.5.66で配布した`fact-record`・`fact-contradict`・`fact-list`と、`start`の`facts`は取り除いた。新しいAgentで効果を試験したところ、記録までたどり着く場面と、記録を使って失敗を減らす場面が確認できなかったためである（#1727）。申し送るべき環境・手順の事実は、AGENTS.mdやREADMEに書く。
 
-- 記録したファイル（`.git/agent-skill-chain/repository-facts.json`）は、ASCが読まなくなるだけで、自動では消さない。不要なら利用者が削除する（commitされていないので、他に影響しない）。
+- 記録したファイル（Gitの共通ディレクトリ（`git rev-parse --git-common-dir`）の`agent-skill-chain/repository-facts.json`）は、ASCが読まなくなるだけで、自動では消さない。同じcloneのworktreeすべてで共有されているので、削除はそのすべてに反映される。commitされていないので、clone の外には影響しない。
 - 導入済みの`.agent-skill-chain/managed-runtime/src/repository-facts.mjs`は、通常の更新では残る（読み込まれない）。`uninstall`は既知の廃止ファイルとして扱い、未編集なら削除する。
 
 ## マージ後の後始末
