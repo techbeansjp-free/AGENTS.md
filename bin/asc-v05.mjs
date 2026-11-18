@@ -2,7 +2,6 @@
 import {saveJsonOutside,saveVerification} from '../src/verification-output.mjs';
 import {planDockerCleanup} from '../src/docker-cleanup-plan.mjs';
 import {startWorktree,verifyWorktree} from '../src/worktree-execution.mjs';
-import {recordFact,contradictFact,listFacts} from '../src/repository-facts.mjs';
 import {projectAssets,uninstallProjectAssets} from '../src/project-assets.mjs';
 import {restartGoal} from '../src/goal-restart.mjs';
 import {runIssues} from '../src/issue-run.mjs';
@@ -33,11 +32,8 @@ try {
   }
   const nativeHelp={
     'host-session':'host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory> [--executable <path>] [--rename-model <claude-model>] [--ephemeral] [--timeout-ms <ms>]\n指定directoryをレビュー対象とし、Gitではrepository rootから命名して起動、成功後に済へ改名します。結果は改名とは別に保存。失敗はexit 2。',
-    start:'start <project-directory> [--path <changed-path>]...\n作業場所・規約参照と、以前の作業が記録したリポジトリの事実（参考）を確認します（非Gitも可、Agent起動なし）。',
+    start:'start <project-directory> [--path <changed-path>]...\n作業場所・規約参照を確認します（非Gitも可、Agent起動なし）。',
     'worktree-create':'worktree-create <repo-root> <issue> <type> <slug> <base>\n既存Git checkoutのrootを指定します（.worktrees自体ではありません）。その配下の.worktreesへ専用worktreeを作成します。type: feature|fix|refactor|test|docs|chore。baseは明示指定し、既存branch・作業場所は上書きしません。',
-    'fact-record':'fact-record <project-directory> --id <id> --kind <command|setup|artifact-location|environment-variable> --text <one line>\n同じ失敗をくり返し、解決を確かめた環境・手順の事実を記録します。次のstartから表示されます。記録の前にfact-listで同じ事実を確かめます。仕様・業務・品質の判断と秘密は記録しません。',
-    'fact-contradict':'fact-contradict <project-directory> --id <id> [--note <one line>]\n事実が誤っていたことを記録し、startでの表示を止めます。もう一度記録すると再び表示されます。',
-    'fact-list':'fact-list <project-directory>\n記録した事実と状態（shown・contradicted）、最後の矛盾の注記を表示します。',
     'worktree-verify':'worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>]\n現在のHost権限で検証します。repo外のowner契約にintent・allowedPaths・commands（argv配列の配列）を指定します。検証失敗はexit 2。',
     'docker-cleanup-plan':'docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]\nmerge後の整理で、そのworktreeのDocker資源の削除候補と保持理由を読取り専用で一覧します。削除・down・停止は行わず、出力は削除許可ではありません。--project省略時はdirectory名をcomposeの規則で正規化、--label省略時はasc.worktree=<worktreeの実path>。Dockerが使えなければexit 1。',
     uninstall:'uninstall <project-directory> [--apply]\n既定は撤去候補の表示のみ。--applyで正常な記録と配布時hashから所有を確認できた未編集資産・Host入口・管理記録を撤去します。競合があれば全体を停止し、利用者のfile・directory・設定・npm prefixは保持します。',
@@ -54,9 +50,6 @@ try {
   start <project-directory> [--path <changed-path>]... 作業場所と必要な責務を確認（非Gitも可・Agent起動なし）
   worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>]
       現在のHost権限で既存ビルド・テストを実行し対象commitへ対応付け
-  fact-record <project-directory> --id <id> --kind <kind> --text <one line>  くり返し出た失敗から分かった環境・手順の事実を記録
-  fact-contradict <project-directory> --id <id> [--note <one line>]  誤っていた事実の表示を止める
-  fact-list <project-directory>  記録した事実と状態を表示
 
   host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory>
       独立レビュー・相談を命名して実行、結果保存後に完了名へ変更
@@ -99,12 +92,6 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
   } else if(command==='start'&&args.length>=1){
     const paths=[];for(let i=1;i<args.length;i+=2){if(args[i]!=='--path'||!args[i+1])throw Error('Expected --path <changed-path>');paths.push(args[i+1]);}
     console.log(JSON.stringify(startWorktree(args[0],paths),null,2));
-  } else if(['fact-record','fact-contradict'].includes(command)&&args.length%2===1){
-    const allowed=command==='fact-record'?{'--id':'id','--kind':'kind','--text':'text'}:{'--id':'id','--note':'note'},options={};
-    for(let i=1;i<args.length;i+=2){const key=allowed[args[i]];if(!key||Object.hasOwn(options,key))throw Error('Expected '+nativeHelp[command].split('\n')[0]);options[key]=args[i+1];}
-    console.log(JSON.stringify(command==='fact-record'?recordFact(args[0],options):contradictFact(args[0],options),null,2));
-  } else if(command==='fact-list'&&args.length===1){
-    console.log(JSON.stringify(listFacts(args[0]),null,2));
   } else if(command==='worktree-verify'&&(args.length===3||(args.length===5&&args[3]==='--output'))){
     const run=()=>verifyWorktree(...args.slice(0,3));
     const result=args.length===5?saveVerification(args[0],args[4],run):run();
@@ -183,7 +170,7 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     if(!(command==='review'?result.status==='reviewed-candidate':['draft-ci-passed','proposed'].includes(result.status)))process.exitCode=2;
   } else if (command==='capabilities'   && args.length===0) {
     console.log(JSON.stringify({schema:'asc-v05-capabilities/v1',releaseReady:true,releaseTarget:'native-linux',publishAuthorized:false,
-      defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','fact-record','fact-contradict','fact-list','host-session','worktree-verify','docker-cleanup-plan','probe-native','project-assets','uninstall','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
+      defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','host-session','worktree-verify','docker-cleanup-plan','probe-native','project-assets','uninstall','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
       execution:'current-host-worktree',executionBackends:['current-host-worktree','current-host-directory','owner-selected-host','linux-runner'],host:executionHost(),legacyFallback:false}));
   } else {
     throw Error('Usage: asc-v05 uninstall <project-directory> [--apply] | --version | start <project-directory> | worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>] | worktree-create <repo-root> <issue> <type> <slug> <base> | docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>] | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');

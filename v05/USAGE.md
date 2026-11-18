@@ -91,25 +91,12 @@ pathはproject root相対、`appliesTo`はglobではなく完全一致またはd
 
 新しい設定の登録は任意。既存のproject directoryに索引設定がなければnoticeを返し、Hostが適用規約を確認する。旧project-policyは解釈・移行対象として提示し、旧版の設定エンジンを暗黙実行しない。親の統合directoryの共通規約はHostが別途確認する。専用worktreeに存在しない未追跡の共通設定を自動コピーしない。追加Agent・モデル通信・全repo走査は行わず、設定の参照と必要なfileのhash計算だけを行う。
 
-## くり返し出た失敗から分かったリポジトリの事実（#1722）
+## 取り除いた機能：リポジトリの事実（#1727）
 
-作業中に同じ失敗をくり返し、解決を確かめた環境・手順の事実を記録できる。記録した事実は、次の作業の`start`で示される。
+v0.5.64〜v0.5.66で配布した`fact-record`・`fact-contradict`・`fact-list`と、`start`の`facts`は取り除いた。新しいAgentで効果を試験したところ、記録までたどり着く場面と、記録を使って失敗を減らす場面が確認できなかったためである（#1727）。申し送るべき環境・手順の事実は、AGENTS.mdやREADMEに書く。
 
-```bash
-asc-v05 fact-list <worktree>
-asc-v05 fact-record <worktree> --id npm-ci-first --kind setup --text "New worktrees have no node_modules; run npm ci before npm run quality"
-asc-v05 fact-contradict <worktree> --id npm-ci-first --note "npm ci is now part of quality"
-```
-
-- **記録する条件**：その作業の中で同じ失敗をくり返し、原因が環境・手順だと確かめ、解決後に成功したとき。1回だけの失敗や、確かめていない推測は記録しない。記録の前に`fact-list`を見て、同じ事実があれば同じid・kind・文で記録する。
-- **対象は環境と手順の事実だけ**：`--kind`は`command`（動くコマンドの書き方）、`setup`（事前準備）、`artifact-location`（生成物の場所）、`environment-variable`（必要な環境変数の名前。値は書かない）のどれか。仕様・業務・品質基準の判断を表す種類はなく、それらはownerが決める。ただし自由文を完全には分類できないため、種類の制限と下の拒否で範囲を保ち、記録する人が責任を持つ。記録した事実は commit されずPRに現れないので、記録・矛盾した事実のidと文を、その作業の完了報告またはPRに書き、ownerが確かめられるようにする。
-- **示す条件**：記録された事実は、次の`start`の`facts.shown`に示される（記録の時点で、その作業がくり返しと解決を確かめているため）。
-- **隠す条件**：`fact-contradict`で矛盾を記録すると、示されなくなる。もう一度記録されると、再び示される。内容を変えるときは、矛盾を記録してから別のidで記録する。同じkindと文を別のidで記録することはできない。記録した場所と時刻は監査のために残すが、示すかどうかには使わない。
-- **規約ではない**：事実は参考情報で、権限を与えず、AGENTS.mdやownerの指示より優先されない。頼る前に確かめ、違っていれば`fact-contradict`で記録する。`start`は記録の内容を自動で確かめ直さない（`start`は読取りのみで、コマンドを実行しない）。
-- **秘密は記録しない**：認証情報に見える文は、伏せ字にせず拒否する。対象は、URLの利用者情報、tokenやpasswordなどの名前（JSONのように引用符で囲んだものを含む）の後に`=`・`:`・引数で値が続く形、`PGPASSWORD=…`や`SECRET_KEY_BASE=…`のような環境変数の代入、`dbPassword=…`や`.npmrc`の`_authToken=…`のように識別子の中に秘密らしい語を含む代入、Bearer等の値、JWT・秘密鍵・既知のtokenの形。検出できるのは既知の形だけで、書く人の責任は残る。秘密に見えるだけの普通の文も拒否されることがあるので、その場合は言い換える。他projectの情報や個人情報も書かない。
-- **置き場所**：Gitの共通ディレクトリ（`git rev-parse --git-common-dir`）の`agent-skill-chain/repository-facts.json`。同じcloneのworktreeすべてで共有され、commitされず、Claude CodeとCodexが同じものを読む。cloneごとの記録で、別の端末・別の人・cloneし直した後には引き継がれない。symbolic linkは辿らずに拒否する。Git管理外のディレクトリでは記録できず、`start`は`facts.available: false`を返す。
-- **壊れた記録**：読めない・形の違う記録や、通常のファイルでない記録（link・FIFO等）でも`start`は止まらず、`facts.available: false`と理由を返す。記録した時と同じ検査（種類・1行・秘密）に通らない内容も示さない。記録・矛盾の書込みは拒否する。エラーにはstoreのpathと理由だけを示し、記録の中身は出さない。直すときは、ownerが`start`の`facts.store`（またはエラーに示したpath）の内容を確かめてから、直すか削除する（commitされないので、削除しても他に影響しない）。
-- 同時に書く場合は1件ずつ処理する。5秒待っても書けなければ、lockのpathと書込み中のプロセス（pid・開始時刻・worktreeの絶対path。どれかが正しい形でなければ示さない）を示して止まる。lockは自動では消さない。書込みに失敗したときは、作った一時ファイルを消す。
+- 記録したファイル（`.git/agent-skill-chain/repository-facts.json`）は、ASCが読まなくなるだけで、自動では消さない。不要なら利用者が削除する（commitされていないので、他に影響しない）。
+- 導入済みの`.agent-skill-chain/managed-runtime/src/repository-facts.mjs`は、通常の更新では残る（読み込まれない）。`uninstall`は既知の廃止ファイルとして扱い、未編集なら削除する。
 
 ## マージ後の後始末
 

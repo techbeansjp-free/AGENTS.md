@@ -10,12 +10,13 @@ import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,GIT_NULL_DEVICE} from '
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const hostNames=['.agents','.claude'];
 const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;
-// Sixteen registered Skills plus two optional assets use 293 assets; reserve 12 preimages
+// Sixteen registered Skills plus two optional assets use 292 assets; reserve 12 preimages
 // for retained canonical/runtime assets. Retired owned Host entries are removed.
-const maxAssets=305;
+const maxAssets=304;
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
 // Exact retired distribution paths, maintained by trusted package releases.
-const retiredAssetPaths=[];
+// src/repository-facts.mjs was distributed by v0.5.64-v0.5.66 and removed by #1727.
+const retiredAssetPaths=['.agent-skill-chain/managed-runtime/src/repository-facts.mjs'];
 function demand(ok,message){if(!ok)throw Error(message);}
 function inspect(root,name){
  safeName(name);let cursor=root;
