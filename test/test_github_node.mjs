@@ -156,4 +156,6 @@ test('the default delivery command names a Git failure without Git stderr',{skip
  assert.match(spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).stderr,/SYNTHETIC_SECRET/);
  const provider=new Github({repository,issue:1,repo:root,branch:'trial',baseBranch:'main',base,workflowPath:'.github/workflows/safety.yml'});
  assert.throws(()=>provider.command(['git','rev-parse','HEAD'],root),{message:'Delivery Git rev-parse failed (exit status 128)'});
+ // -c and its value are skipped, as in the push call, so the label still names the subcommand.
+ assert.throws(()=>provider.command(['git','-c','core.fsmonitor=false','rev-parse','HEAD'],root),{message:'Delivery Git rev-parse failed (exit status 128)'});
 });
