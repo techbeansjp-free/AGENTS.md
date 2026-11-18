@@ -403,13 +403,13 @@ test('distribution inventory remains bounded after adding a second Host',t=>{
 
 test('the inventory bound includes retained preimages as well as all sixteen registered Skills and optional assets',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,registerSkill:true,registerClaudeSkill:true};
- const active=projectAssets(f.work,options);assert.equal(active.changes.length,293);
+ const active=projectAssets(f.work,options);assert.equal(active.changes.length,292);
  const record='.agent-skill-chain/distribution.json';
  const retired=count=>JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:count},(_,i)=>[`retired-${i}`,'a'.repeat(64)]))});
- f.write(record,retired(13));
+ f.write(record,retired(14));
  assert.throws(()=>projectAssets(f.work,{...options,apply:true}),/Invalid asset inventory/);
  assert.equal(fs.existsSync(path.join(f.work,asset)),false);
- f.write(record,retired(12));assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
+ f.write(record,retired(13));assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
  assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.work,record))).files).length,305);
 });
 

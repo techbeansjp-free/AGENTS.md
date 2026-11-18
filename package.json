@@ -55,7 +55,6 @@
     "src/project-context.mjs",
     "src/project-launcher.mjs",
     "src/project-location.mjs",
-    "src/repository-facts.mjs",
     "src/restricted-agent.mjs",
     "src/provider-failure.mjs",
     "src/review-result.mjs",
@@ -197,5 +196,5 @@
     "type": "git",
     "url": "git+https://github.com/techbeansjp-free/AGENTS.md.git"
   },
-  "qualityContractVersion": 25
+  "qualityContractVersion": 26
 }
