@@ -1,7 +1,7 @@
 import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import {performance} from 'node:perf_hooks';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
-import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,gitFailureReason,gitStderrExcerpt} from '../src/source-limits.mjs';
+import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,gitFailureReason,gitStderrExcerpt,gitPathOutput} from '../src/source-limits.mjs';
 import {Controller} from '../src/controller.mjs';import {assertWorkLocation} from '../src/migration.mjs';import {commitCandidate} from '../src/candidate.mjs';import {createVerificationGit} from '../src/verification-git.mjs';
 
 test('failure reason tells a timeout, a buffer overflow, a spawn error, a signal and an exit status apart',()=>{
@@ -307,4 +307,11 @@ test('local Git children take the null device from one place (#1711)',async()=>{
  for(const name of fs.readdirSync(src).filter(n=>n.endsWith('.mjs')&&!allowed.has(n)))
   for(const [i,line] of fs.readFileSync(new URL(name,src),'utf8').split('\n').entries())if(/\/dev\/null|['"`]NUL['"`]|=NUL\b/.test(line))spelled.push(`${name}:${i+1}`);
  assert.deepEqual(spelled,[]);
+});
+
+test('a Git path keeps trailing spaces and loses only its line ending (#1731)',()=>{
+ assert.equal(gitPathOutput('/srv/meta \n'),'/srv/meta ');
+ assert.equal(gitPathOutput(Buffer.from('C:/repo/.git\r\n')),'C:/repo/.git');
+ assert.equal(gitPathOutput('/srv/meta'),'/srv/meta');
+ assert.equal(gitPathOutput('/srv/meta\n\n'),'/srv/meta\n','only one line ending is removed');
 });

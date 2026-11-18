@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {spawn,spawnSync} from 'node:child_process';
 import {setTimeout,clearTimeout} from 'node:timers';
 import {sessionRpc} from './session-rpc.mjs';
-import {GIT_NULL_DEVICE} from './source-limits.mjs';
+import {GIT_NULL_DEVICE,gitPathOutput} from './source-limits.mjs';
 
 export function sessionOptions(args){
  const options={ephemeral:false,timeout:900000},seen=new Set();
@@ -47,7 +47,7 @@ function sessionLocation(directory){
  const first=git(target,['worktree','list','--porcelain','-z']).split('\0\0')[0].split('\0');
  if(!first[0]?.startsWith('worktree ')||first.includes('bare'))throw Error('A primary working checkout is required for session listing');
  const cwd=fs.realpathSync(first[0].slice('worktree '.length));
- const common=dir=>fs.realpathSync(git(dir,['rev-parse','--path-format=absolute','--git-common-dir']).trim());
+ const common=dir=>fs.realpathSync(gitPathOutput(git(dir,['rev-parse','--path-format=absolute','--git-common-dir'])));
  if(common(cwd)!==common(target))throw Error('Session root and target must belong to the same repository');
  const readHead=()=>git(target,['rev-parse','--verify','HEAD']).trim();
  const targetHead=readHead();

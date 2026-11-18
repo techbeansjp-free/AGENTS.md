@@ -2,6 +2,7 @@ import {performance} from 'node:perf_hooks';
 import {reviewDiagnostics} from './review-result.mjs';
 /** Restart in a new owner-selected clone. Old results select candidate bytes only. */
 import fs from 'node:fs';import path from 'node:path';
+import {gitPathOutput} from './source-limits.mjs';
 import {createExecutionBudget} from './execution-budget.mjs';
 import {authorityCommandRootsValidator} from './authority-command.mjs';
 import {Controller,digest} from './controller.mjs';import {cloneSource} from './migration.mjs';
@@ -67,7 +68,7 @@ export function prepareGoalRestart(input){
  const requestFile=path.join(parent,path.basename(destination)+'.restart-request.json');
  try{fs.lstatSync(requestFile);throw Error('Restart request destination already exists');}catch(error){if(error.code!=='ENOENT')throw error;}
  const roots=[c.repo,destination,path.join(destination,'.git')];
- for(const arg of ['--absolute-git-dir','--git-common-dir']){const metadata=fs.realpathSync(c.git('rev-parse','--path-format=absolute',arg).toString().trim());roots.push(metadata);const rel=path.relative(metadata,destination);demand(rel&& (rel==='..'||rel.startsWith('..'+path.sep)||path.isAbsolute(rel)),'Restart destination overlaps Git metadata');}
+ for(const arg of ['--absolute-git-dir','--git-common-dir']){const metadata=fs.realpathSync(gitPathOutput(c.git('rev-parse','--path-format=absolute',arg)));roots.push(metadata);const rel=path.relative(metadata,destination);demand(rel&& (rel==='..'||rel.startsWith('..'+path.sep)||path.isAbsolute(rel)),'Restart destination overlaps Git metadata');}
  const assertAuthority=authorityCommandRootsValidator(roots);
  assertAuthority(request.approvalCommand);
  for(const unit of Object.values(request.unitRequests??{}))assertAuthority(unit.approvalCommand??request.approvalCommand);

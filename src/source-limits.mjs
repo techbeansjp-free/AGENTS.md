@@ -9,6 +9,8 @@ export const LOCAL_GIT_TIMEOUT_MILLISECONDS=20000;
 export const GIT_STDERR_EXCERPT_CHARACTERS=512;
 /* Null device for Git config, hooks and attributes paths given to local Git children (#1711). */
 export const GIT_NULL_DEVICE=process.platform==='win32'?'NUL':'/dev/null';
+/** A path Git printed on one line: strip only its line ending, since a path may end with a space (#1731). */
+export function gitPathOutput(output){return String(output).replace(/\r?\n$/,'');}
 
 /* Best-effort redaction. Git quotes a malformed repo-local config value in its error (for example
    "bad numeric config value '<value>' for 'core.compression'"), so any config value can reach stderr; a remote URL
