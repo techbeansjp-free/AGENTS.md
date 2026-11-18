@@ -1,5 +1,5 @@
 /** Non-destructive evaluation transition. Legacy source and approvals stay untouched. */
-import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {spawnSync} from 'node:child_process';
+import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {spawnSync} from 'node:child_process';import {randomUUID} from 'node:crypto';
 import {inspectMigration} from '../migration_inspect.mjs';import {Controller,safeName,hash} from './controller.mjs';
 import {SOURCE_BATCH_BYTES,gitFailureMessage,withStdinFile,GIT_NULL_DEVICE} from './source-limits.mjs';
 const manifestName='transition.json',manifestByteLimit=16*1024*1024;
@@ -168,6 +168,24 @@ export function assertWorkLocation(directory,mode='worktree'){
  return {repo:root,mode};
 }
 
+/**
+ * Fail before any side effect when the Git common directory is not writable, as under
+ * Codex workspace-write, which keeps .git read-only even inside a writable root (#1730).
+ * Git itself would fail later with a lock error and leave an empty .worktrees behind.
+ */
+function assertGitMetadataWritable(origin){
+ const common=fs.realpathSync.native(git(origin,'rev-parse','--path-format=absolute','--git-common-dir').toString().trim());
+ const probe=path.join(common,`asc-write-probe-${process.pid}-${randomUUID()}`);
+ try{fs.closeSync(fs.openSync(probe,'wx'));}catch(error){
+  if(!['EPERM','EACCES','EROFS'].includes(error?.code))throw error;
+  throw Object.assign(Error(`Git metadata is not writable: ${common} (${error.code}). worktree-create writes the new branch and worktree record there. `+
+   'In a Codex workspace-write sandbox .git stays read-only; start Codex at the repository root and add this directory to '+
+   `sandbox_workspace_write.writable_roots (for example -c 'sandbox_workspace_write.writable_roots=["${common}"]'). `+
+   'This lets the Agent change refs, hooks and config; see v05/USAGE.md.'),{cause:error,code:'ASC_GIT_METADATA_NOT_WRITABLE'});
+ }
+ fs.unlinkSync(probe);
+}
+
 /** Create, never repurpose, an owner-requested linked worktree. No checkout filters. */
 export function createWorktree(source,{issue,slug,type='feature',base='HEAD'}={}){
  demand(Number.isSafeInteger(issue)&&issue>0,'Positive Issue number required');
@@ -177,6 +195,7 @@ export function createWorktree(source,{issue,slug,type='feature',base='HEAD'}={}
  const origin=fs.realpathSync.native(source);
  demand(fs.realpathSync.native(git(origin,'rev-parse','--show-toplevel').toString().trim())===origin,'Repository root required');
  const head=git(origin,'rev-parse','--verify',`${base}^{commit}`).toString().trim(),branch=`${type}/${issue}-${slug}`;
+ assertGitMetadataWritable(origin);
  git(origin,'check-ref-format','--branch',branch);
  const refs=git(origin,'for-each-ref','--format=%(refname)',`refs/heads/${branch}`).toString().trim();demand(!refs,'Work branch already exists; choose a distinct slug');
  // Worktree materialization is not an Agent snapshot: validate metadata, then stream

@@ -114,6 +114,21 @@ v0.5.64〜v0.5.66で配布した`fact-record`・`fact-contradict`・`fact-list`�
 
 命名は作成時の標準であり、安全性の証拠ではない。既存worktreeの改名や時刻の鮮度を再開条件にしない。`asc-v05 worktree-create <repo-root> <issue> <type> <slug> <base>`で標準名の作業先を作成できる。`repo-root`は既存Git checkoutのrootを指定する。作成先の親`.worktrees`はCLIがその配下に用意するため、引数に`.worktrees`自体を渡さない。checkout filterやhookを実行せず、既存branch/pathは上書きしない。途中失敗した作業先は調査用に保持する。独自規約の作業先はownerが作成して`run`へ渡せる。実行時は名前ではなくGitの実体、変更範囲、ContractとEvidenceを検証する。独自規約や過去の名前だけを理由に正常な作業を一律拒否しない。
 
+### Codexのsandboxで作業場所を作る（#1730）
+
+Codexを`workspace-write`のsandboxで起動すると、書込みを許した領域の中でも`.git`は読み取り専用になる。`worktree-create`は新しいbranchとworktreeの記録をGitの共通の管理領域（`git rev-parse --path-format=absolute --git-common-dir`の結果）に書くため、このままでは作成できない。`worktree-create`は、作成を始める前にこの領域へ書けるかを確かめる。書けなければ`Git metadata is not writable: <dir>`と対処を示し、終了コード1で止まる。このとき`.worktrees`もbranchも作らない。
+
+Agentに作業場所の作成とcommitまで任せる場合は、Codexをrepository rootで起動し、この領域を`writable_roots`に加える。
+
+```sh
+codex -C <repo-root> --sandbox workspace-write -c 'sandbox_workspace_write.writable_roots=["<git-common-dir>"]'
+```
+
+- 加えると、Agentはrefs・hooks・configも書き換えられる。hooksとconfigは、後で利用者が実行するGitの操作にも影響する。信頼できる作業だけに使い、作業後に`.git/hooks`と`git config --local --list`を確認する。
+- Codexをworktreeの中で起動すると、そのworktree用の管理領域（`<git-common-dir>/worktrees/<name>`）が読み取り専用のままになり、共通の管理領域を加えてもcommitできなかった。repository rootで起動する。
+- 書込みを許さない場合、Agentは作業場所の作成もcommitもできない。それらは利用者がsandboxの外で行う。
+- 実測はmacOS・codex-cli 0.169.0の`codex sandbox`と`codex exec`で行った。LinuxとWindowsは実機がないため未確認である。ASCの同梱Codex Hostが起動するAgentの設定（#682）とは別の話である。
+
 移行や隔離実験の独立cloneを使う場合だけ、外部owner入力へ`"workspaceMode": "isolated-clone"`を明記する。未指定はworktree、未知値とrepo配下のサブディレクトリは拒否する。これはGit上の作業場所の確認であり、同時編集者がいないことの証明ではない。cloneの独立した準備はowner責務で、共有object storageの有無まではこの検査で判定しない。従来のclean状態・差分検査は継続する。内部APIを直接使うhost integrationは専用作業場所を自ら用意する。
 
 利用者が編集中の作業場所を直接渡さない。専用のclean worktreeまたは移行用独立cloneを使う。候補の検分はtracked file全体とindexを確認する。owner入力・署名鍵・配布物は候補外へ配置する。通常の未追跡fileは停止対象だが、Gitの無視対象の生成物は変更範囲と重ならない場合にHostへ保持する（末尾の「Hostに残る生成物」を参照）。

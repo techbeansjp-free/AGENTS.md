@@ -138,6 +138,24 @@ test('standard worktree creation preserves source edits and never repurposes bra
 
 
 
+test('worktree creation stops before any side effect when Git metadata is not writable (#1730)',{skip:process.platform==='win32'||process.getuid?.()===0},t=>{
+ const f=fixture(t),common=path.join(f.source,'.git'),mode=fs.statSync(common).mode&0o777;
+ const run=()=>execFileSync(process.execPath,[path.resolve('bin/asc-v05.mjs'),'worktree-create',f.source,'1730','fix','read-only-git','HEAD'],{encoding:'utf8',stdio:'pipe'});
+ fs.chmodSync(common,0o555);
+ try{
+  assert.throws(run,error=>{
+   assert.equal(error.status,1);const message=String(error.stderr);
+   assert.match(message,/Git metadata is not writable: .*\.git \(EACCES\)/);
+   assert.match(message,/sandbox_workspace_write\.writable_roots/);assert.match(message,/refs, hooks and config/);return true;});
+ }finally{fs.chmodSync(common,mode);}
+ assert(!fs.existsSync(path.join(f.source,'.worktrees')),'no .worktrees directory is left behind');
+ assert.equal(f.git('branch','--list','fix/1730-read-only-git'),'');
+ assert.deepEqual(fs.readdirSync(common).filter(name=>name.startsWith('asc-write-probe-')),[]);
+ const created=createWorktree(f.source,{issue:1730,type:'fix',slug:'read-only-git'});
+ assert.equal(created.branch,'fix/1730-read-only-git');
+ assert.deepEqual(fs.readdirSync(common).filter(name=>name.startsWith('asc-write-probe-')),[],'the probe file is removed after success');
+});
+
 test('worktree batch materialization preserves binary bytes, empty files and executable modes',t=>{
  const f=fixture(t),expected=new Map();
  for(let i=0;i<100;i++){const name=`nested/file-${i}.bin`,bytes=Buffer.from([0,10,13,255,i]);expected.set(name,bytes);fs.mkdirSync(path.join(f.source,'nested'),{recursive:true});fs.writeFileSync(path.join(f.source,name),bytes);}
