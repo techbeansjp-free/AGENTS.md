@@ -200,13 +200,15 @@ delays detection but cannot pass the Goal. The result records
 `unitVerification` per Unit with `source` `proposal`, `default` or `owner`.
 Adoption marks the request `unitVerificationSource: "controller-catalog"`;
 `runGoal` decides Unit-only checks from this mark, never from the request
-shape, so owner-written `unitRequests` keep their obligations. Only the Controller
-sets this field; do not write it by hand in a request or an edited
+shape, so owner-written `unitRequests` keep their obligations. Adoption also lists the Units with a
+planner selection as `plannerSelectedUnits`. Only the Controller
+sets these fields; do not write them by hand in a request or an edited
 `.restart-request.json`.
 `restart-goal` keeps the selection when reusing a proposal, passes the catalog
 to replanning, and records `unitVerification` and `adoption` in its result. Which files a selected script exercises is not checked
-by the Controller: no catalog entry says which files it exercises (#1733). The Unit review receives
-`unitAssignment.unitChecks` stating that the checks are planner-selected, and also answers
+by the Controller: no catalog entry says which files it exercises (#1733). The review of a Unit in
+`plannerSelectedUnits` receives `unitAssignment.unitChecks` stating that the checks are
+planner-selected, and also answers
 `unitChecksSufficient`. A repair cannot change the checks, so a too-narrow selection is reported
 there, not as a blocking finding. When the passing review answers `false`, the Unit's Controller
 runs the owner whole-Goal `testArgv` and `riskTestArgv` (also the default of an unselected Unit

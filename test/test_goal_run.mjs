@@ -803,6 +803,8 @@ test('delegation without owner unit rules adopts only catalog checks proposed by
  assert.deepEqual(adopted.unitRequests.a.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.unitRequests.a.contract.riskTestArgv,[]);
  // A Unit without a selection falls back to the whole-Goal test; the Goal contract never changes.
  assert.deepEqual(adopted.unitRequests.b.contract.testArgv,request.contract.testArgv);assert.deepEqual(adopted.contract,request.contract);assert.equal(adopted.unitVerificationSource,'controller-catalog');
+ // Only Unit a has a planner selection, so only it answers unitChecksSufficient and gets the fallback (#1733).
+ assert.deepEqual(adopted.plannerSelectedUnits,['a']);
  for(const verification of [{a:['/bin/evil']},{a:[['/bin/evil']]},{a:[]},{a:['contract-test','contract-test']},{ghost:['contract-test']},['contract-test']])
   assert.throws(()=>adoptProposal(request,{status:'proposed',goal,binding,verification}),/verification/);
  const baseline=structuredClone(request);baseline.decomposition.unitTestArgv=['/bin/sh','-c','test -s contract.txt'];
