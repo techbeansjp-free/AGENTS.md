@@ -864,6 +864,30 @@ test('a Unit whose selected checks the reviewer finds too narrow passes the whol
  for(const id of ['b','sum']){const unit=r.units.find(u=>u.id===id).result;assert.equal(Object.hasOwn(unit,'unitChecksSufficient'),false);assert.equal(unit.controllerEvents.some(e=>e.operation==='verify-also'),false);}
 });
 
+// The last passing review decides, not an earlier failed one (#1733 review): a repair runs between the two reviews.
+test('the last passing Unit review decides the fallback after a repair',{skip:!enabled},async t=>{
+ for(const [failed,passed] of [[true,false],[false,true]]){
+  const f=fixture(t),goal=f.request.goal;const request=structuredClone(f.request);delete request.goal;delete request.unitRequests;
+  request.contract.testArgv=['/bin/sh','-c','test -s contract.txt'];request.contract.riskTestArgv=[['/bin/true']];
+  request.decomposition={mode:'within-owner-contract'};request.budget={maxAgentCalls:14};request.maxRepairs=1;let n=0,writesA=0,reviewsA=0;
+  const blocker={location:'a.txt',condition:'First attempt rejected',evidence:'fixture',impact:'fixture',action:'Repair a.txt',counterevidence:'none',severity:'P2',verification:'static-analysis',blocking:true};
+  const agent=async({workspace,writable,prompt})=>{const context=`last-review-${failed}-${++n}`,p=prompt.startsWith('{')?JSON.parse(prompt):{};
+   if(p.pins)return {context,seconds:0,usage:[],answer:JSON.stringify({status:'proposed',goal,verification:{a:['contract-risk-1']}})};
+   if(writable){const id=p.intent.split(' ').at(-1);fs.writeFileSync(path.join(workspace,id+'.txt'),id==='a'?'1'.repeat(++writesA):id==='sum'?'2':'1');return {context,seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};}
+   const meta=JSON.parse(fs.readFileSync(path.join(workspace,'.asc-review.json'),'utf8'));
+   if(meta.unitAssignment?.current?.id!=='a')return {context,seconds:0,usage:[],answer:passingReview(workspace)};
+   const first=++reviewsA===1;
+   return {context,seconds:0,usage:[],answer:JSON.stringify(first?{verdict:'fail',findings:[blocker],unitChecksSufficient:failed}:{verdict:'pass',findings:[],unitChecksSufficient:passed})};};
+  const r=await runAdaptive(request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));t.after(()=>fs.rmSync(r.proposal.root,{recursive:true,force:true}));
+  assert.equal(r.status,'draft-ci-passed');assert.equal(reviewsA,2);assert.equal(writesA,2);
+  const unitA=r.units.find(u=>u.id==='a').result;assert.equal(unitA.unitChecksSufficient,passed);
+  const fallbacks=r.events.filter(e=>e.type==='unit-event'&&e.event.type==='unit-checks-fallback');
+  if(passed){assert.deepEqual(fallbacks,[]);assert.equal(unitA.controllerEvents.some(e=>e.operation==='verify-also'),false);}
+  // The fallback ran on the repaired target, the one that was integrated.
+  else {assert.deepEqual(fallbacks.map(e=>e.id),['a']);assert.equal(fallbacks[0].event.target.head,unitA.target.head);}
+ }
+});
+
 // The fallback runs inside the Unit run, with the Unit's own design approval (#1733 review): a risky contract needs it.
 test('the too-narrow fallback runs with the Unit approval when the contract declares a risk',{skip:!enabled},async t=>{
  const f=fixture(t),goal=f.request.goal,owner=tempDir('asc-goal-owner-');t.after(()=>fs.rmSync(owner,{recursive:true,force:true}));
