@@ -1,0 +1,90 @@
+{
+  "schema": "asc-adaptive-context-phase1/v1",
+  "issue": 1737,
+  "protocol": "PHASE1_ADAPTIVE_PROTOCOL.md",
+  "harness": "phase1-run.mjs",
+  "harnessCommit": "1c687fcc",
+  "conditions": {
+    "model": "gpt-6.1-sol",
+    "effort": "medium",
+    "codexCli": "codex-cli 0.169.0",
+    "mountMode": "host",
+    "platform": "darwin",
+    "scenario": "xl",
+    "rotateAt": 100000
+  },
+  "precondition": {
+    "rule": "baseline coordinator mean input >= 130000",
+    "observed": 109114,
+    "met": false
+  },
+  "trials": [
+    {
+      "run": 1,
+      "arm": "baseline",
+      "seconds": 2052.6,
+      "execSeconds": 2043.1,
+      "processedTokens": 24591702,
+      "stages": 16,
+      "stagesComplete": 16,
+      "stageSeconds": [
+        235.5,
+        180.6,
+        126.8,
+        175.4,
+        99.2,
+        128.4,
+        82.6,
+        128.6,
+        137.5,
+        118,
+        78.9,
+        138.2,
+        105.3,
+        102.3,
+        83.9,
+        121.8
+      ],
+      "ownerReplies": 0,
+      "execFailures": 0,
+      "oraclesPassed": true,
+      "constraint": {
+        "commits": 14,
+        "compliant": 14
+      },
+      "ownerFilesTouchedByAgent": [],
+      "gitControlsVerified": true,
+      "coordinator": {
+        "calls": 182,
+        "meanInput": 109114,
+        "medianInput": 112093,
+        "p95Input": 170330,
+        "maxInput": 173642
+      },
+      "threads": [
+        17
+      ]
+    }
+  ],
+  "notRun": [
+    "adaptive",
+    "adaptive",
+    "baseline"
+  ],
+  "excluded": [
+    {
+      "kind": "smoke",
+      "arm": "adaptive",
+      "scenario": "pilot",
+      "rotateAt": 0,
+      "reason": "harness check before the protocol; Agent could not run git on macOS"
+    },
+    {
+      "kind": "aborted",
+      "arm": "baseline",
+      "scenario": "xl",
+      "stagesCompleted": 1,
+      "reason": "ASC start failed with EPERM under a login shell; stopped and fixed before trial 1"
+    }
+  ]
+}

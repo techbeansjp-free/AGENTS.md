@@ -7,7 +7,8 @@
 // tree clean, work committed) whose last coordinator call had at least ROTATE_AT input tokens, the outgoing session
 // records owner constraints and progress pointers in the state file and the next stage starts a fresh session that
 // reads it. Scenario `xl` delivers four copies (complex/ to complex4/), 16 stages, so the baseline context exceeds
-// the ADR 0004 reconsideration size.
+// the ADR 0004 reconsideration size. Scenario `xxl` delivers eight copies (complex/ to complex8/), 32 stages,
+// because `xl` stayed below that size on macOS (baseline mean 109k).
 // Run arms sequentially: parallel runs share provider limits and distort wall time.
 import fs from 'node:fs';import path from 'node:path';import {spawn,execFileSync} from 'node:child_process';
 import {performance} from 'node:perf_hooks';import {fileURLToPath} from 'node:url';import {setTimeout,clearTimeout} from 'node:timers';
@@ -20,12 +21,12 @@ import {rolloutsFor} from '../../../scripts/native-delivery.mjs';
 import {summarizeNativeUsage} from '../../../scripts/native-host-usage.mjs';
 
 const [tarball,codex,arm,scenario='pilot']=process.argv.slice(2);
-if(![5,6].includes(process.argv.length)||!path.isAbsolute(tarball??'')||!path.isAbsolute(codex??'')||!['baseline','state','adaptive'].includes(arm)||!['pilot','long','xl'].includes(scenario))throw Error('Usage: node phase1-run.mjs <absolute-tarball> <absolute-codex> baseline|state|adaptive [pilot|long|xl]');
+if(![5,6].includes(process.argv.length)||!path.isAbsolute(tarball??'')||!path.isAbsolute(codex??'')||!['baseline','state','adaptive'].includes(arm)||!['pilot','long','xl','xxl'].includes(scenario))throw Error('Usage: node phase1-run.mjs <absolute-tarball> <absolute-codex> baseline|state|adaptive [pilot|long|xl|xxl]');
 // Fixed before the #1737 runs (PHASE1_ADAPTIVE_PROTOCOL.md). An override marks the record as a smoke run, not a trial.
 const ROTATE_AT=Number(process.env.ASC_EVAL_ROTATE_AT??100000);
 if(!Number.isSafeInteger(ROTATE_AT)||ROTATE_AT<0)throw Error('Invalid ASC_EVAL_ROTATE_AT');
 const {model,effort}=nativeModelConditions(),MAX_RESUMES=2,EXEC_TIMEOUT=90*60*1000;
-const units=Array.from({length:{pilot:1,long:2,xl:4}[scenario]},(_,k)=>({dir:k?`complex${k+1}`:'complex',issues:[9001,9002,9003].map(n=>n+3*k)}));
+const units=Array.from({length:{pilot:1,long:2,xl:4,xxl:8}[scenario]},(_,k)=>({dir:k?`complex${k+1}`:'complex',issues:[9001,9002,9003].map(n=>n+3*k)}));
 const usesState=arm!=='baseline';
 const root=fs.realpathSync(fs.mkdtempSync('/var/tmp/asc-native-complex-')),origin=path.join(root,'origin'),runtime=path.join(root,'runtime'),bootstrap=path.join(root,'bootstrap'),pkg=path.join(root,'distribution'),stateDir=path.join(root,'state'),preRevision=path.join(root,'pre-revision');
 for(const p of [origin,runtime,bootstrap,pkg,stateDir,preRevision])fs.mkdirSync(p);
