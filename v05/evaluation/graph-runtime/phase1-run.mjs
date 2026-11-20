@@ -87,10 +87,13 @@ const runExec=(args,input,log)=>new Promise((resolve,reject)=>{
   const thread=fs.readFileSync(log,'utf8').split('\n').filter(Boolean).map(l=>{try{return JSON.parse(l);}catch{return {};}}).find(e=>e.type==='thread.started')?.thread_id;
   resolve({status,signal,timedOut,thread,seconds:(performance.now()-began)/1000});});
 });
-// Input tokens of the latest provider call of a coordinator thread, and its per-call input series.
-const callInputs=events=>{const out=[];let total;for(const e of events){const info=e.type==='event_msg'&&e.payload?.type==='token_count'?e.payload.info:null;
- if(!info?.last_token_usage||info.total_token_usage?.input_tokens===total)continue;total=info.total_token_usage.input_tokens;out.push(info.last_token_usage.input_tokens);}return out;};
-const coordinatorInputs=async id=>{const own=(await rolloutsFor(id,startedAt)).find(r=>r.find(e=>e.type==='session_meta')?.payload?.id===id);if(!own)throw Error('Coordinator rollout not found');return callInputs(own);};
+// Per-call input tokens of a coordinator thread, grouped by exec turn (one `turn_context` per exec or resume).
+const callTurns=events=>{const turns=[];let total,cur;for(const e of events){if(e.type==='turn_context'){turns.push(cur=[]);continue;}
+ const info=e.type==='event_msg'&&e.payload?.type==='token_count'?e.payload.info:null;
+ if(!info?.last_token_usage||info.total_token_usage?.input_tokens===total)continue;total=info.total_token_usage.input_tokens;if(!cur)turns.push(cur=[]);cur.push(info.last_token_usage.input_tokens);}return turns;};
+const coordinatorTurns=async id=>{const own=(await rolloutsFor(id,startedAt)).find(r=>r.find(e=>e.type==='session_meta')?.payload?.id===id);if(!own)throw Error('Coordinator rollout not found');return callTurns(own);};
+const coordinatorInputs=async id=>(await coordinatorTurns(id)).flat();
+const median=a=>{const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;};
 const failed=e=>e.status!==0||e.signal||e.timedOut;
 // macOS: a login shell runs path_helper, which puts sandbox-denied directories first, so Node's spawn of `git` fails with EPERM.
 const common=['--ignore-user-config','--ignore-rules','--skip-git-repo-check','--json','-m',model,'-c',`model_reasoning_effort=${JSON.stringify(effort)}`,...(darwinGit?['-c','allow_login_shell=false']:[])];
@@ -160,8 +163,13 @@ for(const id of [...new Set(record.stages.map(s=>s.thread).filter(Boolean))]){
  try{const u=summarizeNativeUsage(id,await rolloutsFor(id,startedAt));record.usage.push({id,observedProcessedTokens:u.observedProcessedTokens,observedThreads:u.observedThreads,measured:u.measured,missingUsage:u.missingUsage});}
  catch(e){record.usage.push({id,error:e.message});}
 }
-try{const inputs=(await Promise.all([...new Set(record.stages.map(s=>s.thread).filter(Boolean))].map(coordinatorInputs))).flat(),sorted=[...inputs].sort((a,b)=>a-b);
- record.coordinator={calls:inputs.length,meanInput:Math.round(inputs.reduce((a,b)=>a+b,0)/inputs.length),medianInput:sorted[Math.floor(sorted.length/2)],p95Input:sorted[Math.ceil(sorted.length*0.95)-1],maxInput:sorted.at(-1)};}
+try{const threads=[...new Set(record.stages.map(s=>s.thread).filter(Boolean))],turns=await Promise.all(threads.map(coordinatorTurns));
+ const inputs=turns.flat(2),sorted=[...inputs].sort((a,b)=>a-b),stageCalls=record.stages.map(()=>0);
+ // Exec turns of a thread in order: the execs of its stages, then the handoff when a rotation left it.
+ threads.forEach((id,k)=>{const owners=[...record.stages.flatMap((s,i)=>s.thread===id?s.execs.map(()=>i):[]),...(record.rotations.some(r=>r.from===id)?['handoff']:[])];
+  if(owners.length!==turns[k].length)throw Error(`Thread ${id}: ${turns[k].length} turns for ${owners.length} execs`);
+  turns[k].forEach((t,j)=>{if(owners[j]!=='handoff')stageCalls[owners[j]]+=t.length;});});
+ record.coordinator={calls:inputs.length,meanInput:Math.round(inputs.reduce((a,b)=>a+b,0)/inputs.length),medianInput:median(inputs),p95Input:sorted[Math.ceil(sorted.length*0.95)-1],maxInput:sorted.at(-1),stageCalls};}
 catch(e){record.coordinatorError=e.message;}
 record.processedTokens=record.usage.length&&record.usage.every(u=>Number.isSafeInteger(u.observedProcessedTokens))?record.usage.reduce((a,u)=>a+u.observedProcessedTokens,0):null;
 if(usesState)try{record.finalState=JSON.parse(fs.readFileSync(stateFile,'utf8'));}catch(e){record.finalStateError=e.message;}

@@ -1,6 +1,6 @@
 # Adaptive rotationの測定計画（Issue #1737 Phase 1）
 
-2026-11-20。この計画は試行の前にcommitし、結果を見た後に閾値・条件・判定を変えない。
+2026-11-20。この計画は試行の前にcommitし、結果を見た後に閾値・条件・判定を変えない。例外は下の改訂1（scenarioの変更）で、前提条件の不成立を受けたownerの決定により、比較する試行の前にcommitした。閾値と採用条件は変えていない。
 
 ## 範囲
 
@@ -20,7 +20,7 @@ ownerは2026-11-20に、Phase 1を次の2条件で行うと決めた（案B）�
 - macOSの`/usr/bin/git`はCommand Line Toolsを要するshimで、sandboxの既定はその読取りを拒否する。harnessは評価用に限り、その読取りを許し、実体のgitをPATHの先頭に置く。この対処の前の動作確認（4段階、毎境界で引継ぎ）では、Agentがgitを使えずNodeでcommitを組み立てていた。その記録は試行に含めない。また、login shellはpath_helperでsandboxが拒否するdirectoryをPATHの先頭に置き、ASCの`start`がgitを起動できずEPERMで失敗したので、`allow_login_shell=false`を指定する。この不具合で止めた1回目のbaseline（1段階目まで）も試行に含めない。
 - Codexは`--ignore-user-config`でも`CODEX_HOME`の`AGENTS.md`（ownerの個人規約）を読み込む。両条件に同じく効くので、そのままにする。
 - 順序：baseline・adaptive・adaptive・baselineの2組。1試行ずつ順に実行する。
-- 欠測・失敗した試行も除外しない。
+- 欠測・失敗した試行も除外しない。例外は、上記の環境の不具合で試行を始められなかった記録（動作確認と、1段階目で止めたbaseline）で、理由とともに結果に残す。
 
 ## 切替え規則
 
