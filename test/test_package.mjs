@@ -29,7 +29,8 @@ test('package file declarations, with src expanded to its inventory files, exact
  assert.deepEqual(listing.files.map(file=>file.path).filter(name=>name.startsWith('src/')).sort(),inventory.filter(name=>name.startsWith('src/')).sort());
 });
 
-// The declaration check accepts the src directory only, once, as a directory with inventory files under it (#1739).
+// The declaration check accepts the src directory only, once, with inventory files under it (#1739). That src is a
+// real directory is checked in the declarations test above, and a symbolic link to one is refused by the npm pack match.
 test('package declarations refuse another directory, a duplicate src file and a src without inventory files',t=>{
  const root=tempDir('asc-package-declarations-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  for(const name of [...runtimeInventory(),'scripts/check-package-inventory.mjs']){const target=path.join(root,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
