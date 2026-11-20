@@ -704,14 +704,14 @@
       "fromVersion": 27,
       "toVersion": 28,
       "owner": "repository maintainer (Issue #1732, 2026-11-21: テストの増え方は止めずに警告する)",
-      "rationale": "Issue #1732: テストの増え方を PR ごとに見えるようにする。ci.yml の linux job で、npm run quality の step に NODE_OPTIONS で junit reporter を足して各テストの時間を記録し（spec の表示は変えない）、npm pack の後に base の test/ を sparse checkout して scripts/test-growth-report.mjs で比べ、job summary と warning annotation に出す。追加の2 step は if: !cancelled() と continue-on-error: true で、報告は終了コードを常に 0 にするので、job と check を失敗にしない。npm run quality の command・順序・trigger・permissions・ほかの job・step は変えない。package.json の変更は qualityContractVersion だけ。",
+      "rationale": "Issue #1732: テストの増え方を PR ごとに見えるようにする（owner の指示: 止めずに警告する）。ci.yml の linux job で、npm run quality の step に NODE_OPTIONS で junit reporter を足して各テストの時間を記録する（spec の表示は Node 24 の既定と同じで変えない）。npm pack の後に、GitHub の compare API（github.token、contents: read の範囲）で PR の merge-base を求め、その test/ を sparse checkout し、scripts/test-growth-report.mjs で head と比べて job summary と warning annotation に出す。追加の3 step は if: !cancelled() と continue-on-error: true で、報告は終了コードを常に 0 にするので、job と check を失敗にしない。merge-base を得られなければ checkout を飛ばし、報告は比較不能と出す。npm run quality の command・順序・trigger・permissions・ほかの job・step は変えない。追加の checkout は報告用で、release の検査が数える PR HEAD 固定の checkout（- uses: で始まる step）は変えない。package.json の変更は qualityContractVersion だけ。",
       "rollback": "適用前は有効化しない。適用後に戻す場合は次versionのproposalを先行登録して適用し、登録済みproposalの削除や品質保護の解除は行わない。",
       "targets": [
         {
           "kind": "file",
           "name": ".github/workflows/ci.yml",
           "beforeSha256": "58667040c0d656f4d7039a41f1addd3e7be8ba7bf6cf81dc835a19551fb4e2d9",
-          "afterSha256": "b3cdb316e93d7709b4cf2c49e604a6153c4799b1c922a8968c7d74889a4150cd"
+          "afterSha256": "4d7468f90764c65cb48c94cea1748cd69f11f6a80a31226ce6491100debb970d"
         },
         {
           "kind": "packageField",
