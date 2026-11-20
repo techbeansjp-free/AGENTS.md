@@ -37,9 +37,34 @@ jobs:
       - name: Test harness including Linux isolation
         env:
           ASC_TEST_CGROUP: "1"
+          # テストの増え方の報告（#1732）のため、各テストの時間を junit でも記録する。表示は既定の spec のまま。
+          NODE_OPTIONS: --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=${{ runner.temp }}/asc-test-results.xml
         run: npm run quality
       - name: Inspect standard unpublished distribution
         run: npm pack --dry-run --json
+      # テストの増え方を job summary と warning annotation に出す（#1732）。報告だけで、この job を失敗にしない。
+      # 比較の基点は PR の merge-base。base branch の先端と比べると、ほかの PR の増減が混ざる。
+      - name: Find the merge base for the test growth report
+        id: test-growth-base
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPARE: repos/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}
+        run: echo "sha=$(gh api "$COMPARE" --jq .merge_base_commit.sha)" >> "$GITHUB_OUTPUT"
+      - name: Fetch base tests for the test growth report
+        if: ${{ !cancelled() && steps.test-growth-base.outputs.sha != '' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.test-growth-base.outputs.sha }}
+          path: .asc-test-growth-base
+          persist-credentials: false
+          sparse-checkout: test
+      - name: Report test growth (warning only)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: node scripts/test-growth-report.mjs --base=.asc-test-growth-base --head=. "--junit=${{ runner.temp }}/asc-test-results.xml"
   host-protocol:
     name: Host protocol (${{ matrix.os }})
     strategy:
