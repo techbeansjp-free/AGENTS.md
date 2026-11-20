@@ -2,6 +2,8 @@
 
 2026-11-20。状態: owner が Issue #1738 で示した方針の正本化。[ADR 0002](ARCHITECTURE_DECISION_0002.md)（必要な品質を最小の仕組みで保証する）の原則を、Host との境界について具体化する。ADR 0002 と食い違う場合は ADR 0002 を優先する。
 
+本書の「Host」は、Codex・Claude Code などの AI の Host 製品を指す。ADR 0002 の「Host で判定する」の Host は、AI ではない決定論的な実行側（ASC の Controller を含む）の意味で、本書の Host とは別である。
+
 ## 決定
 
 ASC は汎用の Agent Harness を再実装しない。Codex・Claude Code などの Host がすでに Base Harness（Agent loop・Context・Tool 実行・Session・Sandbox・Process lifecycle）を提供している。ASC はその上に、ソフトウェア開発に固有の制御（Goal・Contract・Authority・Evidence・Review）を薄く載せる。
@@ -55,13 +57,14 @@ ASC が所有するのは原則として2段目である。正本（authority）
 6. 新しい第二の正本を作らない。作る場合は owner が必要性を明示して承認している。
 7. Host ごとの任意の経路として分けられるなら、標準経路に強制しない。
 
-**snapshot Controller はこの例外に当たる。** owner が明示して選んだ場合だけ使い、標準の Host 経路から暗黙に切り替えない。
+7つの条件は、今後追加する機構に適用する。**snapshot Controller は、v0.5 の受入（#1578、#1579）で owner が受け入れた既存の例外**で、この7条件での再評価はしていない。例外の範囲は、下の表の「snapshot 経路」の列に挙げたものに限り、Linux の snapshot backend に限る。owner が明示して選んだ場合だけ使い、標準の Host 経路から暗黙に切り替えない。
 
 ## 標準の Host 経路と snapshot 経路
 
 | | 標準の Host 経路 | snapshot 経路（owner が明示して選択） |
 | --- | --- | --- |
-| Agent loop・Context・Tool 実行 | 利用中の Host | ASC の Controller が Agent を起動して制御する |
+| Agent loop・Context・Tool 実行 | 利用中の Host | 起動した Host 製品（Codex CLI など）のまま。汎用の Agent runtime は、どちらの経路でも Host が持つ |
+| ASC が持つ実行の機構 | Host の公式手段を呼ぶ薄い adapter（`host-session` による別 session の起動・待機上限・結果の保存、`worktree-verify` による検証コマンドの実行） | Controller が、Agent の起動と寿命の管理（systemd user service・cgroup）、sandbox の設定と起動前の確認、検証の隔離した実行、修復の反復と実行予算、Work Unit の実行順と並列を持つ |
 | 作業場所 | 実 worktree | 隔離した snapshot |
 | ASC の役割 | worktree・project context・レビュー契約・Evidence と authority の確認 | 上に加えて、隔離した実行と検証の制御 |
 | 切り替え | — | `--snapshot` などの明示の選択だけ。標準経路から自動で切り替えない |
@@ -89,11 +92,12 @@ ASC に新しい runtime の機構を足す前に、Issue か PR で少なくと
 | [ADR 0002](ARCHITECTURE_DECISION_0002.md)、#1578（v0.5 の Goal・Contract・Evidence 駆動への刷新） | 責務の境界と最小の仕組みの原則。本 ADR はその Host との境界を具体化する |
 | #1579（複雑な Goal・復旧・性能の受入） | 標準の Host 経路と snapshot 経路を分けて受け入れた。本 ADR の「標準の Host 経路と snapshot 経路」の表は、その区別を責務として書いたもの |
 | #1517（進行状態を repository state から再開し、context の増幅を減らす） | 「repository・workflow state が authority、conversation は使い捨て」。本 ADR の 7 に含める |
-| #1648 / [ADR 0004](ARCHITECTURE_DECISION_0004.md)（グラフ型 runtime の考え方を実測で不採用） | 固定の rotation と明示 state を実測で採らなかった判断。本 ADR の「対照評価なしに製品にしない」の先例 |
+| [ADR 0003](ARCHITECTURE_DECISION_0003.md)（リポジトリ派生グラフの導入の保留） | 本 ADR の 8 と、#1737 の Semantic Projection は、ADR 0003 の再検討条件に従う |
+| #1648 / [ADR 0004](ARCHITECTURE_DECISION_0004.md)（グラフ型 runtime の考え方） | ループの終了条件と明示的な状態は導入せず、判断点の宣言は保留した判断。本 ADR の「対照評価なしに製品にしない」の先例。#1737 の Adaptive-lived Context は、ADR 0004 の再検討条件と同じ採用条件で比べる |
 | #1737（Adaptive-lived Context と DB レスの Semantic Projection の評価） | 本 ADR に従う。Adaptive-lived Context は 7 の方針と評価として扱い、汎用の session・context runtime は Host に残す。Semantic Projection は 8 の派生した read model の候補で、authority にせず、共有 DB を要求しない |
 
 ## 見直す条件
 
 - Host が、ASC の責務（Evidence の束縛・独立レビュー・authority の境界など）を Host 自身の機能として同等に提供した場合は、ASC 側の実装を薄くするか、取り除く。
 - Host に必要な能力がなく、上の例外の条件をすべて満たす機構が評価で示された場合は、その機構に限って例外を認める。
-- 過去の Issue の本文は正本にしない。この境界の正本は、本 ADR と現行の README・v05 の文書である。
+- 過去の Issue の本文は正本にしない。責務の境界の正本は本 ADR とする。README は入口で、操作の手順は [利用手順](USAGE.md) にある。ADR 0002 と食い違えば ADR 0002 を優先する。
