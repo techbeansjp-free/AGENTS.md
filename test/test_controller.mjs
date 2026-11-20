@@ -10,6 +10,7 @@ import {execFileSync} from 'node:child_process';
 import {generateKeyPairSync,sign} from 'node:crypto';
 import {Controller,safeName,hash} from '../src/controller.mjs';
 import {approvalBytes,keyFingerprint} from '../src/approval.mjs';
+import {SOURCE_BATCH_BYTES} from '../src/source-limits.mjs';
 
 function fixture(t,extra={}) {
  const root=tempDir('asc-node-controller-');
@@ -323,10 +324,15 @@ test('verification output overflow is an infrastructure error with the bounded b
 test('empty blob inventories bound batch headers as well as content bytes',t=>{
  const {c,root}=fixture(t);
  const oid=execFileSync('git',['hash-object','-w','--stdin'],{cwd:root,input:'',encoding:'utf8'}).trim();
- // 350,000 empty SHA-1 blobs emitted together exceed the 16 MiB Git pipe buffer.
- const count=350000,objects=Array.from({length:count},(_,i)=>({name:`empty-${i}`,mode:'100644',oid,size:0}));
- const original=c.gitInput.bind(c);let calls=0,seen=0;
- c.gitInput=(input,...args)=>{calls++;assert(input.trim().split('\n').length<=4096);return original(input,...args);};
+ // Empty blobs add no content bytes, yet each still emits an OID, size and separators. Without a count bound,
+ // 350,000 of them in one batch exceed the 16 MiB Git output buffer. The bound is a per-batch count, so two full
+ // batches and one remainder through real Git prove it; the per-batch output is the same as with 350,000.
+ const limit=4096,count=2*limit+1,objects=Array.from({length:count},(_,i)=>({name:`empty-${i}`,mode:'100644',oid,size:0}));
+ const original=c.gitInput.bind(c);const lines=[];let seen=0;
+ c.gitInput=(input,...args)=>{lines.push(input.trim().split('\n').length);return original(input,...args);};
  const result=c.readBlobs(objects,(_name,blob)=>{assert.equal(blob.bytes.length,0);seen++;});
- assert.equal(seen,count);assert.equal(calls,Math.ceil(count/4096));assert.equal(result.size,0);
+ assert.equal(seen,count);assert.deepEqual(lines,[limit,limit,1]);assert.equal(result.size,0);
+ // A full batch of the largest header (SHA-256 OID and a size up to the content bound) plus the content bound fits the buffer.
+ const header=`${'0'.repeat(64)} blob ${SOURCE_BATCH_BYTES}\n`.length+1;
+ assert(limit*header+SOURCE_BATCH_BYTES<16*1024*1024);
 });
