@@ -645,5 +645,6 @@
       "reason": "ASC start failed with EPERM under a login shell; stopped and fixed before trial 1"
     }
   ],
-  "recount": "coordinator.medianInput and coordinator.stageCalls were recounted after the runs from the coordinator rollouts with the rule of harness commit 8e08e0e7 (even-count median; calls grouped by exec turn); rotations[].nextStageCalls is derived as coordinator.stageCalls[afterStage]; no trial was rerun"
+  "recount": "coordinator.medianInput and coordinator.stageCalls were recounted after the runs from the coordinator rollouts with the rule of harness commit 8e08e0e7 (even-count median; calls grouped by exec turn); rotations[].nextStageCalls is derived as coordinator.stageCalls[afterStage]; no trial was rerun",
+  "stateValidRule": "rotations[].stateValid was recorded by the rule of harness commit 9da11240 (state file has an authority). The stricter rule added later (owner constraint and an existing commit per completed Issue) was checked after the runs only against each adaptive trial's final state at its last rotation (after stages 30 and 29), and both passed; earlier handoff states were overwritten and were not checked. No trial was rerun."
 }

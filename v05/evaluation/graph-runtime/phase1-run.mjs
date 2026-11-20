@@ -98,7 +98,7 @@ const median=a=>{const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length%2
 // (stage 3), and has, for every Issue of the stages completed so far, a progress entry naming the Issue and an
 // existing commit of the worktree.
 const commitExists=sha=>{try{git(['cat-file','-e',sha+'^{commit}'],worktree);return true;}catch{return false;}};
-const handoffValid=(state,n)=>{const entries=(state.progress??[]).map(p=>JSON.stringify(p));
+const handoffValid=(state,n)=>{if(!Array.isArray(state.progress))return false;const entries=state.progress.map(p=>JSON.stringify(p));
  return !!state.authority&&(n<3||JSON.stringify(state.ownerConstraints??[]).includes('Refs: #'))&&[...new Set(stages.filter(t=>t.n<=n).map(t=>t.issue))]
   .every(i=>entries.some(p=>new RegExp('\\b'+i+'\\b').test(p)&&(p.match(/\b[0-9a-f]{7,40}\b/g)??[]).some(commitExists)));};
 const failed=e=>e.status!==0||e.signal||e.timedOut;
