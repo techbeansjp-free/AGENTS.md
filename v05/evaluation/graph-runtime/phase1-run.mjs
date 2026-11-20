@@ -94,6 +94,10 @@ const callTurns=events=>{const turns=[];let total,cur;for(const e of events){if(
 const coordinatorTurns=async id=>{const own=(await rolloutsFor(id,startedAt)).find(r=>r.find(e=>e.type==='session_meta')?.payload?.id===id);if(!own)throw Error('Coordinator rollout not found');return callTurns(own);};
 const coordinatorInputs=async id=>(await coordinatorTurns(id)).flat();
 const median=a=>{const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;};
+// A handoff is valid only if the state file keeps the authority, carries the owner constraint once it was given
+// (stage 3), and points to a commit SHA for every Issue of the stages completed so far.
+const handoffValid=(state,n)=>{const entries=(state.progress??[]).map(p=>JSON.stringify(p));
+ return !!state.authority&&(n<3||JSON.stringify(state.ownerConstraints??[]).includes('Refs: #'))&&[...new Set(stages.filter(t=>t.n<=n).map(t=>t.task.match(/^Issue (\d+)/)[1]))].every(i=>entries.some(p=>p.includes(i)&&/\b[0-9a-f]{7,40}\b/.test(p)));};
 const failed=e=>e.status!==0||e.signal||e.timedOut;
 // macOS: a login shell runs path_helper, which puts sandbox-denied directories first, so Node's spawn of `git` fails with EPERM.
 const common=['--ignore-user-config','--ignore-rules','--skip-git-repo-check','--json','-m',model,'-c',`model_reasoning_effort=${JSON.stringify(effort)}`,...(darwinGit?['-c','allow_login_shell=false']:[])];
@@ -135,9 +139,9 @@ try{
    if(lastInput>=ROTATE_AT){
     const exec=await runExec(['exec','-C',worktree,'resume',...common,...c.options,coordinator,'-'],handoff,path.join(root,`stage${s.n}-handoff.jsonl`));
     const rotation={afterStage:s.n,from:coordinator,lastInput,exec,treeClean:(guard(),!git(['status','--porcelain'],worktree))};
-    try{rotation.stateValid=!!JSON.parse(fs.readFileSync(stateFile,'utf8')).authority;}catch{rotation.stateValid=false;}
+    try{rotation.stateValid=handoffValid(JSON.parse(fs.readFileSync(stateFile,'utf8')),s.n);}catch{rotation.stateValid=false;}
     record.rotations.push(rotation);fs.writeFileSync(path.join(root,'progress.json'),JSON.stringify(record,null,2));
-    if(failed(exec)||!rotation.treeClean)break;
+    if(failed(exec)||!rotation.treeClean||!rotation.stateValid)break;
     rotateNext=true;
    }
   }
