@@ -20,7 +20,7 @@ GitHub Actionsの費用が制約で、runnerの種類を変えて単価を下げ
 | self-hosted（クラウドで使い捨て） | クラウドの費用＋運用の人件費。GitHubへの分の課金は現行なし（告知後に延期中） | 起動の待ちとimageの取得も課金される。運用の担当が要る | 起動の仕組み・image・権限・監視・更新を案件側が担う。EC2のSpotは中断への備えも要る |
 | self-hosted（常時起動の手元の機械） | 機械の償却・電力・保守＋運用の人件費 | 使い捨てにしにくく、job間で状態や秘密情報が残る | 機械の保守・隔離・故障の対応を案件側が担う |
 
-使い捨てのrunnerの実装の例（下の2つは運用の大半をクラウドや公式の部品に任せられる。残りは案件側で組む）：
+使い捨てのrunnerの実装の例（CodeBuildは運用の大半をクラウドに任せられる。ARCは公式の部品を使うがKubernetesの運用が要る。Fargate・EC2は案件側で組む）：
 - **Kubernetes**：Actions Runner Controller（ARC）。GitHubが最新のAutoscaling Runner Setsだけをサポートする（[Actions Runner Controller](https://docs.github.com/en/actions/concepts/runners/actions-runner-controller)、[Support for ARC](https://docs.github.com/en/actions/concepts/runners/support-for-arc)）。
 - **AWS CodeBuild**：クラウドが提供する使い捨てのrunner。webhookで受けたjobごとにrunnerを起動し、job後に終了する（[CodeBuild-hosted GitHub Actions runner](https://docs.aws.amazon.com/codebuild/latest/userguide/action-runner.html)）。
 - **AWS Fargate・EC2**：`workflow_job`のwebhookを受け、JIT runnerの設定を作り、1 jobに1つのtaskまたはinstanceを起動する。Fargateは秒課金（最低はLinuxで1分、Windowsで5分）でimageの取得の開始から課金され、特権containerが使えない（Docker-in-Dockerは不可）。EC2のSpotは安いが中断がある。公開の実装（例：terraform-aws-github-runner）は、使い捨ての設定が既定で無効の場合があるため既定値を確かめる。
@@ -96,7 +96,7 @@ jobごとに違うrunnerを組み合わせてよい。たとえばLinuxの軽い
 
 | 項目 | 確かめること |
 | --- | --- |
-| 載せるjob | forkからのPRと信頼できないcodeを載せない。`pull_request`ではPR側のworkflowの定義が使われるため、workflowの中の条件や`runs-on`はPRを出す人が書き換えられ、境界にならない。境界は、runner groupで使えるrepositoryとworkflowを限ることと、repository・organizationの設定（private repositoryの「Run workflows from fork pull requests」、fork PRのworkflowの承認）に置く。`pull_request_target`等で信頼できないcodeを実行する迂回も防ぐ。既定はhostedにする（[Managing GitHub Actions settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository)） |
+| 載せるjob | forkからのPRと信頼できないcodeを載せない。`pull_request`ではPR側のworkflowの定義が使われるため、workflowの中の条件や`runs-on`はPRを出す人が書き換えられ、境界にならない。境界は、runner groupで使えるrepository（と、使えるならworkflow）を限ることと、repository・organizationの設定（private repositoryの「Run workflows from fork pull requests」、fork PRのworkflowの承認）に置く。runner groupはorganizationとenterpriseのrunnerにだけあり、repositoryに登録したrunnerでは設定だけが境界になる。承認だけでは隔離にならず、承認したworkflowは実行される。`pull_request_target`等で信頼できないcodeを実行する迂回も防ぐ。既定はhostedにする（[Managing GitHub Actions settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository)） |
 | 使い捨て | JIT runnerか`--ephemeral`で1 jobごとに登録を外し、実行環境と書込み領域もjobごとに破棄する。登録を外すだけで完了としない |
 | 使える範囲 | runner groupで使えるrepository（と、使えるならworkflow）を限る。labelを認可の境界にしない |
 | 制御側の権限 | webhookの署名を検証する。GitHub Appの権限を最小にする。起動できるimage・task・roleを限る。制御用の資格情報をjobへ渡さない |
