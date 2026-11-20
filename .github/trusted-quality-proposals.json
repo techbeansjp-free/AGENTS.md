@@ -674,6 +674,29 @@
           "afterSha256": "5f9c4ab08cac7457e9111a30e4664920607ea2c115a1433d7be98e97e64244ca"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-SRC-DIRECTORY-DISTRIBUTION-001",
+      "status": "staged",
+      "fromVersion": 26,
+      "toVersion": 27,
+      "owner": "repository maintainer (explicit approval for Issue #1739, 2026-11-19)",
+      "rationale": "Issue #1739: src/ にファイルを足すたびに package.json の files を変える必要があり、そのたびに proposal の登録だけの PR が要っていた（2026-11-13〜18 の37件中5件）。package.json の files のうち src/ の46行を、ディレクトリの指定 src の1行にまとめる。配布物の正本は src/runtime-files.json とする。適用の PR では、scripts/check-package-inventory.mjs の宣言の検査を「files の src を一覧の src/ の下のファイルに展開してから一覧と完全一致を比べる」形に変え、test/test_package.mjs と v05/MIGRATION_PLAN.md を合わせる。npm pack の実収録一覧が src/runtime-files.json と完全一致することの検査は変えないので、一覧にないファイルが src/ にあれば prepack と scripts/pack-candidate.mjs で止まる。ただし --ignore-scripts で検査を外した直接の pack では、そのファイルも収録される（v05/MIGRATION_PLAN.md でこの保証の対象外と明記している）。src/ の配布内容を決める src/runtime-files.json と scripts/check-package-inventory.mjs は保護対象外なので、src/ へのファイル追加は通常のレビューと CI に任せる（owner の判断）。src/ 以外への追加には、引き続き proposal が要る。package.json の変更は files と qualityContractVersion だけで、scripts・dependencies・devDependencies・engines・type・validator・権限境界は変更しない。",
+      "rollback": "適用前は有効化しない。適用後に戻す場合は次versionのproposalを先行登録して適用し、登録済みproposalの削除や品質保護の解除は行わない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "package.json",
+          "beforeSha256": "7e6ace8a82bb3a0df2fd735e986223cfef744ffe5348a2729861f0fe00eeb83b",
+          "afterSha256": "030138424c53fa41a88335fa06b2a70563a15daed68de9a27083bab038582363"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "5f9c4ab08cac7457e9111a30e4664920607ea2c115a1433d7be98e97e64244ca",
+          "afterSha256": "670671cd97404156226e507973f2ab8330d3022ca96e0c93bdbdb320c41adcaf"
+        }
+      ]
     }
   ]
 }
