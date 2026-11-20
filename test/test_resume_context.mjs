@@ -1,6 +1,6 @@
 import {tempDir} from './helpers/temp-dir.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import fs from 'node:fs';import path from 'node:path';import {spawnSync,execFileSync} from 'node:child_process';
+import fs from 'node:fs';import path from 'node:path';import {spawnSync,execFileSync} from 'node:child_process';import {setTimeout,clearTimeout} from 'node:timers';
 import {fileURLToPath} from 'node:url';
 import {resumeContext,parseWorktrees,issueFromBranch,hookDirectory,readHookInput} from '../src/resume-context.mjs';
 const cli=fileURLToPath(new URL('../bin/asc-v05.mjs',import.meta.url));

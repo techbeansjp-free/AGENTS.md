@@ -1,5 +1,6 @@
 import {spawnSync} from 'node:child_process';
 import path from 'node:path';
+import {setTimeout,clearTimeout} from 'node:timers';
 import {GIT_NULL_DEVICE} from './source-limits.mjs';
 
 /**
