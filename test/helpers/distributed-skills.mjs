@@ -15,7 +15,10 @@ export function assertAdditionalSkills(root,sourceRoot){
   assert.deepEqual(skillFiles(target),files);
   for(const file of files){
    const bytes=fs.readFileSync(path.join(target,file));assert.deepEqual(bytes,fs.readFileSync(path.join(source,file)),`${name}/${file}`);
-   if(file.endsWith('.md'))for(const [,link] of bytes.toString().matchAll(/\]\(([^)]+)\)/g))assert(fs.existsSync(path.resolve(target,path.dirname(file),link)),`${name}/${file}: ${link}`);
+   if(file.endsWith('.md'))for(const [,link] of bytes.toString().matchAll(/\]\(([^)]+)\)/g)){
+    if(/^https:\/\//.test(link)){assert(new URL(link).hostname,`${name}/${file}: ${link}`);continue;} // Public sources are cited, not bundled.
+    assert(fs.existsSync(path.resolve(target,path.dirname(file),link)),`${name}/${file}: ${link}`);
+   }
   }
  }
  const guide=fs.readFileSync(path.join(root,'README.md'),'utf8');

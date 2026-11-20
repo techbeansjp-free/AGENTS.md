@@ -111,6 +111,8 @@
     "skills/user-journey-acceptance/references/journeys.md",
     "skills/verification-optimization/SKILL.md",
     "skills/verification-optimization/references/equivalence-and-reuse.md",
+    "skills/verification-optimization/references/github-actions-cost.md",
+    "skills/verification-optimization/references/github-actions-runners.md",
     "skills/subagent-model-selection/SKILL.md",
     "skills/work-coordination/SKILL.md",
     "skills/review-and-remediation/SKILL.md",
@@ -151,5 +153,5 @@
     "type": "git",
     "url": "git+https://github.com/techbeansjp-free/AGENTS.md.git"
   },
-  "qualityContractVersion": 27
+  "qualityContractVersion": 28
 }
