@@ -31,6 +31,8 @@ CIがGitHub Actionsで、課金額が制約のときに読む。検出能力を�
 
 検出への影響で3群に分け、前の群から使う。
 
+runnerの種類を変えて単価を下げる手段は、同等性を確かめたうえで、下の2群と並べて比べる。3群より前に比べる（[GitHub Actionsのrunnerの選び方](github-actions-runners.md)）。
+
 ### 1. 検出を変えない手段
 
 - `concurrency`の`cancel-in-progress: true`で、同じPRの古いcommitの実行を取り消す。最新のcommitは全部検査されるが、取り消した途中のcommitの結果は残らない。releaseやdeployのように途中で止めてはいけない処理では取り消さない。
@@ -59,12 +61,12 @@ CIがGitHub Actionsで、課金額が制約のときに読む。検出能力を�
 
 ## 並列化とshardの費用
 
-並列化やshardは待ち時間を縮めるが、課金額は減らない。shardごとに準備が重複し、jobごとに切り上げられるため、増えることが多い。準備が短く、分けた後の各jobの端数が小さければ、ほとんど増えない場合もある。費用が制約なら、分ける前と後の課金額と待ち時間を実測で比べてから採る。
+並列化やshardは待ち時間を縮めるが、課金額は増えることが多い。shardごとに準備が重複し、jobごとに切り上げられるためである。準備が短く分けた後の各jobの端数が小さい場合や、分けたことでメモリ不足・資源の競合が解消して合計の時間が縮む場合は、増えないこともある。費用が制約なら、分ける前と後の課金額と待ち時間を実測で比べてから採る。
 
 ## 費用を計測する
 
 - **請求の正本**：所有者のBilling画面の使用量（[Viewing your usage of metered products and licenses](https://docs.github.com/en/billing/how-tos/products/view-productlicense-use)）。repository・SKU単位で見られ、詳しいreportではworkflow単位も見られる。workflow単位の詳しいreportはWeb画面でだけ取れ、REST APIの使用量のendpointからは取れない（[Billing reports reference](https://docs.github.com/en/billing/reference/billing-reports)）。
-- **内訳の推定**：run一覧のAPI（`GET /repos/{owner}/{repo}/actions/runs`）で期間・event・PRを取り、runごとにjobs API（`GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs?filter=all`）でjob名、`started_at`、`completed_at`、`conclusion`、runnerの`labels`を取る（[REST API endpoints for workflow runs](https://docs.github.com/en/rest/actions/workflow-runs)、[REST API endpoints for workflow jobs](https://docs.github.com/en/rest/actions/workflow-jobs)）。推定費用は、jobごとに`completed_at − started_at`を分へ切り上げ、labelsから決めたrunnerの単価を掛けて合計する。
+- **内訳の推定**：run一覧のAPI（`GET /repos/{owner}/{repo}/actions/runs`）で期間・event・PRを取り、runごとにjobs API（`GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs?filter=all`）でjob名、`started_at`、`completed_at`、`conclusion`、runnerの`labels`を取る。run一覧を期間（`created`）やeventで絞ると、1回の検索で返るのは最大1,000件なので、期間を分けて取り、区間ごとに1,000件に達していないこと、区間の境界で重複や欠落がないことを確かめる（[REST API endpoints for workflow runs](https://docs.github.com/en/rest/actions/workflow-runs)、[REST API endpoints for workflow jobs](https://docs.github.com/en/rest/actions/workflow-jobs)）。推定費用は、jobごとに`completed_at − started_at`を分へ切り上げ、labelsから決めたrunnerの単価を掛けて合計する。
   - `filter=all`で再実行したattemptも含め、全pageを取る。既定（`latest`）は最新のattemptだけを返す。
   - 失敗・取消したjobも経過分を数える。
   - labelとrunnerの単価の対応表は案件側で持つ。未終了、取得の失敗、対応表にないlabelは0として扱わず、「不明」として件数を報告する。

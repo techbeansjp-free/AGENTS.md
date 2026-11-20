@@ -1,6 +1,6 @@
 # GitHub Actionsのrunnerの選び方
 
-GitHub Actionsの費用が制約で、runnerの種類を変えて単価を下げるかを判断するときに読む。課金の仕組み・仕事量を減らす手段・計測の基本は[GitHub Actionsの費用](github-actions-cost.md)にある。runnerを変えても実行回数とjobの無駄は残るため、仕事量の削減と並べて比べる。どちらを先に変えるかは、見込める削減額と手間で選ぶ。
+GitHub Actionsの費用が制約で、runnerの種類を変えて単価を下げるかを判断するときに読む。課金の仕組み・仕事量を減らす手段・計測の基本は[GitHub Actionsの費用](github-actions-cost.md)にある。runnerを変えても実行回数とjobの無駄は残るため、仕事量の削減と並べて比べる。手段の順序は[CIのテスト構成を設計する](equivalence-and-reuse.md)に従い、runnerの変更は、検出の時期や範囲を変える手段（後段への移設等）より前に比べる。仕事量の削減とrunnerの変更のどちらを先に行うかは、見込める削減額と手間で選ぶ。
 
 ここでは選ぶ基準と導入前に確かめることを書く。runnerを立てるworkflowやIaCのコードは配らない。案件側で実装し、検証する。採否・費用の負担・運用の担当は利用者側が決める（[判断の所有](../../decision-ownership/SKILL.md)、見積と運用の責任は[見積と対応範囲](../../estimate-and-scope/SKILL.md)）。
 
@@ -8,15 +8,17 @@ GitHub Actionsの費用が制約で、runnerの種類を変えて単価を下げ
 
 次は2026-11-21に一次資料で確かめた内容である。料金と提供条件は変わるため、判断の前に出典で確かめる。数値を目標や規範として使わない。
 
-| 選択肢 | 費用の形 | 主な制約 |
-| --- | --- | --- |
-| GitHub-hostedの標準runner | publicは無料。privateは分単価（Linux 2-core x64 $0.006、arm64 $0.005、Windows $0.010、macOS $0.062） | 同時数の上限（例：Free 20・Team 60、macOSは5） |
-| `ubuntu-slim`（Linux 1-core） | privateは$0.002 | containerの中で非特権。Docker-in-Docker・mount不可、jobの上限15分 |
-| arm64の標準runner | x64より安い | 依存（native module、配布されるbinary、action、container image）がarm64で動くこと |
-| larger runner | core数に応じた分単価。publicでも課金 | GitHub TeamとEnterprise Cloudのorganizationだけ。分単価は高いが、短くなれば総額が下がる場合がある |
-| 外部のrunnerサービス（`runs-on`を替えて使う） | 従量、月額＋含まれる分、runnerごとの定額、利用者のクラウドの費用＋license等、事業者で異なる | ソース・秘密情報・cacheを事業者の環境へ渡す型と、利用者のクラウドで動く型がある。事業の終了がありうる |
-| self-hosted（クラウドで使い捨て） | クラウドの費用＋運用の人件費。GitHubへの分の課金は現行なし（告知後に延期中） | 起動の待ちとimageの取得も課金される。運用の担当が要る |
-| self-hosted（常時起動の手元の機械） | 機械の償却・電力・保守＋運用の人件費 | 使い捨てにしにくく、job間で状態や秘密情報が残る |
+表は運用の手間が小さい順に並べた。下の行ほど、patch・監視・scalingを案件側が担う。
+
+| 選択肢 | 費用の形 | 主な制約 | 運用・導入 |
+| --- | --- | --- | --- |
+| GitHub-hostedの標準runner | publicは無料。privateは分単価（Linux 2-core x64 $0.006、arm64 $0.005、Windows $0.010、macOS $0.062） | 同時数の上限（例：Free 20・Team 60、macOSは5） | 不要。`runs-on`だけ |
+| `ubuntu-slim`（Linux 1-core） | privateは$0.002 | containerの中で非特権。Docker-in-Docker・mount不可、jobの上限15分 | 不要。`runs-on`だけ |
+| arm64の標準runner | x64より安い | 依存（native module、配布されるbinary、action、container image）がarm64で動くこと | 不要。依存の確認が要る |
+| larger runner | core数に応じた分単価。publicでも課金 | GitHub TeamとEnterprise Cloudのorganizationだけ。分単価は高いが、短くなれば総額が下がる場合がある | organizationでrunnerを作る |
+| 外部のrunnerサービス（`runs-on`を替えて使う） | 従量、月額＋含まれる分、runnerごとの定額、利用者のクラウドの費用＋license等、事業者で異なる | ソース・秘密情報・cacheを事業者の環境へ渡す型と、利用者のクラウドで動く型がある。事業の終了がありうる | GitHub Appの導入と`runs-on`の変更。契約・委託の確認が要る |
+| self-hosted（クラウドで使い捨て） | クラウドの費用＋運用の人件費。GitHubへの分の課金は現行なし（告知後に延期中） | 起動の待ちとimageの取得も課金される。運用の担当が要る | 起動の仕組み・image・権限・監視・更新を案件側が担う。EC2のSpotは中断への備えも要る |
+| self-hosted（常時起動の手元の機械） | 機械の償却・電力・保守＋運用の人件費 | 使い捨てにしにくく、job間で状態や秘密情報が残る | 機械の保守・隔離・故障の対応を案件側が担う |
 
 使い捨てのself-hostedの実装の例：
 - **Kubernetes**：Actions Runner Controller（ARC）。GitHubが最新のAutoscaling Runner Setsだけをサポートする（[Actions Runner Controller](https://docs.github.com/en/actions/concepts/runners/actions-runner-controller)、[Support for ARC](https://docs.github.com/en/actions/concepts/runners/support-for-arc)）。
@@ -47,7 +49,7 @@ jobごとに違うrunnerを組み合わせてよい。たとえばLinuxの軽い
 | public repository | self-hosted。GitHubは、public repositoryではself-hostedをほぼ使うべきでないとしている。標準runnerが無料なので、費用の対象はlarger runnerだけ |
 | forkからのPRや信頼できない人のcodeを流すjob | そのjobのself-hosted。privateでも、forkしてPRを出せる人はself-hostedの環境を侵害できる |
 | ソース・秘密情報を第三者へ渡せない（契約・規制・実行地域） | 事業者の環境で動く外部サービス。利用者のクラウドで動く型は、事業者に与える権限と通信先を確かめて残す |
-| 1 jobごとに破棄できない | 秘密情報を使うjob、複数のrepositoryが共有するrunner |
+| 1 jobごとに破棄できない | その構成を、秘密情報を使うjobと、複数のrepositoryで共有するrunnerに使わない |
 
 出典：[Secure use reference](https://docs.github.com/en/actions/reference/security/secure-use)（Hardening for self-hosted runners）。
 
