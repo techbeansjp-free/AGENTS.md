@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {saveJsonOutside,saveVerification} from '../src/verification-output.mjs';
 import {planDockerCleanup} from '../src/docker-cleanup-plan.mjs';
-import {resumeContext,hookDirectory} from '../src/resume-context.mjs';
+import {resumeContext,hookDirectory,readHookInput} from '../src/resume-context.mjs';
 import {startWorktree,verifyWorktree} from '../src/worktree-execution.mjs';
 import {projectAssets,uninstallProjectAssets} from '../src/project-assets.mjs';
 import {restartGoal} from '../src/goal-restart.mjs';
@@ -37,7 +37,7 @@ try {
     'worktree-create':'worktree-create <repo-root> <issue> <type> <slug> <base>\n既存Git checkoutのrootを指定します（.worktrees自体ではありません）。その配下の.worktreesへ専用worktreeを作成します。type: feature|fix|refactor|test|docs|chore。baseは明示指定し、既存branch・作業場所は上書きしません。',
     'worktree-verify':'worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>]\n現在のHost権限で検証します。repo外のowner契約にintent・allowedPaths・commands（argv配列の配列）を指定します。検証失敗はexit 2。',
     'docker-cleanup-plan':'docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]\nmerge後の整理で、そのworktreeのDocker資源の削除候補と保持理由を読取り専用で一覧します。削除・down・停止は行わず、出力は削除許可ではありません。--project省略時はdirectory名をcomposeの規則で正規化、--label省略時はasc.worktree=<worktreeの実path>。Dockerが使えなければexit 1。',
-    'resume-context':'resume-context [<directory>] | resume-context --hook\ncompaction後・新しいContextの開始時に、repositoryのworktree・branch・HEAD・未commit件数を短い文で表示します（読取りのみ・ネットワークなし）。--hookはHostのSessionStart hookの入力JSONのcwdを使い、全体を10秒で打ち切り、読取りに失敗しても終了コード0で一文を返します。',
+    'resume-context':'resume-context [<directory>] | resume-context --hook\ncompaction後・新しいContextの開始時に、repositoryのworktree・branch・HEAD・未commit件数を短い文で表示します（読取りのみ・ネットワークなし）。--hookはHostのSessionStart hookの入力JSONのcwdを使い、入力の読取りを含めて全体を約10秒で打ち切り、読取りに失敗しても終了コード0で一文を返します。',
     uninstall:'uninstall <project-directory> [--apply]\n既定は撤去候補の表示のみ。--applyで正常な記録と配布時hashから所有を確認できた未編集資産・Host入口・管理記録を撤去します。競合があれば全体を停止し、利用者のfile・directory・設定・npm prefixは保持します。',
     'project-assets':'project-assets <project-directory> [--register-skill] [--register-claude-skill] [--apply]\n既定は差分表示のみ。登録オプションはHost選択を保存します。以後の通常更新でも登録Hostの入口を追加・更新し、未編集の廃止入口だけを削除します。--applyで適用し、編集・削除済み入口や未登録の同名fileとの競合は全体を停止します。'
   };
@@ -107,7 +107,8 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     console.log(JSON.stringify(options.output===undefined?run():saveJsonOutside(args[0],options.output,run,{noun:'Docker cleanup plan output',summarize:(plan,saved)=>({schema:'asc-docker-cleanup-plan-output/v1',...saved,plan})}),null,2));
   } else if(command==='resume-context'&&args.length===1&&args[0]==='--hook'){
     // A hook must never block the Host session: report a sentence and exit 0 on any failure.
-    try{let input='';try{input=fs.readFileSync(0,'utf8');}catch{}console.log(resumeContext(hookDirectory(input)));}
+    const started=Date.now();
+    try{const input=await readHookInput(process.stdin);console.log(resumeContext(hookDirectory(input),{deadline:Math.max(1000,10000-(Date.now()-started))}));}
     catch(error){console.log(`ASC: 現在地を読めなかった（${String(error?.message??error).slice(0,200)}）。git worktree listとIssue・PRで確かめてから続ける。`);}
   } else if(command==='resume-context'&&args.length<=1){
     console.log(resumeContext(path.resolve(args[0]??process.cwd())));
