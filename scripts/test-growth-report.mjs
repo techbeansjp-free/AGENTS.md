@@ -21,7 +21,7 @@ const EXTENSIONS = new Set(['.mjs', '.cjs', '.js']);
 // `foo.test(` や `regex.test(` を除くため、直前が識別子・`.`・`$` の呼出しは数えない。
 // 文字列・template・コメント・正規表現の中は scanSource で取り除いてから数える。
 const TEST_CALL = /(?<![\w.$])(?:test|it)(?:\.(?:skip|only|todo))?\s*\(/g;
-const IMPORT = /\bfrom\s*"#(\d+)"|\bimport\s*\(\s*"#(\d+)"\s*\)/g;
+const IMPORT = /\bfrom\s*"#(\d+)"|\bimport\s*\(?\s*"#(\d+)"|\brequire\s*\(\s*"#(\d+)"\s*\)/g;
 const PROCESS_MODULES = new Set(['child_process', 'node:child_process']);
 const REGEX_PREFIX = new Set([...'(,=:[!&|?{};+-*%<>~^']);
 const REGEX_KEYWORDS = /(?:^|[^\w$])(?:return|typeof|case|do|else|in|of|new|delete|void|throw|await|yield)$/;
@@ -131,7 +131,7 @@ function countLines(text) {
 function localImports(file, scanned) {
  const found = [];
  for (const match of scanned.code.matchAll(IMPORT)) {
-  const specifier = scanned.strings[Number(match[1] ?? match[2])];
+  const specifier = scanned.strings[Number(match[1] ?? match[2] ?? match[3])];
   if (typeof specifier === 'string' && /^\.{1,2}\//.test(specifier)) found.push(path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier)));
  }
  return found;
@@ -139,29 +139,33 @@ function localImports(file, scanned) {
 
 /**
  * ファイル単位で、実プロセス・実 Git を起動するかを判定する。
- * 判定はそのファイルか、そのファイルが import する `test/` の下の補助ファイル（推移的）が
- * `child_process` を import するか（実プロセス）、さらに値がちょうど `git` の文字列を書いているか（実 Git）。
- * 文字列の中に書いたサンプルは数えない。テスト1件ごとの判定ではなく概算。
+ * そのファイルと、そのファイルから import・require でたどれる `test/` の下のファイルのどれかが
+ * `child_process` を import していれば実プロセス、さらにどれかが値がちょうど `git` の文字列を書いていれば実 Git。
+ * 文字列の中に書いたサンプルは数えない。`src/` などテストの外を経由した起動は数えないので、少なめに出る概算。
  */
 function classify(scannedFiles) {
- const memo = new Map();
- const visit = (file, seen) => {
-  if (memo.has(file)) return memo.get(file);
-  const scanned = scannedFiles.get(file);
-  const result = { process: false, git: false };
-  if (scanned === undefined || seen.has(file)) return result;
-  seen.add(file);
-  result.process = scanned.strings.some((value) => PROCESS_MODULES.has(value));
-  result.git = result.process && scanned.strings.includes('git');
-  for (const imported of localImports(file, scanned)) {
-   const child = visit(imported, seen);
-   result.process ||= child.process;
-   result.git ||= child.git;
+ const own = new Map([...scannedFiles].map(([file, scanned]) => [file, {
+  process: scanned.strings.some((value) => PROCESS_MODULES.has(value)),
+  git: scanned.strings.includes('git'),
+  imports: localImports(file, scanned),
+ }]));
+ const result = new Map();
+ for (const file of own.keys()) {
+  // 循環 import があっても取りこぼさないよう、たどれるファイルの集合を毎回求める。
+  const reachable = new Set([file]);
+  const pending = [file];
+  while (pending.length > 0) {
+   for (const imported of own.get(pending.pop()).imports) {
+    if (!own.has(imported) || reachable.has(imported)) continue;
+    reachable.add(imported);
+    pending.push(imported);
+   }
   }
-  memo.set(file, result);
-  return result;
- };
- return new Map([...scannedFiles.keys()].map((file) => [file, visit(file, new Set())]));
+  const flags = [...reachable].map((item) => own.get(item));
+  const process = flags.some((item) => item.process);
+  result.set(file, { process, git: process && flags.some((item) => item.git) });
+ }
+ return result;
 }
 
 /** テスト数・行数・ファイル数・実プロセス/実 Git を起動するテストの数を数える。 */
@@ -233,12 +237,15 @@ export function parseJunit(xml, root) {
  return results;
 }
 
-/** head で変わったファイルにあり、base の同じファイルに名前が書かれていないテストを新しいテストとみなす。 */
+/**
+ * head で変わったファイルにあり、base の同じファイルに同じ名前の文字列がないテストを新しいテストとみなす。
+ * 名前を `${}` で組み立てるテストと、名前を変えた・移したテストは新しいとみなす（警告が多めに出る側の概算）。
+ */
 function isNewTest(entry, base, head) {
  const headText = head.get(entry.file);
  const baseText = base.get(entry.file);
  if (headText === undefined || headText === baseText) return false;
- return baseText === undefined || !baseText.includes(entry.name);
+ return baseText === undefined || !scanSource(baseText).strings.includes(entry.name);
 }
 
 /** base と head の比較から、報告と警告を組み立てる。入出力は行わない。 */
@@ -271,7 +278,7 @@ function ratio(part, whole) {
 }
 
 function cell(value) {
- return String(value).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+ return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 }
 
 /** job summary の Markdown。 */
@@ -296,7 +303,7 @@ export function renderSummary(report) {
   '|---|---:|---:|---:|',
   ...rows.map((row) => `| ${row.map(cell).join(' | ')} |`),
   '',
-  `閾値: テストの行数 +${thresholds.netLines} 行、テスト数 +${thresholds.netTests} 件、新しいテスト1件 ${thresholds.newTestSeconds} 秒。実プロセス・実 Git の判定はファイル単位の概算（\`child_process\` の import と、値が \`git\` の文字列。文字列の中のサンプルは数えない）。`,
+  `閾値: テストの行数 +${thresholds.netLines} 行、テスト数 +${thresholds.netTests} 件、新しいテスト1件 ${thresholds.newTestSeconds} 秒。実プロセス・実 Git の判定はファイル単位の概算（\`test/\` の中でたどれる \`child_process\` の import と、値が \`git\` の文字列。\`src/\` を経由した起動は数えないので少なめに出る）。`,
   '',
  ];
  if (slowest === null) {

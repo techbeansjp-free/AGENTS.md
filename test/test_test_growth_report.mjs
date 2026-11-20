@@ -37,6 +37,18 @@ test('samples inside strings, templates, comments and regular expressions are no
  assert.deepEqual(scanned.strings,['./b.mjs',null]);assert.match(scanned.code,/from "#0"/);
 });
 
+test('process and Git use follow import cycles, side-effect imports and require, and Git may be named apart from the spawn',()=>{
+ const {perFile}=measure(files({
+  'test/test_cycle.mjs':"import './helpers/a.mjs';\ntest('x',()=>{});\n",
+  'test/helpers/a.mjs':"import {b} from './b.mjs';export const a=1;\n",
+  'test/helpers/b.mjs':"import {a} from './a.mjs';import {spawnSync} from 'node:child_process';export const run=(cmd)=>spawnSync(cmd);\n",
+  'test/test_named.mjs':"const {run}=require('./helpers/b.mjs');\ntest('y',()=>run('git'));\n",
+ }));
+ for(const file of ['test/test_cycle.mjs','test/helpers/a.mjs','test/helpers/b.mjs'])assert.equal(perFile.get(file).process,true,file);
+ assert.equal(perFile.get('test/test_cycle.mjs').git,false);
+ assert.deepEqual({process:perFile.get('test/test_named.mjs').process,git:perFile.get('test/test_named.mjs').git},{process:true,git:true});
+});
+
 test('growth beyond the line and test thresholds yields warnings, and growth within them yields none',()=>{
  const base=files({'test/test_a.mjs':"test('a',()=>{});\n"});
  const small=buildReport({base,head:files({'test/test_a.mjs':"test('a',()=>{});\ntest('b',()=>{});\n"}),durations:null});
@@ -49,9 +61,9 @@ test('growth beyond the line and test thresholds yields warnings, and growth wit
  assert.deepEqual(exact.warnings,[],'the threshold itself is not exceeded');
 });
 
-test('slow tests are ranked, and only a new test over the limit in a changed file is warned',()=>{
- const base=files({'test/test_old.mjs':"test('old slow',()=>{});\n",'test/test_edit.mjs':"test('kept',()=>{});\n"});
- const head=files({'test/test_old.mjs':"test('old slow',()=>{});\n",'test/test_edit.mjs':"test('kept',()=>{});\ntest('added slow',()=>{});\n",'test/test_new.mjs':"test('fresh fast',()=>{});\n"});
+test('slow tests are ranked, and only a new test over the limit in a changed file is warned, even if its name appears in a base comment',()=>{
+ const base=files({'test/test_old.mjs':"test('old slow',()=>{});\n",'test/test_edit.mjs':"test('kept',()=>{});// the added slow path\n"});
+ const head=files({'test/test_old.mjs':"test('old slow',()=>{});\n",'test/test_edit.mjs':"test('kept',()=>{});// the added slow path\ntest('added slow',()=>{});\n",'test/test_new.mjs':"test('fresh fast',()=>{});\n"});
  const durations=[
   {file:'test/test_old.mjs',name:'old slow',seconds:30},
   {file:'test/test_edit.mjs',name:'kept',seconds:12},
@@ -65,6 +77,8 @@ test('slow tests are ranked, and only a new test over the limit in a changed fil
  const summary=renderSummary(report);
  assert.match(summary,/\| 30\.0 \| test\/test_old\.mjs \| old slow \|/);assert.match(summary,/10 秒を超えた新しいテスト/);
  assert.match(renderSummary(buildReport({base,head,durations:null})),/テストの時間の記録がないため/);
+ const html=renderSummary(buildReport({base,head,durations:[{file:'test/test_old.mjs',name:'<!-- a | b -->',seconds:1}]}));
+ assert.match(html,/\| &lt;!-- a \\\| b --&gt; \|/);
 });
 
 test('parseJunit keeps top-level tests only, takes a parent file from its subtests, keeps names with > and makes paths relative',()=>{
