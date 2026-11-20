@@ -37,7 +37,14 @@ jobs:
       - name: Test harness including Linux isolation
         env:
           ASC_TEST_CGROUP: "1"
+          NODE_OPTIONS: --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=${{ runner.temp }}/asc-test-results.xml
         run: npm run quality
+      - name: TEMPORARY upload junit for measurement (#1732, not for merge)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: asc-test-results
+          path: ${{ runner.temp }}/asc-test-results.xml
       - name: Inspect standard unpublished distribution
         run: npm pack --dry-run --json
   host-protocol:
