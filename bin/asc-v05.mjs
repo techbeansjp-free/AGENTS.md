@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import {saveJsonOutside,saveVerification} from '../src/verification-output.mjs';
 import {planDockerCleanup} from '../src/docker-cleanup-plan.mjs';
+import {resumeContext,hookDirectory,readHookInput} from '../src/resume-context.mjs';
 import {startWorktree,verifyWorktree} from '../src/worktree-execution.mjs';
 import {projectAssets,uninstallProjectAssets} from '../src/project-assets.mjs';
 import {restartGoal} from '../src/goal-restart.mjs';
@@ -36,6 +37,7 @@ try {
     'worktree-create':'worktree-create <repo-root> <issue> <type> <slug> <base>\n既存Git checkoutのrootを指定します（.worktrees自体ではありません）。その配下の.worktreesへ専用worktreeを作成します。type: feature|fix|refactor|test|docs|chore。baseは明示指定し、既存branch・作業場所は上書きしません。',
     'worktree-verify':'worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>]\n現在のHost権限で検証します。repo外のowner契約にintent・allowedPaths・commands（argv配列の配列）を指定します。検証失敗はexit 2。',
     'docker-cleanup-plan':'docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]\nmerge後の整理で、そのworktreeのDocker資源の削除候補と保持理由を読取り専用で一覧します。削除・down・停止は行わず、出力は削除許可ではありません。--project省略時はdirectory名をcomposeの規則で正規化、--label省略時はasc.worktree=<worktreeの実path>。Dockerが使えなければexit 1。',
+    'resume-context':'resume-context [<directory>] | resume-context --hook\ncompaction後・新しいContextの開始時に、repositoryのworktree・branch・HEAD・未commit件数を短い文で表示します（読取りのみ・ネットワークなし）。--hookはHostのSessionStart hookの入力JSONのcwdを使い、入力の読取りを含めて全体を約10秒で打ち切り、読取りに失敗しても終了コード0で一文を返します。',
     uninstall:'uninstall <project-directory> [--apply]\n既定は撤去候補の表示のみ。--applyで正常な記録と配布時hashから所有を確認できた未編集資産・Host入口・管理記録を撤去します。競合があれば全体を停止し、利用者のfile・directory・設定・npm prefixは保持します。',
     'project-assets':'project-assets <project-directory> [--register-skill] [--register-claude-skill] [--apply]\n既定は差分表示のみ。登録オプションはHost選択を保存します。以後の通常更新でも登録Hostの入口を追加・更新し、未編集の廃止入口だけを削除します。--applyで適用し、編集・削除済み入口や未登録の同名fileとの競合は全体を停止します。'
   };
@@ -57,6 +59,8 @@ try {
       専用worktreeを作成（既存branch・作業場所は上書きしない）
   docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]
       worktreeのDocker資源の削除候補と保持理由を読取り専用で一覧（削除しない・削除許可ではない）
+  resume-context [<directory>] | resume-context --hook
+      compaction後・新しいContextで、repositoryの現在地を短い文で表示（読取りのみ・SessionStart hook用）
 明示選択のsnapshot実行:
   run --snapshot <external-owner-request.json>
       範囲が明確な変更を実装・検証・独立レビューし、Draft PR/CIへ進める
@@ -101,6 +105,13 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     for(let i=1;i<args.length;i+=2){const key={'--project':'project','--label':'label','--output':'output'}[args[i]];if(!key||Object.hasOwn(options,key))throw Error('Expected docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]');options[key]=args[i+1];}
     const run=()=>planDockerCleanup(args[0],{project:options.project,label:options.label});
     console.log(JSON.stringify(options.output===undefined?run():saveJsonOutside(args[0],options.output,run,{noun:'Docker cleanup plan output',summarize:(plan,saved)=>({schema:'asc-docker-cleanup-plan-output/v1',...saved,plan})}),null,2));
+  } else if(command==='resume-context'&&args.length===1&&args[0]==='--hook'){
+    // A hook must never block the Host session: report a sentence and exit 0 on any failure.
+    const started=Date.now();
+    try{const input=await readHookInput(process.stdin);console.log(resumeContext(hookDirectory(input),{deadline:Math.max(1000,10000-(Date.now()-started))}));}
+    catch(error){console.log(`ASC: 現在地を読めなかった（${String(error?.message??error).slice(0,200)}）。git worktree listとIssue・PRで確かめてから続ける。`);}
+  } else if(command==='resume-context'&&args.length<=1&&!args[0]?.startsWith('-')){
+    console.log(resumeContext(path.resolve(args[0]??process.cwd())));
   } else if(command==='probe-native'&&args.length===1){
     const result=await probeNativeSandbox(args[0]);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
   } else if(command==='project-assets'&&args.length>=1&&args.length<=4&&args.slice(1).every(a=>['--apply','--register-skill','--register-claude-skill'].includes(a))&&new Set(args.slice(1)).size===args.length-1){
@@ -170,10 +181,10 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     if(!(command==='review'?result.status==='reviewed-candidate':['draft-ci-passed','proposed'].includes(result.status)))process.exitCode=2;
   } else if (command==='capabilities'   && args.length===0) {
     console.log(JSON.stringify({schema:'asc-v05-capabilities/v1',releaseReady:true,releaseTarget:'native-linux',publishAuthorized:false,
-      defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','host-session','worktree-verify','docker-cleanup-plan','probe-native','project-assets','uninstall','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
+      defaultExecution:'current-host-worktree',snapshotRequiresExplicitSelection:true,commands:['start','host-session','worktree-verify','docker-cleanup-plan','resume-context','probe-native','project-assets','uninstall','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
       execution:'current-host-worktree',executionBackends:['current-host-worktree','current-host-directory','owner-selected-host','linux-runner'],host:executionHost(),legacyFallback:false}));
   } else {
-    throw Error('Usage: asc-v05 uninstall <project-directory> [--apply] | --version | start <project-directory> | worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>] | worktree-create <repo-root> <issue> <type> <slug> <base> | docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>] | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');
+    throw Error('Usage: asc-v05 uninstall <project-directory> [--apply] | --version | start <project-directory> | worktree-verify <worktree> <base> <owner-contract.json> [--output <external-result.json>] | worktree-create <repo-root> <issue> <type> <slug> <base> | docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>] | resume-context [<directory>] | resume-context --hook | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run --snapshot <external-owner-request.json> | review --snapshot <external-owner-request.json> | restart-goal --snapshot <external-owner-request.json> | run-adaptive --snapshot <external-owner-request.json> | goal-propose --snapshot <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal --snapshot <external-owner-request.json> | run-issues --snapshot <external-owner-issue-request.json> | capabilities');
   }
 } catch (e) {
   // Preserve existing controller observations without turning a failed run into success.
