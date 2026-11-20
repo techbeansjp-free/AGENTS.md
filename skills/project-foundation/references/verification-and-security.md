@@ -31,7 +31,7 @@ shellの最後の終了値だけで複数assertを合格にしない。`! check_
 
 ローカルとCIが同じ固定依存・検査入口を使い、必要なOS/CPU、新規checkout/cache、有限のtimeout/concurrency、最小権限とAction等の固定を確認する。team運用ではbranchの役割とPR統合先・レビュー・必須checkを決める。main/develop、feature/bugfix/hotfix、必要ならreleaseを候補にし、既存の合意済みフローを維持する。設定payloadと実際の保護設定は区別する。
 
-テストが増えたときのCIの構成（段ごとの検出責任、影響範囲での絞り込み、shard、テストの層）は[同等性・並列化・結果再利用](../../verification-optimization/references/equivalence-and-reuse.md)の「CIのテスト構成を設計する」に従う。
+テストが増えたときのCIの構成（仕事量の削減、影響範囲での絞り込み、shard、最後の手段としての後段への移設）は[同等性・並列化・結果再利用](../../verification-optimization/references/equivalence-and-reuse.md)の「CIのテスト構成を設計する」に従う。
 
 Summaryはsetup・監査・描画・保存それぞれの終了状態と未検査範囲を伝える入口にする。成功表示やupload成功で監査失敗を消さず、bootstrap失敗時にも出力できる手段を選ぶ。表示内容・非秘密artifact・保持範囲を決め、失敗・欠落・不正入力を含む受入を用意する。具体的な集計・escape・証跡照合は[原始結果とSummary](../../security-evidence/references/findings-and-summary.md)に従う。
 

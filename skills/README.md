@@ -9,7 +9,7 @@
 | 機能設計の案を比較する、提案前に前提や過剰設計を問い直す | [engineering-judgment](engineering-judgment/SKILL.md) | 要求・単純さ・利用者負担に基づく判断。誤字修正や決定済みの機械的変更には使わない |
 | 見積・納期・保守範囲・継続費用と管理責任を判断する | [estimate-and-scope](estimate-and-scope/SKILL.md) | 契約と調査に基づく見積・回答案。過去案件の商慣行を一律に適用しない |
 | 依頼・議事録・チケットの未決事項と判断者を整理する、進めてよいか・誰が決めるかを確かめる | [decision-ownership](decision-ownership/SKILL.md) | 判断者・先出しのリスク・仮置き案を示し、判断は判断者に残す。設計案の比較や見積そのものには使わない |
-| CIが重い、重複検査・並列化・結果再利用を見直す | [verification-optimization](verification-optimization/SKILL.md) | 保証を維持した同等性確認と計測。単なるテスト実行とは分ける |
+| CIが重い、重複検査・並列化・結果再利用を見直す、CIのテスト構成（仕事量の削減・影響範囲での絞り込み・shard）を設計する | [verification-optimization](verification-optimization/SKILL.md) | 保証を維持した同等性確認と計測。単なるテスト実行とは分ける |
 | 言語・DB・基盤を段階移行・置換する、併存や移行完了を点検する | [migration-assurance](migration-assurance/SKILL.md) | 受入・データ・構築・運用経路の継承。製品本体だけで完了にしない |
 | 利用者が画面から一連の操作を完了できるか確かめる、デモを見せる | [user-journey-acceptance](user-journey-acceptance/SKILL.md) | 実操作・実接続・保存・失敗回復。見た目の確認だけとは分ける |
 | 脆弱性監査・SBOM・監査Summaryを整備または点検する | [security-evidence](security-evidence/SKILL.md) | 対象実体と原始結果・評価の対応。通常変更に一律scanを要求しない |
