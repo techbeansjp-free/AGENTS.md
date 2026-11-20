@@ -26,4 +26,4 @@
 
 ## 判断
 
-v0.5の期間でも、130k以上のcontextは再発している。Issueの手順に従い、Phase 1へ進む。ownerは2026-11-20に、Phase 1をbaselineとadaptiveの2条件で行うと決めた（[測定計画](PHASE1_ADAPTIVE_PROTOCOL.md)）。
+v0.5の期間でも、130k以上のcontextは再発している。Issueの手順に従い、Phase 1へ進む。ownerは2026-11-20に、Phase 1をbaselineとadaptiveの2条件で行うと決めた（[測定計画](PHASE1_ADAPTIVE_PROTOCOL.md)）。結果はADR 0004の追記に記録した（導入しない）。

@@ -1,76 +1,450 @@
 {
-  "schema": "asc-adaptive-context-phase1/v1",
+  "schema": "asc-adaptive-context-phase1/v2",
   "issue": 1737,
   "protocol": "PHASE1_ADAPTIVE_PROTOCOL.md",
   "harness": "phase1-run.mjs",
-  "harnessCommit": "1c687fcc",
   "conditions": {
     "model": "gpt-6.1-sol",
     "effort": "medium",
     "codexCli": "codex-cli 0.169.0",
     "mountMode": "host",
     "platform": "darwin",
-    "scenario": "xl",
     "rotateAt": 100000
   },
-  "precondition": {
-    "rule": "baseline coordinator mean input >= 130000",
-    "observed": 109114,
-    "met": false
+  "xl": {
+    "harnessCommit": "1c687fcc",
+    "precondition": {
+      "rule": "baseline coordinator mean input >= 130000",
+      "observed": 109114,
+      "met": false
+    },
+    "trials": [
+      {
+        "run": 1,
+        "arm": "baseline",
+        "seconds": 2052.6,
+        "execSeconds": 2043.1,
+        "processedTokens": 24591702,
+        "stages": 16,
+        "stagesComplete": 16,
+        "stageSeconds": [
+          235.5,
+          180.6,
+          126.8,
+          175.4,
+          99.2,
+          128.4,
+          82.6,
+          128.6,
+          137.5,
+          118,
+          78.9,
+          138.2,
+          105.3,
+          102.3,
+          83.9,
+          121.8
+        ],
+        "ownerReplies": 0,
+        "execFailures": 0,
+        "oraclesPassed": true,
+        "constraint": {
+          "commits": 14,
+          "compliant": 14
+        },
+        "ownerFilesTouchedByAgent": [],
+        "gitControlsVerified": true,
+        "coordinator": {
+          "calls": 182,
+          "meanInput": 109114,
+          "medianInput": 112093,
+          "p95Input": 170330,
+          "maxInput": 173642
+        },
+        "threads": [
+          17
+        ]
+      }
+    ],
+    "notRun": [
+      "adaptive",
+      "adaptive",
+      "baseline"
+    ]
   },
-  "trials": [
-    {
-      "run": 1,
-      "arm": "baseline",
-      "seconds": 2052.6,
-      "execSeconds": 2043.1,
-      "processedTokens": 24591702,
-      "stages": 16,
-      "stagesComplete": 16,
-      "stageSeconds": [
-        235.5,
-        180.6,
-        126.8,
-        175.4,
-        99.2,
-        128.4,
-        82.6,
-        128.6,
-        137.5,
-        118,
-        78.9,
-        138.2,
-        105.3,
-        102.3,
-        83.9,
-        121.8
+  "xxl": {
+    "harnessCommit": "9da11240",
+    "precondition": {
+      "rule": "baseline coordinator mean input >= 130000",
+      "observed": 229337,
+      "met": true
+    },
+    "trials": [
+      {
+        "run": 1,
+        "arm": "baseline",
+        "seconds": 3964.2,
+        "execSeconds": 3952.7,
+        "processedTokens": 85392183,
+        "stages": 32,
+        "stagesComplete": 32,
+        "stageSeconds": [
+          237.9,
+          187.7,
+          188.9,
+          149.2,
+          131.8,
+          104.9,
+          85.7,
+          133.7,
+          87.1,
+          85.8,
+          146.8,
+          122.2,
+          109.1,
+          133.3,
+          121.9,
+          124.5,
+          108.7,
+          98.7,
+          88.7,
+          113.1,
+          96.8,
+          93.2,
+          87.2,
+          97,
+          117.3,
+          103.9,
+          96.8,
+          131.7,
+          110.6,
+          151.2,
+          192.8,
+          114.4
+        ],
+        "ownerReplies": 0,
+        "execFailures": 0,
+        "oraclesPassed": true,
+        "constraint": {
+          "commits": 30,
+          "compliant": 30
+        },
+        "ownerFilesTouchedByAgent": [],
+        "gitControlsVerified": true,
+        "coordinator": {
+          "calls": 334,
+          "meanInput": 229337,
+          "medianInput": 228605,
+          "p95Input": 408545,
+          "maxInput": 420306
+        },
+        "rotations": []
+      },
+      {
+        "run": 2,
+        "arm": "adaptive",
+        "seconds": 7563.9,
+        "execSeconds": 7545.3,
+        "processedTokens": 60446080,
+        "stages": 32,
+        "stagesComplete": 32,
+        "stageSeconds": [
+          288.7,
+          201.7,
+          205.2,
+          240.2,
+          203,
+          207.5,
+          179.2,
+          202.2,
+          255.7,
+          330.5,
+          196,
+          238.4,
+          202.7,
+          218.3,
+          167.8,
+          234,
+          282.4,
+          261.3,
+          172.5,
+          246.1,
+          197.3,
+          204.6,
+          202.9,
+          264,
+          247.9,
+          205.4,
+          174.8,
+          232.5,
+          224.6,
+          161.7,
+          210.5,
+          273.5
+        ],
+        "ownerReplies": 0,
+        "execFailures": 0,
+        "oraclesPassed": true,
+        "constraint": {
+          "commits": 30,
+          "compliant": 30
+        },
+        "ownerFilesTouchedByAgent": [],
+        "gitControlsVerified": true,
+        "coordinator": {
+          "calls": 579,
+          "meanInput": 76098,
+          "medianInput": 78550,
+          "p95Input": 114128,
+          "maxInput": 133708
+        },
+        "rotations": [
+          {
+            "afterStage": 4,
+            "lastInput": 105368,
+            "seconds": 74.3,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 8,
+            "lastInput": 107516,
+            "seconds": 39.5,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 12,
+            "lastInput": 101119,
+            "seconds": 44,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 16,
+            "lastInput": 107210,
+            "seconds": 35,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 19,
+            "lastInput": 100959,
+            "seconds": 40.8,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 23,
+            "lastInput": 104041,
+            "seconds": 42.3,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 26,
+            "lastInput": 119543,
+            "seconds": 50.2,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 30,
+            "lastInput": 107558,
+            "seconds": 86,
+            "treeClean": true,
+            "stateValid": true
+          }
+        ]
+      },
+      {
+        "run": 3,
+        "arm": "adaptive",
+        "seconds": 7197.6,
+        "execSeconds": 7176,
+        "processedTokens": 50673522,
+        "stages": 32,
+        "stagesComplete": 32,
+        "stageSeconds": [
+          270.8,
+          169,
+          161.7,
+          158.9,
+          84.8,
+          178.6,
+          209.3,
+          171.2,
+          172.6,
+          494.9,
+          105.1,
+          158,
+          443.6,
+          270.8,
+          253.1,
+          207.4,
+          214.6,
+          195.6,
+          191,
+          194.6,
+          185.3,
+          157.9,
+          141.6,
+          218.4,
+          180,
+          133.7,
+          265.8,
+          268,
+          219.5,
+          202.8,
+          196.7,
+          268.3
+        ],
+        "ownerReplies": 0,
+        "execFailures": 0,
+        "oraclesPassed": true,
+        "constraint": {
+          "commits": 30,
+          "compliant": 30
+        },
+        "ownerFilesTouchedByAgent": [],
+        "gitControlsVerified": true,
+        "coordinator": {
+          "calls": 491,
+          "meanInput": 76072,
+          "medianInput": 78812,
+          "p95Input": 105940,
+          "maxInput": 119438
+        },
+        "rotations": [
+          {
+            "afterStage": 5,
+            "lastInput": 101314,
+            "seconds": 66.9,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 8,
+            "lastInput": 105029,
+            "seconds": 37.3,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 13,
+            "lastInput": 101655,
+            "seconds": 62.3,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 16,
+            "lastInput": 102493,
+            "seconds": 78.3,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 21,
+            "lastInput": 106475,
+            "seconds": 69.3,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 26,
+            "lastInput": 105853,
+            "seconds": 78.6,
+            "treeClean": true,
+            "stateValid": true
+          },
+          {
+            "afterStage": 29,
+            "lastInput": 106166,
+            "seconds": 39.9,
+            "treeClean": true,
+            "stateValid": true
+          }
+        ]
+      },
+      {
+        "run": 4,
+        "arm": "baseline",
+        "seconds": 6364.3,
+        "execSeconds": 6346.7,
+        "processedTokens": 126929377,
+        "stages": 32,
+        "stagesComplete": 32,
+        "stageSeconds": [
+          357.8,
+          265.8,
+          266.8,
+          224.3,
+          218.9,
+          151,
+          166.1,
+          205.5,
+          153.3,
+          178.5,
+          184.9,
+          201.1,
+          200.9,
+          187.2,
+          196.1,
+          205.3,
+          190.1,
+          190.4,
+          146.9,
+          182.2,
+          206.1,
+          190.5,
+          171.1,
+          199.9,
+          175.9,
+          186.1,
+          222.2,
+          175.2,
+          226.3,
+          177,
+          158.8,
+          184.4
+        ],
+        "ownerReplies": 0,
+        "execFailures": 0,
+        "oraclesPassed": true,
+        "constraint": {
+          "commits": 30,
+          "compliant": 30
+        },
+        "ownerFilesTouchedByAgent": [],
+        "gitControlsVerified": true,
+        "coordinator": {
+          "calls": 460,
+          "meanInput": 244168,
+          "medianInput": 250478,
+          "p95Input": 421064,
+          "maxInput": 444699
+        },
+        "rotations": []
+      }
+    ],
+    "criteria": {
+      "processedTokenMedianRatio": 0.523,
+      "everyPairReduced": [
+        true,
+        true
       ],
-      "ownerReplies": 0,
-      "execFailures": 0,
-      "oraclesPassed": true,
-      "constraint": {
-        "commits": 14,
-        "compliant": 14
+      "secondsMedianRatio": 1.429,
+      "met": {
+        "tokens": true,
+        "everyPair": true,
+        "time": false,
+        "quality": true
       },
-      "ownerFilesTouchedByAgent": [],
-      "gitControlsVerified": true,
-      "coordinator": {
-        "calls": 182,
-        "meanInput": 109114,
-        "medianInput": 112093,
-        "p95Input": 170330,
-        "maxInput": 173642
-      },
-      "threads": [
-        17
-      ]
+      "adopted": false,
+      "blindReview": "not run: criterion 3 not met"
     }
-  ],
-  "notRun": [
-    "adaptive",
-    "adaptive",
-    "baseline"
-  ],
+  },
   "excluded": [
     {
       "kind": "smoke",

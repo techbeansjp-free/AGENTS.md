@@ -75,11 +75,37 @@ Cの「不要な停止」は、両条件とも0件だった。この試験は、
 
 これは2組の比率による外挿であって、その規模では測定していない。試行は2組、モデルは1種、fixtureは1種である。
 
+## 追記：境界での適応的な切替え（Issue #1737、2026-11-21）
+
+Bの変形として、contextが大きくなった段階の境界でだけ新しいsessionへ引き継ぐ方式（adaptive rotation）を評価した。結論は、**導入しない**。事前に固定した採用条件のうち、所要時間の条件を満たさなかった。
+
+- 方法：[測定計画](evaluation/graph-runtime/PHASE1_ADAPTIVE_PROTOCOL.md)を試行の前にcommitした。段階が完了した境界で、進行役の直前の呼出しの入力が100,000以上なら、owner制約と進捗の位置だけを状態ファイルに書かせて、次の段階を新しいsessionで始める。macOSのhostモード、Codex CLI 0.169.0、`gpt-6.1-sol`、effort medium。
+- 16段階（`xl`）では、baselineの進行役の平均入力が109kで、再検討条件の130kに届かなかった。計画どおり残りの試行を行わず、ownerの決定で32段階（`xxl`）に替えて測り直した。
+- 32段階の結果（2組、[結果](evaluation/graph-runtime/PHASE1_ADAPTIVE_RESULTS.json)）：
+
+| 試行 | 条件 | 所要時間 | 処理token | 進行役の呼出し | 進行役の平均入力 | 切替え |
+|---|---|---|---|---|---|---|
+| 1 | baseline | 3,964秒 | 85.4M | 334 | 229k | — |
+| 2 | adaptive | 7,564秒 | 60.4M | 579 | 76k | 8 |
+| 3 | adaptive | 7,198秒 | 50.7M | 491 | 76k | 7 |
+| 4 | baseline | 6,364秒 | 126.9M | 460 | 244k | — |
+
+| 採用条件 | 結果 | 判定 |
+|---|---|---|
+| 処理tokenの中央値がbaselineの80%以下 | 52% | 満たす |
+| 全組で処理tokenが減る | 2組とも減った | 満たす |
+| 所要時間の中央値がbaselineの120%以下 | 143% | **満たさない** |
+| 品質の非劣性 | 4試行とも32段階完了、oracle全合格、owner制約30/30、owner所有のfileの変更なし、Git管理状態の照合一致、停止・実行失敗0 | 差なし |
+
+- 所要時間の条件を満たさなかったので、計画どおり、条件を伏せた独立レビューとSemantic Projectionの評価は行っていない。
+- 解釈（推論）：切替えの後は、新しいsessionが状態ファイルとrepositoryを読み直すため、呼出しが2組の合計で1.35倍（1,070/794）に増えた。1回あたりの入力は約3分の1になったが、呼出しの数だけ往復の時間がかかる。baselineの2試行の所要時間は3,964秒と6,364秒で大きく揺れており、所要時間の比は2組の測定としては不確かである。ただし、2組とも、adaptiveはbaselineの長い方より遅かった。
+- 反証条件：同じ計画で、所要時間の中央値が120%以下になり、ほかの条件も満たす組を示せたら、この判断は覆る。
+
 ## 再検討する条件
 
 次のいずれかを示せたら、新しいIssueで導入を検討する。評価資産を出発点とし、同じ測定計画で比べる。
 
-- baseline側の進行役の平均入力contextが130k以上になるfixtureまたは実プロジェクトで、同じ採用条件（処理token 80%以下、全組で減少、所要時間120%以下、品質の非劣性）を満たす。
+- baseline側の進行役の平均入力contextが130k以上になるfixtureまたは実プロジェクトで、同じ採用条件（処理token 80%以下、全組で減少、所要時間120%以下、品質の非劣性）を満たす。境界での適応的な切替えは、この条件で評価して所要時間を満たさなかった（上の追記）。再び評価するのは、引継ぎ後の読み直しを減らす手段（例：Hostが引継ぎやcontextの圧縮を提供する）があり、所要時間の改善が見込める場合に限る。
 - Hostの自動承認審査が利用者の許可範囲を外部の記録から受け取れるようになり、その記録によって不要な停止が減ることを実測できる（Cについて）。
 - 許可を途中で与えて繰り返さない試験で、許可を状態に記録した場合に不要な停止が減ることを実測できる。かつ、不要な停止の損失が、記録を保つ費用を上回る（Cについて）。
 - 是正ラウンドが3回以上になるPRが20%を超え、その後半ラウンドの実欠陥が分割やowner判断でも解決できると示せる（Aについて）。
@@ -93,7 +119,7 @@ D=v05/evaluation/graph-runtime
 node $D/phase0-loops.mjs <out.json> [classification.json] [windows.json]                 # PRの是正ラウンド（GitHub API）
 node $D/phase0-context.mjs <out.json> <sinceISO> <repoPath> <excludeId> <logDir...>      # sessionのcontext蓄積と反実仮想
 node $D/phase0-decisions.mjs <out.json> <sinceISO> <log.jsonl[.zst]>...                  # 判断点の候補抽出
-ASC_EVAL_MODEL=<model> node $D/phase1-run.mjs <abs-tarball> <abs-codex> baseline|state [pilot|long]
+ASC_EVAL_MODEL=<model> node $D/phase1-run.mjs <abs-tarball> <abs-codex> baseline|state|adaptive [pilot|long|xl|xxl]
 ```
 
 Phase 0のscriptはNode 24で実行した。圧縮された`.jsonl.zst`の展開に`zlib.zstdDecompressSync`を使うため、Node 20では起動しない。評価期間の終わりは実行日（2026-11-08）であり、scriptに終了日時の指定はない。後日再実行する場合は、入力するlogを期間内に限る。
