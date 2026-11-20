@@ -15,6 +15,8 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # 成功時は最大でも約90秒（#1732 の実測）。止まったときに既定の6時間を待たない。
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
