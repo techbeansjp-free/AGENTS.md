@@ -1,0 +1,30 @@
+{
+ "ka": {
+  "label": "是正前",
+  "commit": "065e7608",
+  "files": {
+   "skills/research-to-implementation/SKILL.md": "f11f574f9ef065c4fc98e8ad934fa57cf23a3c6c6c3c22827c66a4300ec717a0",
+   "skills/research-to-implementation/references/decisions.md": "2b38b6ea6631139e6333cbbfcb77f5b60ee61de35590b955d18a892a6c36d590",
+   "skills/user-journey-acceptance/SKILL.md": "b09d8d3c54fd41ce5ef53eeb587483c916b4928dd46734ad4631d69dee4208af",
+   "skills/user-journey-acceptance/references/journeys.md": "7e8cca7efa2e146cc59bd41d15216ab137595eb6e54ba6630d4e3a97b8902738",
+   "skills/contract-enforcement/SKILL.md": "1bf97c8e26581b975d21bf0b762c342d443b94450062030919521623c4a98ce7",
+   "skills/contract-enforcement/references/counterexamples.md": "5c3640b3c5ab29f0dcc34b6808c0e706df61ec827288694cd97d7e8873bb6fdb",
+   "skills/review-and-remediation/SKILL.md": "c46c4f666eac89431aabded14029b351205168d3abf98235efe103a5a24f24e1",
+   "skills/review-and-remediation/references/review-method.md": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675"
+  }
+ },
+ "mo": {
+  "label": "最終版",
+  "commit": "8b2e182d",
+  "files": {
+   "skills/research-to-implementation/SKILL.md": "f11f574f9ef065c4fc98e8ad934fa57cf23a3c6c6c3c22827c66a4300ec717a0",
+   "skills/research-to-implementation/references/decisions.md": "2b38b6ea6631139e6333cbbfcb77f5b60ee61de35590b955d18a892a6c36d590",
+   "skills/user-journey-acceptance/SKILL.md": "f9d5efacbade25cc1ed37d26d90682fafd8d6b1c4ebe4f019e7d1bc7aa1d3c02",
+   "skills/user-journey-acceptance/references/journeys.md": "9e77c5d88722f2aeb96ad7c353de2d3e5805929085eca59da6943f9275e54fd0",
+   "skills/contract-enforcement/SKILL.md": "1bf97c8e26581b975d21bf0b762c342d443b94450062030919521623c4a98ce7",
+   "skills/contract-enforcement/references/counterexamples.md": "5c3640b3c5ab29f0dcc34b6808c0e706df61ec827288694cd97d7e8873bb6fdb",
+   "skills/review-and-remediation/SKILL.md": "c46c4f666eac89431aabded14029b351205168d3abf98235efe103a5a24f24e1",
+   "skills/review-and-remediation/references/review-method.md": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675"
+  }
+ }
+}
