@@ -142,7 +142,7 @@ flags: overreach が1件（是正前、両系統）。誤字1か所の修正の�
 #1740 で2回の測定とも下がった M1-5 に対して、追加した1文の後に「どのモデルを使っても、判断の正しさはモデル名や自己申告ではなく、成果物と検証結果で確かめる。」を足した。修正後の本文で、#1740 と同じ方法で測り直した（データは [remeasure-1744/](remeasure-1744/)）。
 
 - **比べた本文**: 是正前（`f1e53437`）と修正後（PR #1745 の `skills/subagent-model-selection/SKILL.md`、commit `689302a7`）。sha256 は [remeasure-1744/source-hashes.json](remeasure-1744/source-hashes.json) に記録した。
-- **方法**: 課題・観点、生成と採点の依頼文は #1740（[remeasure-1740/prompts.md](remeasure-1740/prompts.md)）と同じ。条件の名前は ka（是正前）・pa（修正後）。
+- **方法**: 課題・観点、生成と採点の依頼文は #1740（[remeasure-1740/prompts.md](remeasure-1740/prompts.md)）と同じ。違いは作業用 directory と条件の名前（ka＝是正前、pa＝修正後）だけ。実際の依頼文は [remeasure-1744/prompts.md](remeasure-1744/prompts.md)。
   - 生成は sonnet で各条件3回。採点は opus の独立した2系統で、裁定はしていない。
   - 回答の最長は387字（上限500字）。
 - **判定の基準**: #1740 と同じ（修正後の得点が、両系統とも是正前より下がった観点を「悪化」とする）。
