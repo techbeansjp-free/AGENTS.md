@@ -57,14 +57,14 @@ ASC が所有するのは原則として2段目である。正本（authority）
 6. 新しい第二の正本を作らない。作る場合は owner が必要性を明示して承認している。
 7. Host ごとの任意の経路として分けられるなら、標準経路に強制しない。
 
-7つの条件は、今後追加する機構に適用する。**snapshot Controller は、v0.5 の受入（#1578、#1579）で owner が受け入れた既存の例外**で、この7条件での再評価はしていない。例外の範囲は、下の表の「snapshot 経路」の列に挙げたものに限り、Linux の snapshot backend に限る。owner が明示して選んだ場合だけ使い、標準の Host 経路から暗黙に切り替えない。
+7つの条件は、今後追加する機構に適用する。**snapshot Controller は、v0.5 の受入（#1578、#1579）で owner が受け入れた既存の例外**で、この7条件での再評価はしていない。例外の主な機構は、下の表の「snapshot 経路」の列に挙げたもので、詳細は [利用手順](USAGE.md) を正とする。受入の記録が、Linux の従来の backend と `hostExecution` の backend のどちらまでを含むかは確かめていない（未確認）。owner が明示して選んだ場合だけ使い、標準の Host 経路から暗黙に切り替えない。
 
 ## 標準の Host 経路と snapshot 経路
 
 | | 標準の Host 経路 | snapshot 経路（owner が明示して選択） |
 | --- | --- | --- |
 | Agent loop・Context・Tool 実行 | 利用中の Host | 起動した Host 製品（Codex CLI など）のまま。汎用の Agent runtime は、どちらの経路でも Host が持つ |
-| ASC が持つ実行の機構 | Host の公式手段を呼ぶ薄い adapter（`host-session` による別 session の起動・待機上限・結果の保存、`worktree-verify` による検証コマンドの実行） | Controller が、Agent の起動と寿命の管理（systemd user service・cgroup）、sandbox の設定と起動前の確認、検証の隔離した実行、修復の反復と実行予算、Work Unit の実行順と並列を持つ |
+| ASC が持つ実行の機構 | Host の公式手段を呼ぶ薄い adapter（`host-session` による別 session の起動・待機上限・結果の保存）と、現在の Host 環境で検証コマンドを実行して記録する薄い CLI（`worktree-verify`） | どの backend でも、Controller が snapshot、修復の反復と実行予算、Work Unit の実行順と並列、期限切れなどでの新しい Agent への引継ぎを持つ。Linux の従来の backend では、これに加えて Agent の起動と寿命の管理（systemd user service・cgroup）、sandbox の設定と起動前の確認、検証の隔離した実行を持つ。`hostExecution` の backend では、Agent と検証の実行・sandbox・終了の管理を owner が指定した Host へ委ねる |
 | 作業場所 | 実 worktree | 隔離した snapshot |
 | ASC の役割 | worktree・project context・レビュー契約・Evidence と authority の確認 | 上に加えて、隔離した実行と検証の制御 |
 | 切り替え | — | `--snapshot` などの明示の選択だけ。標準経路から自動で切り替えない |
