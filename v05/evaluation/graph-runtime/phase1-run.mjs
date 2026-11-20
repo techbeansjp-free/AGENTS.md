@@ -91,7 +91,8 @@ const callInputs=events=>{const out=[];let total;for(const e of events){const in
  if(!info?.last_token_usage||info.total_token_usage?.input_tokens===total)continue;total=info.total_token_usage.input_tokens;out.push(info.last_token_usage.input_tokens);}return out;};
 const coordinatorInputs=async id=>{const own=(await rolloutsFor(id,startedAt)).find(r=>r.find(e=>e.type==='session_meta')?.payload?.id===id);if(!own)throw Error('Coordinator rollout not found');return callInputs(own);};
 const failed=e=>e.status!==0||e.signal||e.timedOut;
-const common=['--ignore-user-config','--ignore-rules','--skip-git-repo-check','--json','-m',model,'-c',`model_reasoning_effort=${JSON.stringify(effort)}`];
+// macOS: a login shell runs path_helper, which puts sandbox-denied directories first, so Node's spawn of `git` fails with EPERM.
+const common=['--ignore-user-config','--ignore-rules','--skip-git-repo-check','--json','-m',model,'-c',`model_reasoning_effort=${JSON.stringify(effort)}`,...(darwinGit?['-c','allow_login_shell=false']:[])];
 // Oracles import agent-written code; a hung oracle counts as a failure instead of stalling the run.
 const oracleRun=(d,name)=>{try{execFileSync('node',[`${d}/oracle/${name}.mjs`,...(name==='revision'?[path.join(preRevision,d),d]:[d])],{cwd:worktree,env,stdio:'ignore',timeout:10*60*1000,killSignal:'SIGKILL'});return true;}catch{return false;}};
 const complete=s=>(guard(),!git(['status','--porcelain'],worktree)&&s.oracles.every(o=>oracleRun(s.unit.dir,o)));

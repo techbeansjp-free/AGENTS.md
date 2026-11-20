@@ -17,7 +17,7 @@ ownerは2026-11-20に、Phase 1を次の2条件で行うと決めた（案B）�
 - scenario `xl`：fixtureの4つの写し（`complex/`〜`complex4/`）を順に渡す16段階。2つ目以降は、前の写しが終わった後に新しいIssueとして渡す。3段階目で与えるowner制約（commitの末尾に`Refs: #<Issue>`）を最後まで守るかを測る。
 - model：Codex CLI 0.169.0、`gpt-6.1-sol`、effort medium。全試行で同一。
 - 実行環境：macOSのhostモード。ADR 0004（Linuxのhostモード、Codex CLI 0.166.0-alpha.5.1）と環境が違うため、数値はこの試行の中だけで比べる。
-- macOSの`/usr/bin/git`はCommand Line Toolsを要するshimで、sandboxの既定はその読取りを拒否する。harnessは評価用に限り、その読取りを許し、実体のgitをPATHの先頭に置く。この対処の前の動作確認（4段階、毎境界で引継ぎ）では、Agentがgitを使えずNodeでcommitを組み立てていた。その記録は試行に含めない。
+- macOSの`/usr/bin/git`はCommand Line Toolsを要するshimで、sandboxの既定はその読取りを拒否する。harnessは評価用に限り、その読取りを許し、実体のgitをPATHの先頭に置く。この対処の前の動作確認（4段階、毎境界で引継ぎ）では、Agentがgitを使えずNodeでcommitを組み立てていた。その記録は試行に含めない。また、login shellはpath_helperでsandboxが拒否するdirectoryをPATHの先頭に置き、ASCの`start`がgitを起動できずEPERMで失敗したので、`allow_login_shell=false`を指定する。この不具合で止めた1回目のbaseline（1段階目まで）も試行に含めない。
 - Codexは`--ignore-user-config`でも`CODEX_HOME`の`AGENTS.md`（ownerの個人規約）を読み込む。両条件に同じく効くので、そのままにする。
 - 順序：baseline・adaptive・adaptive・baselineの2組。1試行ずつ順に実行する。
 - 欠測・失敗した試行も除外しない。
