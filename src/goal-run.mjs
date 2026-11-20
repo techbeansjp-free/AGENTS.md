@@ -199,7 +199,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
   }
   // A risk check identical to the parent test is still an explicit risk obligation.
   if(risks.length&&!checks.length)checks.push(request.contract.testArgv);
-  const finalRequest={...request,contract:{...request.contract,criteria,risks:[],requiresDesign:false,design:designs.join('\n\n'),riskTestArgv:checks}}; // TEMPORARY MUTATION (#1732): final approval is skipped
+  const finalRequest={...request,contract:{...request.contract,criteria,risks:[],requiresDesign:requiresDesign&&false,design:designs.join('\n\n'),riskTestArgv:checks}}; // TEMPORARY MUTATION (#1732): final approval is skipped
   const delivery=await runWorkflow(finalRequest,{executionBudget:budget,hostVerification:host?.verify,authorityRoots,agent:freshAgent,provider:checkedRemote,onEvent:e=>emit('integration-event',{event:e})});
   demand(delivery.status==='draft-ci-passed','Goal delivery incomplete');return save({status:'draft-ci-passed',delivery});
  }catch(error){emit('blocked',{error:String(error)});error.goalDiagnostic=save({status:'blocked',error:String(error),diagnostic:error.workflowDiagnostic??null});throw error;}
