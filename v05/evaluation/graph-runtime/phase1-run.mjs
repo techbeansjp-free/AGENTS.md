@@ -164,12 +164,13 @@ for(const id of [...new Set(record.stages.map(s=>s.thread).filter(Boolean))]){
  catch(e){record.usage.push({id,error:e.message});}
 }
 try{const threads=[...new Set(record.stages.map(s=>s.thread).filter(Boolean))],turns=await Promise.all(threads.map(coordinatorTurns));
- const inputs=turns.flat(2),sorted=[...inputs].sort((a,b)=>a-b),stageCalls=record.stages.map(()=>0);
- // Exec turns of a thread in order: the execs of its stages, then the handoff when a rotation left it.
- threads.forEach((id,k)=>{const owners=[...record.stages.flatMap((s,i)=>s.thread===id?s.execs.map(()=>i):[]),...(record.rotations.some(r=>r.from===id)?['handoff']:[])];
-  if(owners.length!==turns[k].length)throw Error(`Thread ${id}: ${turns[k].length} turns for ${owners.length} execs`);
-  turns[k].forEach((t,j)=>{if(owners[j]!=='handoff')stageCalls[owners[j]]+=t.length;});});
- record.coordinator={calls:inputs.length,meanInput:Math.round(inputs.reduce((a,b)=>a+b,0)/inputs.length),medianInput:median(inputs),p95Input:sorted[Math.ceil(sorted.length*0.95)-1],maxInput:sorted.at(-1),stageCalls};}
+ const inputs=turns.flat(2),sorted=[...inputs].sort((a,b)=>a-b);let stageCalls=record.stages.map(()=>0),stageCallsError;
+ // Exec turns of a thread in order: the execs of its stages, then the handoff when a rotation left it. A mismatch
+ // (e.g. an exec that failed before its turn started) leaves only the per-stage split unmeasured.
+ for(const [k,id] of threads.entries()){const owners=[...record.stages.flatMap((s,i)=>s.thread===id?s.execs.map(()=>i):[]),...(record.rotations.some(r=>r.from===id)?['handoff']:[])];
+  if(owners.length!==turns[k].length){stageCalls=null;stageCallsError=`Thread ${id}: ${turns[k].length} turns for ${owners.length} execs`;break;}
+  turns[k].forEach((t,j)=>{if(owners[j]!=='handoff')stageCalls[owners[j]]+=t.length;});}
+ record.coordinator={calls:inputs.length,meanInput:Math.round(inputs.reduce((a,b)=>a+b,0)/inputs.length),medianInput:median(inputs),p95Input:sorted[Math.ceil(sorted.length*0.95)-1],maxInput:sorted.at(-1),stageCalls,...(stageCallsError?{stageCallsError}:{})};}
 catch(e){record.coordinatorError=e.message;}
 record.processedTokens=record.usage.length&&record.usage.every(u=>Number.isSafeInteger(u.observedProcessedTokens))?record.usage.reduce((a,u)=>a+u.observedProcessedTokens,0):null;
 if(usesState)try{record.finalState=JSON.parse(fs.readFileSync(stateFile,'utf8'));}catch(e){record.finalStateError=e.message;}

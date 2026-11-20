@@ -645,5 +645,5 @@
       "reason": "ASC start failed with EPERM under a login shell; stopped and fixed before trial 1"
     }
   ],
-  "recount": "coordinator.medianInput and coordinator.stageCalls were recounted after the runs from the coordinator rollouts with the corrected harness rule (even-count median; calls grouped by exec turn); no trial was rerun"
+  "recount": "coordinator.medianInput and coordinator.stageCalls were recounted after the runs from the coordinator rollouts with the rule of harness commit 8e08e0e7 (even-count median; calls grouped by exec turn); rotations[].nextStageCalls is derived as coordinator.stageCalls[afterStage]; no trial was rerun"
 }
