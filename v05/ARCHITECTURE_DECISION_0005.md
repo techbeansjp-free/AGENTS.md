@@ -64,7 +64,7 @@ ASC が所有するのは原則として2段目である。正本（authority）
 | | 標準の Host 経路 | snapshot 経路（owner が明示して選択） |
 | --- | --- | --- |
 | Agent loop・Context・Tool 実行 | 利用中の Host | 起動した Host 製品（Codex CLI など）のまま。汎用の Agent runtime は、どちらの経路でも Host が持つ |
-| ASC が持つ実行の機構 | Host の公式手段を呼ぶ薄い adapter（`host-session` による別 session の起動・待機上限・結果の保存）と、現在の Host 環境で検証コマンドを実行して記録する薄い CLI（`worktree-verify`） | どの backend でも、Controller が snapshot、修復の反復と実行予算、Work Unit の実行順と並列、期限切れなどでの新しい Agent への引継ぎを持つ。Linux の従来の backend では、これに加えて Agent の起動と寿命の管理（systemd user service・cgroup）、sandbox の設定と起動前の確認、検証の隔離した実行を持つ。`hostExecution` の backend では、Agent と検証の実行・sandbox・終了の管理を owner が指定した Host へ委ねる |
+| ASC が持つ実行の機構 | Host の公式手段を呼ぶ薄い adapter（`host-session` による別 session の起動・待機上限・結果の保存）と、現在の Host 環境で検証コマンドを実行して記録する薄い CLI（`worktree-verify`） | どの backend でも、Controller が snapshot、修復の反復と実行予算、Work Unit の実行順と並列を持つ。Linux の従来の backend では、これに加えて Agent の起動と寿命の管理（systemd user service・cgroup）、sandbox の設定と起動前の確認、検証の隔離した実行、Agent の期限切れや Context の枯渇での新しい Agent への引継ぎを持つ。`hostExecution` の backend では、Agent と検証の実行・sandbox・終了の管理を owner が指定した Host へ委ね、その Host の期限切れでは新しい Agent へ自動では引き継がない。指定した Host が同梱の `bin/asc-codex-host.mjs` の場合は、その中で ASC のコードが sandbox の設定と起動前の診断、検証前の診断と依存資産の写しを行う |
 | 作業場所 | 実 worktree | 隔離した snapshot |
 | ASC の役割 | worktree・project context・レビュー契約・Evidence と authority の確認 | 上に加えて、隔離した実行と検証の制御 |
 | 切り替え | — | `--snapshot` などの明示の選択だけ。標準経路から自動で切り替えない |
