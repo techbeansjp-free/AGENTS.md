@@ -65,7 +65,7 @@ snapshot実行の修正時は、その実行内の過去の失敗レビューを
 
 `npm test`はNodeのGit・検証・レビュー・Goal・移行・配布テストです。Python試作と歴史的fixtureは旧検証リポジトリにあり、このcheckoutのコマンドではありません。これらのテストと実験ログはソースrepository用であり、インストール済みtarballに全評価資産を同梱するものではありません。
 
-設計上の判断は[アーキテクチャ原則](ARCHITECTURE_DECISION_0002.md)を参照してください。過去の試行・失敗・実測値はソースrepositoryのEvidenceに残し、通常実行で全文読込みを要求しません。
+設計上の判断は[アーキテクチャ原則](ARCHITECTURE_DECISION_0002.md)を参照してください。HostのHarness（Agent loop・Context・Tool実行・Sandbox）とASCの責務の境界、および新しい機構をどちらに置くかの判定は、ソースrepositoryの`v05/ARCHITECTURE_DECISION_0005.md`にあります。過去の試行・失敗・実測値はソースrepositoryのEvidenceに残し、通常実行で全文読込みを要求しません。
 
 ## Linux限定だった初回受入の範囲
 
