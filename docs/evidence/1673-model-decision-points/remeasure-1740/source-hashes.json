@@ -1,0 +1,16 @@
+{
+ "ka": {
+  "label": "是正前",
+  "commit": "f1e53437",
+  "files": {
+   "skills/subagent-model-selection/SKILL.md": "fe5d9f25eca3379624a7b9225784b30169f232032fd9820b08229b3c269e882e"
+  }
+ },
+ "mo": {
+  "label": "最終版",
+  "commit": "8b2e182d",
+  "files": {
+   "skills/subagent-model-selection/SKILL.md": "ca83696f856934cf92432853921e8ab23aed37d1c08c54179a9485c5eafc389f"
+  }
+ }
+}
