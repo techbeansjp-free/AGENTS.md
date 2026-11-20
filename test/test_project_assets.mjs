@@ -286,7 +286,7 @@ test('purpose Skills distribute only inventoried assets and opt-in entries with 
  assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
  for(const [file,source] of revisions)assert.deepEqual(fs.readFileSync(path.join(f.work,file)),fs.readFileSync(source),file);
  // Conflict detection is per path, so editing every owned path at once names each of them; one canonical
- // reference and one entry edited alone show that a single edit still blocks the update and the record.
+ // reference, one canonical SKILL.md and one entry edited alone show that a single edit still blocks the update and the record.
  const protect=files=>{
   const originals=files.map(file=>fs.readFileSync(path.join(f.work,file))),before=fs.readFileSync(record),sorted=[...files].sort();
   for(const file of files)f.write(file,'Synthetic owner edit');
@@ -297,7 +297,7 @@ test('purpose Skills distribute only inventoried assets and opt-in entries with 
   assert.deepEqual(fs.readFileSync(record),before);
   files.forEach((file,i)=>f.write(file,originals[i]));
  };
- protect([prefix+'execution-recovery/references/owned-execution.md']);protect(['.agents/skills/execution-recovery/SKILL.md']);
+ protect([prefix+'execution-recovery/references/owned-execution.md']);protect([prefix+'execution-recovery/SKILL.md']);protect(['.agents/skills/execution-recovery/SKILL.md']);
  protect([...expected,...additionalSkills.map(name=>`.agents/skills/${name}/SKILL.md`)]);
  assert.deepEqual(projectAssets(f.work,registered).conflicts,[]);
 });

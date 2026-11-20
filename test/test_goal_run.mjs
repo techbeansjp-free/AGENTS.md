@@ -388,9 +388,10 @@ test('owner unit baseline cannot replace additional unit checks or final integra
 
 
 test('final repair cannot invalidate unit checks and still deliver',{skip:!enabled},async t=>{
- // A repair that breaks the Unit risk obligation is refused. The passing run counts all five final checks (parent test,
- // parent risk, Unit a test and risk, Unit b test), so dropping a Unit test or risk obligation is detected there.
- for(const corrupt of ['risk',null]){
+ // A repair that breaks the Unit main test (a.txt) or the Unit risk check (b.txt) is refused: each must run again on
+ // the repaired target. The passing run counts all five final checks (parent test, parent risk, Unit a test and risk,
+ // Unit b test), so dropping a Unit test or risk obligation is detected there.
+ for(const corrupt of ['main','risk',null]){
   const f=fixture(t);f.request.goal.units=f.request.goal.units.filter(u=>u.id!=='sum');delete f.request.unitRequests.sum;
   f.request.contract.testArgv=['/bin/sh','-c','test "$(cat sum.txt)" = 2'];f.request.contract.riskTestArgv=[f.request.contract.testArgv];f.request.maxRepairs=1;
   const semantic='Preserve the owner-defined rounding rule even when shallow tests pass';
@@ -401,7 +402,7 @@ test('final repair cannot invalidate unit checks and still deliver',{skip:!enabl
   const agent=async({workspace,writable,prompt})=>{
    if(writable){const intent=JSON.parse(prompt).intent;
     if(intent==='Write a'||intent==='Write b')fs.writeFileSync(path.join(workspace,intent.slice(-1)+'.txt'),'1');
-    else {assert.ok(JSON.parse(prompt).criteria.includes(semantic),'final repair lost child semantic obligation');assert.ok(JSON.parse(prompt).criteria.includes('Work Unit intent: Write a'));fs.writeFileSync(path.join(workspace,'sum.txt'),'2');if(corrupt)fs.writeFileSync(path.join(workspace,'b.txt'),'9');}
+    else {assert.ok(JSON.parse(prompt).criteria.includes(semantic),'final repair lost child semantic obligation');assert.ok(JSON.parse(prompt).criteria.includes('Work Unit intent: Write a'));fs.writeFileSync(path.join(workspace,'sum.txt'),'2');if(corrupt)fs.writeFileSync(path.join(workspace,corrupt==='main'?'a.txt':'b.txt'),'9');}
    }
    if(!writable){const review=JSON.parse(fs.readFileSync(path.join(workspace,'.asc-review.json')));if(review.contract.intent===f.request.contract.intent){assert.ok(review.contract.criteria.includes(semantic),'final reviewer lost child semantic obligation');assert.ok(review.contract.criteria.includes('a=1,b=1,sum=2'));}}
    return {context:'final-repair-'+(++counter),usage:[],seconds:0,answer:JSON.stringify({verdict:'pass',findings:[]})};
@@ -691,6 +692,12 @@ test('delegated restart replans once within original authority and shares its ne
     const again=prepareGoalRestart({...f.request,restart:{directory:path.join(root,'resume-1'),resultFile:path.join(saved.root,'result.json'),replan:false,budget:{maxAgentCalls:8,maxElapsedSeconds:120}}});
     assert.deepEqual(again.proposal.goal,saved.proposal.goal);assert.deepEqual(again.proposal.binding,saved.proposal.binding);assert.deepEqual(again.proposal.calls,[]);assert.equal(again.proposal.wallSeconds,0);assert.equal(again.proposal.reusedFrom,path.join(saved.root,'result.json'));
     assert.deepEqual(again.request.goal,saved.proposal.goal);assert.equal(plans,1);assert.equal(writes,3);
+    // Every reviewed Unit of the resumed run is offered again as candidate bytes, not reimplemented.
+    assert.deepEqual(Object.keys(again.request.unitCandidates).sort(),['a','b','sum']);
+    for(const id of ['a','b','sum']){const unit=saved.units.find(u=>u.id===id),candidate=again.request.unitCandidates[id];
+     assert.equal(candidate.repo,path.join(saved.root,'units',id));assert.equal(candidate.repo,unit.repo);
+     assert.equal(candidate.head,unit.result.target.head);assert.equal(candidate.base,unit.result.target.base);assert.equal(candidate.contractDigest,unit.result.target.contract);
+     assert.equal(candidate.contractDigest,digest(again.request.unitRequests[id].contract));}
    }
   }
   assert.equal(plans,1);if(mode!=='complete'){if(mode!=='context')assert.equal(writes,0);assert.equal(deliveries,0);}
