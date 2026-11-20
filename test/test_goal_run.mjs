@@ -419,10 +419,10 @@ test('final repair cannot invalidate unit checks and still deliver',{skip:!enabl
 
 // The fixture owner signs only listed contract digests. Every delivering mode lists the composed final contract and
 // asserts that the final approval binds exactly that digest, which no parent or Unit approval covers; a composition
-// error or a skipped final approval therefore fails here. Refused approval stopping a run is checked by
-// risk-candidate-denied on the same workflow approval path.
+// error or a skipped final approval therefore fails here. A refused final approval stops delivery
+// (final-denied), and so does a refused Unit approval (risk-candidate-denied).
 test('high-risk Goal requires exact composed final approval and preserves duplicate risk checks',{skip:!enabled},async t=>{
- for(const mode of ['composed-final','child-risk-approved','child-design-approved','risk-candidate','risk-candidate-denied']){
+ for(const mode of ['composed-final','final-denied','child-risk-approved','child-design-approved','risk-candidate','risk-candidate-denied']){
   const f=fixture(t),owner=tempDir('asc-goal-owner-');t.after(()=>fs.rmSync(owner,{recursive:true,force:true}));
   const contracts=[f.request.contract,...Object.values(f.request.unitRequests).map(u=>u.contract)];
   for(const contract of contracts){Object.assign(contract,{risks:['public-contract'],requiresDesign:true,design:'Preserve the declared value and sum contracts in this disposable fixture.'});
@@ -446,7 +446,7 @@ test('high-risk Goal requires exact composed final approval and preserves duplic
   if(mode==='composed-final')final.design+='\n\nWork Unit a (Write a):\nDistinct mandatory child design';
   if(mode.startsWith('risk-candidate'))f.request.unitCandidates={a:priorCandidate(t,f)};
   const permitted=mode==='risk-candidate-denied'?contracts.filter(c=>c!==f.request.unitRequests.a.contract).map(digest):contracts.map(digest);
-  assert.equal(permitted.includes(digest(final)),false,'no parent or Unit approval may cover the composed final contract');permitted.push(digest(final));
+  assert.equal(permitted.includes(digest(final)),false,'no parent or Unit approval may cover the composed final contract');if(mode!=='final-denied')permitted.push(digest(final));
   const keys=generateKeyPairSync('ed25519'),publicKey=keys.publicKey.export({type:'spki',format:'pem'}),keyFile=path.join(owner,'key.pem'),signer=path.join(owner,'sign.mjs'),audit=path.join(owner,'requests.jsonl');
   fs.writeFileSync(keyFile,keys.privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600});
   fs.writeFileSync(signer,`import fs from 'node:fs';import {sign} from 'node:crypto';import {approvalBytes} from ${JSON.stringify(new URL('../src/approval.mjs',import.meta.url).href)};
@@ -458,6 +458,8 @@ console.log(JSON.stringify({payload,signature:sign(null,approvalBytes(payload),f
   let counter=0,root;
   const agent=async({workspace,writable,prompt})=>{if(writable){const input=JSON.parse(prompt),id=input.intent.split(' ').at(-1);if(mode==='child-risk-approved'&&input.intent===f.request.contract.intent){assert.equal(input.previousFailure.kind,'verification');assert.equal(input.design,final.design);}fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}return {context:'signed-goal-'+(++counter),usage:[],seconds:0,answer:JSON.stringify({verdict:'pass',findings:[]})};};
   const execution=runGoal(f.request,{agent,provider:f.provider,onEvent:e=>{if(e.type==='goal-started')root=e.root;}});
+  // Every Unit approval is granted; refusing only the composed final contract must still stop delivery.
+  if(mode==='final-denied'){await assert.rejects(execution,/Owner authority unavailable/);assert.equal(f.deliveries(),0);if(root)t.after(()=>fs.rmSync(root,{recursive:true,force:true}));continue;}
   if(mode==='risk-candidate-denied'){await assert.rejects(execution,/Unit failed/);const blocked=JSON.parse(fs.readFileSync(path.join(root,'result.json'))).units.find(u=>u.id==='a');assert.equal(blocked.diagnostic.calls.length,0);assert.match(blocked.diagnostic.error,/Owner authority unavailable/);assert.equal(f.deliveries(),0);assert.equal(f.git('rev-parse','HEAD'),f.request.base);if(root)t.after(()=>fs.rmSync(root,{recursive:true,force:true}));continue;}
   const result=await execution;assert.equal(result.status,'draft-ci-passed');assert.equal(f.deliveries(),1);assert.equal(result.delivery.controllerEvents.find(e=>e.operation==='design-approval')?.binding.contract,digest(final));
   if(mode==='risk-candidate'){const a=result.units.find(u=>u.id==='a').result;assert(a.events.some(e=>e.type==='unit-candidate'&&e.status==='candidate-imported'));assert(a.calls.every(c=>c.role==='review'));assert(a.controllerEvents.some(e=>e.operation==='design-approval'&&e.approved));assert(a.controllerEvents.some(e=>e.operation==='verify'&&e.results.every(r=>r.exit===0)));}
