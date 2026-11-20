@@ -6,6 +6,8 @@
  },
  "pa": {
   "label": "#1744 の修正後",
-  "sha256": "f652a82358741fb3c609a3c7ccad19dc245363587c6c4c0e4c977500c132bef3"
+  "sha256": "f652a82358741fb3c609a3c7ccad19dc245363587c6c4c0e4c977500c132bef3",
+  "commit": "689302a7",
+  "path": "skills/subagent-model-selection/SKILL.md"
  }
 }
