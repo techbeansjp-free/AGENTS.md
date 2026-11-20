@@ -10,22 +10,31 @@ import zlib from 'node:zlib';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 
-test('package file declarations exactly match the runtime inventory',()=>{
- const manifest=JSON.parse(fs.readFileSync('package.json')),inventory=JSON.parse(fs.readFileSync('src/runtime-files.json'));
- assert.deepEqual([...manifest.files].sort(),[...new Set(inventory)].sort());
+// package.json names the src directory; every other entry is one file (#1739). src/runtime-files.json is the inventory.
+const runtimeInventory=()=>JSON.parse(fs.readFileSync('src/runtime-files.json'));
+test('package file declarations, with src expanded to its inventory files, exactly match the runtime inventory',()=>{
+ const manifest=JSON.parse(fs.readFileSync('package.json')),inventory=runtimeInventory();
+ assert.equal(manifest.files.filter(file=>file.startsWith('src')).join(),'src');
+ const expanded=manifest.files.flatMap(file=>file==='src'?inventory.filter(name=>name.startsWith('src/')):[file]);
+ assert.deepEqual([...expanded].sort(),[...new Set(inventory)].sort());
  assert.equal(manifest.scripts.prepack,'node scripts/check-package-inventory.mjs');
  for(const file of manifest.files){
   assert(!/[?*\\]/.test(file)&&!file.endsWith('/'),file);
   assert.equal(file,file.normalize('NFC'));
-  assert(fs.lstatSync(file).isFile(),file);
+  assert(file==='src'?fs.lstatSync(file).isDirectory():fs.lstatSync(file).isFile(),file);
  }
+ // Every file under src is in the inventory, so the declared directory adds nothing unlisted. Names that npm never
+ // packs (macOS metadata, editor swap and merge leftovers) are skipped, as npm skips them.
+ const neverPacked=name=>name==='.DS_Store'||name.startsWith('._')||/^\..*\.swp$/.test(name)||name.endsWith('.orig');
+ const under=dir=>fs.readdirSync(dir,{withFileTypes:true}).filter(e=>!neverPacked(e.name)).flatMap(e=>e.isDirectory()?under(path.join(dir,e.name)):[path.join(dir,e.name).split(path.sep).join('/')]);
+ assert.deepEqual(under('src').sort(),inventory.filter(name=>name.startsWith('src/')).sort());
 });
 
 test('packing rejects decomposed source names and noncanonical declarations without emitting a candidate',t=>{
  const root=tempDir('asc-package-unicode-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=path.join(root,'source'),destination=path.join(root,'output');fs.mkdirSync(source);fs.mkdirSync(destination);
  const manifest=JSON.parse(fs.readFileSync('package.json'));
- for(const name of [...manifest.files,'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
+ for(const name of [...runtimeInventory(),'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
  const canonical='v05/templates/specs/details/07_データ/00_データ一覧.md',decomposed=canonical.normalize('NFD');
  const old=path.join(source,canonical),temporary=old+'.unicode-rename';fs.renameSync(old,temporary);fs.mkdirSync(path.dirname(path.join(source,decomposed)),{recursive:true});fs.renameSync(temporary,path.join(source,decomposed));
  const candidateScript=path.resolve('scripts/pack-candidate.mjs');
@@ -36,7 +45,7 @@ test('packing rejects decomposed source names and noncanonical declarations with
   assert.equal(mismatch.status,1);assert.match(mismatch.stderr,/npm pack file inventory mismatch/);assert.deepEqual(fs.readdirSync(destination),[]);
  }
  manifest.files=manifest.files.map(name=>name===canonical?decomposed:name);fs.writeFileSync(path.join(source,'package.json'),JSON.stringify(manifest));
- fs.writeFileSync(path.join(source,'src/runtime-files.json'),JSON.stringify(manifest.files));
+ fs.writeFileSync(path.join(source,'src/runtime-files.json'),JSON.stringify(runtimeInventory().map(name=>name===canonical?decomposed:name)));
  const invalid=spawnSync(process.execPath,[candidateScript,destination],{cwd:source,encoding:'utf8'});
  assert.equal(invalid.status,1);assert.match(invalid.stderr,/runtime file inventory paths must use NFC/);assert.deepEqual(fs.readdirSync(destination),[]);
 });
@@ -44,14 +53,14 @@ test('packing rejects decomposed source names and noncanonical declarations with
 test('root and canonical package generation exclude unlisted files in runtime directories',t=>{
  const root=tempDir('asc-package-inventory-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=path.join(root,'source');fs.mkdirSync(source);
- const manifest=JSON.parse(fs.readFileSync('package.json'));
- for(const name of [...manifest.files,'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
- const unlisted=['skills/execution-recovery/notes.md','src/local-notes.mjs','bin/private-helper.mjs','v05/templates/specs/local-notes.md'];
+ for(const name of [...runtimeInventory(),'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
+ // Unlisted files outside src stay out of every pack; an unlisted file under src is covered by the next test.
+ const unlisted=['skills/execution-recovery/notes.md','bin/private-helper.mjs','v05/templates/specs/local-notes.md'];
  for(const name of unlisted){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,'Synthetic unlisted package fixture\n');}
  const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
  for(const flags of [[],['--ignore-scripts']]){
   const listing=JSON.parse(execFileSync(process.execPath,[npm,'pack','--dry-run','--json',...flags],{cwd:source,encoding:'utf8'}))[0];
-  assert.deepEqual(listing.files.map(file=>file.path).sort(),[...manifest.files].sort());
+  assert.deepEqual(listing.files.map(file=>file.path).sort(),[...runtimeInventory()].sort());
   for(const name of unlisted)assert(!listing.files.some(file=>file.path===name),name);
  }
  const candidate=JSON.parse(execFileSync(process.execPath,[path.resolve('scripts/pack-candidate.mjs'),root],{cwd:source,encoding:'utf8'}));
@@ -61,11 +70,33 @@ test('root and canonical package generation exclude unlisted files in runtime di
  for(const name of unlisted){assert.equal(fs.existsSync(path.join(installed,name)),false,name);assert.equal(Object.hasOwn(identity.sourceFiles,name),false,name);}
 });
 
+// #1739: npm packs everything under the declared src directory, so the inventory check is what stops an unlisted src
+// file. The guarded entries (pack-candidate and prepack) refuse it; a direct pack with --ignore-scripts includes it,
+// which v05/MIGRATION_PLAN.md states is outside the guarantee.
+test('an unlisted file under src stops guarded packing, and only a script-free direct pack includes it',t=>{
+ const root=tempDir('asc-package-src-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const source=path.join(root,'source'),destination=path.join(root,'output');fs.mkdirSync(source);fs.mkdirSync(destination);
+ fs.copyFileSync('package.json',path.join(source,'package.json'));
+ for(const name of [...runtimeInventory(),'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
+ const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
+ fs.writeFileSync(path.join(source,'src/local-notes.mjs'),'Synthetic unlisted package fixture\n');
+ const candidate=spawnSync(process.execPath,[path.resolve('scripts/pack-candidate.mjs'),destination],{cwd:source,encoding:'utf8'});
+ assert.equal(candidate.status,1);assert.match(candidate.stderr,/npm pack file inventory mismatch; unexpected: src\/local-notes\.mjs/);
+ const ordinary=spawnSync(process.execPath,[npm,'pack','--json','--pack-destination',destination],{cwd:source,encoding:'utf8'});
+ assert.notEqual(ordinary.status,0);assert.match(ordinary.stderr,/npm pack file inventory mismatch/);assert.deepEqual(fs.readdirSync(destination),[]);
+ const direct=JSON.parse(execFileSync(process.execPath,[npm,'pack','--dry-run','--json','--ignore-scripts'],{cwd:source,encoding:'utf8'}))[0];
+ assert(direct.files.some(file=>file.path==='src/local-notes.mjs'));
+ // Listing the file in the inventory is the whole change a new src file needs.
+ fs.writeFileSync(path.join(source,'src/runtime-files.json'),JSON.stringify([...runtimeInventory(),'src/local-notes.mjs']));
+ const listed=JSON.parse(execFileSync(process.execPath,[path.resolve('scripts/pack-candidate.mjs'),destination],{cwd:source,encoding:'utf8'}));
+ assert(fs.existsSync(listed.file));
+});
+
 test('guarded root and canonical packing reject npm implicit files before creating an artifact',t=>{
  const root=tempDir('asc-package-implicit-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=path.join(root,'source'),destination=path.join(root,'output');fs.mkdirSync(source);fs.mkdirSync(destination);
  const manifest=JSON.parse(fs.readFileSync('package.json'));
- for(const name of [...manifest.files,'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
+ for(const name of [...runtimeInventory(),'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
  const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
  const candidateScript=path.resolve('scripts/pack-candidate.mjs');
  for(const name of ['README.private.md','COPYING.private','LICENSE.private']){
@@ -79,7 +110,7 @@ test('guarded root and canonical packing reject npm implicit files before creati
  }
  // The same guarded source still packs normally after the unapproved inputs are removed.
  const clean=JSON.parse(execFileSync(process.execPath,[npm,'pack','--json','--pack-destination',destination],{cwd:source,encoding:'utf8'}))[0];
- assert.deepEqual(clean.files.map(file=>file.path).sort(),[...manifest.files].sort());
+ assert.deepEqual(clean.files.map(file=>file.path).sort(),[...runtimeInventory()].sort());
  assert(fs.existsSync(path.join(destination,clean.filename)));
  // Declarations cannot authorize additional files without changing runtime inventory.
  fs.writeFileSync(path.join(source,'package.json'),JSON.stringify({...manifest,files:[...manifest.files,'scripts/check-package-inventory.mjs']}));

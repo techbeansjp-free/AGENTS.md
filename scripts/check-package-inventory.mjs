@@ -13,10 +13,25 @@ function equal(actual,expected,label){
  const unexpected=[...actual].filter(name=>!expected.has(name)),missing=[...expected].filter(name=>!actual.has(name));
  if(unexpected.length||missing.length)throw Error(`${label} file inventory mismatch; unexpected: ${unexpected.join(', ')||'(none)'}; missing: ${missing.join(', ')||'(none)'}`);
 }
+// package.json may name the src directory instead of each file (#1739); every other entry is one file. A declared
+// directory stands for the inventory paths under it, so the declarations still equal the inventory, and npm pack
+// must still list exactly the inventory: an unlisted file under src stops packing here.
+const DECLARED_DIRECTORIES=new Set(['src']);
+function declarations(files,inventory,root){
+ if(!Array.isArray(files))throw Error('Invalid package declarations file inventory');
+ const expanded=files.flatMap(name=>{
+  if(!DECLARED_DIRECTORIES.has(name))return [name];
+  if(!fs.lstatSync(path.join(root,name)).isDirectory())throw Error(`Declared package directory is not a directory: ${name}`);
+  const under=[...inventory].filter(file=>file.startsWith(name+'/'));
+  if(!under.length)throw Error(`Declared package directory has no inventory files: ${name}`);
+  return under;
+ });
+ return paths(expanded,'package declarations');
+}
 export function checkPackageInventory(directory){
  const root=fs.realpathSync(directory),inventory=paths(JSON.parse(fs.readFileSync(path.join(root,'src/runtime-files.json'))),'runtime');
  const manifest=JSON.parse(fs.readFileSync(path.join(root,'package.json')));
- equal(paths(manifest.files,'package declarations'),inventory,'Package declarations');
+ equal(declarations(manifest.files,inventory,root),inventory,'Package declarations');
  const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
  // --ignore-scripts is essential here: ordinary npm pack invokes this guard.
  const listings=JSON.parse(execFileSync(process.execPath,[npm,'pack','--dry-run','--ignore-scripts','--json'],{cwd:root,encoding:'utf8',timeout:120000,maxBuffer:8e6,stdio:['ignore','pipe','pipe']}));
