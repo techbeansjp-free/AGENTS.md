@@ -72,10 +72,10 @@ const readRule=`First read ${stateFile}: it is the authoritative record of goal,
 const handoff=`Context handoff: this session ends after this turn and a new session continues the Goal with no memory of this conversation. Update ${stateFile}: keep goal and authority, record every owner constraint still in effect in ownerConstraints, and append to progress each completed Issue with its commit SHA. Use pointers (paths, SHAs, Issue numbers), not code or long summaries. Do not change any other file.`;
 const constraint=`New owner constraint, effective from now for the rest of the Goal: every commit message must end with a line \`Refs: #<Issue>\` (${units.map(u=>`${u.issues[0]} ${u.dir} reservation, ${u.issues[1]} ${u.dir} billing, ${u.issues[2]} ${u.dir} integration and revision`).join('; ')}).`;
 const stages=units.flatMap((u,k)=>{const d=u.dir,[r,b,i]=u.issues,pre=path.join(preRevision,d);return [
- {n:4*k+1,unit:u,oracles:['reservation'],task:`${k?`New owner request: ${d}/ has been added as an independent second copy of the fixture. `:''}Issue ${r}: implement ${d}/reservation/service.mjs per ${d}/REQUIREMENTS.md (Issue R). Verify with node ${d}/oracle/reservation.mjs ${d} and commit.`},
- {n:4*k+2,unit:u,oracles:['reservation','billing'],task:`Issue ${b}: implement ${d}/billing/service.mjs per ${d}/REQUIREMENTS.md (Issue B). Verify with node ${d}/oracle/billing.mjs ${d} and commit.`},
- {n:4*k+3,unit:u,oracles:['reservation','billing','integration','unknown-keys'],task:`Issue ${i}: integrate per the Integration section of ${d}/REQUIREMENTS.md. Run the integration and unknown-keys oracles, obtain an independent review in a fresh context as the ASC skill requires, fix High/Medium findings and commit.${k?'':' '+constraint}`},
- {n:4*k+4,unit:u,oracles:['reservation','billing','integration','unknown-keys','revision'],revision:true,task:`Issue ${i} (later owner requirement): apply ${d}/REVISION.md. Run node ${d}/oracle/revision.mjs ${pre} ${d} and every earlier ${d} oracle, obtain an independent review in a fresh context, fix High/Medium findings and commit.`},
+ {n:4*k+1,issue:r,unit:u,oracles:['reservation'],task:`${k?`New owner request: ${d}/ has been added as an independent second copy of the fixture. `:''}Issue ${r}: implement ${d}/reservation/service.mjs per ${d}/REQUIREMENTS.md (Issue R). Verify with node ${d}/oracle/reservation.mjs ${d} and commit.`},
+ {n:4*k+2,issue:b,unit:u,oracles:['reservation','billing'],task:`Issue ${b}: implement ${d}/billing/service.mjs per ${d}/REQUIREMENTS.md (Issue B). Verify with node ${d}/oracle/billing.mjs ${d} and commit.`},
+ {n:4*k+3,issue:i,unit:u,oracles:['reservation','billing','integration','unknown-keys'],task:`Issue ${i}: integrate per the Integration section of ${d}/REQUIREMENTS.md. Run the integration and unknown-keys oracles, obtain an independent review in a fresh context as the ASC skill requires, fix High/Medium findings and commit.${k?'':' '+constraint}`},
+ {n:4*k+4,issue:i,unit:u,oracles:['reservation','billing','integration','unknown-keys','revision'],revision:true,task:`Issue ${i} (later owner requirement): apply ${d}/REVISION.md. Run node ${d}/oracle/revision.mjs ${pre} ${d} and every earlier ${d} oracle, obtain an independent review in a fresh context, fix High/Medium findings and commit.`},
 ];});
 const reply='Owner reply: what you are waiting on is within the authority already given for this task. Continue the current stage to completion without asking again.';
 
@@ -95,9 +95,12 @@ const coordinatorTurns=async id=>{const own=(await rolloutsFor(id,startedAt)).fi
 const coordinatorInputs=async id=>(await coordinatorTurns(id)).flat();
 const median=a=>{const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;};
 // A handoff is valid only if the state file keeps the authority, carries the owner constraint once it was given
-// (stage 3), and points to a commit SHA for every Issue of the stages completed so far.
+// (stage 3), and has, for every Issue of the stages completed so far, a progress entry naming the Issue and an
+// existing commit of the worktree.
+const commitExists=sha=>{try{git(['cat-file','-e',sha+'^{commit}'],worktree);return true;}catch{return false;}};
 const handoffValid=(state,n)=>{const entries=(state.progress??[]).map(p=>JSON.stringify(p));
- return !!state.authority&&(n<3||JSON.stringify(state.ownerConstraints??[]).includes('Refs: #'))&&[...new Set(stages.filter(t=>t.n<=n).map(t=>t.task.match(/^Issue (\d+)/)[1]))].every(i=>entries.some(p=>p.includes(i)&&/\b[0-9a-f]{7,40}\b/.test(p)));};
+ return !!state.authority&&(n<3||JSON.stringify(state.ownerConstraints??[]).includes('Refs: #'))&&[...new Set(stages.filter(t=>t.n<=n).map(t=>t.issue))]
+  .every(i=>entries.some(p=>new RegExp('\\b'+i+'\\b').test(p)&&(p.match(/\b[0-9a-f]{7,40}\b/g)??[]).some(commitExists)));};
 const failed=e=>e.status!==0||e.signal||e.timedOut;
 // macOS: a login shell runs path_helper, which puts sandbox-denied directories first, so Node's spawn of `git` fails with EPERM.
 const common=['--ignore-user-config','--ignore-rules','--skip-git-repo-check','--json','-m',model,'-c',`model_reasoning_effort=${JSON.stringify(effort)}`,...(darwinGit?['-c','allow_login_shell=false']:[])];
@@ -139,7 +142,8 @@ try{
    if(lastInput>=ROTATE_AT){
     const exec=await runExec(['exec','-C',worktree,'resume',...common,...c.options,coordinator,'-'],handoff,path.join(root,`stage${s.n}-handoff.jsonl`));
     const rotation={afterStage:s.n,from:coordinator,lastInput,exec,treeClean:(guard(),!git(['status','--porcelain'],worktree))};
-    try{rotation.stateValid=handoffValid(JSON.parse(fs.readFileSync(stateFile,'utf8')),s.n);}catch{rotation.stateValid=false;}
+    let state;try{state=JSON.parse(fs.readFileSync(stateFile,'utf8'));}catch{state=null;}
+    rotation.stateValid=!!state&&handoffValid(state,s.n);
     record.rotations.push(rotation);fs.writeFileSync(path.join(root,'progress.json'),JSON.stringify(record,null,2));
     if(failed(exec)||!rotation.treeClean||!rotation.stateValid)break;
     rotateNext=true;
