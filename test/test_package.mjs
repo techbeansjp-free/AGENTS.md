@@ -9,6 +9,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
+import {checkPackageInventory} from '../scripts/check-package-inventory.mjs';
 
 // package.json names the src directory; every other entry is one file (#1739). src/runtime-files.json is the inventory.
 const runtimeInventory=()=>JSON.parse(fs.readFileSync('src/runtime-files.json'));
@@ -23,11 +24,22 @@ test('package file declarations, with src expanded to its inventory files, exact
   assert.equal(file,file.normalize('NFC'));
   assert(file==='src'?fs.lstatSync(file).isDirectory():fs.lstatSync(file).isFile(),file);
  }
- // Every file under src is in the inventory, so the declared directory adds nothing unlisted. Names that npm never
- // packs (macOS metadata, editor swap and merge leftovers) are skipped, as npm skips them.
- const neverPacked=name=>name==='.DS_Store'||name.startsWith('._')||/^\..*\.swp$/.test(name)||name.endsWith('.orig');
- const under=dir=>fs.readdirSync(dir,{withFileTypes:true}).filter(e=>!neverPacked(e.name)).flatMap(e=>e.isDirectory()?under(path.join(dir,e.name)):[path.join(dir,e.name).split(path.sep).join('/')]);
- assert.deepEqual(under('src').sort(),inventory.filter(name=>name.startsWith('src/')).sort());
+ // What npm actually packs under the declared src is exactly the inventory; npm's own exclusions decide what it skips.
+ const listing=checkPackageInventory('.');
+ assert.deepEqual(listing.files.map(file=>file.path).filter(name=>name.startsWith('src/')).sort(),inventory.filter(name=>name.startsWith('src/')).sort());
+});
+
+// The declaration check accepts the src directory only, once, as a directory with inventory files under it (#1739).
+test('package declarations refuse another directory, a duplicate src file and a src without inventory files',t=>{
+ const root=tempDir('asc-package-declarations-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ for(const name of [...runtimeInventory(),'scripts/check-package-inventory.mjs']){const target=path.join(root,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
+ const manifest=JSON.parse(fs.readFileSync('package.json')),write=files=>fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({...manifest,files}));
+ for(const [files,message] of [
+  [[...manifest.files,'bin'],/Package declarations file inventory mismatch; unexpected: bin/],
+  [[...manifest.files,'src/adaptive-run.mjs'],/Invalid package declarations file inventory/],
+ ]){write(files);assert.throws(()=>checkPackageInventory(root),message,JSON.stringify(files.slice(-1)));}
+ write(manifest.files);fs.writeFileSync(path.join(root,'src/runtime-files.json'),JSON.stringify(runtimeInventory().filter(name=>!name.startsWith('src/'))));
+ assert.throws(()=>checkPackageInventory(root),/Declared package directory has no inventory files: src/);
 });
 
 test('packing rejects decomposed source names and noncanonical declarations without emitting a candidate',t=>{
