@@ -4,13 +4,29 @@
 
 ASCでは次の作業場所・実行契約を併せて維持する。
 
-- 一つの進行役セッションで複数Issueを継続できる。1セッション1Issueに制限せず、Issue切替だけで利用者や進行役へセッション再作成を要求しない。
+- 一つの進行役セッションで複数Issueを継続できる。1セッション1Issueに制限せず、Issue切替だけで利用者や進行役へセッション再作成を要求しない。Contextの肥大は、次節のとおりsessionを終わらせずにHostのcompactionで抑える。
 - Git管理済みの担当用worktreeは[作業場所の手順](workspace.md)に従い、標準の`worktree-create`で作成する。準備済みなら実パスを渡し、Hostの新規worktree作成を重ねない。Claude Codeの`isolation: "worktree"`は指定場所を選ぶ機能ではないため、準備済みworktreeへの委譲では省略する。
 - 担当の終了時は[実装と検証](implementation.md)の所有・停止規約に従う。compose projectは`down`せず`stop`で止め、残した資源を返す。削除は[マージ後の整理](post-merge.md)の条件を別に満たす場合だけ行う。
 - 分離できる成果の統合は、許可されたcommitを実際のHEADで確認して行う。パッチ転記や差分全文の先読みを通常の引継ぎにせず、競合・指摘・共有契約への影響がある箇所を調べる。未commit成果は保持する。
 - PR後の指摘は現在の対象で成立するか照合する。前回からの差分と影響先を中心に検証し、要求・権限・共有契約の変更や影響不明があれば確認範囲を広げる。未確認の新HEAD全体を合格としない。
 
 これはHostへの実行指示であり、CLIによる自動Context交代ではない。Agent数だけで効率を判定せず、引継ぎ・再読込み・是正も含む時間と取得可能なusageを扱う。未取得usageはゼロにせず、cache読取りを費用と同一視しない。
+
+## Contextの更新と引継ぎ
+
+CLIの進行役sessionを終わらせて新しいsessionに任せる方式は採らない。続きを動かす者がいなくなり、作業が止まるためである。進行役のContextは、同じsessionのままHostの自動compaction（会話を要約に置き換えて続ける機能）で更新する。token数を見て新しいsessionへ切り替える方式は、所要時間が143%になり採用していない（#1737の評価）。ASCはcompactionを再実装せず、要約に古い判断が残る弱点を次で補う。
+
+1. **状態の正本をrepositoryに置く**：決定・残件・次の手順・回答待ちの質問を、決まった時点でIssueかPRに残す。成果は許可の範囲でcommit・pushし、許可のない成果は未commitのままworktreeに残す。compactionの時機はHostが決めるため、区切りまで記録を溜めない。
+2. **更新の後は現在地を確かめてから動く**：compactionの後と新しいContextの開始時は、要約・記憶・引継ぎ文を手掛かりにとどめ、`git worktree list`、対象worktreeの`git status`とHEAD、Issue・PRの記録で現在地を確かめてから次の操作をする。食い違えばrepositoryを正とする。要約や引継ぎ文を許可や独立レビューとして扱わず、merge等の許可と取消しは[許可されたmerge](../SKILL.md#許可されたmerge)に従って照合する。起動済みのプロセス・container・子Agentの所有は、観測して確かめる。
+3. **現在地を自動で差し込む（任意）**：利用者がHostの`SessionStart` hookに`resume-context --hook`を登録すると、compactionと`/clear`の直後に、repositoryのworktree・branch・HEAD・未commit件数とbranch名から推定したIssue番号が差し込まれる。読取りのみで、ネットワーク・Issue・PRは読まない。登録の手順とHostごとの確認状況は[利用手順](../../../v05/USAGE.md#compaction後に現在地を差し込む1755)にある。
+
+Hostの自動compactionの閾値は既定のままにする。閾値を下げると更新が早まるが、所要時間への効果は未測定であり、既定にはしない。利用者が選ぶ場合の設定も利用手順にある。
+
+`/clear`（Claude Code）・`/new`（Codex）は利用者の操作が要るため、自動の手段にしない。Issueの完了など無関係な作業へ移る区切りで、勧めるだけにとどめる。勧めるときは[引継ぎ文](../../work-coordination/SKILL.md#利用者が貼れる引継ぎ文を返す)を添え、利用者の操作を待たずに続けられる作業は続ける。
+
+進行役のContextを小さく保つため、調査・実装の詳細はHostのsubagentへ渡し、結論と参照（path・行・コマンド・commit）だけを受け取る。`host-session`は読取り専用の相談・レビュー用であり、実装の委譲先にしない。
+
+usage（Contextの量）は、利用者がClaude Codeの`/context`・status line、Codexの`/status`・status lineで見られる。Agentが自分の量を取得できるかはHostによる。取得できなくても上の規則は区切りとrepositoryの状態で動き、量の数値には依存しない。`host-session`の`events.jsonl`や`codex exec --json`のusageは記録に使い、累積のusageと現在のContextの占有量を区別する。
 
 ## 利用者への報告・質問・待機
 
