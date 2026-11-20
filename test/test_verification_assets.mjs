@@ -110,8 +110,9 @@ test('timed-out verification does not cancel a concurrent sibling or latch later
  // timeout fires (launch gap < timeout) and outlive its cleanup (healthy sleep >
  // remaining timeout). The 5 s margins on both sides are those of the former
  // 25 s default deadline / 20 s gap / 10 s sleep; the absolute length is not a boundary.
- // The timed-out command must still print child-started within the 6 s budget; the
- // sub-second budget test below shows that startup fits well inside it.
+ // The timed-out command must still print child-started within the 6 s budget. The
+ // sub-second budget test below shows the isolation itself starts in under 1 s; the two
+ // python3 starts fit in the rest, and a slower start fails the elapsed-time assertion.
  const timeoutMilliseconds=6000,launchGapMilliseconds=1000;
  const badContract={...slow.contract,verificationLimits:{timeoutMilliseconds},verificationResourceProfile:'browser-cgroup-v1',testArgv:['/usr/bin/python3','-c','import subprocess,time; child=subprocess.Popen(["/usr/bin/python3","-c","import time; time.sleep(60)"]); assert child.poll() is None; print("child-started",flush=True); time.sleep(60)']};
  const goodContract={...healthy.contract,verificationResourceProfile:'browser-cgroup-v1',testArgv:['/usr/bin/python3','-c','import time; time.sleep(10); print("healthy")']};
