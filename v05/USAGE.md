@@ -648,7 +648,7 @@ Codexでは新しいsessionで `$model-deliberation` を明示選択する。自
 
 ## compaction後に現在地を差し込む（#1755）
 
-進行役のContextは、sessionを終わらせずにHostの自動compactionで更新する（規則は`skills/asc/references/coordination.md`の「Contextの更新と引継ぎ」）。`resume-context --hook`をHostの`SessionStart` hookに登録すると、compactionと`/clear`の直後に、repositoryのworktree・branch・HEAD・未commit件数と、branch名から推定したIssue番号が短い文で差し込まれる。gitの読取りだけを行い（`--no-optional-locks`）、ネットワーク・Issue・PRは読まず、書込み・session切替えはしない。hookの入力の読取り（2秒まで）を含めて全体を約10秒で打ち切り、読めなかった部分は未確認と書く。ASCが起動した後の失敗では終了コード0で一文を返し、sessionを止めない。ASCの導入が壊れて起動できない場合（版の不一致など）は終了コード1になり、差し込みは欠ける。登録は任意で、`project-assets`は利用者のHost設定を書き換えない。登録前に`node .agent-skill-chain/bin/asc.mjs resume-context "$PWD"`で表示を確かめられる。
+進行役のContextは、sessionを終わらせずにHostの自動compactionで更新する（規則は`skills/asc/references/coordination.md`の「Contextの更新と引継ぎ」）。`resume-context --hook`をHostの`SessionStart` hookに登録すると、compactionと`/clear`の直後に、repositoryのworktree・branch・HEAD・未commit件数と、branch名から推定したIssue番号が短い文で差し込まれる。gitの読取りだけを行い（`--no-optional-locks`）、ネットワーク・Issue・PRは読まず、書込み・session切替えはしない。hookの入力の読取り（2秒まで）を含めて全体を約10秒で打ち切り、読めなかった部分は未確認と書く。ASCが起動した後の失敗では終了コード0で一文を返し、sessionを止めない。未commit件数はsystem・globalのGit設定（`core.excludesFile`等）を読まずに数えるため、利用者の`git status`より多く出ることがある。ASCの導入が壊れて起動できない場合（版の不一致など）は終了コード1になり、差し込みは欠ける。登録は任意で、`project-assets`は利用者のHost設定を書き換えない。登録前に`node .agent-skill-chain/bin/asc.mjs resume-context "$PWD"`で表示を確かめられる。
 
 Claude Code（`.claude/settings.json`、個人だけなら`.claude/settings.local.json`）:
 

@@ -7,7 +7,7 @@ import {GIT_NULL_DEVICE} from './source-limits.mjs';
  * It lists the repository's worktrees from local Git only: no network, no writes, no session switching.
  * The Host keeps the context window; ASC only points the summarized context back at the repository state.
  */
-const MAX_WORKTREES=20,MAX_INPUT=65536,MAX_TEXT=4000,GIT_TIMEOUT=5000,DEADLINE=10000;
+const MAX_BRANCH=200,MAX_WORKTREES=20,MAX_INPUT=65536,MAX_TEXT=4000,GIT_TIMEOUT=5000,DEADLINE=10000;
 // Standard ASC branch: <type>/<issue>-<slug> (skills/asc/references/workspace.md).
 const ISSUE_BRANCH=/^(?:feature|fix|refactor|test|docs|chore)\/(\d+)-[a-z0-9-]+$/;
 const HEADER='ASC: Contextが要約または新しいものに置き換わった。要約・記憶・引継ぎ文を手掛かりにし、次のrepositoryの状態とIssue・PRの記録で現在地を確かめてから続ける。食い違えばrepositoryを正とする（ASCのskills/asc/references/coordination.md「Contextの更新と引継ぎ」）。';
@@ -43,6 +43,8 @@ export function parseWorktrees(text){
  }
  return list;
 }
+
+const shorten=text=>text.length<=MAX_BRANCH?text:text.slice(0,MAX_BRANCH)+'…';
 
 export function issueFromBranch(branch){
  const m=ISSUE_BRANCH.exec(branch??'');return m?Number(m[1]):undefined;
@@ -93,7 +95,7 @@ export function resumeContext(directory,{git=defaultGit,now=Date.now,deadline=DE
   }
   const issue=issueFromBranch(w.branch);
   // The current worktree's path is already on the fixed line; its entry keeps only the state so it always fits.
-  entries.push(`- ${w.path===current?'（現在の作業場所）':w.path} branch ${w.detached?'(detached)':w.branch??'不明'} HEAD ${(w.head??'不明').slice(0,12)} ${state}${issue?` Issue #${issue}`:''}`);
+  entries.push(`- ${w.path===current?'（現在の作業場所）':w.path} branch ${w.detached?'(detached)':shorten(w.branch??'不明')} HEAD ${(w.head??'不明').slice(0,12)} ${state}${issue?` Issue #${issue}`:''}`);
  }
  return compose(fixed,entries,all.length);
 }

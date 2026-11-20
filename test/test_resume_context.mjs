@@ -134,3 +134,12 @@ test('the hook command answers within its deadline while stdin stays open',async
  const code=await new Promise(resolve=>{const timer=setTimeout(()=>{child.kill();resolve('killed');},12000);child.on('exit',c=>{clearTimeout(timer);resolve(c);});});
  assert.equal(code,0);assert(Date.now()-started<11000);assert.match(out,/docs\/42-sample/);
 });
+
+test('an extremely long branch name is shortened so the text stays within its limit',()=>{
+ const branch='docs/'+Array.from({length:20},()=>'q'.repeat(190)).join('/');
+ const list=`worktree /w\nHEAD ${'e'.repeat(40)}\nbranch refs/heads/${branch}\n`;
+ const git=(cwd,args)=>args[0]==='rev-parse'?{status:0,stdout:'/w\n'}:args[0]==='worktree'?{status:0,stdout:list}:{status:0,stdout:''};
+ const text=resumeContext('/w',{git});
+ assert(text.length<=4000,String(text.length));
+ assert.match(text,/^- （現在の作業場所） branch docs\/[q/]{195}… HEAD e{12} 未commit 0件$/m);assert.match(text,/^現在の作業場所: \/w$/m);
+});
