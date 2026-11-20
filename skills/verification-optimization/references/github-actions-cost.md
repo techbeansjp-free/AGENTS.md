@@ -31,7 +31,7 @@ CIがGitHub Actionsで、課金額が制約のときに読む。検出能力を�
 
 検出への影響で3群に分け、前の群から使う。
 
-runnerの種類を変えて単価を下げる手段は、同等性を確かめたうえで、下の2群と並べて比べる。3群より前に比べる（[GitHub Actionsのrunnerの選び方](github-actions-runners.md)）。
+runnerの種類を変えて単価を下げる手段は、同等性を確かめたうえで、下の1群・2群と並べて比べる。3群より前に比べる（[GitHub Actionsのrunnerの選び方](github-actions-runners.md)）。
 
 ### 1. 検出を変えない手段
 
