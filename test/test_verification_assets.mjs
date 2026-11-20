@@ -106,15 +106,23 @@ test('timed-out verification does not cancel a concurrent sibling or latch later
   const worker=new Worker(workerSource,{eval:true,workerData:{module:new URL('../src/verification-assets.mjs',import.meta.url).href,input}});
   let result;worker.on('message',m=>{result=m;});worker.once('error',reject);worker.once('exit',code=>code===0&&result?resolve(result):reject(Error('verification worker failed '+code)));
  });
- const badContract={...slow.contract,verificationLimits:{timeoutMilliseconds:25000},verificationResourceProfile:'browser-cgroup-v1',testArgv:['/usr/bin/python3','-c','import subprocess,time; child=subprocess.Popen(["/usr/bin/python3","-c","import time; time.sleep(60)"]); assert child.poll() is None; print("child-started",flush=True); time.sleep(60)']};
+ // Only the order matters: the healthy cgroup must exist before the sibling's
+ // timeout fires (launch gap < timeout) and outlive its cleanup (healthy sleep >
+ // remaining timeout). The 5 s margins on both sides are those of the former
+ // 25 s default deadline / 20 s gap / 10 s sleep; the absolute length is not a boundary.
+ // The timed-out command must still print child-started within the 6 s budget. The
+ // sub-second budget test below shows the isolation itself starts in under 1 s; the two
+ // python3 starts fit in the rest, and a slower start fails the elapsed-time assertion.
+ const timeoutMilliseconds=6000,launchGapMilliseconds=1000;
+ const badContract={...slow.contract,verificationLimits:{timeoutMilliseconds},verificationResourceProfile:'browser-cgroup-v1',testArgv:['/usr/bin/python3','-c','import subprocess,time; child=subprocess.Popen(["/usr/bin/python3","-c","import time; time.sleep(60)"]); assert child.poll() is None; print("child-started",flush=True); time.sleep(60)']};
  const goodContract={...healthy.contract,verificationResourceProfile:'browser-cgroup-v1',testArgv:['/usr/bin/python3','-c','import time; time.sleep(10); print("healthy")']};
  const badRun=launch({...slow,contract:badContract});
- await new Promise(resolve=>setTimeout(resolve,20000));
+ await new Promise(resolve=>setTimeout(resolve,launchGapMilliseconds));
  const [bad,good]=await Promise.all([badRun,launch({...healthy,contract:goodContract})]);
  assert.match(bad.error,/Verification failed/);
  const timedOut=bad.events.at(-1).results[0];assert.equal(timedOut.resourceBoundary.executionError,'ETIMEDOUT');
  assert.equal(timedOut.stdoutSha256,hash('child-started\n'));assert.equal(timedOut.resourceBoundary.cleanupConfirmed,true);
- assert(bad.finished-bad.started>=25000&&bad.finished-bad.started<40000);
+ assert(bad.finished-bad.started>=timeoutMilliseconds&&bad.finished-bad.started<timeoutMilliseconds+15000);
  assert(bad.finished<good.finished,'healthy verification must survive sibling timeout cleanup');
  assert.equal(good.error,null);assert(good.started<bad.finished&&bad.started<good.finished,'verification intervals must overlap');
  const healthyBoundary=good.events.at(-1).results[0].resourceBoundary;

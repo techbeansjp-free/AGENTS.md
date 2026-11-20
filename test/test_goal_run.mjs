@@ -388,6 +388,9 @@ test('owner unit baseline cannot replace additional unit checks or final integra
 
 
 test('final repair cannot invalidate unit checks and still deliver',{skip:!enabled},async t=>{
+ // A repair that breaks the Unit main test (a.txt) or the Unit risk check (b.txt) is refused: each must run again on
+ // the repaired target. The passing run counts all five final checks (parent test, parent risk, Unit a test and risk,
+ // Unit b test), so dropping a Unit test or risk obligation is detected there.
  for(const corrupt of ['main','risk',null]){
   const f=fixture(t);f.request.goal.units=f.request.goal.units.filter(u=>u.id!=='sum');delete f.request.unitRequests.sum;
   f.request.contract.testArgv=['/bin/sh','-c','test "$(cat sum.txt)" = 2'];f.request.contract.riskTestArgv=[f.request.contract.testArgv];f.request.maxRepairs=1;
@@ -414,12 +417,15 @@ test('final repair cannot invalidate unit checks and still deliver',{skip:!enabl
 });
 
 
+// The fixture owner signs only listed contract digests. Every delivering mode lists the composed final contract and
+// asserts that the final approval binds exactly that digest, which no parent or Unit approval covers; a composition
+// error or a skipped final approval therefore fails here. A refused final approval stops delivery
+// (final-denied), and so does a refused Unit approval (risk-candidate-denied).
 test('high-risk Goal requires exact composed final approval and preserves duplicate risk checks',{skip:!enabled},async t=>{
- for(const mode of ['approve-final','parent-only','identical-checks','child-risk-approved','child-risk-unapproved','child-design-approved','different-design-approved','risk-candidate','risk-candidate-denied']){
+ for(const mode of ['composed-final','final-denied','child-risk-approved','child-design-approved','risk-candidate','risk-candidate-denied']){
   const f=fixture(t),owner=tempDir('asc-goal-owner-');t.after(()=>fs.rmSync(owner,{recursive:true,force:true}));
   const contracts=[f.request.contract,...Object.values(f.request.unitRequests).map(u=>u.contract)];
   for(const contract of contracts){Object.assign(contract,{risks:['public-contract'],requiresDesign:true,design:'Preserve the declared value and sum contracts in this disposable fixture.'});
-   if(mode==='identical-checks')contract.testArgv=['/bin/true'];
    contract.riskTestArgv=[contract.testArgv];
   }
   if(mode.startsWith('child-')){
@@ -430,14 +436,17 @@ test('high-risk Goal requires exact composed final approval and preserves duplic
    }
   }
   if(mode==='child-risk-approved'){f.request.goal.units=f.request.goal.units.filter(u=>u.id!=='sum');delete f.request.unitRequests.sum;f.request.maxRepairs=1;}
-  if(mode==='different-design-approved')f.request.unitRequests.a.contract.design='Distinct mandatory child design';
+  // One child design differs from the parent and is appended; the others equal it and are not repeated.
+  // Unit sum repeats the parent test as a risk check: the final contract keeps that check once.
+  if(mode==='composed-final'){f.request.unitRequests.a.contract.design='Distinct mandatory child design';f.request.unitRequests.sum.contract.riskTestArgv.push(f.request.contract.testArgv);}
   const final=structuredClone(f.request.contract),seen=new Set([final.testArgv,...final.riskTestArgv].map(digest));
   for(const unit of f.request.goal.units)for(const argv of [f.request.unitRequests[unit.id].contract.testArgv,...f.request.unitRequests[unit.id].contract.riskTestArgv])if(!seen.has(digest(argv))){seen.add(digest(argv));final.riskTestArgv.push(argv);}
   final.criteria=[...new Set([...final.criteria,...f.request.goal.units.flatMap(u=>['Work Unit intent: '+u.intent,...u.criteria])])];
   if(mode.startsWith('child-')){final.risks=mode==='child-design-approved'?[]:['public-contract'];final.requiresDesign=true;final.design='Work Unit a (Write a):\nChild-only mandatory invariant';}
-  if(mode==='different-design-approved')final.design+='\n\nWork Unit a (Write a):\nDistinct mandatory child design';
+  if(mode==='composed-final')final.design+='\n\nWork Unit a (Write a):\nDistinct mandatory child design';
   if(mode.startsWith('risk-candidate'))f.request.unitCandidates={a:priorCandidate(t,f)};
-  const permitted=mode==='risk-candidate-denied'?contracts.filter(c=>c!==f.request.unitRequests.a.contract).map(digest):contracts.map(digest);if(mode!=='parent-only'&&mode!=='child-risk-unapproved')permitted.push(digest(final));
+  const permitted=mode==='risk-candidate-denied'?contracts.filter(c=>c!==f.request.unitRequests.a.contract).map(digest):contracts.map(digest);
+  assert.equal(permitted.includes(digest(final)),false,'no parent or Unit approval may cover the composed final contract');if(mode!=='final-denied')permitted.push(digest(final));
   const keys=generateKeyPairSync('ed25519'),publicKey=keys.publicKey.export({type:'spki',format:'pem'}),keyFile=path.join(owner,'key.pem'),signer=path.join(owner,'sign.mjs'),audit=path.join(owner,'requests.jsonl');
   fs.writeFileSync(keyFile,keys.privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600});
   fs.writeFileSync(signer,`import fs from 'node:fs';import {sign} from 'node:crypto';import {approvalBytes} from ${JSON.stringify(new URL('../src/approval.mjs',import.meta.url).href)};
@@ -449,14 +458,14 @@ console.log(JSON.stringify({payload,signature:sign(null,approvalBytes(payload),f
   let counter=0,root;
   const agent=async({workspace,writable,prompt})=>{if(writable){const input=JSON.parse(prompt),id=input.intent.split(' ').at(-1);if(mode==='child-risk-approved'&&input.intent===f.request.contract.intent){assert.equal(input.previousFailure.kind,'verification');assert.equal(input.design,final.design);}fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');}return {context:'signed-goal-'+(++counter),usage:[],seconds:0,answer:JSON.stringify({verdict:'pass',findings:[]})};};
   const execution=runGoal(f.request,{agent,provider:f.provider,onEvent:e=>{if(e.type==='goal-started')root=e.root;}});
-  if(mode==='risk-candidate-denied'){await assert.rejects(execution,/Unit failed/);const blocked=JSON.parse(fs.readFileSync(path.join(root,'result.json'))).units.find(u=>u.id==='a');assert.equal(blocked.diagnostic.calls.length,0);assert.equal(f.deliveries(),0);assert.equal(f.git('rev-parse','HEAD'),f.request.base);if(root)t.after(()=>fs.rmSync(root,{recursive:true,force:true}));continue;}
-  if(mode==='parent-only'||mode==='child-risk-unapproved'){await assert.rejects(execution,/Owner authority unavailable/);assert.equal(f.deliveries(),0);}
-  else {const result=await execution;assert.equal(result.status,'draft-ci-passed');assert.equal(f.deliveries(),1);assert.equal(result.delivery.controllerEvents.find(e=>e.operation==='design-approval').binding.contract,digest(final));
-   if(mode==='risk-candidate'){const a=result.units.find(u=>u.id==='a').result;assert(a.events.some(e=>e.type==='unit-candidate'&&e.status==='candidate-imported'));assert(a.calls.every(c=>c.role==='review'));assert(a.controllerEvents.some(e=>e.operation==='design-approval'&&e.approved));assert(a.controllerEvents.some(e=>e.operation==='verify'&&e.results.every(r=>r.exit===0)));}
-  }
+  // Every Unit approval is granted; refusing only the composed final contract must still stop delivery.
+  if(mode==='final-denied'){await assert.rejects(execution,/Owner authority unavailable/);assert.equal(f.deliveries(),0);if(root)t.after(()=>fs.rmSync(root,{recursive:true,force:true}));continue;}
+  if(mode==='risk-candidate-denied'){await assert.rejects(execution,/Unit failed/);const blocked=JSON.parse(fs.readFileSync(path.join(root,'result.json'))).units.find(u=>u.id==='a');assert.equal(blocked.diagnostic.calls.length,0);assert.match(blocked.diagnostic.error,/Owner authority unavailable/);assert.equal(f.deliveries(),0);assert.equal(f.git('rev-parse','HEAD'),f.request.base);if(root)t.after(()=>fs.rmSync(root,{recursive:true,force:true}));continue;}
+  const result=await execution;assert.equal(result.status,'draft-ci-passed');assert.equal(f.deliveries(),1);assert.equal(result.delivery.controllerEvents.find(e=>e.operation==='design-approval')?.binding.contract,digest(final));
+  if(mode==='risk-candidate'){const a=result.units.find(u=>u.id==='a').result;assert(a.events.some(e=>e.type==='unit-candidate'&&e.status==='candidate-imported'));assert(a.calls.every(c=>c.role==='review'));assert(a.controllerEvents.some(e=>e.operation==='design-approval'&&e.approved));assert(a.controllerEvents.some(e=>e.operation==='verify'&&e.results.every(r=>r.exit===0)));}
   const requests=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse);assert.equal(requests.at(-1).binding.contract,digest(final));
   assert.deepEqual(requests.at(-1).contract.riskTestArgv,final.riskTestArgv);
-  if(mode==='identical-checks'){assert.notEqual(digest(final),digest(f.request.contract));assert.equal(final.riskTestArgv.length,1);}
+  if(mode==='composed-final')assert.equal(final.riskTestArgv.filter(argv=>digest(argv)===digest(f.request.contract.testArgv)).length,1);
   if(root)t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  }
 });
@@ -673,14 +682,24 @@ test('delegated restart replans once within original authority and shares its ne
     const priorBytes=fs.readFileSync(path.join(saved.root,'result.json'));
     await assert.rejects(restartGoal({...f.request,restart:{directory:path.join(root,'early-failure'),resultFile:path.join(saved.root,'result.json'),replan:false,budget:{maxAgentCalls:8,maxElapsedSeconds:120}}},{agent,provider:{...provider,intent:()=> 'changed intent'}}),/Primary Goal intent changed/);
     assert.deepEqual(fs.readFileSync(path.join(saved.root,'result.json')),priorBytes,'early failure must not overwrite historical evidence');
-    for(let iteration=0;iteration<2;iteration++){
-     const nextDirectory=path.join(root,'resume-'+iteration);
-     const resumed=await restartGoal({...f.request,restart:{directory:nextDirectory,resultFile:path.join(saved.root,'result.json'),replan:false,budget:{maxAgentCalls:8,maxElapsedSeconds:120}}},{agent,provider:{...provider,observe:()=>({head:execFileSync('git',['rev-parse','HEAD'],{cwd:nextDirectory,encoding:'utf8'}).trim(),draft:true,merged:false,boundToPr:true,checks:{test:'success'}})}});
-     t.after(()=>fs.rmSync(resumed.root,{recursive:true,force:true}));
-     assert.equal(resumed.status,'draft-ci-passed');assert.equal(resumed.restart.replanned,false);
-     assert.deepEqual(resumed.proposal.goal,saved.proposal.goal);assert.deepEqual(resumed.proposal.binding,saved.proposal.binding);assert.deepEqual(resumed.proposal.calls,[]);assert.equal(resumed.proposal.wallSeconds,0);assert.equal(resumed.proposal.reusedFrom,path.join(saved.root,'result.json'));assert.equal(plans,1);assert.equal(writes,3);
-     assert(resumed.budget.admittedAgentCalls>0,'historical proposal must not bypass fresh review');saved=resumed;
-    }
+    // One real resume proves a reused proposal still gets fresh review and delivery.
+    const nextDirectory=path.join(root,'resume-0');
+    const resumed=await restartGoal({...f.request,restart:{directory:nextDirectory,resultFile:path.join(saved.root,'result.json'),replan:false,budget:{maxAgentCalls:8,maxElapsedSeconds:120}}},{agent,provider:{...provider,observe:()=>({head:execFileSync('git',['rev-parse','HEAD'],{cwd:nextDirectory,encoding:'utf8'}).trim(),draft:true,merged:false,boundToPr:true,checks:{test:'success'}})}});
+    t.after(()=>fs.rmSync(resumed.root,{recursive:true,force:true}));
+    assert.equal(resumed.status,'draft-ci-passed');assert.equal(resumed.restart.replanned,false);
+    assert.deepEqual(resumed.proposal.goal,saved.proposal.goal);assert.deepEqual(resumed.proposal.binding,saved.proposal.binding);assert.deepEqual(resumed.proposal.calls,[]);assert.equal(resumed.proposal.wallSeconds,0);assert.equal(resumed.proposal.reusedFrom,path.join(saved.root,'result.json'));assert.equal(plans,1);assert.equal(writes,3);
+    assert(resumed.budget.admittedAgentCalls>0,'historical proposal must not bypass fresh review');saved=resumed;
+    // A result that itself reused a proposal is reusable again. Its reuse is decided by the restart preparation;
+    // the run after it is the same path as the resume above.
+    const again=prepareGoalRestart({...f.request,restart:{directory:path.join(root,'resume-1'),resultFile:path.join(saved.root,'result.json'),replan:false,budget:{maxAgentCalls:8,maxElapsedSeconds:120}}});
+    assert.deepEqual(again.proposal.goal,saved.proposal.goal);assert.deepEqual(again.proposal.binding,saved.proposal.binding);assert.deepEqual(again.proposal.calls,[]);assert.equal(again.proposal.wallSeconds,0);assert.equal(again.proposal.reusedFrom,path.join(saved.root,'result.json'));
+    assert.deepEqual(again.request.goal,saved.proposal.goal);assert.equal(plans,1);assert.equal(writes,3);
+    // Every reviewed Unit of the resumed run is offered again as candidate bytes, not reimplemented.
+    assert.deepEqual(Object.keys(again.request.unitCandidates).sort(),['a','b','sum']);
+    for(const id of ['a','b','sum']){const unit=saved.units.find(u=>u.id===id),candidate=again.request.unitCandidates[id];
+     assert.equal(candidate.repo,path.join(saved.root,'units',id));assert.equal(candidate.repo,unit.repo);
+     assert.equal(candidate.head,unit.result.target.head);assert.equal(candidate.base,unit.result.target.base);assert.equal(candidate.contractDigest,unit.result.target.contract);
+     assert.equal(candidate.contractDigest,digest(again.request.unitRequests[id].contract));}
    }
   }
   assert.equal(plans,1);if(mode!=='complete'){if(mode!=='context')assert.equal(writes,0);assert.equal(deliveries,0);}

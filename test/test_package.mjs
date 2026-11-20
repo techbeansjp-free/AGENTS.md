@@ -76,11 +76,12 @@ test('root and canonical package generation exclude unlisted files in runtime di
   assert.deepEqual(listing.files.map(file=>file.path).sort(),[...runtimeInventory()].sort());
   for(const name of unlisted)assert(!listing.files.some(file=>file.path===name),name);
  }
+ // npm install only extracts the archive, so the archive entries are what a consumer receives. Installing the
+ // candidate is covered by the canonical candidate tests.
  const candidate=JSON.parse(execFileSync(process.execPath,[path.resolve('scripts/pack-candidate.mjs'),root],{cwd:source,encoding:'utf8'}));
- const consumer=path.join(root,'consumer');fs.mkdirSync(consumer);
- execFileSync(process.execPath,[npm,'install','--prefix',consumer,'--offline','--ignore-scripts','--no-audit','--no-fund',candidate.file],{stdio:'pipe'});
- const installed=path.join(consumer,'node_modules/agent-skill-chain'),identity=JSON.parse(fs.readFileSync(path.join(installed,'release-identity.json')));
- for(const name of unlisted){assert.equal(fs.existsSync(path.join(installed,name)),false,name);assert.equal(Object.hasOwn(identity.sourceFiles,name),false,name);}
+ const entries=tarEntries(fs.readFileSync(candidate.file)),identity=JSON.parse(entries.get('package/release-identity.json'));
+ assert.deepEqual([...entries.keys()].sort(),[...runtimeInventory(),'release-identity.json'].map(name=>'package/'+name).sort());
+ for(const name of unlisted){assert.equal(entries.has('package/'+name),false,name);assert.equal(Object.hasOwn(identity.sourceFiles,name),false,name);}
 });
 
 // #1739: npm packs everything under the declared src directory, so the inventory check is what stops an unlisted src
@@ -112,15 +113,18 @@ test('guarded root and canonical packing reject npm implicit files before creati
  for(const name of [...runtimeInventory(),'scripts/check-package-inventory.mjs']){const target=path.join(source,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
  const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
  const candidateScript=path.resolve('scripts/pack-candidate.mjs');
- for(const name of ['README.private.md','COPYING.private','LICENSE.private']){
-  const target=path.join(source,name),bytes=Buffer.from('Synthetic unapproved root document\n');fs.writeFileSync(target,bytes);
-  const candidate=spawnSync(process.execPath,[candidateScript,destination],{cwd:source,encoding:'utf8'});
-  assert.equal(candidate.status,1);assert.match(candidate.stderr,/npm pack file inventory mismatch/);assert(candidate.stderr.includes(name));
-  const ordinary=spawnSync(process.execPath,[npm,'pack','--json','--pack-destination',destination],{cwd:source,encoding:'utf8'});
-  assert.notEqual(ordinary.status,0);assert.match(ordinary.stderr,/npm pack file inventory mismatch/);
-  assert.deepEqual(fs.readdirSync(destination),[]);assert.deepEqual(fs.readFileSync(target),bytes);
-  fs.unlinkSync(target);
- }
+ // Each name is a separate npm implicit-inclusion rule. The guard reports every unexpected file, so one round with
+ // all three still requires each name to be refused, without one npm pack pair per name.
+ const implicit=['README.private.md','COPYING.private','LICENSE.private'],bytes=Buffer.from('Synthetic unapproved root document\n');
+ for(const name of implicit)fs.writeFileSync(path.join(source,name),bytes);
+ const candidate=spawnSync(process.execPath,[candidateScript,destination],{cwd:source,encoding:'utf8'});
+ assert.equal(candidate.status,1);assert.match(candidate.stderr,/npm pack file inventory mismatch/);
+ for(const name of implicit)assert(candidate.stderr.includes(name),name);
+ const ordinary=spawnSync(process.execPath,[npm,'pack','--json','--pack-destination',destination],{cwd:source,encoding:'utf8'});
+ assert.notEqual(ordinary.status,0);assert.match(ordinary.stderr,/npm pack file inventory mismatch/);
+ for(const name of implicit)assert(ordinary.stderr.includes(name),name);
+ assert.deepEqual(fs.readdirSync(destination),[]);
+ for(const name of implicit){const target=path.join(source,name);assert.deepEqual(fs.readFileSync(target),bytes);fs.unlinkSync(target);}
  // The same guarded source still packs normally after the unapproved inputs are removed.
  const clean=JSON.parse(execFileSync(process.execPath,[npm,'pack','--json','--pack-destination',destination],{cwd:source,encoding:'utf8'}))[0];
  assert.deepEqual(clean.files.map(file=>file.path).sort(),[...runtimeInventory()].sort());
@@ -295,34 +299,40 @@ assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
 
 });
 
-// Read stored entry names from the archive bytes. External tar listings depend on the
+// Read stored entries (name to bytes) from the archive. External tar listings depend on the
 // platform and locale (octal escapes, macOS NFD display), which would hide the NFC check.
 // Supports the ustar and pax headers that npm pack writes; GNU long names fail instead of being misread.
-function tarEntryNames(gzip){
+function tarEntryNames(gzip){return [...tarEntries(gzip).keys()];}
+function tarEntries(gzip){
  const bytes=zlib.gunzipSync(gzip),field=(start,end)=>{const raw=bytes.subarray(start,end),nul=raw.indexOf(0);return (nul<0?raw:raw.subarray(0,nul)).toString('utf8');};
- const names=[];let offset=0,paxPath=null;
+ const names=new Map();let offset=0,paxPath=null;
  while(offset+512<=bytes.length&&bytes.subarray(offset,offset+512).some(b=>b!==0)){
   const size=parseInt(field(offset+124,offset+136).trim()||'0',8),type=String.fromCharCode(bytes[offset+156]||48),body=bytes.subarray(offset+512,offset+512+size);
   if(type==='L'||type==='K')throw Error('Unsupported GNU long-name tar entry');
   if(type==='x'){for(const record of body.toString('utf8').split('\n'))if(/^\d+ path=/.test(record))paxPath=record.slice(record.indexOf('=')+1);}
-  else if(type!=='g'){const prefix=field(offset+345,offset+500),name=field(offset,offset+100);names.push(paxPath??(prefix?`${prefix}/${name}`:name));paxPath=null;}
+  else if(type!=='g'){const prefix=field(offset+345,offset+500),name=paxPath??(prefix?`${prefix}/${field(offset,offset+100)}`:field(offset,offset+100));assert(!names.has(name),`Duplicate tar entry ${name}`);names.set(name,Buffer.from(body));paxPath=null;}
   offset+=512+Math.ceil(size/512)*512;
  }
  return names;
 }
 
+// The 0.5.0 case is also the root release candidate: it stamps only the packed manifest and installs with npm's
+// ordinary lifecycle handling, as a consumer would.
 for(const version of [null,'0.5.0','0.5.1-rc.0'])test(`canonical ${version??'source-version'} candidate installs both CLI names without enabling legacy commands or publication`,t=>{
  const root=tempDir('asc-canonical-package-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const packArgs=['scripts/pack-candidate.mjs',root,...(version?[`--version=${version}`]:[])];
+ const sourceManifest=fs.readFileSync('package.json');
  const output=JSON.parse(execFileSync(process.execPath,packArgs,{encoding:'utf8'}));
+ assert.deepEqual(fs.readFileSync('package.json'),sourceManifest,'Packing must not modify the source manifest');
  assert.equal(output.name,'agent-skill-chain');assert.equal(output.publishAuthorized,false);
  const entries=tarEntryNames(fs.readFileSync(output.file));
  const inventory=JSON.parse(fs.readFileSync('src/runtime-files.json'));
  assert(entries.every(name=>name===name.normalize('NFC')));assert.deepEqual(entries.sort(),[...inventory,'release-identity.json'].map(name=>'package/'+name).sort());
  const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
  const consumer=path.join(root,'consumer');fs.mkdirSync(consumer);
- execFileSync(process.execPath,[npm,'install','--prefix',consumer,'--offline','--ignore-scripts','--no-audit','--no-fund',output.file],{stdio:'pipe'});
+ execFileSync(process.execPath,[npm,'install','--prefix',consumer,'--offline',...(version==='0.5.0'?[]:['--ignore-scripts']),'--no-audit','--no-fund',output.file],{stdio:'pipe'});
  const installed=path.join(consumer,'node_modules/agent-skill-chain'),pkg=JSON.parse(fs.readFileSync(path.join(installed,'package.json')));
+ assert.equal(pkg.scripts,undefined);
  const skillRoot=path.join(installed,'skills/asc'),skill=fs.readFileSync(path.join(skillRoot,'SKILL.md'),'utf8');
  for(const match of skill.matchAll(/\]\(([^)]+)\)/g))assert(fs.existsSync(path.resolve(skillRoot,match[1].split('#')[0])),match[1]);
  assert.equal(path.resolve(skillRoot,'../../bin/asc-v05.mjs'),path.join(installed,'bin/asc-v05.mjs'));
@@ -333,7 +343,7 @@ for(const version of [null,'0.5.0','0.5.1-rc.0'])test(`canonical ${version??'sou
   const reported=process.platform==='win32'?execFileSync(process.execPath,[path.join(installed,entry),'--version'],{cwd:root,encoding:'utf8'}):execFileSync(link,['--version'],{cwd:root,encoding:'utf8'});assert.equal(reported.trim(),pkg.version);
   const legacy=spawnSync(process.execPath,[path.join(installed,entry),'workflow','advance'],{encoding:'utf8'});assert.equal(legacy.status,1);assert.match(legacy.stderr,/Usage:/);
  }
- const identity=JSON.parse(fs.readFileSync(path.join(installed,'release-identity.json')));assert.equal(identity.status,'unapproved-candidate');assert.equal(identity.published,false);
+ const identity=JSON.parse(fs.readFileSync(path.join(installed,'release-identity.json')));assert.equal(identity.status,'unapproved-candidate');assert.equal(identity.published,false);assert.deepEqual(identity.transformedManifests,{});
  const {createHash}=createRequire(import.meta.url)('node:crypto');const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
  assert.equal(hash(fs.readFileSync(path.join(installed,'package.json'))),identity.distributionManifestSha256);
  assert.equal(identity.schema,'asc-candidate-identity/v2');assert.equal(identity.sourceManifestSha256,hash(fs.readFileSync('package.json')));assert.equal(Object.hasOwn(identity.sourceFiles,'package.json'),false);
@@ -384,26 +394,4 @@ test('repository root package installs only the v0.5 runtime through the canonic
   const old=spawnSync(process.execPath,[cli,'workflow','advance'],{encoding:'utf8'});assert.equal(old.status,1);
  }
  const skill=path.join(installed,'skills/asc/SKILL.md');assert(fs.existsSync(skill));assert(fs.existsSync(path.resolve(path.dirname(skill),'../../bin/asc-v05.mjs')));
-});
-
-
-test('root release candidate stamps the sole manifest without modifying source or enabling publication',t=>{
- const repository=process.cwd();
- const root=tempDir('asc-root-release-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- const source=fs.readFileSync('package.json'),rootSource=fs.readFileSync(path.join(repository,'package.json'));
- const output=JSON.parse(execFileSync(process.execPath,['scripts/pack-candidate.mjs',root,'--version=0.5.0'],{cwd:repository,encoding:'utf8'}));
- const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),'../lib/node_modules/npm/bin/npm-cli.js');
- const consumer=path.join(root,'consumer');fs.mkdirSync(consumer);
- execFileSync(process.execPath,[npm,'install','--prefix',consumer,'--offline','--no-audit','--no-fund',output.file],{stdio:'pipe'});
- const installed=path.join(consumer,'node_modules/agent-skill-chain');
- const pkg=JSON.parse(fs.readFileSync(path.join(installed,'package.json')));
- assert.equal(pkg.version,'0.5.0');assert.equal(pkg.private,true);assert.equal(output.publishAuthorized,false);
- assert.equal(pkg.scripts,undefined);
- for(const entry of Object.values(pkg.bin))assert.equal(execFileSync(process.execPath,[path.join(installed,entry),'--version'],{encoding:'utf8'}).trim(),'0.5.0');
- const identity=JSON.parse(fs.readFileSync(path.join(installed,'release-identity.json')));
- const {createHash}=createRequire(import.meta.url)('node:crypto');const hash=b=>createHash('sha256').update(b).digest('hex');
- assert.equal(identity.published,false);assert.equal(identity.status,'unapproved-candidate');assert.deepEqual(identity.transformedManifests,{});
- for(const [name,digest] of Object.entries(identity.sourceFiles))assert.equal(hash(fs.readFileSync(path.join(installed,name))),digest);
- assert.deepEqual(fs.readFileSync('package.json'),source);
- assert.deepEqual(fs.readFileSync(path.join(repository,'package.json')),rootSource);
 });
