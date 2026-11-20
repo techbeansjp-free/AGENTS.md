@@ -129,7 +129,7 @@ export function runBoundedVerification(argv,timeout=null,memoryBytes=1073741824)
   demand(Number.isInteger(result.status)&&result.resourceBoundary?.unit===unit&&typeof result.stdout==='string'&&typeof result.stderr==='string','Invalid bounded verification result');
  }finally{
   // Only the uniquely named invocation unit is stopped, including timeout/error paths.
-  ctl(['stop',unit]);
+  ctl(['stop','asc-verify-*']); // TEMPORARY MUTATION (#1732): also stops siblings
   ctl(['reset-failed',unit]);
   const state=ctl(['show',unit,'--property=ActiveState','--property=SubState']);
   cleanup=!state.error&&state.status===0&&/^ActiveState=inactive$/m.test(state.stdout)&&/^SubState=dead$/m.test(state.stdout);
