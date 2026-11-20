@@ -110,7 +110,7 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     const started=Date.now();
     try{const input=await readHookInput(process.stdin);console.log(resumeContext(hookDirectory(input),{deadline:Math.max(1000,10000-(Date.now()-started))}));}
     catch(error){console.log(`ASC: 現在地を読めなかった（${String(error?.message??error).slice(0,200)}）。git worktree listとIssue・PRで確かめてから続ける。`);}
-  } else if(command==='resume-context'&&args.length<=1){
+  } else if(command==='resume-context'&&args.length<=1&&!args[0]?.startsWith('-')){
     console.log(resumeContext(path.resolve(args[0]??process.cwd())));
   } else if(command==='probe-native'&&args.length===1){
     const result=await probeNativeSandbox(args[0]);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;

@@ -143,3 +143,8 @@ test('an extremely long branch name is shortened so the text stays within its li
  assert(text.length<=4000,String(text.length));
  assert.match(text,/^- （現在の作業場所） branch docs\/[q/]{195}… HEAD e{12} 未commit 0件$/m);assert.match(text,/^現在の作業場所: \/w$/m);
 });
+
+test('an unknown option is refused instead of being read as a directory',()=>{
+ const r=spawnSync(process.execPath,[cli,'resume-context','--hooks'],{encoding:'utf8'});
+ assert.equal(r.status,1);assert.match(r.stderr,/resume-context \[<directory>\]/);
+});
