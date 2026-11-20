@@ -1,0 +1,118 @@
+{
+ "runsPerCondition": 3,
+ "totals": {
+  "ka": [
+   40,
+   40
+  ],
+  "pa": [
+   43,
+   43
+  ]
+ },
+ "rows": [
+  {
+   "item": "M1-1",
+   "ka": "3/3",
+   "pa": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "M1-2",
+   "ka": "3/3",
+   "pa": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "M1-3",
+   "ka": "2/2",
+   "pa": "3/3",
+   "judge": "better"
+  },
+  {
+   "item": "M1-4",
+   "ka": "0/0",
+   "pa": "3/3",
+   "judge": "better"
+  },
+  {
+   "item": "M1-5",
+   "ka": "2/2",
+   "pa": "2/3",
+   "judge": "mixed"
+  },
+  {
+   "item": "M2-1",
+   "ka": "3/3",
+   "pa": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "M2-2",
+   "ka": "3/3",
+   "pa": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "M2-3",
+   "ka": "3/3",
+   "pa": "2/3",
+   "judge": "mixed"
+  },
+  {
+   "item": "M2-4",
+   "ka": "0/0",
+   "pa": "0/0",
+   "judge": "same"
+  },
+  {
+   "item": "M3-1",
+   "ka": "3/3",
+   "pa": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "M3-2",
+   "ka": "2/2",
+   "pa": "3/2",
+   "judge": "mixed"
+  },
+  {
+   "item": "M3-3",
+   "ka": "1/1",
+   "pa": "3/3",
+   "judge": "better"
+  },
+  {
+   "item": "M4-1",
+   "ka": "3/3",
+   "pa": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "M4-2",
+   "ka": "3/3",
+   "pa": "3/2",
+   "judge": "mixed"
+  },
+  {
+   "item": "M5-1",
+   "ka": "3/3",
+   "pa": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "M5-2",
+   "ka": "3/3",
+   "pa": "2/2",
+   "judge": "worse"
+  },
+  {
+   "item": "M5-3",
+   "ka": "3/3",
+   "pa": "1/1",
+   "judge": "worse"
+  }
+ ],
+ "flags": []
+}
