@@ -403,14 +403,16 @@ test('distribution inventory remains bounded after adding a second Host',t=>{
 
 test('the inventory bound includes retained preimages as well as all sixteen registered Skills and optional assets',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,registerSkill:true,registerClaudeSkill:true};
- const active=projectAssets(f.work,options);assert.equal(active.changes.length,292);
+ // The active count follows the package inventory, so a new src/ file needs no change here (#1739); the bound does not.
+ const bound=305,active=projectAssets(f.work,options).changes.length,reserve=bound-active;
+ assert.ok(active>=292&&reserve>=1,`active ${active} leaves no preimage reserve under ${bound}`);
  const record='.agent-skill-chain/distribution.json';
  const retired=count=>JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:count},(_,i)=>[`retired-${i}`,'a'.repeat(64)]))});
- f.write(record,retired(14));
+ f.write(record,retired(reserve+1));
  assert.throws(()=>projectAssets(f.work,{...options,apply:true}),/Invalid asset inventory/);
  assert.equal(fs.existsSync(path.join(f.work,asset)),false);
- f.write(record,retired(13));assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
- assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.work,record))).files).length,305);
+ f.write(record,retired(reserve));assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
+ assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.work,record))).files).length,bound);
 });
 
 test('explicit deliberation is distributed intact but never auto-registered',t=>{
