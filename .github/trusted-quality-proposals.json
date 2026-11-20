@@ -674,6 +674,29 @@
           "afterSha256": "5f9c4ab08cac7457e9111a30e4664920607ea2c115a1433d7be98e97e64244ca"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-SRC-DIRECTORY-DISTRIBUTION-001",
+      "status": "staged",
+      "fromVersion": 26,
+      "toVersion": 27,
+      "owner": "repository maintainer (explicit approval for Issue #1739, 2026-11-19)",
+      "rationale": "Issue #1739: src/ にファイルを足すたびに package.json の files を変える必要があり、そのたびに proposal の登録だけの PR が要っていた（2026-11-13〜18 の37件中5件）。package.json の files のうち src/ の46行を、ディレクトリの指定 src の1行にまとめる。配布物の正本は保護対象外の src/runtime-files.json とし、npm pack の中身がこの一覧と完全に一致することは scripts/check-package-inventory.mjs が今までどおり検査するので、一覧にないファイルが src/ にあれば配布の前に止まる。package.json の変更は files と qualityContractVersion だけで、scripts・dependencies・devDependencies・engines・type・品質検査・validator・権限境界は変更しない。",
+      "rollback": "適用前は有効化しない。適用後に戻す場合は次versionのproposalを先行登録して適用し、登録済みproposalの削除や品質保護の解除は行わない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "package.json",
+          "beforeSha256": "7e6ace8a82bb3a0df2fd735e986223cfef744ffe5348a2729861f0fe00eeb83b",
+          "afterSha256": "030138424c53fa41a88335fa06b2a70563a15daed68de9a27083bab038582363"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "5f9c4ab08cac7457e9111a30e4664920607ea2c115a1433d7be98e97e64244ca",
+          "afterSha256": "670671cd97404156226e507973f2ab8330d3022ca96e0c93bdbdb320c41adcaf"
+        }
+      ]
     }
   ]
 }
