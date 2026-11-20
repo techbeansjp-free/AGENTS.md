@@ -16,4 +16,4 @@
 
 ## 採点（opus、2系統）
 
-#1671 の測り直し（`../../1671-agent-skills-comparison/remeasure-1740/prompts.md`）と同じ。ただし回答は30件で、flag の条件から「事実と異なる技術的主張」を除いた（前回の round2 と同じ）。採点用の directory には対応キーを置かなかった。
+#1671 の測り直し（`../../1671-agent-skills-comparison/remeasure-1740/prompts.md`）と同じ。ただし回答は30件で、flag の条件から「事実と異なる技術的主張」を除いた。前回の round2 の記録は「技術的な正しさの確認の一文を除いた」で、今回の扱いと同じかは確かめられない。採点用の directory には対応キーを置かなかった。
