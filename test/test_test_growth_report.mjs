@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 import {tempDir} from './helpers/temp-dir.mjs';
-import {DEFAULT_THRESHOLDS,buildReport,measure,parseJunit,readTestTree,renderAnnotations,renderSummary,run} from '../scripts/test-growth-report.mjs';
+import {DEFAULT_THRESHOLDS,buildReport,measure,parseJunit,readTestTree,renderAnnotations,renderSummary,run,scanSource} from '../scripts/test-growth-report.mjs';
 // #1732: the report only informs. Thresholds, missing inputs and internal errors never change the exit code from 0.
 const script=fileURLToPath(new URL('../scripts/test-growth-report.mjs',import.meta.url));
 const files=entries=>new Map(Object.entries(entries));
@@ -19,6 +19,22 @@ test('measure counts test calls, lines and files, and classifies process and Git
  assert.equal(perFile.get('test/test_pure.mjs').tests,3);
  assert.deepEqual({process:perFile.get('test/test_git.mjs').process,git:perFile.get('test/test_git.mjs').git},{process:true,git:true});
  assert.deepEqual({process:perFile.get('test/test_spawn.mjs').process,git:perFile.get('test/test_spawn.mjs').git},{process:true,git:false});
+});
+
+test('samples inside strings, templates, comments and regular expressions are not counted as tests, imports or Git',()=>{
+ const sample=[
+  "import test from 'node:test';",
+  "const text=\"test('a',()=>{});execFileSync('git',[]);import {x} from './helpers/repo.mjs';\";",
+  "const tpl=`it('b',()=>{}) ${1} test('c')`;// test('d',()=>{})",
+  "/* it('e',()=>{}) */const re=/'test\\(/;const quote=/[\"]/g;",
+  "test('real',()=>{});",
+ ].join('\n')+'\n';
+ const {total,perFile}=measure(files({'test/test_sample.mjs':sample,'test/helpers/repo.mjs':"import {execFileSync} from 'node:child_process';execFileSync('git');\n"}));
+ assert.equal(perFile.get('test/test_sample.mjs').tests,1);
+ assert.deepEqual({process:perFile.get('test/test_sample.mjs').process,git:perFile.get('test/test_sample.mjs').git},{process:false,git:false});
+ assert.equal(total.processTests,0);
+ const scanned=scanSource("import a from './b.mjs';const t=`x${y}`;");
+ assert.deepEqual(scanned.strings,['./b.mjs',null]);assert.match(scanned.code,/from "#0"/);
 });
 
 test('growth beyond the line and test thresholds yields warnings, and growth within them yields none',()=>{
@@ -51,12 +67,12 @@ test('slow tests are ranked, and only a new test over the limit in a changed fil
  assert.match(renderSummary(buildReport({base,head,durations:null})),/テストの時間の記録がないため/);
 });
 
-test('parseJunit keeps top-level tests only, unescapes names and makes paths relative to the head root',()=>{
+test('parseJunit keeps top-level tests only, takes a parent file from its subtests, keeps names with > and makes paths relative',()=>{
  const xml=`<?xml version="1.0" encoding="utf-8"?>
 <testsuites>
 \t<testcase name="a &quot;b&quot; &amp; c" time="1.500000" classname="test" file="/repo/test/test_a.mjs"/>
-\t<testsuite name="parent" time="4.000000" file="/repo/test/test_b.mjs">
-\t\t<testcase name="child" time="3.900000" classname="test" file="/repo/test/test_b.mjs"/>
+\t<testsuite name="parent &gt; &quot;q&quot; > x" time="4.000000" disabled="0" tests="1">
+\t\t<testcase name="child > leaf" time="3.900000" classname="parent > x" file="/repo/test/test_b.mjs"/>
 \t</testsuite>
 \t<testcase name="skipped" time="0.000100" classname="test" file="/repo/test/test_a.mjs">
 \t\t<skipped type="skipped" message="no"/>
@@ -64,7 +80,7 @@ test('parseJunit keeps top-level tests only, unescapes names and makes paths rel
 </testsuites>`;
  assert.deepEqual(parseJunit(xml,'/repo'),[
   {name:'a "b" & c',file:'test/test_a.mjs',seconds:1.5},
-  {name:'parent',file:'test/test_b.mjs',seconds:4},
+  {name:'parent > "q" > x',file:'test/test_b.mjs',seconds:4},
   {name:'skipped',file:'test/test_a.mjs',seconds:0.0001},
  ]);
 });
@@ -89,8 +105,18 @@ test('run reads both trees, appends the summary and still returns 0 when thresho
  assert.match(out.text,/^::warning title=テストの行数が増えています::/m);
  const missing=sink();
  assert.equal(run([`--base=${path.join(root,'absent')}`,`--head=${path.join(root,'head')}`,`--junit=${path.join(root,'absent.xml')}`],{},missing),0);
- assert.match(missing.text,/テストの時間の記録がないため/);
- const broken=sink();assert.equal(run(['--unknown'],{},broken),0);assert.match(broken.text,/^::warning title=テストの増え方を報告できませんでした::/m);
+ assert.match(missing.text,/テストの時間の記録がないため/);assert.match(missing.text,/^::warning title=テストの増え方を比較できませんでした::/m);assert.doesNotMatch(missing.text,/テストの行数が増えています/);
+ assert.equal(readTestTree(path.join(root,'absent')),null);
+ const broken=sink();assert.equal(run(['--unknown'],{},broken),0);
+ const noHead=sink();assert.equal(run([`--base=${path.join(root,'base')}`,`--head=${path.join(root,'absent')}`],{},noHead),0);assert.match(noHead.text,/head の test\/ を読めません/);assert.match(broken.text,/^::warning title=テストの増え方を報告できませんでした::/m);
+});
+
+test('a missing base is reported as not comparable, without growth or new-test warnings',()=>{
+ const head=files({'test/test_a.mjs':lines(DEFAULT_THRESHOLDS.netLines*10)+"test('slow',()=>{});\n"});
+ const report=buildReport({base:null,head,durations:[{file:'test/test_a.mjs',name:'slow',seconds:60}]});
+ assert.equal(report.comparable,false);assert.equal(report.delta,null);assert.deepEqual(report.slowNew,[]);
+ assert.deepEqual(report.warnings.map(w=>w.title),['テストの増え方を比較できませんでした']);
+ const summary=renderSummary(report);assert.match(summary,/base の test\/ を読めなかったため/);assert.match(summary,/\| テストの行数 \| - \| 1201 \| - \|/);assert.match(summary,/\| 60\.0 \| test\/test_a\.mjs \| slow \|/);
 });
 
 test('the CLI process exits 0 even when it warns',t=>{

@@ -19,13 +19,92 @@ const TEST_ROOT = 'test';
 const EXCLUDED = ['test/fixtures/'];
 const EXTENSIONS = new Set(['.mjs', '.cjs', '.js']);
 // `foo.test(` や `regex.test(` を除くため、直前が識別子・`.`・`$` の呼出しは数えない。
+// 文字列・template・コメント・正規表現の中は scanSource で取り除いてから数える。
 const TEST_CALL = /(?<![\w.$])(?:test|it)(?:\.(?:skip|only|todo))?\s*\(/g;
-const PROCESS = /\bchild_process\b/;
-const GIT = /['"`]git['"`]/;
-const LOCAL_IMPORT = /\bfrom\s*['"](\.{1,2}\/[^'"]+)['"]|\bimport\s*\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g;
+const IMPORT = /\bfrom\s*"#(\d+)"|\bimport\s*\(\s*"#(\d+)"\s*\)/g;
+const PROCESS_MODULES = new Set(['child_process', 'node:child_process']);
+const REGEX_PREFIX = new Set([...'(,=:[!&|?{};+-*%<>~^']);
+const REGEX_KEYWORDS = /(?:^|[^\w$])(?:return|typeof|case|do|else|in|of|new|delete|void|throw|await|yield)$/;
 
-/** `test/` の下のテストとその補助ファイルを、repository 相対 path → 本文の Map で返す。 */
+/**
+ * JavaScript の本文から、コメントを空白に、文字列と template を `"#<番号>"` に、正規表現を `/r/` に置き換える。
+ * 文字列の値は `strings` に入れる（`${}` を含む template は値を null とし、中の式は数えない）。
+ * 構文解析器ではなく、テスト数と import を数えるための概算。
+ */
+export function scanSource(text) {
+ const strings = [];
+ let code = '';
+ let index = 0;
+ const lastSignificant = () => code.replace(/\s+$/, '');
+ while (index < text.length) {
+  const char = text[index];
+  const next = text[index + 1];
+  if (char === '/' && next === '/') {
+   const end = text.indexOf('\n', index);
+   index = end < 0 ? text.length : end;
+   code += ' ';
+  } else if (char === '/' && next === '*') {
+   const end = text.indexOf('*/', index + 2);
+   const comment = text.slice(index, end < 0 ? text.length : end + 2);
+   code += comment.replace(/[^\n]/g, ' ');
+   index += comment.length;
+  } else if (char === "'" || char === '"' || char === '`') {
+   let value = '';
+   let interpolated = false;
+   let cursor = index + 1;
+   let depth = 0;
+   while (cursor < text.length) {
+    const current = text[cursor];
+    if (current === '\\') { value += text.slice(cursor, cursor + 2); cursor += 2; continue; }
+    if (char === '`' && depth === 0 && current === '$' && text[cursor + 1] === '{') { interpolated = true; depth = 1; cursor += 2; continue; }
+    if (depth > 0) {
+     if (current === '{') depth += 1;
+     else if (current === '}') depth -= 1;
+     cursor += 1;
+     continue;
+    }
+    if (current === char) break;
+    if (char !== '`' && current === '\n') break;
+    value += current;
+    cursor += 1;
+   }
+   strings.push(interpolated ? null : value);
+   code += `"#${strings.length - 1}"`;
+   code += text.slice(index, cursor + 1).replace(/[^\n]/g, '').replace(/\n/g, '\n');
+   index = cursor + 1;
+  } else if (char === '/') {
+   const before = lastSignificant();
+   const previous = before[before.length - 1];
+   if (previous === undefined || REGEX_PREFIX.has(previous) || REGEX_KEYWORDS.test(before)) {
+    let cursor = index + 1;
+    let inClass = false;
+    while (cursor < text.length && text[cursor] !== '\n') {
+     const current = text[cursor];
+     if (current === '\\') { cursor += 2; continue; }
+     if (current === '[') inClass = true;
+     else if (current === ']') inClass = false;
+     else if (current === '/' && !inClass) break;
+     cursor += 1;
+    }
+    cursor += 1;
+    while (cursor < text.length && /[a-z]/i.test(text[cursor])) cursor += 1;
+    code += '/r/';
+    index = cursor;
+   } else {
+    code += char;
+    index += 1;
+   }
+  } else {
+   code += char;
+   index += 1;
+  }
+ }
+ return { code, strings };
+}
+
+/** `test/` の下のテストとその補助ファイルを、repository 相対 path → 本文の Map で返す。`test/` がなければ null。 */
 export function readTestTree(root) {
+ if (!fs.statSync(path.join(root, TEST_ROOT), { throwIfNoEntry: false })?.isDirectory()) return null;
  const files = new Map();
  const walk = (relative) => {
   let entries;
@@ -49,28 +128,32 @@ function countLines(text) {
  return text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
 }
 
-function localImports(file, text) {
+function localImports(file, scanned) {
  const found = [];
- for (const match of text.matchAll(LOCAL_IMPORT)) found.push(path.posix.normalize(path.posix.join(path.posix.dirname(file), match[1] ?? match[2])));
+ for (const match of scanned.code.matchAll(IMPORT)) {
+  const specifier = scanned.strings[Number(match[1] ?? match[2])];
+  if (typeof specifier === 'string' && /^\.{1,2}\//.test(specifier)) found.push(path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier)));
+ }
  return found;
 }
 
 /**
  * ファイル単位で、実プロセス・実 Git を起動するかを判定する。
  * 判定はそのファイルか、そのファイルが import する `test/` の下の補助ファイル（推移的）が
- * `child_process` を参照するか、`'git'` を文字列で書いているか。テスト1件ごとの判定ではなく概算。
+ * `child_process` を import するか（実プロセス）、さらに値がちょうど `git` の文字列を書いているか（実 Git）。
+ * 文字列の中に書いたサンプルは数えない。テスト1件ごとの判定ではなく概算。
  */
-function classify(files) {
+function classify(scannedFiles) {
  const memo = new Map();
  const visit = (file, seen) => {
   if (memo.has(file)) return memo.get(file);
-  const text = files.get(file);
+  const scanned = scannedFiles.get(file);
   const result = { process: false, git: false };
-  if (text === undefined || seen.has(file)) return result;
+  if (scanned === undefined || seen.has(file)) return result;
   seen.add(file);
-  result.process = PROCESS.test(text);
-  result.git = result.process && GIT.test(text);
-  for (const imported of localImports(file, text)) {
+  result.process = scanned.strings.some((value) => PROCESS_MODULES.has(value));
+  result.git = result.process && scanned.strings.includes('git');
+  for (const imported of localImports(file, scanned)) {
    const child = visit(imported, seen);
    result.process ||= child.process;
    result.git ||= child.git;
@@ -78,16 +161,17 @@ function classify(files) {
   memo.set(file, result);
   return result;
  };
- return new Map([...files.keys()].map((file) => [file, visit(file, new Set())]));
+ return new Map([...scannedFiles.keys()].map((file) => [file, visit(file, new Set())]));
 }
 
 /** テスト数・行数・ファイル数・実プロセス/実 Git を起動するテストの数を数える。 */
 export function measure(files) {
- const kinds = classify(files);
+ const scannedFiles = new Map([...files].map(([file, text]) => [file, scanSource(text)]));
+ const kinds = classify(scannedFiles);
  const perFile = new Map();
  const total = { files: 0, tests: 0, lines: 0, processTests: 0, gitTests: 0 };
  for (const [file, text] of files) {
-  const tests = [...text.matchAll(TEST_CALL)].length;
+  const tests = [...scannedFiles.get(file).code.matchAll(TEST_CALL)].length;
   const lines = countLines(text);
   const kind = kinds.get(file);
   perFile.set(file, { tests, lines, ...kind });
@@ -118,22 +202,31 @@ function attributes(raw) {
 /**
  * Node の junit reporter の出力から、最上位のテスト（`test(` 1回に当たる単位）の時間を取り出す。
  * subtest を持つテストは `testsuite` として出るので、最上位の `testsuite` と `testcase` の両方を数える。
+ * Node 24 は subtest を持つ `testsuite` に `file` を付けないため、中の最初の `file` を使う。
  */
 export function parseJunit(xml, root) {
  const results = [];
  let depth = 0;
- for (const match of xml.matchAll(/<(\/?)(testsuites|testsuite|testcase)\b([^>]*?)(\/?)>/g)) {
+ let open = null;
+ const relative = (absolute) => (absolute && root ? path.relative(root, absolute).split(path.sep).join('/') : absolute);
+ for (const match of xml.matchAll(/<(\/?)(testsuites|testsuite|testcase)\b((?:[^>"]|"[^"]*")*?)(\/?)>/g)) {
   const [, closing, tag, raw, selfClosing] = match;
   if (tag === 'testsuites') continue;
-  if (closing) { depth -= 1; continue; }
+  if (closing) {
+   depth -= 1;
+   if (depth === 0) open = null;
+   continue;
+  }
+  const attrs = attributes(raw);
   if (depth === 0) {
-   const attrs = attributes(raw);
    const seconds = Number.parseFloat(attrs.time);
    if (attrs.name !== undefined && Number.isFinite(seconds)) {
-    const absolute = attrs.file ?? '';
-    const file = absolute && root ? path.relative(root, absolute).split(path.sep).join('/') : absolute;
-    results.push({ name: attrs.name, file, seconds });
+    const entry = { name: attrs.name, file: relative(attrs.file ?? ''), seconds };
+    results.push(entry);
+    if (!selfClosing) open = entry;
    }
+  } else if (open && open.file === '' && attrs.file) {
+   open.file = relative(attrs.file);
   }
   if (!selfClosing) depth += 1;
  }
@@ -150,20 +243,23 @@ function isNewTest(entry, base, head) {
 
 /** base と head の比較から、報告と警告を組み立てる。入出力は行わない。 */
 export function buildReport({ base, head, durations, thresholds = DEFAULT_THRESHOLDS }) {
- const before = measure(base).total;
+ // base を読めなければ、増減も新しいテストも判定できない。空の base と比べて全体を純増と誤報しない。
+ const comparable = base !== null;
  const after = measure(head).total;
- const delta = Object.fromEntries(Object.keys(after).map((key) => [key, after[key] - before[key]]));
+ const before = comparable ? measure(base).total : null;
+ const delta = comparable ? Object.fromEntries(Object.keys(after).map((key) => [key, after[key] - before[key]])) : null;
  const warnings = [];
- if (delta.lines > thresholds.netLines) warnings.push({ title: 'テストの行数が増えています', message: `テストの行数が ${signed(delta.lines)} 行です（閾値 +${thresholds.netLines}）。PR 本文に、なぜ足すか、既存のテストで足りない理由を書いてください。` });
- if (delta.tests > thresholds.netTests) warnings.push({ title: 'テストの数が増えています', message: `テストの数が ${signed(delta.tests)} 件です（閾値 +${thresholds.netTests}）。PR 本文に、なぜ足すか、既存のテストで足りない理由を書いてください。` });
+ if (!comparable) warnings.push({ title: 'テストの増え方を比較できませんでした', message: 'base の test/ を読めなかったため、増減と新しいテストは判定していません。check は失敗にしません。' });
+ if (comparable && delta.lines > thresholds.netLines) warnings.push({ title: 'テストの行数が増えています', message: `テストの行数が ${signed(delta.lines)} 行です（閾値 +${thresholds.netLines}）。PR 本文に、なぜ足すか、既存のテストで足りない理由を書いてください。` });
+ if (comparable && delta.tests > thresholds.netTests) warnings.push({ title: 'テストの数が増えています', message: `テストの数が ${signed(delta.tests)} 件です（閾値 +${thresholds.netTests}）。PR 本文に、なぜ足すか、既存のテストで足りない理由を書いてください。` });
  let slowest = null;
  let slowNew = [];
  if (durations) {
   slowest = [...durations].sort((a, b) => b.seconds - a.seconds).slice(0, thresholds.topSlow);
-  slowNew = durations.filter((entry) => entry.seconds > thresholds.newTestSeconds && isNewTest(entry, base, head)).sort((a, b) => b.seconds - a.seconds);
+  slowNew = comparable ? durations.filter((entry) => entry.seconds > thresholds.newTestSeconds && isNewTest(entry, base, head)).sort((a, b) => b.seconds - a.seconds) : [];
   for (const entry of slowNew) warnings.push({ title: '時間のかかる新しいテスト', file: entry.file, message: `新しいテスト「${entry.name}」が ${entry.seconds.toFixed(1)} 秒かかりました（閾値 ${thresholds.newTestSeconds} 秒）。もっと下の層で検査できないか、PR 本文に理由を書いてください。` });
  }
- return { before, after, delta, slowest, slowNew, warnings, thresholds };
+ return { comparable, before, after, delta, slowest, slowNew, warnings, thresholds };
 }
 
 function signed(value) {
@@ -180,24 +276,27 @@ function cell(value) {
 
 /** job summary の Markdown。 */
 export function renderSummary(report) {
- const { before, after, delta, slowest, slowNew, warnings, thresholds } = report;
+ const { comparable, after, slowest, slowNew, warnings, thresholds } = report;
+ const before = report.before ?? {};
+ const delta = report.delta ?? {};
+ const shown = (value) => (comparable ? value : '-');
  const rows = [
-  ['テスト数（`test(`・`it(` の呼出し）', before.tests, after.tests, signed(delta.tests)],
-  ['テストの行数', before.lines, after.lines, signed(delta.lines)],
-  ['テストのファイル数', before.files, after.files, signed(delta.files)],
-  ['実プロセスを起動するテスト', `${before.processTests}（${ratio(before.processTests, before.tests)}）`, `${after.processTests}（${ratio(after.processTests, after.tests)}）`, signed(delta.processTests)],
-  ['うち実 Git を起動するテスト', `${before.gitTests}（${ratio(before.gitTests, before.tests)}）`, `${after.gitTests}（${ratio(after.gitTests, after.tests)}）`, signed(delta.gitTests)],
+  ['テスト数（`test(`・`it(` の呼出し）', shown(before.tests), after.tests, shown(signed(delta.tests))],
+  ['テストの行数', shown(before.lines), after.lines, shown(signed(delta.lines))],
+  ['テストのファイル数', shown(before.files), after.files, shown(signed(delta.files))],
+  ['実プロセスを起動するテスト', shown(`${before.processTests}（${ratio(before.processTests, before.tests)}）`), `${after.processTests}（${ratio(after.processTests, after.tests)}）`, shown(signed(delta.processTests))],
+  ['うち実 Git を起動するテスト', shown(`${before.gitTests}（${ratio(before.gitTests, before.tests)}）`), `${after.gitTests}（${ratio(after.gitTests, after.tests)}）`, shown(signed(delta.gitTests))],
  ];
  const lines = [
   '## テストの増え方（#1732）',
   '',
-  warnings.length === 0 ? '閾値を超えた項目はありません。' : `閾値を超えた項目が ${warnings.length} 件あります。PR 本文に、なぜ足すか、既存のテストで足りない理由を書いてください。この報告は check を失敗にしません。`,
+  !comparable ? 'base の test/ を読めなかったため、増減と新しいテストは判定していません。この報告は check を失敗にしません。' : warnings.length === 0 ? '閾値を超えた項目はありません。' : `閾値を超えた項目が ${warnings.length} 件あります。PR 本文に、なぜ足すか、既存のテストで足りない理由を書いてください。この報告は check を失敗にしません。`,
   '',
   '| 項目 | base | head | 増減 |',
   '|---|---:|---:|---:|',
   ...rows.map((row) => `| ${row.map(cell).join(' | ')} |`),
   '',
-  `閾値: テストの行数 +${thresholds.netLines} 行、テスト数 +${thresholds.netTests} 件、新しいテスト1件 ${thresholds.newTestSeconds} 秒。実プロセス・実 Git の判定はファイル単位の概算（\`child_process\` の参照と、\`'git'\` の文字列）。`,
+  `閾値: テストの行数 +${thresholds.netLines} 行、テスト数 +${thresholds.netTests} 件、新しいテスト1件 ${thresholds.newTestSeconds} 秒。実プロセス・実 Git の判定はファイル単位の概算（\`child_process\` の import と、値が \`git\` の文字列。文字列の中のサンプルは数えない）。`,
   '',
  ];
  if (slowest === null) {
@@ -251,6 +350,7 @@ export function run(argv, env = process.env, out = process.stdout) {
  try {
   const options = parseArgs(argv);
   const head = readTestTree(options.head);
+  if (head === null) throw new Error(`head の test/ を読めません: ${options.head}`);
   const base = readTestTree(options.base);
   let durations = null;
   if (options.junit && fs.existsSync(options.junit)) durations = parseJunit(fs.readFileSync(options.junit, 'utf8'), options.head);
