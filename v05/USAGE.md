@@ -646,6 +646,44 @@ Codexでは新しいsessionで `$model-deliberation` を明示選択する。自
 
 この任意directoryは `project-assets --register-skill` の登録対象ではなく、managed-runtime内の配布原本である。採用後の任意登録もproject-assetsの自動更新対象ではない。更新時は元の配布原本と採用先を比較し、policyを落とさない。Claude Codeや他Hostの登録への変換は本提供方法では扱わない。未確認のHostで明示限定を保証したとはしない。
 
+## compaction後に現在地を差し込む（#1755）
+
+進行役のContextは、sessionを終わらせずにHostの自動compactionで更新する（規則は`skills/asc/references/coordination.md`の「Contextの更新と引継ぎ」）。`resume-context --hook`をHostの`SessionStart` hookに登録すると、compactionと`/clear`の直後に、repositoryのworktree・branch・HEAD・未commit件数と、branch名から推定したIssue番号が短い文で差し込まれる。gitの読取りだけを行い（`--no-optional-locks`）、ネットワーク・Issue・PRは読まず、書込み・session切替えはしない。hookの入力の読取り（2秒まで）を含めて全体を約10秒で打ち切り、読めなかった部分は未確認と書く。ASCが起動した後の失敗では終了コード0で一文を返し、sessionを止めない。未commit件数はsystem・globalのGit設定（`core.excludesFile`等）を読まずに数えるため、利用者の`git status`より多く出ることがある。ASCの導入が壊れて起動できない場合（版の不一致など）は終了コード1になり、差し込みは欠ける。登録は任意で、`project-assets`は利用者のHost設定を書き換えない。登録前に`node .agent-skill-chain/bin/asc.mjs resume-context "$PWD"`で表示を確かめられる。
+
+Claude Code（`.claude/settings.json`、個人だけなら`.claude/settings.local.json`）:
+
+```json
+{"hooks":{"SessionStart":[{"matcher":"compact|clear","hooks":[{"type":"command","command":"node \"$CLAUDE_PROJECT_DIR/.agent-skill-chain/bin/asc.mjs\" resume-context --hook","timeout":30}]}]}}
+```
+
+既存の`hooks`がある場合は`SessionStart`の配列へ追加し、他の設定を消さない。
+
+Codex（trustしたprojectの`.codex/hooks.json`）:
+
+```json
+{"hooks":{"SessionStart":[{"matcher":"^(compact|clear)$","hooks":[{"type":"command","command":"node \"$(git rev-parse --show-toplevel)/.agent-skill-chain/bin/asc.mjs\" resume-context --hook","timeout":30}]}]}}
+```
+
+設定例は、Git管理下のprojectで、`.agent-skill-chain/`をcommitしていて各worktreeにもあること（[標準の導入先](#標準の導入先asc_cliは不要)）と、POSIX shell（macOS・Linux）を前提にする。Windowsでは未確認。
+
+Codexは、trustしていないprojectの設定と、`/hooks`でreviewしてtrustしていないhookを読まない。登録後に一度`codex`を起動し、`/hooks`で内容を確かめてtrustする。trustを飛ばすflagで代用しない。
+
+確かめた範囲（2026-11-21、macOS）:
+
+| Host | 確かめたこと | 未確認 |
+|---|---|---|
+| Claude Code 2.1.325 | matcher `compact\|clear`で、`claude -p "/compact"`の後にhookが発火し、進行役が差し込まれた文からworktree・branch・未commit件数・Issue番号を答えた。`CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000`と`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=15`で起こした自動compaction（`PreCompact`のtrigger auto）の後にも`SessionStart`のsource compactで発火し、同じsessionのまま作業が続いた。`/clear`のsource clearでの発火と、session IDが変わることも確かめた | Windows |
+| Codex CLI 0.169.0 | trustしていないprojectではhookが読まれない（答えはNONE）。`-c model_auto_compact_token_limit=30000`で起こした自動compaction（session記録の`compacted`）の後も同じsessionが続き、`codex exec resume`後の進行役は`git worktree list`・`git status`で現在地を確かめて、Issue・worktree・branch・未commit件数・次の手順を答えた | trust後のhookの発火（ownerのtrust操作待ち）、Windows |
+
+閾値を下げると、Contextが大きくなる前に要約へ置き換わる。所要時間への効果は未測定のため既定にはせず、利用者が選ぶ場合だけ設定する。
+
+| Host | 既定 | 下げる設定 |
+|---|---|---|
+| Claude Code | 1M windowのモデルで約967K token（公式のmodel-config） | `/autocompact <token数>`（100K以上）、設定`autoCompactWindow`、環境変数`CLAUDE_CODE_AUTO_COMPACT_WINDOW`、割合の`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` |
+| Codex CLI | モデルの既定（`gpt-6.1-sol`はcontext window 500,000、実際の閾値は未確認） | `config.toml`の`model_auto_compact_token_limit`（`-c model_auto_compact_token_limit=<token数>`でも指定できる） |
+
+`/clear`（Claude Code）・`/new`（Codex）は、無関係な作業へ移る区切りで利用者に勧めるだけにする。量の確認は、Claude Codeの`/context`・status line、Codexの`/status`・status lineで行う。
+
 ## 独立レビュー・相談の別セッション
 
 `host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory>`で指定した対象を読む新規セッションを起動します。Git worktreeの場合、Hostの起動先・一覧上のcwdはrepository root、レビュー対象は指定worktreeとそのHEADに分離します。結果保存後に`自動: <内容>`から`済: 自動: <内容>`へ改名します。Claude CodeとCodexの両方に対応し、非永続は`--ephemeral`で明示します。改名失敗でも本体の結果を保持します。権限制限・復旧・未対応版の扱いは[別セッションの手順](../skills/asc/references/host-session.md)を参照してください。

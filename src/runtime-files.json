@@ -43,6 +43,7 @@
   "src/project-launcher.mjs",
   "src/project-location.mjs",
   "src/restricted-agent.mjs",
+  "src/resume-context.mjs",
   "src/provider-failure.mjs",
   "src/review-result.mjs",
   "src/snapshot.mjs",
