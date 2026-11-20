@@ -9,7 +9,7 @@ export const foundationHashes={
  'references/foundation-decisions.md':'cfe26357d3579c1803f922ea90fad47625523d996ff8f8544cbd5ddf850c6941',
  'references/contracts-and-ui.md':'e2cf251ba71e829d84f52ccd80f3817240b3c4734f882d20e1f22b2a473c58be',
  'references/containers-and-worktrees.md':'039ca0ed4dc4ee741b5652b190706787ca07fcdb018206b2cb6fc3d915dd68d4',
- 'references/verification-and-security.md':'5b704c7e6d445e931cd5471bda6d68e6fc3a1bb4fad418a55f8ee752e87c4831',
+ 'references/verification-and-security.md':'e9772af43e688bc3d961a4b2c9b5ed4412febf3efda05c47274033803a9d4143',
  'agents/openai.yaml':'e6f37911eb5101ba3b446133beadaa4ad5bf7afc452d7958afa61d53e7312ea1'
 };
 export function assertFoundation(root){
