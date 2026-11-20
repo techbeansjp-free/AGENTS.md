@@ -1,0 +1,346 @@
+{
+ "runsPerCondition": 3,
+ "totals": {
+  "ka": [
+   122,
+   118
+  ],
+  "mo": [
+   130,
+   129
+  ]
+ },
+ "rows": [
+  {
+   "item": "B1-1",
+   "ka": "1/1",
+   "mo": "3/3",
+   "judge": "better"
+  },
+  {
+   "item": "B1-2",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "B1-3",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "B1-4",
+   "ka": "1/1",
+   "mo": "2/2",
+   "judge": "better"
+  },
+  {
+   "item": "B1-5",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "B2-1",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "B2-2",
+   "ka": "0/0",
+   "mo": "3/3",
+   "judge": "better"
+  },
+  {
+   "item": "B2-3",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "B2-4",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "B2-5",
+   "ka": "0/0",
+   "mo": "0/0",
+   "judge": "same"
+  },
+  {
+   "item": "B3-1",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "B3-2",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "B3-3",
+   "ka": "3/2",
+   "mo": "3/3",
+   "judge": "mixed"
+  },
+  {
+   "item": "K1-1",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "K1-2",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "K1-3",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "K1-4",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "K1-5",
+   "ka": "2/2",
+   "mo": "0/0",
+   "judge": "worse"
+  },
+  {
+   "item": "K2-1",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "K2-2",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "K2-3",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "K2-4",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "K2-5",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "K3-1",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "K3-2",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "S1-1",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "S1-2",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "S1-3",
+   "ka": "3/2",
+   "mo": "2/2",
+   "judge": "mixed"
+  },
+  {
+   "item": "S1-4",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "S2-1",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "S2-2",
+   "ka": "0/0",
+   "mo": "0/0",
+   "judge": "same"
+  },
+  {
+   "item": "S2-3",
+   "ka": "2/2",
+   "mo": "2/2",
+   "judge": "same"
+  },
+  {
+   "item": "S2-4",
+   "ka": "1/1",
+   "mo": "3/3",
+   "judge": "better"
+  },
+  {
+   "item": "S2-5",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "S3-1",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "S3-2",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "Y1-1",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "Y1-2",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "Y1-3",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "Y1-4",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "Y2-1",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "Y2-2",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  },
+  {
+   "item": "Y2-3",
+   "ka": "0/0",
+   "mo": "0/0",
+   "judge": "same"
+  },
+  {
+   "item": "Y2-4",
+   "ka": "2/2",
+   "mo": "3/3",
+   "judge": "better"
+  },
+  {
+   "item": "Y2-5",
+   "ka": "1/1",
+   "mo": "3/3",
+   "judge": "better"
+  },
+  {
+   "item": "Y2-6",
+   "ka": "2/1",
+   "mo": "2/2",
+   "judge": "mixed"
+  },
+  {
+   "item": "Y3-1",
+   "ka": "3/2",
+   "mo": "3/2",
+   "judge": "same"
+  },
+  {
+   "item": "Y3-2",
+   "ka": "2/2",
+   "mo": "2/2",
+   "judge": "same"
+  },
+  {
+   "item": "Y3-3",
+   "ka": "3/3",
+   "mo": "3/3",
+   "judge": "same"
+  }
+ ],
+ "flags": [
+  {
+   "grader": 1,
+   "run": "ka-3",
+   "id": "B3-81b945",
+   "flag": "fabricated",
+   "reason": "本番決済を「取り消せない」と断定しているが、返金で取り消せる場合がある"
+  },
+  {
+   "grader": 2,
+   "run": "ka-1",
+   "id": "K1-321c13",
+   "flag": "fabricated",
+   "reason": "strict:false を「全体の型検査を無効化」と記述。実際は strict 系の検査が外れるだけで型検査自体は残る"
+  },
+  {
+   "grader": 2,
+   "run": "ka-3",
+   "id": "K1-aab901",
+   "flag": "fabricated",
+   "reason": "strict:false を「型検査全体を無効化」と記述。実際は strict 系の検査のみ無効"
+  },
+  {
+   "grader": 2,
+   "run": "mo-2",
+   "id": "K1-1a49f3",
+   "flag": "fabricated",
+   "reason": "strict:false で「全体の型検査が無効」と記述。実際は strict 系の検査のみ無効"
+  },
+  {
+   "grader": 2,
+   "run": "mo-3",
+   "id": "K1-d9f64e",
+   "flag": "fabricated",
+   "reason": "strict:false を「全体の型検査を無効化」と記述。実際は strict 系の検査のみ無効"
+  }
+ ]
+}
