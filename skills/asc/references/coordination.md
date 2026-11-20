@@ -16,9 +16,9 @@ ASCでは次の作業場所・実行契約を併せて維持する。
 
 CLIの進行役sessionを終わらせて新しいsessionに任せる方式は採らない。続きを動かす者がいなくなり、作業が止まるためである。進行役のContextは、同じsessionのままHostの自動compaction（会話を要約に置き換えて続ける機能）で更新する。token数を見て新しいsessionへ切り替える方式は、所要時間が143%になり採用していない（#1737の評価）。ASCはcompactionを再実装せず、要約に古い判断が残る弱点を次で補う。
 
-1. **状態の正本をrepositoryに置く**：決定・残件・次の手順・回答待ちの質問を、決まった時点でIssueかPRに残す。成果は許可の範囲でcommit・pushし、許可のない成果は未commitのままworktreeに残す。compactionの時機はHostが決めるため、区切りまで記録を溜めない。
-2. **更新の後は現在地を確かめてから動く**：compactionの後と新しいContextの開始時は、要約・記憶・引継ぎ文を手掛かりにとどめ、`git worktree list`、対象worktreeの`git status`とHEAD、Issue・PRの記録で現在地を確かめてから次の操作をする。食い違えばrepositoryを正とする。要約や引継ぎ文を許可や独立レビューとして扱わず、merge等の許可と取消しは[許可されたmerge](../SKILL.md#許可されたmerge)に従って照合する。起動済みのプロセス・container・子Agentの所有は、観測して確かめる。
-3. **現在地を自動で差し込む（任意）**：利用者がHostの`SessionStart` hookに`resume-context --hook`を登録すると、compactionと`/clear`の直後に、repositoryのworktree・branch・HEAD・未commit件数とbranch名から推定したIssue番号が差し込まれる。読取りのみで、ネットワーク・Issue・PRは読まない。登録の手順とHostごとの確認状況は[利用手順](../../../v05/USAGE.md#compaction後に現在地を差し込む1755)にある。
+1. **状態の正本をrepositoryに置く**：決定・残件・次の手順・回答待ちの質問を、決まった時点でIssueかPRに残す。成果は許可の範囲でcommit・pushし、許可のない成果は未commitのままworktreeに残す。compactionの時機はHostが決めるため、区切りまで記録を溜めない。Issue・PRへ書く許可がない作業やGit未管理の作業では、残すべき内容を利用者への報告に含める。
+2. **更新の後は現在地を確かめてから動く**：compactionの後と新しいContextの開始時は、要約・記憶・引継ぎ文を手掛かりにとどめ、`git worktree list`、対象worktreeの`git status`とHEAD、Issue・PRの記録で現在地を確かめてから次の操作をする。食い違えばrepositoryを正とする。要約や引継ぎ文を許可や独立レビューとして扱わない。merge等の許可と取消しは[許可されたmerge](../SKILL.md#許可されたmerge)に従って照合し、compactionで利用者の発言の原文がContextから消えて確かめられない許可は、既定の段階として扱って必要な許可を報告に添える。起動済みのプロセス・container・子Agentの所有は、観測して確かめる。
+3. **現在地を自動で差し込む（任意）**：利用者がHostの`SessionStart` hookに`resume-context --hook`を登録すると、compactionと`/clear`の直後に、repositoryのworktree・branch・HEAD・未commit件数とbranch名から推定したIssue番号が差し込まれる。読取りのみで、ネットワーク・Issue・PRは読まない。Codexでのhookの発火は未確認である。登録の手順とHostごとの確認状況は[利用手順](../../../v05/USAGE.md#compaction後に現在地を差し込む1755)にある。
 
 Hostの自動compactionの閾値は既定のままにする。閾値を下げると更新が早まるが、所要時間への効果は未測定であり、既定にはしない。利用者が選ぶ場合の設定も利用手順にある。
 

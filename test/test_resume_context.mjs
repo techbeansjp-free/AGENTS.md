@@ -64,3 +64,38 @@ test('the text stays short when there are many worktrees',()=>{
  const text=resumeContext('/w0',{git});
  assert.equal(text.split('\n').filter(l=>l.startsWith('- /w')).length,20);assert.match(text,/ほか10件は省略/);assert(text.length<=4000);
 });
+
+test('the current worktree comes first and the guidance survives many worktrees with long paths',()=>{
+ const long='/'+'x'.repeat(220);
+ const paths=Array.from({length:30},(_,i)=>`${long}/w${i}`),current=paths[29];
+ const list=paths.map(p=>`worktree ${p}\nHEAD ${'b'.repeat(40)}\nbranch refs/heads/docs/${p.endsWith('w29')?1755:7}-x\n`).join('\n');
+ const git=(cwd,args)=>args[0]==='rev-parse'?{status:0,stdout:current+'\n'}:args[0]==='worktree'?{status:0,stdout:list}:{status:0,stdout:' M a\n'};
+ const text=resumeContext(current,{git}),lines=text.split('\n');
+ assert(text.length<=4000,String(text.length));
+ const listed=lines.filter(l=>l.startsWith('- /'));
+ assert(listed.length>0&&listed.length<20);
+ assert.equal(listed[0],`- ${current}（現在） branch docs/1755-x HEAD ${'b'.repeat(12)} 未commit 1件 Issue #1755`);
+ assert.match(text,new RegExp(`ほか${30-listed.length}件は省略`));
+ assert.match(lines.at(-1),/^次の手順: .*「許可されたmerge」に従って照合する。$/);
+ assert(lines.every(l=>!l.startsWith('- /')||l.endsWith('件')||/Issue #\d+$/.test(l)),'no line is cut in the middle');
+});
+
+test('a slow repository is cut off at the deadline instead of outliving the hook timeout',()=>{
+ let clock=0;const timeouts=[];
+ const list=Array.from({length:5},(_,i)=>`worktree /w${i}\nHEAD ${'c'.repeat(40)}\nbranch refs/heads/main\n`).join('\n');
+ const git=(cwd,args,timeout)=>{timeouts.push(timeout);clock+=args[0]==='status'?4000:10;return args[0]==='rev-parse'?{status:0,stdout:'/w0\n'}:args[0]==='worktree'?{status:0,stdout:list}:{status:0,stdout:''};};
+ const text=resumeContext('/w0',{git,now:()=>clock,deadline:10000});
+ assert(clock<=10000+4000,'no call starts after the deadline');
+ assert(timeouts.every(t=>t>0&&t<=5000));
+ assert.match(text,/状態は時間切れで未確認/);assert.match(text,/^- \/w0（現在） .*未commit 0件$/m);
+});
+
+test('reading another worktree does not start its fsmonitor or hooks',t=>{
+ const {main,work}=repository(t);
+ const marker=path.join(main,'..','fsmonitor-ran');
+ const script=path.join(main,'..','monitor.sh');fs.writeFileSync(script,`#!/bin/sh\ntouch '${marker}'\n`,{mode:0o755});
+ execFileSync('git',['-C',work,'config','core.fsmonitor',script]);
+ execFileSync('git',['-C',main,'config','core.fsmonitor',script]);
+ assert.match(resumeContext(main),/docs\/42-sample/);
+ assert.equal(fs.existsSync(marker),false);
+});
