@@ -3,6 +3,11 @@
 // explicit state file (goal, authority, owner constraints, progress). Local only: no remote, no publication.
 // Scenario `pilot` runs the 4 stages once on complex/; `long` then delivers a second copy (complex2/) as new
 // Issues and repeats the 4 stages, so the coordinator context of the baseline keeps growing.
+// `adaptive` (#1737) continues one session like `baseline`, but at a stage boundary (stage complete: oracles pass,
+// tree clean, work committed) whose last coordinator call had at least ROTATE_AT input tokens, the outgoing session
+// records owner constraints and progress pointers in the state file and the next stage starts a fresh session that
+// reads it. Scenario `xl` delivers four copies (complex/ to complex4/), 16 stages, so the baseline context exceeds
+// the ADR 0004 reconsideration size.
 // Run arms sequentially: parallel runs share provider limits and distort wall time.
 import fs from 'node:fs';import path from 'node:path';import {spawn,execFileSync} from 'node:child_process';
 import {performance} from 'node:perf_hooks';import {fileURLToPath} from 'node:url';import {setTimeout,clearTimeout} from 'node:timers';
@@ -15,10 +20,14 @@ import {rolloutsFor} from '../../../scripts/native-delivery.mjs';
 import {summarizeNativeUsage} from '../../../scripts/native-host-usage.mjs';
 
 const [tarball,codex,arm,scenario='pilot']=process.argv.slice(2);
-if(![5,6].includes(process.argv.length)||!path.isAbsolute(tarball??'')||!path.isAbsolute(codex??'')||!['baseline','state'].includes(arm)||!['pilot','long'].includes(scenario))throw Error('Usage: node phase1-run.mjs <absolute-tarball> <absolute-codex> baseline|state [pilot|long]');
+if(![5,6].includes(process.argv.length)||!path.isAbsolute(tarball??'')||!path.isAbsolute(codex??'')||!['baseline','state','adaptive'].includes(arm)||!['pilot','long','xl'].includes(scenario))throw Error('Usage: node phase1-run.mjs <absolute-tarball> <absolute-codex> baseline|state|adaptive [pilot|long|xl]');
+// Fixed before the #1737 runs (PHASE1_ADAPTIVE_PROTOCOL.md). An override marks the record as a smoke run, not a trial.
+const ROTATE_AT=Number(process.env.ASC_EVAL_ROTATE_AT??100000);
+if(!Number.isSafeInteger(ROTATE_AT)||ROTATE_AT<0)throw Error('Invalid ASC_EVAL_ROTATE_AT');
 const {model,effort}=nativeModelConditions(),MAX_RESUMES=2,EXEC_TIMEOUT=90*60*1000;
-const units=scenario==='long'?[{dir:'complex',issues:[9001,9002,9003]},{dir:'complex2',issues:[9004,9005,9006]}]:[{dir:'complex',issues:[9001,9002,9003]}];
-const root=fs.mkdtempSync('/var/tmp/asc-native-complex-'),origin=path.join(root,'origin'),runtime=path.join(root,'runtime'),bootstrap=path.join(root,'bootstrap'),pkg=path.join(root,'distribution'),stateDir=path.join(root,'state'),preRevision=path.join(root,'pre-revision');
+const units=Array.from({length:{pilot:1,long:2,xl:4}[scenario]},(_,k)=>({dir:k?`complex${k+1}`:'complex',issues:[9001,9002,9003].map(n=>n+3*k)}));
+const usesState=arm!=='baseline';
+const root=fs.realpathSync(fs.mkdtempSync('/var/tmp/asc-native-complex-')),origin=path.join(root,'origin'),runtime=path.join(root,'runtime'),bootstrap=path.join(root,'bootstrap'),pkg=path.join(root,'distribution'),stateDir=path.join(root,'state'),preRevision=path.join(root,'pre-revision');
 for(const p of [origin,runtime,bootstrap,pkg,stateDir,preRevision])fs.mkdirSync(p);
 execFileSync('tar',['-xzf',tarball,'-C',pkg]);
 const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^git_/i.test(k)));
@@ -40,7 +49,11 @@ git(['worktree','add','-q','-b',branch,worktree,base]);
 
 const cli=path.join(pkg,'package','bin','asc-v05.mjs'),skill=path.join(pkg,'package','skills','asc','SKILL.md'),stateFile=path.join(stateDir,'STATE.json');
 const c=configuration({workspace:bootstrap,runtime,executable:fs.realpathSync(codex),writable:true});
-extendFixturePermissions(c.options,[pkg,preRevision],[origin,path.join(origin,'.git'),...(arm==='state'?[stateDir]:[])]);
+// macOS: /usr/bin/git is an xcrun shim that needs the Command Line Tools, which the base profile denies; the trials
+// let the Agent use Git, so grant read access and put the real binary first (evaluation only).
+const CLT='/Library/Developer/CommandLineTools',darwinGit=process.platform==='darwin'&&fs.existsSync(path.join(CLT,'usr/bin/git'));
+if(darwinGit)c.options=c.options.map(v=>v.startsWith('shell_environment_policy.set=')?v.replace('"PATH"="',`"PATH"="${CLT}/usr/bin:`):v);
+extendFixturePermissions(c.options,[pkg,preRevision,...(darwinGit?[CLT]:[])],[origin,path.join(origin,'.git'),...(usesState?[stateDir]:[])]);
 c.options=c.options.map(v=>v==='features.multi_agent=false'?'features.multi_agent=true':v);
 const controls=gitControlState(origin,[worktree]);
 // The agent can write .git; re-check the git control files (config, hooks) before each stage, at each completion
@@ -51,9 +64,11 @@ const guard=()=>assertGitControlState(origin,controls,[worktree]);
 const editable=units.flatMap(u=>[`${u.dir}/reservation/`,`${u.dir}/billing/`]).join(', ');
 const authority=`Synthetic local evaluation; no network, remote or publication. Repo ${worktree}, branch ${branch}, base ${base}. Authorized without further confirmation: editing ${editable} and tests, running any local oracle or test, local commits on ${branch}, local worktrees/branches inside ${origin}, and launching independent reviewer subagents. Not authorized: editing requirements, oracles or AGENTS.md; any remote operation. Use the packaged ASC skill ${skill} and CLI ${cli}.`;
 const goal=units.map(u=>`${u.dir}/: Issues ${u.issues[0]} (reservation), ${u.issues[1]} (billing) and ${u.issues[2]} (integration, then later revision)`).join('; ');
-if(arm==='state')fs.writeFileSync(stateFile,JSON.stringify({goal:`Complete the synthetic fixture work: ${goal}. Later units are delivered by the owner when requested.`,authority,ownerConstraints:[],progress:[],evidence:[]},null,2)+'\n');
+if(usesState)fs.writeFileSync(stateFile,JSON.stringify({goal:`Complete the synthetic fixture work: ${goal}. Later units are delivered by the owner when requested.`,authority,ownerConstraints:[],progress:[],evidence:[]},null,2)+'\n');
 // Same structural instruction every stage; the stage-3 constraint is not singled out.
 const stateRule=`First read ${stateFile}: it is the authoritative record of goal, authority, owner constraints and progress, and you have no other memory of earlier stages. Before you finish, update its fields from this stage.`;
+const readRule=`First read ${stateFile}: it is the authoritative record of goal, authority, owner constraints and progress, and you have no other memory of earlier stages.`;
+const handoff=`Context handoff: this session ends after this turn and a new session continues the Goal with no memory of this conversation. Update ${stateFile}: keep goal and authority, record every owner constraint still in effect in ownerConstraints, and append to progress each completed Issue with its commit SHA. Use pointers (paths, SHAs, Issue numbers), not code or long summaries. Do not change any other file.`;
 const constraint=`New owner constraint, effective from now for the rest of the Goal: every commit message must end with a line \`Refs: #<Issue>\` (${units.map(u=>`${u.issues[0]} ${u.dir} reservation, ${u.issues[1]} ${u.dir} billing, ${u.issues[2]} ${u.dir} integration and revision`).join('; ')}).`;
 const stages=units.flatMap((u,k)=>{const d=u.dir,[r,b,i]=u.issues,pre=path.join(preRevision,d);return [
  {n:4*k+1,unit:u,oracles:['reservation'],task:`${k?`New owner request: ${d}/ has been added as an independent second copy of the fixture. `:''}Issue ${r}: implement ${d}/reservation/service.mjs per ${d}/REQUIREMENTS.md (Issue R). Verify with node ${d}/oracle/reservation.mjs ${d} and commit.`},
@@ -71,6 +86,10 @@ const runExec=(args,input,log)=>new Promise((resolve,reject)=>{
   const thread=fs.readFileSync(log,'utf8').split('\n').filter(Boolean).map(l=>{try{return JSON.parse(l);}catch{return {};}}).find(e=>e.type==='thread.started')?.thread_id;
   resolve({status,signal,timedOut,thread,seconds:(performance.now()-began)/1000});});
 });
+// Input tokens of the latest provider call of a coordinator thread, and its per-call input series.
+const callInputs=events=>{const out=[];let total;for(const e of events){const info=e.type==='event_msg'&&e.payload?.type==='token_count'?e.payload.info:null;
+ if(!info?.last_token_usage||info.total_token_usage?.input_tokens===total)continue;total=info.total_token_usage.input_tokens;out.push(info.last_token_usage.input_tokens);}return out;};
+const coordinatorInputs=async id=>{const own=(await rolloutsFor(id,startedAt)).find(r=>r.find(e=>e.type==='session_meta')?.payload?.id===id);if(!own)throw Error('Coordinator rollout not found');return callInputs(own);};
 const failed=e=>e.status!==0||e.signal||e.timedOut;
 const common=['--ignore-user-config','--ignore-rules','--skip-git-repo-check','--json','-m',model,'-c',`model_reasoning_effort=${JSON.stringify(effort)}`];
 // Oracles import agent-written code; a hung oracle counts as a failure instead of stalling the run.
@@ -78,7 +97,7 @@ const oracleRun=(d,name)=>{try{execFileSync('node',[`${d}/oracle/${name}.mjs`,..
 const complete=s=>(guard(),!git(['status','--porcelain'],worktree)&&s.oracles.every(o=>oracleRun(s.unit.dir,o)));
 
 const startedAt=new Date().toISOString(),started=performance.now(),record={arm,scenario,model,effort,base,startedAt,mountMode:process.env.ASC_EVAL_MOUNT_MODE??'host',cliVersion:sh([codex,'--version']),stages:[]};
-let coordinator,constraintFrom;
+let coordinator,constraintFrom,rotateNext=false;record.rotateAt=ROTATE_AT;record.smoke=process.env.ASC_EVAL_ROTATE_AT!==undefined;record.rotations=[];
 try{
  for(const s of stages){
   const d=s.unit.dir;guard();
@@ -90,8 +109,9 @@ try{
    for(const name of ['reservation','billing']){const f=path.join(worktree,d,'oracle',name+'.mjs');fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace("amountCents:50,status:'reserved',version:1","amountCents:50,currency:'JPY',status:'reserved',version:1"));}
    git(['add',d],worktree);evaluatorCommit(worktree,`Evaluator: issue ${d} currency revision requirements and oracles`);
   }
-  const prompt=arm==='state'?`${stateRule}\n\n${s.task}`:(s.n===1?`${authority}\n\n${s.task}`:s.task);
-  const fresh=arm==='state'||s.n===1,stage={n:s.n,execs:[],ownerReplies:0,execFailures:0};
+  const fresh=arm==='state'||s.n===1||rotateNext;rotateNext=false;
+  const prompt=arm==='state'?`${stateRule}\n\n${s.task}`:s.n===1?`${authority}\n\n${s.task}`:fresh?`${readRule}\n\n${s.task}`:s.task;
+  const stage={n:s.n,execs:[],ownerReplies:0,execFailures:0};
   const first=await runExec(fresh?['exec','-C',worktree,...common,...c.options,'-']:['exec','-C',worktree,'resume',...common,...c.options,coordinator,'-'],prompt,path.join(root,`stage${s.n}-0.jsonl`));
   stage.execs.push(first);
   if(!first.thread)throw Error(`Stage ${s.n}: no thread id observed`);
@@ -105,9 +125,20 @@ try{
   stage.execFailures=stage.execs.filter(failed).length;stage.complete=complete(s);stage.thread=coordinator;stage.head=git(['rev-parse','HEAD'],worktree);record.stages.push(stage);
   fs.writeFileSync(path.join(root,'progress.json'),JSON.stringify(record,null,2));
   if(!stage.complete)break;
+  if(arm==='adaptive'&&s!==stages.at(-1)){
+   const lastInput=(await coordinatorInputs(coordinator)).at(-1);
+   if(lastInput>=ROTATE_AT){
+    const exec=await runExec(['exec','-C',worktree,'resume',...common,...c.options,coordinator,'-'],handoff,path.join(root,`stage${s.n}-handoff.jsonl`));
+    const rotation={afterStage:s.n,from:coordinator,lastInput,exec,treeClean:(guard(),!git(['status','--porcelain'],worktree))};
+    try{rotation.stateValid=!!JSON.parse(fs.readFileSync(stateFile,'utf8')).authority;}catch{rotation.stateValid=false;}
+    record.rotations.push(rotation);fs.writeFileSync(path.join(root,'progress.json'),JSON.stringify(record,null,2));
+    if(failed(exec)||!rotation.treeClean)break;
+    rotateNext=true;
+   }
+  }
  }
 }catch(e){record.error=e.message;}
-record.seconds=(performance.now()-started)/1000;record.execSeconds=record.stages.flatMap(s=>s.execs).reduce((a,e)=>a+e.seconds,0);
+record.seconds=(performance.now()-started)/1000;record.execSeconds=[...record.stages.flatMap(s=>s.execs),...record.rotations.map(r=>r.exec)].reduce((a,e)=>a+e.seconds,0);
 try{guard();record.gitControlsVerified=true;}catch(e){record.gitControlsVerified=false;record.gitControlsError=e.message;}
 try{
 if(record.gitControlsVerified){
@@ -127,6 +158,9 @@ for(const id of [...new Set(record.stages.map(s=>s.thread).filter(Boolean))]){
  try{const u=summarizeNativeUsage(id,await rolloutsFor(id,startedAt));record.usage.push({id,observedProcessedTokens:u.observedProcessedTokens,observedThreads:u.observedThreads,measured:u.measured,missingUsage:u.missingUsage});}
  catch(e){record.usage.push({id,error:e.message});}
 }
+try{const inputs=(await Promise.all([...new Set(record.stages.map(s=>s.thread).filter(Boolean))].map(coordinatorInputs))).flat(),sorted=[...inputs].sort((a,b)=>a-b);
+ record.coordinator={calls:inputs.length,meanInput:Math.round(inputs.reduce((a,b)=>a+b,0)/inputs.length),medianInput:sorted[Math.floor(sorted.length/2)],p95Input:sorted[Math.ceil(sorted.length*0.95)-1],maxInput:sorted.at(-1)};}
+catch(e){record.coordinatorError=e.message;}
 record.processedTokens=record.usage.length&&record.usage.every(u=>Number.isSafeInteger(u.observedProcessedTokens))?record.usage.reduce((a,u)=>a+u.observedProcessedTokens,0):null;
-if(arm==='state')try{record.finalState=JSON.parse(fs.readFileSync(stateFile,'utf8'));}catch(e){record.finalStateError=e.message;}
+if(usesState)try{record.finalState=JSON.parse(fs.readFileSync(stateFile,'utf8'));}catch(e){record.finalStateError=e.message;}
 fs.writeFileSync(path.join(root,'result.json'),JSON.stringify(record,null,2));console.log(root);
