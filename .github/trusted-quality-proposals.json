@@ -697,6 +697,29 @@
           "afterSha256": "670671cd97404156226e507973f2ab8330d3022ca96e0c93bdbdb320c41adcaf"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-TEST-GROWTH-REPORT-001",
+      "status": "staged",
+      "fromVersion": 27,
+      "toVersion": 28,
+      "owner": "repository maintainer (Issue #1732, 2026-11-21: テストの増え方は止めずに警告する)",
+      "rationale": "Issue #1732: テストの増え方を PR ごとに見えるようにする。ci.yml の linux job で、npm run quality の step に NODE_OPTIONS で junit reporter を足して各テストの時間を記録し（spec の表示は変えない）、npm pack の後に base の test/ を sparse checkout して scripts/test-growth-report.mjs で比べ、job summary と warning annotation に出す。追加の2 step は if: !cancelled() と continue-on-error: true で、報告は終了コードを常に 0 にするので、job と check を失敗にしない。npm run quality の command・順序・trigger・permissions・ほかの job・step は変えない。package.json の変更は qualityContractVersion だけ。",
+      "rollback": "適用前は有効化しない。適用後に戻す場合は次versionのproposalを先行登録して適用し、登録済みproposalの削除や品質保護の解除は行わない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": ".github/workflows/ci.yml",
+          "beforeSha256": "58667040c0d656f4d7039a41f1addd3e7be8ba7bf6cf81dc835a19551fb4e2d9",
+          "afterSha256": "b3cdb316e93d7709b4cf2c49e604a6153c4799b1c922a8968c7d74889a4150cd"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "670671cd97404156226e507973f2ab8330d3022ca96e0c93bdbdb320c41adcaf",
+          "afterSha256": "59e19706d51d39f66711c2653cd7eb1291c94d9b55eb14bda74ce4dc636d015a"
+        }
+      ]
     }
   ]
 }
