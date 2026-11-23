@@ -7,8 +7,14 @@ const [mapFile, reviewFile, ...goldFiles] = process.argv.slice(2);
 if (!mapFile || !reviewFile || !goldFiles.length) throw Error('usage: score-review.mjs <map> <review> <gold>...');
 const map = JSON.parse(fs.readFileSync(mapFile, 'utf8'));
 const gold = new Map(goldFiles.flatMap(f => JSON.parse(fs.readFileSync(f, 'utf8')).fixtures.map(g => [g.id, g])));
-const answers = new Map(fs.readFileSync(reviewFile, 'utf8').split('\n').filter(l => l.trim())
-  .map(l => l.split('|').map(x => x.trim())).map(([code, verdict, file]) => [code, {verdict, file}]));
+const lines = fs.readFileSync(reviewFile, 'utf8').split('\n').filter(l => l.trim()).map(l => l.split('|').map(x => x.trim()));
+const answers = new Map();
+for (const [code, verdict, file] of lines) {
+  if (!Object.hasOwn(map, code)) throw Error(`answer for an unknown code: ${code}`);
+  if (answers.has(code)) throw Error(`duplicate answer for ${code}`);
+  answers.set(code, {verdict, file});
+}
+if (answers.size !== Object.keys(map).length) throw Error(`expected ${Object.keys(map).length} answers, got ${answers.size}`);
 const rows = Object.entries(map).map(([code, id]) => {
   const g = gold.get(id), a = answers.get(code);
   if (!g || !a) throw Error(`missing gold or answer for ${code} (${id})`);

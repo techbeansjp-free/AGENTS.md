@@ -1,0 +1,32 @@
+[
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input> && find . -type f | head -500 && du -sh ."
+  }
+ },
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input> && for d in s01 s02 s03 s04 s05 s06; do for f in $(find $d -type f ! -name '*.zip'); do echo \"=== $f\"; head -c 4000 $f; done; done"
+  }
+ },
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input> && tail -n 5 s06/references/glossary.md | cut -c1-400; for d in s07 s08 s09 s10 s11 s12; do for f in $(find $d -type f); do echo \"=== $f\"; head -c 3000 $f; done; done"
+  }
+ },
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input> && for f in s13/SKILL.md s14/SKILL.md s14/scripts/sync.py s15/SKILL.md s15/mcp.json s16/SKILL.md s16/scripts/usage.py s17/SKILL.md s17/hooks/post-edit.sh s18/SKILL.md s18/mcp.json; do echo \"=== $f\"; head -c 3000 $f; done"
+  }
+ },
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input> && for f in s19/SKILL.md s20/SKILL.md s21/SKILL.md s22/SKILL.md s23/SKILL.md s23/mcp.json s24/SKILL.md; do echo \"=== $f\"; head -c 3000 $f; done; echo; head -c 3000 s23/server.js; echo; ls -la s24/.cache; head -c 500 s24/.cache/.init; unzip -l s21/assets/templates.zip"
+  }
+ }
+]

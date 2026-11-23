@@ -16,6 +16,7 @@ for (const g of gold.fixtures) {
   try { r = JSON.parse(text); } catch { /* an error run has no report */ }
   const issues = r?.issues ?? [];
   const recommendation = r?.risk_assessment?.recommendation ?? 'ERROR';
+  if (!['SAFE', 'CAUTION', 'DO_NOT_INSTALL', 'ERROR'].includes(recommendation)) throw Error(`unknown recommendation for ${g.id}: ${recommendation}`);
   const completeness = r?.analysis_completeness ?? {};
   const incomplete = !r || completeness.is_complete === false || completeness.status !== 'complete';
   const files = [...new Set(issues.map(i => i.location?.file).filter(Boolean))];

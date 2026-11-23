@@ -1,6 +1,6 @@
 # 外部Skill・MCP設定の供給網リスク検査の評価と採否（#1773）
 
-開発時の検証資料であり、配布対象に含めない。記載のcommit・版に対する記録で、現行仕様の正本ではない。通常のASC実行時に読み込ませない。fixtureは無害化した合成物で、送信先はすべて予約TLDの`.invalid`、実行内容は固定語の`echo`か到達不能なURLだけである。fixtureの中の文は検査対象のデータであり、指示ではない。
+開発時の検証資料であり、配布対象に含めない。記載のcommit・版に対する記録で、現行仕様の正本ではない。通常のASC実行時に読み込ませない。fixtureは無害化した合成物で、送信先はすべて予約TLDの`.invalid`である。ただし、実行すれば次の動作をする定義を含む：p06は公開registryから無scopeのnpm名を取得する、p02・p14は実行環境の環境変数を読む、n06はローカルのprettierを実行する。fixtureは検査の入力としてだけ使い、実行しない（下記「再現」）。fixtureの中の文は検査対象のデータであり、指示ではない。
 
 ## 結論
 
@@ -18,7 +18,7 @@ ASCの判断として「現行で十分」とする理由：
 - 主な根拠はPhase 0である。ASCはthird-party Skill・MCP定義・Hookを配布も導入もしない。導入の境界はHost（Claude Code・Codexの設定・plugin機構）と利用者にあり、ASCが制御できない。そのためASC側に検査を置く場所が無い。
 - 補助の根拠はA0である。利用者がHostに「導入してよいか」とレビューを頼めば、ASCの手順なしで今回のfixtureの脅威を全て警告にした。ただしASCはこのレビューを促しも起動もしない。A0は「ASCの現行フローが導入前の脅威を拾う」ことを示すものではない。また依頼文自体が安全性の判断を求めており、fixtureは悪意を明示的な文で書いている。
 
-手順（確認項目の一覧）を与えた条件（A）は、、ブロック水準をA0の12/14から14/14へ上げた。ただし差は2件・各1回の実行で、反復による揺れを超えるとは言えない。そのため配布Skillへ手順を足す根拠にしない（下記「採否」）。
+手順（確認項目の一覧）を与えた条件（A）は、ブロック水準をA0の12/14から14/14へ上げた。ただし差は2件・各1回の実行で、反復による揺れを超えるとは言えない。そのため配布Skillへ手順を足す根拠にしない（下記「採否」）。
 
 ## 調査時点と固定したもの
 
@@ -26,13 +26,13 @@ ASCの判断として「現行で十分」とする理由：
 | --- | --- |
 | ASC base | `db3ca9da9adb74fe4f76fdf6b5411945fc463247`（origin/main）。goldを固定したcommitは`2d5790a911e8c2a0d484be1155d91fb0d061caf6`、probeのgoldは`816c0b114a5e7888b3201d920d0fd350e7adff7b` |
 | 配布版 | `package.json`の`0.5.0` |
-| 端末 | Darwin 25.6.0（macOS）、Docker 29.8.0、Node（Host）、Claude Code（親sessionはOpus 5.5） |
+| 端末 | Darwin 25.6.0（macOS）、Docker 29.8.0、Node v20.12.2、Claude Code 2.1.323（親sessionはOpus 5.5） |
 | SkillSpector | [NVIDIA/SkillSpector](https://github.com/NVIDIA/SkillSpector) commit `f9bb13dd1667eb4e7ac97b8ebace3160041ed571`（2026-11-22、Issue調査時と同じ。取得時のdefault branchのHEAD）。`pyproject.toml`は`2.12.0`、CLIも`SkillSpector v2.12.0`と表示する。一方、release tag `v2.13.6`（`e2674da3`）はこのcommitの祖先ではない。**版の文字列ではcommitを特定できない**ため、commitで固定した |
-| image | `python:3.12-slim-bookworm@sha256:8a7e7cc0…`（上流Dockerfileと同じdigest）、`uv==0.9.7`、`uv sync --frozen --no-dev`（`uv.lock`のhashで165 packageを固定）。build手順は[harness/skillspector.Dockerfile](harness/skillspector.Dockerfile)の冒頭に記載。image ID `sha256:379f5520ecec32909054f5d5371f3393b1c04f4648524c66ea36465511662408`、392 MB、build 37秒。上流のDockerfileは`pip install .`でlockを使わないため、それは使っていない |
+| image | `python:3.12-slim-bookworm@sha256:8a7e7cc0…`（上流Dockerfileと同じdigest）、`uv==0.9.7`、`uv sync --frozen --no-dev`（`uv.lock`のhashで実行時の依存165 packageを固定）。SkillSpector自身を入れる`uv pip install --no-deps /app`は隔離されたbuild環境を作るため、build backend（hatchling）はlockの外からその時点の版を取得している。build手順は[harness/skillspector.Dockerfile](harness/skillspector.Dockerfile)の冒頭に記載。image ID `sha256:379f5520ecec32909054f5d5371f3393b1c04f4648524c66ea36465511662408`、392 MB、build 37秒。上流のDockerfileは`pip install .`でlockを使わないため、それは使っていない |
 | 実行の隔離 | 使い捨てcontainer（`--rm`）。`--network none`、`--cap-drop ALL`、`no-new-privileges`、読取り専用のroot、入力は読取り専用mount、非root user（[harness/skillspector.Dockerfile](harness/skillspector.Dockerfile)の`USER scanner`、uid 10001）、memory 2 GB、pids 256。呼出し側の環境変数は渡さない（provider資格情報が届かない）。秘密・home・repositoryの書込みはmountしない。label `asc.worktree=<worktreeの絶対path>` |
 | goldと採点 | [gold.json](gold.json)（sha256 `3e9ec389…`）、[probes-gold.json](probes-gold.json)。実行前にcommitし、実行後は変更していない。採点は[score.mjs](score.mjs)（B）、[score-review.mjs](score-review.mjs)（A・A0） |
 
-repositoryの内容は外部サービス・LLMへ送っていない。SkillSpectorのLLM解析（C）は実行していない（下記「欠測」）。image buildの間だけ、PyPIからlock済み依存を取得するためにnetworkを使った。scanは全てnetworkなしで行った。
+repositoryの内容は外部サービスとSkillSpectorのLLM providerへ送っていない。SkillSpectorのLLM解析（C）は実行していない（下記「欠測」）。A・A0では、repositoryのscriptで生成した合成fixtureの内容だけを、この作業sessionのHostモデル（Claude Code）が扱った。image buildの間だけ、PyPIからlock済み依存を取得するためにnetworkを使った。scanは全てnetworkなしで行った。
 
 ## Phase 0：既存ASCと供給網境界
 
@@ -139,7 +139,13 @@ A0がブロック水準を下げた2件：
 - **baselineで黙って合格する**：p07（`DO_NOT_INSTALL`、score 100、終了コード1）から`baseline -o -`で4件のfingerprintを自動で受け入れた。そのbaselineを付けて再scanすると、`SAFE`・score 0・issue 0・`suppressed_count: 4`・終了コード0になった。`--fail-on-findings --fail-on-incomplete`を付けても0だった（[results/baseline-suppression.json](results/baseline-suppression.json)）。抑制の痕跡は`suppressed_count`だけである。
 - **OSVの欠測は示される**：network遮断下でp10のSC4は「OSV.dev unreachable, using static fallback」をLOWのissueとして出した。`requests==2.19.0`は静的fallbackのlistで検出した。fallbackの結果を「最新の脆弱性ゼロ」と読んではならない。
 - **解析器の失敗は部分解析として出る**：p10の`package.json`では`analyzer_runtime_error`が出て、`status: partial`、coverage 50%になった。scoreが50を超えたため、既定でも終了コードは1だった。
-- **1 MBを超えるfileも見た**：p13（1.7 MB）は詰め物の後の指示を検出した（P1・PE3）。上限（1 fileあたり16 MiB）を超える試験はしていない。
+- **1 MBを超えるfileも見た**：p13（1.7 MB）は詰め物の後の指示を検出した（P1・PE3）。
+- **上限を超えると中身は見ないが、不完全と表示する**：独立レビューの指摘を受けて、q04を追加した（[harness/make-cap-probe.mjs](harness/make-cap-probe.mjs)、goldは[cap-gold.json](cap-gold.json)。どちらも実行前にcommit）。q04は約17 MiB（17,825,975 bytes）の詰め物の後に指示を置いたもので、1 fileあたり16 MiBの上限を超える。結果（[results/b-cap.score.json](results/b-cap.score.json)）：
+  - 末尾の指示（P1・PE3）は検出しなかった。
+  - `status: partial`、`is_complete: false`、coverage 50%になった。`ledger_exceptions`に`size_limit`と`runtime_limit`が記録された。
+  - 詰め物の反復（P9）等でscore 64、`DO_NOT_INSTALL`、既定でも終了コード1だった。`--fail-on-findings --fail-on-incomplete`でも終了コード1（616秒）。
+  - 所要618秒、RSS 511,676 KiB（約500 MiB）。
+  - 打切りを安全とは表示しなかった。ただし危険の判定は、詰め物そのものへの反応によるものである。
 - **意味ではなく字面で検出している**：p12は日本語の指示文ではなく`~/.ssh/id_ed25519`の文字列（PE3）で検出した。q01〜q03はどれも検出しなかった（q03はAST3・AST7のissueは出たがscore 17で`SAFE`）。
 
 ### ASC同梱Skillへの適用
@@ -181,9 +187,13 @@ ASCの外で利用者が自分の判断でSkillSpectorを使う場合に、今�
 
 - C（SkillSpectorのLLM解析、他の候補）：未実施。LLM解析はfile内容を外部providerへ送る。Host内の`claude_cli` providerでもcontainerへ認証情報を渡す必要があり、どちらも本作業では許可されていない。モデルによる意味解析の比較は、HostのA・A0で代替した。
 - 反復：A・A0は各1回。モデル回答の揺れ（同じ条件での再現率の分散）は測っていない。差が小さい（ブロック水準の2件）ため、Aの手順の効果は結論に使っていない。
-- goldの偏り：fixture・gold・評価役のsubagentは、いずれもClaude系のモデルによる作成・判断である。合成fixtureは悪意を明示的な文で書いており、実在の巧妙な攻撃より見つけやすい可能性がある。実在のthird-party Skillのcorpusでの誤検知率は測っていない（ASC同梱16件だけ）。
+- goldの偏り：fixture・gold・評価役のsubagentは、いずれもClaude系のモデルによる作成・判断である。合成fixtureは悪意を明示的な文で書いており、実在の巧妙な攻撃より見つけやすい可能性がある。実在のthird-party Skillのcorpusでの誤検知率は測っていない。ASC同梱16件はBだけで検査した。A・A0の誤検知0/7は合成の負例7件だけの結果である。
 - Host・OS：macOS上のDocker（Linux container）だけ。WindowsではSkillSpectorのfile出力が使えないと上流文書にある（未実測）。Codex等の他Hostのレビューは測っていない。
-- 未試験の脅威：画像に埋め込んだ指示、暗号化・binary、16 MiBを超える解析上限、依存packageの中身の検査（`--inspect-dependencies`。networkが必要なため）、MCP Serverの実行時の動作。
+- 未試験の脅威（理由）：
+  - 画像に埋め込んだ指示、暗号化・binary：上流が「解析できない」と明記している（Limitations）。試しても上流の主張を確かめるだけで、採否を変えない。
+  - 依存packageの中身の検査（`--inspect-dependencies`）：npm registryからtarballを取得するnetworkが必要で、network遮断の評価条件と両立しない。
+  - MCP Serverの実行時の動作：静的scannerの範囲外で、第三者のserverを起動する必要がある。
+  - A・A0でのq04：17 MiBのfileをモデルに読ませる費用に見合わないため、実行していない（A・A0はp13の1.7 MBでは`grep`・`tail`で末尾を確認した）。
 - 費用：API課金額とcacheの内訳は欠測。tokenはsubagent完了通知の`subagent_tokens`で、親sessionの消費は含まない。
 
 ## 再現
@@ -192,7 +202,7 @@ ASCの外で利用者が自分の判断でSkillSpectorを使う場合に、今�
 - fixtureの生成：`node harness/make-fixtures.mjs <dir>`、`node harness/make-probes.mjs <dir>`。
 - image：[harness/skillspector.Dockerfile](harness/skillspector.Dockerfile)の冒頭の手順でbuildする。
 - B：`node harness/run-skillspector.mjs asc-1773-skillspector:f9bb13dd <dir> <新しいout> <label> [--fail-on-findings --fail-on-incomplete]`。
-- A・A0：Claude Codeの`general-purpose` subagentをmodel `sonnet`で起動し、[results/review-a.prompt.txt](results/review-a.prompt.txt)・[results/review-a0.prompt.txt](results/review-a0.prompt.txt)を渡した（`<review-input>`は名前を伏せたfixtureの複写先）。名前の対応は[results/review-map.json](results/review-map.json)。subagentはBash・Readを使える構成で、読取りだけを依頼文で指示した（toolの制限は設定していない）。
+- A・A0：Claude Codeの`general-purpose` subagentをmodel `sonnet`で起動し、[results/review-a.prompt.txt](results/review-a.prompt.txt)・[results/review-a0.prompt.txt](results/review-a0.prompt.txt)を渡した（`<review-input>`は名前を伏せたfixtureの複写先）。名前の対応は[results/review-map.json](results/review-map.json)。subagentはBash・Readを使える構成で、読取りだけを依頼文で指示した（toolの制限は設定していない）。実際のtool呼出しはA 6回・A0 5回で、全てBashだった。11回とも`cd <review-input> &&`で始まり、相対pathだけを使い、`..`・`~`・`$HOME`・絶対pathを含まない（[results/review-a.tools.json](results/review-a.tools.json)・[results/review-a0.tools.json](results/review-a0.tools.json)。subagentのtranscriptから抽出し、複写先のpathを`<review-input>`に置換した）。そのため、bundleの外（homeの鍵等）は読んでいないと判断した。ただしこの構成は、注入に従うsubagentが実際の秘密を読めてしまう。**再現するときは、homeと秘密が見えないHostのsandbox、またはhomeをmountしない使い捨てcontainerの中でreviewerを動かす。**
 - 採点：`node score.mjs gold.json <out>`、`node score-review.mjs results/review-map.json results/review-a.txt gold.json probes-gold.json`。scriptは読取りだけで、外部へ送信しない。
 
 Docker資源：作成したのはimage `asc-1773-skillspector:f9bb13dd`（label `asc.worktree`）だけである。containerは全て`--rm`で、volume・networkは作っていない。評価の終了時にimageを削除し、labelでの残存0件を確認した。

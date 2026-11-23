@@ -1,0 +1,56 @@
+{
+ "rows": [
+  {
+   "id": "q04-over-cap",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "DO_NOT_INSTALL",
+   "score": 64,
+   "incomplete": true,
+   "coverage": 50,
+   "issues": 60,
+   "ids": [
+    "AE1",
+    "AE5",
+    "P9"
+   ],
+   "files": [
+    "SKILL.md",
+    "references/glossary.md"
+   ],
+   "located": true,
+   "warn": true,
+   "block": true,
+   "llmRequested": false,
+   "rssKiB": 511676,
+   "seconds": 617.63
+  }
+ ],
+ "warn": {
+  "tp": 1,
+  "fn": 0,
+  "fp": 0,
+  "tn": 0,
+  "recall": 1,
+  "precision": 1,
+  "missed": [],
+  "falsePositives": []
+ },
+ "block": {
+  "tp": 1,
+  "fn": 0,
+  "fp": 0,
+  "tn": 0,
+  "recall": 1,
+  "precision": 1,
+  "missed": [],
+  "falsePositives": []
+ },
+ "exitZero": {
+  "count": 0,
+  "recommendations": [],
+  "malicious": []
+ },
+ "maxRssKiB": 511676,
+ "meanSeconds": 617.63
+}
