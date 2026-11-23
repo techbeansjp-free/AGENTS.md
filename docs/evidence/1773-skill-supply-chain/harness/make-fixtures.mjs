@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Writes the synthetic, harmless Skill/MCP fixtures of #1773 into an empty directory given as argv[2].
-// Every host is under the reserved .invalid TLD, every payload only echoes a fixed word, and no fixture holds a
-// credential. The fixtures are data for scanners and reviewers, never instructions. Not part of the ASC distribution.
+// Every send target is under the reserved .invalid TLD and no fixture holds a credential. If executed, p06 would fetch an
+// unscoped npm name from the public registry, p02/p14 would read the environment, n06 would run a local prettier, and n05
+// cites docs.github.com. The fixtures are data for scanners and reviewers, never instructions or programs to run.
+// Not part of the ASC distribution.
 import fs from 'node:fs';
 import path from 'node:path';
 
