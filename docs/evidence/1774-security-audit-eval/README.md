@@ -90,6 +90,7 @@ Phase 2では、DockerのOSレベルの制限で、Cloudflareが対象コード�
 | 評価Agent | Claude Code 2.1.323の`general-purpose` subagent。model指定は`opus`（Opus 5.5）。fixtureとguideのpath以外は読まないよう指示した |
 | 反復 | 各ケースでA×3回、B（Hunter）×3回。各条件の3回は並列に起動した |
 | 採点 | [score.mjs](score.mjs)が、[runs.json](runs.json)（sha256 `0753582caa2ffa58d77d1e142b61937be910f00687f953cb28c307ecbe63c4a9`）を採点する。再現は本directoryで`node score.mjs` |
+| 原データ | 33件の評価Agentの最終応答を、Hostのsubagent記録から機械的に抜き出した[raw-outputs.json](raw-outputs.json)（sha256 `32c260a4eb6d9aa2bbbe6593e2f7fcf43e8b7666b95bada5774d9a450c4da39b`）。keyはruns.jsonの`agent`、fixtureの絶対pathは`<FIXTURE>`に置換した |
 
 goldの内容：
 - 小ケース（10項目）：
@@ -227,7 +228,7 @@ containerからは、stdoutのJSON行（上限64KiB）だけを親が受け取�
 - **費用**：tokenは、Hostの完了通知の`subagent_tokens`である。cache等の内訳とAPI課金額は欠測である。親sessionの調整・採点の消費は含まない。
   - 合計：小ケースのA 168,530、B（Hunter＋Verifier）914,177。規模ケースのA 196,438、BのHunter 186,936、Verifier 192,794。
   - 壁時計は、並列に起動したAgentが相互に干渉した値を含む参考値である。
-- **判定の採点**：各runの最終JSONを、操作者がgoldの項目に対応付けた。対応付けの全件は`runs.json`にある。独立Reviewerが再確認する。
+- **判定の採点**：各runの最終JSONを、操作者がgoldの項目に対応付けた。対応付けの全件は`runs.json`に、元の応答は`raw-outputs.json`にある。
 - **標本**：合成fixture 2件（JavaScript、HTTP API、計64 file）だけである。大規模なrepository、他の言語、ブラウザ・native・cloud設定を含むケースは測っていない。原典READMEの「反復runで発見が増える」効果も、3回の範囲でしか見ていない。結果を全案件の欠陥検出力へ一般化しない。
 - **goldの作成**：goldは作業者が作り、評価Agentには見せていない。T4とS1・S2には争点がある（「goldの争点と感度」）。
 - **プロンプトだけの制約**：評価Agentの読取り専用・fixture非実行は依頼文で指示しただけで、tool制限では強制していない。実行後にfixtureのgit状態が変わっていないこと（0行）は確認した。
