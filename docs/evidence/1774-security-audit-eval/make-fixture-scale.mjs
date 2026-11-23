@@ -3,8 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+// --seed (Phase 1c) adds src/seed.mjs so every store starts with one record per tenant; resource modules are unchanged.
 const dir = process.argv[2];
-if (!dir) throw new Error('usage: node make-fixture-scale.mjs <empty-dir>');
+const seeded = process.argv[3] === '--seed';
+if (!dir) throw new Error('usage: node make-fixture-scale.mjs <empty-dir> [--seed]');
 if (fs.existsSync(dir) && fs.readdirSync(dir).length > 0) throw new Error('target directory must be empty');
 
 const names = ['accounts', 'addresses', 'alerts', 'approvals', 'assets', 'attachments', 'audit', 'budgets', 'calendars',
@@ -109,7 +111,17 @@ Multi-tenant workspace service (synthetic sample).
   "scripts": { "start": "node src/server.mjs", "test": "node --test test/" }
 }
 `,
-  'src/store.mjs': `const stores = new Map();
+  'src/store.mjs': seeded
+    ? `import { seedRecords } from './seed.mjs';
+
+const stores = new Map();
+
+export function storeFor(name) {
+  if (!stores.has(name)) stores.set(name, new Map(seedRecords(name).map((record) => [record.id, record])));
+  return stores.get(name);
+}
+`
+    : `const stores = new Map();
 
 export function storeFor(name) {
   if (!stores.has(name)) stores.set(name, new Map());
@@ -200,6 +212,16 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
 }
 `;
 names.forEach((name, index) => { files[`src/resources/${name}.mjs`] = moduleSource(name, index); });
+if (seeded) {
+  files['src/seed.mjs'] = `// Demo data loaded at startup: one record per tenant in every store.
+export function seedRecords(name) {
+  return [
+    { id: \`\${name}-t1\`, tenantId: 't1', ownerId: 'u1', label: 'one', title: 'one', summary: 'one', status: 'open', note: 'one', owner_note: 'one' },
+    { id: \`\${name}-t2\`, tenantId: 't2', ownerId: 'u2', label: 'two', title: 'two', summary: 'two', status: 'open', note: 'two', owner_note: 'two' },
+  ];
+}
+`;
+}
 files['test/scoped.test.mjs'] = `import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadScoped } from '../src/scoped.mjs';
