@@ -1,0 +1,2708 @@
+{
+ "a5334bf6": {
+  "items": [
+   {
+    "file": "src/routes/notes.mjs",
+    "line": 8,
+    "title": "Cross-tenant note read via GET /notes/:id",
+    "verdict": "confirmed",
+    "boundary": "authenticated member of tenant t2 -> tenant ownership check (missing on GET /:id) -> notes of tenant t1",
+    "reason": "GET /:id returns notes.get(req.params.id) with only an existence check, so any note id is returned. PUT /:id (line 14) and GET / (line 6) both check note.tenantId === req.user.tenantId. README line 5 says members may only read data of their own tenant. Example: u2 sends GET /notes/n1 and gets tenant t1's note body."
+   },
+   {
+    "file": "src/routes/export.mjs",
+    "line": 12,
+    "title": "Path traversal in export name escapes tenant directory",
+    "verdict": "confirmed",
+    "boundary": "authenticated member -> per-tenant export directory (path.join without containment check) -> other tenants' exports and any .csv file on the host",
+    "reason": "name comes from req.query.name and is only checked with endsWith('.csv'). path.join(EXPORT_ROOT, tenantId, name) normalizes '..', and nothing checks that the result stays inside EXPORT_ROOT/tenantId. Example: name=../t1/report.csv read by a t2 member, or ../../../x.csv to leave EXPORT_ROOT. avatars.mjs line 11 has the resolve+startsWith check that this route lacks."
+   },
+   {
+    "file": "src/agent/tools.mjs",
+    "line": 7,
+    "title": "fetch_doc URL allowlist bypass (SSRF)",
+    "verdict": "confirmed",
+    "boundary": "member or prompt-injected assistant tool call -> DOCS_PREFIX string-prefix allowlist -> arbitrary outbound HTTPS hosts, including internal ones, with the response body returned to the caller",
+    "reason": "String(url).startsWith('https://docs.example.com') has no trailing '/' and does not parse the URL. 'https://docs.example.com@internal-host/' (userinfo) and 'https://docs.example.com.attacker.tld/' both pass, and fetch() goes to the real host. redirect:'error' only blocks redirects, not the direct bypass. The body is returned through /agent/tool-call (routes.mjs line 9). Fix: parse with new URL() and compare origin/hostname exactly."
+   },
+   {
+    "file": ".github/workflows/pr.yml",
+    "line": 13,
+    "title": "pull_request_target runs untrusted PR code with a secret",
+    "verdict": "confirmed",
+    "boundary": "external PR author (fork) -> pull_request_target trust context (base-repo secrets) -> PREVIEW_DEPLOY_TOKEN",
+    "reason": "The workflow triggers on pull_request_target, checks out github.event.pull_request.head.sha, and runs 'npm test', which executes PR-controlled package.json scripts and test/ files, with secrets.PREVIEW_DEPLOY_TOKEN in env. permissions: contents:read limits GITHUB_TOKEN only; it does not protect the injected secret. A PR that changes the test script can exfiltrate the token."
+   },
+   {
+    "file": "src/auth.mjs",
+    "line": 27,
+    "title": "Header-based impersonation bypasses authentication when enabled",
+    "verdict": "needs_validation",
+    "boundary": "unauthenticated network client -> bearer token verification (skipped) -> any user, including admin ops1 and /admin tenant deletion",
+    "reason": "When SUPPORT_IMPERSONATION==='on', an x-impersonate-user header sets req.user with no credential or role check (users.get('ops1') gives admin). docker-compose.dev.yml sets it on and publishes 8080:8080, and README says it is for local debugging. Unresolved fact: whether any deployed (non-local) environment, or a reachable dev host, sets SUPPORT_IMPERSONATION=on. The deployment configuration is not in the repository."
+   },
+   {
+    "file": "src/webhooks.mjs",
+    "line": 13,
+    "title": "Webhook replay / duplicate credit (no timestamp window or event idempotency)",
+    "verdict": "needs_validation",
+    "boundary": "holder of a previously valid signed webhook (or provider redelivery) -> HMAC signature check -> account balances",
+    "reason": "The HMAC covers timestamp.rawBody and is compared in constant time with an empty-secret guard, so forgery is refuted. However, x-signature-timestamp is never checked for freshness, and there is no event-id dedup, so re-sending the same signed request credits the balance again (line 18). Unresolved facts: the provider's delivery and retry semantics and signature-tolerance contract, and whether signed deliveries can be observed or replayed by a lower-trust party."
+   },
+   {
+    "file": "src/webhooks.mjs",
+    "line": 13,
+    "title": "Webhook signature forgery / unauthenticated mount",
+    "verdict": "rejected",
+    "boundary": "internet client -> webhook HMAC -> balances",
+    "reason": "/webhooks is intentionally mounted without authenticate (server.mjs line 13), but the handler rejects requests when WEBHOOK_SECRET is empty or the HMAC-SHA256 over the exact rawBody does not match (length check plus timingSafeEqual). The parsed body is the same rawBody that was signed."
+   },
+   {
+    "file": "src/routes/avatars.mjs",
+    "line": 11,
+    "title": "Avatar path traversal / cross-tenant avatar read",
+    "verdict": "rejected",
+    "boundary": "member -> AVATAR_ROOT containment -> filesystem",
+    "reason": "path.resolve(AVATAR_ROOT, name) followed by startsWith(AVATAR_ROOT + path.sep) blocks '..' and absolute names, including decoded %2F. README line 7 says avatars are public across tenants, so reading another tenant's avatar is allowed by the specification. Symlinks inside the avatar directory would be a deployment concern, not shown by the source."
+   },
+   {
+    "file": "src/routes/search.mjs",
+    "line": 12,
+    "title": "SQL injection in search ORDER BY / query",
+    "verdict": "rejected",
+    "boundary": "member -> query construction -> notes table",
+    "reason": "The interpolated column comes only from the SORTABLE allowlist, direction is a fixed 'ASC'/'DESC', and tenantId and q are bound as $1/$2 params (db.mjs run() binds separately). Results are scoped by tenant_id = $1 from req.user."
+   },
+   {
+    "file": "src/server.mjs",
+    "line": 19,
+    "title": "Admin routes reachable by members",
+    "verdict": "rejected",
+    "boundary": "member -> requireAdmin -> tenant listing/deletion",
+    "reason": "/admin is mounted as authenticate, requireAdmin, adminRoutes. requireAdmin returns 403 unless role==='admin'. Router prefix matching (router.mjs line 20) needs an exact match or prefix+'/', so '/adminX' cannot slip past the mount."
+   },
+   {
+    "file": "src/agent/routes.mjs",
+    "line": 8,
+    "title": "Arbitrary/prototype tool invocation",
+    "verdict": "rejected",
+    "boundary": "member -> tool dispatch -> server functions",
+    "reason": "Object.hasOwn(tools, name) restricts calls to the own properties fetch_doc and list_notes, so inherited names like 'constructor' or '__proto__' are refused. list_notes filters by user.tenantId (tools.mjs line 14)."
+   },
+   {
+    "file": "src/auth.mjs",
+    "line": 20,
+    "title": "Session token forgery / expiry bypass",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> HMAC token verification -> user session",
+    "reason": "Tokens are HMAC-SHA256 over the body and compared with a length check plus timingSafeEqual, and exp must be a number in the future. Tampered signatures are rejected (also covered by test/auth.test.mjs). A malformed body makes JSON.parse throw, which the router turns into a 500; that is not an authentication bypass."
+   },
+   {
+    "file": "src/routes/notes.mjs",
+    "line": 14,
+    "title": "Cross-tenant note update",
+    "verdict": "rejected",
+    "boundary": "member -> tenant check -> other tenant notes",
+    "reason": "PUT /:id returns 404 unless note.tenantId === req.user.tenantId."
+   }
+  ],
+  "hardening": [
+   "auth.mjs line 4: falling back to a random SESSION_SECRET invalidates sessions on every restart and differs across instances; require the variable to be set explicitly.",
+   "router.mjs line 57: decodeURIComponent on malformed percent-encoding throws URIError, which becomes a generic 500; return 400 instead.",
+   "webhooks.mjs line 18: Number(event.amount) is not validated (NaN or negative values); validate even though the payload is signed by the provider.",
+   "docker-compose.dev.yml: impersonation is on and the port is published on all interfaces; bind to 127.0.0.1 for local debugging.",
+   "test/: only the token sign/verify tests exist; there are no tenant-isolation, traversal, SSRF or webhook regression tests.",
+   "Admin users have tenantId null, so export paths resolve to EXPORT_ROOT/null; reject members or admins without a tenant explicitly.",
+   "Not checked: nothing was executed (static review only, as instructed), and deployment configuration and GitHub repository settings (for example fork PR approval) are outside the repository."
+  ]
+ },
+ "a2629261": {
+  "items": [
+   {
+    "file": "src/routes/notes.mjs",
+    "line": 8,
+    "title": "Cross-tenant note read via GET /notes/:id",
+    "verdict": "confirmed",
+    "boundary": "member of tenant A -> tenant isolation check (missing) -> notes of tenant B",
+    "reason": "GET /:id calls notes.get(req.params.id) and returns the note with no check that note.tenantId === req.user.tenantId. PUT /:id on line 14 and GET / on line 6 both have that check. u1 (t1) requesting /notes/n2 gets t2's note, which breaks README line 5."
+   },
+   {
+    "file": "src/routes/export.mjs",
+    "line": 12,
+    "title": "Path traversal in export name escapes tenant directory",
+    "verdict": "confirmed",
+    "boundary": "member of tenant A -> per-tenant export directory (path.join without containment check) -> other tenants' exports and any readable .csv on the host",
+    "reason": "name comes from req.query.name and the only check is endsWith('.csv') on line 11. path.join(EXPORT_ROOT, tenantId, name) resolves '..', so name=../t2/report.csv reads tenant t2's export and ../../../any/path.csv reads outside EXPORT_ROOT. There is no resolve-and-startsWith check like the one in avatars.mjs."
+   },
+   {
+    "file": "src/agent/tools.mjs",
+    "line": 7,
+    "title": "fetch_doc URL allowlist bypass (prefix match)",
+    "verdict": "confirmed",
+    "boundary": "signed-in member, or an assistant steered by injected content -> DOCS_PREFIX allowlist -> server-side outbound requests to arbitrary hosts",
+    "reason": "String(url).startsWith('https://docs.example.com') has no trailing '/' and does not parse the host. 'https://docs.example.com.attacker.test/' and 'https://docs.example.com@10.0.0.5/' both pass, so the server fetches any https host and returns up to 20000 chars of the response. redirect:'error' blocks only redirects. Which internal https services are reachable, and with which certificates, depends on the deployment network, but the control bypass itself is visible in the code."
+   },
+   {
+    "file": ".github/workflows/pr.yml",
+    "line": 13,
+    "title": "pull_request_target runs untrusted PR code with a secret",
+    "verdict": "confirmed",
+    "boundary": "fork PR author -> pull_request_target trust context -> PREVIEW_DEPLOY_TOKEN secret",
+    "reason": "The workflow triggers on pull_request_target, checks out github.event.pull_request.head.sha, then runs npm test (package.json runs node --test test/, which is PR-controlled code) with env PREVIEW_DEPLOY_TOKEN: secrets.PREVIEW_DEPLOY_TOKEN. Any PR, including from a fork, can change the tests or package.json to exfiltrate the token. permissions: contents: read limits GITHUB_TOKEN only, not repository secrets."
+   },
+   {
+    "file": "src/webhooks.mjs",
+    "line": 12,
+    "title": "Payment webhook replay / no idempotency",
+    "verdict": "confirmed",
+    "boundary": "holder of any previously delivered signed webhook, or a provider retry -> signature and timestamp verification -> account balances",
+    "reason": "x-signature-timestamp is included in the HMAC but never checked for freshness, and there is no event-id dedup. A valid (timestamp, signature, rawBody) triple can be resent forever, and each resend adds event.amount to balances again on line 18. Signature checking itself is sound: empty secret rejected, constant-time compare, HMAC over the raw body."
+   },
+   {
+    "file": "src/auth.mjs",
+    "line": 27,
+    "title": "Unauthenticated impersonation header when SUPPORT_IMPERSONATION=on",
+    "verdict": "needs_validation",
+    "boundary": "unauthenticated network client -> authenticate (header bypasses token verification) -> any user, including admin ops1 and /admin tenant deletion",
+    "reason": "When SUPPORT_IMPERSONATION==='on', X-Impersonate-User: ops1 sets req.user with no credential at all. The repository enables it only in docker-compose.dev.yml, and README line 8 says it is for local debugging. Unresolved fact: whether any non-local deployment (production or staging env/config outside this repo) sets SUPPORT_IMPERSONATION=on or exposes the dev compose service to other hosts."
+   },
+   {
+    "file": "src/routes/avatars.mjs",
+    "line": 11,
+    "title": "Avatar path traversal / cross-tenant avatar access",
+    "verdict": "rejected",
+    "boundary": "member -> AVATAR_ROOT containment -> files outside the avatar directory",
+    "reason": "path.resolve followed by file.startsWith(AVATAR_ROOT + path.sep) rejects decoded '../' and %2F escapes. Cross-tenant reads are allowed by design: README line 7 says avatars are public profile images shared by all tenants."
+   },
+   {
+    "file": "src/routes/search.mjs",
+    "line": 12,
+    "title": "SQL injection via sort/dir/q",
+    "verdict": "rejected",
+    "boundary": "member -> query construction -> notes table / other tenants",
+    "reason": "column comes from the SORTABLE allowlist, direction is fixed to ASC or DESC, and tenantId and q are bound as $1/$2 params (db.run requires text plus a params array). Results are scoped by tenant_id = $1."
+   },
+   {
+    "file": "src/server.mjs",
+    "line": 19,
+    "title": "Admin routes reachable by members",
+    "verdict": "rejected",
+    "boundary": "member -> requireAdmin -> tenant listing/deletion",
+    "reason": "/admin is mounted with authenticate followed by requireAdmin (role !== 'admin' gives 403). Router prefix matching needs an exact match or prefix+'/', and WHATWG URL normalizes '..' and %2e%2e before matching, so /notes/../admin still goes through requireAdmin."
+   },
+   {
+    "file": "src/auth.mjs",
+    "line": 20,
+    "title": "Bearer token forgery / tampering",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> HMAC token verification -> user identity",
+    "reason": "The HMAC-SHA256 over the body is compared with a length check and timingSafeEqual before claims are parsed, and exp is enforced. test/auth.test.mjs covers rejection of tampered tokens. Unsigned claims are never trusted."
+   },
+   {
+    "file": "src/agent/routes.mjs",
+    "line": 8,
+    "title": "Tool-name injection / prototype method call",
+    "verdict": "rejected",
+    "boundary": "member -> tool dispatch -> arbitrary functions",
+    "reason": "Object.hasOwn(tools, name) limits calls to the tool object's own keys. list_notes filters by req.user.tenantId, so it cannot cross tenants."
+   },
+   {
+    "file": "src/routes/notes.mjs",
+    "line": 14,
+    "title": "Cross-tenant note update via PUT",
+    "verdict": "rejected",
+    "boundary": "member of tenant A -> tenant check -> tenant B notes",
+    "reason": "PUT returns 404 unless note.tenantId === req.user.tenantId."
+   }
+  ],
+  "hardening": [
+   "auth.mjs:4 falls back to a random SESSION_SECRET, so tokens are invalidated on restart and are inconsistent across instances. Requiring an explicit secret would be safer.",
+   "docker-compose.dev.yml publishes 8080 on all interfaces while impersonation is on. Binding to 127.0.0.1:8080 would limit exposure to other LAN hosts.",
+   "router.mjs:57: decodeURIComponent throws on a malformed % sequence and returns 500 instead of 400.",
+   "webhooks.mjs:18: Number(event.amount) is not checked for finite or positive values. The payload is provider-signed, so this is defensive only.",
+   "search.mjs:13: % and _ in q act as ILIKE wildcards inside the caller's own tenant. Escaping them would make search literal.",
+   "tools.mjs:11: fetched document text goes back into the assistant loop, which is a prompt-injection vector for later tool calls. Those calls are still limited to the member's own permissions.",
+   "The only tests cover the auth token. There are no tests for tenant isolation (notes GET, export) or for webhook replay.",
+   "security-evidence was not applied: the repository has no dependencies, lockfile or container image to audit.",
+   "This was a static review only. No code, tests or network were executed, and no finding has been reproduced."
+  ]
+ },
+ "aa062a93": {
+  "items": [
+   {
+    "file": "src/routes/notes.mjs",
+    "line": 8,
+    "title": "GET /notes/:id returns notes from other tenants",
+    "verdict": "confirmed",
+    "boundary": "authenticated member of tenant A -> tenant isolation check (missing on GET /:id) -> notes of tenant B",
+    "reason": "GET /:id calls notes.get(req.params.id) and returns the note without comparing note.tenantId to req.user.tenantId. The list route (line 6) and PUT (line 14) both apply that check, and README line 5 says members may only read their own tenant's data. Example: u1 (t1) requests GET /notes/n2 and receives n2's body from t2."
+   },
+   {
+    "file": ".github/workflows/pr.yml",
+    "line": 13,
+    "title": "pull_request_target runs PR head code with a secret",
+    "verdict": "confirmed",
+    "boundary": "external/fork PR author -> pull_request_target trust context -> secrets.PREVIEW_DEPLOY_TOKEN",
+    "reason": "The workflow triggers on pull_request_target, checks out github.event.pull_request.head.sha, and runs npm test with PREVIEW_DEPLOY_TOKEN in env. A fork PR controls package.json scripts.test and test/*, so its code runs with the secret. permissions: contents: read only limits GITHUB_TOKEN, not repository secrets."
+   },
+   {
+    "file": "src/routes/export.mjs",
+    "line": 12,
+    "title": "Path traversal in export name reads other tenants' exports",
+    "verdict": "confirmed",
+    "boundary": "authenticated member of tenant A -> per-tenant export directory -> tenant B export files and any *.csv readable by the process",
+    "reason": "name comes from req.query.name (already URL-decoded), and the only check is endsWith('.csv'). path.join(EXPORT_ROOT, tenantId, name) normalizes '..', so name=../t2/report.csv resolves to EXPORT_ROOT/t2/report.csv, and ../../../x.csv leaves EXPORT_ROOT. No containment check is made after the join."
+   },
+   {
+    "file": "src/agent/tools.mjs",
+    "line": 7,
+    "title": "fetch_doc URL prefix check bypass (SSRF)",
+    "verdict": "confirmed",
+    "boundary": "authenticated member, or content steering the assistant -> docs URL allowlist (string prefix) -> internal or arbitrary network hosts reachable from the server, with the response returned",
+    "reason": "startsWith('https://docs.example.com') does not check the parsed host. 'https://docs.example.com@127.0.0.1:8443/' (userinfo, host 127.0.0.1) and 'https://docs.example.com.attacker.tld/' (attacker DNS can point to internal IPs) both pass. Up to 20000 chars of the response go back through /agent/tool-call. redirect:'error' blocks only redirects, not the initial host choice."
+   },
+   {
+    "file": "src/webhooks.mjs",
+    "line": 12,
+    "title": "Signed webhook can be replayed to credit balances again",
+    "verdict": "confirmed",
+    "boundary": "holder of any previously delivered signed payment webhook (including provider retries) -> HMAC signature check -> account balances",
+    "reason": "x-signature-timestamp is included in the HMAC but never checked for freshness, and there is no event-id or idempotency record. The same signed request is accepted any number of times, and each one adds event.amount to balances. How an attacker would obtain a signed request (provider retry behaviour, log exposure) is outside the repository, but the missing replay and duplicate control is in the source."
+   },
+   {
+    "file": "src/auth.mjs",
+    "line": 27,
+    "title": "Header impersonation bypasses authentication when enabled",
+    "verdict": "needs_validation",
+    "boundary": "any network client -> bearer token authentication -> any user including ops1 admin (/admin tenant deletion)",
+    "reason": "If SUPPORT_IMPERSONATION==='on', a bare x-impersonate-user header sets req.user with no credential, and impersonating ops1 also passes requireAdmin. docker-compose.dev.yml sets it to on and publishes 8080:8080 on all interfaces, while README says it is for local debugging. Unresolved fact: whether SUPPORT_IMPERSONATION is ever 'on' in a deployed or shared environment, or whether the dev host's port 8080 is reachable by other hosts. Neither can be determined from the repository."
+   },
+   {
+    "file": "src/routes/avatars.mjs",
+    "line": 11,
+    "title": "Avatar path traversal",
+    "verdict": "rejected",
+    "boundary": "authenticated member -> avatar root containment -> server filesystem",
+    "reason": "path.resolve(AVATAR_ROOT, name) is followed by a startsWith(AVATAR_ROOT + path.sep) check, which rejects decoded '..%2F' and absolute names. Avatars being readable across tenants matches README line 7 (they are public)."
+   },
+   {
+    "file": "src/routes/search.mjs",
+    "line": 12,
+    "title": "SQL injection via sort/dir/q",
+    "verdict": "rejected",
+    "boundary": "authenticated member -> query construction -> notes database",
+    "reason": "column comes from the SORTABLE allowlist with a constant default, direction is the literal ASC or DESC, and tenantId and q are bound as $1/$2 params (the run() driver stand-in binds parameters separately). The query is scoped to the caller's tenant."
+   },
+   {
+    "file": "src/auth.mjs",
+    "line": 20,
+    "title": "Bearer token forgery or tampering",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> HMAC session token verification -> user identity",
+    "reason": "The HMAC-SHA256 over the body is compared with a length check plus timingSafeEqual, exp is enforced, and the body is parsed only after the MAC is verified. test/auth.test.mjs covers the tampered-token case."
+   },
+   {
+    "file": "src/server.mjs",
+    "line": 19,
+    "title": "Admin routes reachable by members",
+    "verdict": "rejected",
+    "boundary": "authenticated member -> requireAdmin -> tenant listing and deletion",
+    "reason": "/admin is mounted with authenticate, then requireAdmin (role !== 'admin' returns 403), then adminRoutes. The Router prefix match requires an exact match or prefix + '/'."
+   },
+   {
+    "file": "src/routes/notes.mjs",
+    "line": 14,
+    "title": "Cross-tenant note update",
+    "verdict": "rejected",
+    "boundary": "authenticated member -> tenant check -> other tenant's notes",
+    "reason": "PUT returns 404 unless note.tenantId === req.user.tenantId."
+   },
+   {
+    "file": "src/agent/routes.mjs",
+    "line": 8,
+    "title": "Arbitrary or prototype tool invocation; list_notes tenant leak",
+    "verdict": "rejected",
+    "boundary": "authenticated member -> tool dispatch -> server functions and notes",
+    "reason": "Object.hasOwn(tools, name) restricts dispatch to the declared tools, so prototype names are not callable. list_notes filters by user.tenantId."
+   },
+   {
+    "file": "src/webhooks.mjs",
+    "line": 13,
+    "title": "Unsigned or empty-secret webhook acceptance",
+    "verdict": "rejected",
+    "boundary": "any network client -> webhook signature -> balances",
+    "reason": "An empty WEBHOOK_SECRET is rejected explicitly. Otherwise the HMAC over timestamp.rawBody (the raw bytes actually received) is compared in constant time before req.body is used."
+   }
+  ],
+  "hardening": [
+   "auth.mjs:4 falls back to a random per-process SESSION_SECRET, so tokens break on restart and differ across instances. Consider requiring the variable to be set.",
+   "Router reads and parses the request body (up to 1MB) before authentication. Consider per-route body limits.",
+   "export.mjs: an admin (tenantId null) resolves to the EXPORT_ROOT/'null' directory. Consider rejecting users without a tenant explicitly.",
+   "webhooks.mjs: Number(event.amount) is not validated (it could be negative or NaN). It is trusted because the provider signs it, but validating it would be defensive.",
+   "docker-compose.dev.yml binds 8080 on all interfaces. Consider 127.0.0.1:8080:8080, given that impersonation is enabled there.",
+   "avatars.mjs: symlinks inside AVATAR_ROOT are not resolved (realpath). This depends on who can write to that directory, which is outside the repository.",
+   "Tests cover only token sign/verify. There are no tests for tenant isolation, traversal, the agent URL allowlist or webhook replay.",
+   "decodeURIComponent on a malformed path segment throws and returns 500. Consider returning 400."
+  ]
+ },
+ "ae140a32": {
+  "ledger": [
+   {
+    "unit": "HTTP GET /notes/:id | member tenant A -> tenant B notes | IDOR / tenant isolation",
+    "paths": [
+     "src/server.mjs",
+     "src/router.mjs",
+     "src/auth.mjs",
+     "src/routes/notes.mjs",
+     "src/db.mjs",
+     "README.md"
+    ],
+    "status": "candidate",
+    "note": "There is no tenantId check on the single-note read. The list and PUT routes do check it."
+   },
+   {
+    "unit": "HTTP PUT /notes/:id | member -> other tenant notes | IDOR (write)",
+    "paths": [
+     "src/routes/notes.mjs",
+     "src/auth.mjs"
+    ],
+    "status": "covered",
+    "note": "The tenantId comparison at notes.mjs:14 returns 404 for another tenant's note."
+   },
+   {
+    "unit": "HTTP GET /notes | member -> other tenant notes | tenant filter",
+    "paths": [
+     "src/routes/notes.mjs"
+    ],
+    "status": "covered",
+    "note": "The list is filtered by req.user.tenantId. An admin (tenantId null) matches no notes."
+   },
+   {
+    "unit": "HTTP GET /export?name= | member tenant A -> other tenant / filesystem | path traversal",
+    "paths": [
+     "src/server.mjs",
+     "src/router.mjs",
+     "src/routes/export.mjs"
+    ],
+    "status": "candidate",
+    "note": "path.join with a user-supplied name that may contain '../'. The only check is a .csv suffix."
+   },
+   {
+    "unit": "HTTP GET /avatars/:name | authenticated user -> filesystem outside AVATAR_ROOT | path traversal",
+    "paths": [
+     "src/routes/avatars.mjs",
+     "src/router.mjs",
+     "README.md"
+    ],
+    "status": "covered",
+    "note": "path.resolve is followed by a startsWith(root+sep) check, which blocks decoded '..%2F'. README says avatars are public across tenants, so cross-tenant reads are intended."
+   },
+   {
+    "unit": "HTTP GET /search | member -> DB | SQL injection / tenant scope",
+    "paths": [
+     "src/routes/search.mjs",
+     "src/db.mjs"
+    ],
+    "status": "covered",
+    "note": "The sort column is allowlisted, the direction is one of two constants, q and tenantId are bound parameters, and tenant_id = $1 comes from the session."
+   },
+   {
+    "unit": "HTTP /admin/* | member -> admin tenant management | authorization / mount order bypass",
+    "paths": [
+     "src/server.mjs",
+     "src/router.mjs",
+     "src/auth.mjs",
+     "src/routes/admin.mjs"
+    ],
+    "status": "covered",
+    "note": "The admin mount chain is authenticate then requireAdmin. URL parsing normalizes dot-segments, and no earlier mount prefix captures /admin."
+   },
+   {
+    "unit": "Authentication | unauthenticated client -> any user identity | token forgery",
+    "paths": [
+     "src/auth.mjs",
+     "test/auth.test.mjs"
+    ],
+    "status": "covered",
+    "note": "HMAC-SHA256 over the body with a constant-time compare runs before JSON.parse. exp is enforced. The secret falls back to random bytes, not a constant."
+   },
+   {
+    "unit": "Authentication | network client -> any user incl. admin | impersonation header",
+    "paths": [
+     "src/auth.mjs",
+     "docker-compose.dev.yml",
+     "README.md"
+    ],
+    "status": "candidate",
+    "note": "When SUPPORT_IMPERSONATION=on, the X-Impersonate-User header replaces auth entirely. The dev compose file turns it on and publishes port 8080."
+   },
+   {
+    "unit": "Agent POST /agent/tool-call fetch_doc | member / assistant-injected content -> server network | SSRF allowlist bypass",
+    "paths": [
+     "src/agent/routes.mjs",
+     "src/agent/tools.mjs",
+     "src/router.mjs",
+     "src/server.mjs"
+    ],
+    "status": "candidate",
+    "note": "The allowlist is a string-prefix check with no trailing '/'. It passes docs.example.com.attacker.tld and docs.example.com@host. redirect:'error' blocks redirects only."
+   },
+   {
+    "unit": "Agent POST /agent/tool-call | member -> tools dispatch | prototype / unknown tool",
+    "paths": [
+     "src/agent/routes.mjs",
+     "src/agent/tools.mjs"
+    ],
+    "status": "covered",
+    "note": "Object.hasOwn restricts dispatch to the tool object's own keys."
+   },
+   {
+    "unit": "Agent list_notes | member -> other tenant notes | tenant scope",
+    "paths": [
+     "src/agent/tools.mjs"
+    ],
+    "status": "covered",
+    "note": "Filtered by the session user's tenantId."
+   },
+   {
+    "unit": "Webhook POST /webhooks/payments | unauthenticated internet -> balances | signature bypass",
+    "paths": [
+     "src/webhooks.mjs",
+     "src/router.mjs",
+     "src/server.mjs"
+    ],
+    "status": "covered",
+    "note": "HMAC over timestamp.rawBody with a constant-time compare and a length check. An empty secret is rejected."
+   },
+   {
+    "unit": "Webhook POST /webhooks/payments | holder of a captured signed request -> balances | replay",
+    "paths": [
+     "src/webhooks.mjs"
+    ],
+    "status": "candidate",
+    "note": "The timestamp is signed but never checked for freshness, and there is no event-id idempotency."
+   },
+   {
+    "unit": "CI pull_request_target | fork PR author -> repository secret | untrusted checkout with secrets",
+    "paths": [
+     ".github/workflows/pr.yml",
+     "package.json",
+     "test/auth.test.mjs"
+    ],
+    "status": "candidate",
+    "note": "The workflow checks out the PR head SHA and runs npm test with PREVIEW_DEPLOY_TOKEN in env."
+   },
+   {
+    "unit": "Router / body parsing | unauthenticated client -> service availability | DoS / error leakage",
+    "paths": [
+     "src/router.mjs"
+    ],
+    "status": "covered",
+    "note": "The body is capped at 1MB. Errors are generic unless marked expose. A malformed percent-encoding gives a 500 with no leak."
+   }
+  ],
+  "items": [
+   {
+    "fingerprint": "notes-get-by-id-missing-tenant-check",
+    "file": "src/routes/notes.mjs",
+    "line": 8,
+    "title": "Cross-tenant note read via GET /notes/:id",
+    "verdict": "confirmed",
+    "boundary": "member of tenant t1 -> tenant isolation (README: may only read own tenant data) -> notes of tenant t2",
+    "trace": [
+     "src/server.mjs:14",
+     "src/auth.mjs:26",
+     "src/router.mjs:57",
+     "src/routes/notes.mjs:7",
+     "src/routes/notes.mjs:8",
+     "src/routes/notes.mjs:10"
+    ],
+    "reason": "The handler returns notes.get(req.params.id) without comparing note.tenantId to req.user.tenantId. The sibling routes do compare it (lines 6 and 14). u1 (t1) requesting GET /notes/n2 receives n2 of t2, with body and ownerId."
+   },
+   {
+    "fingerprint": "export-name-path-traversal",
+    "file": "src/routes/export.mjs",
+    "line": 12,
+    "title": "Path traversal in export name escapes the tenant directory",
+    "verdict": "confirmed",
+    "boundary": "member of tenant t1 -> per-tenant export directory -> other tenants' export CSVs and any *.csv readable by the process",
+    "trace": [
+     "src/server.mjs:15",
+     "src/router.mjs:17",
+     "src/routes/export.mjs:10",
+     "src/routes/export.mjs:11",
+     "src/routes/export.mjs:12",
+     "src/routes/export.mjs:13",
+     "src/routes/export.mjs:15"
+    ],
+    "reason": "name comes from the query string, decoded by URLSearchParams, and the only check is endsWith('.csv'). path.join(EXPORT_ROOT, tenantId, '../t2/x.csv') normalizes to EXPORT_ROOT/t2/x.csv, and there is no containment check, so a member can read any .csv file by its relative path. Effect is limited to files ending in .csv."
+   },
+   {
+    "fingerprint": "agent-fetch-doc-prefix-allowlist-bypass",
+    "file": "src/agent/tools.mjs",
+    "line": 7,
+    "title": "fetch_doc URL allowlist bypass (SSRF)",
+    "verdict": "confirmed",
+    "boundary": "signed-in member or assistant-steering content -> docs.example.com-only fetch allowlist -> server-side HTTPS requests to arbitrary hosts, response returned",
+    "trace": [
+     "src/server.mjs:18",
+     "src/agent/routes.mjs:7",
+     "src/agent/routes.mjs:9",
+     "src/agent/tools.mjs:7",
+     "src/agent/tools.mjs:10",
+     "src/agent/tools.mjs:11"
+    ],
+    "reason": "String(url).startsWith('https://docs.example.com') also accepts https://docs.example.com.attacker.tld/ (attacker-controlled DNS, which can resolve to internal addresses) and https://docs.example.com@other-host/ (userinfo). The server fetches the URL and returns up to 20000 chars of the body to the caller. redirect:'error' blocks only redirects. Source proves an arbitrary-host fetch with readback. Which internal services are reachable depends on the deployment and is not shown in source."
+   },
+   {
+    "fingerprint": "ci-pull-request-target-untrusted-checkout-secret",
+    "file": ".github/workflows/pr.yml",
+    "line": 13,
+    "title": "pull_request_target runs PR-head code with PREVIEW_DEPLOY_TOKEN",
+    "verdict": "confirmed",
+    "boundary": "fork PR author (untrusted) -> pull_request_target privileged context -> secrets.PREVIEW_DEPLOY_TOKEN",
+    "trace": [
+     ".github/workflows/pr.yml:3",
+     ".github/workflows/pr.yml:13",
+     ".github/workflows/pr.yml:17",
+     ".github/workflows/pr.yml:19",
+     "package.json:5"
+    ],
+    "reason": "pull_request_target runs on opened/synchronize for fork PRs and has access to secrets. The job checks out github.event.pull_request.head.sha and runs npm test, which executes the PR's own package.json script and test/ files, with the secret in env. A PR author can exfiltrate the token. permissions: contents:read limits GITHUB_TOKEN but does not protect the named secret."
+   },
+   {
+    "fingerprint": "support-impersonation-header-auth-bypass",
+    "file": "src/auth.mjs",
+    "line": 27,
+    "title": "X-Impersonate-User bypasses authentication when enabled",
+    "verdict": "needs_validation",
+    "boundary": "any network client reaching the service -> bearer-token authentication -> any user account including admin ops1",
+    "trace": [
+     "docker-compose.dev.yml:8",
+     "docker-compose.dev.yml:9",
+     "src/auth.mjs:27",
+     "src/auth.mjs:28",
+     "src/server.mjs:19",
+     "src/auth.mjs:39",
+     "src/routes/admin.mjs:7"
+    ],
+    "reason": "When SUPPORT_IMPERSONATION==='on', any request with X-Impersonate-User: ops1 is authenticated as admin with no credential, which allows DELETE /admin/tenants/:id. The dev compose file sets it on and publishes 8080 on all interfaces. Unresolved fact: whether any deployed (non-local) environment sets SUPPORT_IMPERSONATION=on, or whether the dev host's port 8080 is reachable by untrusted networks. README describes it as local debugging only."
+   },
+   {
+    "fingerprint": "payment-webhook-replay-no-freshness",
+    "file": "src/webhooks.mjs",
+    "line": 12,
+    "title": "Signed payment webhook replayable (no timestamp window / idempotency)",
+    "verdict": "needs_validation",
+    "boundary": "party holding a previously delivered signed webhook -> provider signature check -> account balances (repeated credit)",
+    "trace": [
+     "src/server.mjs:13",
+     "src/webhooks.mjs:10",
+     "src/webhooks.mjs:12",
+     "src/webhooks.mjs:13",
+     "src/webhooks.mjs:17",
+     "src/webhooks.mjs:18"
+    ],
+    "reason": "The timestamp is included in the HMAC but never compared to the current time, and there is no event-id dedupe. Resending a captured request credits the balance again. Unresolved fact: whether a lower-trust party can obtain a delivered signed request (request logging, TLS termination/proxy access, or the provider's retry and redelivery behavior)."
+   },
+   {
+    "fingerprint": "avatars-path-traversal",
+    "file": "src/routes/avatars.mjs",
+    "line": 11,
+    "title": "Avatar name traversal",
+    "verdict": "rejected",
+    "boundary": "authenticated user -> AVATAR_ROOT containment -> filesystem",
+    "trace": [
+     "src/router.mjs:57",
+     "src/routes/avatars.mjs:10",
+     "src/routes/avatars.mjs:11"
+    ],
+    "reason": "path.resolve normalizes decoded '..' and '/', and file.startsWith(AVATAR_ROOT + path.sep) rejects escapes. Cross-tenant avatar reads are intended per README."
+   },
+   {
+    "fingerprint": "search-order-by-sql-injection",
+    "file": "src/routes/search.mjs",
+    "line": 12,
+    "title": "SQL injection via sort/dir/q",
+    "verdict": "rejected",
+    "boundary": "member -> query construction -> notes DB",
+    "trace": [
+     "src/routes/search.mjs:9",
+     "src/routes/search.mjs:10",
+     "src/routes/search.mjs:13",
+     "src/db.mjs:20"
+    ],
+    "reason": "The column comes from the SORTABLE allowlist, direction is a fixed ASC or DESC, and q and tenantId are bound as $1/$2 parameters."
+   },
+   {
+    "fingerprint": "admin-route-authorization-bypass",
+    "file": "src/server.mjs",
+    "line": 19,
+    "title": "Reaching /admin without admin role",
+    "verdict": "rejected",
+    "boundary": "member -> requireAdmin -> tenant management",
+    "trace": [
+     "src/server.mjs:19",
+     "src/router.mjs:16",
+     "src/router.mjs:20",
+     "src/auth.mjs:39"
+    ],
+    "reason": "The /admin mount chain enforces authenticate then requireAdmin. WHATWG URL normalizes dot-segments, and no other mount prefix matches /admin paths."
+   },
+   {
+    "fingerprint": "session-token-forgery",
+    "file": "src/auth.mjs",
+    "line": 20,
+    "title": "Session token forgery / alg confusion",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> HMAC verify -> user identity",
+    "trace": [
+     "src/auth.mjs:4",
+     "src/auth.mjs:18",
+     "src/auth.mjs:20",
+     "src/auth.mjs:22"
+    ],
+    "reason": "A fixed HMAC-SHA256 with a constant-time compare runs before the claims are parsed, and exp is enforced. With no env secret, a random 32-byte secret is used rather than a known default."
+   },
+   {
+    "fingerprint": "webhook-signature-bypass",
+    "file": "src/webhooks.mjs",
+    "line": 13,
+    "title": "Unsigned webhook accepted",
+    "verdict": "rejected",
+    "boundary": "internet -> webhook HMAC -> balances",
+    "trace": [
+     "src/webhooks.mjs:5",
+     "src/webhooks.mjs:12",
+     "src/webhooks.mjs:13"
+    ],
+    "reason": "An empty secret is explicitly rejected, the lengths are compared before timingSafeEqual, and the HMAC covers the raw body."
+   },
+   {
+    "fingerprint": "agent-tool-dispatch-prototype",
+    "file": "src/agent/routes.mjs",
+    "line": 8,
+    "title": "Arbitrary function via tool name",
+    "verdict": "rejected",
+    "boundary": "member -> tool allowlist -> server functions",
+    "trace": [
+     "src/agent/routes.mjs:7",
+     "src/agent/routes.mjs:8"
+    ],
+    "reason": "Object.hasOwn(tools, name) admits only fetch_doc and list_notes. Inherited properties such as constructor and __proto__ are rejected."
+   },
+   {
+    "fingerprint": "notes-put-cross-tenant",
+    "file": "src/routes/notes.mjs",
+    "line": 14,
+    "title": "Cross-tenant note update",
+    "verdict": "rejected",
+    "boundary": "member -> tenant check -> other tenant notes",
+    "trace": [
+     "src/routes/notes.mjs:13",
+     "src/routes/notes.mjs:14"
+    ],
+    "reason": "note.tenantId !== req.user.tenantId returns 404 before the write."
+   }
+  ],
+  "hardening": [
+   "router.mjs:57 decodeURIComponent throws on malformed percent-encoding and yields a 500. Return a 400 instead.",
+   "search.mjs:13 does not escape LIKE wildcards (% and _) in q. This is limited to the caller's own tenant.",
+   "The request body is read and parsed for every route before authentication (1MB cap). Consider reading the body after authentication or using smaller limits.",
+   "webhooks.mjs:18 Number(event.amount) is not validated as a positive finite value. The payload is provider-signed, so this is defense in depth.",
+   "Avatar and export reads do not resolve symlinks (realpath). Containment relies on lexical checks only.",
+   "GitHub Actions in pr.yml are pinned by tag (@v4), not by commit SHA."
+  ]
+ },
+ "aad01640": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists and matches the description. src/server.mjs:14 mounts /notes behind authenticate only, with no tenant middleware. src/auth.mjs:26-35 sets req.user from a verified HMAC bearer token (or from impersonation when enabled), so it establishes identity and nothing more. src/router.mjs:21 strips the /notes prefix, and router.mjs:57 decodes the :id segment into req.params.id. src/routes/notes.mjs:7-10 looks up notes.get(req.params.id), returns 404 only when the note is missing, and otherwise returns the full note with res.send(200, note). It never compares note.tenantId with req.user.tenantId. The sibling routes do enforce tenancy: GET / filters on tenantId at line 6, and PUT /:id checks it at line 14. That shows the missing check is a defect, not a design choice. No other file adds a tenant control: the Router has no global hooks and db.notes is a plain Map. src/db.mjs gives u1 tenant t1 and gives note n2 tenant t2 with a short, guessable id. README line 5 says a member may only read data of their own tenant. So u1, sending a valid Bearer token with GET /notes/n2, receives the full n2 record (title 'budget', body 'tenant two note'). The impact is limited to reading another tenant's note by id. It is not a write: PUT checks tenancy. It is not enumeration: the list filters by tenant. The attacker must be an authenticated member and must know or guess a note id. In this fixture the ids are trivial (n1, n2).",
+  "unresolved_fact": null
+ },
+ "acf65a02": {
+  "decision": "confirmed",
+  "reason": "All trace locations exist and match. server.mjs:15 mounts /export behind authenticate only, with no tenant or role check beyond requiring a valid user. router.mjs:17 fills req.query from URLSearchParams, which are already decoded, so '../' arrives as-is. export.mjs:10 reads name from the query, and line 11 only checks endsWith('.csv'). Line 12 builds the path with path.join(EXPORT_ROOT, req.user.tenantId, name), which resolves '..' segments, and nothing checks that the result stays under EXPORT_ROOT/<tenantId>. Line 13 reads the file and line 15 returns its contents in the response. No middleware in auth.mjs, router.mjs or routes() normalizes or rejects traversal, so name=../t2/x.csv reads EXPORT_ROOT/t2/x.csv. Deeper '../' sequences reach any .csv the process can read. What source establishes is that an authenticated member can read another tenant's export CSVs or any process-readable .csv, if such files exist. It does not give a write, or a read of files without the .csv extension.",
+  "unresolved_fact": null
+ },
+ "a20714ae": {
+  "decision": "confirmed",
+  "reason": "The trace holds at git HEAD. server.mjs:18 mounts /agent behind authenticate only, so any signed-in member of any tenant gets in, with no role or tenant check. routes.mjs:7-9 accepts any tool name that is an own key of `tools` and passes req.body.args, which comes straight from the client JSON (router.mjs readJson only caps the size at 1MB). tools.mjs:7 checks only String(url).startsWith('https://docs.example.com'). It does no URL parsing and no host comparison, and nothing in router, auth, server or package.json adds a control. tools.mjs:10 fetches String(url) with redirect:'error', and tools.mjs:11 returns up to 20000 chars of the body, which routes.mjs:9 sends back in the 200 JSON. So a URL like https://docs.example.com.attacker.tld/... passes the check, the server sends an HTTPS request to that attacker-registered host, and the response body comes back to the caller. Assistant-steered calls (README: tools run on behalf of the signed-in member) can also put data in that URL and send it to the attacker's host. The impact is narrower than claimed in three ways. (1) The userinfo variant https://docs.example.com@other-host/ does not work, because WHATWG fetch (Node's built-in undici) rejects URLs that carry credentials with a TypeError, which surfaces as a 500. (2) The bypass is limited to the scheme https: and hostnames that start with the literal 'docs.example.com', such as attacker subdomain chains or docs.example.com:<port>. It is not 'arbitrary hosts'. (3) Reaching internal or metadata services is not shown. The scheme stays fixed at https, redirects are refused, and Node's default TLS validation would fail an attacker hostname that DNS-points at an internal IP. No source line disables TLS validation. The confirmed effect is therefore: allowlist bypass, server-side HTTPS requests to attacker-controlled hosts, and the response body returned to the caller.",
+  "unresolved_fact": null
+ },
+ "a354d919": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists in the fixture at git HEAD 5940e7b and matches the description. pr.yml:3 triggers on pull_request_target (types opened and synchronize, line 4). That event runs in the base repository's privileged context, with repository secrets available, even for fork PRs. So the lower-trust entry is any fork PR author. pr.yml:11-13 runs actions/checkout@v4 with ref: github.event.pull_request.head.sha, which puts the attacker's PR-head tree in the workspace. pr.yml:17 runs `npm test` on that tree. npm reads package.json from the checked-out tree, so the PR author controls both the test script (package.json:5, currently `node --test test/`) and the contents of test/. pr.yml:18-19 puts secrets.PREVIEW_DEPLOY_TOKEN into that step's environment, so attacker code can read the token and send it out. The only control on the path is `permissions: contents: read` (pr.yml:5-6). It limits GITHUB_TOKEN only and does not protect repository secrets. Nothing else on the path stops this: no job or step `if:` condition (for example on head.repo or the author's association), no `environment:` with required reviewers, no label gate, no split into a pull_request job plus a workflow_run job, and no other workflow file (pr.yml is the only one). The established impact is limited to an untrusted fork PR author running code with access to PREVIEW_DEPLOY_TOKEN and being able to exfiltrate it. That is a meaningful crossing of the trust boundary, and it is visible entirely in source. What the token can do after it leaks is not established, and I did not claim any stronger downstream effect.",
+  "unresolved_fact": null
+ },
+ "ab679f64": {
+  "decision": "needs_validation",
+  "reason": "Every trace location exists and matches the description. In docker-compose.dev.yml, line 8 sets SUPPORT_IMPERSONATION: \"on\" and line 9 publishes \"8080:8080\" without a host IP, so the port is bound on all host interfaces. In src/auth.mjs, the check on line 27 runs before any bearer-token check, and line 28 sets req.user = users.get(<header value>) with no credential, signature, source-IP or allowlist check. src/server.mjs:19 mounts /admin behind authenticate and requireAdmin. requireAdmin (src/auth.mjs:39) only checks req.user.role, and ops1 is role 'admin' in src/db.mjs:4. That lets the caller reach DELETE /tenants/:id at src/routes/admin.mjs:7-10, which deletes a tenant and all of its notes. The router (src/router.mjs) adds no header filtering, origin check or other control. So when the flag is on, a request with X-Impersonate-User: ops1 and no other credential becomes admin and can delete tenants. No source control prevents this. The bypass is not shown to reach a real trust boundary, though. The flag is read from the environment and defaults to off (strict === 'on'). The only file that turns it on is the dev compose file, and the README (line 8) describes the feature as local debugging. The repository has no production or other non-local deployment manifest. The data is the in-memory synthetic store in db.mjs. A dev instance exposed through 0.0.0.0:8080 to a network that untrusted clients can reach would be a real cross-boundary admin takeover, but the source cannot show that such a network or deployment exists. It is also not refuted, because the port mapping is not limited to 127.0.0.1. The trace's first entry is a config line, not an entrypoint. The actual lower-trust entry is the HTTP request header read at src/auth.mjs:27.",
+  "unresolved_fact": "Whether any instance that untrusted clients can reach runs with SUPPORT_IMPERSONATION=on. That means either a deployed non-local environment with this variable set, or a dev host running docker-compose.dev.yml whose 0.0.0.0:8080 mapping is reachable from networks beyond the developer's own machine. No deployment configuration in the repository answers this."
+ },
+ "ac068315": {
+  "decision": "needs_validation",
+  "reason": "Every trace location exists and matches the description. src/server.mjs:13 mounts /webhooks with no authenticate step, so POST /webhooks/payments is reachable without authentication. The router (src/router.mjs readJson) sets req.rawBody and req.body from the same bytes. In src/webhooks.mjs, line 10 reads x-signature-timestamp. Line 12 computes the HMAC over `${timestamp}.${rawBody}`. Line 13 rejects only a missing secret or a signature mismatch, using a length check plus timingSafeEqual, so forging a request without the secret is not possible. Lines 17-18 add Number(event.amount) to the balance of an existing account. The timestamp is never compared to the current time. No event-id, nonce or seen-set exists anywhere in the fixture (searched for webhook, replay, idempot and timestamp; db.mjs holds only the in-memory balances Map). Resending an identical signed request therefore passes verification and credits the account again each time. Impact is limited to that: repeated crediting of the account and amount named in an original provider-signed event. Tampering with the amount or account, or forging an event, is blocked by the HMAC.",
+  "unresolved_fact": "Whether a lower-trust party can ever obtain a complete, previously delivered signed request (body plus x-signature and x-signature-timestamp headers). Possible routes are request logging, TLS-terminating proxy or log access, or the provider's own retry/redelivery behavior, and none of these appear in the repository. A second fact outside source is whether the provider redelivers the same event automatically, which would double-credit with no attacker at all."
+ },
+ "ac45fe8c": {
+  "ledger": [
+   {
+    "unit": "HTTP GET /notes/:id | member tenant A -> tenant B notes | IDOR / cross-tenant read",
+    "paths": [
+     "src/server.mjs",
+     "src/router.mjs",
+     "src/auth.mjs",
+     "src/routes/notes.mjs",
+     "src/db.mjs",
+     "README.md"
+    ],
+    "status": "candidate",
+    "note": "GET /:id has no tenantId check, unlike GET / and PUT /:id"
+   },
+   {
+    "unit": "HTTP GET/PUT /notes (list, update) | member -> other tenant | IDOR",
+    "paths": [
+     "src/routes/notes.mjs",
+     "src/db.mjs"
+    ],
+    "status": "covered",
+    "note": "List filters by req.user.tenantId; PUT returns 404 when note.tenantId !== req.user.tenantId"
+   },
+   {
+    "unit": "HTTP GET /export?name= | member tenant A -> other tenant / filesystem | path traversal",
+    "paths": [
+     "src/server.mjs",
+     "src/router.mjs",
+     "src/routes/export.mjs"
+    ],
+    "status": "candidate",
+    "note": "name is passed to path.join with no containment check; only the .csv suffix is enforced"
+   },
+   {
+    "unit": "HTTP GET /avatars/:name | member -> filesystem outside AVATAR_ROOT | path traversal (incl. %2F via decodeURIComponent)",
+    "paths": [
+     "src/server.mjs",
+     "src/router.mjs",
+     "src/routes/avatars.mjs",
+     "README.md"
+    ],
+    "status": "covered",
+    "note": "path.resolve plus a startsWith(AVATAR_ROOT + sep) check contains decoded ../ and absolute names; avatars are documented as shared across tenants"
+   },
+   {
+    "unit": "HTTP GET /search | member -> SQL / other tenant | SQL injection, tenant scoping",
+    "paths": [
+     "src/routes/search.mjs",
+     "src/db.mjs",
+     "src/router.mjs"
+    ],
+    "status": "covered",
+    "note": "sort uses an allowlist, dir is mapped to ASC/DESC only, q and tenantId are bound as params, tenant_id = $1 comes from req.user"
+   },
+   {
+    "unit": "HTTP POST /agent/tool-call | member or assistant-chosen args -> tool dispatch | prototype or unknown tool invocation",
+    "paths": [
+     "src/agent/routes.mjs",
+     "src/agent/tools.mjs"
+    ],
+    "status": "covered",
+    "note": "Object.hasOwn(tools, name) blocks inherited properties; list_notes is filtered by user.tenantId"
+   },
+   {
+    "unit": "Agent tool fetch_doc | member / prompt-injected assistant -> server network | SSRF via URL prefix allowlist",
+    "paths": [
+     "src/agent/tools.mjs",
+     "src/router.mjs"
+    ],
+    "status": "candidate",
+    "note": "The startsWith prefix has no trailing '/', so hosts like docs.example.com.attacker.tld pass. Examined, then rejected on effect (see item)"
+   },
+   {
+    "unit": "Authentication middleware | unauthenticated client -> any user incl. admin | impersonation header bypass",
+    "paths": [
+     "src/auth.mjs",
+     "src/server.mjs",
+     "docker-compose.dev.yml",
+     "README.md",
+     "src/db.mjs"
+    ],
+    "status": "candidate",
+    "note": "When SUPPORT_IMPERSONATION=on, the x-impersonate-user header alone sets req.user. The dev compose file enables it and publishes 8080 on all interfaces"
+   },
+   {
+    "unit": "Bearer token sign/verify | unauthenticated client -> session | token forgery, timing, expiry",
+    "paths": [
+     "src/auth.mjs",
+     "test/auth.test.mjs"
+    ],
+    "status": "covered",
+    "note": "HMAC-SHA256 with a length check and timingSafeEqual before JSON.parse; exp is enforced; the secret falls back to a random value per process"
+   },
+   {
+    "unit": "HTTP /admin/* | member -> operator functions | authorization / mount-order bypass",
+    "paths": [
+     "src/server.mjs",
+     "src/router.mjs",
+     "src/auth.mjs",
+     "src/routes/admin.mjs"
+    ],
+    "status": "covered",
+    "note": "The mount chain is authenticate then requireAdmin. Prefix match is exact or prefix + '/'. WHATWG URL normalizes dot segments and does not decode %61, so encoded variants fall through to 404"
+   },
+   {
+    "unit": "Router body/error handling | any client -> server | info leak, oversized body",
+    "paths": [
+     "src/router.mjs"
+    ],
+    "status": "covered",
+    "note": "Only errors with expose set leak their message; body capped at 1MB"
+   },
+   {
+    "unit": "Webhook POST /webhooks/payments | unauthenticated network party -> account balances | signature forgery",
+    "paths": [
+     "src/server.mjs",
+     "src/webhooks.mjs",
+     "src/router.mjs"
+    ],
+    "status": "covered",
+    "note": "HMAC over timestamp.rawBody with an empty-secret guard, a length check and timingSafeEqual"
+   },
+   {
+    "unit": "Webhook POST /webhooks/payments | party holding a previously delivered signed event -> account balances | replay / duplicate credit",
+    "paths": [
+     "src/webhooks.mjs"
+    ],
+    "status": "candidate",
+    "note": "No timestamp freshness check and no event-id idempotency"
+   },
+   {
+    "unit": "CI pull_request_target | fork PR author -> repository secret PREVIEW_DEPLOY_TOKEN | untrusted code execution with secrets",
+    "paths": [
+     ".github/workflows/pr.yml",
+     "package.json",
+     "test/auth.test.mjs"
+    ],
+    "status": "candidate",
+    "note": "Checks out the PR head SHA and runs npm test (PR-controlled script and tests) with the secret in env"
+   },
+   {
+    "unit": "Configuration / dev compose | LAN client -> dev instance | exposure",
+    "paths": [
+     "docker-compose.dev.yml"
+    ],
+    "status": "covered",
+    "note": "Folded into the impersonation item"
+   }
+  ],
+  "items": [
+   {
+    "fingerprint": "notes-get-by-id-missing-tenant-check",
+    "file": "src/routes/notes.mjs",
+    "line": 8,
+    "title": "Cross-tenant note read via GET /notes/:id",
+    "verdict": "confirmed",
+    "boundary": "member of tenant A -> missing tenantId check on GET /notes/:id -> tenant B notes (title, body, ownerId)",
+    "trace": [
+     "src/server.mjs:14",
+     "src/auth.mjs:26",
+     "src/router.mjs:57",
+     "src/routes/notes.mjs:7",
+     "src/routes/notes.mjs:8",
+     "src/routes/notes.mjs:10"
+    ],
+    "reason": "The handler does notes.get(req.params.id) and returns the whole note. It never compares note.tenantId with req.user.tenantId, unlike the list route (line 6) and PUT (line 14). Example: u1 (t1) sends GET /notes/n2 and receives tenant t2's note. README:5 says members may only read data of their own tenant."
+   },
+   {
+    "fingerprint": "export-name-path-traversal",
+    "file": "src/routes/export.mjs",
+    "line": 12,
+    "title": "Path traversal in /export name escapes tenant export directory",
+    "verdict": "confirmed",
+    "boundary": "member of tenant A -> tenant-scoped export directory (path.join with no containment check) -> other tenants' export files and any readable *.csv on the host",
+    "trace": [
+     "src/server.mjs:15",
+     "src/auth.mjs:26",
+     "src/router.mjs:17",
+     "src/routes/export.mjs:10",
+     "src/routes/export.mjs:11",
+     "src/routes/export.mjs:12",
+     "src/routes/export.mjs:13",
+     "src/routes/export.mjs:15"
+    ],
+    "reason": "name comes from the query string. The only check is endsWith('.csv'). path.join(EXPORT_ROOT, tenantId, name) resolves '../', so name=../t2/<file>.csv reads under tenant t2's directory and deeper ../ sequences leave EXPORT_ROOT. The contents are returned to the caller. Unlike avatars.mjs:11, there is no startsWith containment check. Which specific files exist is runtime data."
+   },
+   {
+    "fingerprint": "ci-pull-request-target-runs-pr-code-with-secret",
+    "file": ".github/workflows/pr.yml",
+    "line": 17,
+    "title": "pull_request_target runs PR-head code with PREVIEW_DEPLOY_TOKEN",
+    "verdict": "confirmed",
+    "boundary": "external PR author (fork) -> pull_request_target trust context (base-repo secrets) -> secrets.PREVIEW_DEPLOY_TOKEN",
+    "trace": [
+     ".github/workflows/pr.yml:3",
+     ".github/workflows/pr.yml:4",
+     ".github/workflows/pr.yml:13",
+     ".github/workflows/pr.yml:17",
+     ".github/workflows/pr.yml:19",
+     "package.json:5"
+    ],
+    "reason": "pull_request_target runs in the base-repo context with access to secrets, on opened/synchronize for any PR. The job checks out github.event.pull_request.head.sha, then runs npm test. Both the test script (package.json:5) and test/ come from the PR, and the step env carries PREVIEW_DEPLOY_TOKEN, so attacker code can read and send out the token. permissions: contents: read limits only GITHUB_TOKEN, not repository secrets. No author or label gate is visible."
+   },
+   {
+    "fingerprint": "support-impersonation-header-auth-bypass",
+    "file": "src/auth.mjs",
+    "line": 27,
+    "title": "x-impersonate-user header grants any identity when SUPPORT_IMPERSONATION=on",
+    "verdict": "needs_validation",
+    "boundary": "unauthenticated network client -> authenticate middleware -> any user incl. ops1 admin (all tenants' notes, DELETE /admin/tenants/:id)",
+    "trace": [
+     "docker-compose.dev.yml:8",
+     "docker-compose.dev.yml:9",
+     "src/auth.mjs:27",
+     "src/auth.mjs:28",
+     "src/auth.mjs:34",
+     "src/server.mjs:19",
+     "src/auth.mjs:39",
+     "src/routes/admin.mjs:7"
+    ],
+    "reason": "With the flag on, the header alone sets req.user with no credential, so x-impersonate-user: ops1 passes requireAdmin. Unresolved fact: whether any network-reachable deployment runs with SUPPORT_IMPERSONATION=on. The source enables it only in docker-compose.dev.yml, which publishes 8080:8080 on all host interfaces, so a dev instance would be reachable from other machines on that network. README:8 says the feature is meant for local debugging."
+   },
+   {
+    "fingerprint": "payment-webhook-replay-no-freshness-or-idempotency",
+    "file": "src/webhooks.mjs",
+    "line": 17,
+    "title": "Signed payment webhook can be replayed to credit balance repeatedly",
+    "verdict": "needs_validation",
+    "boundary": "party holding a previously delivered signed webhook -> HMAC signature check (no freshness/idempotency) -> account balances",
+    "trace": [
+     "src/server.mjs:13",
+     "src/webhooks.mjs:10",
+     "src/webhooks.mjs:12",
+     "src/webhooks.mjs:13",
+     "src/webhooks.mjs:17",
+     "src/webhooks.mjs:18"
+    ],
+    "reason": "The signature covers timestamp and body, but the timestamp is never compared with the current time and no event id is recorded. The same signed request therefore adds event.amount again on every delivery. Unresolved fact: whether a lower-trust party can obtain a previously delivered signed request (for example from logs, a proxy or the provider dashboard). The provider's own retries would also double-credit, which is an integrity defect rather than an attack."
+   },
+   {
+    "fingerprint": "fetch-doc-prefix-allowlist-ssrf",
+    "file": "src/agent/tools.mjs",
+    "line": 7,
+    "title": "fetch_doc host allowlist bypassable via prefix match",
+    "verdict": "rejected",
+    "boundary": "member / prompt-injected assistant -> docs URL allowlist -> server-side network",
+    "trace": [
+     "src/server.mjs:18",
+     "src/agent/routes.mjs:9",
+     "src/agent/tools.mjs:7",
+     "src/agent/tools.mjs:10"
+    ],
+    "reason": "The prefix check does pass https://docs.example.com.attacker.tld/. The source still bounds the effect. Only https is reachable. Redirects are set to 'error'. URLs with credentials (docs.example.com@internal) make fetch's Request constructor throw. TLS hostname verification stops an attacker-chosen hostname that resolves to an internal IP from completing a handshake with an internal service. What remains is fetching an attacker-owned page and returning it to the same member, so no boundary is crossed (see hardening)."
+   },
+   {
+    "fingerprint": "avatars-path-traversal",
+    "file": "src/routes/avatars.mjs",
+    "line": 11,
+    "title": "Avatar name traversal",
+    "verdict": "rejected",
+    "boundary": "member -> AVATAR_ROOT containment -> host filesystem",
+    "trace": [
+     "src/router.mjs:57",
+     "src/routes/avatars.mjs:10",
+     "src/routes/avatars.mjs:11"
+    ],
+    "reason": "Decoded names (including %2F and ..) are resolved with path.resolve and rejected unless they start with AVATAR_ROOT + path.sep. Cross-tenant access to avatars is intended (README:7)."
+   },
+   {
+    "fingerprint": "search-sql-injection",
+    "file": "src/routes/search.mjs",
+    "line": 12,
+    "title": "SQL injection via sort/dir/q",
+    "verdict": "rejected",
+    "boundary": "member -> query construction -> notes table / other tenants",
+    "trace": [
+     "src/routes/search.mjs:9",
+     "src/routes/search.mjs:10",
+     "src/routes/search.mjs:12",
+     "src/routes/search.mjs:13",
+     "src/db.mjs:20"
+    ],
+    "reason": "Interpolated column and direction come only from SORTABLE and from a fixed ASC/DESC mapping. q and tenantId are bound parameters, and tenant scoping uses req.user.tenantId."
+   },
+   {
+    "fingerprint": "tool-call-prototype-dispatch",
+    "file": "src/agent/routes.mjs",
+    "line": 8,
+    "title": "Arbitrary/prototype tool invocation",
+    "verdict": "rejected",
+    "boundary": "member -> tool dispatch -> inherited functions",
+    "trace": [
+     "src/agent/routes.mjs:7",
+     "src/agent/routes.mjs:8",
+     "src/agent/tools.mjs:13"
+    ],
+    "reason": "Object.hasOwn rejects names such as constructor or __proto__. list_notes filters by user.tenantId."
+   },
+   {
+    "fingerprint": "admin-route-authz-bypass",
+    "file": "src/server.mjs",
+    "line": 19,
+    "title": "Member reaching /admin",
+    "verdict": "rejected",
+    "boundary": "member -> requireAdmin -> tenant deletion/listing",
+    "trace": [
+     "src/server.mjs:19",
+     "src/router.mjs:20",
+     "src/auth.mjs:39"
+    ],
+    "reason": "The mount chain enforces authenticate and then role === 'admin'. Prefix matching is exact or prefix + '/'. URL parsing normalizes dot segments and does not decode %-encoded letters, so no alternate path reaches adminRoutes without the chain. Earlier mounts do not match /admin paths."
+   },
+   {
+    "fingerprint": "session-token-forgery",
+    "file": "src/auth.mjs",
+    "line": 20,
+    "title": "Bearer token forgery / expiry bypass",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> verify() -> user session",
+    "trace": [
+     "src/auth.mjs:16",
+     "src/auth.mjs:18",
+     "src/auth.mjs:20",
+     "src/auth.mjs:22",
+     "src/auth.mjs:31"
+    ],
+    "reason": "An HMAC-SHA256 constant-time compare with a length guard runs before claims are parsed. exp must be a number and in the future. There is no algorithm field to confuse."
+   },
+   {
+    "fingerprint": "webhook-signature-bypass",
+    "file": "src/webhooks.mjs",
+    "line": 13,
+    "title": "Webhook signature forgery / empty secret",
+    "verdict": "rejected",
+    "boundary": "unauthenticated network party -> HMAC check -> balances",
+    "trace": [
+     "src/webhooks.mjs:5",
+     "src/webhooks.mjs:12",
+     "src/webhooks.mjs:13"
+    ],
+    "reason": "An empty secret is rejected explicitly. The HMAC is computed over the raw body bytes that are parsed later (router.mjs:71-74), and comparison uses a length check and timingSafeEqual."
+   }
+  ],
+  "hardening": [
+   "fetch_doc: parse the URL and compare protocol and hostname exactly (or require the prefix to end with '/'), and block private address ranges after DNS resolution.",
+   "Malformed percent-encoding in path params makes decodeURIComponent throw, returning a generic 500. Map it to 400.",
+   "Remove or compile out the impersonation path in production builds, and bind the dev compose port to 127.0.0.1.",
+   "CI: use the pull_request trigger, or do not check out the PR head under pull_request_target; scope deploy secrets to a separate job gated by environment approval; set persist-credentials: false.",
+   "Webhook: enforce a timestamp tolerance window and store processed event ids; validate that amount is a finite positive number.",
+   "SESSION_SECRET falls back to a random value per process, so tokens become invalid across restarts or replicas. Require it to be configured explicitly.",
+   "readJson buffers and parses a body for every method, including GET and unauthenticated webhook requests, up to 1MB. Consider applying per-route limits."
+  ]
+ },
+ "a025c088": {
+  "decision": "confirmed",
+  "reason": "Each trace location matches its description. src/server.mjs:14 mounts /notes behind authenticate only. src/auth.mjs:26-35 sets req.user to any valid member and does nothing about tenants. src/router.mjs:57 copies the decoded :id path segment straight into req.params with no ownership check. src/routes/notes.mjs:7-10 looks up notes.get(req.params.id) and, if the note exists, returns the whole object (id, tenantId, ownerId, title, body). Neither the handler nor the Router.handle chain compares note.tenantId with req.user.tenantId anywhere. The sibling routes show the expected control is missing here: the list route (line 6) filters by tenantId, and PUT (line 14) returns 404 when the tenant does not match. db.mjs has n2 in tenant t2 and u1 in tenant t1, so an authenticated u1 calling GET /notes/n2 gets tenant two's note. README:5 says members may only read their own tenant's data, so the tenant boundary is crossed. The impact is read-only disclosure of a single note per request, and the attacker must know or guess its id. The ids in the fixture are short and sequential (n1, n2). No write or other effect is claimed or established.",
+  "unresolved_fact": null
+ },
+ "a68ac5d3": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists and matches the description. server.mjs:15 mounts /export behind authenticate only. auth.mjs:26-35 just puts the signed-in user (for example u1, tenant t1, from db.mjs) on req.user; there is no tenant check. router.mjs:16-17 fills req.query from URLSearchParams, which already decodes the value, so name is fully attacker-controlled (for example ../t2/x.csv or ../../../../some/path.csv). At export.mjs:10-11 the only check is name.endsWith('.csv'). export.mjs:12 builds path.join(EXPORT_ROOT, tenantId, name), and path.join normalizes '..' segments, so the path resolves outside EXPORT_ROOT/<tenantId>. Nothing checks that the result stays inside the directory, unlike avatars.mjs:10-11, which uses path.resolve plus a startsWith(AVATAR_ROOT + sep) check. export.mjs:13 reads the file with fs.readFile and export.mjs:15 returns its full content to the caller. No router, framework or middleware control normalizes or rejects the name. The README says members may only read data of their own tenant, so tenant A reading tenant B's exports, or any readable host file ending in .csv, crosses that boundary. The impact is limited to reading .csv files the process can access. It gives no write access and no files without the .csv ending. Whether a given victim file exists at runtime is ordinary data, not a missing control.",
+  "unresolved_fact": null
+ },
+ "aa4ad953": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists in the fixture at git HEAD and matches the description. pr.yml:3-4 triggers on pull_request_target for [opened, synchronize]. That trigger runs in the base-repo context and can read repository secrets even for PRs from forks, so it is a real entry point for a lower-trust fork author. pr.yml:11-13 runs actions/checkout with ref set to github.event.pull_request.head.sha, which puts the PR author's tree in the workspace. pr.yml:17-19 then runs `npm test` with PREVIEW_DEPLOY_TOKEN set from secrets.PREVIEW_DEPLOY_TOKEN. npm test is read from the checked-out package.json (line 5: `node --test test/`), so the author controls both the script and the test/ files. That is arbitrary PR code running with the secret in its environment. I found no control on the path: there is no `if:` condition on author_association, actor or label, no environment with required reviewers, and no split into an unprivileged pull_request job plus a later privileged one. The only other workflow file is this one. `permissions: contents: read` only limits GITHUB_TOKEN and does not shield repository secrets. The impact that source establishes is that the fork author's code reads PREVIEW_DEPLOY_TOKEN and can send it out. The candidate does not claim more than that. What the token can do after it leaks is not part of the claim.",
+  "unresolved_fact": null
+ },
+ "acc01b0d": {
+  "decision": "needs_validation",
+  "reason": "I checked the whole trace against the source and could not refute it. docker-compose.dev.yml:8 sets SUPPORT_IMPERSONATION=\"on\" and :9 publishes \"8080:8080\" with no host IP, so it binds all interfaces. In src/auth.mjs:27-28, when the flag is on and an x-impersonate-user header is present, the code sets req.user = users.get(header) without checking a Bearer token or HMAC, and line 34 only rejects a null user. src/db.mjs:4 defines ops1 with role 'admin'. src/server.mjs:19 mounts /admin as authenticate -> requireAdmin -> adminRoutes. requireAdmin (auth.mjs:39) checks only req.user.role, so ops1 passes. src/routes/admin.mjs:7-10 deletes the tenant and all of its notes, and admin.mjs:6 lists tenants. router.mjs strips the prefix correctly, so path matching does not stop this. I found no other source control: the header is not restricted to loopback, there is no network or IP check, no second secret and no environment guard. The impact is also wider than admin. The same header lets a caller act as any user (u1 or u2) on every route that uses authenticate (notes, export, avatars, search, agent). One correction: the candidate's boundary says 'all tenants' notes', but the admin routes shown only list tenants and delete tenants with their notes. They do not read notes. Reading another tenant's notes works by impersonating that tenant's member, not through ops1. The flag defaults to off and is turned on only in the dev compose file. README.md:8 calls the feature 'for local debugging', and no other config, workflow or package script sets it. So whether this crosses a real trust boundary depends on how the service is actually deployed, and the source cannot show that.",
+  "unresolved_fact": "Whether any deployment that untrusted clients can reach (production, staging, preview, or a dev host exposed on a shared network through the 0.0.0.0:8080 publish) runs with SUPPORT_IMPERSONATION=on. The repository sets it only in docker-compose.dev.yml, and no production deployment config is in the source."
+ },
+ "ab7081ac": {
+  "decision": "needs_validation",
+  "reason": "I checked the source and it supports the trace. Nothing in it shows that an attacker could actually get hold of a signed request. Every trace location exists and matches the description. src/server.mjs:13 mounts /webhooks with no authenticate step, so POST /webhooks/payments can be reached without logging in. The router (src/router.mjs:63-78) reads at most 1 MB, sets req.rawBody, and parses JSON. src/webhooks.mjs:10-13 computes HMAC-SHA256 over `${timestamp}.${rawBody}` and compares it in constant time; it also rejects requests when the secret is empty. The signature check is sound, so nobody can forge a request without the secret. The timestamp header is used only as HMAC input and is never compared with the current time. Nothing reads or records an event id, and no other file adds replay protection (the only state is the in-memory balances Map in src/db.mjs:17). Lines 17-18 then add Number(event.amount) to balances for any account that already exists. So the exact same signed request, resent, credits the balance again every time. Impact is limited to resending events the provider actually sent, with their original account and amount. Changing the amount or the target account is not possible without the secret. The claim that provider retries would also double-credit depends on the provider's retry behaviour, which is outside the source.",
+  "unresolved_fact": "Whether a lower-trust party can obtain a previously delivered, validly signed payments webhook request (exact headers x-signature and x-signature-timestamp plus raw body), for example through logs, a proxy or TLS-terminating intermediary, or the provider's dashboard or resend feature. A related open fact is whether the provider redelivers the same event (retries) in a way that would cause double crediting without an attacker."
+ },
+ "acd1b8b9": {
+  "ledger": [
+   {
+    "unit": "GET /notes/:id | member tenant A -> tenant B notes | IDOR / tenant isolation",
+    "paths": [
+     "src/server.mjs",
+     "src/router.mjs",
+     "src/auth.mjs",
+     "src/routes/notes.mjs",
+     "src/db.mjs",
+     "README.md"
+    ],
+    "status": "candidate",
+    "note": "No tenantId check on single-note read. GET / and PUT /:id do check it."
+   },
+   {
+    "unit": "GET /notes, PUT /notes/:id | member tenant A -> tenant B notes | IDOR",
+    "paths": [
+     "src/routes/notes.mjs"
+    ],
+    "status": "covered",
+    "note": "The list is filtered by req.user.tenantId. PUT returns 404 when the note's tenantId does not match."
+   },
+   {
+    "unit": "GET /export?name= | member tenant A -> other tenant export dirs / filesystem | path traversal",
+    "paths": [
+     "src/routes/export.mjs",
+     "src/router.mjs",
+     "src/server.mjs"
+    ],
+    "status": "candidate",
+    "note": "path.join normalizes '../' in a user-supplied name. The only check is endsWith('.csv'). There is no containment check."
+   },
+   {
+    "unit": "GET /avatars/:name | authenticated member -> filesystem outside AVATAR_ROOT | path traversal",
+    "paths": [
+     "src/routes/avatars.mjs",
+     "src/router.mjs"
+    ],
+    "status": "covered",
+    "note": "path.resolve followed by startsWith(AVATAR_ROOT + sep) contains the name, including names with %2F decoded by match(). Avatars are shared across tenants by design (README)."
+   },
+   {
+    "unit": "GET /search | member -> SQL / other tenant rows | SQL injection, tenant isolation",
+    "paths": [
+     "src/routes/search.mjs",
+     "src/db.mjs"
+    ],
+    "status": "covered",
+    "note": "The sort column comes from an allowlist (SORTABLE), the direction is limited to ASC/DESC, q and tenant_id are bound params, and the query is scoped to req.user.tenantId."
+   },
+   {
+    "unit": "/admin/* | member -> admin tenant management | authz bypass / mount-order",
+    "paths": [
+     "src/server.mjs",
+     "src/router.mjs",
+     "src/auth.mjs",
+     "src/routes/admin.mjs"
+    ],
+    "status": "covered",
+    "note": "authenticate and requireAdmin run in order on the chain. Prefix matching is exact or prefix+'/'. The WHATWG URL parser normalizes dot segments, and no unauthenticated mount shadows /admin."
+   },
+   {
+    "unit": "authenticate (X-Impersonate-User) | unauthenticated network client -> any user incl. admin | authentication bypass",
+    "paths": [
+     "src/auth.mjs",
+     "docker-compose.dev.yml",
+     "README.md",
+     "src/db.mjs"
+    ],
+    "status": "candidate",
+    "note": "When SUPPORT_IMPERSONATION=on, the header alone selects any user, including ops1 (admin). There is no secret, source-IP or support-role check. The dev compose file sets it on and publishes 8080:8080."
+   },
+   {
+    "unit": "Bearer token verify | unauthenticated client -> any user | token forgery / expiry",
+    "paths": [
+     "src/auth.mjs",
+     "test/auth.test.mjs"
+    ],
+    "status": "covered",
+    "note": "The HMAC-SHA256 signature is compared with a length check and timingSafeEqual before JSON.parse, and exp is enforced. No forgery path is visible."
+   },
+   {
+    "unit": "POST /webhooks/payments | unauthenticated network -> account balances | signature forgery",
+    "paths": [
+     "src/webhooks.mjs",
+     "src/router.mjs",
+     "src/server.mjs",
+     "src/db.mjs"
+    ],
+    "status": "covered",
+    "note": "An empty secret is rejected. The HMAC is computed over timestamp.rawBody and compared in constant time with a length check."
+   },
+   {
+    "unit": "POST /webhooks/payments | holder of a previously signed request -> account balances | replay",
+    "paths": [
+     "src/webhooks.mjs"
+    ],
+    "status": "candidate",
+    "note": "The timestamp is signed but its freshness is never checked, and there is no event-id idempotency."
+   },
+   {
+    "unit": "POST /agent/tool-call fetch_doc | member/assistant-chosen args -> server egress allowlist | SSRF",
+    "paths": [
+     "src/agent/routes.mjs",
+     "src/agent/tools.mjs",
+     "src/server.mjs"
+    ],
+    "status": "candidate",
+    "note": "The allowlist is a raw string startsWith('https://docs.example.com') with no trailing '/' or host parse. Hosts like docs.example.com.evil.tld and docs.example.com@host pass it. The response body is returned to the caller."
+   },
+   {
+    "unit": "POST /agent/tool-call list_notes / tool dispatch | member -> other tenant notes / prototype tools | IDOR, prototype lookup",
+    "paths": [
+     "src/agent/routes.mjs",
+     "src/agent/tools.mjs"
+    ],
+    "status": "covered",
+    "note": "list_notes filters by user.tenantId. Object.hasOwn blocks inherited names such as constructor and __proto__."
+   },
+   {
+    "unit": "CI pull_request_target | external PR author -> repository secret PREVIEW_DEPLOY_TOKEN | untrusted code execution with secrets",
+    "paths": [
+     ".github/workflows/pr.yml",
+     "package.json",
+     "test/auth.test.mjs"
+    ],
+    "status": "candidate",
+    "note": "The workflow checks out the PR head sha and runs npm test, which runs PR-controlled package.json scripts and test files, with the secret in env."
+   },
+   {
+    "unit": "Router error handling / body parsing | any client -> internal details / resources | info leak, DoS",
+    "paths": [
+     "src/router.mjs"
+    ],
+    "status": "covered",
+    "note": "Only errors marked expose return their messages, otherwise the response is 'internal error'. The body is capped at 1MB. The body is parsed before auth, which is a hardening note only."
+   }
+  ],
+  "items": [
+   {
+    "fingerprint": "notes-get-by-id-missing-tenant-check",
+    "file": "src/routes/notes.mjs",
+    "line": 8,
+    "title": "Cross-tenant note read via GET /notes/:id",
+    "verdict": "confirmed",
+    "boundary": "member of tenant t1 -> per-tenant isolation (README) -> notes of tenant t2",
+    "trace": [
+     "src/server.mjs:14",
+     "src/auth.mjs:26",
+     "src/router.mjs:41",
+     "src/routes/notes.mjs:7",
+     "src/routes/notes.mjs:8",
+     "src/routes/notes.mjs:10"
+    ],
+    "reason": "The handler returns notes.get(id) with no comparison of note.tenantId to req.user.tenantId. The sibling PUT does make that comparison (line 14), and the list filters by tenant (line 6). As u1 (t1), GET /notes/n2 returns tenant t2's note body."
+   },
+   {
+    "fingerprint": "export-name-path-traversal",
+    "file": "src/routes/export.mjs",
+    "line": 12,
+    "title": "Path traversal in export name escapes tenant directory",
+    "verdict": "confirmed",
+    "boundary": "member of tenant t1 -> tenant-scoped export directory -> other tenants' .csv exports and any readable *.csv on the server filesystem",
+    "trace": [
+     "src/server.mjs:15",
+     "src/router.mjs:17",
+     "src/routes/export.mjs:10",
+     "src/routes/export.mjs:11",
+     "src/routes/export.mjs:12",
+     "src/routes/export.mjs:13",
+     "src/routes/export.mjs:15"
+    ],
+    "reason": "name comes from the query string (URLSearchParams decodes it) and is only required to end in '.csv'. path.join(EXPORT_ROOT, tenantId, name) resolves '../t2/x.csv' or '../../../x.csv' outside the tenant dir, and there is no containment check, unlike avatars.mjs:11. The file contents are returned. Which files exist is runtime state, but no control blocks the read."
+   },
+   {
+    "fingerprint": "agent-fetch-doc-prefix-allowlist-bypass",
+    "file": "src/agent/tools.mjs",
+    "line": 7,
+    "title": "fetch_doc URL allowlist bypass by string prefix (SSRF)",
+    "verdict": "confirmed",
+    "boundary": "signed-in member (or assistant-chosen args) -> docs.example.com egress allowlist -> arbitrary https hosts reachable from the server, with the response read back",
+    "trace": [
+     "src/server.mjs:18",
+     "src/agent/routes.mjs:7",
+     "src/agent/routes.mjs:9",
+     "src/agent/tools.mjs:7",
+     "src/agent/tools.mjs:10",
+     "src/agent/tools.mjs:11"
+    ],
+    "reason": "String(url).startsWith('https://docs.example.com') accepts 'https://docs.example.com.attacker.tld/' and 'https://docs.example.com@10.0.0.5/' (userinfo form). redirect:'error' blocks only redirects, not the initial host, and up to 20000 chars of the body are returned to the caller. The member can supply args directly in the request body. What internal https services exist is deployment-dependent; the allowlist bypass and the read-back are fully source-visible."
+   },
+   {
+    "fingerprint": "ci-pull-request-target-runs-pr-code-with-secret",
+    "file": ".github/workflows/pr.yml",
+    "line": 13,
+    "title": "pull_request_target executes PR head code with PREVIEW_DEPLOY_TOKEN",
+    "verdict": "confirmed",
+    "boundary": "external PR author -> base-repo workflow trust (secrets) -> PREVIEW_DEPLOY_TOKEN",
+    "trace": [
+     ".github/workflows/pr.yml:3",
+     ".github/workflows/pr.yml:13",
+     ".github/workflows/pr.yml:17",
+     ".github/workflows/pr.yml:19",
+     "package.json:5"
+    ],
+    "reason": "pull_request_target runs with base-repo secrets on opened/synchronize. The checkout uses github.event.pull_request.head.sha, and npm test then runs the PR's own package.json script and test/ files with the secret in env. Any PR author can print or exfiltrate it. permissions: contents: read limits only GITHUB_TOKEN, not the secret, and the workflow has no gating (labels, environment approval)."
+   },
+   {
+    "fingerprint": "impersonation-header-unauthenticated",
+    "file": "src/auth.mjs",
+    "line": 27,
+    "title": "X-Impersonate-User grants any identity including admin when enabled",
+    "verdict": "needs_validation",
+    "boundary": "unauthenticated network client -> bearer authentication / requireAdmin -> any member's tenant data and /admin tenant deletion",
+    "trace": [
+     "src/server.mjs:14",
+     "src/server.mjs:19",
+     "src/auth.mjs:27",
+     "src/auth.mjs:28",
+     "src/auth.mjs:38",
+     "src/routes/admin.mjs:7",
+     "docker-compose.dev.yml:8",
+     "docker-compose.dev.yml:9"
+    ],
+    "reason": "When the flag is on, the header value alone selects the user. There is no secret, loopback/IP restriction or support-role check, so 'x-impersonate-user: ops1' passes requireAdmin. Unresolved fact: whether any deployment reachable by untrusted clients runs with SUPPORT_IMPERSONATION=on. Source sets it only in docker-compose.dev.yml, which publishes 8080:8080 on all host interfaces (not localhost-only), despite the README framing it as local debugging."
+   },
+   {
+    "fingerprint": "payment-webhook-replay-no-timestamp-or-idempotency",
+    "file": "src/webhooks.mjs",
+    "line": 17,
+    "title": "Signed payment webhook can be replayed to re-credit balance",
+    "verdict": "needs_validation",
+    "boundary": "party holding a previously valid signed webhook request -> provider signature (authenticity/freshness) -> account balances",
+    "trace": [
+     "src/server.mjs:13",
+     "src/webhooks.mjs:10",
+     "src/webhooks.mjs:12",
+     "src/webhooks.mjs:13",
+     "src/webhooks.mjs:17",
+     "src/webhooks.mjs:18"
+    ],
+    "reason": "x-signature-timestamp is included in the HMAC but never compared to the current time, and there is no event-id dedup. Resending an identical signed request credits the amount again. Unresolved fact: whether a lower-trust party can obtain a previously signed request (e.g. via logs, a proxy, or provider retry delivery). Forging a new event is not possible from source."
+   },
+   {
+    "fingerprint": "avatars-path-traversal",
+    "file": "src/routes/avatars.mjs",
+    "line": 11,
+    "title": "Avatar name traversal",
+    "verdict": "rejected",
+    "boundary": "authenticated member -> AVATAR_ROOT containment -> server filesystem",
+    "trace": [
+     "src/router.mjs:57",
+     "src/routes/avatars.mjs:10",
+     "src/routes/avatars.mjs:11"
+    ],
+    "reason": "Refuted by path.resolve(AVATAR_ROOT, name) plus startsWith(AVATAR_ROOT + path.sep), which rejects decoded '../' and absolute names. Avatars being cross-tenant is intended (README:7)."
+   },
+   {
+    "fingerprint": "search-order-by-injection",
+    "file": "src/routes/search.mjs",
+    "line": 12,
+    "title": "SQL injection via sort/dir/q",
+    "verdict": "rejected",
+    "boundary": "member -> parameterized query -> notes table of other tenants",
+    "trace": [
+     "src/routes/search.mjs:9",
+     "src/routes/search.mjs:10",
+     "src/routes/search.mjs:13",
+     "src/db.mjs:20"
+    ],
+    "reason": "Refuted: the interpolated column is restricted to the SORTABLE allowlist, the direction is a fixed literal, and the user q and tenant_id are bound $1/$2 params."
+   },
+   {
+    "fingerprint": "admin-route-authz-bypass",
+    "file": "src/server.mjs",
+    "line": 19,
+    "title": "Reaching /admin without admin role",
+    "verdict": "rejected",
+    "boundary": "member -> requireAdmin -> tenant management",
+    "trace": [
+     "src/server.mjs:19",
+     "src/router.mjs:20",
+     "src/router.mjs:23",
+     "src/auth.mjs:38"
+    ],
+    "reason": "Refuted for the bearer path: the chain runs authenticate and then requireAdmin, and prefix matching is exact or 'prefix/'. Members have role 'member'. The only bypass is the impersonation item above."
+   },
+   {
+    "fingerprint": "bearer-token-forgery",
+    "file": "src/auth.mjs",
+    "line": 20,
+    "title": "Session token forgery or expiry bypass",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> HMAC session token -> any user",
+    "trace": [
+     "src/auth.mjs:16",
+     "src/auth.mjs:20",
+     "src/auth.mjs:22"
+    ],
+    "reason": "Refuted: the HMAC-SHA256 signature is verified in constant time with a length check before the claims are parsed, and exp is enforced."
+   },
+   {
+    "fingerprint": "webhook-signature-forgery",
+    "file": "src/webhooks.mjs",
+    "line": 13,
+    "title": "Forging payment webhook",
+    "verdict": "rejected",
+    "boundary": "unauthenticated network -> webhook HMAC -> balances",
+    "trace": [
+     "src/webhooks.mjs:5",
+     "src/webhooks.mjs:12",
+     "src/webhooks.mjs:13"
+    ],
+    "reason": "Refuted: requests are rejected when the secret is empty, and the HMAC over the raw body is checked with timingSafeEqual and a length check."
+   },
+   {
+    "fingerprint": "agent-tool-dispatch-prototype-or-tenant",
+    "file": "src/agent/routes.mjs",
+    "line": 8,
+    "title": "Tool dispatch prototype lookup / list_notes cross-tenant",
+    "verdict": "rejected",
+    "boundary": "member -> tool allowlist / tenant filter -> other tools or tenants' notes",
+    "trace": [
+     "src/agent/routes.mjs:8",
+     "src/agent/tools.mjs:14"
+    ],
+    "reason": "Refuted: Object.hasOwn blocks inherited names, and list_notes filters by user.tenantId."
+   }
+  ],
+  "hardening": [
+   "SESSION_SECRET falls back to random bytes (src/auth.mjs:4). Tokens are invalidated on restart and differ between instances, so an explicit secret should be required.",
+   "The request body is read and JSON-parsed (up to 1MB) for every request before authentication (src/router.mjs:18). Consider auth-first parsing or a lower limit.",
+   "actions/checkout persists GITHUB_TOKEN in .git/config by default. Set persist-credentials: false and pin actions to commit SHAs (.github/workflows/pr.yml:11,14).",
+   "Webhook: no validation of event.amount sign/finiteness (src/webhooks.mjs:18). It relies entirely on the provider's signature.",
+   "fetch_doc returns 500 on network errors versus 200 with a body, a minor reachability oracle. Parse with new URL() and compare origin/hostname exactly.",
+   "Avatars: the containment check does not resolve symlinks inside AVATAR_ROOT, so use realpath if writable by others. Avatars require auth even though README calls them public (no security impact).",
+   "The admin principal (tenantId null) on tenant routes maps to the 'null' export directory. Consider rejecting tenantless users explicitly on tenant routes."
+  ]
+ },
+ "ab0b2dbc": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists and matches the description. src/server.mjs:14 mounts /notes behind authenticate only, with no requireAdmin or tenant middleware. src/auth.mjs:26-35 only establishes identity: a valid HMAC bearer token is mapped to a user via users.get(sub) and nothing tenant-related is checked. src/router.mjs:41 (match) puts the ':id' path segment, URL-decoded, into req.params, and Router.handle applies no other normalization or authorization. In src/routes/notes.mjs, line 7 is the GET '/:id' route, line 8 is notes.get(req.params.id), and line 10 returns the whole note object, including tenantId, ownerId, title and body. Nothing compares note.tenantId with req.user.tenantId on this path. That comparison exists only in PUT (line 14), and the list route filters by tenant (line 6), which shows the isolation was intended. README line 5 states that members may only read data of their own tenant. src/db.mjs gives the concrete case: u1 is a member of t1, and n2 belongs to t2 with body 'tenant two note'. So u1, holding a legitimately issued token, can send GET /notes/n2 and receive tenant t2's note with status 200. The claimed effect, reading another tenant's note, is exactly what the code shows and is not overstated. The only prerequisite is an ordinary authenticated member session, which is the lower-trust actor in the boundary.",
+  "unresolved_fact": null
+ },
+ "adaf4d0d": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists and matches the description. server.mjs:15 mounts /export behind `authenticate` only; that check needs a valid HMAC Bearer token and sets req.user from db.users. There is no per-route tenant authorization. router.mjs:16-17 decodes the query with URLSearchParams into req.query, so `?name=../t2/x.csv` (or the %2e%2e%2f form) reaches the handler as a raw string. For GET /export, req.path is '/', which matches the route. export.mjs:10-11 applies only one check: `name.endsWith('.csv')`. export.mjs:12 calls `path.join(EXPORT_ROOT, tenantId, name)`, which normalizes the '..' segments and resolves to EXPORT_ROOT/t2/x.csv, or further up with more '../'. No resolve-plus-startsWith containment check follows, unlike avatars.mjs:10-11. export.mjs:13 reads the file as utf8 and export.mjs:15 returns its contents in the JSON response. README states that each member may only read data of their own tenant, so reading t2's export is a real cross-tenant boundary break. Impact is limited to files whose path ends in '.csv' that the process can read: a NUL-byte suffix bypass is not possible because fs rejects NUL in paths. Within that limit, both other tenants' exports and arbitrary readable *.csv files on the host are reachable. Which .csv files actually exist depends on the deployment, but that does not change whether the read primitive exists.",
+  "unresolved_fact": null
+ },
+ "a60f9a31": {
+  "decision": "rejected",
+  "reason": "The trace locations exist and match. server.mjs:18 mounts /agent behind authenticate, and any signed-in member can POST /agent/tool-call with {name:'fetch_doc',args:{url}} (routes.mjs:7-9). tools.mjs:7 checks the URL only with String(url).startsWith('https://docs.example.com'). tools.mjs:10-11 fetches it with redirect:'error' and returns up to 20000 chars. So the prefix check is weak, but source does not support the claimed effect of arbitrary HTTPS hosts reachable from the server, with the response read back. (1) The userinfo form 'https://docs.example.com@10.0.0.5/' does not work: Node 22's global fetch (node:22-alpine in docker-compose.dev.yml) follows the Fetch spec and throws a TypeError for a URL that includes credentials, so no request is sent. (2) The 'https://docs.example.com.attacker.tld/' form (also 'docs.example.comX.tld' or adding a port) only reaches hostnames the attacker controls. The scheme is forced to https and TLS certificate checks stay on, because no NODE_TLS_REJECT_UNAUTHORIZED, custom agent or dispatcher appears anywhere in source or compose. So pointing attacker DNS at an internal IP fails the hostname check against the internal service's certificate, and redirect:'error' blocks the redirect pivot. What is left is the server fetching attacker-owned content and returning it to the same attacker. That content is already available to them, and the step crosses no meaningful confidentiality or integrity boundary. The bypass is still worth hardening (parse with new URL and compare the hostname exactly), but the SSRF impact claimed is not established and is blocked by visible runtime controls.",
+  "unresolved_fact": null
+ },
+ "a0429e70": {
+  "decision": "confirmed",
+  "reason": "I could not refute the candidate from the source. Every trace location exists and says what the candidate claims. pr.yml:3 triggers on pull_request_target for opened and synchronize (lines 3-4). That event runs in the base repo's context, so the job can read base-repo secrets, and PRs from forks trigger it. pr.yml:13 checks out ${{ github.event.pull_request.head.sha }}, which is code the PR author controls. pr.yml:17 runs `npm test` with PREVIEW_DEPLOY_TOKEN set from secrets.PREVIEW_DEPLOY_TOKEN (line 19). package.json:5 defines test as `node --test test/`. Both package.json and the test/ files come from the PR head, so an external author can rewrite the script or add a test file and run any code that reads the token from the environment. I found no control in the source that blocks this. There is no `if:` condition on author or labels, no `environment:` (so no required-reviewer gate), no separate trusted and untrusted jobs, no persist-credentials setting, and no other workflow files in the repo. `permissions: contents: read` only limits GITHUB_TOKEN. It does not restrict repository secrets. The README and src/ add nothing that gates the workflow. The claimed impact is that PR-author code runs with PREVIEW_DEPLOY_TOKEN available and can take it, and the source establishes that fully. What the token can do once taken is not shown in the source, but the candidate does not claim more than exposure of the secret.",
+  "unresolved_fact": null
+ },
+ "a414c52f": {
+  "decision": "needs_validation",
+  "reason": "I could not refute the trace from source. Each listed location exists and does what the candidate says. src/server.mjs:14 and :19 mount authenticate on /notes and authenticate+requireAdmin on /admin. src/auth.mjs:27-28: when process.env.SUPPORT_IMPERSONATION === 'on' and an x-impersonate-user header is present, req.user = users.get(header) with no token, signature, caller-role, loopback or NODE_ENV check, and the else branch holding the bearer/HMAC verify is skipped entirely. src/auth.mjs:38 requireAdmin only checks req.user.role === 'admin'. src/db.mjs:4 seeds ops1 with role 'admin', so 'x-impersonate-user: ops1' passes. src/routes/admin.mjs:7-10 DELETE /admin/tenants/:id deletes the tenant and all its notes. Naming u1 or u2 likewise gives that member's identity on /notes and the other authenticated mounts. src/router.mjs adds no auth or header filtering. Searching the repo shows the flag is enabled only in docker-compose.dev.yml:8. That file also maps ports 8080:8080, which is all interfaces by default. README.md:8 calls the feature 'for local debugging'. No production or deployment configuration exists in source, and the CI workflow (.github/workflows/pr.yml) only runs npm test. The bypass is therefore fully established when the flag is on. Whether it reaches an untrusted client depends on deployment environment, which source does not contain.",
+  "unresolved_fact": "Whether any deployment reachable by untrusted network clients (production, staging, or a dev host whose published 0.0.0.0:8080 is network-exposed) runs the service with SUPPORT_IMPERSONATION=on. Source sets it only in docker-compose.dev.yml and has no production deployment config."
+ },
+ "a565ac5b": {
+  "decision": "needs_validation",
+  "reason": "I could not refute the trace from source, but source alone does not establish it either. Every trace location exists and matches. At src/server.mjs:13, /webhooks is mounted with no authenticate step. At src/webhooks.mjs:10-13 the handler reads x-signature-timestamp and x-signature, computes HMAC-SHA256(PAYMENT_WEBHOOK_SECRET, `${timestamp}.${rawBody}`), and rejects an empty secret or a length or timingSafeEqual mismatch. rawBody is the exact request bytes, captured in router.mjs readJson. That makes the signature check sound for authenticity, and an attacker cannot forge or change account or amount. Nowhere does the code compare the timestamp to Date.now(), and there is no event-id or nonce store; db.mjs only has the balances Map. So a byte-identical resend of a previously valid request passes again, and lines 17-18 add Number(event.amount) to the account again. This is a real cross-boundary effect: balances are credited more than once. The impact is limited to repeating credits the provider already signed, at the same account and amount. It is not arbitrary crediting. Exploiting it needs a party below the provider's trust level to hold a valid signed request (signature headers plus exact body), and nothing in the fixture logs, stores or exposes webhook headers or bodies. README.md only says the webhooks come from the payment provider. Getting such a request depends on infrastructure that is not in source.",
+  "unresolved_fact": "Whether a party below the provider's trust level can obtain a previously delivered, provider-signed webhook request (both the x-signature and x-signature-timestamp headers and the exact raw body). Possible routes: request logging at a reverse proxy or load balancer, an APM tool or log sink, the provider's dashboard or event-resend feature, TLS termination outside the app, or provider retry delivery. None of this is defined in the fixture source."
+ },
+ "a72f54cd": {
+  "items": [
+   {
+    "file": "src/resources/invoices.mjs",
+    "line": 12,
+    "title": "Cross-tenant invoice read via ?tenant= query override",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of tenant A -> tenant check in GET /invoices/:id -> invoices of tenant B",
+    "reason": "GET /:id compares item.tenantId against (req.query.tenant ?? req.user.tenantId), so the client-supplied query value replaces the server-side tenant. A user of t2 requesting /invoices/<id>?tenant=t1 gets the t1 invoice. README line 5 says users may only read their own tenant's records. The other routes (list, PUT, DELETE) use req.user.tenantId or loadScoped, which shows this route departs from the shared control."
+   },
+   {
+    "file": "src/resources/reports.mjs",
+    "line": 12,
+    "title": "Report PUT lacks tenant scoping (cross-tenant edit by managers)",
+    "verdict": "confirmed",
+    "boundary": "manager (or owner-id match) of tenant B -> tenant isolation in PUT /reports/:id -> reports of tenant A",
+    "reason": "PUT uses store.get(req.params.id) instead of loadScoped, and its only check is `item.ownerId !== req.user.id && req.user.role !== 'manager'`. Manager m2 (tenant t2) therefore passes and can overwrite the title of any t1 report. README line 6 limits edits to a manager 'of the same tenant', and line 5 forbids changing other tenants' records. GET and DELETE in the same file use loadScoped."
+   },
+   {
+    "file": "src/resources/attachments.mjs",
+    "line": 17,
+    "title": "Attachment DELETE has no tenant check",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of tenant A -> tenant check (loadScoped) missing in DELETE /attachments/:id -> attachments of tenant B",
+    "reason": "DELETE calls store.delete(req.params.id) without first calling loadScoped(store, id, req.user), which every other resource's DELETE does. Any authenticated user who knows or obtains an attachment id from another tenant can delete it, and the 204 response does not reveal whether it existed. Ids are randomUUIDs (src/ids.mjs), so the attacker must know the id, but no authorization control exists."
+   },
+   {
+    "file": "src/resources/reports.mjs",
+    "line": 19,
+    "title": "Any same-tenant member can delete another user's report",
+    "verdict": "needs_validation",
+    "boundary": "non-owner member of tenant A -> owner/manager rule for reports -> reports of tenant A",
+    "reason": "DELETE checks only the tenant (loadScoped) and has no owner/manager check, so u1 can delete a report owned by m1. Whether this is a violation depends on a fact the code does not settle: whether README line 6 ('a report may be edited only by its owner or by a manager') is meant to cover deletion. The product owner needs to confirm the intended authorization for DELETE /reports/:id."
+   },
+   {
+    "file": "src/resources/legacy-exports.mjs",
+    "line": 10,
+    "title": "Unscoped legacy-exports GET",
+    "verdict": "rejected",
+    "boundary": "authenticated user -> tenant check -> legacy-exports records",
+    "reason": "The handler returns store.get(id) without a tenant check, but the module is neither imported nor mounted in src/registry.mjs (resources list lines 37-73), and server.mjs mounts only registry entries. The route cannot be reached. It is a latent risk if it is ever registered (see hardening)."
+   },
+   {
+    "file": "src/resources/catalog.mjs",
+    "line": 9,
+    "title": "Catalog returns all entries without tenant filter",
+    "verdict": "rejected",
+    "boundary": "authenticated user -> tenant filter -> catalog entries",
+    "reason": "README line 7 defines /catalog as a global, read-only catalog shared by all tenants. The module defines only GET routes, so there is no write path."
+   },
+   {
+    "file": "src/resources/audit.mjs",
+    "line": 12,
+    "title": "Audit entry read uses an inline check instead of loadScoped",
+    "verdict": "rejected",
+    "boundary": "user of tenant A -> tenant check -> audit entries of tenant B",
+    "reason": "The inline check `entry.tenantId !== req.user.tenantId` compares against the server-side user tenant, which is equivalent to loadScoped. The list is filtered the same way, and there are no write routes."
+   },
+   {
+    "file": "src/server.mjs",
+    "line": 7,
+    "title": "Unauthenticated access to resource routes",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> authenticate middleware -> all resources",
+    "reason": "Every registry mount is router.mount(prefix, authenticate, factory()). authenticate (auth.mjs:26-31) sends 401 unless an HMAC-valid, unexpired token maps to a known user. Router prefix matching (router.mjs:20) requires an exact match or prefix+'/', so no path bypasses this."
+   },
+   {
+    "file": "src/auth.mjs",
+    "line": 20,
+    "title": "Token forgery / timing attack on signature",
+    "verdict": "rejected",
+    "boundary": "external client -> HMAC token verification -> user identity",
+    "reason": "The signature is HMAC-SHA256 with a length check and crypto.timingSafeEqual. Claims are parsed only after the MAC is verified, and exp is enforced. Tenant and role come from the server-side users map (users.mjs), not from token claims."
+   },
+   {
+    "file": "src/resources/accounts.mjs",
+    "line": 13,
+    "title": "Mass assignment of tenantId/ownerId via PUT/POST body",
+    "verdict": "rejected",
+    "boundary": "authenticated user -> field allowlist -> record tenant/owner",
+    "reason": "All PUT handlers assign one named field coerced with String(). POST handlers build the item with tenantId/ownerId taken from req.user. No body spreading or Object.assign of the request body exists in any resource."
+   },
+   {
+    "file": "src/router.mjs",
+    "line": 32,
+    "title": "Internal error detail disclosure",
+    "verdict": "rejected",
+    "boundary": "external client -> error handler -> server internals",
+    "reason": "Error messages are returned only when error.expose is set (on 404/413/400 errors created deliberately). Every other error returns the generic 'internal error'. A decodeURIComponent URIError at line 57 also ends up as a generic 500."
+   }
+  ],
+  "hardening": [
+   "auth.mjs:4 falls back to a random per-process SESSION_SECRET. Whether production sets a strong, shared SESSION_SECRET is a deployment fact. No token issuance endpoint exists in the repo, so how sign() is exposed is outside the review scope.",
+   "Tokens have no revocation or audience claims, and authenticate does not catch a malformed-claims JSON.parse error (reachable only with a valid MAC, so it ends up as a 500, not a bypass).",
+   "router.mjs:18 reads and parses the body (up to 1 MB) before authentication and has no request timeout. Consider authenticating before reading the body and adding timeouts to limit unauthenticated resource use.",
+   "legacy-exports.mjs is dead code with an unscoped GET. Delete it, or switch it to loadScoped before it is ever added to registry.mjs.",
+   "Route handlers implement tenant checks inconsistently (inline checks, loadScoped, or none). Enforcing loadScoped centrally for every :id route, and adding tests for cross-tenant GET/PUT/DELETE per resource, would catch regressions like those in invoices, reports and attachments. The only existing test (test/scoped.test.mjs) covers just the loadScoped helper.",
+   "No tests or fixture code were executed. All verdicts rest on static source evidence only."
+  ]
+ },
+ "a92a004f": {
+  "items": [
+   {
+    "file": "src/resources/attachments.mjs",
+    "line": 17,
+    "title": "DELETE /attachments/:id removes records of any tenant",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of tenant A -> tenant scoping (loadScoped) omitted on DELETE -> tenant B attachment records",
+    "reason": "The DELETE handler (lines 16-19) calls store.delete(req.params.id) with no loadScoped or tenantId check. Every other mutating handler in this file and its sibling resources calls loadScoped first. Any authenticated user who knows or obtains an id can delete another tenant's attachment and gets 204. This breaks the README rule that users may only change records of their own tenant."
+   },
+   {
+    "file": "src/resources/invoices.mjs",
+    "line": 12,
+    "title": "GET /invoices/:id tenant taken from ?tenant query",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of tenant A -> tenant check compares against client-supplied req.query.tenant instead of req.user.tenantId -> tenant B invoice data",
+    "reason": "The tenant check is item.tenantId !== (req.query.tenant ?? req.user.tenantId). req.query is built from URL searchParams in router.mjs:16 without validation, so GET /invoices/<id>?tenant=t2 returns a t2 invoice to a t1 user. This breaks the README's own-tenant-only read rule. The list, PUT and DELETE handlers correctly use loadScoped and req.user."
+   },
+   {
+    "file": "src/resources/reports.mjs",
+    "line": 14,
+    "title": "PUT /reports/:id missing tenant check; managers can edit other tenants' reports",
+    "verdict": "confirmed",
+    "boundary": "manager of tenant B (or any user probing ids) -> PUT uses store.get without loadScoped; role check ignores tenant -> tenant A reports (integrity), plus an existence oracle via 403 vs 404",
+    "reason": "Lines 12-14 load the item with store.get and allow the write when ownerId===req.user.id or req.user.role==='manager'. There is no item.tenantId===req.user.tenantId check, so m2 (tenant t2, users.mjs) can change the title of a t1 report. The README allows only the owner or a manager *of the same tenant*. Non-managers in other tenants get 403 instead of 404, which shows that a foreign id exists."
+   },
+   {
+    "file": "src/resources/legacy-exports.mjs",
+    "line": 10,
+    "title": "Unscoped GET /legacy-exports/:id",
+    "verdict": "rejected",
+    "boundary": "authenticated user -> no tenant check -> legacy-exports records",
+    "reason": "The handler does lack a tenant check. However, the module is not imported or listed in src/registry.mjs, and server.mjs mounts only the registry's resources, so the route cannot be reached through any HTTP path. This is dead code that contradicts README line 8; it is listed under hardening."
+   },
+   {
+    "file": "src/resources/catalog.mjs",
+    "line": 9,
+    "title": "Catalog lists and reads without tenant filter",
+    "verdict": "rejected",
+    "boundary": "authenticated user of any tenant -> no tenant filter -> catalog entries",
+    "reason": "The README defines /catalog as a global, read-only product catalog shared by all tenants. Only GET routes exist, so there is no write path."
+   },
+   {
+    "file": "src/resources/audit.mjs",
+    "line": 12,
+    "title": "Audit read uses an inline tenant check instead of loadScoped",
+    "verdict": "rejected",
+    "boundary": "authenticated user of tenant A -> audit GET -> tenant B audit entries",
+    "reason": "The list (line 9) and get (line 12) both compare entry.tenantId with req.user.tenantId and return 404 on a mismatch. There are no write routes."
+   },
+   {
+    "file": "src/router.mjs",
+    "line": 21,
+    "title": "Possible unauthenticated route reachability or prefix confusion",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> authenticate middleware -> all resources",
+    "reason": "server.mjs:8 mounts every registry prefix with authenticate first in the chain. The prefix match requires an exact match or prefix+'/' (so /catalogx does not match /catalog). Unmatched paths return 404 before any handler runs."
+   },
+   {
+    "file": "src/auth.mjs",
+    "line": 19,
+    "title": "Token forgery or expiry bypass",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> HMAC token verification -> user identity",
+    "reason": "The HMAC-SHA256 is compared with timingSafeEqual after a length check, exp is required to be a number and must not have passed, and sub is resolved through the users Map. A malformed body after a valid MAC cannot be produced without SECRET."
+   },
+   {
+    "file": "src/resources/accounts.mjs",
+    "line": 12,
+    "title": "Other template resources (accounts...timesheets) cross-tenant access",
+    "verdict": "rejected",
+    "boundary": "authenticated user of tenant A -> loadScoped -> tenant B records",
+    "reason": "All remaining resources follow the same pattern: GET/PUT/DELETE by id go through loadScoped (scoped.mjs compares tenantId and returns 404), lists filter by req.user.tenantId, POST takes tenantId and ownerId from req.user, and only a single String-coerced field is assigned (no mass assignment)."
+   },
+   {
+    "file": "src/auth.mjs",
+    "line": 3,
+    "title": "Random SESSION_SECRET fallback",
+    "verdict": "needs_validation",
+    "boundary": "token holder -> session secret configuration -> session validity across instances and restarts",
+    "reason": "Unresolved fact: whether production deployments always set SESSION_SECRET. Without it, each process generates its own secret, so tokens fail across replicas and restarts. That is an availability and operations problem rather than a boundary bypass, and the deployment configuration is not in the repository."
+   }
+  ],
+  "hardening": [
+   "router.mjs reads and JSON-parses up to 1 MB of request body before authentication runs; consider authenticating first or lowering the limit for unauthenticated requests.",
+   "auth.mjs verify() calls JSON.parse on the token body without try/catch; malformed input after a valid MAC is not realistically reachable, but wrapping it would return 401 instead of 500.",
+   "router.mjs match() calls decodeURIComponent on path segments; malformed percent-encoding throws URIError and returns 500 instead of 400.",
+   "Delete or register-and-scope src/resources/legacy-exports.mjs so it cannot later be mounted without a tenant check (it also contradicts README line 8).",
+   "Centralize tenant scoping (for example in a shared CRUD factory) so per-handler omissions like attachments DELETE, invoices GET and reports PUT cannot recur; add per-route cross-tenant tests, since test/scoped.test.mjs only covers loadScoped itself.",
+   "Tokens have no revocation; a user removed from the users map is rejected, but role changes take effect only through the map lookup, which is acceptable as is."
+  ]
+ },
+ "a0f51694": {
+  "items": [
+   {
+    "file": "src/resources/reports.mjs",
+    "line": 12,
+    "title": "Report PUT skips tenant check; any manager can edit other tenants' reports",
+    "verdict": "confirmed",
+    "boundary": "manager of tenant B -> tenant isolation (loadScoped not used) -> tenant A report records",
+    "reason": "PUT /reports/:id uses store.get(req.params.id) and only checks `item.ownerId !== req.user.id && req.user.role !== 'manager'` (line 14). It never compares item.tenantId with req.user.tenantId, unlike every other handler, which calls loadScoped (src/scoped.mjs:3). So m2 (t2, manager in src/users.mjs) passes the check for any t1 report and overwrites its title (line 15). README lines 5-6 say a manager may edit only reports of the same tenant. The different status codes (404 vs 403) also tell a member of another tenant whether a report id exists."
+   },
+   {
+    "file": "src/resources/invoices.mjs",
+    "line": 12,
+    "title": "Invoice GET lets the caller choose the tenant with ?tenant=",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of tenant B -> tenant isolation (query parameter overrides session tenant) -> tenant A invoice records",
+    "reason": "The handler compares item.tenantId against `req.query.tenant ?? req.user.tenantId`. req.query comes straight from the URL (src/router.mjs:17), so GET /invoices/<id>?tenant=t1 by u2 returns a t1 invoice. README line 5 says users may only read records of their own tenant. The list route and PUT/DELETE correctly use req.user.tenantId and loadScoped."
+   },
+   {
+    "file": "src/resources/attachments.mjs",
+    "line": 17,
+    "title": "Attachment DELETE has no tenant check",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of tenant B -> tenant isolation (missing loadScoped) -> tenant A attachment records",
+    "reason": "DELETE /attachments/:id calls store.delete(req.params.id) without loadScoped, whereas GET and PUT in the same file (lines 10 and 12) and DELETE in every other resource scope by tenant. Any authenticated user who has an attachment id can delete another tenant's attachment, and the 204 response does not depend on whether the record exists. UUID ids (src/ids.mjs) make ids hard to guess but are not an authorization control."
+   },
+   {
+    "file": "src/resources/reports.mjs",
+    "line": 18,
+    "title": "Report DELETE has no owner/manager check",
+    "verdict": "needs_validation",
+    "boundary": "non-owner member of the same tenant -> report owner/manager rule -> report records",
+    "reason": "DELETE uses only loadScoped, which checks the tenant, so any same-tenant member can delete a report they cannot edit through PUT. README line 6 limits 'edited' to the owner or a manager but does not say whether deletion counts as editing. Unresolved fact: whether the product specification treats deleting a report as an edit that the owner/manager rule restricts."
+   },
+   {
+    "file": "src/resources/legacy-exports.mjs",
+    "line": 10,
+    "title": "legacy-exports GET has no tenant check",
+    "verdict": "rejected",
+    "boundary": "authenticated user of tenant B -> tenant isolation -> legacy-export records",
+    "reason": "The handler returns store.get(id) without scoping, but the module is not imported or mounted: it is absent from src/registry.mjs, and src/server.mjs mounts only registry.resources. No HTTP path reaches it in this tree. It is latent only, so it is listed under hardening."
+   },
+   {
+    "file": "src/resources/catalog.mjs",
+    "line": 9,
+    "title": "Catalog is returned to every tenant unfiltered",
+    "verdict": "rejected",
+    "boundary": "authenticated user of any tenant -> tenant isolation -> catalog entries",
+    "reason": "README line 7 defines /catalog as a global, read-only catalog shared by all tenants. The module exposes only GET routes, so there is no write path."
+   },
+   {
+    "file": "src/auth.mjs",
+    "line": 21,
+    "title": "Token parsing and forging",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> HMAC session token -> any user identity",
+    "reason": "JSON.parse of the claims runs only after a constant-time HMAC comparison with a length check (lines 18-20), so the body is always server-signed. exp is enforced (line 22), and the user is looked up from the server-side map (line 29). Every mount puts authenticate before the resource chain (server.mjs:7), so no route is unauthenticated."
+   },
+   {
+    "file": "src/resources/audit.mjs",
+    "line": 12,
+    "title": "Audit read scoping",
+    "verdict": "rejected",
+    "boundary": "authenticated user of tenant B -> tenant isolation -> audit entries",
+    "reason": "The list filters by req.user.tenantId and GET /:id rejects entries whose tenantId differs. There are no write routes."
+   },
+   {
+    "file": "src/resources/approvals.mjs",
+    "line": 13,
+    "title": "Any tenant member can change approval status and other fields",
+    "verdict": "rejected",
+    "boundary": "member -> role check -> tenant records",
+    "reason": "README line 6 allows any user to edit records of their own tenant, with reports as the only exception. loadScoped enforces the tenant on the PUT/DELETE handlers of all template resources (the groups were verified identical up to field names). POST sets tenantId and ownerId from req.user, not from the body, so there is no mass assignment."
+   }
+  ],
+  "hardening": [
+   "router.mjs:18 reads and buffers up to 1MB of request body before authenticate runs, so unauthenticated clients can make the server do buffering work; consider authenticating first or using a smaller limit.",
+   "router.mjs:57 decodeURIComponent throws URIError on malformed percent-encoding, which becomes a generic 500 instead of a 400.",
+   "legacy-exports.mjs lacks tenant scoping. It is unreachable now, but it would become a cross-tenant read if it were ever added to registry.mjs; use loadScoped or remove it.",
+   "auth.mjs:4 falls back to a random per-process secret when SESSION_SECRET is unset, so tokens are invalidated on restart and are not shared across instances. This is an operational issue, not a bypass.",
+   "There are no tests for the PUT/DELETE authorization paths of reports, invoices or attachments. test/scoped.test.mjs covers only the loadScoped helper, which is why these handlers' deviations from it went undetected.",
+   "DELETE handlers send a JSON body with status 204, which is a protocol nit."
+  ]
+ },
+ "a6149000": {
+  "ledger": [
+   {
+    "unit": "all HTTP mounts | unauthenticated -> authenticated | authentication bypass",
+    "paths": [
+     "src/server.mjs",
+     "src/auth.mjs",
+     "src/router.mjs",
+     "src/registry.mjs",
+     "src/users.mjs"
+    ],
+    "status": "covered",
+    "note": "Every registry entry is mounted as authenticate -> routes (server.mjs:7). verify() checks HMAC with timingSafeEqual and a length check before JSON.parse and exp. Unknown sub gives 401. Prefix match requires an exact match or prefix+'/'."
+   },
+   {
+    "unit": "router | any client | parsing/error handling (body, params, exceptions)",
+    "paths": [
+     "src/router.mjs"
+    ],
+    "status": "covered",
+    "note": "Body capped at 1MB and invalid JSON gives 400. decodeURIComponent errors and handler throws are caught (router.mjs:31-33) and return a generic 500. Stores are Maps, so __proto__ ids cannot pollute prototypes. Body is read before authenticate (hardening note only)."
+   },
+   {
+    "unit": "/invoices GET /:id | tenant member -> other tenant | IDOR via query override",
+    "paths": [
+     "src/resources/invoices.mjs",
+     "src/router.mjs"
+    ],
+    "status": "candidate",
+    "note": "The tenant comparison uses req.query.tenant ?? req.user.tenantId."
+   },
+   {
+    "unit": "/reports PUT /:id | other-tenant manager / same-tenant member | authz (tenant + owner/manager)",
+    "paths": [
+     "src/resources/reports.mjs",
+     "src/scoped.mjs",
+     "README.md"
+    ],
+    "status": "candidate",
+    "note": "No tenant check. The role check does not consider tenant."
+   },
+   {
+    "unit": "/reports DELETE /:id | same-tenant non-owner member | owner/manager policy",
+    "paths": [
+     "src/resources/reports.mjs",
+     "README.md"
+    ],
+    "status": "candidate",
+    "note": "loadScoped checks only tenant. Whether delete counts as 'edit' under the README policy is not defined in source."
+   },
+   {
+    "unit": "/attachments DELETE /:id | tenant member -> other tenant | IDOR delete",
+    "paths": [
+     "src/resources/attachments.mjs"
+    ],
+    "status": "candidate",
+    "note": "No loadScoped before store.delete."
+   },
+   {
+    "unit": "/legacy-exports GET /:id | any user -> any tenant | missing tenant check",
+    "paths": [
+     "src/resources/legacy-exports.mjs",
+     "src/registry.mjs",
+     "src/server.mjs"
+    ],
+    "status": "covered",
+    "note": "Has no tenant check, but the module is never imported or mounted in registry.mjs, so it cannot be reached."
+   },
+   {
+    "unit": "/catalog GET | any tenant | cross-tenant read",
+    "paths": [
+     "src/resources/catalog.mjs",
+     "README.md"
+    ],
+    "status": "covered",
+    "note": "README says the catalog is global and read-only. Only GET routes exist."
+   },
+   {
+    "unit": "/audit GET | tenant member -> other tenant | IDOR read",
+    "paths": [
+     "src/resources/audit.mjs"
+    ],
+    "status": "covered",
+    "note": "Inline tenant check on both routes. No write routes."
+   },
+   {
+    "unit": "tenant-scoped CRUD resources (accounts, addresses, alerts, approvals, assets, budgets, calendars, campaigns, comments, contacts, contracts, deals, devices, documents, expenses, forms, goals, issues, leads, locations, meetings, milestones, orders, payments, projects, quotes, shipments, tags, tasks, timesheets) | tenant member -> other tenant | IDOR read/update/delete, mass assignment, tenant spoofing on create",
+    "paths": [
+     "src/resources/accounts.mjs",
+     "src/resources/addresses.mjs",
+     "src/resources/alerts.mjs",
+     "src/resources/approvals.mjs",
+     "src/resources/assets.mjs",
+     "src/resources/budgets.mjs",
+     "src/resources/calendars.mjs",
+     "src/resources/campaigns.mjs",
+     "src/resources/comments.mjs",
+     "src/resources/contacts.mjs",
+     "src/resources/contracts.mjs",
+     "src/resources/deals.mjs",
+     "src/resources/devices.mjs",
+     "src/resources/documents.mjs",
+     "src/resources/expenses.mjs",
+     "src/resources/forms.mjs",
+     "src/resources/goals.mjs",
+     "src/resources/issues.mjs",
+     "src/resources/leads.mjs",
+     "src/resources/locations.mjs",
+     "src/resources/meetings.mjs",
+     "src/resources/milestones.mjs",
+     "src/resources/orders.mjs",
+     "src/resources/payments.mjs",
+     "src/resources/projects.mjs",
+     "src/resources/quotes.mjs",
+     "src/resources/shipments.mjs",
+     "src/resources/tasks.mjs",
+     "src/resources/timesheets.mjs",
+     "src/resources/tags.mjs",
+     "src/scoped.mjs"
+    ],
+    "status": "covered",
+    "note": "List filters by tenant. GET, PUT and DELETE by id use loadScoped. POST takes tenantId and ownerId from req.user. PUT writes one stringified field only. Same-tenant edits are intended per the README."
+   },
+   {
+    "unit": "attachments GET/PUT, invoices PUT/DELETE/list, reports GET/list | tenant member -> other tenant | IDOR",
+    "paths": [
+     "src/resources/attachments.mjs",
+     "src/resources/invoices.mjs",
+     "src/resources/reports.mjs"
+    ],
+    "status": "covered",
+    "note": "These routes use loadScoped or a tenant filter."
+   },
+   {
+    "unit": "CI workflows / configuration | repo contributor | supply chain",
+    "paths": [
+     "package.json"
+    ],
+    "status": "covered",
+    "note": "git ls-files shows no workflow files and no dependencies. SESSION_SECRET is read from env, with a random per-process fallback."
+   }
+  ],
+  "items": [
+   {
+    "fingerprint": "invoices-get-query-tenant-override",
+    "file": "src/resources/invoices.mjs",
+    "line": 12,
+    "title": "Cross-tenant invoice read via ?tenant= query parameter",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of tenant A -> tenant isolation check (client-controlled tenant value) -> tenant B invoice records",
+    "trace": [
+     "src/server.mjs:7",
+     "src/auth.mjs:29",
+     "src/router.mjs:17",
+     "src/resources/invoices.mjs:10-13"
+    ],
+    "reason": "The tenant check compares item.tenantId with req.query.tenant ?? req.user.tenantId. req.query comes from URL search params (router.mjs:17). GET /invoices/<id>?tenant=t2 sent by user u1 (tenant t1) returns t2's invoice. No other control on the path."
+   },
+   {
+    "fingerprint": "reports-put-missing-tenant-check",
+    "file": "src/resources/reports.mjs",
+    "line": 14,
+    "title": "Report update lacks tenant scoping; manager of any tenant can edit",
+    "verdict": "confirmed",
+    "boundary": "manager of tenant B -> tenant isolation + owner/manager-of-same-tenant rule -> tenant A report title",
+    "trace": [
+     "src/server.mjs:7",
+     "src/auth.mjs:29",
+     "src/resources/reports.mjs:12-16"
+    ],
+    "reason": "PUT uses store.get rather than loadScoped. The only check is ownerId === user.id || role === 'manager', with no tenantId comparison. m2 (t2 manager, users.mjs:5) can modify any t1 report, which breaks README rules 5 and 6. The response also returns the full record, so this is a cross-tenant read too."
+   },
+   {
+    "fingerprint": "attachments-delete-missing-scope",
+    "file": "src/resources/attachments.mjs",
+    "line": 17,
+    "title": "Attachment delete without tenant check",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of tenant A -> tenant isolation (loadScoped missing) -> tenant B attachment records (deletion)",
+    "trace": [
+     "src/server.mjs:7",
+     "src/auth.mjs:29",
+     "src/resources/attachments.mjs:16-19"
+    ],
+    "reason": "DELETE calls store.delete(req.params.id) without loadScoped, unlike every sibling route. Any authenticated user can delete another tenant's attachment by id. The attacker must know the id, and no route here creates attachments, so the id format is unknown. That limits exploitation but does not prevent it."
+   },
+   {
+    "fingerprint": "reports-delete-owner-policy",
+    "file": "src/resources/reports.mjs",
+    "line": 19,
+    "title": "Same-tenant non-owner member can delete reports",
+    "verdict": "needs_validation",
+    "boundary": "same-tenant member (not owner, not manager) -> report owner/manager restriction -> other user's report",
+    "trace": [
+     "src/resources/reports.mjs:18-22",
+     "src/scoped.mjs:1-6",
+     "README.md:6"
+    ],
+    "reason": "DELETE enforces tenant only, so any t1 member can delete any t1 report. Unresolved fact: whether the README's 'a report may be edited only by its owner or by a manager' is meant to cover deletion. Source and README do not say."
+   },
+   {
+    "fingerprint": "legacy-exports-unscoped-get",
+    "file": "src/resources/legacy-exports.mjs",
+    "line": 10,
+    "title": "Unscoped legacy export read",
+    "verdict": "rejected",
+    "boundary": "any authenticated user -> tenant isolation -> legacy export records",
+    "trace": [
+     "src/resources/legacy-exports.mjs:9-12",
+     "src/registry.mjs:1-73",
+     "src/server.mjs:7"
+    ],
+    "reason": "The handler lacks a tenant check, but registry.mjs neither imports nor mounts legacy-exports. Only registry entries are mounted (server.mjs:7), so the route is unreachable."
+   },
+   {
+    "fingerprint": "catalog-cross-tenant-read",
+    "file": "src/resources/catalog.mjs",
+    "line": 9,
+    "title": "Catalog returns all entries without tenant filter",
+    "verdict": "rejected",
+    "boundary": "any authenticated user -> none -> global catalog",
+    "trace": [
+     "src/resources/catalog.mjs:9-12",
+     "README.md:7"
+    ],
+    "reason": "README states /catalog is global and read-only for all tenants. Only GET routes exist."
+   },
+   {
+    "fingerprint": "auth-token-forgery",
+    "file": "src/auth.mjs",
+    "line": 20,
+    "title": "Session token forgery / parse before verify",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> HMAC session verification -> any user identity",
+    "trace": [
+     "src/auth.mjs:15-24",
+     "src/auth.mjs:26-31"
+    ],
+    "reason": "The HMAC-SHA256 is checked with a length check plus timingSafeEqual before claims are parsed. exp is enforced. sub must exist in the users map. Any parse error is caught by the router and returns a 500."
+   },
+   {
+    "fingerprint": "audit-idor",
+    "file": "src/resources/audit.mjs",
+    "line": 12,
+    "title": "Audit entry cross-tenant read",
+    "verdict": "rejected",
+    "boundary": "tenant A user -> tenant check -> tenant B audit entries",
+    "trace": [
+     "src/resources/audit.mjs:9-14"
+    ],
+    "reason": "An explicit tenantId comparison returns 404 for other tenants. The list is filtered by tenant."
+   }
+  ],
+  "hardening": [
+   "Request bodies (up to 1MB) are read and JSON-parsed before authentication (router.mjs:18), so unauthenticated clients can make the server do parsing work.",
+   "If SESSION_SECRET is unset, a random per-process secret is used (auth.mjs:4): tokens are invalidated on restart and fail across multiple instances.",
+   "Tokens cannot be revoked and there is no audience or issuer claim; sub is looked up in a static users map.",
+   "legacy-exports.mjs has no tenant check; if it is ever mounted, it would become a cross-tenant read.",
+   "Tenant checks are inconsistent (loadScoped vs inline vs none). Centralizing scoping in a mount-level middleware would prevent per-route omissions like the attachments, invoices and reports findings.",
+   "Tests cover only loadScoped (test/scoped.test.mjs), with no route-level authorization tests."
+  ]
+ },
+ "a031bcbd": {
+  "decision": "rejected",
+  "reason": "Every trace location exists and matches the description. server.mjs:7 mounts authenticate in front of each registered resource, and registry.mjs:58 mounts /invoices. auth.mjs:29 sets req.user from an HMAC-verified token. router.mjs:17 builds req.query from URL search params, so a client controls req.query.tenant. invoices.mjs:12 compares item.tenantId to (req.query.tenant ?? req.user.tenantId). The comparison is flawed, but the claimed effect needs a tenant-B invoice to exist, and source shows none can. The 'invoices' store is a module-private in-memory Map (store.mjs:1-5, storeFor('invoices') at invoices.mjs:5). Its only writer would be a store.set call. invoices.mjs has no POST route. Its PUT and DELETE go through loadScoped and only change or delete existing items. No other file calls storeFor('invoices') or calls storeFor with a dynamic name. Nothing seeds the store: there is no seed data, persistence or test fixture for it. store.get(id) therefore always returns undefined, and GET /invoices/:id always returns 404 whatever ?tenant= is set to. The prerequisite (a tenant-B invoice record) is impossible as the source stands, so no cross-tenant read happens. It is a latent defect, not an exploitable effect.",
+  "unresolved_fact": null
+ },
+ "a11f5d24": {
+  "decision": "rejected",
+  "reason": "The trace locations are real. src/server.mjs:7 mounts every resource behind authenticate. src/auth.mjs:29 resolves req.user from an HMAC-verified token. src/resources/attachments.mjs:16-19 handles DELETE /:id by calling store.delete(req.params.id) without loadScoped, unlike GET and PUT in the same file and the DELETE handlers in assets.mjs and comments.mjs. So the missing tenant check is real. The claimed effect, deleting tenant B's attachment records, cannot happen from source. The attachments store is a process-local in-memory Map (src/store.mjs, storeFor('attachments')). attachments.mjs has no POST or any other write path. A grep of src/ and test/ finds no other module that calls storeFor('attachments') or writes to that Map, and there is no seeding or persistence layer. The Map is always empty, so no tenant B attachment record can exist for the cross-tenant delete to hit; the call only deletes a missing key and returns 204. The prerequisite (existing attachment records of another tenant) is impossible in source, so there is no meaningful cross-boundary impact. This is a latent missing-check defect, not an exploitable tenant-isolation break.",
+  "unresolved_fact": null
+ },
+ "aaede1d9": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists and matches the claim. src/server.mjs:7 mounts each resource, '/reports' included (registry.mjs:68), behind authenticate. auth.mjs:29 sets req.user from an HMAC-verified token, so m2 is a real lower-trust caller with tenantId t2 and role manager (users.mjs:5). In reports.mjs:11-16, PUT /:id calls raw store.get(req.params.id), not loadScoped (scoped.mjs:1-7, the tenantId check that GET /:id and DELETE use). Its only authorization is line 14: `item.ownerId !== req.user.id && req.user.role !== 'manager'`, which passes for any manager whatever the tenant. Line 15 then overwrites item.title in the shared in-memory store and line 16 returns the whole item. No other control is on the path: router.mjs only parses the URL and JSON body, routes() only matches method and path, and there is no global tenant middleware. This breaks the README rule that a report may be edited only by its owner or a manager of the same tenant. Impact is limited to what the source shows: a t2 manager can change the title of a t1 report whose id they know, and the response discloses that report's fields. Ids are not enumerable through GET /, which filters by tenant. Caveat: nothing in this repo ever writes to the reports store. There is no POST and no seed, the same as several other resources in this fixture, so the attack assumes a t1 report exists at runtime, which is a normal data-state assumption for an access-control bug.",
+  "unresolved_fact": null
+ },
+ "a47ee2f5": {
+  "decision": "rejected",
+  "reason": "The trace locations exist and match the description. DELETE /reports/:id (reports.mjs:18-22) runs only loadScoped, which is a tenant check (scoped.mjs:1-7). PUT (reports.mjs:14) also checks owner or manager. Authentication is applied to every mount (server.mjs:7, auth.mjs:26-32). So as written, a same-tenant member who is neither owner nor manager is not blocked from deleting. The claimed effect still cannot happen, because the 'reports' store is never populated anywhere in source. reports.mjs defines only GET /, GET /:id, PUT /:id and DELETE /:id, with no POST/create route. storeFor('reports') is a process-local in-memory Map (store.mjs:1-6) that only reports.mjs obtains. No module calls store.set on it, and nothing seeds it (users.mjs seeds only users). Unlike the resources at line 14 of leads/documents/budgets/etc., reports has no creation path, and no report object with an ownerId is ever constructed. Every DELETE therefore reaches loadScoped with store.get(id) returning undefined and throws 404, so there is no other user's report to delete. The prerequisite (an existing report owned by another user) is impossible from the visible source, and the meaningful impact is missing. The README scope question (whether 'edited' covers deletion) does not matter given this. It would only become relevant if a report-creation path existed, and in this in-memory design that would require a code change, not an outside fact.",
+  "unresolved_fact": null
+ },
+ "ada0f88e": {
+  "ledger": [
+   {
+    "unit": "All HTTP routes | unauthenticated -> authenticated | authentication bypass / mount order",
+    "paths": [
+     "src/server.mjs",
+     "src/router.mjs",
+     "src/auth.mjs",
+     "src/users.mjs",
+     "src/registry.mjs"
+    ],
+    "status": "covered",
+    "note": "Each registered prefix is mounted as (authenticate, routes) at server.mjs:7. Router takes only the first matching prefix (router.mjs:19-28), and there is no unauthenticated mount. authenticate requires a Bearer token with a valid HMAC that has not expired, plus a known sub (auth.mjs:15-31). The MAC is compared with a length check and timingSafeEqual before JSON.parse. No token-issuing route exists in source; sign() is never called."
+   },
+   {
+    "unit": "Token handling | client -> server secret | forgery / expiry / parsing",
+    "paths": [
+     "src/auth.mjs"
+    ],
+    "status": "covered",
+    "note": "HMAC-SHA256 over the body, verified before parse, with an exp check. Without SESSION_SECRET, a random per-process secret is used. No candidate."
+   },
+   {
+    "unit": "Router/body parsing | unauthenticated -> server | path matching, param decoding, JSON/prototype pollution, error disclosure",
+    "paths": [
+     "src/router.mjs",
+     "src/store.mjs",
+     "src/scoped.mjs"
+    ],
+    "status": "covered",
+    "note": "Split happens before decodeURIComponent, so %2F cannot cross segments. A malformed escape throws, and the catch returns a generic 500. Stores are Maps, so __proto__ keys are inert. Bodies are only read field by field through String(). Only errors with expose:true show their message. The body is read before auth (hardening note only)."
+   },
+   {
+    "unit": "GET /invoices/:id | tenant t2 user -> tenant scoping -> t1 invoices | IDOR / tenant override",
+    "paths": [
+     "src/resources/invoices.mjs",
+     "src/server.mjs",
+     "src/router.mjs"
+    ],
+    "status": "candidate",
+    "note": "The tenant comparison uses req.query.tenant, which the client controls. Recorded as item invoices-query-tenant-override."
+   },
+   {
+    "unit": "PUT/DELETE/GET list /invoices | cross-tenant | IDOR",
+    "paths": [
+     "src/resources/invoices.mjs",
+     "src/scoped.mjs"
+    ],
+    "status": "covered",
+    "note": "Uses loadScoped or a tenant filter."
+   },
+   {
+    "unit": "PUT /reports/:id | other-tenant user -> tenant scoping -> report | cross-tenant write",
+    "paths": [
+     "src/resources/reports.mjs",
+     "src/users.mjs",
+     "README.md"
+    ],
+    "status": "candidate",
+    "note": "Uses store.get without a tenant check. The role check is not tied to a tenant. Recorded as item reports-put-missing-tenant-scope."
+   },
+   {
+    "unit": "PUT /reports/:id | same-tenant non-owner member -> owner/manager rule | intra-tenant authz",
+    "paths": [
+     "src/resources/reports.mjs",
+     "README.md"
+    ],
+    "status": "covered",
+    "note": "ownerId/role check at line 14 enforces the README rule within a tenant."
+   },
+   {
+    "unit": "DELETE /reports/:id | same-tenant non-owner member -> owner/manager rule | intra-tenant authz",
+    "paths": [
+     "src/resources/reports.mjs",
+     "README.md"
+    ],
+    "status": "candidate",
+    "note": "Only loadScoped is applied. Whether delete counts as 'edit' under the README policy is unresolved. Recorded as item reports-delete-no-owner-check."
+   },
+   {
+    "unit": "DELETE /attachments/:id | other-tenant user -> tenant scoping -> attachment | cross-tenant delete",
+    "paths": [
+     "src/resources/attachments.mjs"
+    ],
+    "status": "candidate",
+    "note": "There is no loadScoped call before store.delete. Recorded as item attachments-delete-missing-tenant-scope."
+   },
+   {
+    "unit": "GET/PUT /attachments | cross-tenant | IDOR",
+    "paths": [
+     "src/resources/attachments.mjs",
+     "src/scoped.mjs"
+    ],
+    "status": "covered",
+    "note": "Uses loadScoped or a tenant filter."
+   },
+   {
+    "unit": "/catalog | any tenant -> global catalog | cross-tenant read / write",
+    "paths": [
+     "src/resources/catalog.mjs",
+     "README.md"
+    ],
+    "status": "covered",
+    "note": "The catalog is global and read-only by design. Only GET routes exist."
+   },
+   {
+    "unit": "/audit | cross-tenant | IDOR",
+    "paths": [
+     "src/resources/audit.mjs"
+    ],
+    "status": "covered",
+    "note": "Explicit tenant check on GET /:id and the list. No write routes."
+   },
+   {
+    "unit": "legacy-exports GET /:id | cross-tenant | IDOR",
+    "paths": [
+     "src/resources/legacy-exports.mjs",
+     "src/registry.mjs",
+     "src/server.mjs"
+    ],
+    "status": "covered",
+    "note": "The handler is unscoped, but the module is neither imported nor mounted, so it is unreachable. Recorded as rejected item legacy-exports-unscoped."
+   },
+   {
+    "unit": "CRUD template resources with POST (addresses, budgets, contracts, goals, meetings, alerts, calendars, deals, milestones, shipments, assets, documents, leads, payments, tasks, comments, expenses, projects, timesheets) | cross-tenant + mass assignment | IDOR / tenant spoof on create",
+    "paths": [
+     "src/resources/addresses.mjs",
+     "src/resources/budgets.mjs",
+     "src/resources/contracts.mjs",
+     "src/resources/goals.mjs",
+     "src/resources/meetings.mjs",
+     "src/resources/alerts.mjs",
+     "src/resources/calendars.mjs",
+     "src/resources/deals.mjs",
+     "src/resources/milestones.mjs",
+     "src/resources/shipments.mjs",
+     "src/resources/assets.mjs",
+     "src/resources/documents.mjs",
+     "src/resources/leads.mjs",
+     "src/resources/payments.mjs",
+     "src/resources/tasks.mjs",
+     "src/resources/comments.mjs",
+     "src/resources/expenses.mjs",
+     "src/resources/projects.mjs",
+     "src/resources/timesheets.mjs"
+    ],
+    "status": "covered",
+    "note": "Content hashes after normalizing the resource name confirm these files match the representatives I read in full: addresses, alerts, assets, comments. POST takes tenantId and ownerId from req.user. GET/:id, PUT and DELETE use loadScoped. The list is tenant-filtered. PUT sets only one string field. Same-tenant edits by any user are intended per the README."
+   },
+   {
+    "unit": "CRUD template resources without POST (accounts, contacts, forms, locations, quotes, approvals, campaigns, devices, issues, orders, tags) | cross-tenant | IDOR",
+    "paths": [
+     "src/resources/accounts.mjs",
+     "src/resources/contacts.mjs",
+     "src/resources/forms.mjs",
+     "src/resources/locations.mjs",
+     "src/resources/quotes.mjs",
+     "src/resources/approvals.mjs",
+     "src/resources/campaigns.mjs",
+     "src/resources/devices.mjs",
+     "src/resources/issues.mjs",
+     "src/resources/orders.mjs",
+     "src/resources/tags.mjs"
+    ],
+    "status": "covered",
+    "note": "Normalized hashes match the representatives I read: accounts, approvals. Every by-id route uses loadScoped."
+   },
+   {
+    "unit": "CI workflows / webhooks / tool calls | external -> repo | supply chain / CI injection",
+    "paths": [
+     "package.json"
+    ],
+    "status": "covered",
+    "note": "Git-tracked files contain no CI workflows, webhooks or tool-call surfaces. package.json has no dependencies and only start/test scripts."
+   },
+   {
+    "unit": "Configuration (SESSION_SECRET, PORT) | operator -> server | weak secret",
+    "paths": [
+     "src/auth.mjs",
+     "src/server.mjs"
+    ],
+    "status": "covered",
+    "note": "Falls back to a random 32-byte secret. Hardening only."
+   }
+  ],
+  "items": [
+   {
+    "fingerprint": "invoices-get-query-tenant-override",
+    "file": "src/resources/invoices.mjs",
+    "line": 12,
+    "title": "GET /invoices/:id trusts ?tenant= query parameter for tenant check",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of tenant t2 -> tenant scoping (item.tenantId === user tenant) -> invoices of tenant t1",
+    "trace": [
+     "src/server.mjs:7",
+     "src/auth.mjs:26-31",
+     "src/router.mjs:16-17",
+     "src/router.mjs:19-27",
+     "src/resources/invoices.mjs:10-13"
+    ],
+    "reason": "The check is item.tenantId !== (req.query.tenant ?? req.user.tenantId). req.query comes straight from the URL (router.mjs:17). For example, u2 (tenant t2) requests GET /invoices/<id>?tenant=t1 and receives the t1 invoice. No other scoping applies on this path; PUT and DELETE in the same file correctly use loadScoped. The attacker needs an invoice id from the other tenant. The source has no code that populates the invoices store, so records must come from code that is not shown."
+   },
+   {
+    "fingerprint": "reports-put-missing-tenant-scope",
+    "file": "src/resources/reports.mjs",
+    "line": 12,
+    "title": "PUT /reports/:id lacks tenant check; any manager edits other tenants' reports",
+    "verdict": "confirmed",
+    "boundary": "manager of tenant t2 (m2) -> tenant isolation -> reports of tenant t1",
+    "trace": [
+     "src/server.mjs:7",
+     "src/auth.mjs:26-31",
+     "src/resources/reports.mjs:11-16",
+     "src/users.mjs:5"
+    ],
+    "reason": "The handler uses store.get(req.params.id) instead of loadScoped. The only check is item.ownerId !== req.user.id && req.user.role !== 'manager', and it ignores tenantId. m2 has role 'manager' in tenant t2, so m2 can overwrite the title of any t1 report whose id it knows. This violates the README rule 'manager of the same tenant'. GET and DELETE in the same file do use loadScoped."
+   },
+   {
+    "fingerprint": "attachments-delete-missing-tenant-scope",
+    "file": "src/resources/attachments.mjs",
+    "line": 17,
+    "title": "DELETE /attachments/:id deletes without tenant check",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of any tenant -> tenant isolation -> other tenant's attachment records",
+    "trace": [
+     "src/server.mjs:7",
+     "src/auth.mjs:26-31",
+     "src/resources/attachments.mjs:16-19"
+    ],
+    "reason": "The DELETE handler calls store.delete(req.params.id) with no loadScoped or tenant comparison, unlike every other DELETE in the codebase. Any authenticated user who knows another tenant's attachment id can delete it. Ids are not exposed cross-tenant by GET, because the list is filtered and GET /:id is scoped. The source has no creation path, so the id format is not visible."
+   },
+   {
+    "fingerprint": "reports-delete-no-owner-check",
+    "file": "src/resources/reports.mjs",
+    "line": 19,
+    "title": "DELETE /reports/:id allows any same-tenant member, bypassing owner/manager rule if delete counts as edit",
+    "verdict": "needs_validation",
+    "boundary": "same-tenant non-owner member -> report owner/manager rule -> another user's report",
+    "trace": [
+     "src/resources/reports.mjs:18-21",
+     "README.md:6"
+    ],
+    "reason": "DELETE checks only the tenant (loadScoped), so u1 can delete m1's t1 report. Unresolved fact: whether the README policy 'a report may be edited only by its owner or by a manager' covers deletion. The README does not say whether deletion counts as editing."
+   },
+   {
+    "fingerprint": "legacy-exports-unscoped",
+    "file": "src/resources/legacy-exports.mjs",
+    "line": 10,
+    "title": "legacy-exports GET /:id has no tenant scoping",
+    "verdict": "rejected",
+    "boundary": "authenticated user -> tenant isolation -> legacy export records",
+    "trace": [
+     "src/resources/legacy-exports.mjs:9-12",
+     "src/registry.mjs:1-73",
+     "src/server.mjs:7"
+    ],
+    "reason": "The module is neither imported in registry.mjs nor mounted in server.mjs, and the router answers 404 for unmounted prefixes (router.mjs:30). So the handler is unreachable over HTTP."
+   },
+   {
+    "fingerprint": "catalog-unscoped-global",
+    "file": "src/resources/catalog.mjs",
+    "line": 9,
+    "title": "catalog list/get not tenant-filtered",
+    "verdict": "rejected",
+    "boundary": "authenticated user -> tenant isolation -> catalog",
+    "trace": [
+     "src/resources/catalog.mjs:9-13",
+     "README.md:7"
+    ],
+    "reason": "The README defines /catalog as a global, read-only catalog shared by all tenants. Only GET routes exist and they require authentication, so this is intended behavior."
+   },
+   {
+    "fingerprint": "router-param-decode-traversal",
+    "file": "src/router.mjs",
+    "line": 57,
+    "title": "decodeURIComponent on params could alter route matching",
+    "verdict": "rejected",
+    "boundary": "authenticated user -> route matching -> other handlers/records",
+    "trace": [
+     "src/router.mjs:51-60",
+     "src/router.mjs:31-33"
+    ],
+    "reason": "Segments are split before decoding, so an encoded slash cannot change segment count or route choice. A decoded id is only a Map key, and Map keys are inert. A malformed escape throws a URIError, which becomes a generic 500."
+   },
+   {
+    "fingerprint": "auth-token-forgery",
+    "file": "src/auth.mjs",
+    "line": 18,
+    "title": "session token forgery / unsafe parse",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> HMAC verification -> any user identity",
+    "trace": [
+     "src/auth.mjs:15-24"
+    ],
+    "reason": "The HMAC is verified with a length check and timingSafeEqual before JSON.parse. exp is enforced, and sub must exist in the users map. There is no alg or none negotiation."
+   }
+  ],
+  "hardening": [
+   "The router reads and parses request bodies up to 1MB before authentication and before route matching (router.mjs:18). An unauthenticated client can make the server buffer up to 1MB per request.",
+   "If SESSION_SECRET is unset, a random per-process secret is used, so tokens become invalid on restart or across instances (auth.mjs:4).",
+   "legacy-exports.mjs is dead, unscoped code. If it is ever mounted, it would expose records across tenants. Remove it or scope it with loadScoped.",
+   "Tenant scoping is enforced by hand in each handler rather than centrally. A shared loadScoped-based helper and tests for each route's tenant isolation would catch regressions like the ones in invoices, reports and attachments.",
+   "verify() has no try/catch around JSON.parse. This is only reachable with a validly MACed body, so it is not exploitable."
+  ]
+ },
+ "a27023b5": {
+  "ledger": [
+   {
+    "unit": "HTTP all mounts | unauthenticated -> authenticated | authentication bypass / token forgery",
+    "paths": [
+     "src/server.mjs",
+     "src/auth.mjs",
+     "src/users.mjs",
+     "src/router.mjs",
+     "src/registry.mjs"
+    ],
+    "status": "covered",
+    "note": "Every registry entry is mounted as [authenticate, factory()] (server.mjs:7). verify() checks the HMAC with timingSafeEqual after a length check, then checks exp. No route issues tokens. No bypass found."
+   },
+   {
+    "unit": "HTTP router | any principal | prefix/path confusion, param decoding, error leakage",
+    "paths": [
+     "src/router.mjs"
+    ],
+    "status": "covered",
+    "note": "Prefix match requires an exact match or prefix+'/'. The first match wins and the prefixes are distinct. decodeURIComponent output is used only as a Map key, and a URIError becomes a generic 500. Only errors marked expose return their message."
+   },
+   {
+    "unit": "HTTP body parsing | unauthenticated | resource exhaustion / prototype pollution",
+    "paths": [
+     "src/router.mjs"
+    ],
+    "status": "covered",
+    "note": "The 1MB cap applies, but the body is read before authenticate runs (hardening). JSON.parse does not pollute prototypes. Handlers copy single fields through String()."
+   },
+   {
+    "unit": "Template CRUD resources (accounts, contacts, forms, locations, quotes) | tenant A -> tenant B | IDOR/BOLA",
+    "paths": [
+     "src/resources/accounts.mjs",
+     "src/scoped.mjs"
+    ],
+    "status": "covered",
+    "note": "I read accounts.mjs in full. The other four files are identical once the resource name is normalized (content hash 3b0cf4b3c7). The list filters by tenantId; GET/PUT/DELETE use loadScoped."
+   },
+   {
+    "unit": "Template CRUD resources (addresses, budgets, contracts, goals, meetings) | tenant A -> tenant B | IDOR / mass assignment",
+    "paths": [
+     "src/resources/addresses.mjs",
+     "src/scoped.mjs",
+     "src/ids.mjs"
+    ],
+    "status": "covered",
+    "note": "I read addresses.mjs. The others match its normalized hash (aacfb12905). POST takes tenantId and ownerId from req.user; a single field is assigned."
+   },
+   {
+    "unit": "Template CRUD resources (alerts, calendars, deals, milestones, shipments) | tenant A -> tenant B | IDOR",
+    "paths": [
+     "src/resources/alerts.mjs",
+     "src/scoped.mjs"
+    ],
+    "status": "covered",
+    "note": "I read alerts.mjs. The others match hash dff46dbcac."
+   },
+   {
+    "unit": "Template CRUD resources (assets, documents, leads, payments, tasks) | tenant A -> tenant B | IDOR",
+    "paths": [
+     "src/resources/assets.mjs",
+     "src/scoped.mjs"
+    ],
+    "status": "covered",
+    "note": "I read assets.mjs. The others match hash a45a83d97b."
+   },
+   {
+    "unit": "Template CRUD resources (comments, expenses, projects, timesheets) | tenant A -> tenant B | IDOR",
+    "paths": [
+     "src/resources/comments.mjs",
+     "src/scoped.mjs"
+    ],
+    "status": "covered",
+    "note": "I read comments.mjs. The others match hash 1ce8fc283a."
+   },
+   {
+    "unit": "Template resources without POST (approvals, campaigns, devices, issues, orders, tags) | tenant A -> tenant B | IDOR",
+    "paths": [
+     "src/resources/approvals.mjs",
+     "src/scoped.mjs"
+    ],
+    "status": "covered",
+    "note": "I read approvals.mjs. The others match hash c11981ba92."
+   },
+   {
+    "unit": "/invoices GET /:id | tenant A -> tenant B | IDOR via query parameter",
+    "paths": [
+     "src/resources/invoices.mjs"
+    ],
+    "status": "candidate",
+    "note": "The tenant comparison uses req.query.tenant, which the caller controls."
+   },
+   {
+    "unit": "/reports PUT /:id | tenant A user/manager -> tenant B report | missing tenant check",
+    "paths": [
+     "src/resources/reports.mjs",
+     "src/users.mjs"
+    ],
+    "status": "candidate",
+    "note": "The PUT checks owner or role but never tenant."
+   },
+   {
+    "unit": "/reports DELETE /:id | same-tenant non-owner member -> report | owner/manager rule",
+    "paths": [
+     "src/resources/reports.mjs",
+     "README.md"
+    ],
+    "status": "candidate",
+    "note": "DELETE uses only loadScoped (tenant check). Whether the README's edit restriction covers delete is a policy question."
+   },
+   {
+    "unit": "/attachments DELETE /:id | tenant A -> tenant B | missing authorization",
+    "paths": [
+     "src/resources/attachments.mjs"
+    ],
+    "status": "candidate",
+    "note": "DELETE has no loadScoped call."
+   },
+   {
+    "unit": "/audit | tenant A -> tenant B | IDOR",
+    "paths": [
+     "src/resources/audit.mjs"
+    ],
+    "status": "covered",
+    "note": "The list and GET /:id both compare entry.tenantId to req.user.tenantId. Read-only."
+   },
+   {
+    "unit": "/catalog | any tenant | cross-tenant read / write",
+    "paths": [
+     "src/resources/catalog.mjs",
+     "README.md"
+    ],
+    "status": "covered",
+    "note": "The README makes the catalog global and read-only by design. Only GET routes exist."
+   },
+   {
+    "unit": "legacy-exports routes | tenant A -> tenant B | unscoped read",
+    "paths": [
+     "src/resources/legacy-exports.mjs",
+     "src/registry.mjs",
+     "src/server.mjs"
+    ],
+    "status": "covered",
+    "note": "The handler is unscoped, but registry.mjs never imports or mounts it, so it is unreachable."
+   },
+   {
+    "unit": "CI workflows / configuration",
+    "paths": [
+     "package.json"
+    ],
+    "status": "covered",
+    "note": "No CI workflow files exist (no .github). package.json has only start/test scripts. Configuration is SESSION_SECRET and PORT environment variables."
+   },
+   {
+    "unit": "Tests | n/a | coverage of the scoping control",
+    "paths": [
+     "test/scoped.test.mjs"
+    ],
+    "status": "covered",
+    "note": "The test covers loadScoped only, not the handlers that bypass it. Not a vulnerability."
+   }
+  ],
+  "items": [
+   {
+    "fingerprint": "invoices-get-tenant-from-query",
+    "file": "src/resources/invoices.mjs",
+    "line": 12,
+    "title": "Invoice read trusts caller-supplied ?tenant= for tenant check",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of tenant t2 -> tenant check (compares against req.query.tenant instead of req.user.tenantId) -> tenant t1 invoice records",
+    "trace": [
+     "src/server.mjs:7",
+     "src/auth.mjs:26-31",
+     "src/router.mjs:17",
+     "src/resources/invoices.mjs:10-13"
+    ],
+    "reason": "req.query comes from URL searchParams (router.mjs:17). The check is item.tenantId !== (req.query.tenant ?? req.user.tenantId), so GET /invoices/<id>?tenant=t1 by u2 returns a t1 invoice. Nothing else checks it: authenticate only identifies the user. The attacker still needs the invoice id. The list route is correctly scoped, and how ids are assigned is not visible because invoices has no POST."
+   },
+   {
+    "fingerprint": "reports-put-missing-tenant-scope",
+    "file": "src/resources/reports.mjs",
+    "line": 12,
+    "title": "Report update checks owner/role but not tenant",
+    "verdict": "confirmed",
+    "boundary": "manager of tenant t2 (or any user whose id matches ownerId) -> missing tenant check -> tenant t1 report title",
+    "trace": [
+     "src/server.mjs:7",
+     "src/auth.mjs:29",
+     "src/resources/reports.mjs:11-16",
+     "src/users.mjs:5"
+    ],
+    "reason": "PUT loads with store.get and skips loadScoped. The only check is ownerId === user.id OR role === 'manager'. m2 (manager, t2) passes the role check for any report, so PUT /reports/<t1-id> overwrites a t1 report's title. The README says a report may be edited only by a manager of the same tenant. Requires knowing the report id."
+   },
+   {
+    "fingerprint": "attachments-delete-unscoped",
+    "file": "src/resources/attachments.mjs",
+    "line": 17,
+    "title": "Attachment delete has no tenant check",
+    "verdict": "confirmed",
+    "boundary": "authenticated user of any tenant -> missing loadScoped on DELETE -> another tenant's attachment record (deleted)",
+    "trace": [
+     "src/server.mjs:7",
+     "src/auth.mjs:26-31",
+     "src/resources/attachments.mjs:16-19"
+    ],
+    "reason": "DELETE calls store.delete(req.params.id) directly. Unlike its sibling routes, it never calls loadScoped, so any authenticated user can delete any tenant's attachment by id and gets 204. Requires knowing the attachment id."
+   },
+   {
+    "fingerprint": "reports-delete-no-owner-manager-check",
+    "file": "src/resources/reports.mjs",
+    "line": 19,
+    "title": "Same-tenant member can delete another user's report",
+    "verdict": "needs_validation",
+    "boundary": "non-owner member of tenant t1 -> owner/manager restriction (applied to PUT only) -> t1 report owned by someone else",
+    "trace": [
+     "src/resources/reports.mjs:18-21",
+     "src/scoped.mjs:1-7",
+     "README.md:6"
+    ],
+    "reason": "DELETE enforces only the tenant check. Unresolved fact: whether the README rule 'a report may be edited only by its owner or by a manager' is meant to cover deletion. If it is, u1 can delete m1's report. The tenant boundary itself holds."
+   },
+   {
+    "fingerprint": "legacy-exports-unscoped-get",
+    "file": "src/resources/legacy-exports.mjs",
+    "line": 10,
+    "title": "Unscoped legacy export read",
+    "verdict": "rejected",
+    "boundary": "tenant A user -> none -> tenant B export",
+    "trace": [
+     "src/resources/legacy-exports.mjs:9-12",
+     "src/registry.mjs:1-73",
+     "src/server.mjs:7"
+    ],
+    "reason": "Not reachable. The registry never imports or mounts legacyExportsRoutes, and only registry entries are mounted (server.mjs:7). Requests for /legacy-exports return 404."
+   },
+   {
+    "fingerprint": "catalog-cross-tenant-read",
+    "file": "src/resources/catalog.mjs",
+    "line": 9,
+    "title": "Catalog returns all entries without tenant filter",
+    "verdict": "rejected",
+    "boundary": "tenant A user -> none -> catalog entries",
+    "trace": [
+     "src/resources/catalog.mjs:9-13",
+     "README.md:7"
+    ],
+    "reason": "Intended behavior. The README defines /catalog as global, read-only and shared by all tenants. Only GET routes exist, so no write path is exposed."
+   },
+   {
+    "fingerprint": "audit-get-scope",
+    "file": "src/resources/audit.mjs",
+    "line": 12,
+    "title": "Audit entry read scoping",
+    "verdict": "rejected",
+    "boundary": "tenant A user -> tenant check -> tenant B audit entries",
+    "trace": [
+     "src/resources/audit.mjs:9-14"
+    ],
+    "reason": "Both list and GET compare against req.user.tenantId, which comes from the server-side users map. Not attacker controlled."
+   },
+   {
+    "fingerprint": "auth-token-forgery",
+    "file": "src/auth.mjs",
+    "line": 20,
+    "title": "Session token forgery / claim tampering",
+    "verdict": "rejected",
+    "boundary": "unauthenticated client -> HMAC verification -> any user identity",
+    "trace": [
+     "src/auth.mjs:6-8",
+     "src/auth.mjs:15-24",
+     "src/auth.mjs:26-31"
+    ],
+    "reason": "The body is HMAC-SHA256 signed and compared with a length check plus timingSafeEqual before parsing, and exp is enforced. sub must exist in the users map. Forging requires SESSION_SECRET."
+   },
+   {
+    "fingerprint": "template-crud-idor",
+    "file": "src/scoped.mjs",
+    "line": 3,
+    "title": "Generic CRUD resources cross-tenant access",
+    "verdict": "rejected",
+    "boundary": "tenant A user -> loadScoped tenant check -> tenant B records",
+    "trace": [
+     "src/scoped.mjs:1-7",
+     "src/resources/accounts.mjs:9-20",
+     "src/resources/addresses.mjs:10-26",
+     "src/resources/alerts.mjs:10-26",
+     "src/resources/assets.mjs:10-26",
+     "src/resources/comments.mjs:10-26",
+     "src/resources/approvals.mjs:9-20"
+    ],
+    "reason": "Each of the 30 templated resources filters its list by tenant and calls loadScoped on GET/PUT/DELETE. POST derives tenantId and ownerId from req.user. I verified the group members are identical after normalizing the resource name."
+   }
+  ],
+  "hardening": [
+   "SESSION_SECRET falls back to a per-process random value (auth.mjs:4): tokens break on restart and cannot be shared between instances. Require it to be set explicitly.",
+   "The request body (up to 1MB) is read and parsed before authenticate runs (router.mjs:18), so unauthenticated clients can force parsing work.",
+   "A JSON body that parses to null or a primitive makes req.body.<field> throw a TypeError, which becomes a 500. Validate that the body is an object.",
+   "verify() calls JSON.parse on the token body without a try/catch. Only a validly signed body reaches that point, so it is not exploitable, but a defensive guard is cheap.",
+   "The unmounted legacy-exports.mjs contains an unscoped handler. Remove it or scope it so a future registry change does not expose it.",
+   "Tests cover loadScoped only. Add handler-level tests for tenant isolation on invoices, reports and attachments.",
+   "Tokens carry no revocation or user-state check beyond the user existing in the map."
+  ]
+ },
+ "adc42912": {
+  "decision": "confirmed",
+  "reason": "Every trace location matches the source at HEAD. At src/server.mjs:7 each registry resource is mounted behind authenticate, and registry.mjs:58 maps /invoices to invoicesRoutes. At src/auth.mjs:29 an HMAC-verified bearer token resolves req.user from users.mjs, where u1 is in tenant t1 and u2 is in tenant t2. Identity therefore comes from the server, and the lower-trust entry is any authenticated user. At src/router.mjs:17 req.query is built straight from URL searchParams with no filtering or allowlist, and no middleware between authenticate and the route handler removes or checks 'tenant'. At src/resources/invoices.mjs:10-13 GET /:id loads store.get(id) and returns 404 only when item.tenantId !== (req.query.tenant ?? req.user.tenantId). Because the client-supplied ?tenant= is used first, u1 can send GET /invoices/invoices-t2?tenant=t2. The seed data in seed.mjs and store.mjs creates the record invoices-t2 with tenantId t2, so the request matches and receives 200 with the full t2 invoice record. The proper control, loadScoped in scoped.mjs, compares against user.tenantId. It is used only by PUT and DELETE, not by this GET. The README states that users may read only their own tenant's records and that invoices are tenant-scoped, so this is a cross-tenant read that breaks the stated isolation. The impact is limited to reading single invoice records by id. The ids are predictable (<store>-<tenant>) in the seed data. Writes are not affected because PUT and DELETE use loadScoped.",
+  "unresolved_fact": null
+ },
+ "a15b484f": {
+  "decision": "confirmed",
+  "reason": "The whole path can be read from source at HEAD, and nothing on it stops a cross-tenant delete. (1) src/server.mjs:7 mounts every resource, including '/attachments' (registry.mjs:43), behind the authenticate middleware. That middleware is the lower-trust entry: any request with a valid Bearer token gets through. (2) src/auth.mjs:29 sets req.user from the signed token's sub claim. It checks identity only and makes no tenant or role decision. (3) The router (router.mjs:37-61) matches DELETE /:id, URI-decodes the id and calls the handler. Nothing in it filters by tenant. (4) In src/resources/attachments.mjs:16-19, the DELETE handler calls store.delete(req.params.id) and returns 204, and it never calls loadScoped. The GET /:id and PUT /:id routes in the same file call loadScoped (attachments.mjs:10,12), and so does the sibling comments DELETE (comments.mjs:23). loadScoped (scoped.mjs:3) is the only tenant check in the codebase. The store (store.mjs) is a plain Map with no scoping of its own. Seed data (seed.mjs) gives every store records for both tenants with predictable ids, such as 'attachments-t2'. So user u1 of tenant t1 can send DELETE /attachments/attachments-t2 and remove tenant t2's record. The README says users may only read or change records of their own tenant and that attachments are tenant-scoped, so this delete crosses a stated boundary. The impact matches the claim and goes no further: the attacker can delete records by id, but the response is a 204 with an empty body, so nothing is read or disclosed. Ids created at runtime would be random UUIDs (ids.mjs), but the seeded records already make the trace work as written.",
+  "unresolved_fact": null
+ },
+ "afa6c8b9": {
+  "decision": "confirmed",
+  "reason": "All three trace locations match at git HEAD. In src/server.mjs:7 every resource prefix, /reports included, is mounted behind authenticate. In src/auth.mjs:29, authenticate sets req.user from an HMAC-verified token by looking up users.get(sub). That check only proves who the caller is (here m2: tenantId t2, role manager). It does not limit which tenant's records they can reach. In src/resources/reports.mjs:12-16 the PUT /:id handler uses store.get(req.params.id) rather than loadScoped. It returns 404 only when the record is missing, and returns 403 only when the caller is neither the owner (item.ownerId !== req.user.id) nor a manager (req.user.role !== 'manager'). It never compares item.tenantId with req.user.tenantId, and it then sets item.title from req.body.title. No other control on the path refuses the request. The router (src/router.mjs) only parses the JSON body, matches the route and decodes the path parameter. The store (src/store.mjs) is a single Map shared across tenants, holding seed record reports-t1 (tenantId t1, ownerId u1). The tenant check does exist in src/scoped.mjs and is used by the GET /:id and DELETE /:id handlers in the same file, but the PUT handler skips it. README.md lines 5-6 state the rule this breaks: users may change only their own tenant's records, and a report may be edited only by its owner or by a manager of the same tenant. The owner check cannot be used across tenants because user IDs are unique (u1/u2), so the manager role is the only cross-tenant path. Impact is limited to what the source shows. An authenticated manager of t2 (m2) can send PUT /reports/reports-t1 with a title and overwrite the title of a t1 report, which is then visible to t1 when it reads the report. The response also returns that one t1 record in full. The handler changes no field other than title. Reading this from source alone is enough; no fixture code was run.",
+  "unresolved_fact": null
+ },
+ "aadb90b1": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists and matches the description. server.mjs:7 mounts /invoices behind authenticate. HTTP requests enter through server.mjs:10 and router.handle. auth.mjs:26-31 sets req.user from an HMAC-verified bearer token through users.get, so u2 resolves to tenantId t2. router.mjs:16-17 fills req.query straight from URL searchParams with no filtering. router.mjs:19-27 dispatches to the invoices routes, and invoices.mjs:10-13 returns the item when item.tenantId === (req.query.tenant ?? req.user.tenantId). No source-visible control prevents this. No middleware strips or validates query.tenant, the route does not use loadScoped (scoped.mjs checks only user.tenantId), and the only other gate is authentication. seed.mjs creates invoices-t1 with tenantId t1, and README.md:5 states that users may only read records of their own tenant. So an authenticated u2 can send GET /invoices/invoices-t1?tenant=t1 and gets a 200 with the full t1 invoice (summary, note, owner_note, ownerId). The impact is a cross-tenant read of a single invoice, not a write: PUT and DELETE use loadScoped, and the GET / list filters by req.user.tenantId. Read only, nothing executed.",
+  "unresolved_fact": null
+ },
+ "ad1fc96b": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists at git HEAD and matches the description. 1) src/server.mjs:7 mounts each resource prefix, including '/attachments' (src/registry.mjs:43), with only `authenticate` in front of it, so the entry is a real HTTP route. 2) src/auth.mjs:26-31 checks the HMAC-signed bearer token and sets req.user to a user record that carries a tenantId. It does no tenant or role check. 3) src/resources/attachments.mjs:16-19 is the DELETE '/:id' handler, which calls store.delete(req.params.id) and returns 204. It never calls loadScoped (src/scoped.mjs, which returns 404 when item.tenantId !== user.tenantId) and never compares tenantId. In the same file, GET and PUT both use loadScoped, and the other resources (for example assets.mjs:23 and documents.mjs:23) call loadScoped before store.delete. Nothing else on the path adds a tenant check: the router (src/router.mjs) only decodes path params and dispatches, and storeFor (src/store.mjs) is a plain shared Map that holds every tenant's records. The README requires tenant isolation and lists attachments as tenant-scoped. Knowing the id is easy: seed ids are predictable (src/seed.mjs gives `attachments-t2` for tenant t2), and new ids are UUIDs. So an authenticated user in tenant t1 (u1 or m1) can send DELETE /attachments/attachments-t2 and permanently remove tenant t2's attachment record. The impact is limited to deleting another tenant's attachment record by id, which is what the candidate claims. Reading or changing it stays blocked by loadScoped on GET and PUT. The DELETE also returns 204 whether or not the id exists, so the caller cannot use the response to tell whether the attachment existed, but that does not stop the deletion.",
+  "unresolved_fact": null
+ },
+ "ae9b12bf": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists at HEAD and matches the description. In src/server.mjs:7, each resource is mounted as router.mount(prefix, authenticate, factory()), and that chain has no tenant middleware. src/auth.mjs:26-31 only verifies the HMAC bearer token and sets req.user = users.get(claims.sub). In src/users.mjs:5, m2 is {tenantId:'t2', role:'manager'}. In src/resources/reports.mjs:11-16, PUT /:id calls store.get(req.params.id) directly. It does not call loadScoped (src/scoped.mjs, which compares tenantId), unlike GET /:id and DELETE /:id in the same file. The only check, at line 14, is `item.ownerId !== req.user.id && req.user.role !== 'manager'`, so any manager passes no matter which tenant they belong to. Line 15 then sets item.title on the shared in-memory store object. Nothing in router.mjs (body parsing, route matching) or store.mjs adds a tenant filter. The README says reports may be edited only by the owner or by a manager of the same tenant, so the code breaks that rule. Report ids can be guessed: src/seed.mjs creates 'reports-t1' for tenant t1. The impact is limited to what the source shows. An authenticated manager of t2 can overwrite the title field of any t1 report whose id they know, and gets the full t1 record back in the 200 response, which also discloses its other fields. Other fields cannot be changed through this route. A non-manager from another tenant gets 403.",
+  "unresolved_fact": null
+ },
+ "a3bf20b4": {
+  "decision": "confirmed",
+  "reason": "I could not refute it; every trace location matches the source at git HEAD. src/server.mjs:10 sends every HTTP request to router.handle. src/server.mjs:7 mounts /invoices behind authenticate. authenticate (src/auth.mjs:26-31) checks the HMAC-signed bearer token and sets req.user, for example u2 in tenant t2. It only identifies the user and does no tenant authorization. src/router.mjs:17 fills req.query directly from the URL searchParams, with no filtering or normalization. src/resources/invoices.mjs:10-13 gets the item by id and returns 404 only if item.tenantId !== (req.query.tenant ?? req.user.tenantId), so the caller's own ?tenant= value overrides their real tenant. Ids are predictable: src/seed.mjs gives 'invoices-t1' tenantId t1. So u2 sending GET /invoices/invoices-t1?tenant=t1 gets a 200 with the full t1 record. No other control on the path stops this. The tenant-safe helper loadScoped (src/scoped.mjs) is used only by PUT and DELETE, not by this GET. README.md says users may only read their own tenant's records and that invoices are tenant-scoped, so this is a real cross-tenant read. The impact is limited to reading t1 invoice records by an authenticated user of another tenant; it gives no write access, because PUT and DELETE use loadScoped.",
+  "unresolved_fact": null
+ },
+ "a2c2133d": {
+  "decision": "confirmed",
+  "reason": "I checked every trace location and it matches. src/server.mjs:7 mounts every resource, '/attachments' included (registry.mjs:43), behind authenticate. authenticate (src/auth.mjs:26-31) only verifies an HMAC bearer token and sets req.user from users.mjs. It applies no tenant or role control. The router passes the decoded :id through with only a segment-count check (router.mjs:51-61). In src/resources/attachments.mjs:16-19, DELETE '/:id' calls store.delete(req.params.id) and returns 204. It does not call loadScoped (scoped.mjs:1-7, which compares item.tenantId with user.tenantId). The sibling GET and PUT routes in the same file call it, and so does the parallel assets.mjs DELETE (line 23). No other control exists on the path: no global middleware, no store wrapper, no tenant-partitioned store (store.mjs is a single global Map per resource name). The README says attachments are tenant-scoped and users may only change records of their own tenant. Record ids are not secret: the seeds use the predictable pattern 'attachments-t1' / 'attachments-t2' (seed.mjs:4-5). So a valid user of tenant t2 (e.g. u2) can send DELETE /attachments/attachments-t1 and remove tenant t1's attachment record from the shared in-memory store, getting 204. The impact is limited to deleting the attachment record from this process's in-memory Map. The record cannot be read or modified, and nothing beyond the store (such as file storage) is affected. The endpoint returns 204 even for ids that don't exist. This is an integrity and availability impact across tenants, as the candidate claims.",
+  "unresolved_fact": null
+ },
+ "ac51136c": {
+  "decision": "confirmed",
+  "reason": "Every trace location exists at HEAD and does what the candidate says. src/server.mjs:7 mounts each resource, including /reports from registry.mjs:68, behind authenticate. src/auth.mjs:29 sets req.user from the users map once the HMAC token checks out, and that is the only identity control. In src/resources/reports.mjs:11-16, the PUT handler loads the record with a plain store.get(req.params.id) and never calls loadScoped, the tenant check in scoped.mjs:3 that GET /:id and DELETE /:id both use. Its only check is ownerId === user.id OR role === 'manager'. src/users.mjs:5 defines m2 as {tenantId:'t2', role:'manager'}. No router-level or framework-level tenant scoping exists: router.mjs only matches paths and decodes params. Report ids are predictable: seed.mjs creates 'reports-t1' with tenantId t1 and ownerId u1. So a legitimate t2 manager sending PUT /reports/reports-t1 with {title:...} passes the role check, overwrites the t1 report's title, and gets the whole t1 record back in the 200 response. The README says users may only change their own tenant's records, and that only a manager of the same tenant may edit a report, so this crosses the tenant boundary. The impact should be stated narrowly. The write reaches only the title field: it is coerced with String() and no other field is changed. The 200 response also returns the full t1 record. The candidate's second path, 'any user whose id matches ownerId', is not shown to cross tenants: there is no report create route, and seeded owners belong to the same tenant. The manager-role path alone establishes the bug. The source has no login route, since sign() is exported but never called inside it, but this is not a blocker: the attacker is an ordinary authenticated m2 user holding a valid token.",
+  "unresolved_fact": null
+ }
+}

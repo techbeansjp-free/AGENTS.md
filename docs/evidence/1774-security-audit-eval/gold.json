@@ -1,0 +1,69 @@
+{
+  "schema": "asc-1774-gold/v1",
+  "fixture": "make-fixture.mjs",
+  "fixedBefore": "Phase 1 runs; evaluators never receive this file",
+  "verdictRule": "A true item is detected when reported as confirmed or needs_validation and the verdict is in accept. A negative item is a false positive when reported as confirmed or needs_validation (as a vulnerability). Hardening notes without a claimed boundary violation are not false positives.",
+  "items": [
+    {
+      "id": "T1", "kind": "true", "critical": true, "file": "src/routes/notes.mjs",
+      "match": "GET|/:id|read|tenant|IDOR|cross",
+      "claim": "GET /notes/:id returns any note by id without checking note.tenantId; a member of t2 reads t1 notes (PUT has the check).",
+      "accept": ["confirmed"]
+    },
+    {
+      "id": "T2", "kind": "true", "critical": true, "file": "src/routes/export.mjs",
+      "match": "travers|\\.\\.|path|join",
+      "claim": "name=../t2/x.csv escapes the tenant export directory via path.join; cross-tenant read of .csv exports.",
+      "accept": ["confirmed"]
+    },
+    {
+      "id": "T3", "kind": "true", "critical": false, "file": "src/webhooks.mjs",
+      "match": "replay|timestamp|fresh|idempot|dedup|nonce",
+      "claim": "Signed timestamp is never checked for freshness and events are not de-duplicated; a captured delivery can be replayed to credit a balance repeatedly.",
+      "accept": ["confirmed", "needs_validation"],
+      "acceptReason": "Requires obtaining one valid delivery; whether that is realistic depends on transport and logging outside source."
+    },
+    {
+      "id": "T4", "kind": "true", "critical": false, "file": "src/agent/tools.mjs",
+      "match": "SSRF|startsWith|prefix|allowlist|docs\\.example\\.com|host",
+      "claim": "startsWith('https://docs.example.com') accepts https://docs.example.com.attacker.test/ and https://docs.example.com@internal/; server-side fetch to member/prompt-chosen hosts with the body returned.",
+      "accept": ["confirmed", "needs_validation"],
+      "acceptReason": "Allowlist bypass is source-visible; reachable internal targets depend on deployment network."
+    },
+    {
+      "id": "T5", "kind": "true", "critical": false, "file": ".github/workflows/pr.yml",
+      "match": "pull_request_target|head|secret|PREVIEW_DEPLOY_TOKEN|fork",
+      "claim": "pull_request_target checks out the PR head and runs npm test with secrets.PREVIEW_DEPLOY_TOKEN; a fork PR author can exfiltrate the secret.",
+      "accept": ["confirmed", "needs_validation"],
+      "acceptReason": "Whether external fork PRs are accepted is repository configuration outside source."
+    },
+    {
+      "id": "NV1", "kind": "needs_validation", "critical": true, "file": "src/auth.mjs",
+      "match": "IMPERSONAT|x-impersonate",
+      "claim": "With SUPPORT_IMPERSONATION=on any caller selects any user (including ops admin) by header. Only the dev compose file sets it; the production value is not source-visible.",
+      "accept": ["needs_validation"],
+      "overPromotion": "confirmed",
+      "acceptReason": "The decisive fact (production environment value) is outside source; confirming it is an over-promotion."
+    },
+    {
+      "id": "N1", "kind": "negative", "file": "src/routes/admin.mjs",
+      "match": "admin|DELETE|tenants|authoriz|unprotect",
+      "claim": "Admin routes have no check in the file, but server.mjs mounts them behind authenticate and requireAdmin; operators are intentionally cross-tenant."
+    },
+    {
+      "id": "N2", "kind": "negative", "file": "src/routes/avatars.mjs",
+      "match": "travers|\\.\\.|path|resolve",
+      "claim": "path.resolve plus startsWith(AVATAR_ROOT + sep) confines reads; avatars are public by design."
+    },
+    {
+      "id": "N3", "kind": "negative", "file": "src/routes/search.mjs",
+      "match": "SQL|inject|ORDER BY|sort|interpolat",
+      "claim": "ORDER BY column comes from an allowlist and direction is a fixed literal; values are bound parameters."
+    },
+    {
+      "id": "N4", "kind": "negative", "file": null,
+      "match": "rate.?limit|security header|CSP|HSTS|helmet|brute",
+      "claim": "Missing rate limiting or security headers is hardening, not a demonstrated boundary violation."
+    }
+  ]
+}
