@@ -124,16 +124,21 @@ not ok 1 - /target/test
 {"containerExit":1,"wallClockKilled":false,"elapsedMs":503,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
 [note] runner exit status=0
 
-$ docker run --rm --label asc.worktree=<worktree> --read-only --cap-drop ALL --user 65534:65534 --entrypoint node -v <probe>:/probe:ro node:22-alpine /probe/limits.mjs   (default bridge network; first line only)
+$ docker run --rm --label asc.worktree=<worktree> --read-only --cap-drop ALL --user 65534:65534 --entrypoint node -v <probe>:/probe:ro node:22-alpine /probe/limits.mjs 2>&1 | head -1
+[note] default bridge network; only the first output line was kept.
 {"check":"external-network","enforced":"unverified","detail":"fetch=TimeoutError interfaces=eth0,lo defaultRoute=present"}
 [note] counterexample: with a network attached, the network check must not report enforced:true.
 
-$ docker run --rm --label asc.worktree=<worktree> --network none --read-only --cap-drop ALL --user 65534:65534 --entrypoint node node:22-alpine -e "<write /dev/shm/x>"   (without --ipc none)
+$ docker run --rm --label asc.worktree=<worktree> --network none --read-only --cap-drop ALL --user 65534:65534 --entrypoint node node:22-alpine -e "try{require('fs').writeFileSync('/dev/shm/x','x');console.log('shm writable')}catch(e){console.log('shm',e.code)}"
+[note] without --ipc none.
 shm writable
 [note] counterexample for the earlier configuration: /dev/shm is writable without --ipc none.
 
 $ docker ps -aq --filter label=asc.worktree=<worktree> | wc -l
 1
-[note] the remaining container was the bridge-network counterexample above: `| head -1` closed the pipe while the container kept running. It exited and was removed by --rm within about 30 s; a later check returned 0. That counterexample ran without the resource limits, bounded only by the probe's own 20 s child timeout.
+[note] the remaining container was the bridge-network counterexample above: `| head -1` closed the pipe while the container kept running until limits.mjs finished, then --rm removed it.
+[note] that counterexample ran WITHOUT the memory, pids and CPU limits, so its memory and fork probes were bounded only by time (20 s child timeout), not by a resource limit. Future counterexamples should change only --network and keep the other limits.
+$ for i in $(seq 1 12); do n=$(docker ps -aq --filter label=asc.worktree=<worktree> | wc -l | tr -d ' '); [ "$n" = 0 ] && break; sleep 5; done; echo "containers=$n"
+containers=0
 $ git -C <fixture> status --porcelain | wc -l
 0

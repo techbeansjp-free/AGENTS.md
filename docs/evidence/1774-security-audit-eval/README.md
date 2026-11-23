@@ -25,7 +25,7 @@ Verifierに有利な材料も1つある。Aの3回はいずれも、SSRF候補�
 - 静的な根拠として断定した事実が誤っていたので、これは`review-method.md`の「再現済み、静的な根拠、未確認の懸念を区別」が十分に働かなかった例である。ただし`score.mjs`は判定だけを採点し、根拠と影響の正確さを測っていない。この効果の大きさは欠測である（「欠測と限界」）。
 - 1件の事例で、Verifierの段（tokenが3倍以上）を常設する根拠にはならない。
 
-Phase 2では、DockerのOSレベルの制限で、Cloudflareが対象コードの実行に求める制御を一通り強制できた。最終の設定では、反例も全て拒否された（当初の設定では`/dev/shm`への書込みが残っており、CodeRabbitの指摘で直した）。合成fixtureでは、この中で最小のPoCを安全に実行できた。ただし、この実行手順をASCへ配布するかはownerの判断に当たる。本PRでは配布せず、記録にとどめる（「ownerの判断事項」）。
+Phase 2では、Cloudflareが対象コードの実行に求める制御のうち、時間の上限以外をDockerのOSレベルの制限で強制できた。最終の設定では、反例も全て拒否された（当初の設定では`/dev/shm`への書込みが残っており、CodeRabbitの指摘で直した）。時間の上限は、host側のrunnerが強制した。scratch以外への書込みの検査は、mountの直下までである。成果物のfileを昇格させる手順は実装していない。合成fixtureでは、この中で最小のPoCを安全に実行できた。ただし、この実行手順をASCへ配布するかはownerの判断に当たる。本PRでは配布せず、記録にとどめる（「ownerの判断事項」）。
 
 ## Phase 0：現行ASCとの差分と必要性
 
@@ -191,7 +191,7 @@ runnerの後始末と失敗の扱い：
   - `docker wait`・`docker logs`が失敗した場合
 - runnerがSIGINT・SIGTERM・SIGHUPを受けた場合も、削除してから終了する。
 - SIGKILLやhostの停止では削除できない。その場合は、label `asc.worktree=<worktree>`で探して削除する。
-- 壁時計の上限はhost側のrunnerが`docker kill`で強制していて、OSの強制ではない。runnerが落ちると、上限も失われる（containerは`-d`で動き続ける）。`docker kill`が失敗したときは、`docker rm -f -v`で強制削除し、`docker wait`が無期限に待たないようにした。
+- 壁時計の上限はhost側のrunnerが`docker kill`で強制していて、OSの強制ではない。runnerが落ちると、上限も失われる（containerは`-d`で動き続ける）。`docker kill`が失敗したときは、`docker rm -f -v`での強制削除を試みる。docker自体が応答しない場合の上限は保証しない。また、強制削除で止めた場合は`wallClockKilled`がfalseのまま残る（終了statusは1になる）。
 - runnerの終了status：起動・待機・logの取得・削除のどれかが失敗したら1、全て成功したら0。containerの終了codeは、JSONの`containerExit`に分けて記録する。出力を切り詰めたかは`truncated`に記録する。
 - `<fixture>`が存在するdirectoryでなければ、起動前に拒否する。`docker run -v`がhostに空のdirectoryを作るのを防ぐためである。
 - homeや秘密を含むdirectoryを渡さないことは、呼び出す側の責任である。imageはタグで指定していて、digestでは固定していない（実行時のimage IDは、この節の冒頭に記録した）。
@@ -202,7 +202,9 @@ runnerの後始末と失敗の扱い：
 - CPUとfile descriptorの上限、/scratch以外のrw mountの反例を追加した。
 - process数の検査（200個の`sleep`）を最初に実行すると、pidsの上限（threadも数える）に達して、後続の子processが動かなかったと推定する（当時の出力は`ETIMEDOUT`で、forkの失敗そのものは記録していない）。そのため、この検査を最後に移した。移した後は、memory・CPUの検査が成立した。
 - 外部networkの判定は、当初は失敗の種類を問わずに合格としていた。そのため、隔離が無くても合格になり得た。`ENETUNREACH`・`lo`だけ・default route無しの3条件を全て要求する形に改め、networkを付けたcontainerで`unverified`になることを反例として確認した。
-- 下の表は、全て最終版のrunnerとprobeで再実行した結果である。出力はそのまま[probe/results.txt](probe/results.txt)に保存した。
+- 下の表は、最終版のrunnerとprobeで再実行した結果である。出力はそのまま[probe/results.txt](probe/results.txt)に保存した。ただし次の3つは例外である。
+  - networkの反例と`/dev/shm`の反例は、runnerを使わない`docker run`による。networkの反例は、memory・pids・CPUの制限を付けずに実行した（時間でしか抑えていない）。今後は`--network`だけを変え、ほかの制限は付けたまま行う。
+  - envの行の「shにすると`PWD`・`SHLVL`が加わる」は以前の実行での観察で、再実行していない。
 
 [probe/limits.mjs](probe/limits.mjs)・[probe/mem.mjs](probe/mem.mjs)の結果：
 
