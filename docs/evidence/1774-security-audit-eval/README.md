@@ -25,7 +25,7 @@ Verifierに有利な材料も1つある。Aの3回はいずれも、SSRF候補�
 - 静的な根拠として断定した事実が誤っていたので、これは`review-method.md`の「再現済み、静的な根拠、未確認の懸念を区別」が十分に働かなかった例である。ただし`score.mjs`は判定だけを採点し、根拠と影響の正確さを測っていない。この効果の大きさは欠測である（「欠測と限界」）。
 - 1件の事例で、Verifierの段（tokenが3倍以上）を常設する根拠にはならない。
 
-Phase 2では、DockerのOSレベルの制限で、Cloudflareが対象コードの実行に求める制御を一通り強制できた。反例も全て拒否された。合成fixtureでは、この中で最小のPoCを安全に実行できた。ただし、この実行手順をASCへ配布するかはownerの判断に当たる。本PRでは配布せず、記録にとどめる（「ownerの判断事項」）。
+Phase 2では、DockerのOSレベルの制限で、Cloudflareが対象コードの実行に求める制御を一通り強制できた。最終の設定では、反例も全て拒否された（当初の設定では`/dev/shm`への書込みが残っており、CodeRabbitの指摘で直した）。合成fixtureでは、この中で最小のPoCを安全に実行できた。ただし、この実行手順をASCへ配布するかはownerの判断に当たる。本PRでは配布せず、記録にとどめる（「ownerの判断事項」）。
 
 ## Phase 0：現行ASCとの差分と必要性
 
@@ -171,23 +171,13 @@ B最終の壁時計は、Hunterの時間に、並列に起動したVerifierの�
 使い捨てのcontainer（`node:22-alpine`、image ID `sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603`、linux/amd64）を、次の設定で起動した。`<fixture>`は作業用の一時directory、`<probe>`は本directoryの`probe/`、`<worktree>`は本worktreeの絶対pathである。
 
 host側の手順は[probe/run-sandbox.mjs](probe/run-sandbox.mjs)にある。`node probe/run-sandbox.mjs <秒> <fixture> <worktree> -- <nodeの引数>`で、次を一度に行う。
-- 起動
-- 壁時計の上限での`docker kill`
-- 出力の取得（64KiB上限）
-- `docker rm -v`による削除
-
-再実行した出力は[probe/results.txt](probe/results.txt)に、そのまま保存した。独立再レビューの指摘L-cのうち、次の2点はCodeRabbitの指摘とあわせてcodeを直した。
-- `docker wait`の失敗時も、containerを削除する（`finally`）。
-- Dockerのlogの大きさに上限を設けた（`max-size=1m`）。
-
-残る制約は次の2つである。
-- imageはタグで指定していて、digestで固定していない。実行時のimage IDは、この節の冒頭に記録した。
-- `<fixture>`引数を検査しない。homeや秘密を含むdirectoryを渡さないことは、呼び出す側の責任である。
-
-下の結果は全て、このrunnerで再実行して確認した（独立レビューの指摘L2・L3の是正後。最初の実行は同じ設定のshell scriptで行い、外部network probeの宛先が`1.1.1.1`だった）。
+- 起動。containerには固定の名前を付ける。
+- 壁時計の上限での`docker kill`。
+- 出力の取得（64KiB上限）。
+- `docker rm -f -v`による削除。
 
 ```sh
-docker run -d --label asc.worktree=<worktree> --network none --ipc none --read-only --cap-drop ALL \
+docker run -d --name <固定名> --label asc.worktree=<worktree> --network none --ipc none --read-only --cap-drop ALL \
   --security-opt no-new-privileges --user 65534:65534 --pids-limit 64 --memory 256m --memory-swap 256m \
   --cpus 0.5 --ulimit fsize=4194304 --ulimit nofile=256 \
   --log-driver json-file --log-opt max-size=1m --log-opt max-file=1 --entrypoint node \
@@ -195,11 +185,22 @@ docker run -d --label asc.worktree=<worktree> --network none --ipc none --read-o
   -v <fixture>:/target:ro -v <probe>:/probe:ro node:22-alpine <args>
 ```
 
-壁時計の上限は、hostの監視が`docker kill`で強制する。終了後に、出力（64KiB上限）を取得してから、`docker rm -f -v`で削除する。待機やlogの取得に失敗しても、`finally`で必ず削除する。ホームディレクトリ・秘密・socketはmountしていない。
+runnerの後始末と失敗の扱い：
+- 次の場合も、`finally`で固定名のcontainerを削除する。
+  - `docker run`がcreateの後で失敗した場合
+  - `docker wait`・`docker logs`が失敗した場合
+- runnerがSIGINT・SIGTERM・SIGHUPを受けた場合も、削除してから終了する。
+- SIGKILLやhostの停止では削除できない。その場合は、label `asc.worktree=<worktree>`で探して削除する。
+- runnerの終了status：起動・待機・logの取得・削除のどれかが失敗したら1、全て成功したら0。containerの終了codeは、JSONの`containerExit`に分けて記録する。出力を切り詰めたかは`truncated`に記録する。
+- `<fixture>`が存在するdirectoryでなければ、起動前に拒否する。`docker run -v`がhostに空のdirectoryを作るのを防ぐためである。
+- homeや秘密を含むdirectoryを渡さないことは、呼び出す側の責任である。imageはタグで指定していて、digestでは固定していない（実行時のimage IDは、この節の冒頭に記録した）。
 
-CodeRabbitの指摘で、次の2点を直した。
-- 最初の設定（`--ipc none`無し）では、`/dev/shm`がscratch以外の書込み先として残っていた。非rootでも`/dev/shm/x`への書込みが成功することを確認した（`probe/results.txt`の末尾）。`--ipc none`を足し、書込みが拒否されることを再確認した。
-- `docker wait`の失敗と、Dockerのlogの大きさの上限が無いことも直した。このため、表は修正後のrunnerで再実行した結果である。
+是正の経緯（独立レビューのL2・L3・M1・L-c、CodeRabbitの指摘）：
+- 最初の実行は、同じ制限のshell scriptで行った。外部network probeの宛先は`1.1.1.1`だった。
+- `--ipc none`が無いと、`/dev/shm`がscratch以外の書込み先として残った。非rootでも`/dev/shm/x`への書込みが成功することを確認したうえで、`--ipc none`を足した。
+- CPUとfile descriptorの上限、/scratch以外のrw mountの反例を追加した。
+- process数の検査（200個の`sleep`）を最初に実行すると、pidsの上限（threadも数える）に達して、後続の子processが止まっていた。そのため、この検査を最後に移した。memory検査が当初`unverified`になったのは、この影響である。
+- 下の表は、全て最終版のrunnerとprobeで再実行した結果である。出力はそのまま[probe/results.txt](probe/results.txt)に保存した。
 
 [probe/limits.mjs](probe/limits.mjs)・[probe/mem.mjs](probe/mem.mjs)の結果：
 
@@ -210,15 +211,16 @@ CodeRabbitの指摘で、次の2点を直した。
 | root fsの読取り専用 | `/etc`への書込み | `EROFS` |
 | scratchだけ書込み可 | `/scratch`への書込み | 成功 |
 | scratch以外の一時領域への書込み禁止 | `/dev/shm`・`/tmp`・`/var/tmp`への書込み | `/dev/shm`は`ENOENT`（`--ipc none`でmountされない）、`/tmp`・`/var/tmp`は`EROFS` |
+| /scratch以外のrw mount | `/proc/self/mountinfo`のrw mount（`/proc`・`/dev`・`/dev/pts`・`/dev/mqueue`等の8件）へのfile作成 | 全て失敗（書き込めたmountは0件） |
 | fileの大きさの上限 | 8MiBの書込み（上限4MiB） | `EFBIG` |
-| 環境変数のallowlist | 一覧 | `HOME,HOSTNAME,NODE_VERSION,PATH,YARN_VERSION`のみ。entrypointをshにすると`PWD`・`SHLVL`が加わったため、`--entrypoint node`に変えて再確認した |
+| file descriptorの上限 | 300個のopen（上限256） | 238個目の後に`EMFILE` |
+| CPUの上限 | `cpu.max`の値と、1 threadのbusy loop（3秒） | `cpu.max=50000 100000`、CPU時間／壁時計は0.50 |
+| 環境変数のallowlist | 一覧 | `HOME,HOSTNAME,NODE_VERSION,PATH,YARN_VERSION`のみ。entrypointをshにすると`PWD`・`SHLVL`が加わったため、`--entrypoint node`に変えて確認した |
 | 非root | uid | 65534 |
 | host homeの非露出 | `/Users` | 存在しない |
 | process数の上限 | 200個のfork | `can't fork` |
-| memoryの上限 | 16MiBずつ確保 | 約240MiBで終了（exit 137） |
-| 壁時計の上限 | 30秒待つprocessを5秒上限で起動（`node run-sandbox.mjs 5 … -- -e 'setTimeout(…,30000)'`） | 5.7秒で`docker kill`、exit 137（`wallClockKilled: true`） |
-
-`limits.mjs`のmemory項目は、子processが20秒のtimeout（SIGTERM）で止まっていた。CodeRabbitの指摘を受け、SIGKILL以外の終了は`unverified`と出力するように直した。再実行の結果も`unverified`だったため、上限の証拠は`mem.mjs`（exit 137）だけである。
+| memoryの上限 | 子processで16MiBずつ確保（`limits.mjs`）、主processで確保（`mem.mjs`） | 子processはSIGKILLで終了。`mem.mjs`は約240MiBで終了（exit 137） |
+| 壁時計の上限 | 30秒待つprocessを5秒上限で起動（`node run-sandbox.mjs 5 … -- -e 'setTimeout(…,30000)'`） | 5.36秒（`elapsedMs: 5356`）で`docker kill`、exit 137（`wallClockKilled: true`） |
 
 ### 最小のPoC（ダミーデータ、loopbackのみ）
 
@@ -231,7 +233,7 @@ CodeRabbitの指摘で、次の2点を直した。
 | N2：`/avatars/..%2Fexports%2Ft2%2Freport.csv` | 400。負例を実行でも確認 |
 | T4：`new Request('https://docs.example.com@10.0.0.5/')` | `TypeError`。tool経由の呼出しは500。userinfo形式の主張を反証 |
 | T4：`https://docs.example.com.attacker.test/` | Requestは生成できる（prefixの回避自体は成立。外部への送信は行っていない） |
-| fixtureのtest：`node --test /target/test/auth.test.mjs` | 2件成功。directory指定の`--test /target/test/`は1件失敗で、原因は調べていない（fixtureのtestであり、評価の結論には使わない） |
+| fixtureのtest：`node --test /target/test/auth.test.mjs` | 2件成功。directory指定の`--test /target/test/`は`Cannot find module '/target/test'`で失敗する。Node 22がdirectoryの指定を受け付けないためで、fixtureの失敗ではない |
 
 実行後、fixtureのgit状態は変わっていない（`git status --porcelain`が0行）。
 
@@ -241,7 +243,7 @@ containerからは、stdoutのJSON行（上限64KiB）だけを親が受け取�
 
 ### Phase 2の判断
 
-- このHost（Docker Desktop、macOS）では、原典がsandboxに求める制御を、OSレベルで反例付きで強制できた。
+- このHost（Docker Desktop、macOS）では、原典がsandboxに求める制御（network、env、読取り専用、scratch以外への書込み、CPU・memory・process・file・file descriptor・時間の上限）を、最終の設定でOSレベルに反例付きで強制できた。
 - PoCは、静的レビューで残った根拠の誤り（T4のuserinfo）を確定的に訂正した。実行による確認には価値がある。
 - 一方、確認の対象は合成fixtureの1ケースだけである。Linux本体やCI runner、ブラウザ・fuzzerを使う確認は検証していない。外部の本番・共有環境への試験は行っておらず、許可もされていない。
 

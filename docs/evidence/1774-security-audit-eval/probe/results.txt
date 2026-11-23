@@ -1,8 +1,8 @@
-# Output of the Phase 2 re-run with run-sandbox.mjs after the CodeRabbit fixes (2026-11-23, Docker Desktop 29.8.0,
+# Output of the final Phase 2 re-run with run-sandbox.mjs (2026-11-23, Docker Desktop 29.8.0,
 # node:22-alpine image sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603). Copied verbatim;
 # "$ " lines are the commands (<fixture> = generated small fixture, <worktree> = this worktree).
 
-$ node run-sandbox.mjs 90 <fixture> <worktree> -- /probe/limits.mjs
+$ node run-sandbox.mjs 120 <fixture> <worktree> -- /probe/limits.mjs
 {"check":"external-network","enforced":true,"detail":"ENETUNREACH"}
 {"check":"target-readonly","enforced":true,"detail":"EROFS"}
 {"check":"probe-readonly","enforced":true,"detail":"EROFS"}
@@ -16,16 +16,21 @@ $ node run-sandbox.mjs 90 <fixture> <worktree> -- /probe/limits.mjs
 {"check":"home-is-scratch","enforced":true,"detail":"/scratch"}
 {"check":"uid-nonroot","enforced":true,"detail":"65534"}
 {"check":"no-host-home","enforced":true,"detail":"absent"}
+{"check":"memory-limit","enforced":true,"detail":"status=null signal=SIGKILL error=null"}
+{"check":"nofile-limit","enforced":true,"detail":"opened=238 error=EMFILE"}
+{"check":"cpu-limit","enforced":true,"detail":"cpu.max=50000 100000 cpu/wall=0.50"}
+{"check":"no-other-writable-mount","enforced":true,"detail":"rw mounts checked=/proc,/dev,/dev/pts,/dev/mqueue,/proc/interrupts,/proc/kcore,/proc/keys,/proc/timer_list writable=none"}
 {"check":"pids-limit","enforced":true,"detail":"sh: can't fork: Resource temporarily unavailable 0 "}
-{"check":"memory-limit","enforced":"unverified","detail":"status=null signal=SIGTERM error=ETIMEDOUT"}
-{"containerExit":0,"wallClockKilled":false,"waitError":null,"removed":true}
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":9059,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+(runner exit=0)
 
 $ node run-sandbox.mjs 60 <fixture> <worktree> -- /probe/mem.mjs   (last 2 lines)
 allocated 240MiB
-{"containerExit":137,"wallClockKilled":false,"waitError":null,"removed":true}
+{"containerExit":137,"wallClockKilled":false,"elapsedMs":557,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
 
 $ node run-sandbox.mjs 5 <fixture> <worktree> -- -e 'setTimeout(()=>console.log("not killed"),30000)'
-{"containerExit":137,"wallClockKilled":true,"waitError":null,"removed":true}
+{"containerExit":137,"wallClockKilled":true,"elapsedMs":5356,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+(runner exit=0)
 
 $ node run-sandbox.mjs 60 <fixture> <worktree> -- /probe/poc.mjs
 {"check":"T1-cross-tenant-note-read","status":200,"tenantOfBody":"t2","actorTenant":"t1"}
@@ -34,13 +39,23 @@ $ node run-sandbox.mjs 60 <fixture> <worktree> -- /probe/poc.mjs
 {"check":"T4-request-construct","url":"https://docs.example.com@10.0.0.5/","constructed":false,"error":"TypeError"}
 {"check":"T4-request-construct","url":"https://docs.example.com.attacker.test/","constructed":true}
 {"check":"T4-userinfo-via-tool","status":500}
-{"containerExit":0,"wallClockKilled":false,"waitError":null,"removed":true}
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":918,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+(runner exit=0)
 
 $ node run-sandbox.mjs 60 <fixture> <worktree> -- --test /target/test/auth.test.mjs   (filtered)
 # pass 2
 # fail 0
-{"containerExit":0,"wallClockKilled":false,"waitError":null,"removed":true}
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":649,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+
+$ node run-sandbox.mjs 60 <fixture> <worktree> -- --test /target/test/   (filtered)
+# Error: Cannot find module '/target/test'
+not ok 1 - /target/test
+# pass 0
+# fail 1
+{"containerExit":1,"wallClockKilled":false,"elapsedMs":519,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
 
 # afterwards: containers with this worktree label = 0; fixture `git status --porcelain` = 0 lines.
 
-# Counterexample for the old configuration (without --ipc none): writing /dev/shm/x as uid 65534 printed "shm writable".
+# Counterexample for the earlier configuration (without --ipc none): writing /dev/shm/x as uid 65534 printed "shm writable".
+
+# Node 22 does not accept a directory as a --test argument ("Cannot find module"), so the directory form fails by usage, not by the fixture.

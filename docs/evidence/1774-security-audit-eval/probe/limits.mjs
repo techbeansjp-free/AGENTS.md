@@ -1,5 +1,6 @@
 // Counterexample probes for sandbox controls. Prints one JSON line per check.
 import fs from 'node:fs';
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 const out = (check, ok, detail) => console.log(JSON.stringify({ check, enforced: ok, detail: String(detail).slice(0, 200) }));
 try { await fetch('http://192.0.2.1/', { signal: AbortSignal.timeout(3000) }); out('external-network', false, 'fetch succeeded'); } catch (e) { out('external-network', true, e.cause?.code ?? e.name); }
@@ -15,10 +16,40 @@ out('env-allowlist', Object.keys(process.env).sort().join(',') === 'HOME,HOSTNAM
 out('home-is-scratch', process.env.HOME === '/scratch', process.env.HOME);
 out('uid-nonroot', process.getuid() !== 0, process.getuid());
 let ok = true; try { fs.readdirSync('/Users'); ok = false; } catch {} out('no-host-home', ok, fs.existsSync('/Users') ? 'exists' : 'absent');
-const procs = spawnSync('sh', ['-c', 'i=0; while [ $i -lt 200 ]; do sleep 5 & i=$((i+1)); done 2>&1 | head -c 120; echo; jobs | wc -l'], { encoding: 'utf8', timeout: 8000 });
-out('pids-limit', /can't fork|Resource temporarily unavailable|fork/i.test(procs.stdout + procs.stderr), (procs.stdout + procs.stderr).replace(/\s+/g, ' '));
 const mem = spawnSync(process.execPath, ['-e', 'const a=[];for(;;)a.push(Buffer.alloc(16*1024*1024,1))'], { encoding: 'utf8', timeout: 20000 });
 // Only a kill by the memory cgroup (SIGKILL) counts as enforced; a timeout or spawn error is unverified.
 const memDetail = `status=${mem.status} signal=${mem.signal} error=${mem.error?.code ?? null}`;
 if (mem.signal === 'SIGKILL' && !mem.error) out('memory-limit', true, memDetail);
 else console.log(JSON.stringify({ check: 'memory-limit', enforced: 'unverified', detail: memDetail }));
+// File-descriptor limit (nofile=256): opening 300 descriptors must fail with EMFILE.
+{
+  const fds = [];
+  let error = null;
+  try { for (let i = 0; i < 300; i++) fds.push(fs.openSync('/probe/limits.mjs', 'r')); } catch (e) { error = e.code; }
+  for (const fd of fds) fs.closeSync(fd);
+  out('nofile-limit', error === 'EMFILE', `opened=${fds.length} error=${error}`);
+}
+// CPU quota (--cpus 0.5): the cgroup must expose the quota, and a single busy thread must get about half a CPU.
+{
+  let quota = null;
+  try { quota = fs.readFileSync('/sys/fs/cgroup/cpu.max', 'utf8').trim(); } catch (e) { quota = `unreadable:${e.code}`; }
+  const busy = spawnSync(process.execPath, ['-e', 'const s=Date.now(),c=process.cpuUsage();while(Date.now()-s<3000);const u=process.cpuUsage(c);console.log(((u.user+u.system)/1000/(Date.now()-s)).toFixed(2))'], { encoding: 'utf8', timeout: 20000 });
+  const ratio = Number(busy.stdout.trim());
+  out('cpu-limit', quota === '50000 100000' && ratio > 0 && ratio <= 0.6, `cpu.max=${quota} cpu/wall=${busy.stdout.trim() || busy.error?.code}`);
+}
+// Every writable mount other than /scratch must refuse a new file for this uid.
+{
+  const mounts = fs.readFileSync('/proc/self/mountinfo', 'utf8').trim().split('\n').map((line) => {
+    const fields = line.split(' ');
+    return { point: fields[4], options: fields[5] };
+  }).filter((mount) => mount.options.split(',').includes('rw') && mount.point !== '/scratch');
+  const writable = [];
+  for (const { point } of mounts) {
+    const file = path.join(point, `.probe-${process.pid}`);
+    try { fs.writeFileSync(file, 'x', { flag: 'wx' }); writable.push(point); fs.rmSync(file); } catch {}
+  }
+  out('no-other-writable-mount', writable.length === 0, `rw mounts checked=${mounts.map((m) => m.point).join(',')} writable=${writable.join(',') || 'none'}`);
+}
+// Run last: the 200 background sleeps exhaust the pids limit (threads count), which would stall later child processes.
+const procs = spawnSync('sh', ['-c', 'i=0; while [ $i -lt 200 ]; do sleep 5 & i=$((i+1)); done 2>&1 | head -c 120; echo; jobs | wc -l'], { encoding: 'utf8', timeout: 8000 });
+out('pids-limit', /can't fork|Resource temporarily unavailable|fork/i.test(procs.stdout + procs.stderr), (procs.stdout + procs.stderr).replace(/\s+/g, ' '));
