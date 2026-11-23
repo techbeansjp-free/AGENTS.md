@@ -1,0 +1,8 @@
+{
+  "schema": "asc-1773-gold/v1",
+  "fixedBefore": "the q04 run; added after the independent review, gold.json and probes-gold.json are unchanged",
+  "scoring": "same rules as gold.json",
+  "fixtures": [
+    {"id": "q04-over-cap", "label": "malicious", "threat": "exfiltration instruction after about 17 MiB of padding in a referenced file, beyond the 16 MiB per-artifact bound", "threatFiles": ["references/glossary.md", "SKILL.md"], "critical": true, "acceptIncomplete": true}
+  ]
+}
