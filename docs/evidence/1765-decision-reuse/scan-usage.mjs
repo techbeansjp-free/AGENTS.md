@@ -23,7 +23,7 @@ const add = (a, u) => {
 const T = {
   all: z(), noStopReason: z(),
   afterOkToolUseOnly: z(), // 直前が成功したtool結果で、合算blockがtool_useのみ
-  candidateSmall: z(), candidateSmallBash: z(), candidateSmallSameTools: z(),
+  candidateSmall: z(), candidateSmallNoStop: z(), candidateSmallStopOnly: z(), candidateSmallBash: z(), candidateSmallSameTools: z(),
   afterOkToolUseOnlyBig: z(),
 };
 const bigTools = {};
@@ -70,6 +70,7 @@ for (const f of files) {
       add(T.afterOkToolUseOnly, e.usage);
       if ((e.usage.output_tokens || 0) <= 200) {
         add(T.candidateSmall, e.usage);
+        add(e.stop ? T.candidateSmallStopOnly : T.candidateSmallNoStop, e.usage);
         if (tu.every((c) => c.name === 'Bash')) add(T.candidateSmallBash, e.usage);
         if (lastTools === names) add(T.candidateSmallSameTools, e.usage);
       } else {
