@@ -1,0 +1,35 @@
+{
+  "schema": "asc-1774-gold/v1",
+  "fixture": "make-fixture-scale.mjs",
+  "fixedBefore": "Phase 1b runs; evaluators never receive this file",
+  "verdictRule": "Same as gold.json. Purpose: coverage under scale (36 near-identical resource modules, 3 deviations, 3 look-alike negatives).",
+  "items": [
+    {
+      "id": "S1", "kind": "true", "critical": true, "file": "src/resources/invoices.mjs",
+      "claim": "GET /invoices/:id compares item.tenantId with req.query.tenant (client-controlled) before req.user.tenantId; ?tenant=t2 reads t2 invoices.",
+      "accept": ["confirmed"]
+    },
+    {
+      "id": "S2", "kind": "true", "critical": true, "file": "src/resources/attachments.mjs",
+      "claim": "DELETE /attachments/:id deletes by id without loadScoped; any user deletes other tenants' attachments.",
+      "accept": ["confirmed"]
+    },
+    {
+      "id": "S3", "kind": "true", "critical": true, "file": "src/resources/reports.mjs",
+      "claim": "PUT /reports/:id lets any manager edit any report: the manager branch has no tenant check; a t2 manager edits t1 reports.",
+      "accept": ["confirmed"]
+    },
+    {
+      "id": "SN1", "kind": "negative", "file": "src/resources/audit.mjs",
+      "claim": "Does not use loadScoped but checks entry.tenantId === req.user.tenantId inline."
+    },
+    {
+      "id": "SN2", "kind": "negative", "file": "src/resources/catalog.mjs",
+      "claim": "Unscoped reads are intended: README declares the catalog global and read-only, and it has only GET routes."
+    },
+    {
+      "id": "SN3", "kind": "negative", "file": "src/resources/legacy-exports.mjs",
+      "claim": "Missing tenant check, but the module is not imported by registry.mjs, so no entry point reaches it (dead code, hardening note at most)."
+    }
+  ]
+}
