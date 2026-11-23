@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 const out = (check, ok, detail) => console.log(JSON.stringify({ check, enforced: ok, detail: String(detail).slice(0, 200) }));
-try { await fetch('http://1.1.1.1/', { signal: AbortSignal.timeout(3000) }); out('external-network', false, 'fetch succeeded'); } catch (e) { out('external-network', true, e.cause?.code ?? e.name); }
+try { await fetch('http://192.0.2.1/', { signal: AbortSignal.timeout(3000) }); out('external-network', false, 'fetch succeeded'); } catch (e) { out('external-network', true, e.cause?.code ?? e.name); }
 try { fs.writeFileSync('/target/pwn.txt', 'x'); out('target-readonly', false, 'write succeeded'); } catch (e) { out('target-readonly', true, e.code); }
 try { fs.writeFileSync('/probe/pwn.txt', 'x'); out('probe-readonly', false, 'write succeeded'); } catch (e) { out('probe-readonly', true, e.code); }
 try { fs.writeFileSync('/etc/pwn.txt', 'x'); out('rootfs-readonly', false, 'write succeeded'); } catch (e) { out('rootfs-readonly', true, e.code); }

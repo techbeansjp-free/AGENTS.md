@@ -13,10 +13,19 @@
 
 固定goldの2ケースで、A（現行ASCの独立レビュー）とB（Cloudflare方式の最小手順）を各3回比べた。根拠は次のとおり（数値は「Phase 1の結果」）。
 - **検出の増分が無い**：Aは真の欠陥を24/24件検出した（小ケース15/15、規模ケース9/9）。critical欠落、検証不能の誤昇格、誤検知はいずれも0件だった。Bの探索段（coverage ledgerを作るHunter）も、検出の上積みは無かった（23/24件）。
-- **独立反証の段は品質を下げた**：Verifierの呼出し21回のうち3回が、goldの真の欠陥を「影響なし」「前提が成立しない」としてrejectedにした。Bの最終結果は小ケース13/15件、規模ケース1/3件（1回のみ実施）。規模ケースでは、critical欠落が2件出た。
-- **費用が大きい**：Bの最終結果まで進めると、1回あたりのsubagent tokenはAの約4〜5.4倍、壁時計は約1.6〜1.9倍になった。
+- **独立反証の段も、検出・判定を改善しなかった**：Hunterが正しく出した候補を、Verifierは再確認しただけだった。seed版の規模ケースでは、3回×3件の9件全てをconfirmedにした（Phase 1c）。
+  - 最初の規模ケースでは、Verifierが真の欠陥2件をrejectedにした（「storeに書き込むcodeが無い」が理由）。seedを足した版では、同じ候補が全てconfirmedになった。この2件は、fixtureの不備による交絡と判断した。
+  - 小ケースのT4のrejectedは、goldの妥当性に争いがある（「goldの争点と感度」）。
+  - 以上から、Verifierが品質を下げたとは結論しない。上げたとも言えない。
+- **費用が大きい**：Bの最終結果まで進めると、1回あたりのsubagent tokenはAの約3.1〜5.4倍、壁時計は約1.9〜2.0倍になった。
 
-一方、Verifierと実行による確認で役立った点もある。Aの3回はいずれも、SSRF候補（T4）の根拠にuserinfo形式のURL（`https://docs.example.com@10.0.0.5/`）が通るという誤った記述を含んでいた。BのVerifier 2回がこの誤りを指摘した。後述のsandbox実行（Phase 2）でも、Node 22の`fetch`がこのURLを`TypeError`で拒否することを確認した。ただしこれは判定（confirmed等）を変えない根拠の細部の誤りであり、検出率・判定の差としては現れなかった。現行の`review-method.md`は「再現済み、静的な根拠、未確認の懸念を区別」することを既に要求しており、これに反した報告でもない。
+Verifierに有利な材料も1つある。Aの3回はいずれも、SSRF候補（T4）の根拠に、userinfo形式のURL（`https://docs.example.com@10.0.0.5/`）で内部hostへ到達できるという誤った事実を含んでいた。影響も「内部hostを含む任意のhost」と過大に書いていた。
+- この誤りは、Phase 2のsandbox実行で確定的に反証した。Node 22の`fetch`はこのURLを`TypeError`で拒否する。
+- T4の候補を受けたBのVerifier 2回は、どちらもこの誤りを指摘した。B1は影響を絞ってconfirmedに、B3はrejectedにした。
+- 静的な根拠として断定した事実が誤っていたので、これは`review-method.md`の「再現済み、静的な根拠、未確認の懸念を区別」が十分に働かなかった例である。ただし`score.mjs`は判定だけを採点し、根拠と影響の正確さを測っていない。この効果の大きさは欠測である（「欠測と限界」）。
+- 1件の事例で、Verifierの段（tokenが3倍以上）を常設する根拠にはならない。
+
+Phase 2では、DockerのOSレベルの制限で、Cloudflareが対象コードの実行に求める制御を一通り強制できた。反例も全て拒否された。合成fixtureでは、この中で最小のPoCを安全に実行できた。ただし、この実行手順をASCへ配布するかはownerの判断に当たる。本PRでは配布せず、記録にとどめる（「ownerの判断事項」）。
 
 Phase 2では、DockerのOSレベルの制限で、Cloudflareが対象コードの実行に求める制御を一通り強制できた。反例も全て拒否された。合成fixtureでは、この中で最小のPoCを安全に実行できた。ただし、この実行手順をASCへ配布するかはownerの判断に当たる。本PRでは配布せず、記録にとどめる（「ownerの判断事項」）。
 
@@ -88,9 +97,10 @@ Phase 2では、DockerのOSレベルの制限で、Cloudflareが対象コード�
 | 規模ケース | [make-fixture-scale.mjs](make-fixture-scale.mjs)が生成する、似た形の36 resource moduleを持つAPI（47 file、約1,300行）。git treeは`a0df5a1593b3abe524d5ea0f1f3ae0df196cf8b8` |
 | 規模ケースのgold | [gold-scale.json](gold-scale.json)（sha256 `f5f340462b854639c7ea22c68dd3f7039328fd6896f25a0e29ffdd282a171666`）。commit `531d2c29`で、実行前に固定した |
 | 評価Agent | Claude Code 2.1.323の`general-purpose` subagent。model指定は`opus`（Opus 5.5）。fixtureとguideのpath以外は読まないよう指示した |
-| 反復 | 各ケースでA×3回、B（Hunter）×3回。各条件の3回は並列に起動した |
-| 採点 | [score.mjs](score.mjs)が、[runs.json](runs.json)（sha256 `0753582caa2ffa58d77d1e142b61937be910f00687f953cb28c307ecbe63c4a9`）を採点する。再現は本directoryで`node score.mjs` |
-| 原データ | 33件の評価Agentの最終応答を、Hostのsubagent記録から機械的に抜き出した[raw-outputs.json](raw-outputs.json)（sha256 `32c260a4eb6d9aa2bbbe6593e2f7fcf43e8b7666b95bada5774d9a450c4da39b`）。keyはruns.jsonの`agent`、fixtureの絶対pathは`<FIXTURE>`に置換した |
+| seed版（Phase 1c） | `make-fixture-scale.mjs <dir> --seed`。resource moduleは規模ケースと同一で、`src/store.mjs`の変更と`src/seed.mjs`（各storeにtenantごと1件）の追加だけが違う（48 file）。git treeは`689254d076b0683e27fc0c31ce96b5c1be84739e`。generatorはcommit `223c00ad`で、実行前に固定した。goldは`gold-scale.json`をそのまま使う |
+| 反復 | 各ケースでA×3回、B（Hunter）×3回。各条件の3回は並列に起動した。Phase 1cでは、規模ケースのHunter 3回の候補（S1〜S3）を、seed版に対してVerifierで3回ずつ反証した |
+| 採点 | [score.mjs](score.mjs)が、[runs.json](runs.json)（sha256 `3b3e7c37735d8108ce10d8d275900257e3fdf4a723b3b19f4b85dc5225df2b3d`）を採点する。再現は本directoryで`node score.mjs` |
+| 原データ | 42件の評価Agent（Phase 1cの9件を含む）の最終応答を、Hostのsubagent記録から機械的に抜き出した[raw-outputs.json](raw-outputs.json)（sha256 `392bddd2cfb449810fb23489aff08d9f324cb19b7f02c06c79a346f7b69432f1`）。keyはruns.jsonの`agent`、fixtureの絶対pathは`<FIXTURE>`に置換した |
 
 goldの内容：
 - 小ケース（10項目）：
@@ -123,39 +133,52 @@ goldの内容：
 | 規模・A | 9/9 | 0 | – | – | 0/9 | 65,479 | 50.6秒 | 1 |
 | 規模・B Hunter | 9/9 | 0 | – | – | 0/9 | 62,312 | 66.6秒 | 1 |
 | 規模・B 最終（1回のみ） | 1/3 | 2 | – | – | 0/3 | 262,733 | 81.8秒 | 5 |
+| seed版・B 最終（Phase 1c） | 9/9 | 0 | – | – | 0/9 | 201,990 | 101.7秒 | 4 |
 
-B最終の壁時計は、Hunterの時間に、並列に起動したVerifierのうち最長の時間を足した値である。
+B最終の壁時計は、Hunterの時間に、並列に起動したVerifierのうち最長の時間を足した値である。seed版の行は、規模ケースのHunterの値（token・時間）に、seed版で実行したVerifierの値を足したものである。seed版でのAの再実行はしていない。Aの値は規模ケースのものを比較に使い、tokenは約3.1倍、壁時計は約2.0倍となる。
 
 観察：
 - **coverage ledgerは検出を増やさなかった**：
   - 規模ケースでも、Aは36 module中の3件の逸脱を3回とも検出した。dead code（SN3）の除外もできた。
   - BのHunterはledgerに全moduleを記録した。正規化hashで同形のmoduleをまとめて確認した回もある。ただし、検出結果はAと同じだった。
   - B2のHunterは、小ケースのT4をrejectedにした（userinfo形式が通らないこととTLS検証を根拠に、境界の越えが無いと判断）。
-- **独立反証は誤判定も生んだ**：
+- **独立反証は判定を改善しなかった**：
   - 小ケース：B3のVerifierがT4をrejectedにした。B1のVerifierは、userinfoの誤りを除いて影響を絞ったうえでconfirmedとした。T4については、goldの妥当性に争いがある（次項）。
-  - 規模ケース：B1のVerifier 4件のうち3件が、「このstoreに書き込むcodeがsourceに無い」ことを「前提が成立しない」とみなし、rejectedにした。対象はS1・S2（真の欠陥）と、Hunterのneeds_validation 1件である。S3のVerifierは同じ点を指摘したうえで、通常のdata状態の仮定としてconfirmedにした。原典の「impossible prerequisite」規則を厳格に当てると、同じ入力でもVerifierごとに判定が割れた。
-  - fixtureがDBの代わりにin-memoryのMapを使い、一部のresourceに作成経路が無いことは、合成fixtureの不備でもある。ただし実際のrepositoryでも、データ源（DB、外部同期）はsourceの外にあることが多い。そのため、この規則は真の欠陥を落とす経路になり得る。
+  - 規模ケース：B1のVerifier 4件のうち3件が、「このstoreに書き込むcodeがsourceに無い」ことを「前提が成立しない」とみなし、rejectedにした。対象はS1・S2（真の欠陥）と、Hunterのneeds_validation 1件である。S3のVerifierは同じ点を指摘したうえで、通常のdata状態の仮定としてconfirmedにした。
+  - 原因は、invoices・attachments・reportsだけに作成経路（POST）もseedも無いという、fixtureの不備だった（`make-fixture-scale.mjs`の特別扱いの分岐）。そこで計画を変え、seedを足した版（Phase 1c）でVerifierを3回ずつ実行した。結果は9件全てconfirmedで、各Verifierはseedのidを使って到達経路を示した。
+  - 以上から、最初の規模ケースの誤rejectedはfixtureの交絡であり、Verifier方式の品質低下の証拠とはしない。ただしデータ源がsourceの外にある場合、「impossible prerequisite」規則で真の欠陥を落とす経路は残る。実際のrepositoryでこの経路がどのくらい起きるかは測っていない。
 - **検証不能の区別は、両条件とも正しかった**：偽装header（NV1）は、6回中6回でneeds_validationとなった。根拠は「本番でenvが`on`か」という同じ未確認事実で、誤昇格は0件だった。
 - **目的外の指摘**（goldに無い項目。runs.jsonの`extras`）：
   - 規模ケースの「reportのDELETEは編集に当たるか」：Aの2回とBのHunter 3回が、needs_validationとした。READMEが「edited」としか書いていないため、仕様の未決として妥当である（fixtureの記述が曖昧だった）。
   - A2の1回は、`SESSION_SECRET`の乱数fallbackを、境界の越えが無いと自ら書きながらneeds_validationにした。needs_validationの誤用（hardeningに入れるべき）として1件と数える。誤検知の数には含めない。
-- **根拠の誤り**：T4の根拠に、userinfo形式が通るという誤りを含んだ回数は次のとおり。判定の正誤には影響しない。
-  - A：3回中3回。
+- **根拠・影響の誤り**：T4の根拠に、userinfo形式が内部hostへ届くという誤った事実を含んだ回数は次のとおり。`score.mjs`は判定だけを採点するので、表の数値にはこの差が出ない。
+  - A：3回中3回（影響を「内部hostを含む任意のhost」とした）。
   - BのHunter：3回中2回。
   - Bの最終結果：0回（B1のVerifierが訂正し、B3はrejectedにした）。
 
 ### goldの争点と感度
 
-- **T4**：Phase 2の実行で、userinfo形式が`fetch`で失敗することを確認した。残るのは「member自身が指定した、攻撃者所有のhostへのHTTPS取得」と「到達性のoracle」で、境界の越えは弱い。goldはconfirmedとneeds_validationを正答としたが、rejectedにも根拠がある。T4を採点から除くと、小ケースの検出はA 12/12、B最終12/12で、差は無い。
-- **S1・S2**：「作成経路が無い」というVerifierの反証は、fixtureの不備に依存する。fixtureを直してから再評価すれば、B最終もAと同じ3/3になる可能性がある。その場合もAを上回らず、費用だけが4倍になる。
+- **T4**：固定したgold（`gold.json`のT4の`claim`）自体にも、userinfo形式（`https://docs.example.com@internal/`）で到達できるという誤った例が含まれていた。Phase 2の実行で、このURLは`fetch`で失敗することを確認した。goldのfileは実行前に固定したため直さず、ここに誤りを記録する。
+  - 残る影響は「member自身が指定した、攻撃者所有のhostへのHTTPS取得」と「到達性のoracle」で、境界の越えは弱い。
+  - goldはconfirmedとneeds_validationを正答としたが、rejectedにも根拠がある。
+  - T4を採点から除くと、小ケースの検出はA 12/12、B最終12/12で、差は無い。
+- **S1〜S3**：規模ケースの生成物（seed無し）では、invoices・attachments・reportsのstoreに書き込む経路が無い。そのため`gold-scale.json`の主張は、実行時には到達しない潜在的な欠陥（code上の欠落）としてだけ成立する。seed版（Phase 1c）では到達でき、B最終もAと同じ9/9になった。
 
-どちらの読み方でも、BがAを上回る結果は無い。
+どちらの読み方でも、判定の採点でBがAを上回る結果は無い。Bに有利な点は、根拠・影響の誤りを訂正したこと（T4の1事例）だけである。
 
 ## Phase 2：監査用の実行境界とEvidenceの安全
 
 ### 制限の強制と反例
 
-使い捨てのcontainer（`node:22-alpine`、image ID `sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603`、linux/amd64）を、次の設定で起動した。`<fixture>`と`<probe>`は作業用の一時directoryで、`<worktree>`は本worktreeの絶対pathである。
+使い捨てのcontainer（`node:22-alpine`、image ID `sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603`、linux/amd64）を、次の設定で起動した。`<fixture>`は作業用の一時directory、`<probe>`は本directoryの`probe/`、`<worktree>`は本worktreeの絶対pathである。
+
+host側の手順は[probe/run-sandbox.mjs](probe/run-sandbox.mjs)にある。`node probe/run-sandbox.mjs <秒> <fixture> <worktree> -- <nodeの引数>`で、次を一度に行う。
+- 起動
+- 壁時計の上限での`docker kill`
+- 出力の取得（64KiB上限）
+- `docker rm -v`による削除
+
+下の結果は全て、このrunnerで再実行して確認した（独立レビューの指摘L2・L3の是正後。最初の実行は同じ設定のshell scriptで行い、外部network probeの宛先が`1.1.1.1`だった）。
 
 ```sh
 docker run -d --label asc.worktree=<worktree> --network none --read-only --cap-drop ALL \
@@ -171,7 +194,7 @@ docker run -d --label asc.worktree=<worktree> --network none --read-only --cap-d
 
 | 制御 | 反例 | 結果 |
 | --- | --- | --- |
-| 外部network | `fetch('http://1.1.1.1/')` | `ENETUNREACH`で拒否 |
+| 外部network | `fetch('http://192.0.2.1/')`（TEST-NET。隔離を誤っても実在のhostへは送らない） | `ENETUNREACH`で拒否 |
 | target・probeの読取り専用 | `/target`・`/probe`への書込み | `EROFS` |
 | root fsの読取り専用 | `/etc`への書込み | `EROFS` |
 | scratchだけ書込み可 | `/scratch`への書込み | 成功 |
@@ -181,7 +204,7 @@ docker run -d --label asc.worktree=<worktree> --network none --read-only --cap-d
 | host homeの非露出 | `/Users` | 存在しない |
 | process数の上限 | 200個のfork | `can't fork` |
 | memoryの上限 | 16MiBずつ確保 | 約240MiBで終了（exit 137） |
-| 壁時計の上限 | 30秒待つprocessを5秒上限で起動 | 5.45秒で`docker kill`、exit 137 |
+| 壁時計の上限 | 30秒待つprocessを5秒上限で起動（`node run-sandbox.mjs 5 … -- -e 'setTimeout(…,30000)'`） | 5.7秒で`docker kill`、exit 137（`wallClockKilled: true`） |
 
 `limits.mjs`のmemory項目は、子processの20秒のtimeout（SIGTERM）で止まっていた。そのため上限の証拠とはせず、`mem.mjs`で別に確認した。
 
@@ -216,30 +239,43 @@ containerからは、stdoutのJSON行（上限64KiB）だけを親が受け取�
 | --- | --- | --- |
 | 現行ASCのまま（独立レビュー＋security-evidence） | **維持** | 2ケース×3回で、真の欠陥24/24件を検出した。誤検知・誤昇格は0件、critical欠落も0件だった |
 | coverage ledgerの規範を追加 | 不採用 | 検出の増分が0件。Hunterの壁時計は+32〜36% |
-| 候補ごとの独立Verifierを追加 | 不採用 | 真の欠陥の誤rejectedが、Verifier呼出し21回中3回あった。規模ケースではcritical欠落が2件。tokenは4〜5.4倍 |
+| 候補ごとの独立Verifierを追加 | 不採用 | 判定の採点で検出・誤昇格・誤検知の改善が0件（seed版では9/9をconfirmedにしただけ）。tokenは3.1〜5.4倍、壁時計は約2倍。Bに有利なのは、T4の根拠・影響の誤りを訂正した1事例だけで、常設の費用に見合う根拠にならない。最初の規模ケースの誤rejected 2件は、fixtureの交絡として根拠から外した |
 | 三値判定の文言を追加 | 不採用 | 現行の「静的な根拠・再現済み・未確認の懸念」の区別で、NV1を6回中6回とも正しく判定した。誤用は1件で、規範を足して減るという根拠は得ていない |
 | `security-audit` Skillを任意の別Skillとして配布 | 不採用 | 上の各要素に、実測で示せる追加価値が無い。原典の文書（6段階で読む本文だけで約94KB）を読み込む費用も増える |
-| sandboxの実行手順を規範に加える | 本PRでは配布しない（ownerの判断事項） | 制御の強制とPoCの効果は確認した。ただし配布するかは、利用者projectへの新しい実行規範であり、ownerの判断に当たる |
+| sandboxの実行手順を規範に加える | 本PRでは配布しない（ownerの判断事項。推奨は「今は配布しない」） | 制御の強制とPoCの効果は確認した。推奨の理由は次の3つ。(1) 確認したのは1 Host（Docker Desktop、macOS）だけである。(2) fileを昇格させる手順を実装していない。(3) 明示の監査依頼という需要がまだ記録されていない。配布するかは、利用者projectへの新しい実行規範なので、ownerの判断に当たる |
 
 ## 欠測と限界
 
-- **C（原典の6段階）は未実施**：Bの結果で、独立反証の段が品質を下げ、費用を4倍以上にした。Cはこれにcoverage critic・記録の再検証・Agentの追加を重ね、各Agentが原典の約94KB（概算で約2.3万token）を読む。そのためCでAを上回るとは見込めず、実験の規模の上限も考えて実施しなかった。
-- **B最終の規模ケースは1回だけ**：B1のVerifierが、3件中2件の真の欠陥をrejectedにした。この時点で不採用が確定したため、B2・B3のVerifier（各4件）は省いた。規模ケースのB最終の数値は1回分である。
+- **C（原典の6段階）は未実施**：Bでは、独立反証の段が判定を改善しないまま、費用を3倍以上にした。Cはこれにcoverage critic・記録の再検証・Agentの追加を重ね、各Agentが原典の約94KB（概算で約2.3万token）を読む。そのためCでAを上回るとは見込めず、実験の規模の上限も考えて実施しなかった。
+- **seed無しの規模ケースのB最終は1回だけ**：B1のVerifierが真の欠陥2件をrejectedにした後、原因がfixtureの不備だと分かったため、seed版で3回測り直した（Phase 1c）。seed無し版のB2・B3のVerifierは実行していない。
+- **Phase 1cの範囲**：Hunterは規模ケースのものを再利用し、Verifierだけをseed版で実行した。HunterのextrasのreportのDELETE（needs_validation）は、再検証していない。seed版でのAは再実行していない（resource moduleが同一で、Aは規模ケースで既に9/9のため）。
+- **根拠・影響の正確さ**：`score.mjs`は判定だけを採点する。根拠に含まれる事実の正誤と、影響の過大な記述は、T4の1事例を手で確認しただけである。全件の評価は欠測である。
 - **費用**：tokenは、Hostの完了通知の`subagent_tokens`である。cache等の内訳とAPI課金額は欠測である。親sessionの調整・採点の消費は含まない。
-  - 合計：小ケースのA 168,530、B（Hunter＋Verifier）914,177。規模ケースのA 196,438、BのHunter 186,936、Verifier 192,794。
+  - 合計：小ケースのA 168,530、B（Hunter＋Verifier）914,177。規模ケースのA 196,438、BのHunter 186,936、Verifier 192,794。seed版のVerifier 9件は419,035。
   - 壁時計は、並列に起動したAgentが相互に干渉した値を含む参考値である。
 - **判定の採点**：各runの最終JSONを、操作者がgoldの項目に対応付けた。対応付けの全件は`runs.json`に、元の応答は`raw-outputs.json`にある。
-- **標本**：合成fixture 2件（JavaScript、HTTP API、計64 file）だけである。大規模なrepository、他の言語、ブラウザ・native・cloud設定を含むケースは測っていない。原典READMEの「反復runで発見が増える」効果も、3回の範囲でしか見ていない。結果を全案件の欠陥検出力へ一般化しない。
-- **goldの作成**：goldは作業者が作り、評価Agentには見せていない。T4とS1・S2には争点がある（「goldの争点と感度」）。
+- **標本**：合成fixture 2件（JavaScript、HTTP API、計64 file。seed版を含めない数）だけである。大規模なrepository、他の言語、ブラウザ・native・cloud設定を含むケースは測っていない。原典READMEの「反復runで発見が増える」効果も、3回の範囲でしか見ていない。結果を全案件の欠陥検出力へ一般化しない。
+- **goldの作成**：goldは作業者が作り、評価Agentには見せていない。T4とS1〜S3には争点がある（「goldの争点と感度」）。
 - **プロンプトだけの制約**：評価Agentの読取り専用・fixture非実行は依頼文で指示しただけで、tool制限では強制していない。実行後にfixtureのgit状態が変わっていないこと（0行）は確認した。
 
 ## ownerの判断事項（案。確定していない）
 
-1. **採否の閾値（案）**：「B最終の真の欠陥の検出がA以上で、誤検知・誤昇格が厳密に少なく、tokenが2倍以内なら採用」。今回のBはどの条件も満たさないため、この閾値のどの値をとっても、結論は不採用で変わらない。
-2. **sandboxの実行手順の扱い**：本directoryの起動設定と反例probeを、ユーザーが明示的に脆弱性監査を依頼したときの任意の参照として、`security-evidence`へ短く載せるかどうか。載せる場合の条件の案は次のとおり。
+1. **採否の閾値（案。結果を見た後に作った）**：次の2つをともに満たせば採用する。
+   - B最終が、どの指標でもAより悪くならない（検出はA以上、誤検知・誤昇格はA以下）。
+   - 次のどちらかがある。(a) 判定の採点でAを上回る項目が1つ以上ある。(b) 根拠・影響の誤りの件数が、全件の採点で有意に少なく、tokenが2倍以内。
+   
+   今回のBは、(a)が無い。(b)はT4の1事例しか無く、tokenは3.1〜5.4倍である。そのため結論は不採用となる。(b)を全件で測る場合の採点方法は、未設計である。
+2. **改善の候補（未測定）**：Aは3回とも、実行環境の挙動（`fetch`がuserinfo付きURLを拒否すること）を、確かめないまま静的な根拠として断定した。「library・runtimeの挙動に依存する事実は、確認しなければ未確認の懸念とする」という一文を`review-method.md`に足せば、この誤りが減るかもしれない。しかし、足して誤りが減ることは測っておらず、ADR 0002に従って本PRでは足さない。採否を決めるには、本directoryのT4と同種の事例を複数含むfixtureで、文言の有無を比べる必要がある。
+3. **sandboxの実行手順の扱い**（推奨は「今は配布しない」。理由はPhase 3の表）：本directoryの起動設定と反例probeを、ユーザーが明示的に脆弱性監査を依頼したときの任意の参照として、`security-evidence`へ短く載せるかどうか。載せる場合の条件の案は次のとおり。
    - 反例probeで全制御を確認できたときだけ、対象コードを実行する。
    - 確認できなければneeds_validationとする。
    - 成果物はstdoutの上限付き取得に限る。
+
+## 検証
+
+- `node score.mjs`（本directory）：上の表の値を出力する（読取りだけで、networkを使わない）。
+- `node --import tsx scripts/check_source_quality.ts --root=<worktree>`：`errors: []`で成功した。`scripts/check_project_quality.ts`も成功した。
+- `npm run quality`（ローカル、HEAD `d7085e93`）：651件中、成功470・失敗34・skip 147だった。同じ時点のmain（`db3ca9da`）で`npm test`を実行すると、失敗40件だった。worktreeで失敗した34件は、全てmainでも失敗していた（worktreeだけの失敗は0件）。そのためこの失敗は、ローカル環境（Git・Host process等の試験）に起因すると判断した。本PRの差分は`docs/evidence/`だけで、試験の対象を変えない。合否はCIで確認する。
 
 ## 再評価の条件
 

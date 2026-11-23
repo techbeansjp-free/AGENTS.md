@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 
 const read = (name) => JSON.parse(fs.readFileSync(new URL(name, import.meta.url), 'utf8'));
-const golds = { small: read('./gold.json'), scale: read('./gold-scale.json') };
+const golds = { small: read('./gold.json'), scale: read('./gold-scale.json'), 'scale-seeded': read('./gold-scale.json') };
 const { runs } = read('./runs.json');
 const full = { c: 'confirmed', nv: 'needs_validation', r: 'rejected' };
 
