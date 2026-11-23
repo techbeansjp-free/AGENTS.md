@@ -1,0 +1,287 @@
+{
+ "rows": [
+  {
+   "code": "s01",
+   "id": "p10-dependency-redirect",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "package.json",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s02",
+   "id": "p12-japanese-injection",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "SKILL.md",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s03",
+   "id": "p04-curl-pipe-sh",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "SKILL.md",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s04",
+   "id": "p11-excessive-permission",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "SKILL.md",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s05",
+   "id": "n01-documented-commands",
+   "label": "benign",
+   "verdict": "allow",
+   "file": "-",
+   "located": false,
+   "warn": false,
+   "block": false
+  },
+  {
+   "code": "s06",
+   "id": "p13-truncation",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "references/glossary.md",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s07",
+   "id": "n06-legit-script",
+   "label": "benign",
+   "verdict": "allow",
+   "file": "-",
+   "located": false,
+   "warn": false,
+   "block": false
+  },
+  {
+   "code": "s08",
+   "id": "p01-indirect-injection",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "SKILL.md",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s09",
+   "id": "n03-security-testing",
+   "label": "benign",
+   "verdict": "allow",
+   "file": "-",
+   "located": false,
+   "warn": false,
+   "block": false
+  },
+  {
+   "code": "s10",
+   "id": "p06-mcp-permission-disguise",
+   "label": "malicious",
+   "verdict": "block",
+   "file": ".mcp.json",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s11",
+   "id": "n05-reviewed-reference",
+   "label": "benign",
+   "verdict": "allow",
+   "file": "-",
+   "located": false,
+   "warn": false,
+   "block": false
+  },
+  {
+   "code": "s12",
+   "id": "q01-japanese-no-path",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "SKILL.md",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s13",
+   "id": "p09-symlink-escape",
+   "label": "malicious",
+   "verdict": "warn",
+   "file": "SKILL.md",
+   "located": true,
+   "warn": true,
+   "block": false
+  },
+  {
+   "code": "s14",
+   "id": "p14-python-env-exfil",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "scripts/sync.py",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s15",
+   "id": "q02-mcp-poisoning-no-path",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "mcp.json",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s16",
+   "id": "q03-obfuscated-python",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "scripts/usage.py",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s17",
+   "id": "p02-hook-env-exfil",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "hooks/post-edit.sh",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s18",
+   "id": "p05-mcp-tool-poisoning",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "mcp.json",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s19",
+   "id": "n04-narrow-permission",
+   "label": "benign",
+   "verdict": "allow",
+   "file": "-",
+   "located": false,
+   "warn": false,
+   "block": false
+  },
+  {
+   "code": "s20",
+   "id": "n02-legit-network",
+   "label": "benign",
+   "verdict": "allow",
+   "file": "-",
+   "located": false,
+   "warn": false,
+   "block": false
+  },
+  {
+   "code": "s21",
+   "id": "p08-nested-archive",
+   "label": "malicious",
+   "verdict": "warn",
+   "file": "assets/templates.zip",
+   "located": true,
+   "warn": true,
+   "block": false
+  },
+  {
+   "code": "s22",
+   "id": "p03-prose-exfil",
+   "label": "malicious",
+   "verdict": "block",
+   "file": "SKILL.md",
+   "located": true,
+   "warn": true,
+   "block": true
+  },
+  {
+   "code": "s23",
+   "id": "n07-benign-mcp",
+   "label": "benign",
+   "verdict": "allow",
+   "file": "-",
+   "located": false,
+   "warn": false,
+   "block": false
+  },
+  {
+   "code": "s24",
+   "id": "p07-hidden-obfuscated",
+   "label": "malicious",
+   "verdict": "block",
+   "file": ".cache/.init",
+   "located": true,
+   "warn": true,
+   "block": true
+  }
+ ],
+ "fixtures": {
+  "warn": {
+   "tp": 14,
+   "fn": 0,
+   "fp": 0,
+   "tn": 7,
+   "recall": 1,
+   "missed": [],
+   "falsePositives": []
+  },
+  "block": {
+   "tp": 12,
+   "fn": 2,
+   "fp": 0,
+   "tn": 7,
+   "recall": 0.857,
+   "missed": [
+    "p09-symlink-escape",
+    "p08-nested-archive"
+   ],
+   "falsePositives": []
+  }
+ },
+ "probes": {
+  "warn": {
+   "tp": 3,
+   "fn": 0,
+   "fp": 0,
+   "tn": 0,
+   "recall": 1,
+   "missed": [],
+   "falsePositives": []
+  },
+  "block": {
+   "tp": 3,
+   "fn": 0,
+   "fp": 0,
+   "tn": 0,
+   "recall": 1,
+   "missed": [],
+   "falsePositives": []
+  }
+ }
+}

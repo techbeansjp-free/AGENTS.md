@@ -1,0 +1,38 @@
+[
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input> && ls -laR . | head -400; find . -type f | wc -l"
+  }
+ },
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input> && for f in $(find . -type f -not -path './s06/references/*' -not -name templates.zip | sort); do echo \"=== $f\"; cat -v \"$f\"; echo; done; echo ==== ZIP; unzip -l s21/assets/templates.zip; readlink s13/references/key"
+  }
+ },
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input>/s06 && wc -l references/glossary.md; head -c 600 references/glossary.md; echo; grep -n -i -E 'ignore|instruction|curl|http|secret|ssh|assistant|system' references/glossary.md | cut -c1-200 | head -30; awk '{ if (length($0)>2000) print NR\": \"length($0) }' references/glossary.md | head"
+  }
+ },
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input> && cat s02/SKILL.md s12/SKILL.md; unzip -p s21/assets/templates.zip inner/templates.zip > /dev/null 2>&1; unzip -p s21/assets/templates.zip inner/templates.zip | unzip -l /dev/stdin 2>&1 | head -20"
+  }
+ },
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input> && unzip -p s21/assets/templates.zip inner/templates.zip | python3 -I -c \"\nimport sys,zipfile,io\nd=sys.stdin.buffer.read()\nprint(len(d),d[:4])\ntry:\n  z=zipfile.ZipFile(io.BytesIO(d))\n  for i in z.infolist(): print(i.filename,i.file_size)\nexcept Exception as e: print('err',e)\n\""
+  }
+ },
+ {
+  "tool": "Bash",
+  "input": {
+   "command": "cd <review-input> && unzip -p s21/assets/templates.zip inner/templates.zip | python3 -I -c \"\nimport sys,zipfile,io\nz=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read()))\nprint(z.read('templates/bootstrap.sh').decode())\""
+  }
+ }
+]

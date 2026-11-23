@@ -1,0 +1,188 @@
+{
+ "b-cap": {
+  "status": "partial",
+  "is_complete": false,
+  "coverage_percent": 50.0,
+  "ledger_exceptions": [
+   {
+    "reason": "size_limit",
+    "path": "references/glossary.md",
+    "phase": "cache",
+    "analyzers": null
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_agent_snooping"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_anti_refusal"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_deserialization"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_excessive_agency"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_harmful_content"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_memory_poisoning"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_privilege_escalation"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_prompt_injection"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_system_prompt_leakage"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_tool_misuse"
+    ]
+   }
+  ]
+ },
+ "b-cap-strict": {
+  "status": "partial",
+  "is_complete": false,
+  "coverage_percent": 50.0,
+  "ledger_exceptions": [
+   {
+    "reason": "size_limit",
+    "path": "references/glossary.md",
+    "phase": "cache",
+    "analyzers": null
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_agent_snooping"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_anti_refusal"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_deserialization"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_excessive_agency"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_harmful_content"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_memory_poisoning"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_privilege_escalation"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_prompt_injection"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_system_prompt_leakage"
+    ]
+   },
+   {
+    "reason": "runtime_limit",
+    "path": "references/glossary.md",
+    "phase": "static",
+    "analyzers": [
+     "static_patterns_tool_misuse"
+    ]
+   }
+  ]
+ }
+}

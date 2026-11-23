@@ -1,0 +1,104 @@
+{
+ "rows": [
+  {
+   "id": "q01-japanese-no-path",
+   "label": "malicious",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 0,
+   "ids": [],
+   "files": [],
+   "located": false,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 254716,
+   "seconds": 11.22
+  },
+  {
+   "id": "q02-mcp-poisoning-no-path",
+   "label": "malicious",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 0,
+   "ids": [],
+   "files": [],
+   "located": false,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 186004,
+   "seconds": 7.29
+  },
+  {
+   "id": "q03-obfuscated-python",
+   "label": "malicious",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 17,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 3,
+   "ids": [
+    "AST3",
+    "AST7"
+   ],
+   "files": [
+    "scripts/usage.py"
+   ],
+   "located": true,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 186512,
+   "seconds": 6.72
+  }
+ ],
+ "warn": {
+  "tp": 0,
+  "fn": 3,
+  "fp": 0,
+  "tn": 0,
+  "recall": 0,
+  "precision": null,
+  "missed": [
+   "q01-japanese-no-path",
+   "q02-mcp-poisoning-no-path",
+   "q03-obfuscated-python"
+  ],
+  "falsePositives": []
+ },
+ "block": {
+  "tp": 0,
+  "fn": 3,
+  "fp": 0,
+  "tn": 0,
+  "recall": 0,
+  "precision": null,
+  "missed": [
+   "q01-japanese-no-path",
+   "q02-mcp-poisoning-no-path",
+   "q03-obfuscated-python"
+  ],
+  "falsePositives": []
+ },
+ "exitZero": {
+  "count": 3,
+  "recommendations": [
+   "SAFE"
+  ],
+  "malicious": [
+   "q01-japanese-no-path",
+   "q02-mcp-poisoning-no-path",
+   "q03-obfuscated-python"
+  ]
+ },
+ "maxRssKiB": 254716,
+ "meanSeconds": 8.41
+}
