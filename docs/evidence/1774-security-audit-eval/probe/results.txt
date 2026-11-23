@@ -1,6 +1,6 @@
-# Output of the Phase 2 re-run with run-sandbox.mjs (2026-11-23, Docker Desktop 29.8.0, node:22-alpine
-# image sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603). Copied verbatim from the
-# terminal; "$ " lines are the commands (<fixture> = generated small fixture, <worktree> = this worktree).
+# Output of the Phase 2 re-run with run-sandbox.mjs after the CodeRabbit fixes (2026-11-23, Docker Desktop 29.8.0,
+# node:22-alpine image sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603). Copied verbatim;
+# "$ " lines are the commands (<fixture> = generated small fixture, <worktree> = this worktree).
 
 $ node run-sandbox.mjs 90 <fixture> <worktree> -- /probe/limits.mjs
 {"check":"external-network","enforced":true,"detail":"ENETUNREACH"}
@@ -8,23 +8,24 @@ $ node run-sandbox.mjs 90 <fixture> <worktree> -- /probe/limits.mjs
 {"check":"probe-readonly","enforced":true,"detail":"EROFS"}
 {"check":"rootfs-readonly","enforced":true,"detail":"EROFS"}
 {"check":"scratch-writable","enforced":true,"detail":"ok"}
+{"check":"no-write:/dev/shm","enforced":true,"detail":"ENOENT"}
+{"check":"no-write:/tmp","enforced":true,"detail":"EROFS"}
+{"check":"no-write:/var/tmp","enforced":true,"detail":"EROFS"}
 {"check":"file-size-limit","enforced":true,"detail":"EFBIG"}
 {"check":"env-allowlist","enforced":true,"detail":"HOME,HOSTNAME,NODE_VERSION,PATH,YARN_VERSION"}
 {"check":"home-is-scratch","enforced":true,"detail":"/scratch"}
 {"check":"uid-nonroot","enforced":true,"detail":"65534"}
 {"check":"no-host-home","enforced":true,"detail":"absent"}
 {"check":"pids-limit","enforced":true,"detail":"sh: can't fork: Resource temporarily unavailable 0 "}
-{"check":"memory-limit","enforced":true,"detail":"status=null signal=SIGTERM"}
-{"containerExit":0,"wallClockKilled":false}
-# memory-limit above was stopped by the child's own 20 s timeout (SIGTERM), not by the cgroup; see mem.mjs below.
+{"check":"memory-limit","enforced":"unverified","detail":"status=null signal=SIGTERM error=ETIMEDOUT"}
+{"containerExit":0,"wallClockKilled":false,"waitError":null,"removed":true}
 
 $ node run-sandbox.mjs 60 <fixture> <worktree> -- /probe/mem.mjs   (last 2 lines)
 allocated 240MiB
-{"containerExit":137,"wallClockKilled":false}
+{"containerExit":137,"wallClockKilled":false,"waitError":null,"removed":true}
 
 $ node run-sandbox.mjs 5 <fixture> <worktree> -- -e 'setTimeout(()=>console.log("not killed"),30000)'
-{"containerExit":137,"wallClockKilled":true}
-# elapsed 5.684 s total
+{"containerExit":137,"wallClockKilled":true,"waitError":null,"removed":true}
 
 $ node run-sandbox.mjs 60 <fixture> <worktree> -- /probe/poc.mjs
 {"check":"T1-cross-tenant-note-read","status":200,"tenantOfBody":"t2","actorTenant":"t1"}
@@ -33,11 +34,13 @@ $ node run-sandbox.mjs 60 <fixture> <worktree> -- /probe/poc.mjs
 {"check":"T4-request-construct","url":"https://docs.example.com@10.0.0.5/","constructed":false,"error":"TypeError"}
 {"check":"T4-request-construct","url":"https://docs.example.com.attacker.test/","constructed":true}
 {"check":"T4-userinfo-via-tool","status":500}
-{"containerExit":0,"wallClockKilled":false}
+{"containerExit":0,"wallClockKilled":false,"waitError":null,"removed":true}
 
 $ node run-sandbox.mjs 60 <fixture> <worktree> -- --test /target/test/auth.test.mjs   (filtered)
 # pass 2
 # fail 0
-{"containerExit":0,"wallClockKilled":false}
+{"containerExit":0,"wallClockKilled":false,"waitError":null,"removed":true}
 
 # afterwards: containers with this worktree label = 0; fixture `git status --porcelain` = 0 lines.
+
+# Counterexample for the old configuration (without --ipc none): writing /dev/shm/x as uid 65534 printed "shm writable".

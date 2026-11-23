@@ -176,23 +176,30 @@ host側の手順は[probe/run-sandbox.mjs](probe/run-sandbox.mjs)にある。`no
 - 出力の取得（64KiB上限）
 - `docker rm -v`による削除
 
-再実行した出力は[probe/results.txt](probe/results.txt)に、そのまま保存した。runnerには、評価用の制約として次がある（独立再レビューの指摘L-c。安全境界の穴ではないため、codeは変えず記録する）。
-- `docker wait`が失敗した場合、containerが残り得る（try/finallyが無い）。この場合はlabelで探して削除する。
-- 64KiBの上限は、hostが受け取る量だけにかかる。Dockerのlog自体には上限が無い（`--log-opt max-size`を付けていない）。
+再実行した出力は[probe/results.txt](probe/results.txt)に、そのまま保存した。独立再レビューの指摘L-cのうち、次の2点はCodeRabbitの指摘とあわせてcodeを直した。
+- `docker wait`の失敗時も、containerを削除する（`finally`）。
+- Dockerのlogの大きさに上限を設けた（`max-size=1m`）。
+
+残る制約は次の2つである。
 - imageはタグで指定していて、digestで固定していない。実行時のimage IDは、この節の冒頭に記録した。
 - `<fixture>`引数を検査しない。homeや秘密を含むdirectoryを渡さないことは、呼び出す側の責任である。
 
 下の結果は全て、このrunnerで再実行して確認した（独立レビューの指摘L2・L3の是正後。最初の実行は同じ設定のshell scriptで行い、外部network probeの宛先が`1.1.1.1`だった）。
 
 ```sh
-docker run -d --label asc.worktree=<worktree> --network none --read-only --cap-drop ALL \
+docker run -d --label asc.worktree=<worktree> --network none --ipc none --read-only --cap-drop ALL \
   --security-opt no-new-privileges --user 65534:65534 --pids-limit 64 --memory 256m --memory-swap 256m \
-  --cpus 0.5 --ulimit fsize=4194304 --ulimit nofile=256 --entrypoint node \
+  --cpus 0.5 --ulimit fsize=4194304 --ulimit nofile=256 \
+  --log-driver json-file --log-opt max-size=1m --log-opt max-file=1 --entrypoint node \
   --tmpfs /scratch:rw,size=16m,mode=1777 -e HOME=/scratch -w /scratch \
   -v <fixture>:/target:ro -v <probe>:/probe:ro node:22-alpine <args>
 ```
 
-壁時計の上限は、hostの監視が`docker kill`で強制する。終了後に、出力（64KiB上限）を取得してから、`docker rm -v`で削除する。ホームディレクトリ・秘密・socketはmountしていない。
+壁時計の上限は、hostの監視が`docker kill`で強制する。終了後に、出力（64KiB上限）を取得してから、`docker rm -f -v`で削除する。待機やlogの取得に失敗しても、`finally`で必ず削除する。ホームディレクトリ・秘密・socketはmountしていない。
+
+CodeRabbitの指摘で、次の2点を直した。
+- 最初の設定（`--ipc none`無し）では、`/dev/shm`がscratch以外の書込み先として残っていた。非rootでも`/dev/shm/x`への書込みが成功することを確認した（`probe/results.txt`の末尾）。`--ipc none`を足し、書込みが拒否されることを再確認した。
+- `docker wait`の失敗と、Dockerのlogの大きさの上限が無いことも直した。このため、表は修正後のrunnerで再実行した結果である。
 
 [probe/limits.mjs](probe/limits.mjs)・[probe/mem.mjs](probe/mem.mjs)の結果：
 
@@ -202,6 +209,7 @@ docker run -d --label asc.worktree=<worktree> --network none --read-only --cap-d
 | target・probeの読取り専用 | `/target`・`/probe`への書込み | `EROFS` |
 | root fsの読取り専用 | `/etc`への書込み | `EROFS` |
 | scratchだけ書込み可 | `/scratch`への書込み | 成功 |
+| scratch以外の一時領域への書込み禁止 | `/dev/shm`・`/tmp`・`/var/tmp`への書込み | `/dev/shm`は`ENOENT`（`--ipc none`でmountされない）、`/tmp`・`/var/tmp`は`EROFS` |
 | fileの大きさの上限 | 8MiBの書込み（上限4MiB） | `EFBIG` |
 | 環境変数のallowlist | 一覧 | `HOME,HOSTNAME,NODE_VERSION,PATH,YARN_VERSION`のみ。entrypointをshにすると`PWD`・`SHLVL`が加わったため、`--entrypoint node`に変えて再確認した |
 | 非root | uid | 65534 |
@@ -210,7 +218,7 @@ docker run -d --label asc.worktree=<worktree> --network none --read-only --cap-d
 | memoryの上限 | 16MiBずつ確保 | 約240MiBで終了（exit 137） |
 | 壁時計の上限 | 30秒待つprocessを5秒上限で起動（`node run-sandbox.mjs 5 … -- -e 'setTimeout(…,30000)'`） | 5.7秒で`docker kill`、exit 137（`wallClockKilled: true`） |
 
-`limits.mjs`のmemory項目は、子processの20秒のtimeout（SIGTERM）で止まっていた。そのため上限の証拠とはせず、`mem.mjs`で別に確認した。
+`limits.mjs`のmemory項目は、子processが20秒のtimeout（SIGTERM）で止まっていた。CodeRabbitの指摘を受け、SIGKILL以外の終了は`unverified`と出力するように直した。再実行の結果も`unverified`だったため、上限の証拠は`mem.mjs`（exit 137）だけである。
 
 ### 最小のPoC（ダミーデータ、loopbackのみ）
 
