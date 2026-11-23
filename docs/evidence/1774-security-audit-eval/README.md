@@ -27,8 +27,6 @@ Verifierに有利な材料も1つある。Aの3回はいずれも、SSRF候補�
 
 Phase 2では、DockerのOSレベルの制限で、Cloudflareが対象コードの実行に求める制御を一通り強制できた。反例も全て拒否された。合成fixtureでは、この中で最小のPoCを安全に実行できた。ただし、この実行手順をASCへ配布するかはownerの判断に当たる。本PRでは配布せず、記録にとどめる（「ownerの判断事項」）。
 
-Phase 2では、DockerのOSレベルの制限で、Cloudflareが対象コードの実行に求める制御を一通り強制できた。反例も全て拒否された。合成fixtureでは、この中で最小のPoCを安全に実行できた。ただし、この実行手順をASCへ配布するかはownerの判断に当たる。本PRでは配布せず、記録にとどめる（「ownerの判断事項」）。
-
 ## Phase 0：現行ASCとの差分と必要性
 
 ### 記録
@@ -145,7 +143,7 @@ B最終の壁時計は、Hunterの時間に、並列に起動したVerifierの�
 - **独立反証は判定を改善しなかった**：
   - 小ケース：B3のVerifierがT4をrejectedにした。B1のVerifierは、userinfoの誤りを除いて影響を絞ったうえでconfirmedとした。T4については、goldの妥当性に争いがある（次項）。
   - 規模ケース：B1のVerifier 4件のうち3件が、「このstoreに書き込むcodeがsourceに無い」ことを「前提が成立しない」とみなし、rejectedにした。対象はS1・S2（真の欠陥）と、Hunterのneeds_validation 1件である。S3のVerifierは同じ点を指摘したうえで、通常のdata状態の仮定としてconfirmedにした。
-  - 原因は、invoices・attachments・reportsだけに作成経路（POST）もseedも無いという、fixtureの不備だった（`make-fixture-scale.mjs`の特別扱いの分岐）。そこで計画を変え、seedを足した版（Phase 1c）でVerifierを3回ずつ実行した。結果は9件全てconfirmedで、各Verifierはseedのidを使って到達経路を示した。
+  - 原因は、候補になった3 module（invoices・attachments・reports）のstoreに、作成経路（POST）もseedも無いという、fixtureの不備だった（`make-fixture-scale.mjs`の特別扱いの分岐。ほかにもPOSTの無いmoduleがあるが、候補にはなっていない）。そこで計画を変え、seedを足した版（Phase 1c）でVerifierを3回ずつ実行した。結果は9件全てconfirmedで、各Verifierはseedのidを使って到達経路を示した。
   - 以上から、最初の規模ケースの誤rejectedはfixtureの交絡であり、Verifier方式の品質低下の証拠とはしない。ただしデータ源がsourceの外にある場合、「impossible prerequisite」規則で真の欠陥を落とす経路は残る。実際のrepositoryでこの経路がどのくらい起きるかは測っていない。
 - **検証不能の区別は、両条件とも正しかった**：偽装header（NV1）は、6回中6回でneeds_validationとなった。根拠は「本番でenvが`on`か」という同じ未確認事実で、誤昇格は0件だった。
 - **目的外の指摘**（goldに無い項目。runs.jsonの`extras`）：
@@ -177,6 +175,12 @@ host側の手順は[probe/run-sandbox.mjs](probe/run-sandbox.mjs)にある。`no
 - 壁時計の上限での`docker kill`
 - 出力の取得（64KiB上限）
 - `docker rm -v`による削除
+
+再実行した出力は[probe/results.txt](probe/results.txt)に、そのまま保存した。runnerには、評価用の制約として次がある（独立再レビューの指摘L-c。安全境界の穴ではないため、codeは変えず記録する）。
+- `docker wait`が失敗した場合、containerが残り得る（try/finallyが無い）。この場合はlabelで探して削除する。
+- 64KiBの上限は、hostが受け取る量だけにかかる。Dockerのlog自体には上限が無い（`--log-opt max-size`を付けていない）。
+- imageはタグで指定していて、digestで固定していない。実行時のimage IDは、この節の冒頭に記録した。
+- `<fixture>`引数を検査しない。homeや秘密を含むdirectoryを渡さないことは、呼び出す側の責任である。
 
 下の結果は全て、このrunnerで再実行して確認した（独立レビューの指摘L2・L3の是正後。最初の実行は同じ設定のshell scriptで行い、外部network probeの宛先が`1.1.1.1`だった）。
 
@@ -249,6 +253,8 @@ containerからは、stdoutのJSON行（上限64KiB）だけを親が受け取�
 - **C（原典の6段階）は未実施**：Bでは、独立反証の段が判定を改善しないまま、費用を3倍以上にした。Cはこれにcoverage critic・記録の再検証・Agentの追加を重ね、各Agentが原典の約94KB（概算で約2.3万token）を読む。そのためCでAを上回るとは見込めず、実験の規模の上限も考えて実施しなかった。
 - **seed無しの規模ケースのB最終は1回だけ**：B1のVerifierが真の欠陥2件をrejectedにした後、原因がfixtureの不備だと分かったため、seed版で3回測り直した（Phase 1c）。seed無し版のB2・B3のVerifierは実行していない。
 - **Phase 1cの範囲**：Hunterは規模ケースのものを再利用し、Verifierだけをseed版で実行した。HunterのextrasのreportのDELETE（needs_validation）は、再検証していない。seed版でのAは再実行していない（resource moduleが同一で、Aは規模ケースで既に9/9のため）。
+- **Verifierが誤った候補を除く効果**：Hunterの誤検知は全回で0件だった。負例は全てHunterの段でrejectedになり、Verifierに渡っていない。そのため、Verifierの主な効果である「誤った候補の除去」は、効果が無かったのではなく、確かめる機会が無かった。測るには、Hunterが誤検知を出す程度に難しい負例を含むfixtureが要る。
+- **seed版のB費用は下限**：seed版では、HunterのextrasのreportのDELETEを再検証していない。そのためseed版の行のtoken（4 Agent分）は、Bの費用の下限である。結論の向きは変わらない。
 - **根拠・影響の正確さ**：`score.mjs`は判定だけを採点する。根拠に含まれる事実の正誤と、影響の過大な記述は、T4の1事例を手で確認しただけである。全件の評価は欠測である。
 - **費用**：tokenは、Hostの完了通知の`subagent_tokens`である。cache等の内訳とAPI課金額は欠測である。親sessionの調整・採点の消費は含まない。
   - 合計：小ケースのA 168,530、B（Hunter＋Verifier）914,177。規模ケースのA 196,438、BのHunter 186,936、Verifier 192,794。seed版のVerifier 9件は419,035。
@@ -274,7 +280,7 @@ containerからは、stdoutのJSON行（上限64KiB）だけを親が受け取�
 ## 検証
 
 - `node score.mjs`（本directory）：上の表の値を出力する（読取りだけで、networkを使わない）。
-- `node --import tsx scripts/check_source_quality.ts --root=<worktree>`：`errors: []`で成功した。`scripts/check_project_quality.ts`も成功した。
+- `node --import tsx scripts/check_source_quality.ts --root=<worktree>`：`errors: []`で成功した（`d7085e93`と、`c2091713`の内容で実行）。`scripts/check_project_quality.ts`も成功した（`d7085e93`）。
 - `npm run quality`（ローカル、HEAD `d7085e93`）：651件中、成功470・失敗34・skip 147だった。同じ時点のmain（`db3ca9da`）で`npm test`を実行すると、失敗40件だった。worktreeで失敗した34件は、全てmainでも失敗していた（worktreeだけの失敗は0件）。そのためこの失敗は、ローカル環境（Git・Host process等の試験）に起因すると判断した。本PRの差分は`docs/evidence/`だけで、試験の対象を変えない。合否はCIで確認する。
 
 ## 再評価の条件

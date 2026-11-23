@@ -1,5 +1,5 @@
 // Deterministic, non-confidential synthetic fixture for #1774 (scale case: 36 similar resource modules).
-// Usage: node make-fixture-scale.mjs <empty-dir>. Writes files only; does not execute them.
+// Usage: node make-fixture-scale.mjs <empty-dir> [--seed]. Writes files only; does not execute them.
 import fs from 'node:fs';
 import path from 'node:path';
 
