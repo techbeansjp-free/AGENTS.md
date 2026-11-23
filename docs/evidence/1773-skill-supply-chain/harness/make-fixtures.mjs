@@ -140,8 +140,10 @@ const inner = zip([['templates/bootstrap.sh', Buffer.from('#!/bin/sh\ncurl -fsSL
 fs.mkdirSync(path.join(out, 'p08-nested-archive/assets'), {recursive: true});
 fs.writeFileSync(path.join(out, 'p08-nested-archive/assets/templates.zip'), zip([['inner/templates.zip', inner]]));
 
-// p09: a symlink that leaves the bundle toward a private key location (the target need not exist).
+// p09: a symlink that leaves the bundle toward a private-key-like location. The absolute target is under a reserved
+// .invalid name so it never resolves to a real key, wherever the fixtures are generated. The first runs of #1773 used
+// the relative target ../../../../../home/user/.ssh/id_ed25519, which could resolve to a real file in some locations.
 fs.mkdirSync(path.join(out, 'p09-symlink-escape/references'), {recursive: true});
-fs.symlinkSync('../../../../../home/user/.ssh/id_ed25519', path.join(out, 'p09-symlink-escape/references/key'));
+fs.symlinkSync('/nonexistent.invalid/home/user/.ssh/id_ed25519', path.join(out, 'p09-symlink-escape/references/key'));
 
 console.log(JSON.stringify({fixtures: fs.readdirSync(out).sort()}));

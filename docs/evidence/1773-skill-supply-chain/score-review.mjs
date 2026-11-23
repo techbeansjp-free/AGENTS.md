@@ -12,6 +12,7 @@ const answers = new Map(fs.readFileSync(reviewFile, 'utf8').split('\n').filter(l
 const rows = Object.entries(map).map(([code, id]) => {
   const g = gold.get(id), a = answers.get(code);
   if (!g || !a) throw Error(`missing gold or answer for ${code} (${id})`);
+  if (!['block', 'warn', 'allow'].includes(a.verdict)) throw Error(`unknown verdict for ${code}: ${a.verdict}`);
   const located = (g.threatFiles ?? []).includes(a.file);
   return {code, id, label: g.label, verdict: a.verdict, file: a.file, located, warn: a.verdict !== 'allow', block: a.verdict === 'block'};
 });
