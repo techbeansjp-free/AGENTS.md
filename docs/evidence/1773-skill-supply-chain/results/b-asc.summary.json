@@ -1,0 +1,212 @@
+{
+ "target": "skills/ at 2d5790a911e8c2a0d484be1155d91fb0d061caf6 (git archive)",
+ "mode": "--no-llm, --network none",
+ "rows": [
+  {
+   "skill": "asc",
+   "exit": 0,
+   "recommendation": "CAUTION",
+   "score": 22,
+   "status": "complete_with_caveats",
+   "components": 8,
+   "issues": [
+    {
+     "id": "EA5",
+     "severity": "HIGH",
+     "file": "references/review.md",
+     "line": 29,
+     "pattern": "External Model or Provider Selection"
+    }
+   ],
+   "caveats": [
+    {
+     "reason": "reference_missing",
+     "path": "SKILL.md",
+     "line": 71
+    }
+   ],
+   "rssKiB": 255056,
+   "seconds": 10.49
+  },
+  {
+   "skill": "contract-enforcement",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 2,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 255292,
+   "seconds": 7.72
+  },
+  {
+   "skill": "decision-ownership",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 2,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 256108,
+   "seconds": 8.05
+  },
+  {
+   "skill": "engineering-judgment",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 2,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 255160,
+   "seconds": 7.79
+  },
+  {
+   "skill": "estimate-and-scope",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 1,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 254652,
+   "seconds": 7.5
+  },
+  {
+   "skill": "execution-recovery",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 2,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 255148,
+   "seconds": 7.67
+  },
+  {
+   "skill": "migration-assurance",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 2,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 255124,
+   "seconds": 7.5
+  },
+  {
+   "skill": "project-foundation",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 6,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 257856,
+   "seconds": 9.25
+  },
+  {
+   "skill": "research-to-implementation",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 2,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 254680,
+   "seconds": 7.73
+  },
+  {
+   "skill": "review-and-remediation",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 2,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 255056,
+   "seconds": 7.93
+  },
+  {
+   "skill": "security-evidence",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 2,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 255152,
+   "seconds": 7.61
+  },
+  {
+   "skill": "subagent-model-selection",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 1,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 254688,
+   "seconds": 7.52
+  },
+  {
+   "skill": "tracker-issue-writing",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 1,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 255096,
+   "seconds": 7.94
+  },
+  {
+   "skill": "user-journey-acceptance",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 2,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 255232,
+   "seconds": 7.76
+  },
+  {
+   "skill": "verification-optimization",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 4,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 255320,
+   "seconds": 9.52
+  },
+  {
+   "skill": "work-coordination",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "status": "complete",
+   "components": 1,
+   "issues": [],
+   "caveats": [],
+   "rssKiB": 255024,
+   "seconds": 7.94
+  }
+ ]
+}

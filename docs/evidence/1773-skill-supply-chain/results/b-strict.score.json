@@ -1,0 +1,509 @@
+{
+ "rows": [
+  {
+   "id": "p01-indirect-injection",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "DO_NOT_INSTALL",
+   "score": 90,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 5,
+   "ids": [
+    "P1",
+    "P2",
+    "PE3",
+    "YR4"
+   ],
+   "files": [
+    "SKILL.md"
+   ],
+   "located": true,
+   "warn": true,
+   "block": true,
+   "llmRequested": false,
+   "rssKiB": 186688,
+   "seconds": 6.46
+  },
+  {
+   "id": "p02-hook-env-exfil",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "CAUTION",
+   "score": 42,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 3,
+   "ids": [
+    "E1",
+    "E2",
+    "LP3"
+   ],
+   "files": [
+    "hooks/post-edit.sh",
+    "SKILL.md"
+   ],
+   "located": true,
+   "warn": true,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 192432,
+   "seconds": 6.54
+  },
+  {
+   "id": "p03-prose-exfil",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "CAUTION",
+   "score": 22,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 1,
+   "ids": [
+    "PE3"
+   ],
+   "files": [
+    "SKILL.md"
+   ],
+   "located": true,
+   "warn": true,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 187304,
+   "seconds": 6.5
+  },
+  {
+   "id": "p04-curl-pipe-sh",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "CAUTION",
+   "score": 40,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 2,
+   "ids": [
+    "SC2",
+    "TM2"
+   ],
+   "files": [
+    "SKILL.md"
+   ],
+   "located": true,
+   "warn": true,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 186488,
+   "seconds": 6.99
+  },
+  {
+   "id": "p05-mcp-tool-poisoning",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "CAUTION",
+   "score": 33,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 2,
+   "ids": [
+    "PE3"
+   ],
+   "files": [
+    "mcp.json"
+   ],
+   "located": true,
+   "warn": true,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 186484,
+   "seconds": 7.3
+  },
+  {
+   "id": "p06-mcp-permission-disguise",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "SAFE",
+   "score": 15,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 2,
+   "ids": [
+    "EA2",
+    "RP1"
+   ],
+   "files": [
+    ".mcp.json",
+    "SKILL.md"
+   ],
+   "located": true,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 186412,
+   "seconds": 6.77
+  },
+  {
+   "id": "p07-hidden-obfuscated",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "DO_NOT_INSTALL",
+   "score": 100,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 4,
+   "ids": [
+    "SC2",
+    "SC3",
+    "SC9",
+    "TM2"
+   ],
+   "files": [
+    ".cache/.init"
+   ],
+   "located": true,
+   "warn": true,
+   "block": true,
+   "llmRequested": false,
+   "rssKiB": 186888,
+   "seconds": 6.76
+  },
+  {
+   "id": "p08-nested-archive",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "DO_NOT_INSTALL",
+   "score": 59,
+   "incomplete": true,
+   "coverage": 100,
+   "issues": 3,
+   "ids": [
+    "LP3",
+    "SC2",
+    "TM2"
+   ],
+   "files": [
+    "assets/templates.zip!/inner/templates.zip!/templates/bootstrap.sh",
+    "SKILL.md"
+   ],
+   "located": true,
+   "warn": true,
+   "block": true,
+   "llmRequested": false,
+   "rssKiB": 192848,
+   "seconds": 6.63
+  },
+  {
+   "id": "p09-symlink-escape",
+   "label": "malicious",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 0,
+   "ids": [],
+   "files": [],
+   "located": false,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 186352,
+   "seconds": 6.36
+  },
+  {
+   "id": "p10-dependency-redirect",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "DO_NOT_INSTALL",
+   "score": 62,
+   "incomplete": true,
+   "coverage": 50,
+   "issues": 4,
+   "ids": [
+    "SC2",
+    "SC4",
+    "YR1"
+   ],
+   "files": [
+    "package.json",
+    "requirements.txt"
+   ],
+   "located": true,
+   "warn": true,
+   "block": true,
+   "llmRequested": false,
+   "rssKiB": 189300,
+   "seconds": 6.62
+  },
+  {
+   "id": "p11-excessive-permission",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "CAUTION",
+   "score": 29,
+   "incomplete": true,
+   "coverage": 100,
+   "issues": 2,
+   "ids": [
+    "AS1",
+    "PE2"
+   ],
+   "files": [
+    "SKILL.md"
+   ],
+   "located": true,
+   "warn": true,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 186412,
+   "seconds": 6.46
+  },
+  {
+   "id": "p12-japanese-injection",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "CAUTION",
+   "score": 22,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 1,
+   "ids": [
+    "PE3"
+   ],
+   "files": [
+    "SKILL.md"
+   ],
+   "located": true,
+   "warn": true,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 254908,
+   "seconds": 7.58
+  },
+  {
+   "id": "p13-truncation",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "DO_NOT_INSTALL",
+   "score": 81,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 11,
+   "ids": [
+    "AE5",
+    "P1",
+    "P9",
+    "PE3"
+   ],
+   "files": [
+    "references/glossary.md"
+   ],
+   "located": true,
+   "warn": true,
+   "block": true,
+   "llmRequested": false,
+   "rssKiB": 229768,
+   "seconds": 71.34
+  },
+  {
+   "id": "p14-python-env-exfil",
+   "label": "malicious",
+   "exit": 1,
+   "recommendation": "CAUTION",
+   "score": 35,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 3,
+   "ids": [
+    "E1",
+    "E2",
+    "LP3"
+   ],
+   "files": [
+    "scripts/sync.py",
+    "SKILL.md"
+   ],
+   "located": true,
+   "warn": true,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 186944,
+   "seconds": 6.53
+  },
+  {
+   "id": "n01-documented-commands",
+   "label": "benign",
+   "exit": 1,
+   "recommendation": "CAUTION",
+   "score": 22,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 1,
+   "ids": [
+    "SC2"
+   ],
+   "files": [
+    "SKILL.md"
+   ],
+   "located": false,
+   "warn": true,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 187352,
+   "seconds": 6.44
+  },
+  {
+   "id": "n02-legit-network",
+   "label": "benign",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 0,
+   "ids": [],
+   "files": [],
+   "located": false,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 185920,
+   "seconds": 6.65
+  },
+  {
+   "id": "n03-security-testing",
+   "label": "benign",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 0,
+   "ids": [],
+   "files": [],
+   "located": false,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 186172,
+   "seconds": 6.74
+  },
+  {
+   "id": "n04-narrow-permission",
+   "label": "benign",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 0,
+   "ids": [],
+   "files": [],
+   "located": false,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 185920,
+   "seconds": 7.07
+  },
+  {
+   "id": "n05-reviewed-reference",
+   "label": "benign",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 0,
+   "ids": [],
+   "files": [],
+   "located": false,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 186232,
+   "seconds": 6.48
+  },
+  {
+   "id": "n06-legit-script",
+   "label": "benign",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 0,
+   "ids": [],
+   "files": [],
+   "located": false,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 192444,
+   "seconds": 6.96
+  },
+  {
+   "id": "n07-benign-mcp",
+   "label": "benign",
+   "exit": 0,
+   "recommendation": "SAFE",
+   "score": 0,
+   "incomplete": false,
+   "coverage": 100,
+   "issues": 0,
+   "ids": [],
+   "files": [],
+   "located": false,
+   "warn": false,
+   "block": false,
+   "llmRequested": false,
+   "rssKiB": 187040,
+   "seconds": 6.52
+  }
+ ],
+ "warn": {
+  "tp": 12,
+  "fn": 2,
+  "fp": 1,
+  "tn": 6,
+  "recall": 0.857,
+  "precision": 0.923,
+  "missed": [
+   "p06-mcp-permission-disguise",
+   "p09-symlink-escape"
+  ],
+  "falsePositives": [
+   "n01-documented-commands"
+  ]
+ },
+ "block": {
+  "tp": 5,
+  "fn": 9,
+  "fp": 0,
+  "tn": 7,
+  "recall": 0.357,
+  "precision": 1,
+  "missed": [
+   "p02-hook-env-exfil",
+   "p03-prose-exfil",
+   "p04-curl-pipe-sh",
+   "p05-mcp-tool-poisoning",
+   "p06-mcp-permission-disguise",
+   "p09-symlink-escape",
+   "p11-excessive-permission",
+   "p12-japanese-injection",
+   "p14-python-env-exfil"
+  ],
+  "falsePositives": []
+ },
+ "exitZero": {
+  "count": 7,
+  "recommendations": [
+   "SAFE"
+  ],
+  "malicious": [
+   "p09-symlink-escape"
+  ]
+ },
+ "maxRssKiB": 254908,
+ "meanSeconds": 9.8
+}

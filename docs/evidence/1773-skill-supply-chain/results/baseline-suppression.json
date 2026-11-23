@@ -1,0 +1,26 @@
+{
+ "fixture": "p07-hidden-obfuscated",
+ "steps": [
+  "skillspector baseline /scan/in -o - --no-llm (exit 0, 4 fingerprints auto-accepted)",
+  "scan --baseline (exit 0)",
+  "scan --baseline --fail-on-findings --fail-on-incomplete (exit 0)"
+ ],
+ "withoutBaseline": {
+  "recommendation": "DO_NOT_INSTALL",
+  "score": 100,
+  "exit": 1
+ },
+ "withBaseline": {
+  "risk": {
+   "score": 0,
+   "severity": "LOW",
+   "recommendation": "SAFE",
+   "max_issue_severity": "NONE"
+  },
+  "issues": 0,
+  "suppressed_count": 4,
+  "status": "complete",
+  "exit": 0,
+  "strictExit": 0
+ }
+}
