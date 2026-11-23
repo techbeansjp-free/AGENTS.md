@@ -1,9 +1,22 @@
 // Counterexample probes for sandbox controls. Prints one JSON line per check.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 const out = (check, ok, detail) => console.log(JSON.stringify({ check, enforced: ok, detail: String(detail).slice(0, 200) }));
-try { await fetch('http://192.0.2.1/', { signal: AbortSignal.timeout(3000) }); out('external-network', false, 'fetch succeeded'); } catch (e) { out('external-network', true, e.cause?.code ?? e.name); }
+// External network: enforced only if the fetch fails with ENETUNREACH (no route at all), the only interface
+// is loopback and there is no default route. Any other failure (timeout, EHOSTUNREACH) is unverified.
+{
+  let code = null;
+  try { await fetch('http://192.0.2.1/', { signal: AbortSignal.timeout(3000) }); code = 'fetch-succeeded'; } catch (e) { code = e.cause?.code ?? e.name; }
+  const ifaces = Object.keys(os.networkInterfaces()).sort().join(',');
+  let defaultRoute = 'unreadable';
+  try { defaultRoute = fs.readFileSync('/proc/net/route', 'utf8').split('\n').slice(1).some((line) => line.split(/\s+/)[1] === '00000000') ? 'present' : 'absent'; } catch {}
+  const detail = `fetch=${code} interfaces=${ifaces} defaultRoute=${defaultRoute}`;
+  if (code === 'fetch-succeeded') out('external-network', false, detail);
+  else if (code === 'ENETUNREACH' && ifaces === 'lo' && defaultRoute === 'absent') out('external-network', true, detail);
+  else console.log(JSON.stringify({ check: 'external-network', enforced: 'unverified', detail }));
+}
 try { fs.writeFileSync('/target/pwn.txt', 'x'); out('target-readonly', false, 'write succeeded'); } catch (e) { out('target-readonly', true, e.code); }
 try { fs.writeFileSync('/probe/pwn.txt', 'x'); out('probe-readonly', false, 'write succeeded'); } catch (e) { out('probe-readonly', true, e.code); }
 try { fs.writeFileSync('/etc/pwn.txt', 'x'); out('rootfs-readonly', false, 'write succeeded'); } catch (e) { out('rootfs-readonly', true, e.code); }
@@ -34,8 +47,8 @@ else console.log(JSON.stringify({ check: 'memory-limit', enforced: 'unverified',
   let quota = null;
   try { quota = fs.readFileSync('/sys/fs/cgroup/cpu.max', 'utf8').trim(); } catch (e) { quota = `unreadable:${e.code}`; }
   const busy = spawnSync(process.execPath, ['-e', 'const s=Date.now(),c=process.cpuUsage();while(Date.now()-s<3000);const u=process.cpuUsage(c);console.log(((u.user+u.system)/1000/(Date.now()-s)).toFixed(2))'], { encoding: 'utf8', timeout: 20000 });
-  const ratio = Number(busy.stdout.trim());
-  out('cpu-limit', quota === '50000 100000' && ratio > 0 && ratio <= 0.6, `cpu.max=${quota} cpu/wall=${busy.stdout.trim() || busy.error?.code}`);
+  const ratio = Number(String(busy.stdout ?? '').trim());
+  out('cpu-limit', quota === '50000 100000' && ratio > 0 && ratio <= 0.6, `cpu.max=${quota} cpu/wall=${String(busy.stdout ?? '').trim() || busy.error?.code}`);
 }
 // Every writable mount other than /scratch must refuse a new file for this uid.
 {
@@ -52,4 +65,4 @@ else console.log(JSON.stringify({ check: 'memory-limit', enforced: 'unverified',
 }
 // Run last: the 200 background sleeps exhaust the pids limit (threads count), which would stall later child processes.
 const procs = spawnSync('sh', ['-c', 'i=0; while [ $i -lt 200 ]; do sleep 5 & i=$((i+1)); done 2>&1 | head -c 120; echo; jobs | wc -l'], { encoding: 'utf8', timeout: 8000 });
-out('pids-limit', /can't fork|Resource temporarily unavailable|fork/i.test(procs.stdout + procs.stderr), (procs.stdout + procs.stderr).replace(/\s+/g, ' '));
+out('pids-limit', /can't fork|Resource temporarily unavailable/i.test(procs.stdout + procs.stderr), (procs.stdout + procs.stderr).replace(/\s+/g, ' '));

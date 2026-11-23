@@ -191,27 +191,29 @@ runnerの後始末と失敗の扱い：
   - `docker wait`・`docker logs`が失敗した場合
 - runnerがSIGINT・SIGTERM・SIGHUPを受けた場合も、削除してから終了する。
 - SIGKILLやhostの停止では削除できない。その場合は、label `asc.worktree=<worktree>`で探して削除する。
+- 壁時計の上限はhost側のrunnerが`docker kill`で強制していて、OSの強制ではない。runnerが落ちると、上限も失われる（containerは`-d`で動き続ける）。`docker kill`が失敗したときは、`docker rm -f -v`で強制削除し、`docker wait`が無期限に待たないようにした。
 - runnerの終了status：起動・待機・logの取得・削除のどれかが失敗したら1、全て成功したら0。containerの終了codeは、JSONの`containerExit`に分けて記録する。出力を切り詰めたかは`truncated`に記録する。
 - `<fixture>`が存在するdirectoryでなければ、起動前に拒否する。`docker run -v`がhostに空のdirectoryを作るのを防ぐためである。
 - homeや秘密を含むdirectoryを渡さないことは、呼び出す側の責任である。imageはタグで指定していて、digestでは固定していない（実行時のimage IDは、この節の冒頭に記録した）。
 
-是正の経緯（独立レビューのL2・L3・M1・L-c、CodeRabbitの指摘）：
+是正の経緯。独立レビューの対象commitごとに、`d7085e93`のL2・L3、`c2091713`のL-c、`2aec3572`のM1・L1〜L5、`5ee23061`のM-1・L-1〜L-4と、CodeRabbitの指摘を受けた：
 - 最初の実行は、同じ制限のshell scriptで行った。外部network probeの宛先は`1.1.1.1`だった。
 - `--ipc none`が無いと、`/dev/shm`がscratch以外の書込み先として残った。非rootでも`/dev/shm/x`への書込みが成功することを確認したうえで、`--ipc none`を足した。
 - CPUとfile descriptorの上限、/scratch以外のrw mountの反例を追加した。
-- process数の検査（200個の`sleep`）を最初に実行すると、pidsの上限（threadも数える）に達して、後続の子processが止まっていた。そのため、この検査を最後に移した。memory検査が当初`unverified`になったのは、この影響である。
+- process数の検査（200個の`sleep`）を最初に実行すると、pidsの上限（threadも数える）に達して、後続の子processが動かなかったと推定する（当時の出力は`ETIMEDOUT`で、forkの失敗そのものは記録していない）。そのため、この検査を最後に移した。移した後は、memory・CPUの検査が成立した。
+- 外部networkの判定は、当初は失敗の種類を問わずに合格としていた。そのため、隔離が無くても合格になり得た。`ENETUNREACH`・`lo`だけ・default route無しの3条件を全て要求する形に改め、networkを付けたcontainerで`unverified`になることを反例として確認した。
 - 下の表は、全て最終版のrunnerとprobeで再実行した結果である。出力はそのまま[probe/results.txt](probe/results.txt)に保存した。
 
 [probe/limits.mjs](probe/limits.mjs)・[probe/mem.mjs](probe/mem.mjs)の結果：
 
 | 制御 | 反例 | 結果 |
 | --- | --- | --- |
-| 外部network | `fetch('http://192.0.2.1/')`（TEST-NET。隔離を誤っても実在のhostへは送らない） | `ENETUNREACH`で拒否 |
+| 外部network | `fetch('http://192.0.2.1/')`（TEST-NET。隔離を誤っても実在のhostへは送らない）。合否の条件は3つ：失敗が`ENETUNREACH`であること、interfaceが`lo`だけであること、default routeが無いこと。どれかを満たさなければ`unverified` | 3条件とも成立。反例として、networkを付けたcontainerでは`unverified`（`TimeoutError`、`eth0,lo`、default routeあり）になった |
 | target・probeの読取り専用 | `/target`・`/probe`への書込み | `EROFS` |
 | root fsの読取り専用 | `/etc`への書込み | `EROFS` |
 | scratchだけ書込み可 | `/scratch`への書込み | 成功 |
 | scratch以外の一時領域への書込み禁止 | `/dev/shm`・`/tmp`・`/var/tmp`への書込み | `/dev/shm`は`ENOENT`（`--ipc none`でmountされない）、`/tmp`・`/var/tmp`は`EROFS` |
-| /scratch以外のrw mount | `/proc/self/mountinfo`のrw mount（`/proc`・`/dev`・`/dev/pts`・`/dev/mqueue`等の8件）へのfile作成 | 全て失敗（書き込めたmountは0件） |
+| /scratch以外のrw mount | `/proc/self/mountinfo`のrw mount（`/proc`・`/dev`・`/dev/pts`・`/dev/mqueue`等の8件）の直下へのfile作成。mountの中にある子directoryは調べていない | 全て失敗（書き込めたmountは0件） |
 | fileの大きさの上限 | 8MiBの書込み（上限4MiB） | `EFBIG` |
 | file descriptorの上限 | 300個のopen（上限256） | 238個目の後に`EMFILE` |
 | CPUの上限 | `cpu.max`の値と、1 threadのbusy loop（3秒） | `cpu.max=50000 100000`、CPU時間／壁時計は0.50 |
@@ -220,7 +222,7 @@ runnerの後始末と失敗の扱い：
 | host homeの非露出 | `/Users` | 存在しない |
 | process数の上限 | 200個のfork | `can't fork` |
 | memoryの上限 | 子processで16MiBずつ確保（`limits.mjs`）、主processで確保（`mem.mjs`） | 子processはSIGKILLで終了。`mem.mjs`は約240MiBで終了（exit 137） |
-| 壁時計の上限 | 30秒待つprocessを5秒上限で起動（`node run-sandbox.mjs 5 … -- -e 'setTimeout(…,30000)'`） | 5.36秒（`elapsedMs: 5356`）で`docker kill`、exit 137（`wallClockKilled: true`） |
+| 壁時計の上限 | 30秒待つprocessを5秒上限で起動（`node run-sandbox.mjs 5 … -- -e 'setTimeout(…,30000)'`） | 5.40秒（`elapsedMs: 5403`）で`docker kill`、exit 137（`wallClockKilled: true`）。この上限はOSではなくrunnerが強制する（下記） |
 
 ### 最小のPoC（ダミーデータ、loopbackのみ）
 
@@ -243,7 +245,7 @@ containerからは、stdoutのJSON行（上限64KiB）だけを親が受け取�
 
 ### Phase 2の判断
 
-- このHost（Docker Desktop、macOS）では、原典がsandboxに求める制御（network、env、読取り専用、scratch以外への書込み、CPU・memory・process・file・file descriptor・時間の上限）を、最終の設定でOSレベルに反例付きで強制できた。
+- このHost（Docker Desktop、macOS）では、原典がsandboxに求める制御を、最終の設定で反例付きで強制できた。OSレベルで強制したのは、network、env、読取り専用、scratch以外への書込み（mount直下まで）、CPU・memory・process・file・file descriptorの上限である。時間の上限は、host側のrunnerが強制した。
 - PoCは、静的レビューで残った根拠の誤り（T4のuserinfo）を確定的に訂正した。実行による確認には価値がある。
 - 一方、確認の対象は合成fixtureの1ケースだけである。Linux本体やCI runner、ブラウザ・fuzzerを使う確認は検証していない。外部の本番・共有環境への試験は行っておらず、許可もされていない。
 

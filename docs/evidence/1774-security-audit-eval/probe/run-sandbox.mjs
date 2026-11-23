@@ -47,6 +47,8 @@ try {
   } else {
     const timer = setTimeout(() => {
       killed = spawnSync('docker', ['kill', name]).status === 0;
+      // If kill fails, force-remove so that `docker wait` returns instead of waiting without a limit.
+      if (!killed) spawnSync('docker', ['rm', '-f', '-v', name]);
     }, limitSeconds * 1000);
     // `docker wait` runs asynchronously so the wall-clock timer can fire while it blocks.
     const waited = await new Promise((resolve) => {

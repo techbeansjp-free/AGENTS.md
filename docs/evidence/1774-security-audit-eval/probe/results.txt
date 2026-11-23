@@ -1,9 +1,9 @@
-# Output of the final Phase 2 re-run with run-sandbox.mjs (2026-11-23, Docker Desktop 29.8.0,
-# node:22-alpine image sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603). Copied verbatim;
-# "$ " lines are the commands (<fixture> = generated small fixture, <worktree> = this worktree).
+# Phase 2 final re-run with run-sandbox.mjs (2026-11-23, Docker Desktop 29.8.0, node:22-alpine image sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603).
+# Lines starting with "$ " are commands; lines starting with "[note]" are added by the operator; all other lines are verbatim output.
+# <fixture> = generated small fixture, <worktree> = this worktree.
 
 $ node run-sandbox.mjs 120 <fixture> <worktree> -- /probe/limits.mjs
-{"check":"external-network","enforced":true,"detail":"ENETUNREACH"}
+{"check":"external-network","enforced":true,"detail":"fetch=ENETUNREACH interfaces=lo defaultRoute=absent"}
 {"check":"target-readonly","enforced":true,"detail":"EROFS"}
 {"check":"probe-readonly","enforced":true,"detail":"EROFS"}
 {"check":"rootfs-readonly","enforced":true,"detail":"EROFS"}
@@ -21,16 +21,31 @@ $ node run-sandbox.mjs 120 <fixture> <worktree> -- /probe/limits.mjs
 {"check":"cpu-limit","enforced":true,"detail":"cpu.max=50000 100000 cpu/wall=0.50"}
 {"check":"no-other-writable-mount","enforced":true,"detail":"rw mounts checked=/proc,/dev,/dev/pts,/dev/mqueue,/proc/interrupts,/proc/kcore,/proc/keys,/proc/timer_list writable=none"}
 {"check":"pids-limit","enforced":true,"detail":"sh: can't fork: Resource temporarily unavailable 0 "}
-{"containerExit":0,"wallClockKilled":false,"elapsedMs":9059,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
-(runner exit=0)
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":9285,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+[note] runner exit status=0
 
-$ node run-sandbox.mjs 60 <fixture> <worktree> -- /probe/mem.mjs   (last 2 lines)
+$ node run-sandbox.mjs 60 <fixture> <worktree> -- /probe/mem.mjs
+allocated 16MiB
+allocated 32MiB
+allocated 48MiB
+allocated 64MiB
+allocated 80MiB
+allocated 96MiB
+allocated 112MiB
+allocated 128MiB
+allocated 144MiB
+allocated 160MiB
+allocated 176MiB
+allocated 192MiB
+allocated 208MiB
+allocated 224MiB
 allocated 240MiB
-{"containerExit":137,"wallClockKilled":false,"elapsedMs":557,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+{"containerExit":137,"wallClockKilled":false,"elapsedMs":428,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+[note] runner exit status=0
 
-$ node run-sandbox.mjs 5 <fixture> <worktree> -- -e 'setTimeout(()=>console.log("not killed"),30000)'
-{"containerExit":137,"wallClockKilled":true,"elapsedMs":5356,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
-(runner exit=0)
+$ node run-sandbox.mjs 5 <fixture> <worktree> -- -e setTimeout(()=>console.log("not killed"),30000)
+{"containerExit":137,"wallClockKilled":true,"elapsedMs":5403,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+[note] runner exit status=0
 
 $ node run-sandbox.mjs 60 <fixture> <worktree> -- /probe/poc.mjs
 {"check":"T1-cross-tenant-note-read","status":200,"tenantOfBody":"t2","actorTenant":"t1"}
@@ -39,23 +54,86 @@ $ node run-sandbox.mjs 60 <fixture> <worktree> -- /probe/poc.mjs
 {"check":"T4-request-construct","url":"https://docs.example.com@10.0.0.5/","constructed":false,"error":"TypeError"}
 {"check":"T4-request-construct","url":"https://docs.example.com.attacker.test/","constructed":true}
 {"check":"T4-userinfo-via-tool","status":500}
-{"containerExit":0,"wallClockKilled":false,"elapsedMs":918,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
-(runner exit=0)
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":932,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+[note] runner exit status=0
 
-$ node run-sandbox.mjs 60 <fixture> <worktree> -- --test /target/test/auth.test.mjs   (filtered)
+$ node run-sandbox.mjs 60 <fixture> <worktree> -- --test /target/test/auth.test.mjs
+TAP version 13
+# Subtest: signed token verifies
+ok 1 - signed token verifies
+  ---
+  duration_ms: 3.148727
+  type: 'test'
+  ...
+# Subtest: tampered token is rejected
+ok 2 - tampered token is rejected
+  ---
+  duration_ms: 0.527044
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
 # pass 2
 # fail 0
-{"containerExit":0,"wallClockKilled":false,"elapsedMs":649,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 285.623041
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":703,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+[note] runner exit status=0
 
-$ node run-sandbox.mjs 60 <fixture> <worktree> -- --test /target/test/   (filtered)
+$ node run-sandbox.mjs 60 <fixture> <worktree> -- --test /target/test/
+TAP version 13
+# node:internal/modules/cjs/loader:1433
+#   throw err;
+#   ^
 # Error: Cannot find module '/target/test'
+#     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+#     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+#     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+#     at Function._load (node:internal/modules/cjs/loader:1216:25)
+#     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+#     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+#     at node:internal/main/run_main_module:36:49 {
+#   code: 'MODULE_NOT_FOUND',
+#   requireStack: []
+# }
+# Node.js v22.23.5
+# Subtest: /target/test
 not ok 1 - /target/test
+  ---
+  duration_ms: 113.306136
+  type: 'test'
+  location: '/target/test:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 1
+# suites 0
 # pass 0
 # fail 1
-{"containerExit":1,"wallClockKilled":false,"elapsedMs":519,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 179.791389
+{"containerExit":1,"wallClockKilled":false,"elapsedMs":503,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+[note] runner exit status=0
 
-# afterwards: containers with this worktree label = 0; fixture `git status --porcelain` = 0 lines.
+$ docker run --rm --label asc.worktree=<worktree> --read-only --cap-drop ALL --user 65534:65534 --entrypoint node -v <probe>:/probe:ro node:22-alpine /probe/limits.mjs   (default bridge network; first line only)
+{"check":"external-network","enforced":"unverified","detail":"fetch=TimeoutError interfaces=eth0,lo defaultRoute=present"}
+[note] counterexample: with a network attached, the network check must not report enforced:true.
 
-# Counterexample for the earlier configuration (without --ipc none): writing /dev/shm/x as uid 65534 printed "shm writable".
+$ docker run --rm --label asc.worktree=<worktree> --network none --read-only --cap-drop ALL --user 65534:65534 --entrypoint node node:22-alpine -e "<write /dev/shm/x>"   (without --ipc none)
+shm writable
+[note] counterexample for the earlier configuration: /dev/shm is writable without --ipc none.
 
-# Node 22 does not accept a directory as a --test argument ("Cannot find module"), so the directory form fails by usage, not by the fixture.
+$ docker ps -aq --filter label=asc.worktree=<worktree> | wc -l
+1
+[note] the remaining container was the bridge-network counterexample above: `| head -1` closed the pipe while the container kept running. It exited and was removed by --rm within about 30 s; a later check returned 0. That counterexample ran without the resource limits, bounded only by the probe's own 20 s child timeout.
+$ git -C <fixture> status --porcelain | wc -l
+0
