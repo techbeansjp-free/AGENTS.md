@@ -416,7 +416,8 @@
    "improveCorrect": false,
    "improveAmb": false,
    "safe": true,
-   "costRatio": 1.39
+   "costRatio": 1.39,
+   "costOk": true
   },
   "aRecallMean": 1,
   "candidates": {
@@ -424,6 +425,7 @@
    "review-C": "採用しない（改善なし）",
    "reader-C": "採用しない（改善なし）"
   },
+  "overallStrict": "追加評価が必要",
   "overall": "現行方式で十分"
  },
  "supplementA0": {

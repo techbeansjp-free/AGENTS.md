@@ -43,6 +43,10 @@ for (const rep of [1, 2, 3]) {
     if (fs.existsSync(file)) continue;
     // 中断後の再開でも再実行が1回を超えないよう、残っている無効試行の数から始める
     const prior = fs.readdirSync(outDir).filter((f) => f.startsWith(`${key}.invalid`)).length;
+    if (prior >= 2) {
+      console.log(`MISSING ${key}（無効試行が上限に達した。欠測）`);
+      continue;
+    }
     for (let attempt = prior; attempt < 2; attempt++) {
       if (spent() >= budget) {
         console.log(`STOP: budget reached (${spent().toFixed(3)} USD)`);
