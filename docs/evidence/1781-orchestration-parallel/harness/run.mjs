@@ -44,13 +44,13 @@ const childModel = { B: 'opus', C: 'sonnet', D: 'opus', E: 'sonnet' }[cond];
 const seq = 'Run the subagents one at a time: wait for each result before launching the next.';
 const par = 'Launch the subagents of all work units that do not depend on each other at the same time, as several Agent tool calls in a single message, and wait for them together.';
 const deleg = (order) => ` You are the coordinator. Delegate each work unit to its own subagent with the Agent tool, model set to "${childModel}". Give each subagent the goal, the spec doc and file paths, the test command and the completion condition; do not paste file contents. ${order}${task === 'P2' ? ' The money unit must be finished and its tests passing before any dependent unit starts.' : ''} Do not implement work units yourself. After the subagents return, run the tests yourself. If a unit fails, send it back once to a new subagent (same model) with the failure details; do not fix it yourself.`;
-const COND = { A: ' Decide yourself, following the guidance, whether to do the work in this session or to delegate or parallelize it.', B: deleg(seq), C: deleg(seq), D: deleg(par), E: deleg(par) };
+const COND = { A: ' Decide yourself, following the guidance, whether to do the work in this session or to delegate or parallelize it.', A2: ' Decide yourself, following the guidance, whether to do the work in this session or to delegate or parallelize it.', B: deleg(seq), C: deleg(seq), D: deleg(par), E: deleg(par) };
 let prompt = TASKS[task] + (task.startsWith('PROBE') ? '' : COND[cond]);
 const markerDir = path.resolve(outRoot, '..', 'marker');
 if (task.startsWith('PROBE')) prompt = prompt.replaceAll('MARKERDIR', markerDir).replaceAll('MARKER', path.join(markerDir, 'SECRET.txt'));
 
 const sessionId = crypto.randomUUID();
-const args = ['-l', 'claude', '-p', prompt, '--model', parentModel, '--session-id', sessionId, '--output-format', 'json', '--restricted', '--tools', 'Read,Glob,Grep,Edit,Write,Agent,Bash', '--allowedTools', `Read,Glob,Grep,Edit,Write,Agent,Bash(${runTests})`, '--permission-mode', 'dontAsk', '--strict-mcp-config', '--disable-slash-commands', '--settings', '{"disableAllHooks":true}', '--max-budget-usd', '4.00', '--append-system-prompt', fs.readFileSync(path.join(here, 'asc-guidance.txt'), 'utf8')];
+const args = ['-l', 'claude', '-p', prompt, '--model', parentModel, '--session-id', sessionId, '--output-format', 'json', '--restricted', '--tools', 'Read,Glob,Grep,Edit,Write,Agent,Bash', '--allowedTools', `Read,Glob,Grep,Edit,Write,Agent,Bash(${runTests})`, '--permission-mode', 'dontAsk', '--strict-mcp-config', '--disable-slash-commands', '--settings', '{"disableAllHooks":true}', '--max-budget-usd', '4.00', '--append-system-prompt', fs.readFileSync(path.join(here, cond === 'A2' ? 'asc-guidance-a2.txt' : 'asc-guidance.txt'), 'utf8')];
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_') && !k.startsWith('CLAUDE_CODE_') && k !== 'CLAUDECODE'));
 env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS = '1500000';
 const t0 = Date.now();
