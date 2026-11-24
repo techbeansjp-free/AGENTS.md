@@ -36,7 +36,7 @@ function sessionLocation(directory){
   if(fs.existsSync(path.join(current,'HEAD'))&&fs.existsSync(path.join(current,'objects')))throw Error('Bare Git repository is not a session workspace');
   if(path.dirname(current)===current)break;
  }
- if(!gitManaged)return {cwd:target,targetDirectory:target,targetHead:null};
+ if(!gitManaged)return {cwd:target,targetDirectory:target,targetHead:null,gitCommonDir:null};
  const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('GIT_')));
  Object.assign(env,{GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:GIT_NULL_DEVICE,GIT_TERMINAL_PROMPT:'0',GIT_NO_LAZY_FETCH:'1',GIT_NO_REPLACE_OBJECTS:'1'});
  const git=(cwd,args)=>{
@@ -48,11 +48,12 @@ function sessionLocation(directory){
  if(!first[0]?.startsWith('worktree ')||first.includes('bare'))throw Error('A primary working checkout is required for session listing');
  const cwd=fs.realpathSync(first[0].slice('worktree '.length));
  const common=dir=>fs.realpathSync(gitPathOutput(git(dir,['rev-parse','--path-format=absolute','--git-common-dir'])));
- if(common(cwd)!==common(target))throw Error('Session root and target must belong to the same repository');
+ const gitCommonDir=common(target);
+ if(common(cwd)!==gitCommonDir)throw Error('Session root and target must belong to the same repository');
  const readHead=()=>git(target,['rev-parse','--verify','HEAD']).trim();
  const targetHead=readHead();
  if(!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(targetHead))throw Error('Invalid target HEAD');
- return {cwd,targetDirectory:target,targetHead,readHead};
+ return {cwd,targetDirectory:target,targetHead,readHead,gitCommonDir};
 }
 
 /**
@@ -66,6 +67,47 @@ export function claudeReviewArguments({model,sessionId,instruction,cwd,targetDir
  if(targetDirectory!==cwd)args.push('--add-dir',targetDirectory);
  if(ephemeral)args.push('--no-session-persistence');else args.push('-n',name);
  return args;
+}
+
+/**
+ * Codex review permissions. `sandbox: read-only` limits writes only, so the app-server gets a named profile
+ * that reads only the platform minimum, the review target and the given paths (the Host executable, the shared
+ * Git metadata, the active developer tools). Temporary roots are denied; nothing is writable.
+ * The session cwd stays at the primary checkout for listing, so the profile names the target explicitly.
+ * Project instructions are not auto-loaded: Codex reads them from that cwd, which the profile cannot read
+ * (thread start fails) and which holds another revision; the Reviewer reads the target's rules itself.
+ * Keys are TOML basic strings (JSON escaping is valid TOML for these paths).
+ */
+export const CODEX_REVIEW_PROFILE='asc_review';
+export function codexReviewProfileArguments(targetDirectory,readablePaths=[]){
+ for(const item of [targetDirectory,...readablePaths])if(typeof item!=='string'||!path.isAbsolute(item))throw Error('Codex review paths must be absolute');
+ const entries=[[':minimal','read'],['/tmp','deny'],['/private/tmp','deny'],['/private/var/tmp','deny'],...readablePaths.map(item=>[item,'read']),[targetDirectory,'read']];
+ const table=`{${entries.map(([key,access])=>`${JSON.stringify(key)}=${JSON.stringify(access)}`).join(',')}}`;
+ return ['-c','project_doc_max_bytes=0','-c',`default_permissions=${JSON.stringify(CODEX_REVIEW_PROFILE)}`,'-c',`permissions.${CODEX_REVIEW_PROFILE}.filesystem=${table}`];
+}
+
+/** Resolve the Host executable to its real file: the sandboxed helper re-executes it, so it must be readable. */
+export function resolveExecutable(executable,searchPath=process.env.PATH??''){
+ const candidates=executable.includes('/')?[path.resolve(executable)]:searchPath.split(path.delimiter).filter(Boolean).map(dir=>path.join(dir,executable));
+ for(const candidate of candidates){
+  try{fs.accessSync(candidate,fs.constants.X_OK);const real=fs.realpathSync(candidate);if(fs.statSync(real).isFile())return real;}catch{/* try the next PATH entry */}
+ }
+ throw Error('Host executable not found');
+}
+
+/**
+ * Paths besides the target that the Codex Reviewer needs: the real Host executable (re-executed by the sandboxed
+ * helper), the shared Git metadata (history only, not other checkouts' files) and, on macOS, the active developer
+ * tools that /usr/bin/git runs.
+ */
+export function codexReviewReadablePaths({executable,gitCommonDir}){
+ const paths=[executable];if(gitCommonDir)paths.push(gitCommonDir);
+ if(process.platform==='darwin'){
+  const result=spawnSync('xcode-select',['-p'],{encoding:'utf8',timeout:10000});
+  const dir=result.status===0?result.stdout.trim():'';
+  if(path.isAbsolute(dir)&&fs.existsSync(dir))paths.push(fs.realpathSync(dir));
+ }
+ return paths;
 }
 
 /** Claude completion rename: no tools at all, so it has no file access to confine. */
@@ -91,7 +133,7 @@ function command(executable,args,{cwd,input,timeout,out,err}){
 
 export async function runHostSession(options){
  const {host,model,ephemeral,timeout,executable}=options;
- const {cwd,targetDirectory,targetHead,readHead}=sessionLocation(options.cwd);
+ const {cwd,targetDirectory,targetHead,readHead,gitCommonDir}=sessionLocation(options.cwd);
  const targetInstruction=`ASC session location: ${JSON.stringify({sessionRoot:cwd,targetDirectory,targetHead})}. The sessionRoot is only the launch/listing location. Review and read files in targetDirectory, never substitute the primary checkout or another worktree. Use absolute paths (or git -C targetDirectory). Read the target's applicable AGENTS.md/CLAUDE.md and nested project rules before work. Verify the target HEAD when Git is available; report a mismatch instead of reviewing another checkout. Do not modify files or use external write tools.`;
  const prompt=fs.readFileSync(options.promptFile,'utf8');if(!prompt.trim())throw Error('Empty session prompt');
  const outputDir=path.resolve(options.outputDir);
@@ -119,16 +161,20 @@ export async function runHostSession(options){
     state.rename=renamed;state.naming=!renamed.error&&renamed.code===0?'completed':'failed';
    }
   }else{
-   rpc=sessionRpc(executable,cwd,{env:hostEnvironment(),timeout,record:line=>{
+   const codex=resolveExecutable(executable);
+   state.permissionProfile=CODEX_REVIEW_PROFILE;
+   rpc=sessionRpc(codex,cwd,{args:codexReviewProfileArguments(targetDirectory,codexReviewReadablePaths({executable:codex,gitCommonDir})),env:hostEnvironment(),timeout,record:line=>{
     write('events.jsonl',line);
     const message=JSON.parse(line),item=message.params?.item;
     if(message.method==='item/completed'&&message.params?.threadId===state.sessionId&&item?.type==='agentMessage'&&typeof item.text==='string')write('result.txt',item.text+'\n');
    },stderr:b=>write('stderr.txt',b)});
-   await rpc.initialize();
-   const response=await rpc.call('thread/start',{cwd,model,ephemeral,approvalPolicy:'never',sandbox:'read-only',developerInstructions:targetInstruction});
+   // experimentalApi exposes the named-profile fields; the thread must report that profile before any turn.
+   await rpc.initialize({experimentalApi:true});
+   const response=await rpc.call('thread/start',{cwd,model,ephemeral,approvalPolicy:'never',permissions:CODEX_REVIEW_PROFILE,developerInstructions:targetInstruction});
    state.sessionId=response.thread?.id;if(typeof state.sessionId!=='string'||!state.sessionId)throw Error('Missing Codex thread ID');save();
+   if(response.activePermissionProfile?.id!==CODEX_REVIEW_PROFILE)throw Error('Codex did not apply the review permission profile');
    if(!ephemeral){await rpc.call('thread/name/set',{threadId:state.sessionId,name:state.name});state.naming='started';save();}
-   const started=await rpc.call('turn/start',{threadId:state.sessionId,input:[{type:'text',text:prompt}],approvalPolicy:'never',sandboxPolicy:{type:'readOnly'}});
+   const started=await rpc.call('turn/start',{threadId:state.sessionId,input:[{type:'text',text:prompt}],approvalPolicy:'never',permissions:CODEX_REVIEW_PROFILE});
    const completed=await rpc.wait(message=>message.method==='turn/completed'&&message.params?.threadId===state.sessionId&&message.params?.turn?.id===started.turn.id);
    if(completed.params.turn.status!=='completed')throw Error(`Codex turn ${completed.params.turn.status}`);
    if(!fs.readFileSync(path.join(outputDir,'result.txt'),'utf8').trim())throw Error('Codex returned no response');

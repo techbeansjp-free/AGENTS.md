@@ -1,0 +1,93 @@
+{
+  "condition": "profile",
+  "codexVersion": "codex-cli 0.171.0",
+  "codexArgs": [
+    "-c",
+    "project_doc_max_bytes=0",
+    "-c",
+    "default_permissions=\"asc_review\"",
+    "-c",
+    "permissions.asc_review.filesystem={\":minimal\"=\"read\",\"/tmp\"=\"deny\",\"/private/tmp\"=\"deny\",\"/private/var/tmp\"=\"deny\",\"<codex>\"=\"read\",\"<fixture>/repo/.git\"=\"read\",\"/Library/Developer/CommandLineTools\"=\"read\",\"<fixture>/repo/.worktrees/target\"=\"read\"}"
+  ],
+  "checks": {
+    "target": {
+      "exitCode": 0,
+      "markerRead": true,
+      "stderr": ""
+    },
+    "outside": {
+      "exitCode": 1,
+      "markerRead": false,
+      "stderr": "cat: <fixture>/outside/marker.txt: Operation not permitted\n"
+    },
+    "primaryUntracked": {
+      "exitCode": 1,
+      "markerRead": false,
+      "stderr": "cat: <fixture>/repo/untracked.txt: Operation not permitted\n"
+    },
+    "primaryTracked": {
+      "exitCode": 1,
+      "markerRead": false,
+      "stderr": "cat: <fixture>/repo/tracked.txt: Operation not permitted\n"
+    },
+    "otherWorktree": {
+      "exitCode": 1,
+      "markerRead": false,
+      "stderr": "cat: <fixture>/repo/.worktrees/other/other.txt: Operation not permitted\n"
+    },
+    "externalWorktree": {
+      "exitCode": 1,
+      "markerRead": false,
+      "stderr": "cat: <fixture>/external-target/inside.txt: Operation not permitted\n"
+    },
+    "symlinkToOutside": {
+      "exitCode": 1,
+      "markerRead": false,
+      "stderr": "cat: <fixture>/repo/.worktrees/target/link-file.txt: Operation not permitted\n"
+    },
+    "symlinkDirToOutside": {
+      "exitCode": 1,
+      "markerRead": false,
+      "stderr": "cat: <fixture>/repo/.worktrees/target/link-dir/marker.txt: Operation not permitted\n"
+    },
+    "symlinkToPrimary": {
+      "exitCode": 1,
+      "markerRead": false,
+      "stderr": "cat: <fixture>/repo/.worktrees/target/link-root.txt: Operation not permitted\n"
+    },
+    "nonTemporaryPath": {
+      "exitCode": 1,
+      "stderr": "cat: <checkout>/AGENTS.md: Operation not permitted\n"
+    },
+    "writeTarget": {
+      "exitCode": 1,
+      "created": false,
+      "stderr": "touch: <fixture>/repo/.worktrees/target/write-probe.txt: Operation not permitted\n"
+    },
+    "localNetwork": {
+      "exitCode": 7,
+      "reached": false,
+      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 52832 after 0 ms: Couldn't connect to server\n"
+    },
+    "gitLog": {
+      "exitCode": 0,
+      "stdout": "init\n"
+    },
+    "gitStatus": {
+      "exitCode": 0,
+      "stdout": "?? inside.txt\n?? link-dir\n?? link-file.txt\n?? link-root.txt\n"
+    }
+  },
+  "thread": {
+    "sandbox": {
+      "type": "readOnly",
+      "networkAccess": false
+    },
+    "activePermissionProfile": {
+      "id": "asc_review",
+      "extends": null
+    },
+    "cwd": "<fixture>/repo",
+    "instructionSources": []
+  }
+}

@@ -3,8 +3,8 @@ import {spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
 import {setTimeout,clearTimeout} from 'node:timers';
 
-export function sessionRpc(executable,cwd,{env,record,stderr,timeout}){
- const child=spawn(executable,['app-server'],{cwd,env,stdio:['pipe','pipe','pipe']});
+export function sessionRpc(executable,cwd,{args=[],env,record,stderr,timeout}){
+ const child=spawn(executable,['app-server',...args],{cwd,env,stdio:['pipe','pipe','pipe']});
  const pending=new Map(),events=[];let nextId=0,failure,waiter;
  const closed=new Promise(resolve=>child.once('close',resolve));
  const fail=error=>{failure??=error;for(const {reject,timer} of pending.values()){clearTimeout(timer);reject(failure);}pending.clear();if(waiter){clearTimeout(waiter.timer);waiter.reject(failure);waiter=null;}};
@@ -31,7 +31,7 @@ export function sessionRpc(executable,cwd,{env,record,stderr,timeout}){
   }catch(error){fail(error);child.kill();}
  });
  return {
-  async initialize(){await this.call('initialize',{clientInfo:{name:'asc_session',version:'0.5.0'}});send({method:'initialized',params:{}});},
+  async initialize(capabilities){await this.call('initialize',{clientInfo:{name:'asc_session',version:'0.5.0'},...(capabilities?{capabilities}:{})});send({method:'initialized',params:{}});},
   call(method,params){
    if(failure)return Promise.reject(failure);
    const id=++nextId;

@@ -1,0 +1,59 @@
+{
+  "condition": "primary-cwd",
+  "criteriaSha256": "da3cc1e9870403b5348370a6d0a60af6a56ce433d5accb35487dede079e5e0e6",
+  "launchCwd": "<fixture>/repo",
+  "start": {
+    "exit": 0,
+    "ok": true,
+    "sessionId": "ac761016-6b16-4214-bc10-c4534c260751",
+    "result": "OK",
+    "stderr": ""
+  },
+  "rename": {
+    "exit": 0,
+    "ok": false,
+    "result": "OK\n",
+    "stderr": "<user settings warning omitted>"
+  },
+  "storedUnder": {
+    "primaryProject": "transcript present",
+    "targetProject": "no project state"
+  },
+  "beforeRemove": {
+    "byId": {
+      "exit": 0,
+      "ok": true,
+      "sessionId": "ac761016-6b16-4214-bc10-c4534c260751",
+      "result": "OK",
+      "stderr": "",
+      "sameSession": true
+    },
+    "byName": {
+      "exit": 0,
+      "ok": true,
+      "sessionId": "ac761016-6b16-4214-bc10-c4534c260751",
+      "result": "OK",
+      "stderr": "",
+      "sameSession": true
+    }
+  },
+  "afterRemove": {
+    "byId": {
+      "exit": 0,
+      "ok": true,
+      "sessionId": "ac761016-6b16-4214-bc10-c4534c260751",
+      "result": "OK",
+      "stderr": "",
+      "sameSession": true
+    },
+    "byName": {
+      "exit": 0,
+      "ok": true,
+      "sessionId": "ac761016-6b16-4214-bc10-c4534c260751",
+      "result": "OK",
+      "stderr": "",
+      "sameSession": true
+    }
+  },
+  "note": "rename uses text output; success is judged by exit code as host-session does (ok=false only means non-JSON stdout). stderr omitted: it contained a warning about the local user settings file."
+}
