@@ -5,7 +5,13 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {sessionOptions,runHostSession,claudeReviewArguments,claudeRenameArguments} from '../src/host-session.mjs';
+import {sessionOptions,runHostSession,claudeReviewArguments,claudeRenameArguments,codexReviewProfileName,codexReviewProfileArguments,codexReviewReadablePaths,resolveExecutable,assertCodexVersion} from '../src/host-session.mjs';
+import {codexRuntimeRoots} from '../src/codex-runtime.mjs';
+
+/** The profile host-session must pass for a native fake Codex at `executable`. */
+function expectedProfile(executable,targetDirectory,gitCommonDir,profile){
+ return codexReviewProfileArguments({profile,targetDirectory,providerRoots:codexRuntimeRoots(executable),node:fs.realpathSync(process.execPath),readablePaths:codexReviewReadablePaths({gitCommonDir})});
+}
 
 function fixture(t,host,mode='success'){
  const root=tempDir('asc-session-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -24,13 +30,15 @@ if(${JSON.stringify(mode)}!=='rename-mutate')await mutate();`;
  import {createInterface} from 'node:readline';
  process.on('SIGTERM',()=>{process.stderr.write('shutdown diagnostic\\n',()=>process.exit(0));});
  fs.appendFileSync(${JSON.stringify(path.join(root,'cwd'))},process.cwd()+'\\n');
+ fs.appendFileSync(${JSON.stringify(path.join(root,'argv'))},JSON.stringify(process.argv.slice(2))+'\\n');
+ fs.appendFileSync(${JSON.stringify(path.join(root,'script'))},process.argv[1]+'\\n');
  let names=0;
  const send=m=>console.log(JSON.stringify(m));
  createInterface({input:process.stdin}).on('line',async line=>{
  const m=JSON.parse(line);fs.appendFileSync(${JSON.stringify(path.join(root,'calls'))},line+'\\n');
  if(m.method==='initialized')return;
  if(m.method==='initialize')return send({id:m.id,result:{}});
- if(m.method==='thread/start')return send({id:m.id,result:{thread:{id:'thread-owned'}}});
+ if(m.method==='thread/start')return send({id:m.id,result:{thread:{id:'thread-owned'},...(${JSON.stringify(mode)}==='no-profile'?{}:{activePermissionProfile:{id:${JSON.stringify(mode)}==='other-profile'?':read-only':m.params.permissions,extends:${JSON.stringify(mode)}==='extended-profile'?':workspace':null}})}});
  if(m.method==='thread/name/set'){
  names++;if(names===2&&${JSON.stringify(mode)}==='rename-mutate')await mutate();if(${JSON.stringify(mode)}==='start-name-fail'||(${JSON.stringify(mode)}==='rename-fail'&&names===2))return send({id:m.id,error:{message:'name unavailable'}});
  return send({id:m.id,result:{}});}
@@ -41,7 +49,7 @@ if(${JSON.stringify(mode)}!=='rename-mutate')await mutate();`;
  send({method:'turn/completed',params:{threadId:'unrelated',turn:{id:'turn-other',status:'completed'}}});
  return send({method:'turn/completed',params:{threadId:'thread-owned',turn:{id:'turn-owned',status:${JSON.stringify(mode==='run-fail'?'failed':'completed')}}}});}
  });`;
- fs.writeFileSync(executable,`#!${process.execPath}\nimport fs from 'node:fs';\n${mutation}\nfs.appendFileSync(${JSON.stringify(path.join(root,'env'))},JSON.stringify({git:Object.keys(process.env).filter(k=>/^GIT_/i.test(k)),sentinel:process.env.ASC_TEST_SENTINEL})+'\\n');\n${body}`,{mode:0o700});
+ fs.writeFileSync(executable,`#!${process.execPath}\nimport fs from 'node:fs';\n${host==='codex'?"if(process.argv.includes('--version')){console.log('codex-cli 0.171.0');process.exit(0);}\n":''}${mutation}\nfs.appendFileSync(${JSON.stringify(path.join(root,'env'))},JSON.stringify({git:Object.keys(process.env).filter(k=>/^GIT_/i.test(k)),sentinel:process.env.ASC_TEST_SENTINEL})+'\\n');\n${body}`,{mode:0o700});
  const promptFile=path.join(root,'request.txt');fs.writeFileSync(promptFile,'Review the specified worktree.');
  return {root,options:{host,cwd:root,model:'test-model',name:'1644 日本語 $literal',promptFile,outputDir:path.join(root,'result'),executable,ephemeral:false,timeout:2000}};
 }
@@ -61,7 +69,12 @@ for(const host of ['claude','codex']){
    assert.equal(calls[1][calls[1].indexOf('--model')+1],options.model);
   }else{
    assert.deepEqual(calls.filter(c=>c.method==='thread/name/set').map(c=>c.params),[{threadId:'thread-owned',name:'自動: '+options.name},{threadId:'thread-owned',name:'済: 自動: '+options.name}]);
-   const start=calls.find(c=>c.method==='thread/start');assert.equal(start.params.sandbox,'read-only');assert.equal(start.params.approvalPolicy,'never');
+   const start=calls.find(c=>c.method==='thread/start');assert.equal(start.params.approvalPolicy,'never');
+   assert.match(result.permissionProfile,/^asc_review_[a-f0-9]{24}$/);assert.equal(start.params.permissions,result.permissionProfile);assert(!('sandbox' in start.params),'read-only sandbox does not limit reads and cannot be combined with a profile');
+   const turn=calls.find(c=>c.method==='turn/start');assert.equal(turn.params.permissions,result.permissionProfile);assert(!('sandboxPolicy' in turn.params));
+   assert.deepEqual(calls.find(c=>c.method==='initialize').params.capabilities,{experimentalApi:true});
+   const argv=JSON.parse(fs.readFileSync(path.join(root,'argv'),'utf8').trim());
+   assert.deepEqual(argv,['app-server',...expectedProfile(fs.realpathSync(options.executable),result.targetDirectory,null,result.permissionProfile)],'The Host receives exactly the read-scope profile');
   }
   await assert.rejects(runHostSession(options),/EEXIST/);
   assert.equal(fs.readFileSync(path.join(options.outputDir,'result.txt'),'utf8'),'ORIGINAL REVIEW\n');
@@ -84,6 +97,11 @@ for(const host of ['claude','codex']){
   assert(host==='claude'?calls.includes('--no-session-persistence'):calls.includes('"ephemeral":true'));
  });
 }
+for(const mode of ['no-profile','other-profile','extended-profile'])test(`Codex without the review permission profile stops before model turn (${mode})`,async t=>{
+ const {root,options}=fixture(t,'codex',mode);const result=await runHostSession(options);
+ assert.equal(result.status,'failed');assert.match(result.error,/permission profile/);
+ assert(!fs.readFileSync(path.join(root,'calls'),'utf8').includes('turn/start'));
+});
 test('Codex unavailable naming stops before model turn',async t=>{
  const {root,options}=fixture(t,'codex','start-name-fail');const result=await runHostSession(options);
  assert.equal(result.status,'failed');assert(!fs.readFileSync(path.join(root,'calls'),'utf8').includes('turn/start'));
@@ -143,6 +161,8 @@ for(const host of ['claude','codex'])test(`${host}: launch and rename at primary
   const start=calls.find(c=>c.method==='thread/start');assert.equal(start.params.cwd,primary);
   assert(start.params.developerInstructions.includes(head));assert(start.params.developerInstructions.includes(JSON.stringify(target)));
   assert.equal(calls.find(c=>c.method==='turn/start').params.cwd,undefined,'Do not move the persisted thread cwd to the worktree');
+  const argv=JSON.parse(fs.readFileSync(path.join(root,'argv'),'utf8').trim());
+  assert.deepEqual(argv.slice(1),expectedProfile(fs.realpathSync(options.executable),target,fs.realpathSync(path.join(primary,'.git')),result.permissionProfile),'Only the target and shared Git metadata, not the primary checkout, become readable');
  }
  assert.equal(fs.readFileSync(path.join(primary,'marker.txt'),'utf8'),'PRIMARY');
 });
@@ -216,4 +236,63 @@ test('claude rename arguments expose no tools',()=>{
  const args=claudeRenameArguments({sessionId:'s',name:'自動: n',model:'m'});
  assert.equal(args[args.indexOf('--tools')+1],'');assert.equal(args[args.indexOf('--allowedTools')+1],'');
  assert.equal(args[args.indexOf('-n')+1],'済: 自動: n');assert.equal(args[args.indexOf('--max-turns')+1],'1');
+});
+
+// #1800: Codex read scope comes from a named permissions profile. Live counterexamples are in docs/evidence/1800-review-read-scope-rest/.
+test('codex review profile reads only the platform minimum, the runtime, the target and the named paths',()=>{
+ const profile='asc_review_'+'0'.repeat(24);
+ const common={profile,targetDirectory:'/r/.worktrees/t',providerRoots:['/opt/codex/bin/codex'],node:'/opt/node/bin/node',readablePaths:['/r/.git']};
+ const darwin=codexReviewProfileArguments({...common,platform:'darwin'});
+ assert.deepEqual(darwin,['-c','project_doc_max_bytes=0','-c',`default_permissions="${profile}"`,'-c',`permissions.${profile}.filesystem={":root"="deny",":minimal"="read","/tmp"="deny","/private/tmp"="deny","/var/tmp"="deny","/private/var/tmp"="deny","/System/Library/OpenSSL"="read","/opt/codex/bin/codex"="read","/opt/node/bin/node"="read","/r/.git"={"."="read"},"/r/.worktrees/t"={"."="read"}}`,'-c',`permissions.${profile}.network.enabled=false`]);
+ const linux=codexReviewProfileArguments({...common,platform:'linux'});
+ assert.equal(linux[5],`permissions.${profile}.filesystem={":root"="deny",":minimal"="read","/opt/codex/bin/codex"="read","/opt/node/bin/node"="read","/r/.git"={"."="read"},"/r/.worktrees/t"={"."="read"}}`,'Linux mounts private temporaries, so no denial keys');
+ for(const args of [darwin,linux]){const text=args.join(' ');assert(!text.includes('"write"')&&!text.includes(':workspace_roots')&&!text.includes(':root"="read'),'No writes, no full-disk read, not the primary checkout as workspace root');}
+ assert(codexReviewProfileArguments({...common,targetDirectory:'/a "b"\\c'})[5].endsWith('"/a \\"b\\"\\\\c"={"."="read"}}'),'Paths are escaped as TOML basic strings');
+ assert(codexReviewProfileArguments({...common,targetDirectory:'/r/review[1]'})[5].endsWith('"/r/review[1]"={"."="read"}}'),'Glob characters stay literal through the scoped form');
+ assert.throws(()=>codexReviewProfileArguments({...common,targetDirectory:'relative'}),/absolute/);
+ assert.throws(()=>codexReviewProfileArguments({...common,readablePaths:['relative']}),/absolute/);
+ assert.throws(()=>codexReviewProfileArguments({...common,providerRoots:[]}),/runtime roots/);
+ for(const name of ['asc_review','asc_review_x',undefined])assert.throws(()=>codexReviewProfileArguments({...common,profile:name}),/generated per run/,'A fixed name merges with same-named profiles from configuration');
+ const names=new Set(Array.from({length:20},codexReviewProfileName));assert.equal(names.size,20);for(const name of names)assert.match(name,/^asc_review_[a-f0-9]{24}$/);
+ const paths=codexReviewReadablePaths({gitCommonDir:'/r/.git'});
+ assert.equal(paths[0],'/r/.git');assert(paths.length<=2&&paths.every(p=>path.isAbsolute(p)));
+ if(process.platform!=='darwin')assert.deepEqual(paths,['/r/.git'],'Developer tools are added only on macOS');
+ if(process.platform!=='darwin')assert.deepEqual(codexReviewReadablePaths({gitCommonDir:null}),[]);
+});
+test('Host executable resolves through PATH, symlinks and Windows extensions to the real file',t=>{
+ const root=tempDir('asc-exe-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const real=path.join(root,'real');fs.mkdirSync(real);fs.writeFileSync(path.join(real,'codex'),'#!/bin/sh\n',{mode:0o700});
+ const bin=path.join(root,'bin');fs.mkdirSync(bin);fs.symlinkSync(path.join(real,'codex'),path.join(bin,'codex'));
+ fs.writeFileSync(path.join(root,'codex-not-executable'),'',{mode:0o600});
+ assert.equal(resolveExecutable('codex',[path.join(root,'missing'),bin].join(path.delimiter)),path.join(real,'codex'));
+ assert.equal(resolveExecutable(path.join(bin,'codex'),''),path.join(real,'codex'));
+ assert.throws(()=>resolveExecutable('codex',path.join(root,'missing')),/not found/);
+ assert.throws(()=>resolveExecutable(path.join(root,'codex-not-executable'),''),/not found/);
+ const win=path.join(root,'win');fs.mkdirSync(win);fs.writeFileSync(path.join(win,'codex.EXE'),'',{mode:0o700});fs.writeFileSync(path.join(win,'other.CMD'),'',{mode:0o700});
+ assert.equal(resolveExecutable('codex',win,'win32','.EXE;.CMD'),path.join(win,'codex.EXE'),'PATHEXT finds codex.exe');
+ assert.throws(()=>resolveExecutable('other',win,'win32','.EXE;.CMD'),/command shell wrapper/);
+ fs.writeFileSync(path.join(win,'npmcodex'),'',{mode:0o700});fs.writeFileSync(path.join(win,'npmcodex.CMD'),'',{mode:0o700});
+ assert.throws(()=>resolveExecutable('npmcodex',win,'win32','.EXE;.CMD'),/command shell wrapper/,'The extensionless npm shell script is never chosen on Windows');
+});
+test('codex: a symlinked Host is launched as its real file',async t=>{
+ const {root,options}=fixture(t,'codex');const link=path.join(root,'host-link');fs.symlinkSync(options.executable,link);options.executable=link;
+ const result=await runHostSession(options);assert.equal(result.status,'completed');
+ assert.equal(fs.readFileSync(path.join(root,'script'),'utf8').trim(),fs.realpathSync(path.join(root,'host')));
+ const argv=JSON.parse(fs.readFileSync(path.join(root,'argv'),'utf8').trim());
+ assert.deepEqual(argv.slice(1),expectedProfile(fs.realpathSync(path.join(root,'host')),result.targetDirectory,null,result.permissionProfile));
+});
+test('macOS review requires a Codex whose sandbox denies the shared temporaries',()=>{
+ for(const ok of ['codex-cli 0.156.0','codex-cli 0.171.0\n','codex-cli 1.0.0'])assert.doesNotThrow(()=>assertCodexVersion(ok,'darwin'));
+ for(const bad of ['codex-cli 0.155.9','codex-cli 0.99.0','',undefined,'unknown'])assert.throws(()=>assertCodexVersion(bad,'darwin'),/0\.156\.0 or later/);
+ assert.doesNotThrow(()=>assertCodexVersion('','linux'),'Linux mounts private temporaries');
+});
+test('codex: the npm launcher runs under Node and its package becomes readable',async t=>{
+ const {root,options}=fixture(t,'codex');const pkg=path.join(root,'npm-codex');fs.mkdirSync(path.join(pkg,'bin'),{recursive:true});
+ fs.writeFileSync(path.join(pkg,'package.json'),JSON.stringify({name:'@openai/codex'}));
+ const launcher=path.join(pkg,'bin','codex.js');fs.copyFileSync(options.executable,launcher);fs.chmodSync(launcher,0o700);options.executable=launcher;
+ const result=await runHostSession(options);assert.equal(result.status,'completed');
+ assert.equal(fs.readFileSync(path.join(root,'script'),'utf8').trim(),fs.realpathSync(launcher));
+ const argv=JSON.parse(fs.readFileSync(path.join(root,'argv'),'utf8').trim());assert.equal(argv[0],'app-server');
+ assert.deepEqual(argv.slice(1),expectedProfile(fs.realpathSync(launcher),result.targetDirectory,null,result.permissionProfile));
+ assert(argv.join(' ').includes(JSON.stringify(fs.realpathSync(pkg))+'="read"'),'The package root, not only the launcher file, is readable');
 });

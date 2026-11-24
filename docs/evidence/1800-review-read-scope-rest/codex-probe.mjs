@@ -1,0 +1,93 @@
+// Codex read-scope probe without any model call: app-server `initialize`, `thread/start` (ephemeral) and
+// `command/exec` only. No `turn/start` is sent, so nothing is sent to a model.
+// Usage: CODEX_HOME=<disposable dir> node codex-probe.mjs <fixture-dir> <legacy-read-only|profile|fixed-name> <out.json>
+//   legacy-read-only: the launch before #1800 (`sandbox: read-only`).
+//   profile: the #1800 launch (codexReviewProfileArguments, thread `permissions`), with the same readable paths
+//            as host-session (Host executable, shared Git metadata, macOS developer tools) and a per-run profile name.
+//   fixed-name: the same profile under the fixed name `asc_review` (shows how a same-named configured profile merges).
+import fs from 'node:fs';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import {spawn,spawnSync} from 'node:child_process';
+import {createInterface} from 'node:readline';
+import {fileURLToPath} from 'node:url';
+import {codexReviewProfileName,codexReviewProfileArguments,codexReviewReadablePaths,resolveExecutable} from '../../../src/host-session.mjs';
+import {codexRuntimeRoots} from '../../../src/codex-runtime.mjs';
+
+const [fixture, condition, out] = process.argv.slice(2);
+if (!process.env.CODEX_HOME) throw Error('Set CODEX_HOME to a disposable directory');
+if (!['legacy-read-only', 'profile', 'fixed-name'].includes(condition)) throw Error('unknown condition');
+const F = fs.realpathSync(fixture), repo = path.join(F, 'repo'), target = path.join(repo, '.worktrees/target');
+// A non-temporary path: this checkout's public AGENTS.md (content is not a secret; only the exit code is recorded).
+const nonTmp = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../AGENTS.md');
+const files = {
+  target: path.join(target, 'inside.txt'),
+  outside: path.join(F, 'outside/marker.txt'),
+  primaryUntracked: path.join(repo, 'untracked.txt'),
+  primaryTracked: path.join(repo, 'tracked.txt'),
+  otherWorktree: path.join(repo, '.worktrees/other/other.txt'),
+  externalWorktree: path.join(F, 'external-target/inside.txt'),
+  symlinkToOutside: path.join(target, 'link-file.txt'),
+  symlinkDirToOutside: path.join(target, 'link-dir/marker.txt'),
+  symlinkToPrimary: path.join(target, 'link-root.txt'),
+};
+const codex = resolveExecutable('codex');
+// Same construction as host-session (native executable; the npm launcher form is not exercised here).
+const generated = codexReviewProfileName(), profileName = condition === 'fixed-name' ? 'asc_review' : generated;
+const built = condition === 'legacy-read-only' ? [] : codexReviewProfileArguments({profile: generated, targetDirectory: target, providerRoots: codexRuntimeRoots(codex), node: fs.realpathSync(process.execPath), readablePaths: codexReviewReadablePaths({gitCommonDir: fs.realpathSync(path.join(repo, '.git'))})});
+const extra = built.map(arg => arg.replaceAll(generated, profileName));
+const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
+const server = http.createServer((q, s) => s.end('LOCAL-LISTENER')); await new Promise(r => server.listen(0, '127.0.0.1', r));
+const child = spawn(codex, ['app-server', ...extra], {cwd: repo, env, stdio: ['pipe', 'pipe', 'pipe']});
+let id = 0, closed; const pending = new Map();
+// An app-server that exits early rejects every pending and later call, so the probe still records and stops.
+child.on('close', code => { closed = Error(`app-server exited (${code})`); for (const p of pending.values()) p.reject(closed); pending.clear(); });
+createInterface({input: child.stdout}).on('line', line => {
+  const m = JSON.parse(line);
+  if (m.method && Object.hasOwn(m, 'id')) { child.stdin.write(JSON.stringify({id: m.id, error: {code: -32601, message: 'denied'}}) + '\n'); return; }
+  if (Object.hasOwn(m, 'id') && pending.has(m.id)) { const p = pending.get(m.id); pending.delete(m.id); m.error ? p.reject(Error(m.error.message)) : p.resolve(m.result); }
+});
+let stderr = ''; child.stderr.on('data', b => { stderr += b; });
+const call = (method, params) => new Promise((resolve, reject) => { if (closed) return reject(closed); const n = ++id; pending.set(n, {resolve, reject}); child.stdin.write(JSON.stringify({id: n, method, params}) + '\n'); });
+const hide = text => String(text ?? '').replaceAll(F, '<fixture>').replaceAll(path.dirname(nonTmp), '<checkout>').replaceAll(codex, '<codex>').replaceAll(fs.realpathSync(process.execPath), '<node>').replaceAll(generated, '<profile>').replaceAll(process.env.CODEX_HOME, '<codex-home>').replaceAll(process.env.HOME ?? '\0', '<home>');
+// Configuration placed in the disposable CODEX_HOME: table and key names only, never values.
+const configFile = path.join(process.env.CODEX_HOME, 'config.toml');
+const codexHomeConfig = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf8').split('\n').map(l => l.trim()).filter(l => l.startsWith('[') || l.includes('=')).map(l => l.startsWith('[') ? l : l.split('=')[0].trim()) : [];
+const codexHomeInstructions = fs.existsSync(path.join(process.env.CODEX_HOME, 'AGENTS.md'));
+const result = {condition, fixtureHasGlobChars: /[[\]*?{}]/.test(F), codexHomeConfig: codexHomeConfig.map(hide), codexHomeInstructions, codexVersion: spawnSync(codex, ['--version'], {encoding: 'utf8'}).stdout.trim(), codexArgs: extra.map(hide), checks: {}};
+const policy = condition === 'legacy-read-only' ? {sandboxPolicy: {type: 'readOnly'}} : {};
+const exec = async (command, extraEnv = {}) => {
+  try { const r = await call('command/exec', {command, cwd: repo, timeoutMs: 20000, env: {HOME: target, ...extraEnv}, ...policy}); return r; }
+  catch (error) { return {rpcError: hide(error.message).slice(0, 200)}; }
+};
+try {
+  await call('initialize', {clientInfo: {name: 'asc_probe', version: '0'}, capabilities: {experimentalApi: true}});
+  child.stdin.write(JSON.stringify({method: 'initialized', params: {}}) + '\n');
+  const started = await call('thread/start', {cwd: repo, ephemeral: true, approvalPolicy: 'never', ...(condition === 'legacy-read-only' ? {sandbox: 'read-only'} : {permissions: profileName})});
+  result.thread = {sandbox: started.sandbox, activePermissionProfile: started.activePermissionProfile ?? null, cwd: hide(started.cwd), instructionSources: JSON.parse(hide(JSON.stringify(started.instructionSources ?? null)))};
+  for (const [name, file] of Object.entries(files)) {
+    const r = await exec(['/bin/cat', file]);
+    result.checks[name] = {exitCode: r.exitCode, markerRead: (r.stdout ?? '').includes(fs.readFileSync(file, 'utf8').trim()), stderr: hide(r.stderr).slice(0, 160), rpcError: r.rpcError};
+  }
+  const nonTmpRead = await exec(['/bin/cat', nonTmp]);
+  result.checks.nonTemporaryPath = {exitCode: nonTmpRead.exitCode, stderr: hide(nonTmpRead.stderr).slice(0, 160)};
+  // Temporary directories (shared ones under both spellings, and the per-user $TMPDIR): exit code and whether any
+  // entry was listed. Entry names are not recorded.
+  for (const [name, dir] of Object.entries({userTmpdirListing: fs.realpathSync(os.tmpdir()), tmpListing: '/tmp', privateTmpListing: '/private/tmp', varTmpListing: '/var/tmp', privateVarTmpListing: '/private/var/tmp'})) {
+    const r = await exec(['/bin/ls', '-A', dir]);
+    result.checks[name] = {exitCode: r.exitCode, listedEntries: Boolean((r.stdout ?? '').trim())};
+  }
+  const write = await exec(['/usr/bin/touch', path.join(target, 'write-probe.txt')]);
+  result.checks.writeTarget = {exitCode: write.exitCode, created: fs.existsSync(path.join(target, 'write-probe.txt')), stderr: hide(write.stderr).slice(0, 160)};
+  fs.rmSync(path.join(target, 'write-probe.txt'), {force: true});
+  const net = await exec(['/usr/bin/curl', '-sS', '-m', '3', `http://127.0.0.1:${server.address().port}/`]);
+  result.checks.localNetwork = {exitCode: net.exitCode, reached: (net.stdout ?? '').includes('LOCAL-LISTENER'), stderr: hide(net.stderr).slice(0, 160)};
+  for (const [name, args] of Object.entries({gitLog: ['log', '-1', '--format=%s'], gitStatus: ['status', '--short']})) {
+    const r = await exec(['/usr/bin/git', '-C', target, ...args]);
+    result.checks[name] = {exitCode: r.exitCode, stdout: hide(r.stdout).slice(0, 120)};
+  }
+} catch (error) { result.error = hide(error.message); result.stderr = hide(stderr).slice(-800); }
+child.stdin.end(); child.kill(); server.close();
+fs.writeFileSync(out, JSON.stringify(result, null, 2) + '\n');
+console.log(JSON.stringify({condition, error: result.error, thread: result.thread, checks: Object.fromEntries(Object.entries(result.checks).map(([k, v]) => [k, v.markerRead ?? v.reached ?? v.created ?? v.listedEntries ?? v.exitCode]))}));

@@ -1,0 +1,179 @@
+{
+  "condition": "primary-cwd",
+  "exit": 0,
+  "resultSubtype": "success",
+  "cost": 0.00294014,
+  "probes": [
+    "Read:outside",
+    "Glob:outside",
+    "Grep:outside",
+    "Read:symlink file to outside",
+    "Read:symlink dir to outside",
+    "Read:target (positive control)",
+    "Glob:target (positive control)",
+    "Read:primary tracked",
+    "Read:primary untracked",
+    "Read:other worktree",
+    "Glob:worktrees listing",
+    "Grep:primary grep",
+    "Read:symlink to primary untracked"
+  ],
+  "markerInAnyEvent": {
+    "outside": false,
+    "inside": true,
+    "primaryUntracked": true,
+    "otherWorktree": true
+  },
+  "results": [
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/outside/marker.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOtherWorktree": false,
+      "listedOutside": true,
+      "message": "<fixture>/outside/marker.txt is outside <fixture>/repo; --restricted confines the file tools to the working directory.\"Error: <fixture>/outside/marker.txt is outside <fixture>/repo; --restricted confines the file tools t"
+    },
+    {
+      "tool": "Glob",
+      "input": {
+        "pattern": "*.txt",
+        "path": "<fixture>/outside"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOtherWorktree": false,
+      "listedOutside": false,
+      "message": "<fixture>/outside is outside <fixture>/repo; --restricted confines the file tools to the working directory.\"Error: <fixture>/outside is outside <fixture>/repo; --restricted confines the file tools to the working director"
+    },
+    {
+      "tool": "Grep",
+      "input": {
+        "pattern": "OUTSIDE",
+        "path": "<fixture>/outside",
+        "output_mode": "content"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOtherWorktree": false,
+      "listedOutside": false,
+      "message": "<fixture>/outside is outside <fixture>/repo; --restricted confines the file tools to the working directory.\"Error: <fixture>/outside is outside <fixture>/repo; --restricted confines the file tools to the working director"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/.worktrees/target/link-file.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOtherWorktree": false,
+      "listedOutside": false,
+      "message": "<fixture>/repo/.worktrees/… [+20 chars] resolves through a symlink to <fixture>/outside/marker.t… [+2 chars], which is outside <fixture>/repo; --restricted confines the file tools to the working directory.\"Error: <fixtur"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/.worktrees/target/link-dir/marker.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOtherWorktree": false,
+      "listedOutside": false,
+      "message": "<fixture>/repo/.worktrees/… [+26 chars] resolves through a symlink to <fixture>/outside/marker.t… [+2 chars], which is outside <fixture>/repo; --restricted confines the file tools to the working directory.\"Error: <fixtur"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/.worktrees/target/inside.txt"
+      },
+      "isError": false,
+      "markers": [
+        "inside"
+      ],
+      "listedOtherWorktree": false,
+      "listedOutside": false
+    },
+    {
+      "tool": "Glob",
+      "input": {
+        "pattern": "*.txt",
+        "path": "<fixture>/repo/.worktrees/target"
+      },
+      "isError": false,
+      "markers": [],
+      "listedOtherWorktree": false,
+      "listedOutside": false
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/tracked.txt"
+      },
+      "isError": false,
+      "markers": [],
+      "listedOtherWorktree": false,
+      "listedOutside": false
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/untracked.txt"
+      },
+      "isError": false,
+      "markers": [
+        "primaryUntracked"
+      ],
+      "listedOtherWorktree": false,
+      "listedOutside": false
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/.worktrees/other/other.txt"
+      },
+      "isError": false,
+      "markers": [
+        "otherWorktree"
+      ],
+      "listedOtherWorktree": true,
+      "listedOutside": false
+    },
+    {
+      "tool": "Glob",
+      "input": {
+        "pattern": "**/*.txt",
+        "path": "<fixture>/repo/.worktrees"
+      },
+      "isError": false,
+      "markers": [],
+      "listedOtherWorktree": false,
+      "listedOutside": false
+    },
+    {
+      "tool": "Grep",
+      "input": {
+        "pattern": "OTHERWT",
+        "path": "<fixture>/repo",
+        "output_mode": "content"
+      },
+      "isError": false,
+      "markers": [],
+      "listedOtherWorktree": false,
+      "listedOutside": false
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/.worktrees/target/link-root.txt"
+      },
+      "isError": false,
+      "markers": [
+        "primaryUntracked"
+      ],
+      "listedOtherWorktree": false,
+      "listedOutside": false
+    }
+  ]
+}

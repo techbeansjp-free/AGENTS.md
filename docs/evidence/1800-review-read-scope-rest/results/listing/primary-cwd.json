@@ -1,0 +1,62 @@
+{
+  "condition": "primary-cwd",
+  "criteriaSha256": "da3cc1e9870403b5348370a6d0a60af6a56ce433d5accb35487dede079e5e0e6",
+  "launchCwd": "<fixture>/repo",
+  "start": {
+    "exit": 0,
+    "jsonOk": true,
+    "sessionId": "0dfe7e81-893e-4190-a050-fb2c13f51187",
+    "result": "OK",
+    "stderrEmpty": true
+  },
+  "rename": {
+    "exit": 0,
+    "jsonOk": null,
+    "result": "OK\n",
+    "stderrEmpty": false
+  },
+  "transcriptStoredUnder": {
+    "primaryProject": true,
+    "targetProject": false
+  },
+  "beforeRemove": {
+    "byId": {
+      "exit": 0,
+      "jsonOk": true,
+      "sessionId": "0dfe7e81-893e-4190-a050-fb2c13f51187",
+      "result": "OK",
+      "stderrEmpty": true,
+      "sameSession": true
+    },
+    "byName": {
+      "exit": 0,
+      "jsonOk": true,
+      "sessionId": "0dfe7e81-893e-4190-a050-fb2c13f51187",
+      "result": "OK",
+      "stderrEmpty": true,
+      "sameSession": true
+    }
+  },
+  "afterRemove": {
+    "byId": {
+      "exit": 0,
+      "jsonOk": true,
+      "sessionId": "0dfe7e81-893e-4190-a050-fb2c13f51187",
+      "result": "OK",
+      "stderrEmpty": true,
+      "sameSession": true
+    },
+    "byName": {
+      "exit": 0,
+      "jsonOk": true,
+      "sessionId": "0dfe7e81-893e-4190-a050-fb2c13f51187",
+      "result": "OK",
+      "stderrEmpty": true,
+      "sameSession": true
+    }
+  },
+  "transcriptStoredUnderAfter": {
+    "primaryProject": true,
+    "targetProject": false
+  }
+}

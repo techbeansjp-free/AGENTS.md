@@ -1,11 +1,12 @@
 /** Read-only, named Host sessions. Result artifacts are independent of display-name updates. */
 import fs from 'node:fs';
 import path from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,randomBytes} from 'node:crypto';
 import {spawn,spawnSync} from 'node:child_process';
 import {setTimeout,clearTimeout} from 'node:timers';
 import {sessionRpc} from './session-rpc.mjs';
 import {GIT_NULL_DEVICE,gitPathOutput} from './source-limits.mjs';
+import {codexRuntimeRoots,sandboxFilesystemBase,MACOS_MIN_CODEX_VERSION} from './codex-runtime.mjs';
 
 export function sessionOptions(args){
  const options={ephemeral:false,timeout:900000},seen=new Set();
@@ -36,7 +37,7 @@ function sessionLocation(directory){
   if(fs.existsSync(path.join(current,'HEAD'))&&fs.existsSync(path.join(current,'objects')))throw Error('Bare Git repository is not a session workspace');
   if(path.dirname(current)===current)break;
  }
- if(!gitManaged)return {cwd:target,targetDirectory:target,targetHead:null};
+ if(!gitManaged)return {cwd:target,targetDirectory:target,targetHead:null,gitCommonDir:null};
  const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('GIT_')));
  Object.assign(env,{GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:GIT_NULL_DEVICE,GIT_TERMINAL_PROMPT:'0',GIT_NO_LAZY_FETCH:'1',GIT_NO_REPLACE_OBJECTS:'1'});
  const git=(cwd,args)=>{
@@ -48,11 +49,12 @@ function sessionLocation(directory){
  if(!first[0]?.startsWith('worktree ')||first.includes('bare'))throw Error('A primary working checkout is required for session listing');
  const cwd=fs.realpathSync(first[0].slice('worktree '.length));
  const common=dir=>fs.realpathSync(gitPathOutput(git(dir,['rev-parse','--path-format=absolute','--git-common-dir'])));
- if(common(cwd)!==common(target))throw Error('Session root and target must belong to the same repository');
+ const gitCommonDir=common(target);
+ if(common(cwd)!==gitCommonDir)throw Error('Session root and target must belong to the same repository');
  const readHead=()=>git(target,['rev-parse','--verify','HEAD']).trim();
  const targetHead=readHead();
  if(!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(targetHead))throw Error('Invalid target HEAD');
- return {cwd,targetDirectory:target,targetHead,readHead};
+ return {cwd,targetDirectory:target,targetHead,readHead,gitCommonDir};
 }
 
 /**
@@ -66,6 +68,76 @@ export function claudeReviewArguments({model,sessionId,instruction,cwd,targetDir
  if(targetDirectory!==cwd)args.push('--add-dir',targetDirectory);
  if(ephemeral)args.push('--no-session-persistence');else args.push('-n',name);
  return args;
+}
+
+/**
+ * Codex review permissions. `sandbox: read-only` limits writes only, so the app-server gets a named profile built on
+ * the shared Codex sandbox base (`:root` denied, `:minimal` read, macOS shared temporaries denied under both spellings,
+ * the Codex runtime and Node read). It adds read-only grants for the given paths (shared Git metadata, developer
+ * tools) and the review target; nothing is writable and the network is disabled.
+ * The session cwd stays at the primary checkout for listing, so the profile names the target explicitly.
+ * Project instructions are not auto-loaded: Codex reads them from that cwd, which the profile cannot read
+ * (thread start fails) and which holds another revision; the Reviewer reads the target's rules itself.
+ * Keys are TOML basic strings (JSON escaping is valid TOML for these paths).
+ * Codex merges a same-named `[permissions.<name>]` table from user or project configuration into the `-c` table
+ * (measured: a user read entry survived), so each run uses a fresh, unguessable profile name.
+ */
+export const CODEX_REVIEW_PROFILE_PREFIX='asc_review_';
+export function codexReviewProfileName(){return CODEX_REVIEW_PROFILE_PREFIX+randomBytes(12).toString('hex');}
+export function codexReviewProfileArguments({profile,targetDirectory,providerRoots,node,readablePaths=[],platform=process.platform}){
+ if(typeof profile!=='string'||!/^asc_review_[a-f0-9]{24}$/.test(profile))throw Error('Codex review profile name must be generated per run');
+ for(const item of [targetDirectory,node,...providerRoots,...readablePaths])if(typeof item!=='string'||!path.isAbsolute(item))throw Error('Codex review paths must be absolute');
+ if(!providerRoots.length)throw Error('Codex runtime roots are required');
+ // Added directories use the scoped form {"."="read"}: Codex treats a bare key with glob characters such as [ ] as a
+ // glob, which it allows only for deny (measured), while the scoped base path is literal.
+ const scoped={'.':'read'};
+ const filesystem={...sandboxFilesystemBase({providerRoots,node,platform}),...Object.fromEntries(readablePaths.map(item=>[item,scoped])),[targetDirectory]:scoped};
+ const value=access=>typeof access==='string'?JSON.stringify(access):`{${Object.entries(access).map(([key,mode])=>`${JSON.stringify(key)}=${JSON.stringify(mode)}`).join(',')}}`;
+ const table=`{${Object.entries(filesystem).map(([key,access])=>`${JSON.stringify(key)}=${value(access)}`).join(',')}}`;
+ return ['-c','project_doc_max_bytes=0','-c',`default_permissions=${JSON.stringify(profile)}`,'-c',`permissions.${profile}.filesystem=${table}`,'-c',`permissions.${profile}.network.enabled=false`];
+}
+
+/**
+ * Resolve the Host executable to its real file: the sandboxed helper re-executes Codex, so its runtime must be readable.
+ * Windows names are tried with PATHEXT; command-shell wrappers are rejected because their target is unknown.
+ */
+export function resolveExecutable(executable,searchPath=process.env.PATH??'',platform=process.platform,pathExt=process.env.PATHEXT??'.EXE;.CMD;.BAT'){
+ // Windows never runs an extensionless file (npm also writes a POSIX shell script without one).
+ const extensions=platform==='win32'&&!path.extname(executable)?pathExt.split(';').filter(Boolean):[''];
+ const bases=executable.includes('/')||(platform==='win32'&&executable.includes('\\'))?[path.resolve(executable)]:searchPath.split(path.delimiter).filter(Boolean).map(dir=>path.join(dir,executable));
+ for(const base of bases)for(const extension of extensions){
+  try{
+   const candidate=base+extension;fs.accessSync(candidate,fs.constants.X_OK);const real=fs.realpathSync(candidate);
+   if(fs.statSync(real).isFile()){if(/\.(cmd|bat)$/i.test(real))throw Error('Use the native Codex executable or the npm package bin/codex.js, not a command shell wrapper');return real;}
+  }catch(error){if(/command shell wrapper/.test(error.message))throw error;/* try the next candidate */}
+ }
+ throw Error('Host executable not found');
+}
+
+/** Oldest Codex whose macOS sandbox denies the shared temporaries (see codex-runtime.mjs); older ones fail closed here. */
+export function assertCodexVersion(versionText,platform=process.platform){
+ if(platform!=='darwin')return;
+ const match=/codex-cli (\d+)\.(\d+)\.(\d+)/.exec(versionText??'');
+ const [major,minor,patch]=MACOS_MIN_CODEX_VERSION.split('.').map(Number);
+ const version=match?match.slice(1).map(Number):null;
+ const older=!version||version[0]<major||(version[0]===major&&(version[1]<minor||(version[1]===minor&&version[2]<patch)));
+ if(older)throw Error(`Codex ${MACOS_MIN_CODEX_VERSION} or later is required on macOS for the review read scope`);
+}
+
+/**
+ * Paths besides the target and the Codex runtime that the Reviewer needs: the shared Git metadata (history, refs,
+ * config, other worktrees' index, staged objects and stash; not any checkout's working files) and, on macOS, the
+ * active developer tools that /usr/bin/git runs.
+ */
+export function codexReviewReadablePaths({gitCommonDir}){
+ const paths=gitCommonDir?[gitCommonDir]:[];
+ if(process.platform==='darwin'){
+  const result=spawnSync('xcode-select',['-p'],{encoding:'utf8',timeout:10000});
+  const dir=result.status===0?result.stdout.trim():'';
+  // Only an Xcode or Command Line Tools developer directory; never a broad path such as / or a home directory.
+  if(path.isAbsolute(dir)&&fs.existsSync(dir)){const real=fs.realpathSync(dir);if(/^(?:Developer|CommandLineTools)$/.test(path.basename(real)))paths.push(real);}
+ }
+ return paths;
 }
 
 /** Claude completion rename: no tools at all, so it has no file access to confine. */
@@ -91,7 +163,7 @@ function command(executable,args,{cwd,input,timeout,out,err}){
 
 export async function runHostSession(options){
  const {host,model,ephemeral,timeout,executable}=options;
- const {cwd,targetDirectory,targetHead,readHead}=sessionLocation(options.cwd);
+ const {cwd,targetDirectory,targetHead,readHead,gitCommonDir}=sessionLocation(options.cwd);
  const targetInstruction=`ASC session location: ${JSON.stringify({sessionRoot:cwd,targetDirectory,targetHead})}. The sessionRoot is only the launch/listing location. Review and read files in targetDirectory, never substitute the primary checkout or another worktree. Use absolute paths (or git -C targetDirectory). Read the target's applicable AGENTS.md/CLAUDE.md and nested project rules before work. Verify the target HEAD when Git is available; report a mismatch instead of reviewing another checkout. Do not modify files or use external write tools.`;
  const prompt=fs.readFileSync(options.promptFile,'utf8');if(!prompt.trim())throw Error('Empty session prompt');
  const outputDir=path.resolve(options.outputDir);
@@ -119,16 +191,27 @@ export async function runHostSession(options){
     state.rename=renamed;state.naming=!renamed.error&&renamed.code===0?'completed':'failed';
    }
   }else{
-   rpc=sessionRpc(executable,cwd,{env:hostEnvironment(),timeout,record:line=>{
+   // The npm launcher (bin/codex.js) runs under this Node; its package and native runtime become readable.
+   const codex=resolveExecutable(executable),node=fs.realpathSync(process.execPath),script=/\.m?js$/i.test(codex);
+   const launch=script?node:codex,prefix=script?[codex]:[];
+   if(process.platform==='darwin')assertCodexVersion(spawnSync(launch,[...prefix,'--version'],{encoding:'utf8',timeout:30000,env:hostEnvironment()}).stdout);
+   const permissionProfile=codexReviewProfileName();
+   const profile=codexReviewProfileArguments({profile:permissionProfile,targetDirectory,providerRoots:codexRuntimeRoots(codex),node,readablePaths:codexReviewReadablePaths({gitCommonDir})});
+   state.permissionProfile=permissionProfile;
+   rpc=sessionRpc(launch,cwd,{prefix,args:profile,env:hostEnvironment(),timeout,record:line=>{
     write('events.jsonl',line);
     const message=JSON.parse(line),item=message.params?.item;
     if(message.method==='item/completed'&&message.params?.threadId===state.sessionId&&item?.type==='agentMessage'&&typeof item.text==='string')write('result.txt',item.text+'\n');
    },stderr:b=>write('stderr.txt',b)});
-   await rpc.initialize();
-   const response=await rpc.call('thread/start',{cwd,model,ephemeral,approvalPolicy:'never',sandbox:'read-only',developerInstructions:targetInstruction});
+   // experimentalApi exposes the named-profile fields; the thread must report that profile before any turn.
+   await rpc.initialize({experimentalApi:true});
+   const response=await rpc.call('thread/start',{cwd,model,ephemeral,approvalPolicy:'never',permissions:state.permissionProfile,developerInstructions:targetInstruction});
    state.sessionId=response.thread?.id;if(typeof state.sessionId!=='string'||!state.sessionId)throw Error('Missing Codex thread ID');save();
+   // A same-named profile extended elsewhere could widen reads, so only the unextended profile is accepted.
+   const active=response.activePermissionProfile;
+   if(active?.id!==state.permissionProfile||active.extends!=null)throw Error('Codex did not apply the review permission profile');
    if(!ephemeral){await rpc.call('thread/name/set',{threadId:state.sessionId,name:state.name});state.naming='started';save();}
-   const started=await rpc.call('turn/start',{threadId:state.sessionId,input:[{type:'text',text:prompt}],approvalPolicy:'never',sandboxPolicy:{type:'readOnly'}});
+   const started=await rpc.call('turn/start',{threadId:state.sessionId,input:[{type:'text',text:prompt}],approvalPolicy:'never',permissions:state.permissionProfile});
    const completed=await rpc.wait(message=>message.method==='turn/completed'&&message.params?.threadId===state.sessionId&&message.params?.turn?.id===started.turn.id);
    if(completed.params.turn.status!=='completed')throw Error(`Codex turn ${completed.params.turn.status}`);
    if(!fs.readFileSync(path.join(outputDir,'result.txt'),'utf8').trim())throw Error('Codex returned no response');

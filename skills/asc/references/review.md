@@ -31,7 +31,7 @@ codex exec --ephemeral -s read-only -C /absolute/worktree \
   'この作業場所のskills/asc/references/review.mdを読み、指定した要求・base・HEAD・検証記録を照合して独立レビューする。'
 ```
 
-これは起動形式の例であり、実際の依頼には未記入の要求・base・HEAD・検証記録を補う。`read-only`はそのHostのローカル実行制限であり、MCP等の外部ツールの書込み可否まで証明しない。読取り範囲もworkspaceに限定しない。書込みを要するbuild・テストはその場で成功したとせず、実装担当の同一対象のログを照合するか、許可された実行担当へ依頼する。レビューのためにsandboxを解除しない。
+これは起動形式の例であり、実際の依頼には未記入の要求・base・HEAD・検証記録を補う。`read-only`はそのHostのローカル実行制限であり、MCP等の外部ツールの書込み可否まで証明しない。読取り範囲もworkspaceに限定しない。読取りを対象worktreeに限る必要があれば、名前付きpermissions profileを与える`host-session codex`（[命名と結果保存](host-session.md)）を使う。書込みを要するbuild・テストはその場で成功したとせず、実装担当の同一対象のログを照合するか、許可された実行担当へ依頼する。レビューのためにsandboxを解除しない。
 
 Claude Codeの任意例は、導入済み版の`claude --help`で`-p`・`--tools`・`--restricted`を確認し、プロジェクト契約が許す読取りツールに限定する。例えば `claude -p --no-session-persistence --restricted --tools Read,Glob,Grep --permission-mode dontAsk --strict-mcp-config --settings '{"disableAllHooks":true}' -- '<要求と参照を含む依頼>'`。`--allowedTools`でpathを指定せずに許可すると、user設定等と同様に作業directory外の読取りを許す。Bash・外部連携を追加すればその権限も別途確認する。フラグが存在するだけで安全性が成立したとは扱わず、保護した使い捨てファイルへの書込み拒否などを実環境で検証する。本例の存在をClaude Codeでの実証済み保証としない。
 

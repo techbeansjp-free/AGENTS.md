@@ -1,0 +1,62 @@
+{
+  "condition": "target-cwd",
+  "criteriaSha256": "da3cc1e9870403b5348370a6d0a60af6a56ce433d5accb35487dede079e5e0e6",
+  "launchCwd": "<fixture>/repo/.worktrees/target",
+  "start": {
+    "exit": 0,
+    "jsonOk": true,
+    "sessionId": "b999156e-92e9-47d0-9747-036d8d2b130f",
+    "result": "OK",
+    "stderrEmpty": true
+  },
+  "rename": {
+    "exit": 0,
+    "jsonOk": null,
+    "result": "OK\n",
+    "stderrEmpty": false
+  },
+  "transcriptStoredUnder": {
+    "primaryProject": false,
+    "targetProject": true
+  },
+  "beforeRemove": {
+    "byId": {
+      "exit": 0,
+      "jsonOk": true,
+      "sessionId": "b999156e-92e9-47d0-9747-036d8d2b130f",
+      "result": "OK",
+      "stderrEmpty": true,
+      "sameSession": true
+    },
+    "byName": {
+      "exit": 0,
+      "jsonOk": true,
+      "sessionId": "b999156e-92e9-47d0-9747-036d8d2b130f",
+      "result": "OK",
+      "stderrEmpty": true,
+      "sameSession": true
+    }
+  },
+  "afterRemove": {
+    "byId": {
+      "exit": 0,
+      "jsonOk": true,
+      "sessionId": "b999156e-92e9-47d0-9747-036d8d2b130f",
+      "result": "OK",
+      "stderrEmpty": true,
+      "sameSession": true
+    },
+    "byName": {
+      "exit": 0,
+      "jsonOk": true,
+      "sessionId": "b999156e-92e9-47d0-9747-036d8d2b130f",
+      "result": "OK",
+      "stderrEmpty": true,
+      "sameSession": true
+    }
+  },
+  "transcriptStoredUnderAfter": {
+    "primaryProject": false,
+    "targetProject": true
+  }
+}

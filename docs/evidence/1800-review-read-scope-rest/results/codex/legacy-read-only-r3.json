@@ -1,0 +1,107 @@
+{
+  "condition": "legacy-read-only",
+  "codexHomeConfig": [],
+  "codexHomeInstructions": false,
+  "codexVersion": "codex-cli 0.171.0",
+  "codexArgs": [],
+  "checks": {
+    "target": {
+      "exitCode": 0,
+      "markerRead": true,
+      "stderr": ""
+    },
+    "outside": {
+      "exitCode": 0,
+      "markerRead": true,
+      "stderr": ""
+    },
+    "primaryUntracked": {
+      "exitCode": 0,
+      "markerRead": true,
+      "stderr": ""
+    },
+    "primaryTracked": {
+      "exitCode": 0,
+      "markerRead": true,
+      "stderr": ""
+    },
+    "otherWorktree": {
+      "exitCode": 0,
+      "markerRead": true,
+      "stderr": ""
+    },
+    "externalWorktree": {
+      "exitCode": 0,
+      "markerRead": true,
+      "stderr": ""
+    },
+    "symlinkToOutside": {
+      "exitCode": 0,
+      "markerRead": true,
+      "stderr": ""
+    },
+    "symlinkDirToOutside": {
+      "exitCode": 0,
+      "markerRead": true,
+      "stderr": ""
+    },
+    "symlinkToPrimary": {
+      "exitCode": 0,
+      "markerRead": true,
+      "stderr": ""
+    },
+    "nonTemporaryPath": {
+      "exitCode": 0,
+      "stderr": ""
+    },
+    "userTmpdirListing": {
+      "exitCode": 0,
+      "listedEntries": true
+    },
+    "tmpListing": {
+      "exitCode": 0,
+      "listedEntries": true
+    },
+    "privateTmpListing": {
+      "exitCode": 0,
+      "listedEntries": true
+    },
+    "varTmpListing": {
+      "exitCode": 0,
+      "listedEntries": true
+    },
+    "privateVarTmpListing": {
+      "exitCode": 0,
+      "listedEntries": true
+    },
+    "writeTarget": {
+      "exitCode": 1,
+      "created": false,
+      "stderr": "touch: <fixture>/repo/.worktrees/target/write-probe.txt: Operation not permitted\n"
+    },
+    "localNetwork": {
+      "exitCode": 7,
+      "reached": false,
+      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53767 after 0 ms: Couldn't connect to server\n"
+    },
+    "gitLog": {
+      "exitCode": 0,
+      "stdout": "init\n"
+    },
+    "gitStatus": {
+      "exitCode": 0,
+      "stdout": "?? inside.txt\n?? link-dir\n?? link-file.txt\n?? link-root.txt\n"
+    }
+  },
+  "thread": {
+    "sandbox": {
+      "type": "readOnly",
+      "networkAccess": false
+    },
+    "activePermissionProfile": null,
+    "cwd": "<fixture>/repo",
+    "instructionSources": [
+      "<fixture>/repo/AGENTS.md"
+    ]
+  }
+}
