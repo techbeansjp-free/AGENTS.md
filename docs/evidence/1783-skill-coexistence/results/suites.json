@@ -57,7 +57,30 @@
      true
     ]
    }
-  ]
+  ],
+  "sessionTools": {
+   "iso-read": [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "ToolSearch"
+   ],
+   "iso-write": [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "ToolSearch"
+   ],
+   "iso-net": [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "ToolSearch"
+   ]
+  }
  },
  "diag": {
   "claudeVersion": "2.1.323",
@@ -66,5 +89,12 @@
   "partial": false,
   "runs": 5,
   "errors": []
- }
+ },
+ "modelRunTools": [
+  "Glob",
+  "Grep",
+  "Read",
+  "Skill",
+  "ToolSearch"
+ ]
 }
