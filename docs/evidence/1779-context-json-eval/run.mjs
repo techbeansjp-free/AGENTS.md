@@ -1,7 +1,8 @@
 // #1779の読取り役を、隔離した設定のClaude Codeで起動する測定用script。
 // 使い方:
 //   node run.mjs probe <fixture> <prompt-file> <out-prefix>
-//   node run.mjs measure <cases.json> <asc-cli> <fixture-A> <fixture-AC> <out-dir> <rep> <first-condition> [concurrency]
+//   node run.mjs measure <cases.json> <asc-cli> <fixture-A> <fixture-AC> <out-dir> <rep> <first-condition> [concurrency] [only]
+// onlyは`A_R1,AC_R5`のような条件_ケースのカンマ区切り。失敗した試行だけをやり直すときに使い、他の記録を上書きしない。
 // 出力（stream-json、stderr、prompt、起動設定）はout側だけに書く。fixtureへは書かない。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -69,15 +70,17 @@ if (mode === 'import') {
   const [fixture, promptFile, prefix] = rest;
   console.log(JSON.stringify(await launch(fixture, fs.readFileSync(promptFile, 'utf8'), prefix, 300000)));
 } else if (mode === 'measure') {
-  const [casesFile, cli, fixtureA, fixtureAC, outDir, rep, first, concurrency = '4'] = rest;
+  const [casesFile, cli, fixtureA, fixtureAC, outDir, rep, first, concurrency = '4', only = ''] = rest;
+  const selected = new Set(only.split(',').filter(Boolean));
   const { cases } = JSON.parse(fs.readFileSync(casesFile, 'utf8'));
   const fixtures = { A: fixtureA, AC: fixtureAC };
   const order = first === 'A' ? ['A', 'AC'] : ['AC', 'A'];
   fs.mkdirSync(outDir, { recursive: true });
   // 条件の順序を回ごとに交替する。同じ回の中では、先の条件の全ケースを終えてから後の条件を起動する。
   for (const cond of order) {
-    const jobs = cases.map((c) => async () => {
+    const jobs = cases.filter((c) => !selected.size || selected.has(`${cond}_${c.id}`)).map((c) => async () => {
       const prefix = path.join(outDir, `${cond}_${c.id}_${rep}`);
+      if (fs.existsSync(`${prefix}.jsonl`)) throw Error(`refusing to overwrite ${prefix}; rename a failed attempt to .failed1 first`);
       const context = startContext(cli, fixtures[cond], c.paths);
       fs.writeFileSync(`${prefix}.context.json`, JSON.stringify(context, null, 1));
       const meta = await launch(fixtures[cond], buildPrompt(fixtures[cond], c.req, context), prefix);

@@ -5,6 +5,7 @@
 // - 欠落は「ケース×回×必須規則file」で数える。requiredが空のケースはrecallの対象外。
 // - 不要な規則fileは、rulePrefix配下でrequired・optional・repositoryWideOptionalのいずれでもないfile。
 // - keyに`.failed`を含む試行は、失敗として件数と費用にだけ計上し、recallには使わない。
+// - 期待する48試行の成功記録が揃わない場合はacFullRecallをfalseにする（PRレビュー後に追加。完全な記録では判定は変わらない）。
 // - 採用: A+Cの欠落0（critical欠落0を含む）、かつAの欠落1件以上、かつA+Cの欠落がAより少ない。
 // - 区別できる差: 回ごとの値の範囲（最小〜最大）が条件間で重ならない。
 import fs from 'node:fs';
@@ -61,8 +62,11 @@ result.differences = {
   meanTok: distinct((s) => s.meanTok), meanTu: distinct((s) => s.meanTu), meanWallS: distinct((s) => s.meanWallS),
 };
 const A = result.conditions.A, AC = result.conditions.AC;
+// 期待する全試行（条件×ケース×1〜3回）が成功記録として揃わない限り、採用と判定しない。
+const okKeys = new Set(rows.map((x) => x.key));
+result.missingKeys = spec.cases.flatMap((c) => ['A', 'AC'].flatMap((cond) => [1, 2, 3].map((rep) => `${cond}_${c.id}_${rep}`))).filter((k) => !okKeys.has(k));
 result.verdict = {
-  acFullRecall: AC.misses === 0 && AC.critMisses === 0,
+  acFullRecall: result.missingKeys.length === 0 && AC.misses === 0 && AC.critMisses === 0,
   aHasMiss: A.misses >= 1, acFewerThanA: AC.misses < A.misses,
 };
 result.verdict.adopt = result.verdict.acFullRecall && result.verdict.aHasMiss && result.verdict.acFewerThanA;
