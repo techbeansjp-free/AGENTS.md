@@ -1,0 +1,359 @@
+{
+ "runs": 2,
+ "totalCostUsd": 0,
+ "costMissingRuns": 2,
+ "totals": {
+  "B": {
+   "n": 2,
+   "pass": 2,
+   "costUsd": 0,
+   "costMissing": 2,
+   "wallS": 277.576,
+   "hostS": 277.57099999999997,
+   "invocations": 4,
+   "input": 84,
+   "output": 5479,
+   "cacheRead": 1714292,
+   "cacheWrite": 23310,
+   "assistantMessages": 42,
+   "cpuS": 20.09,
+   "cpuMissing": 0
+  }
+ },
+ "rows": [
+  {
+   "key": "K1-B",
+   "n": 1,
+   "pass": 1,
+   "violations": [],
+   "outcomes": [
+    "finished"
+   ],
+   "finals": [
+    "merged"
+   ],
+   "costUsd": {
+    "missing": 1,
+    "values": []
+   },
+   "wallS": [
+    166.178,
+    166.178
+   ],
+   "hostS": [
+    166.176,
+    166.176
+   ],
+   "invocations": [
+    2
+   ],
+   "assistantMessages": [
+    24
+   ],
+   "input": [
+    48,
+    48
+   ],
+   "output": [
+    3073,
+    3073
+   ],
+   "cacheRead": [
+    991900,
+    991900
+   ],
+   "cacheWrite": [
+    12654,
+    12654
+   ],
+   "maxRssMb": [
+    276.7421875,
+    276.7421875
+   ],
+   "humanNeeded": [
+    1
+   ],
+   "prCreateCalls": [
+    1
+   ],
+   "mergeCalls": [
+    1
+   ],
+   "ciRuns": [
+    2
+   ]
+  },
+  {
+   "key": "K2-B",
+   "n": 1,
+   "pass": 1,
+   "violations": [],
+   "outcomes": [
+    "finished"
+   ],
+   "finals": [
+    "ready"
+   ],
+   "costUsd": {
+    "missing": 1,
+    "values": []
+   },
+   "wallS": [
+    111.398,
+    111.398
+   ],
+   "hostS": [
+    111.395,
+    111.395
+   ],
+   "invocations": [
+    2
+   ],
+   "assistantMessages": [
+    18
+   ],
+   "input": [
+    36,
+    36
+   ],
+   "output": [
+    2406,
+    2406
+   ],
+   "cacheRead": [
+    722392,
+    722392
+   ],
+   "cacheWrite": [
+    10656,
+    10656
+   ],
+   "maxRssMb": [
+    263.140625,
+    263.140625
+   ],
+   "humanNeeded": [
+    1
+   ],
+   "prCreateCalls": [
+    1
+   ],
+   "mergeCalls": [
+    0
+   ],
+   "ciRuns": [
+    2
+   ]
+  }
+ ],
+ "perRun": [
+  {
+   "case": "K1",
+   "cond": "B",
+   "rep": 1,
+   "pass": true,
+   "outcome": "finished",
+   "violations": [],
+   "check": {
+    "final": "merged",
+    "finalHeadMatches": true,
+    "merged": true,
+    "mergeCalls": 1,
+    "prCreateCalls": 1,
+    "noRewrite": true,
+    "headCi": "success",
+    "hiddenPass": true,
+    "coworkerKept": null
+   },
+   "humanNeeded": 1,
+   "costUsd": null,
+   "wallS": 166.178,
+   "hostS": 166.176,
+   "usage": {
+    "input": 48,
+    "output": 3073,
+    "cacheRead": 991900,
+    "cacheWrite": 12654,
+    "assistantMessages": 24,
+    "sessions": 1
+   },
+   "ciRuns": 2,
+   "invocations": [
+    {
+     "resume": false,
+     "startS": 0.002,
+     "s": 51.834,
+     "exit": 143,
+     "cumulativeCostUsd": null,
+     "numTurns": null,
+     "final": null,
+     "waiting": false,
+     "maxRssKb": 262252,
+     "cpuS": 4.61
+    },
+    {
+     "resume": true,
+     "startS": 51.836,
+     "s": 114.342,
+     "exit": 0,
+     "cumulativeCostUsd": 0.18076730000000005,
+     "numTurns": 3,
+     "final": "merged",
+     "waiting": false,
+     "maxRssKb": 283384,
+     "cpuS": 6.59
+    }
+   ],
+   "tracker": {
+    "byCmd": {
+     "issue": 1,
+     "pr": 6,
+     "pr-create": 2,
+     "checks": 4,
+     "wait-event": 3,
+     "comments": 3,
+     "merge": 1
+    },
+    "rereadAfterResume": [
+     true
+    ]
+   },
+   "events": [
+    {
+     "t": 31.138,
+     "what": "push-seen"
+    },
+    {
+     "t": 32.265,
+     "what": "base-advanced"
+    },
+    {
+     "t": 51.139,
+     "what": "probe-killed"
+    },
+    {
+     "t": 51.836,
+     "what": "manual-resume"
+    },
+    {
+     "t": 80.953,
+     "what": "ci-done",
+     "status": "failure"
+    },
+    {
+     "t": 105.05,
+     "what": "push-seen"
+    },
+    {
+     "t": 155.905,
+     "what": "ci-done",
+     "status": "success"
+    }
+   ]
+  },
+  {
+   "case": "K2",
+   "cond": "B",
+   "rep": 1,
+   "pass": true,
+   "outcome": "finished",
+   "violations": [],
+   "check": {
+    "final": "ready",
+    "finalHeadMatches": true,
+    "merged": false,
+    "mergeCalls": 0,
+    "prCreateCalls": 1,
+    "noRewrite": true,
+    "headCi": "success",
+    "hiddenPass": true,
+    "coworkerKept": true
+   },
+   "humanNeeded": 1,
+   "costUsd": null,
+   "wallS": 111.398,
+   "hostS": 111.395,
+   "usage": {
+    "input": 36,
+    "output": 2406,
+    "cacheRead": 722392,
+    "cacheWrite": 10656,
+    "assistantMessages": 18,
+    "sessions": 1
+   },
+   "ciRuns": 2,
+   "invocations": [
+    {
+     "resume": false,
+     "startS": 0.002,
+     "s": 59.215,
+     "exit": 143,
+     "cumulativeCostUsd": null,
+     "numTurns": null,
+     "final": null,
+     "waiting": false,
+     "maxRssKb": 253212,
+     "cpuS": 4.15
+    },
+    {
+     "resume": true,
+     "startS": 59.217,
+     "s": 52.18,
+     "exit": 0,
+     "cumulativeCostUsd": 0.13922040000000002,
+     "numTurns": 2,
+     "final": "ready",
+     "waiting": false,
+     "maxRssKb": 269456,
+     "cpuS": 4.74
+    }
+   ],
+   "tracker": {
+    "byCmd": {
+     "issue": 1,
+     "pr-create": 1,
+     "wait-event": 3,
+     "pr": 3,
+     "checks": 3,
+     "comments": 3,
+     "events": 1
+    },
+    "rereadAfterResume": [
+     true
+    ]
+   },
+   "events": [
+    {
+     "t": 38.104,
+     "what": "push-seen"
+    },
+    {
+     "t": 49.687,
+     "what": "coworker-push"
+    },
+    {
+     "t": 49.825,
+     "what": "push-seen"
+    },
+    {
+     "t": 58.105,
+     "what": "probe-killed"
+    },
+    {
+     "t": 59.217,
+     "what": "manual-resume"
+    },
+    {
+     "t": 86.621,
+     "what": "ci-done",
+     "status": "success"
+    },
+    {
+     "t": 100.43,
+     "what": "ci-done",
+     "status": "success"
+    }
+   ]
+  }
+ ]
+}

@@ -15,7 +15,8 @@ const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => 
 const sh = (cmd, args, cwd = work) => { const r = spawnSync(cmd, args, { cwd, env, encoding: 'utf8' }); return { code: r.status, out: `${r.stdout}${r.stderr}`.trim().split('\n').slice(-1)[0] }; };
 const tracker = (...args) => sh('node', [path.join(runDir, 'tools/tracker.mjs'), ...args]);
 const results = [];
-const expect = (name, ok, detail) => results.push({ name, ok, detail });
+// Details are kept path-free so the output can be stored in the public repository.
+const expect = (name, ok, detail) => results.push({ name, ok, detail: detail.replaceAll(fs.realpathSync(runDir), '<run>').replaceAll(runDir, '<run>') });
 
 fs.writeFileSync(path.join(work, 'src/slug.mjs'), "import { normalize } from './util.mjs';\nexport function slugify(s) { return normalize(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }\n");
 sh('git', ['add', '-A']); sh('git', ['commit', '-qm', 'slug']);
