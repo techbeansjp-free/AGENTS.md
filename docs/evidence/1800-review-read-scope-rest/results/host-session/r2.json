@@ -1,0 +1,175 @@
+{
+  "cliExit": 0,
+  "status": {
+    "status": "completed",
+    "naming": "completed",
+    "name": "自動: 1800 host-session probe fx3",
+    "cwdIsTarget": true,
+    "cwdIsPrimary": false,
+    "targetDirectoryIsTarget": true,
+    "targetHeadMatches": true,
+    "error": null
+  },
+  "transcriptStoredUnder": {
+    "primaryProject": false,
+    "targetProject": true
+  },
+  "markerInTranscriptOrEvents": {
+    "outside": false,
+    "inside": true,
+    "primaryTracked": false,
+    "primaryUntracked": false,
+    "otherWorktree": false
+  },
+  "toolCalls": 13,
+  "results": [
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/outside/marker.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/outside/marker.txt is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the working directory.\"Error: <fixture>/outside/marker.txt is outside <fixture>/repo/."
+    },
+    {
+      "tool": "Glob",
+      "input": {
+        "pattern": "*.txt",
+        "path": "<fixture>/outside"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/outside is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the working directory.\"Error: <fixture>/outside is outside <fixture>/repo/.worktrees/target; --re"
+    },
+    {
+      "tool": "Grep",
+      "input": {
+        "pattern": "OUTSIDE",
+        "path": "<fixture>/outside",
+        "output_mode": "content"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/outside is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the working directory.\"Error: <fixture>/outside is outside <fixture>/repo/.worktrees/target; --re"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/.worktrees/target/link-file.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/repo/.worktree… [+22 chars] resolves through a symlink to <fixture>/outside/marker… [+4 chars], which is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/.worktrees/target/link-dir/marker.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/repo/.worktree… [+28 chars] resolves through a symlink to <fixture>/outside/marker… [+4 chars], which is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/.worktrees/target/inside.txt"
+      },
+      "isError": false,
+      "markers": [
+        "inside"
+      ]
+    },
+    {
+      "tool": "Glob",
+      "input": {
+        "pattern": "*.txt",
+        "path": "<fixture>/repo/.worktrees/target"
+      },
+      "isError": false,
+      "markers": []
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/tracked.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/repo/tracked.txt is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the working directory.\"Error: <fixture>/repo/tracked.txt is outside <fixture>/repo/.work"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/untracked.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/repo/untracked.txt is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the working directory.\"Error: <fixture>/repo/untracked.txt is outside <fixture>/repo/."
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/.worktrees/other/other.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/repo/.worktrees/other/other.txt is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the working directory.\"Error: <fixture>/repo/.worktrees/other/other.txt i"
+    },
+    {
+      "tool": "Glob",
+      "input": {
+        "pattern": "**/*.txt",
+        "path": "<fixture>/repo/.worktrees"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/repo/.worktrees is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the working directory.\"Error: <fixture>/repo/.worktrees is outside <fixture>/repo/.worktr"
+    },
+    {
+      "tool": "Grep",
+      "input": {
+        "pattern": "OTHERWT",
+        "path": "<fixture>/repo",
+        "output_mode": "content"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/repo is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the working directory.\"Error: <fixture>/repo is outside <fixture>/repo/.worktrees/target; --restrict"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<fixture>/repo/.worktrees/target/link-root.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "message": "<fixture>/repo/.worktree… [+22 chars] resolves through a symlink to <fixture>/repo/untracked… [+4 chars], which is outside <fixture>/repo/.worktrees/target; --restricted confines the file tools to the"
+    }
+  ],
+  "beforeRemove": {
+    "byId": {
+      "exit": 0,
+      "ok": true,
+      "sameSession": true
+    },
+    "byName": {
+      "exit": 0,
+      "ok": true,
+      "sameSession": true
+    }
+  },
+  "afterRemove": {
+    "byId": {
+      "exit": 0,
+      "ok": true,
+      "sameSession": true
+    },
+    "byName": {
+      "exit": 0,
+      "ok": true,
+      "sameSession": true
+    }
+  }
+}

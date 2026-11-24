@@ -5,9 +5,9 @@
 | 経路 | 判断 | 理由 |
 | --- | --- | --- |
 | Codex | 実装した | 実行ごとに名前を生成する名前付きpermissions profileで、読取りをOSの最小限と対象worktree等に限れた。起動先（主要checkout）は変えないので、一覧所属は保たれる |
-| Claude Code | 実装しない（ASC ownerの判断待ち） | 起動先を対象worktreeにすると読取りは対象に限られるが、事前に固定した一覧所属の基準のうち項目5（保存先project）を満たさない。主要checkoutのまま拒否ruleを与える案は、起動後に作られたfileを防げない |
+| Claude Code | 実装した（2回目のPR、ASC ownerの判断による） | 起動先を対象worktreeにする案Wを採用した。読取りは対象に限られる。事前に固定した一覧所属の基準のうち項目5（保存先project）は満たさないが、ASC ownerがこれを受け入れて案Wを選んだ（2026-11-24） |
 
-このため本Issueは閉じず、PRは`Relates to #1800`とする。
+1回目のPR（#1802）はCodex経路だけを実装し、`Relates to #1800`とした。Claude Code経路はownerの判断後に2回目のPRで実装し、そのPRで本Issueを閉じる（[Claude Code経路の実装](#claude-code経路の実装案wの採用)）。
 
 ## 対象と環境
 
@@ -72,9 +72,55 @@
 - 案Wでは、起動先の指示file（CLAUDE.md等）が主要checkoutの版でなく対象worktreeの版になる（資料と起動先の違いからの推測。未実測）。
 - 保存先projectを起動先と別に指定する`CLAUDE_CODE_PROJECT_DIR_NAME`は、`CLAUDE_CONFIG_DIR`の設定を要する（資料）。#1793では、別の`CLAUDE_CONFIG_DIR`では未ログインで起動できなかった。このため候補にしていない（未実測）。
 
-推奨（判断はASC owner）：案W。読取り範囲をHostの作業directory制限で強制でき、失うのは項目5だけで、IDと名前での再開はworktreeの削除後も保たれた。案Dは起動後のfileを防げないため、推奨しない。
+推奨（判断はASC owner）：案W。ownerは2026-11-24に推奨どおり案Wを選んだ（[Claude Code経路の実装](#claude-code経路の実装案wの採用)）。読取り範囲をHostの作業directory制限で強制でき、失うのは項目5だけで、IDと名前での再開はworktreeの削除後も保たれた。案Dは起動後のfileを防げないため、推奨しない。
 
-変更しない理由と見直す条件：一覧所属と読取り範囲のどちらを優先するかはownerの判断事項のため、現行のままにした。次のどれかで見直す。ownerが案Wを選ぶ。Claude Codeに保存先projectを起動先と別に指定する手段（認証を分けずに使えるもの）が加わる。拒否ruleに除外の書き方が加わる。
+1回目のPRで変更しなかった理由：一覧所属と読取り範囲のどちらを優先するかはownerの判断事項だったため。見直す条件のうち「ownerが案Wを選ぶ」が満たされ、2回目のPRで実装した。
+
+## Claude Code経路の実装（案Wの採用）
+
+### owner判断と判定基準の扱い
+
+- ASC ownerは2026-11-24に「全部推奨どおりでよい」と回答し、推奨した案Wを採用した。保存先projectが主要checkoutでなくなること（基準の項目5）を受け入れた。
+- `listing-criteria.md`は測定前に固定した基準として変更しない（sha256 `da3cc1e9…e0e6`のまま）。基準による判定は「一覧所属を保てない」のままであり、案Wの採用は基準の判定を変えたものではなく、項目5をownerの判断で要件から外したものである。項目1〜4（完了時の改名、主要checkoutから実行ID・表示名での再開、worktree削除後の再開）は採用後も維持すべき要件とし、下の実測で確かめた。
+- 対象：2回目のPRのbaseは`7392653cb0075b68d06c5547d02fdb74ab5c15a3`（#1802のmerge後のmain）。
+
+### 変更（`src/host-session.mjs`）
+
+- `runHostSession`は、Claude Codeでは起動先（`cwd`）を対象worktreeにし、本体と完了時の改名（`--resume <ID> -n '済: …'`）の両方をそこで起動する。`status.json`の`cwd`は実際の起動先（対象worktree）になる。
+- `claudeReviewArguments`は起動先と対象を受け取らず、`--add-dir`を付けない。`--restricted`・`--tools Read,Glob,Grep`・`--permission-mode dontAsk`・`--strict-mcp-config`・hook無効は従来どおり。
+- Codexは変えない（起動先は主要checkout、読取りは名前付きprofile）。
+- 主要checkoutの解決（bare構成・壊れたGit metadataで起動前に停止）と対象HEADの確認（本体後・改名後）は両Hostで従来どおり行う。対象が主要checkoutそのもの・非Gitの場合は、従来から起動先＝対象であり変わらない。
+
+### 実測（`host-session-probe.mjs`、各1回×3、`results/host-session/`）
+
+実装した`host-session claude`のCLIそのもの（`node bin/asc-v05.mjs host-session claude <対象worktree> --model haiku --rename-model haiku`）を、合成fixture（`setup-fixture.mjs`、実行ごとに新規）で起動した。依頼は`probe-run.mjs`と同じ13件のtool呼出しである。`host-session`の出力（JSON）はtool結果を含まないため、各呼出しの成否とmarkerは、保存されたsessionのtranscript（合成fixtureのものだけ）から判定した。transcriptでは同じtool結果が2回記録されたため、`tool_use_id`ごとに1件として数えた。その後、主要checkoutから実行IDと表示名（`済: 自動: …`）で`--resume`し、対象worktreeを削除して再度行った。
+
+| 確認 | 3回の結果 |
+| --- | --- |
+| `host-session`の終了コード、`status`・`naming` | 0、`completed`・`completed`（3回とも） |
+| `status.json`の`cwd` | 対象worktree（主要checkoutではない）、`targetHead`は対象のHEADと一致 |
+| 1〜5 外のRead・Glob・Grep、外へのsymlink | 拒否 |
+| 6〜7 対象のRead・Glob（陽性対照） | 成功（対象のmarkerが出た） |
+| 8〜13 主要checkoutのGit管理・Git管理外file、別worktree、`.worktrees`のGlob、主要checkoutのGrep、主要checkoutを指すsymlink | 拒否 |
+| transcriptと出力全体のmarker | 対象のmarkerだけ（外・主要checkoutのGit管理/管理外・別worktreeは出ない） |
+| 保存先project | 対象worktreeのproject（主要checkoutのprojectには無い） |
+| 主要checkoutから実行ID・表示名で`--resume`（削除前・削除後） | 4件とも成功し、同じsession |
+
+本体の費用は1回あたり約0.0036 USD（haiku、3回の`total_cost_usd`）。最初の1回はtranscriptの重複を数え分けないscriptで行ったため結果を採らず、scriptを直して3回を測り直した（判定は同じだった）。測定後、fixtureのsessionを`claude purge -y <fixtureの主要checkout>`で削除し（入れ子の対象worktreeのprojectも削除された）、`--dry-run`で残りが無いことを確かめた。
+
+### CIで検査すること（追加分）
+
+`test/test_host_session.mjs`：
+
+- Claude Codeでは、本体と改名の両方が対象worktreeで起動され、`status.json`の`cwd`が対象worktreeである。どの呼出しにも`--add-dir`が無い。追加指示に対象のpathとHEADがあり、主要checkoutのpathは無い。改名は同じIDに`-n '済: 自動: …'`を送る。
+- Codexでは従来どおり起動先が主要checkoutで、profileは対象と共有のGit metadataだけを読ませる。
+- 対象が主要checkoutそのもの・非Gitのdirectoryの場合、両Hostで起動先＝対象になる。
+- `claudeReviewArguments`は永続・非永続とも`--add-dir`を含まない。
+
+### 品質検査（2回目のPR）
+
+- Linux container（`node:20.19.5-bookworm`、network none、read-only root）：`node --test test/test_host_session.mjs`は38件成功。
+- その他の結果はPRに記録する。
 
 ## Codex経路
 
@@ -149,12 +195,12 @@
 
 - Codex：modelを呼ぶturnでの読取り（外部serviceへ送らない方針による）。turnのshell実行は`command/exec`と同じprofileの下で動く前提で、`activePermissionProfile`で適用を確かめている。shell以外の組込みtool（画像の表示等）の読取りがprofileに従うか。
 - Codex：Linux・Windowsでのprofileの効き方。npm導入（launcherをNodeで起動し、`codexRuntimeRoots`のpackageを許可する。ASCの他のCodex起動と同じ扱い）等、Homebrew cask以外の導入形態。許可が足りなければ`thread/start`かturn中のtoolが失敗する想定で、読取りを広げては続行しない。`/usr/bin/git`以外のgit。家directoryのfileへの反例（実設定を読まないため、一時directory外のfileとしてこのcheckoutの公開fileで代用した）。
-- Claude Code：案Dの一覧所属。案Wでの指示file（CLAUDE.md等）の読込み元。session pickerの表示。
+- Claude Code：案Dの一覧所属。案Wでの指示file（CLAUDE.md等）の読込み元。session pickerの表示。Linux・Windowsでの案W（起動先の解決はunit testで検査した）。
 - `host-session codex`の全経路（turnがmodelを呼ぶため）。起動引数の組立ては偽のHostで検査した。
 
 ## 残る制限
 
-- Claude Code経路：主要checkout内のfile（Git管理外のfile、他のworktree）は引き続き読める。ownerの判断後に対応する。
+- Claude Code経路：sessionは対象worktreeのprojectに保存され、主要checkoutのproject単位の一覧（`claude purge <主要checkout>`等の操作、pickerの既定表示）では見つからない。主要checkoutから実行IDか表示名で再開する（ownerが受け入れた制限）。
 - Codex経路：共有のGit metadata（全branchの履歴、ref、`.git/config`、他worktreeのindex・stage済みの内容・stash）は読める。macOSの開発toolのdirectoryは`xcode-select -p`の結果で、`DEVELOPER_DIR`等で利用者が変えられる（PATHと同じく利用者の管理下とした）。ただし名前が`Developer`か`CommandLineTools`で終わるdirectoryだけを許可し、それ以外（`/`や家directory等）は加えない。判定は名前だけなので、`DEVELOPER_DIR`を家directoryの下の`Developer`等の同名directoryに向けると、その全体が読取りに入る（利用者の設定の誤りが必要なため、構造の判定は加えていない）。この判定はmacOSでしか動かず、単体テストでは固定していない。同名のprofileは設定から合成されるが（実測）、profile名を実行ごとに生成するため衝突しない。managed設定の`requirements.toml`による制約は確認していない。
 - Codex経路の`thread/start`・`turn/start`の`permissions`と`activePermissionProfile`は実験的APIの項目で、版により変わりうる。応答に無ければ失敗して止まる。
 - Codex経路：Codexが起動するMCP server等はsandboxの外で動き、このprofileでは読取りを限定できない（Claude Code経路の`--strict-mcp-config`に当たるものは入れていない）。
@@ -187,6 +233,14 @@
 - `skills/asc/references/host-session.md`、`skills/asc/references/review.md`：Codex経路の読取り範囲の説明を更新した。配布物に含まれる。
 
 配布物に入らない変更path：`test/test_host_session.mjs`、`docs/evidence/1800-review-read-scope-rest/`。
+
+2回目のPR（Claude Code経路）で配布境界に入る変更path：
+
+- `src/host-session.mjs`：Claude Code経路の起動先を対象worktreeにし、`--add-dir`を外した。配布物に含まれる。
+- `skills/asc/references/host-session.md`：起動先・読取り範囲・一覧の確認方法の説明を実態に合わせた。配布物に含まれる。
+- `v05/USAGE.md`：`host-session`の起動先の説明を実態に合わせた。配布物に含まれる。
+
+`skills/asc/references/review.md`は、Claude Code経路の一覧所属や`--add-dir`に触れる記述が無いため変更していない。2回目のPRで配布物に入らない変更path：`test/test_host_session.mjs`、`docs/evidence/1800-review-read-scope-rest/`（`README.md`、`host-session-probe.mjs`、`results/host-session/`）。
 
 ## 品質検査
 

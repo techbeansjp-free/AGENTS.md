@@ -688,4 +688,4 @@ Codexは、trustしていないprojectの設定と、`/hooks`でreviewしてtrus
 
 ## 独立レビュー・相談の別セッション
 
-`host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory>`で指定した対象を読む新規セッションを起動します。Git worktreeの場合、Hostの起動先・一覧上のcwdはrepository root、レビュー対象は指定worktreeとそのHEADに分離します。結果保存後に`自動: <内容>`から`済: 自動: <内容>`へ改名します。Claude CodeとCodexの両方に対応し、非永続は`--ephemeral`で明示します。改名失敗でも本体の結果を保持します。権限制限・復旧・未対応版の扱いは[別セッションの手順](../skills/asc/references/host-session.md)を参照してください。
+`host-session <claude|codex> <project-directory> --name <内容> --model <model> --prompt-file <file> --output-dir <new-directory>`で指定した対象を読む新規セッションを起動します。Git worktreeの場合、レビュー対象は指定worktreeとそのHEADです。Claude Codeは読取りを起動先に閉じるため指定worktreeから起動し、Codexは一覧上のcwdをrepository rootにして読取りを名前付きprofileで対象に限ります。結果保存後に`自動: <内容>`から`済: 自動: <内容>`へ改名します。Claude CodeとCodexの両方に対応し、非永続は`--ephemeral`で明示します。改名失敗でも本体の結果を保持します。権限制限・復旧・未対応版の扱いは[別セッションの手順](../skills/asc/references/host-session.md)を参照してください。

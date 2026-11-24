@@ -63,7 +63,7 @@ for(const host of ['claude','codex']){
   if(host==='claude'){
    assert(calls[0].includes('自動: '+options.name));assert(calls[1].includes('済: 自動: '+options.name));
    assert(calls[1].includes(result.sessionId));assert(calls[0].includes('dontAsk'));assert(calls[0].includes('--strict-mcp-config'));
-   assert.deepEqual(calls[0],claudeReviewArguments({model:options.model,sessionId:result.sessionId,instruction:calls[0][calls[0].indexOf('--append-system-prompt')+1],cwd:result.cwd,targetDirectory:result.targetDirectory,ephemeral:false,name:result.name}),'The Host receives exactly the read-scope-confined arguments');
+   assert.deepEqual(calls[0],claudeReviewArguments({model:options.model,sessionId:result.sessionId,instruction:calls[0][calls[0].indexOf('--append-system-prompt')+1],ephemeral:false,name:result.name}),'The Host receives exactly the read-scope-confined arguments');
    assert.equal(calls[1][calls[1].indexOf('--tools')+1],'');
    for(const call of calls)assert.deepEqual(JSON.parse(call[call.indexOf('--settings')+1]),{disableAllHooks:true});
    assert.equal(calls[1][calls[1].indexOf('--model')+1],options.model);
@@ -147,16 +147,21 @@ function linkedTarget(root){
  fs.writeFileSync(path.join(target,'marker.txt'),'TARGET');git(target,'commit','-am','target');
  return {primary:fs.realpathSync(primary),target:fs.realpathSync(target),head:git(target,'rev-parse','HEAD')};
 }
-for(const host of ['claude','codex'])test(`${host}: launch and rename at primary root but bind a different worktree HEAD`,async t=>{
+// #1800: Claude confines reads to its launch directory, so it launches in the target; Codex keeps the primary root.
+for(const host of ['claude','codex'])test(`${host}: launch and rename in the expected directory and bind a different worktree HEAD`,async t=>{
  const {root,options}=fixture(t,host);const {primary,target,head}=linkedTarget(root);options.cwd=target;
  const result=await runHostSession(options);assert.equal(result.status,'completed');assert.equal(result.naming,'completed');
- assert.equal(result.cwd,primary);assert.equal(result.targetDirectory,target);assert.equal(result.targetHead,head);
- assert(fs.readFileSync(path.join(root,'cwd'),'utf8').trim().split('\n').every(cwd=>cwd===primary));
+ const launch=host==='claude'?target:primary;
+ assert.equal(result.cwd,launch);assert.equal(result.targetDirectory,target);assert.equal(result.targetHead,head);
+ const launches=fs.readFileSync(path.join(root,'cwd'),'utf8').trim().split('\n');
+ assert.equal(launches.length,host==='claude'?2:1);assert(launches.every(cwd=>cwd===launch),'Review and rename run in the recorded cwd');
+ assert.equal(JSON.parse(fs.readFileSync(path.join(options.outputDir,'status.json'),'utf8')).cwd,launch);
  const calls=fs.readFileSync(path.join(root,'calls'),'utf8').trim().split('\n').map(JSON.parse);
  if(host==='claude'){
-  assert.equal(calls[0][calls[0].indexOf('--add-dir')+1],target);
+  assert(!calls.some(call=>call.includes('--add-dir')),'The primary checkout is never a working directory');
   const instruction=calls[0][calls[0].indexOf('--append-system-prompt')+1];assert(instruction.includes(head));assert(instruction.includes(JSON.stringify(target)));
-  assert(calls[1].includes(result.sessionId));
+  assert(!instruction.includes(JSON.stringify(primary)),'The instruction does not point the Reviewer at the primary checkout');
+  assert(calls[1].includes(result.sessionId));assert.equal(calls[1][calls[1].indexOf('-n')+1],'済: '+result.name);
  }else{
   const start=calls.find(c=>c.method==='thread/start');assert.equal(start.params.cwd,primary);
   assert(start.params.developerInstructions.includes(head));assert(start.params.developerInstructions.includes(JSON.stringify(target)));
@@ -166,9 +171,11 @@ for(const host of ['claude','codex'])test(`${host}: launch and rename at primary
  }
  assert.equal(fs.readFileSync(path.join(primary,'marker.txt'),'utf8'),'PRIMARY');
 });
-test('root input and non-Git input preserve their launch directory',async t=>{
- const {root,options}=fixture(t,'codex');const {primary}=linkedTarget(root);options.cwd=primary;
+for(const host of ['claude','codex'])test(`${host}: root input and non-Git input preserve their launch directory`,async t=>{
+ const {root,options}=fixture(t,host);const {primary}=linkedTarget(root);options.cwd=primary;
  const result=await runHostSession(options);assert.equal(result.status,'completed');assert.equal(result.cwd,primary);assert.equal(result.targetDirectory,primary);
+ const plain=path.join(root,'plain');fs.mkdirSync(plain);options.cwd=plain;options.outputDir=path.join(root,'result-plain');
+ const other=await runHostSession(options);assert.equal(other.status,'completed');assert.equal(other.cwd,fs.realpathSync(plain));assert.equal(other.targetDirectory,fs.realpathSync(plain));assert.equal(other.targetHead,null);
 });
 test('broken Git metadata fails before launching or creating output',async t=>{
  const {root,options}=fixture(t,'codex');fs.writeFileSync(path.join(root,'.git'),'gitdir: /no-such-asc-root\n');
@@ -216,9 +223,9 @@ for(const host of ['claude','codex'])test(`${host}: Host and rename drop Git ove
 
 // #1793: read scope must come from launch settings. Live counterexamples are recorded in docs/evidence/1793-host-session-read-scope/.
 test('claude review arguments confine reads by launch settings and never grant path-unrestricted reads',()=>{
- const common={model:'m',sessionId:'00000000-0000-4000-8000-000000000000',instruction:'i',cwd:'/r',name:'自動: n'};
- for(const [targetDirectory,ephemeral] of [['/r',false],['/r/.worktrees/t',false],['/r/.worktrees/t',true]]){
-  const args=claudeReviewArguments({...common,targetDirectory,ephemeral});
+ const common={model:'m',sessionId:'00000000-0000-4000-8000-000000000000',instruction:'i',name:'自動: n'};
+ for(const ephemeral of [false,true]){
+  const args=claudeReviewArguments({...common,ephemeral});
   assert(args.includes('--restricted'),'Ignore user/project/local settings and confine file tools to working directories');
   assert.equal(args.indexOf('--restricted'),args.lastIndexOf('--restricted'));
   assert(!args.some(a=>/^--allowed-?tools$/i.test(a)),'A bare Read/Glob/Grep allow rule has no path limit');
@@ -227,8 +234,7 @@ test('claude review arguments confine reads by launch settings and never grant p
   assert.equal(args[args.indexOf('--tools')+1],'Read,Glob,Grep');
   assert(args.includes('--strict-mcp-config'));
   assert.deepEqual(JSON.parse(args[args.indexOf('--settings')+1]),{disableAllHooks:true},'No extra allow rules or additionalDirectories through flag settings');
-  const dirs=args.flatMap((a,i)=>a==='--add-dir'?[args[i+1]]:[]);
-  assert.deepEqual(dirs,targetDirectory===common.cwd?[]:[targetDirectory],'Only the reviewed worktree is added to the working directories');
+  assert(!args.includes('--add-dir'),'The launch directory (the review target) is the only working directory');
   assert.equal(args.includes('--no-session-persistence'),ephemeral);assert.equal(args.includes('-n'),!ephemeral);
  }
 });
