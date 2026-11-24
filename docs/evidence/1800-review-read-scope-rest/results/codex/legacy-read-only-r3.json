@@ -52,6 +52,9 @@
       "exitCode": 0,
       "stderr": ""
     },
+    "userTmpdirListing": {
+      "exitCode": 0
+    },
     "writeTarget": {
       "exitCode": 1,
       "created": false,
@@ -60,7 +63,7 @@
     "localNetwork": {
       "exitCode": 7,
       "reached": false,
-      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 52826 after 0 ms: Couldn't connect to server\n"
+      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53129 after 0 ms: Couldn't connect to server\n"
     },
     "gitLog": {
       "exitCode": 0,

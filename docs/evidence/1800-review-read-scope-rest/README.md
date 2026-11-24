@@ -19,13 +19,14 @@
 | Codex CLI | 0.171.0（modelを呼ぶ実行はしていない） |
 | Node | v20.12.2（macOS）、v20.19.5（Linux container） |
 | OS | macOS（Darwin 25.6.0） |
+| Codexの導入形態 | Homebrew cask（native実行file。PATH上のsymlinkが実体を指す） |
 
 ## 方法
 
-`setup-fixture.mjs <directory>`で合成fixtureを作る。主要checkout（`repo`、Git管理のfile・Git管理外のfile・AGENTS.md）、その中の対象worktree（`.worktrees/target`）と別のworktree（`.worktrees/other`）、主要checkout外のworktree（`external-target`）、repositoryの外の`outside`を置く。markerは乱数の無害な値である。対象worktreeには、外のfile・directoryと主要checkoutのGit管理外fileを指すsymlinkを置いた。fixtureは一時directoryに作った。
+`setup-fixture.mjs <directory>`で合成fixtureを作る。主要checkout（`repo`、Git管理のfile・Git管理外のfile・AGENTS.md）、その中の対象worktree（`.worktrees/target`）と別のworktree（`.worktrees/other`）、主要checkout外のworktree（`external-target`）、repositoryの外の`outside`を置く。markerは乱数の無害な値である。対象worktreeには、外のfile・directoryと主要checkoutのGit管理外fileを指すsymlinkを置いた。fixtureは一時directory（`/private/tmp`の下）に作った。`setup-fixture.mjs`は新規か空のdirectoryにだけ作る。
 
 - `probe-run.mjs`：Claude Codeを`host-session`と同じ制限（`--restricted --tools Read,Glob,Grep --permission-mode dontAsk --strict-mcp-config`、hook無効、`--no-session-persistence`）で起動し、13件のtool呼出しを依頼する。stream-jsonのtool結果にmarkerが出たかを機械的に判定する。modelはhaiku。
-- `listing-probe.mjs`：永続sessionを`host-session`と同じ引数builder（`claudeReviewArguments`・`claudeRenameArguments`）で作り、改名し、主要checkoutから実行IDと表示名で`--resume`する。対象worktreeを削除した後にも同じことを行う。判定基準は測定前に`listing-criteria.md`として固定した（commit `4f6b12d8`、sha256 `da3cc1e9…e0e6`）。
+- `listing-probe.mjs`：永続sessionを`host-session`と同じ引数builder（`claudeReviewArguments`・`claudeRenameArguments`）で作り、改名し、主要checkoutから実行IDと表示名で`--resume`する。対象worktreeを削除した後にも同じことを行う。判定基準は測定前に`listing-criteria.md`として固定した（commit `4f6b12d8`、sha256 `da3cc1e9…e0e6`）。保存先は、資料にある保存場所（`<設定directory>/projects/<起動先のpathの英数字以外を-にした名前>/<session ID>.jsonl`）のfileの有無で判定し、真偽だけを出力する。Hostのstderrは利用者の設定fileの名前を含みうるため、空かどうかだけを残す。
 - `codex-probe.mjs`：`codex app-server`に`initialize`、`thread/start`（ephemeral）、`command/exec`だけを送る。`turn/start`を送らないので、modelは呼ばれない。`command/exec`は、app-serverの設定で決まるpermissions（本変更では`default_permissions`）の下でcommandを実行する。`CODEX_HOME`は使い捨てのdirectoryにした（利用者の`~/.codex`は読み書きしない）。
 
 ## Claude Code経路の比較
@@ -52,13 +53,15 @@
 
 ### 一覧所属（`results/listing/`、基準は`listing-criteria.md`）
 
+測定は2回行った。1回目は保存先をscriptの外で確かめ（`claude purge --dry-run`の表示と保存directoryの一覧）、結果fileを手で要約したため、独立レビューの指摘を受けてscript自体が保存先を判定するように直し、新しいfixtureで2回目を測った。`results/listing/`は2回目のscriptの出力そのものである。判定は2回とも同じだった。
+
 | 基準 | 現行 | 案W |
 | --- | --- | --- |
 | 1 完了時の改名（`済: 自動: …`） | 成功（終了コード0） | 成功（終了コード0） |
 | 2 主要checkoutから実行IDで`--resume` | 成功（同じsession ID） | 成功（同じsession ID） |
 | 3 主要checkoutから表示名で`--resume` | 成功 | 成功 |
 | 4 対象worktreeの削除後の2と3 | 成功 | 成功 |
-| 5 保存先projectが主要checkout | 満たす | 満たさない（対象worktreeのprojectに保存された） |
+| 5 保存先projectが主要checkout | 満たす | 満たさない（対象worktreeのprojectに保存され、削除後もそのまま） |
 
 案Wは項目5を満たさないため、基準により「一覧所属を保てない」と判定した。案Dは起動先と引数以外を変えないため、保存先は現行と同じになる（案Dの一覧所属は測定していない）。
 
@@ -93,6 +96,7 @@
 | 別worktree、主要checkout外のworktree | 読めた | 拒否 |
 | 主要checkoutを指すsymlink | 読めた | 拒否 |
 | 一時directory外のfile（このcheckoutの公開AGENTS.md。終了コードだけ記録） | 読めた | 拒否 |
+| 利用者単位の一時directory（`os.tmpdir()`。一覧の終了コードだけ記録） | 読めた | 拒否 |
 | 対象worktreeへの書込み | 拒否 | 拒否 |
 | localhostへの接続 | 拒否 | 拒否 |
 | 対象での`git log`・`git status` | 成功 | 成功 |
@@ -107,8 +111,9 @@
 - app-serverを`-c project_doc_max_bytes=0 -c default_permissions="asc_review" -c permissions.asc_review.filesystem={…}`で起動する（`codexReviewProfileArguments`）。filesystemは`:minimal`の読取り、`/tmp`・`/private/tmp`・`/private/var/tmp`の拒否、`codexReviewReadablePaths`のpath、対象worktreeの読取りである。書込みのentryは無い。
 - `codexReviewReadablePaths`は、Codexの実行fileの実体、共有のGit metadata（`git rev-parse --git-common-dir`）、macOSでは`xcode-select -p`の開発toolを返す。理由は次のとおり（いずれも実測）。
   - sandbox内の補助処理（AGENTS.md読込み等）がCodexの実行fileを再実行する。symlink（`/usr/local/bin/codex`等）のpathを許可しても実行できず、symlinkを解決した実体を起動し、その実体を許可すると実行できた（`resolveExecutable`）。
-  - `:minimal`には一時directory（`/private/tmp`・`/private/var/tmp`）の読取りが含まれた。fixtureを一時directoryに置いたため、拒否を加えないと外のmarkerを読めた。
-  - 対象worktreeの`.git`は共有のGit metadataを指すため、これが無いとgitが使えない。`/usr/bin/git`は開発toolを実行するため、それも必要だった。共有のGit metadataにはcommit済みの履歴・ref・設定が含まれ、主要checkoutや他worktreeの作業treeのfileは含まない。
+  - `:minimal`には一時directory（`/private/tmp`・`/private/var/tmp`）の読取りが含まれた。fixtureを一時directoryに置いたため、拒否を加えないと外のmarkerを読めた。利用者単位の一時directory（macOSの`$TMPDIR`）は拒否を加えなくても読めなかった（実測）。
+  - 対象worktreeとfixtureは`/private/tmp`の下にあるが、対象は読めた。拒否より具体的なpathの読取り許可が優先される（実測）。
+  - 対象worktreeの`.git`は共有のGit metadataを指すため、これが無いとgitが使えない。`/usr/bin/git`は開発toolを実行するため、それも必要だった。共有のGit metadataには全branchの履歴・ref・設定のほか、他worktreeのindex・stage済みの内容・stashのobjectも含まれる。各checkoutの作業treeのfile（Git管理外のfileを含む）は含まない。
 - 起動先（主要checkout）は読めないため、そこにAGENTS.mdがあると`thread/start`が「failed to load AGENTS.md instructions」で失敗した（実測）。起動先のAGENTS.mdは対象とは別の版でもあるため、`project_doc_max_bytes=0`で自動読込みを止めた。Reviewerは従来どおり指示に従って対象側の規約を読む。
 - `initialize`で`experimentalApi`を有効にし、`thread/start`と`turn/start`に`permissions: "asc_review"`を渡す（`sandbox`・`sandboxPolicy`は渡さない）。`thread/start`の応答の`activePermissionProfile.id`が`asc_review`でなければ、turnを始めずに失敗する。
 
@@ -119,7 +124,7 @@
 - 偽のCodex Hostが受け取る起動引数が、`codexReviewProfileArguments(対象, codexReviewReadablePaths(…))`と完全に一致する。Git管理の対象では共有のGit metadataが含まれ、主要checkoutは含まれない。
 - profileの文字列（`:root`・`write`・`:workspace_roots`を含まない、TOMLの文字列として逃がす、相対pathを拒否する）。
 - `thread/start`・`turn/start`が`permissions: "asc_review"`を持ち、`sandbox`・`sandboxPolicy`を持たない。`initialize`が`experimentalApi`を有効にする。
-- `activePermissionProfile`が無い応答では、`turn/start`を送らずに失敗する。
+- `activePermissionProfile`が無い応答と別のprofileの応答では、`turn/start`を送らずに失敗する。
 - 実行fileをPATHとsymlinkから実体へ解決し、見つからない・実行できない場合は失敗する。
 
 実際のHostでの実測はこのEvidenceだけにあり、CIでは行わない。
@@ -134,14 +139,14 @@
 未実測：
 
 - Codex：modelを呼ぶturnでの読取り（外部serviceへ送らない方針による）。turnのshell実行は`command/exec`と同じprofileの下で動く前提で、`activePermissionProfile`で適用を確かめている。shell以外の組込みtool（画像の表示等）の読取りがprofileに従うか。
-- Codex：Linux・Windowsでのprofileの効き方。Nodeのwrapper等、実行fileの再実行ができない導入形態（`thread/start`の失敗で止まる想定）。Homebrew等、`/usr/bin/git`以外のgit。
+- Codex：Linux・Windowsでのprofileの効き方。npm導入（Nodeのwrapperがnative実行fileを起動する）等、Homebrew cask以外の導入形態。実行fileの再実行が許可と食い違えば`thread/start`が失敗して止まる想定で、#1800より前に動いていた導入形態で動かなくなる可能性がある。`/usr/bin/git`以外のgit。家directoryのfileへの反例（実設定を読まないため、一時directory外のfileとしてこのcheckoutの公開fileで代用した）。
 - Claude Code：案Dの一覧所属。案Wでの指示file（CLAUDE.md等）の読込み元。session pickerの表示。
 - `host-session codex`の全経路（turnがmodelを呼ぶため）。起動引数の組立ては偽のHostで検査した。
 
 ## 残る制限
 
 - Claude Code経路：主要checkout内のfile（Git管理外のfile、他のworktree）は引き続き読める。ownerの判断後に対応する。
-- Codex経路：共有のGit metadata（全branchのcommit済み履歴、ref、`.git/config`）は読める。managed設定やproject設定が同名のprofileを変えた場合の挙動は確認していない（`-c`の指定が優先されることは利用者設定で確認した）。
+- Codex経路：共有のGit metadata（全branchの履歴、ref、`.git/config`、他worktreeのindex・stage済みの内容・stash）は読める。macOSの開発toolのdirectoryは`xcode-select -p`の結果で、`DEVELOPER_DIR`等で利用者が変えられる（PATHと同じく利用者の管理下とした）。managed設定やproject設定が同名のprofileを変えた場合の挙動は確認していない（`-c`の指定が優先されることは利用者設定で確認した）。
 - Codex経路の`thread/start`・`turn/start`の`permissions`と`activePermissionProfile`は実験的APIの項目で、版により変わりうる。応答に無ければ失敗して止まる。
 
 ## 片付け

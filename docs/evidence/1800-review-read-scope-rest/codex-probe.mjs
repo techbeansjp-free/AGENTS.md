@@ -6,6 +6,7 @@
 //            as host-session (Host executable, shared Git metadata, macOS developer tools).
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import {createInterface} from 'node:readline';
@@ -61,6 +62,9 @@ try {
   }
   const nonTmpRead = await exec(['/bin/cat', nonTmp]);
   result.checks.nonTemporaryPath = {exitCode: nonTmpRead.exitCode, stderr: hide(nonTmpRead.stderr).slice(0, 160)};
+  // The per-user temporary directory (macOS $TMPDIR under /private/var/folders): listing exit code only, no content.
+  const tmpdirList = await exec(['/bin/ls', fs.realpathSync(os.tmpdir())]);
+  result.checks.userTmpdirListing = {exitCode: tmpdirList.exitCode};
   const write = await exec(['/usr/bin/touch', path.join(target, 'write-probe.txt')]);
   result.checks.writeTarget = {exitCode: write.exitCode, created: fs.existsSync(path.join(target, 'write-probe.txt')), stderr: hide(write.stderr).slice(0, 160)};
   fs.rmSync(path.join(target, 'write-probe.txt'), {force: true});

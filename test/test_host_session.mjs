@@ -31,7 +31,7 @@ if(${JSON.stringify(mode)}!=='rename-mutate')await mutate();`;
  const m=JSON.parse(line);fs.appendFileSync(${JSON.stringify(path.join(root,'calls'))},line+'\\n');
  if(m.method==='initialized')return;
  if(m.method==='initialize')return send({id:m.id,result:{}});
- if(m.method==='thread/start')return send({id:m.id,result:{thread:{id:'thread-owned'},...(${JSON.stringify(mode)}==='no-profile'?{}:{activePermissionProfile:{id:m.params.permissions}})}});
+ if(m.method==='thread/start')return send({id:m.id,result:{thread:{id:'thread-owned'},...(${JSON.stringify(mode)}==='no-profile'?{}:{activePermissionProfile:{id:${JSON.stringify(mode)}==='other-profile'?':read-only':m.params.permissions}})}});
  if(m.method==='thread/name/set'){
  names++;if(names===2&&${JSON.stringify(mode)}==='rename-mutate')await mutate();if(${JSON.stringify(mode)}==='start-name-fail'||(${JSON.stringify(mode)}==='rename-fail'&&names===2))return send({id:m.id,error:{message:'name unavailable'}});
  return send({id:m.id,result:{}});}
@@ -90,8 +90,8 @@ for(const host of ['claude','codex']){
   assert(host==='claude'?calls.includes('--no-session-persistence'):calls.includes('"ephemeral":true'));
  });
 }
-test('Codex without the review permission profile stops before model turn',async t=>{
- const {root,options}=fixture(t,'codex','no-profile');const result=await runHostSession(options);
+for(const mode of ['no-profile','other-profile'])test(`Codex without the review permission profile stops before model turn (${mode})`,async t=>{
+ const {root,options}=fixture(t,'codex',mode);const result=await runHostSession(options);
  assert.equal(result.status,'failed');assert.match(result.error,/permission profile/);
  assert(!fs.readFileSync(path.join(root,'calls'),'utf8').includes('turn/start'));
 });

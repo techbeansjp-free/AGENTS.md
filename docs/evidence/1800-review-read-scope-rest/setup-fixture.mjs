@@ -1,5 +1,5 @@
 // Create the synthetic fixture for probe-run.mjs and codex-probe.mjs.
-// Usage: node setup-fixture.mjs <empty-or-disposable-directory>
+// Usage: node setup-fixture.mjs <new-or-empty-directory>
 // Layout: <dir>/{repo (primary checkout), repo/.worktrees/{target,other}, outside, external-target}.
 // Markers are random harmless values; nothing here is a real secret or user setting.
 import fs from 'node:fs';
@@ -13,7 +13,8 @@ const repo = path.join(P, 'repo'), target = path.join(repo, '.worktrees/target')
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
 const git = (...args) => execFileSync('git', ['-C', repo, '-c', 'user.email=probe@example.invalid', '-c', 'user.name=probe', ...args], {stdio: 'ignore', env});
 const marker = (file, prefix) => fs.writeFileSync(file, `${prefix}-${randomBytes(8).toString('hex')}\n`);
-fs.rmSync(P, {recursive: true, force: true});
+// Never delete: the directory must be new (or empty) so a mistyped path cannot remove existing files.
+if (fs.existsSync(P) && fs.readdirSync(P).length) throw Error('fixture directory must be new or empty');
 fs.mkdirSync(outside, {recursive: true});
 fs.mkdirSync(repo);
 git('init', '-q', '-b', 'main');

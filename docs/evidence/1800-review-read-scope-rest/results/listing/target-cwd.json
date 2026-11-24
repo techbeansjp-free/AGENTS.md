@@ -4,56 +4,59 @@
   "launchCwd": "<fixture>/repo/.worktrees/target",
   "start": {
     "exit": 0,
-    "ok": true,
-    "sessionId": "22172239-f324-40e4-83f5-59da1a6a22a1",
+    "jsonOk": true,
+    "sessionId": "b999156e-92e9-47d0-9747-036d8d2b130f",
     "result": "OK",
-    "stderr": ""
+    "stderrEmpty": true
   },
   "rename": {
     "exit": 0,
-    "ok": false,
+    "jsonOk": null,
     "result": "OK\n",
-    "stderr": "<user settings warning omitted>"
+    "stderrEmpty": false
   },
-  "storedUnder": {
-    "primaryProject": "memory directory only, no transcript",
-    "targetProject": "transcript present"
+  "transcriptStoredUnder": {
+    "primaryProject": false,
+    "targetProject": true
   },
   "beforeRemove": {
     "byId": {
       "exit": 0,
-      "ok": true,
-      "sessionId": "22172239-f324-40e4-83f5-59da1a6a22a1",
+      "jsonOk": true,
+      "sessionId": "b999156e-92e9-47d0-9747-036d8d2b130f",
       "result": "OK",
-      "stderr": "",
+      "stderrEmpty": true,
       "sameSession": true
     },
     "byName": {
       "exit": 0,
-      "ok": true,
-      "sessionId": "22172239-f324-40e4-83f5-59da1a6a22a1",
+      "jsonOk": true,
+      "sessionId": "b999156e-92e9-47d0-9747-036d8d2b130f",
       "result": "OK",
-      "stderr": "",
+      "stderrEmpty": true,
       "sameSession": true
     }
   },
   "afterRemove": {
     "byId": {
       "exit": 0,
-      "ok": true,
-      "sessionId": "22172239-f324-40e4-83f5-59da1a6a22a1",
+      "jsonOk": true,
+      "sessionId": "b999156e-92e9-47d0-9747-036d8d2b130f",
       "result": "OK",
-      "stderr": "",
+      "stderrEmpty": true,
       "sameSession": true
     },
     "byName": {
       "exit": 0,
-      "ok": true,
-      "sessionId": "22172239-f324-40e4-83f5-59da1a6a22a1",
+      "jsonOk": true,
+      "sessionId": "b999156e-92e9-47d0-9747-036d8d2b130f",
       "result": "OK",
-      "stderr": "",
+      "stderrEmpty": true,
       "sameSession": true
     }
   },
-  "note": "rename uses text output; success is judged by exit code as host-session does (ok=false only means non-JSON stdout). stderr omitted: it contained a warning about the local user settings file."
+  "transcriptStoredUnderAfter": {
+    "primaryProject": false,
+    "targetProject": true
+  }
 }

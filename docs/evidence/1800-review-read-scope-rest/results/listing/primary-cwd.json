@@ -4,56 +4,59 @@
   "launchCwd": "<fixture>/repo",
   "start": {
     "exit": 0,
-    "ok": true,
-    "sessionId": "ac761016-6b16-4214-bc10-c4534c260751",
+    "jsonOk": true,
+    "sessionId": "0dfe7e81-893e-4190-a050-fb2c13f51187",
     "result": "OK",
-    "stderr": ""
+    "stderrEmpty": true
   },
   "rename": {
     "exit": 0,
-    "ok": false,
+    "jsonOk": null,
     "result": "OK\n",
-    "stderr": "<user settings warning omitted>"
+    "stderrEmpty": false
   },
-  "storedUnder": {
-    "primaryProject": "transcript present",
-    "targetProject": "no project state"
+  "transcriptStoredUnder": {
+    "primaryProject": true,
+    "targetProject": false
   },
   "beforeRemove": {
     "byId": {
       "exit": 0,
-      "ok": true,
-      "sessionId": "ac761016-6b16-4214-bc10-c4534c260751",
+      "jsonOk": true,
+      "sessionId": "0dfe7e81-893e-4190-a050-fb2c13f51187",
       "result": "OK",
-      "stderr": "",
+      "stderrEmpty": true,
       "sameSession": true
     },
     "byName": {
       "exit": 0,
-      "ok": true,
-      "sessionId": "ac761016-6b16-4214-bc10-c4534c260751",
+      "jsonOk": true,
+      "sessionId": "0dfe7e81-893e-4190-a050-fb2c13f51187",
       "result": "OK",
-      "stderr": "",
+      "stderrEmpty": true,
       "sameSession": true
     }
   },
   "afterRemove": {
     "byId": {
       "exit": 0,
-      "ok": true,
-      "sessionId": "ac761016-6b16-4214-bc10-c4534c260751",
+      "jsonOk": true,
+      "sessionId": "0dfe7e81-893e-4190-a050-fb2c13f51187",
       "result": "OK",
-      "stderr": "",
+      "stderrEmpty": true,
       "sameSession": true
     },
     "byName": {
       "exit": 0,
-      "ok": true,
-      "sessionId": "ac761016-6b16-4214-bc10-c4534c260751",
+      "jsonOk": true,
+      "sessionId": "0dfe7e81-893e-4190-a050-fb2c13f51187",
       "result": "OK",
-      "stderr": "",
+      "stderrEmpty": true,
       "sameSession": true
     }
   },
-  "note": "rename uses text output; success is judged by exit code as host-session does (ok=false only means non-JSON stdout). stderr omitted: it contained a warning about the local user settings file."
+  "transcriptStoredUnderAfter": {
+    "primaryProject": true,
+    "targetProject": false
+  }
 }
