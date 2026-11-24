@@ -1,0 +1,3737 @@
+[
+ {
+  "key": "P1-A-1",
+  "case": "P1",
+  "cond": "A",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 30812,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.0957877,
+   "numTurns": 1,
+   "durationApiMs": 26854,
+   "usage": {
+    "input": 2,
+    "output": 2821,
+    "cacheRead": 649,
+    "cacheWrite": 4862
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 8,
+   "correct": 8,
+   "misread": 0,
+   "unknownQ": 1,
+   "unknownOk": 1,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "B",
+    "q2": "B",
+    "q3": "C",
+    "q4": "B",
+    "q5": "B",
+    "q6": "X",
+    "q7": "B",
+    "q8": "B"
+   },
+   "ambiguityGold": 0,
+   "ambDetected": [],
+   "ambiguitiesReported": 4,
+   "unknownsReported": 6
+  }
+ },
+ {
+  "key": "P1-A-2",
+  "case": "P1",
+  "cond": "A",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 30111,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.09504069999999999,
+   "numTurns": 1,
+   "durationApiMs": 25241,
+   "usage": {
+    "input": 2,
+    "output": 2785,
+    "cacheRead": 649,
+    "cacheWrite": 4859
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 8,
+   "correct": 8,
+   "misread": 0,
+   "unknownQ": 1,
+   "unknownOk": 1,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "B",
+    "q2": "B",
+    "q3": "C",
+    "q4": "B",
+    "q5": "B",
+    "q6": "X",
+    "q7": "B",
+    "q8": "B"
+   },
+   "ambiguityGold": 0,
+   "ambDetected": [],
+   "ambiguitiesReported": 3,
+   "unknownsReported": 8
+  }
+ },
+ {
+  "key": "P1-A-3",
+  "case": "P1",
+  "cond": "A",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 36377,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.09637420000000001,
+   "numTurns": 1,
+   "durationApiMs": 26711,
+   "usage": {
+    "input": 2,
+    "output": 2852,
+    "cacheRead": 649,
+    "cacheWrite": 4858
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 8,
+   "correct": 8,
+   "misread": 0,
+   "unknownQ": 1,
+   "unknownOk": 1,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "B",
+    "q2": "B",
+    "q3": "C",
+    "q4": "B",
+    "q5": "B",
+    "q6": "X",
+    "q7": "B",
+    "q8": "B"
+   },
+   "ambiguityGold": 0,
+   "ambDetected": [],
+   "ambiguitiesReported": 4,
+   "unknownsReported": 7
+  }
+ },
+ {
+  "key": "P1-C-1",
+  "case": "P1",
+  "cond": "C",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 51276,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1302355,
+   "numTurns": 1,
+   "durationApiMs": 45797,
+   "usage": {
+    "input": 2,
+    "output": 4479,
+    "cacheRead": 649,
+    "cacheWrite": 5021
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 8,
+   "correct": 8,
+   "misread": 0,
+   "unknownQ": 1,
+   "unknownOk": 1,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "B",
+    "q2": "B",
+    "q3": "C",
+    "q4": "B",
+    "q5": "B",
+    "q6": "X",
+    "q7": "B",
+    "q8": "B"
+   },
+   "ambiguityGold": 0,
+   "ambDetected": [],
+   "ambiguitiesReported": 9,
+   "unknownsReported": 9
+  }
+ },
+ {
+  "key": "P1-C-2",
+  "case": "P1",
+  "cond": "C",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 46066,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1365515,
+   "numTurns": 1,
+   "durationApiMs": 44220,
+   "usage": {
+    "input": 2,
+    "output": 4810,
+    "cacheRead": 649,
+    "cacheWrite": 4983
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 8,
+   "correct": 8,
+   "misread": 0,
+   "unknownQ": 1,
+   "unknownOk": 1,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "B",
+    "q2": "B",
+    "q3": "C",
+    "q4": "B",
+    "q5": "B",
+    "q6": "X",
+    "q7": "B",
+    "q8": "B"
+   },
+   "ambiguityGold": 0,
+   "ambDetected": [],
+   "ambiguitiesReported": 11,
+   "unknownsReported": 12
+  }
+ },
+ {
+  "key": "P1-C-3",
+  "case": "P1",
+  "cond": "C",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 46374,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1380155,
+   "numTurns": 1,
+   "durationApiMs": 44337,
+   "usage": {
+    "input": 2,
+    "output": 4868,
+    "cacheRead": 649,
+    "cacheWrite": 5021
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 8,
+   "correct": 8,
+   "misread": 0,
+   "unknownQ": 1,
+   "unknownOk": 1,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "B",
+    "q2": "B",
+    "q3": "C",
+    "q4": "B",
+    "q5": "B",
+    "q6": "X",
+    "q7": "B",
+    "q8": "B"
+   },
+   "ambiguityGold": 0,
+   "ambDetected": [],
+   "ambiguitiesReported": 8,
+   "unknownsReported": 14
+  }
+ },
+ {
+  "key": "P2-A-1",
+  "case": "P2",
+  "cond": "A",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 28385,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.0895068,
+   "numTurns": 1,
+   "durationApiMs": 25392,
+   "usage": {
+    "input": 2,
+    "output": 2738,
+    "cacheRead": 649,
+    "cacheWrite": 4292
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 7,
+   "correct": 7,
+   "misread": 0,
+   "unknownQ": 4,
+   "unknownOk": 4,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "X",
+    "q3": "X",
+    "q4": "X",
+    "q5": "B",
+    "q6": "C",
+    "q7": "B"
+   },
+   "ambiguityGold": 4,
+   "ambDetected": [
+    "P2-a1",
+    "P2-a2",
+    "P2-a3",
+    "P2-a4"
+   ],
+   "ambiguitiesReported": 4,
+   "unknownsReported": 7
+  }
+ },
+ {
+  "key": "P2-A-2",
+  "case": "P2",
+  "cond": "A",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 25752,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.08630279999999999,
+   "numTurns": 1,
+   "durationApiMs": 23273,
+   "usage": {
+    "input": 2,
+    "output": 2577,
+    "cacheRead": 649,
+    "cacheWrite": 4294
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 7,
+   "correct": 7,
+   "misread": 0,
+   "unknownQ": 4,
+   "unknownOk": 4,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "X",
+    "q3": "X",
+    "q4": "X",
+    "q5": "B",
+    "q6": "C",
+    "q7": "B"
+   },
+   "ambiguityGold": 4,
+   "ambDetected": [
+    "P2-a1",
+    "P2-a2",
+    "P2-a3",
+    "P2-a4"
+   ],
+   "ambiguitiesReported": 3,
+   "unknownsReported": 7
+  }
+ },
+ {
+  "key": "P2-A-3",
+  "case": "P2",
+  "cond": "A",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 27756,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.08397879999999999,
+   "numTurns": 1,
+   "durationApiMs": 23193,
+   "usage": {
+    "input": 2,
+    "output": 2460,
+    "cacheRead": 649,
+    "cacheWrite": 4296
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 7,
+   "correct": 7,
+   "misread": 0,
+   "unknownQ": 4,
+   "unknownOk": 4,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "X",
+    "q3": "X",
+    "q4": "X",
+    "q5": "B",
+    "q6": "C",
+    "q7": "B"
+   },
+   "ambiguityGold": 4,
+   "ambDetected": [
+    "P2-a1",
+    "P2-a2",
+    "P2-a3",
+    "P2-a4"
+   ],
+   "ambiguitiesReported": 5,
+   "unknownsReported": 7
+  }
+ },
+ {
+  "key": "P2-C-1",
+  "case": "P2",
+  "cond": "C",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 37140,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.10850459999999999,
+   "numTurns": 1,
+   "durationApiMs": 35003,
+   "usage": {
+    "input": 2,
+    "output": 3617,
+    "cacheRead": 649,
+    "cacheWrite": 4453
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 7,
+   "correct": 7,
+   "misread": 0,
+   "unknownQ": 4,
+   "unknownOk": 4,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "X",
+    "q3": "X",
+    "q4": "X",
+    "q5": "B",
+    "q6": "C",
+    "q7": "B"
+   },
+   "ambiguityGold": 4,
+   "ambDetected": [
+    "P2-a1",
+    "P2-a2",
+    "P2-a3",
+    "P2-a4"
+   ],
+   "ambiguitiesReported": 7,
+   "unknownsReported": 11
+  }
+ },
+ {
+  "key": "P2-C-2",
+  "case": "P2",
+  "cond": "C",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 44925,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1305591,
+   "numTurns": 1,
+   "durationApiMs": 43575,
+   "usage": {
+    "input": 2,
+    "output": 4720,
+    "cacheRead": 649,
+    "cacheWrite": 4452
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 7,
+   "correct": 7,
+   "misread": 0,
+   "unknownQ": 4,
+   "unknownOk": 4,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "X",
+    "q3": "X",
+    "q4": "X",
+    "q5": "B",
+    "q6": "C",
+    "q7": "B"
+   },
+   "ambiguityGold": 4,
+   "ambDetected": [
+    "P2-a1",
+    "P2-a2",
+    "P2-a3",
+    "P2-a4"
+   ],
+   "ambiguitiesReported": 12,
+   "unknownsReported": 11
+  }
+ },
+ {
+  "key": "P2-C-3",
+  "case": "P2",
+  "cond": "C",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 41956,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1158601,
+   "numTurns": 1,
+   "durationApiMs": 36606,
+   "usage": {
+    "input": 2,
+    "output": 3986,
+    "cacheRead": 649,
+    "cacheWrite": 4454
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 7,
+   "correct": 7,
+   "misread": 0,
+   "unknownQ": 4,
+   "unknownOk": 4,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "X",
+    "q3": "X",
+    "q4": "X",
+    "q5": "B",
+    "q6": "C",
+    "q7": "B"
+   },
+   "ambiguityGold": 4,
+   "ambDetected": [
+    "P2-a1",
+    "P2-a2",
+    "P2-a3",
+    "P2-a4"
+   ],
+   "ambiguitiesReported": 9,
+   "unknownsReported": 12
+  }
+ },
+ {
+  "key": "P3-A-1",
+  "case": "P3",
+  "cond": "A",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 37350,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.096089,
+   "numTurns": 1,
+   "durationApiMs": 29860,
+   "usage": {
+    "input": 2,
+    "output": 3106,
+    "cacheRead": 649,
+    "cacheWrite": 4196
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 6,
+   "correct": 5,
+   "misread": 1,
+   "unknownQ": 3,
+   "unknownOk": 2,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "B",
+    "q3": "B",
+    "q4": "X",
+    "q5": "A",
+    "q6": "A"
+   },
+   "ambiguityGold": 3,
+   "ambDetected": [
+    "P3-a1",
+    "P3-a2",
+    "P3-a3"
+   ],
+   "ambiguitiesReported": 3,
+   "unknownsReported": 7
+  }
+ },
+ {
+  "key": "P3-A-2",
+  "case": "P3",
+  "cond": "A",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 31632,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.09019700000000001,
+   "numTurns": 1,
+   "durationApiMs": 26092,
+   "usage": {
+    "input": 2,
+    "output": 2813,
+    "cacheRead": 649,
+    "cacheWrite": 4192
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 6,
+   "correct": 5,
+   "misread": 1,
+   "unknownQ": 3,
+   "unknownOk": 2,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "B",
+    "q3": "B",
+    "q4": "X",
+    "q5": "A",
+    "q6": "A"
+   },
+   "ambiguityGold": 3,
+   "ambDetected": [
+    "P3-a1",
+    "P3-a2",
+    "P3-a3"
+   ],
+   "ambiguitiesReported": 4,
+   "unknownsReported": 6
+  }
+ },
+ {
+  "key": "P3-A-3",
+  "case": "P3",
+  "cond": "A",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 27814,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.084885,
+   "numTurns": 1,
+   "durationApiMs": 23208,
+   "usage": {
+    "input": 2,
+    "output": 2545,
+    "cacheRead": 649,
+    "cacheWrite": 4198
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 6,
+   "correct": 6,
+   "misread": 0,
+   "unknownQ": 3,
+   "unknownOk": 3,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "Y",
+    "q3": "B",
+    "q4": "X",
+    "q5": "A",
+    "q6": "A"
+   },
+   "ambiguityGold": 3,
+   "ambDetected": [
+    "P3-a1",
+    "P3-a2",
+    "P3-a3"
+   ],
+   "ambiguitiesReported": 3,
+   "unknownsReported": 5
+  }
+ },
+ {
+  "key": "P3-C-1",
+  "case": "P3",
+  "cond": "C",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 59348,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1424928,
+   "numTurns": 1,
+   "durationApiMs": 54112,
+   "usage": {
+    "input": 2,
+    "output": 5377,
+    "cacheRead": 649,
+    "cacheWrite": 4317
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 6,
+   "correct": 5,
+   "misread": 1,
+   "unknownQ": 3,
+   "unknownOk": 2,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "B",
+    "q3": "B",
+    "q4": "X",
+    "q5": "A",
+    "q6": "A"
+   },
+   "ambiguityGold": 3,
+   "ambDetected": [
+    "P3-a1",
+    "P3-a2",
+    "P3-a3"
+   ],
+   "ambiguitiesReported": 8,
+   "unknownsReported": 11
+  }
+ },
+ {
+  "key": "P3-C-2",
+  "case": "P3",
+  "cond": "C",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 50540,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.11873229999999999,
+   "numTurns": 1,
+   "durationApiMs": 39306,
+   "usage": {
+    "input": 2,
+    "output": 4175,
+    "cacheRead": 649,
+    "cacheWrite": 4352
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 6,
+   "correct": 5,
+   "misread": 1,
+   "unknownQ": 3,
+   "unknownOk": 2,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "B",
+    "q3": "B",
+    "q4": "X",
+    "q5": "A",
+    "q6": "A"
+   },
+   "ambiguityGold": 3,
+   "ambDetected": [
+    "P3-a1",
+    "P3-a2",
+    "P3-a3"
+   ],
+   "ambiguitiesReported": 6,
+   "unknownsReported": 12
+  }
+ },
+ {
+  "key": "P3-C-3",
+  "case": "P3",
+  "cond": "C",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 51276,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.11884879999999998,
+   "numTurns": 1,
+   "durationApiMs": 39621,
+   "usage": {
+    "input": 2,
+    "output": 4186,
+    "cacheRead": 649,
+    "cacheWrite": 4326
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "questions": 6,
+   "correct": 6,
+   "misread": 0,
+   "unknownQ": 3,
+   "unknownOk": 3,
+   "overUnknown": 0,
+   "wrongDirection": 0,
+   "missing": 0,
+   "perQ": {
+    "q1": "Y",
+    "q2": "Y",
+    "q3": "B",
+    "q4": "X",
+    "q5": "A",
+    "q6": "A"
+   },
+   "ambiguityGold": 3,
+   "ambDetected": [
+    "P3-a1",
+    "P3-a2",
+    "P3-a3"
+   ],
+   "ambiguitiesReported": 6,
+   "unknownsReported": 11
+  }
+ },
+ {
+  "key": "R1-A-1",
+  "case": "R1",
+  "cond": "A",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 30169,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12170280000000001,
+   "numTurns": 1,
+   "durationApiMs": 25877,
+   "usage": {
+    "input": 2,
+    "output": 2567,
+    "cacheRead": 649,
+    "cacheWrite": 8689
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 7,
+   "detected": [
+    "R1-d1",
+    "R1-d2",
+    "R1-d3",
+    "R1-d4",
+    "R1-d5",
+    "R1-d6",
+    "R1-d7"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 0,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R1-A-2",
+  "case": "R1",
+  "cond": "A",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 47383,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1324508,
+   "numTurns": 1,
+   "durationApiMs": 31052,
+   "usage": {
+    "input": 2,
+    "output": 3102,
+    "cacheRead": 649,
+    "cacheWrite": 8695
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 7,
+   "detected": [
+    "R1-d1",
+    "R1-d2",
+    "R1-d3",
+    "R1-d4",
+    "R1-d5",
+    "R1-d6",
+    "R1-d7"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 0,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R1-A-3",
+  "case": "R1",
+  "cond": "A",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 30145,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1216258,
+   "numTurns": 1,
+   "durationApiMs": 24878,
+   "usage": {
+    "input": 2,
+    "output": 2563,
+    "cacheRead": 649,
+    "cacheWrite": 8689
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 7,
+   "detected": [
+    "R1-d1",
+    "R1-d2",
+    "R1-d3",
+    "R1-d4",
+    "R1-d5",
+    "R1-d6",
+    "R1-d7"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R1-B-1",
+  "case": "R1",
+  "cond": "B",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 31902,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1285284,
+   "numTurns": 1,
+   "durationApiMs": 27439,
+   "usage": {
+    "input": 2,
+    "output": 2832,
+    "cacheRead": 649,
+    "cacheWrite": 8877
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 7,
+   "detected": [
+    "R1-d1",
+    "R1-d2",
+    "R1-d3",
+    "R1-d4",
+    "R1-d5",
+    "R1-d6",
+    "R1-d7"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R1-B-2",
+  "case": "R1",
+  "cond": "B",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 38530,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.13454689999999997,
+   "numTurns": 1,
+   "durationApiMs": 32417,
+   "usage": {
+    "input": 2,
+    "output": 3151,
+    "cacheRead": 649,
+    "cacheWrite": 8832
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 7,
+   "detected": [
+    "R1-d1",
+    "R1-d2",
+    "R1-d3",
+    "R1-d4",
+    "R1-d5",
+    "R1-d6",
+    "R1-d7"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 0,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R1-B-3",
+  "case": "R1",
+  "cond": "B",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 30544,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12211490000000001,
+   "numTurns": 1,
+   "durationApiMs": 26421,
+   "usage": {
+    "input": 2,
+    "output": 2513,
+    "cacheRead": 649,
+    "cacheWrite": 8873
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 7,
+   "detected": [
+    "R1-d1",
+    "R1-d2",
+    "R1-d3",
+    "R1-d4",
+    "R1-d5",
+    "R1-d6",
+    "R1-d7"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 0,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R1-C-1",
+  "case": "R1",
+  "cond": "C",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 27124,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.125387,
+   "numTurns": 1,
+   "durationApiMs": 25501,
+   "usage": {
+    "input": 2,
+    "output": 2626,
+    "cacheRead": 649,
+    "cacheWrite": 8998
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 7,
+   "detected": [
+    "R1-d1",
+    "R1-d2",
+    "R1-d3",
+    "R1-d4",
+    "R1-d5",
+    "R1-d6",
+    "R1-d7"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R1-C-2",
+  "case": "R1",
+  "cond": "C",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 41590,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1355965,
+   "numTurns": 1,
+   "durationApiMs": 32148,
+   "usage": {
+    "input": 2,
+    "output": 3137,
+    "cacheRead": 649,
+    "cacheWrite": 8997
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 7,
+   "detected": [
+    "R1-d1",
+    "R1-d2",
+    "R1-d3",
+    "R1-d4",
+    "R1-d5",
+    "R1-d6",
+    "R1-d7"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R1-C-3",
+  "case": "R1",
+  "cond": "C",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 33882,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.137637,
+   "numTurns": 1,
+   "durationApiMs": 30863,
+   "usage": {
+    "input": 2,
+    "output": 3256,
+    "cacheRead": 649,
+    "cacheWrite": 8954
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 7,
+   "detected": [
+    "R1-d1",
+    "R1-d2",
+    "R1-d3",
+    "R1-d4",
+    "R1-d5",
+    "R1-d6",
+    "R1-d7"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R2-A-1",
+  "case": "R2",
+  "cond": "A",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 25830,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1134441,
+   "numTurns": 1,
+   "durationApiMs": 21563,
+   "usage": {
+    "input": 2,
+    "output": 2177,
+    "cacheRead": 649,
+    "cacheWrite": 8632
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R2-A-2",
+  "case": "R2",
+  "cond": "A",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 23663,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.11136009999999999,
+   "numTurns": 1,
+   "durationApiMs": 20868,
+   "usage": {
+    "input": 2,
+    "output": 2072,
+    "cacheRead": 649,
+    "cacheWrite": 8634
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R2-A-3",
+  "case": "R2",
+  "cond": "A",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 25199,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.10785609999999998,
+   "numTurns": 1,
+   "durationApiMs": 19294,
+   "usage": {
+    "input": 2,
+    "output": 1896,
+    "cacheRead": 649,
+    "cacheWrite": 8636
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R2-B-1",
+  "case": "R2",
+  "cond": "B",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 30539,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.11449820000000001,
+   "numTurns": 1,
+   "durationApiMs": 25821,
+   "usage": {
+    "input": 2,
+    "output": 2152,
+    "cacheRead": 649,
+    "cacheWrite": 8824
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R2-B-2",
+  "case": "R2",
+  "cond": "B",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 25793,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.11809470000000001,
+   "numTurns": 1,
+   "durationApiMs": 24546,
+   "usage": {
+    "input": 2,
+    "output": 2333,
+    "cacheRead": 649,
+    "cacheWrite": 8821
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R2-B-3",
+  "case": "R2",
+  "cond": "B",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 32139,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1169702,
+   "numTurns": 1,
+   "durationApiMs": 23122,
+   "usage": {
+    "input": 2,
+    "output": 2276,
+    "cacheRead": 649,
+    "cacheWrite": 8823
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R2-C-1",
+  "case": "R2",
+  "cond": "C",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 30218,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.11659930000000002,
+   "numTurns": 1,
+   "durationApiMs": 22367,
+   "usage": {
+    "input": 2,
+    "output": 2210,
+    "cacheRead": 649,
+    "cacheWrite": 8940
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R2-C-2",
+  "case": "R2",
+  "cond": "C",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 37944,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12273030000000001,
+   "numTurns": 1,
+   "durationApiMs": 25759,
+   "usage": {
+    "input": 2,
+    "output": 2515,
+    "cacheRead": 649,
+    "cacheWrite": 8944
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R2-C-3",
+  "case": "R2",
+  "cond": "C",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 26528,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1129788,
+   "numTurns": 1,
+   "durationApiMs": 20503,
+   "usage": {
+    "input": 2,
+    "output": 2029,
+    "cacheRead": 649,
+    "cacheWrite": 8940
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R3-A-1",
+  "case": "R3",
+  "cond": "A",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 43703,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1290959,
+   "numTurns": 1,
+   "durationApiMs": 35862,
+   "usage": {
+    "input": 2,
+    "output": 2993,
+    "cacheRead": 649,
+    "cacheWrite": 8550
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R3-A-2",
+  "case": "R3",
+  "cond": "A",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 33485,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12302839999999998,
+   "numTurns": 1,
+   "durationApiMs": 26967,
+   "usage": {
+    "input": 2,
+    "output": 2692,
+    "cacheRead": 649,
+    "cacheWrite": 8544
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 7
+  }
+ },
+ {
+  "key": "R3-A-3",
+  "case": "R3",
+  "cond": "A",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 37135,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1301759,
+   "numTurns": 1,
+   "durationApiMs": 32258,
+   "usage": {
+    "input": 2,
+    "output": 3049,
+    "cacheRead": 649,
+    "cacheWrite": 8545
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R3-B-1",
+  "case": "R3",
+  "cond": "B",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 34458,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12059450000000001,
+   "numTurns": 1,
+   "durationApiMs": 30196,
+   "usage": {
+    "input": 2,
+    "output": 2495,
+    "cacheRead": 649,
+    "cacheWrite": 8730
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 7
+  }
+ },
+ {
+  "key": "R3-B-2",
+  "case": "R3",
+  "cond": "B",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 32971,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1291105,
+   "numTurns": 1,
+   "durationApiMs": 31385,
+   "usage": {
+    "input": 2,
+    "output": 2920,
+    "cacheRead": 649,
+    "cacheWrite": 8732
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 7
+  }
+ },
+ {
+  "key": "R3-B-3",
+  "case": "R3",
+  "cond": "B",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 38774,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.13763849999999997,
+   "numTurns": 1,
+   "durationApiMs": 33808,
+   "usage": {
+    "input": 2,
+    "output": 3364,
+    "cacheRead": 649,
+    "cacheWrite": 8688
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R3-C-1",
+  "case": "R3",
+  "cond": "C",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 28304,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1232266,
+   "numTurns": 1,
+   "durationApiMs": 26143,
+   "usage": {
+    "input": 2,
+    "output": 2576,
+    "cacheRead": 649,
+    "cacheWrite": 8855
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 7
+  }
+ },
+ {
+  "key": "R3-C-2",
+  "case": "R3",
+  "cond": "C",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 27991,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1262756,
+   "numTurns": 1,
+   "durationApiMs": 30355,
+   "usage": {
+    "input": 2,
+    "output": 2727,
+    "cacheRead": 649,
+    "cacheWrite": 8846
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R3-C-3",
+  "case": "R3",
+  "cond": "C",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 33970,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1283426,
+   "numTurns": 1,
+   "durationApiMs": 30096,
+   "usage": {
+    "input": 2,
+    "output": 2851,
+    "cacheRead": 649,
+    "cacheWrite": 8807
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R4-A-1",
+  "case": "R4",
+  "cond": "A",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 34454,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1192007,
+   "numTurns": 1,
+   "durationApiMs": 28828,
+   "usage": {
+    "input": 2,
+    "output": 2496,
+    "cacheRead": 649,
+    "cacheWrite": 8555
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 7
+  }
+ },
+ {
+  "key": "R4-A-2",
+  "case": "R4",
+  "cond": "A",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 27576,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.11841270000000001,
+   "numTurns": 1,
+   "durationApiMs": 24100,
+   "usage": {
+    "input": 2,
+    "output": 2455,
+    "cacheRead": 649,
+    "cacheWrite": 8559
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R4-A-3",
+  "case": "R4",
+  "cond": "A",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 31888,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1328567,
+   "numTurns": 1,
+   "durationApiMs": 29370,
+   "usage": {
+    "input": 2,
+    "output": 3178,
+    "cacheRead": 649,
+    "cacheWrite": 8557
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R4-B-1",
+  "case": "R4",
+  "cond": "B",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 31884,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1304353,
+   "numTurns": 1,
+   "durationApiMs": 29205,
+   "usage": {
+    "input": 2,
+    "output": 2982,
+    "cacheRead": 649,
+    "cacheWrite": 8742
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 3,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R4-B-2",
+  "case": "R4",
+  "cond": "B",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 38238,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12882429999999997,
+   "numTurns": 1,
+   "durationApiMs": 29982,
+   "usage": {
+    "input": 2,
+    "output": 2903,
+    "cacheRead": 649,
+    "cacheWrite": 8738
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R4-B-3",
+  "case": "R4",
+  "cond": "B",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 35598,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1337953,
+   "numTurns": 1,
+   "durationApiMs": 30688,
+   "usage": {
+    "input": 2,
+    "output": 3150,
+    "cacheRead": 649,
+    "cacheWrite": 8742
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 4,
+   "findings": 11
+  }
+ },
+ {
+  "key": "R4-C-1",
+  "case": "R4",
+  "cond": "C",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 41459,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12336290000000001,
+   "numTurns": 1,
+   "durationApiMs": 35269,
+   "usage": {
+    "input": 2,
+    "output": 2581,
+    "cacheRead": 649,
+    "cacheWrite": 8859
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R4-C-2",
+  "case": "R4",
+  "cond": "C",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 31150,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1270264,
+   "numTurns": 1,
+   "durationApiMs": 27078,
+   "usage": {
+    "input": 2,
+    "output": 2761,
+    "cacheRead": 649,
+    "cacheWrite": 8867
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R4-C-3",
+  "case": "R4",
+  "cond": "C",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 41598,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1412714,
+   "numTurns": 1,
+   "durationApiMs": 34073,
+   "usage": {
+    "input": 2,
+    "output": 3474,
+    "cacheRead": 649,
+    "cacheWrite": 8865
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R5-A-1",
+  "case": "R5",
+  "cond": "A",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 46314,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1451954,
+   "numTurns": 1,
+   "durationApiMs": 41263,
+   "usage": {
+    "input": 2,
+    "output": 3731,
+    "cacheRead": 649,
+    "cacheWrite": 8715
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 4,
+   "findings": 7,
+   "revised": {
+    "present": true,
+    "chars": 516,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R5-A-2",
+  "case": "R5",
+  "cond": "A",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 26831,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1259509,
+   "numTurns": 1,
+   "durationApiMs": 26968,
+   "usage": {
+    "input": 2,
+    "output": 2770,
+    "cacheRead": 649,
+    "cacheWrite": 8712
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 3,
+   "findings": 6,
+   "revised": {
+    "present": true,
+    "chars": 573,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R5-A-3",
+  "case": "R5",
+  "cond": "A",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 30538,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1183669,
+   "numTurns": 1,
+   "durationApiMs": 24633,
+   "usage": {
+    "input": 2,
+    "output": 2406,
+    "cacheRead": 649,
+    "cacheWrite": 8674
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 5,
+   "revised": {
+    "present": true,
+    "chars": 469,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R5-B-1",
+  "case": "R5",
+  "cond": "B",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 38250,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12849549999999998,
+   "numTurns": 1,
+   "durationApiMs": 32535,
+   "usage": {
+    "input": 2,
+    "output": 2816,
+    "cacheRead": 649,
+    "cacheWrite": 8900
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 4,
+   "findings": 7,
+   "revised": {
+    "present": true,
+    "chars": 507,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R5-B-2",
+  "case": "R5",
+  "cond": "B",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 39160,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1411615,
+   "numTurns": 1,
+   "durationApiMs": 32814,
+   "usage": {
+    "input": 2,
+    "output": 3472,
+    "cacheRead": 649,
+    "cacheWrite": 8856
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 4,
+   "findings": 7,
+   "revised": {
+    "present": true,
+    "chars": 557,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R5-B-3",
+  "case": "R5",
+  "cond": "B",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 29857,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.121562,
+   "numTurns": 1,
+   "durationApiMs": 25335,
+   "usage": {
+    "input": 2,
+    "output": 2474,
+    "cacheRead": 649,
+    "cacheWrite": 8901
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 3,
+   "findings": 6,
+   "revised": {
+    "present": true,
+    "chars": 506,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R5-C-1",
+  "case": "R5",
+  "cond": "C",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 40788,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1317851,
+   "numTurns": 1,
+   "durationApiMs": 34844,
+   "usage": {
+    "input": 2,
+    "output": 2932,
+    "cacheRead": 649,
+    "cacheWrite": 9019
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 3,
+   "findings": 6,
+   "revised": {
+    "present": true,
+    "chars": 541,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R5-C-2",
+  "case": "R5",
+  "cond": "C",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 31601,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.13342959999999998,
+   "numTurns": 1,
+   "durationApiMs": 29427,
+   "usage": {
+    "input": 2,
+    "output": 3015,
+    "cacheRead": 649,
+    "cacheWrite": 9020
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 5,
+   "revised": {
+    "present": true,
+    "chars": 483,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R5-C-3",
+  "case": "R5",
+  "cond": "C",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 48271,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1573856,
+   "numTurns": 1,
+   "durationApiMs": 40899,
+   "usage": {
+    "input": 2,
+    "output": 4210,
+    "cacheRead": 649,
+    "cacheWrite": 9026
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 3,
+   "findings": 6,
+   "revised": {
+    "present": true,
+    "chars": 534,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R6-A-1",
+  "case": "R6",
+  "cond": "A",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 26616,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12210399999999999,
+   "numTurns": 1,
+   "durationApiMs": 24296,
+   "usage": {
+    "input": 2,
+    "output": 2612,
+    "cacheRead": 649,
+    "cacheWrite": 8627
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R6-d1",
+    "R6-d2",
+    "R6-d3",
+    "R6-d4",
+    "R6-d5",
+    "R6-d6",
+    "R6-d7",
+    "R6-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R6-A-2",
+  "case": "R6",
+  "cond": "A",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 29093,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12006800000000001,
+   "numTurns": 1,
+   "durationApiMs": 23868,
+   "usage": {
+    "input": 2,
+    "output": 2495,
+    "cacheRead": 649,
+    "cacheWrite": 8665
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R6-d1",
+    "R6-d2",
+    "R6-d3",
+    "R6-d4",
+    "R6-d5",
+    "R6-d6",
+    "R6-d7",
+    "R6-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R6-A-3",
+  "case": "R6",
+  "cond": "A",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 36610,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.124244,
+   "numTurns": 1,
+   "durationApiMs": 26482,
+   "usage": {
+    "input": 2,
+    "output": 2703,
+    "cacheRead": 649,
+    "cacheWrite": 8667
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R6-d1",
+    "R6-d2",
+    "R6-d3",
+    "R6-d4",
+    "R6-d5",
+    "R6-d6",
+    "R6-d7",
+    "R6-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R6-B-1",
+  "case": "R6",
+  "cond": "B",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 35031,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1319521,
+   "numTurns": 1,
+   "durationApiMs": 30539,
+   "usage": {
+    "input": 2,
+    "output": 3013,
+    "cacheRead": 649,
+    "cacheWrite": 8853
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R6-d1",
+    "R6-d2",
+    "R6-d3",
+    "R6-d4",
+    "R6-d5",
+    "R6-d6",
+    "R6-d7",
+    "R6-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R6-B-2",
+  "case": "R6",
+  "cond": "B",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 29743,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12969609999999998,
+   "numTurns": 1,
+   "durationApiMs": 27648,
+   "usage": {
+    "input": 2,
+    "output": 2901,
+    "cacheRead": 649,
+    "cacheWrite": 8851
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R6-d1",
+    "R6-d2",
+    "R6-d3",
+    "R6-d4",
+    "R6-d5",
+    "R6-d6",
+    "R6-d7",
+    "R6-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R6-B-3",
+  "case": "R6",
+  "cond": "B",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 37479,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1380011,
+   "numTurns": 1,
+   "durationApiMs": 32199,
+   "usage": {
+    "input": 2,
+    "output": 3317,
+    "cacheRead": 649,
+    "cacheWrite": 8849
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R6-d1",
+    "R6-d2",
+    "R6-d3",
+    "R6-d4",
+    "R6-d5",
+    "R6-d6",
+    "R6-d7",
+    "R6-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R6-C-1",
+  "case": "R6",
+  "cond": "C",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 30380,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1320467,
+   "numTurns": 1,
+   "durationApiMs": 27884,
+   "usage": {
+    "input": 2,
+    "output": 2968,
+    "cacheRead": 649,
+    "cacheWrite": 8976
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R6-d1",
+    "R6-d2",
+    "R6-d3",
+    "R6-d4",
+    "R6-d5",
+    "R6-d6",
+    "R6-d7",
+    "R6-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R6-C-2",
+  "case": "R6",
+  "cond": "C",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 27700,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1308802,
+   "numTurns": 1,
+   "durationApiMs": 27446,
+   "usage": {
+    "input": 2,
+    "output": 2928,
+    "cacheRead": 649,
+    "cacheWrite": 8930
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R6-d1",
+    "R6-d2",
+    "R6-d3",
+    "R6-d4",
+    "R6-d5",
+    "R6-d6",
+    "R6-d7",
+    "R6-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 10
+  }
+ },
+ {
+  "key": "R6-C-3",
+  "case": "R6",
+  "cond": "C",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 43858,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.14313620000000002,
+   "numTurns": 1,
+   "durationApiMs": 35422,
+   "usage": {
+    "input": 2,
+    "output": 3524,
+    "cacheRead": 649,
+    "cacheWrite": 8972
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R6-d1",
+    "R6-d2",
+    "R6-d3",
+    "R6-d4",
+    "R6-d5",
+    "R6-d6",
+    "R6-d7",
+    "R6-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 10
+  }
+ }
+]
