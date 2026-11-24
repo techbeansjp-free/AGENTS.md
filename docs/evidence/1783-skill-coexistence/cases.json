@@ -1,0 +1,27 @@
+{
+ "schema": "asc-1783-cases/v1",
+ "note": "Fixed before the model runs. Paths are relative to the run's working directory. A run reaches a Skill when it calls the Skill tool with that Skill (plugin-qualified name ends with :<skill>) or Reads its body. Glob/Grep hits do not count.",
+ "bodyPattern": "(^|/)\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
+ "referencePattern": "(^|/)\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/references/<ref>$",
+ "cases": [
+  {"id": "asc-1", "expect": "asc", "prompt": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。", "references": ["workspace.md"], "answerAll": ["worktree"], "answerAny": ["worktree-create", "\\.worktrees"]},
+  {"id": "asc-2", "expect": "asc", "prompt": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？", "references": ["workspace.md", "coordination.md"], "answerAll": ["worktree"], "answerAny": ["start", "未commit", "未保存"]},
+  {"id": "rr-1", "expect": "review-and-remediation", "prompt": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。", "references": ["review-method.md"], "answerAll": [], "answerAny": ["認可", "権限", "authoriz"]},
+  {"id": "tw-1", "expect": "tracker-issue-writing", "prompt": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。", "references": [], "answerAll": ["## 目的", "## 完了の基準", "## してはいけないことと対象外", "## 依存と未決"], "answerAny": []},
+  {"id": "ri-1", "expect": "research-to-implementation", "prompt": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。", "references": ["decisions.md"], "answerAll": ["受入条件", "未決"], "answerAny": []},
+  {"id": "se-1", "expect": "security-evidence", "prompt": "依存パッケージの脆弱性監査をして、結果をまとめて。", "references": ["findings-and-summary.md"], "answerAll": [], "answerAny": ["lock", "ロック"]},
+  {"id": "ma-1", "expect": "migration-assurance", "prompt": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。", "references": ["acceptance-and-cutover.md"], "answerAll": [], "answerAny": ["受入", "切戻し", "ロールバック", "rollback"]},
+  {"id": "neg-1", "expect": null, "prompt": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。", "references": [], "answerAll": [], "answerAny": ["search"]},
+  {"id": "neg-2", "expect": null, "prompt": "HTTPのPUTとPATCHの違いを簡単に教えて。", "references": [], "answerAll": ["PATCH"], "answerAny": []}
+ ],
+ "scoring": {
+  "reach": "expected Skill called via Skill tool or its body Read",
+  "misselect": "expected not reached and another Skill was called or another ASC body was Read",
+  "unselected": "no Skill call and no ASC body Read",
+  "bodyRead": "expected body Read (Skill tool alone loads only the entry)",
+  "referenceRead": "any listed reference Read (true when none listed)",
+  "applied": "bodyRead and referenceRead and all answerAll and (answerAny empty or any matches), case-insensitive",
+  "overapplication": "negative case with any Skill call or any ASC body Read",
+  "failure": "run error, API error or missing trace; counted separately, never as unselected"
+ }
+}
