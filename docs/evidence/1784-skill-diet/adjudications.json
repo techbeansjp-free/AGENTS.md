@@ -1,0 +1,33 @@
+{
+ "note": "採点後に見つかったoracleの不備。score.mjsとcases.jsonは変えず、機械判定（raw）をそのまま残す。READMEでは裁定後の値を別に示す。",
+ "items": [
+  {
+   "rule": "K1 worktree-name",
+   "runs": ["K1-B-3", "K1-C-2", "K1-C-3"],
+   "raw": "missing",
+   "adjudicated": "pass",
+   "reason": "work_directoryの時刻部分を、worktree-createが作成時に決める値として placeholder（20261124_HHMMSS、20261124_<HHMMSS>、<worktree-createが返したYYYYMMDD_HHMMSS>）で書いた。正規表現は「8桁_6桁」か「<YYYYMMDD_HHMMSS>」全体だけを許し、日付だけ具体的な形を拒否した。3件とも worktree-create に Issue番号12・種別fix を渡し、branchは fix/12-<slug>、作成後に start <worktree> --path を実行しており、手順は満たす。時刻を作り話で埋めた回答（K1-B-1等）より正確である"
+  },
+  {
+   "rule": "K1 dedicated-worktree",
+   "runs": ["K1-A-2", "K1-A-3"],
+   "raw": "missing",
+   "adjudicated": "pass（runの合否は変わらない）",
+   "reason": "git -C <proj> worktree add -b fix/12-<slug> <proj>/.worktrees/<時刻>-12-<slug> origin/main の形で、正規表現が git の直後に worktree を要求したため一致しなかった。専用worktreeは作っている。両runとも start --path が無く、必須の欠落は残るのでfailのまま"
+  },
+  {
+   "rule": "refs（必要referenceの取得）",
+   "runs": ["K2-A-2"],
+   "raw": "host-session.md を取得（1件）",
+   "adjudicated": "未取得",
+   "reason": "score.mjs は Read の呼出しを取得として数え、成否を見ない。条件Aでは asc の references を除いてあり、このReadは file does not exist で失敗した。B・Cでは失敗したReadは無く、Rの判定には影響しない"
+  }
+ ],
+ "adjudicatedDecision": {
+  "K1": {"A": "0/3", "B": "3/3", "C": "3/3"},
+  "Q": true,
+  "R": true,
+  "I": false,
+  "decision": "現状維持"
+ }
+}

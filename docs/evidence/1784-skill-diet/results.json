@@ -1,0 +1,1716 @@
+{
+ "rows": [
+  {
+   "id": "K1-A-1",
+   "caseId": "K1",
+   "cond": "A",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": false,
+   "critical": [],
+   "missing": [
+    "start-with-path-after-create"
+   ],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {
+    "skills/asc/references/workspace.md": -1
+   },
+   "toolCalls": 11,
+   "costUsd": 0.3279364,
+   "wallMs": 58796,
+   "inputSide": 156315,
+   "input": 14,
+   "output": 2785,
+   "cacheRead": 125450,
+   "cacheWrite": 30851
+  },
+  {
+   "id": "K1-A-2",
+   "caseId": "K1",
+   "cond": "A",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": false,
+   "critical": [],
+   "missing": [
+    "dedicated-worktree",
+    "start-with-path-after-create"
+   ],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {
+    "skills/asc/references/workspace.md": -1
+   },
+   "toolCalls": 13,
+   "costUsd": 0.38441890000000006,
+   "wallMs": 47663,
+   "inputSide": 236449,
+   "input": 18,
+   "output": 4312,
+   "cacheRead": 204295,
+   "cacheWrite": 32136
+  },
+  {
+   "id": "K1-A-3",
+   "caseId": "K1",
+   "cond": "A",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": false,
+   "critical": [],
+   "missing": [
+    "dedicated-worktree",
+    "start-with-path-after-create"
+   ],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {
+    "skills/asc/references/workspace.md": -1
+   },
+   "toolCalls": 10,
+   "costUsd": 0.24142750000000004,
+   "wallMs": 57857,
+   "inputSide": 128107,
+   "input": 14,
+   "output": 3629,
+   "cacheRead": 109758,
+   "cacheWrite": 18335
+  },
+  {
+   "id": "K1-B-1",
+   "caseId": "K1",
+   "cond": "B",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/workspace.md": 4
+   },
+   "toolCalls": 11,
+   "costUsd": 0.3267388,
+   "wallMs": 54306,
+   "inputSide": 162510,
+   "input": 14,
+   "output": 4267,
+   "cacheRead": 135742,
+   "cacheWrite": 26754
+  },
+  {
+   "id": "K1-B-2",
+   "caseId": "K1",
+   "cond": "B",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/workspace.md": 4
+   },
+   "toolCalls": 10,
+   "costUsd": 0.30074429999999996,
+   "wallMs": 42456,
+   "inputSide": 135367,
+   "input": 12,
+   "output": 3809,
+   "cacheRead": 110062,
+   "cacheWrite": 25293
+  },
+  {
+   "id": "K1-B-3",
+   "caseId": "K1",
+   "cond": "B",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": false,
+   "critical": [],
+   "missing": [
+    "worktree-name"
+   ],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/workspace.md": 3
+   },
+   "toolCalls": 12,
+   "costUsd": 0.33691570000000004,
+   "wallMs": 49506,
+   "inputSide": 141719,
+   "input": 12,
+   "output": 3957,
+   "cacheRead": 112319,
+   "cacheWrite": 29388
+  },
+  {
+   "id": "K1-C-1",
+   "caseId": "K1",
+   "cond": "C",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/workspace.md": 4
+   },
+   "toolCalls": 10,
+   "costUsd": 0.2946625,
+   "wallMs": 44534,
+   "inputSide": 133970,
+   "input": 12,
+   "output": 3561,
+   "cacheRead": 108773,
+   "cacheWrite": 25185
+  },
+  {
+   "id": "K1-C-2",
+   "caseId": "K1",
+   "cond": "C",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": false,
+   "critical": [],
+   "missing": [
+    "worktree-name"
+   ],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/workspace.md": 4
+   },
+   "toolCalls": 13,
+   "costUsd": 0.30460489999999996,
+   "wallMs": 48284,
+   "inputSide": 157593,
+   "input": 14,
+   "output": 4052,
+   "cacheRead": 132985,
+   "cacheWrite": 24594
+  },
+  {
+   "id": "K1-C-3",
+   "caseId": "K1",
+   "cond": "C",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": false,
+   "critical": [],
+   "missing": [
+    "worktree-name"
+   ],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/workspace.md": 4
+   },
+   "toolCalls": 13,
+   "costUsd": 0.35427050000000004,
+   "wallMs": 42314,
+   "inputSide": 175389,
+   "input": 14,
+   "output": 3944,
+   "cacheRead": 144593,
+   "cacheWrite": 30782
+  },
+  {
+   "id": "K2-A-1",
+   "caseId": "K2",
+   "cond": "A",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [
+    "execution-recovery"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/host-session.md": -1
+   },
+   "toolCalls": 11,
+   "costUsd": 0.3625833,
+   "wallMs": 89841,
+   "inputSide": 191468,
+   "input": 18,
+   "output": 4841,
+   "cacheRead": 162340,
+   "cacheWrite": 29110
+  },
+  {
+   "id": "K2-A-2",
+   "caseId": "K2",
+   "cond": "A",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [
+    "execution-recovery"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/host-session.md": 6
+   },
+   "toolCalls": 12,
+   "costUsd": 0.3583294,
+   "wallMs": 58316,
+   "inputSide": 182942,
+   "input": 16,
+   "output": 5497,
+   "cacheRead": 155803,
+   "cacheWrite": 27123
+  },
+  {
+   "id": "K2-A-3",
+   "caseId": "K2",
+   "cond": "A",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [
+    "execution-recovery"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/host-session.md": -1
+   },
+   "toolCalls": 11,
+   "costUsd": 0.33296499999999996,
+   "wallMs": 70723,
+   "inputSide": 175612,
+   "input": 16,
+   "output": 4935,
+   "cacheRead": 150096,
+   "cacheWrite": 25500
+  },
+  {
+   "id": "K2-B-1",
+   "caseId": "K2",
+   "cond": "B",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/host-session.md": 2
+   },
+   "toolCalls": 8,
+   "costUsd": 0.36526440000000004,
+   "wallMs": 58568,
+   "inputSide": 186303,
+   "input": 16,
+   "output": 4864,
+   "cacheRead": 156738,
+   "cacheWrite": 29549
+  },
+  {
+   "id": "K2-B-2",
+   "caseId": "K2",
+   "cond": "B",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": 4,
+    "skills/asc/references/host-session.md": 3
+   },
+   "toolCalls": 10,
+   "costUsd": 0.37492729999999996,
+   "wallMs": 48316,
+   "inputSide": 163115,
+   "input": 12,
+   "output": 4344,
+   "cacheRead": 130385,
+   "cacheWrite": 32718
+  },
+  {
+   "id": "K2-B-3",
+   "caseId": "K2",
+   "cond": "B",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/host-session.md": 2
+   },
+   "toolCalls": 8,
+   "costUsd": 0.3358104,
+   "wallMs": 50303,
+   "inputSide": 159140,
+   "input": 14,
+   "output": 4081,
+   "cacheRead": 130648,
+   "cacheWrite": 28478
+  },
+  {
+   "id": "K2-C-1",
+   "caseId": "K2",
+   "cond": "C",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc",
+    "execution-recovery"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/host-session.md": 4
+   },
+   "toolCalls": 8,
+   "costUsd": 0.2652754,
+   "wallMs": 42381,
+   "inputSide": 99319,
+   "input": 10,
+   "output": 3455,
+   "cacheRead": 76733,
+   "cacheWrite": 22576
+  },
+  {
+   "id": "K2-C-2",
+   "caseId": "K2",
+   "cond": "C",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": 3,
+    "skills/asc/references/host-session.md": 2
+   },
+   "toolCalls": 9,
+   "costUsd": 0.3306132,
+   "wallMs": 51777,
+   "inputSide": 159485,
+   "input": 14,
+   "output": 4256,
+   "cacheRead": 132117,
+   "cacheWrite": 27354
+  },
+  {
+   "id": "K2-C-3",
+   "caseId": "K2",
+   "cond": "C",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": 3,
+    "skills/asc/references/host-session.md": 2
+   },
+   "toolCalls": 9,
+   "costUsd": 0.37397439999999993,
+   "wallMs": 50406,
+   "inputSide": 195245,
+   "input": 16,
+   "output": 4636,
+   "cacheRead": 164208,
+   "cacheWrite": 31021
+  },
+  {
+   "id": "K3-A-1",
+   "caseId": "K3",
+   "cond": "A",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [
+    "subagent-model-selection"
+   ],
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "toolCalls": 8,
+   "costUsd": 0.23149239999999996,
+   "wallMs": 59096,
+   "inputSide": 105294,
+   "input": 12,
+   "output": 2375,
+   "cacheRead": 84421,
+   "cacheWrite": 20861
+  },
+  {
+   "id": "K3-A-2",
+   "caseId": "K3",
+   "cond": "A",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [
+    "subagent-model-selection"
+   ],
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 1
+   },
+   "toolCalls": 13,
+   "costUsd": 0.28931640000000003,
+   "wallMs": 38651,
+   "inputSide": 167954,
+   "input": 16,
+   "output": 3135,
+   "cacheRead": 143221,
+   "cacheWrite": 24717
+  },
+  {
+   "id": "K3-A-3",
+   "caseId": "K3",
+   "cond": "A",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [
+    "subagent-model-selection"
+   ],
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "toolCalls": 9,
+   "costUsd": 0.21569140000000003,
+   "wallMs": 55427,
+   "inputSide": 107428,
+   "input": 12,
+   "output": 2812,
+   "cacheRead": 89756,
+   "cacheWrite": 17660
+  },
+  {
+   "id": "K3-B-1",
+   "caseId": "K3",
+   "cond": "B",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": true,
+   "skills": [
+    "subagent-model-selection"
+   ],
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "toolCalls": 8,
+   "costUsd": 0.3208884,
+   "wallMs": 44371,
+   "inputSide": 132640,
+   "input": 12,
+   "output": 3527,
+   "cacheRead": 103961,
+   "cacheWrite": 28667
+  },
+  {
+   "id": "K3-B-2",
+   "caseId": "K3",
+   "cond": "B",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": true,
+   "skills": [
+    "subagent-model-selection"
+   ],
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "toolCalls": 9,
+   "costUsd": 0.3219136,
+   "wallMs": 38165,
+   "inputSide": 138123,
+   "input": 12,
+   "output": 3392,
+   "cacheRead": 109107,
+   "cacheWrite": 29004
+  },
+  {
+   "id": "K3-B-3",
+   "caseId": "K3",
+   "cond": "B",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": true,
+   "skills": [
+    "subagent-model-selection"
+   ],
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "toolCalls": 12,
+   "costUsd": 0.4141342,
+   "wallMs": 58550,
+   "inputSide": 213809,
+   "input": 16,
+   "output": 4742,
+   "cacheRead": 178370,
+   "cacheWrite": 35423
+  },
+  {
+   "id": "K3-C-1",
+   "caseId": "K3",
+   "cond": "C",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": true,
+   "skills": [
+    "subagent-model-selection"
+   ],
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "toolCalls": 15,
+   "costUsd": 0.39122500000000004,
+   "wallMs": 52857,
+   "inputSide": 212405,
+   "input": 16,
+   "output": 4694,
+   "cacheRead": 179744,
+   "cacheWrite": 32645
+  },
+  {
+   "id": "K3-C-2",
+   "caseId": "K3",
+   "cond": "C",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": true,
+   "skills": [
+    "subagent-model-selection"
+   ],
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "toolCalls": 11,
+   "costUsd": 0.32898739999999993,
+   "wallMs": 42516,
+   "inputSide": 160657,
+   "input": 14,
+   "output": 3513,
+   "cacheRead": 131621,
+   "cacheWrite": 29022
+  },
+  {
+   "id": "K3-C-3",
+   "caseId": "K3",
+   "cond": "C",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [
+    "subagent-model-selection"
+   ],
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "toolCalls": 10,
+   "costUsd": 0.2914138,
+   "wallMs": 36980,
+   "inputSide": 149865,
+   "input": 14,
+   "output": 3489,
+   "cacheRead": 125308,
+   "cacheWrite": 24543
+  },
+  {
+   "id": "K4-A-1",
+   "caseId": "K4",
+   "cond": "A",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/post-merge.md": -1
+   },
+   "toolCalls": 14,
+   "costUsd": 0.3572704,
+   "wallMs": 76017,
+   "inputSide": 172983,
+   "input": 16,
+   "output": 4238,
+   "cacheRead": 142497,
+   "cacheWrite": 30470
+  },
+  {
+   "id": "K4-A-2",
+   "caseId": "K4",
+   "cond": "A",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/post-merge.md": -1
+   },
+   "toolCalls": 10,
+   "costUsd": 0.2841054,
+   "wallMs": 36221,
+   "inputSide": 156465,
+   "input": 14,
+   "output": 3107,
+   "cacheRead": 132052,
+   "cacheWrite": 24399
+  },
+  {
+   "id": "K4-A-3",
+   "caseId": "K4",
+   "cond": "A",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/post-merge.md": -1
+   },
+   "toolCalls": 10,
+   "costUsd": 0.3559096,
+   "wallMs": 60136,
+   "inputSide": 223428,
+   "input": 18,
+   "output": 3184,
+   "cacheRead": 191723,
+   "cacheWrite": 31687
+  },
+  {
+   "id": "K4-B-1",
+   "caseId": "K4",
+   "cond": "B",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/post-merge.md": 4
+   },
+   "toolCalls": 10,
+   "costUsd": 0.28745449999999995,
+   "wallMs": 42857,
+   "inputSide": 136320,
+   "input": 12,
+   "output": 3511,
+   "cacheRead": 112005,
+   "cacheWrite": 24303
+  },
+  {
+   "id": "K4-B-2",
+   "caseId": "K4",
+   "cond": "B",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/post-merge.md": 3
+   },
+   "toolCalls": 8,
+   "costUsd": 0.2656484,
+   "wallMs": 35090,
+   "inputSide": 108900,
+   "input": 10,
+   "output": 3043,
+   "cacheRead": 85472,
+   "cacheWrite": 23418
+  },
+  {
+   "id": "K4-B-3",
+   "caseId": "K4",
+   "cond": "B",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/post-merge.md": 3
+   },
+   "toolCalls": 8,
+   "costUsd": 0.2610018,
+   "wallMs": 38423,
+   "inputSide": 106413,
+   "input": 10,
+   "output": 2822,
+   "cacheRead": 82954,
+   "cacheWrite": 23449
+  },
+  {
+   "id": "K4-C-1",
+   "caseId": "K4",
+   "cond": "C",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/post-merge.md": 3
+   },
+   "toolCalls": 9,
+   "costUsd": 0.2613168,
+   "wallMs": 36153,
+   "inputSide": 133229,
+   "input": 12,
+   "output": 2761,
+   "cacheRead": 110259,
+   "cacheWrite": 22958
+  },
+  {
+   "id": "K4-C-2",
+   "caseId": "K4",
+   "cond": "C",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/post-merge.md": 3
+   },
+   "toolCalls": 9,
+   "costUsd": 0.255542,
+   "wallMs": 35900,
+   "inputSide": 105939,
+   "input": 10,
+   "output": 2926,
+   "cacheRead": 83415,
+   "cacheWrite": 22514
+  },
+  {
+   "id": "K4-C-3",
+   "caseId": "K4",
+   "cond": "C",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": true,
+   "ascBody": true,
+   "skills": [
+    "asc"
+   ],
+   "refs": {
+    "skills/asc/references/review.md": -1,
+    "skills/asc/references/post-merge.md": 3
+   },
+   "toolCalls": 9,
+   "costUsd": 0.27772959999999997,
+   "wallMs": 34141,
+   "inputSide": 134072,
+   "input": 12,
+   "output": 3382,
+   "cacheRead": 110593,
+   "cacheWrite": 23467
+  },
+  {
+   "id": "K5-A-1",
+   "caseId": "K5",
+   "cond": "A",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {},
+   "toolCalls": 2,
+   "costUsd": 0.1091605,
+   "wallMs": 34139,
+   "inputSide": 24069,
+   "input": 4,
+   "output": 459,
+   "cacheRead": 11885,
+   "cacheWrite": 12180
+  },
+  {
+   "id": "K5-A-2",
+   "caseId": "K5",
+   "cond": "A",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {},
+   "toolCalls": 2,
+   "costUsd": 0.08111960000000001,
+   "wallMs": 14263,
+   "inputSide": 24070,
+   "input": 4,
+   "output": 643,
+   "cacheRead": 15953,
+   "cacheWrite": 8113
+  },
+  {
+   "id": "K5-A-3",
+   "caseId": "K5",
+   "cond": "A",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {},
+   "toolCalls": 2,
+   "costUsd": 0.08524480000000001,
+   "wallMs": 25159,
+   "inputSide": 24079,
+   "input": 4,
+   "output": 848,
+   "cacheRead": 15959,
+   "cacheWrite": 8116
+  },
+  {
+   "id": "K5-B-1",
+   "caseId": "K5",
+   "cond": "B",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {},
+   "toolCalls": 2,
+   "costUsd": 0.0814132,
+   "wallMs": 18524,
+   "inputSide": 24403,
+   "input": 4,
+   "output": 590,
+   "cacheRead": 16121,
+   "cacheWrite": 8278
+  },
+  {
+   "id": "K5-B-2",
+   "caseId": "K5",
+   "cond": "B",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {},
+   "toolCalls": 2,
+   "costUsd": 0.0800024,
+   "wallMs": 13058,
+   "inputSide": 24395,
+   "input": 4,
+   "output": 521,
+   "cacheRead": 16117,
+   "cacheWrite": 8274
+  },
+  {
+   "id": "K5-B-3",
+   "caseId": "K5",
+   "cond": "B",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {},
+   "toolCalls": 2,
+   "costUsd": 0.0827624,
+   "wallMs": 18733,
+   "inputSide": 24395,
+   "input": 4,
+   "output": 659,
+   "cacheRead": 16117,
+   "cacheWrite": 8274
+  },
+  {
+   "id": "K5-C-1",
+   "caseId": "K5",
+   "cond": "C",
+   "rep": 1,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {},
+   "toolCalls": 2,
+   "costUsd": 0.0838906,
+   "wallMs": 18438,
+   "inputSide": 24397,
+   "input": 4,
+   "output": 715,
+   "cacheRead": 16118,
+   "cacheWrite": 8275
+  },
+  {
+   "id": "K5-C-2",
+   "caseId": "K5",
+   "cond": "C",
+   "rep": 2,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {},
+   "toolCalls": 2,
+   "costUsd": 0.0809914,
+   "wallMs": 16381,
+   "inputSide": 24398,
+   "input": 4,
+   "output": 553,
+   "cacheRead": 16117,
+   "cacheWrite": 8277
+  },
+  {
+   "id": "K5-C-3",
+   "caseId": "K5",
+   "cond": "C",
+   "rep": 3,
+   "structured": true,
+   "subtype": "success",
+   "pass": true,
+   "critical": [],
+   "missing": [],
+   "ascSelected": false,
+   "ascBody": false,
+   "skills": [],
+   "refs": {},
+   "toolCalls": 2,
+   "costUsd": 0.0807732,
+   "wallMs": 10621,
+   "inputSide": 24403,
+   "input": 4,
+   "output": 558,
+   "cacheRead": 16121,
+   "cacheWrite": 8278
+  }
+ ],
+ "agg": {
+  "K1/A": {
+   "n": 3,
+   "pass": 0,
+   "critical": 0,
+   "missing": 5,
+   "ascSelected": 0,
+   "ascBody": 0,
+   "refs": {
+    "skills/asc/references/workspace.md": 0
+   },
+   "refFirstIndexMedian": {
+    "skills/asc/references/workspace.md": null
+   },
+   "costMedian": 0.3279364,
+   "costRange": [
+    0.24142750000000004,
+    0.38441890000000006
+   ],
+   "inputSideMedian": 156315,
+   "inputSideRange": [
+    128107,
+    236449
+   ],
+   "outputMedian": 3629,
+   "cacheReadMedian": 125450,
+   "cacheWriteMedian": 30851,
+   "toolCallsMedian": 11,
+   "wallMedianS": 57.857,
+   "wallRangeS": [
+    47.663,
+    58.796
+   ]
+  },
+  "K1/B": {
+   "n": 3,
+   "pass": 2,
+   "critical": 0,
+   "missing": 1,
+   "ascSelected": 3,
+   "ascBody": 3,
+   "refs": {
+    "skills/asc/references/workspace.md": 3
+   },
+   "refFirstIndexMedian": {
+    "skills/asc/references/workspace.md": 4
+   },
+   "costMedian": 0.3267388,
+   "costRange": [
+    0.30074429999999996,
+    0.33691570000000004
+   ],
+   "inputSideMedian": 141719,
+   "inputSideRange": [
+    135367,
+    162510
+   ],
+   "outputMedian": 3957,
+   "cacheReadMedian": 112319,
+   "cacheWriteMedian": 26754,
+   "toolCallsMedian": 11,
+   "wallMedianS": 49.506,
+   "wallRangeS": [
+    42.456,
+    54.306
+   ]
+  },
+  "K1/C": {
+   "n": 3,
+   "pass": 1,
+   "critical": 0,
+   "missing": 2,
+   "ascSelected": 3,
+   "ascBody": 3,
+   "refs": {
+    "skills/asc/references/workspace.md": 3
+   },
+   "refFirstIndexMedian": {
+    "skills/asc/references/workspace.md": 4
+   },
+   "costMedian": 0.30460489999999996,
+   "costRange": [
+    0.2946625,
+    0.35427050000000004
+   ],
+   "inputSideMedian": 157593,
+   "inputSideRange": [
+    133970,
+    175389
+   ],
+   "outputMedian": 3944,
+   "cacheReadMedian": 132985,
+   "cacheWriteMedian": 25185,
+   "toolCallsMedian": 13,
+   "wallMedianS": 44.534,
+   "wallRangeS": [
+    42.314,
+    48.284
+   ]
+  },
+  "K2/A": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 0,
+   "ascBody": 0,
+   "refs": {
+    "skills/asc/references/review.md": 0,
+    "skills/asc/references/host-session.md": 1
+   },
+   "refFirstIndexMedian": {
+    "skills/asc/references/review.md": null,
+    "skills/asc/references/host-session.md": 6
+   },
+   "costMedian": 0.3583294,
+   "costRange": [
+    0.33296499999999996,
+    0.3625833
+   ],
+   "inputSideMedian": 182942,
+   "inputSideRange": [
+    175612,
+    191468
+   ],
+   "outputMedian": 4935,
+   "cacheReadMedian": 155803,
+   "cacheWriteMedian": 27123,
+   "toolCallsMedian": 11,
+   "wallMedianS": 70.723,
+   "wallRangeS": [
+    58.316,
+    89.841
+   ]
+  },
+  "K2/B": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 3,
+   "ascBody": 3,
+   "refs": {
+    "skills/asc/references/review.md": 1,
+    "skills/asc/references/host-session.md": 3
+   },
+   "refFirstIndexMedian": {
+    "skills/asc/references/review.md": 4,
+    "skills/asc/references/host-session.md": 2
+   },
+   "costMedian": 0.36526440000000004,
+   "costRange": [
+    0.3358104,
+    0.37492729999999996
+   ],
+   "inputSideMedian": 163115,
+   "inputSideRange": [
+    159140,
+    186303
+   ],
+   "outputMedian": 4344,
+   "cacheReadMedian": 130648,
+   "cacheWriteMedian": 29549,
+   "toolCallsMedian": 8,
+   "wallMedianS": 50.303,
+   "wallRangeS": [
+    48.316,
+    58.568
+   ]
+  },
+  "K2/C": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 3,
+   "ascBody": 3,
+   "refs": {
+    "skills/asc/references/review.md": 2,
+    "skills/asc/references/host-session.md": 3
+   },
+   "refFirstIndexMedian": {
+    "skills/asc/references/review.md": 3,
+    "skills/asc/references/host-session.md": 2
+   },
+   "costMedian": 0.3306132,
+   "costRange": [
+    0.2652754,
+    0.37397439999999993
+   ],
+   "inputSideMedian": 159485,
+   "inputSideRange": [
+    99319,
+    195245
+   ],
+   "outputMedian": 4256,
+   "cacheReadMedian": 132117,
+   "cacheWriteMedian": 27354,
+   "toolCallsMedian": 9,
+   "wallMedianS": 50.406,
+   "wallRangeS": [
+    42.381,
+    51.777
+   ]
+  },
+  "K3/A": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 0,
+   "ascBody": 0,
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 3
+   },
+   "refFirstIndexMedian": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "costMedian": 0.23149239999999996,
+   "costRange": [
+    0.21569140000000003,
+    0.28931640000000003
+   ],
+   "inputSideMedian": 107428,
+   "inputSideRange": [
+    105294,
+    167954
+   ],
+   "outputMedian": 2812,
+   "cacheReadMedian": 89756,
+   "cacheWriteMedian": 20861,
+   "toolCallsMedian": 9,
+   "wallMedianS": 55.427,
+   "wallRangeS": [
+    38.651,
+    59.096
+   ]
+  },
+  "K3/B": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 0,
+   "ascBody": 3,
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 3
+   },
+   "refFirstIndexMedian": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "costMedian": 0.3219136,
+   "costRange": [
+    0.3208884,
+    0.4141342
+   ],
+   "inputSideMedian": 138123,
+   "inputSideRange": [
+    132640,
+    213809
+   ],
+   "outputMedian": 3527,
+   "cacheReadMedian": 109107,
+   "cacheWriteMedian": 29004,
+   "toolCallsMedian": 9,
+   "wallMedianS": 44.371,
+   "wallRangeS": [
+    38.165,
+    58.55
+   ]
+  },
+  "K3/C": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 0,
+   "ascBody": 2,
+   "refs": {
+    "skills/subagent-model-selection/SKILL.md": 3
+   },
+   "refFirstIndexMedian": {
+    "skills/subagent-model-selection/SKILL.md": 0
+   },
+   "costMedian": 0.32898739999999993,
+   "costRange": [
+    0.2914138,
+    0.39122500000000004
+   ],
+   "inputSideMedian": 160657,
+   "inputSideRange": [
+    149865,
+    212405
+   ],
+   "outputMedian": 3513,
+   "cacheReadMedian": 131621,
+   "cacheWriteMedian": 29022,
+   "toolCallsMedian": 11,
+   "wallMedianS": 42.516,
+   "wallRangeS": [
+    36.98,
+    52.857
+   ]
+  },
+  "K4/A": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 0,
+   "ascBody": 0,
+   "refs": {
+    "skills/asc/references/review.md": 0,
+    "skills/asc/references/post-merge.md": 0
+   },
+   "refFirstIndexMedian": {
+    "skills/asc/references/review.md": null,
+    "skills/asc/references/post-merge.md": null
+   },
+   "costMedian": 0.3559096,
+   "costRange": [
+    0.2841054,
+    0.3572704
+   ],
+   "inputSideMedian": 172983,
+   "inputSideRange": [
+    156465,
+    223428
+   ],
+   "outputMedian": 3184,
+   "cacheReadMedian": 142497,
+   "cacheWriteMedian": 30470,
+   "toolCallsMedian": 10,
+   "wallMedianS": 60.136,
+   "wallRangeS": [
+    36.221,
+    76.017
+   ]
+  },
+  "K4/B": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 3,
+   "ascBody": 3,
+   "refs": {
+    "skills/asc/references/review.md": 0,
+    "skills/asc/references/post-merge.md": 3
+   },
+   "refFirstIndexMedian": {
+    "skills/asc/references/review.md": null,
+    "skills/asc/references/post-merge.md": 3
+   },
+   "costMedian": 0.2656484,
+   "costRange": [
+    0.2610018,
+    0.28745449999999995
+   ],
+   "inputSideMedian": 108900,
+   "inputSideRange": [
+    106413,
+    136320
+   ],
+   "outputMedian": 3043,
+   "cacheReadMedian": 85472,
+   "cacheWriteMedian": 23449,
+   "toolCallsMedian": 8,
+   "wallMedianS": 38.423,
+   "wallRangeS": [
+    35.09,
+    42.857
+   ]
+  },
+  "K4/C": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 3,
+   "ascBody": 3,
+   "refs": {
+    "skills/asc/references/review.md": 0,
+    "skills/asc/references/post-merge.md": 3
+   },
+   "refFirstIndexMedian": {
+    "skills/asc/references/review.md": null,
+    "skills/asc/references/post-merge.md": 3
+   },
+   "costMedian": 0.2613168,
+   "costRange": [
+    0.255542,
+    0.27772959999999997
+   ],
+   "inputSideMedian": 133229,
+   "inputSideRange": [
+    105939,
+    134072
+   ],
+   "outputMedian": 2926,
+   "cacheReadMedian": 110259,
+   "cacheWriteMedian": 22958,
+   "toolCallsMedian": 9,
+   "wallMedianS": 35.9,
+   "wallRangeS": [
+    34.141,
+    36.153
+   ]
+  },
+  "K5/A": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 0,
+   "ascBody": 0,
+   "refs": {},
+   "refFirstIndexMedian": {},
+   "costMedian": 0.08524480000000001,
+   "costRange": [
+    0.08111960000000001,
+    0.1091605
+   ],
+   "inputSideMedian": 24070,
+   "inputSideRange": [
+    24069,
+    24079
+   ],
+   "outputMedian": 643,
+   "cacheReadMedian": 15953,
+   "cacheWriteMedian": 8116,
+   "toolCallsMedian": 2,
+   "wallMedianS": 25.159,
+   "wallRangeS": [
+    14.263,
+    34.139
+   ]
+  },
+  "K5/B": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 0,
+   "ascBody": 0,
+   "refs": {},
+   "refFirstIndexMedian": {},
+   "costMedian": 0.0814132,
+   "costRange": [
+    0.0800024,
+    0.0827624
+   ],
+   "inputSideMedian": 24395,
+   "inputSideRange": [
+    24395,
+    24403
+   ],
+   "outputMedian": 590,
+   "cacheReadMedian": 16117,
+   "cacheWriteMedian": 8274,
+   "toolCallsMedian": 2,
+   "wallMedianS": 18.524,
+   "wallRangeS": [
+    13.058,
+    18.733
+   ]
+  },
+  "K5/C": {
+   "n": 3,
+   "pass": 3,
+   "critical": 0,
+   "missing": 0,
+   "ascSelected": 0,
+   "ascBody": 0,
+   "refs": {},
+   "refFirstIndexMedian": {},
+   "costMedian": 0.0809914,
+   "costRange": [
+    0.0807732,
+    0.0838906
+   ],
+   "inputSideMedian": 24398,
+   "inputSideRange": [
+    24397,
+    24403
+   ],
+   "outputMedian": 558,
+   "cacheReadMedian": 16118,
+   "cacheWriteMedian": 8277,
+   "toolCallsMedian": 2,
+   "wallMedianS": 16.381,
+   "wallRangeS": [
+    10.621,
+    18.438
+   ]
+  }
+ },
+ "summary": {
+  "Q": false,
+  "R": true,
+  "I": false,
+  "tokenWins": 1,
+  "costSumB": 1.2795652,
+  "costSumC": 1.2255222999999997,
+  "toolsOk": false,
+  "decision": "不採用",
+  "effectAB": {
+   "passA": 12,
+   "passB": 14
+  },
+  "totalCostUsd": 12.147861500000003
+ }
+}
