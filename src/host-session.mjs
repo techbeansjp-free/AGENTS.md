@@ -28,7 +28,7 @@ export function sessionOptions(args){
  return options;
 }
 
-/** Separate the Host's listing directory from the exact checkout being reviewed. */
+/** Resolve the primary checkout (Codex listing directory) separately from the exact checkout being reviewed. */
 function sessionLocation(directory){
  const target=fs.realpathSync(directory);if(!fs.statSync(target).isDirectory())throw Error('Expected project directory');
  let gitManaged=false;
@@ -60,12 +60,13 @@ function sessionLocation(directory){
 /**
  * Claude review launch. Read scope is enforced by launch settings, not prompt text:
  * --restricted ignores user/project/local settings (their allow rules and additionalDirectories)
- * and confines the file tools to the working directories (cwd and --add-dir).
+ * and confines the file tools to the working directory. The caller launches in the review target itself
+ * (#1800, owner decision): no --add-dir, so the primary checkout and other worktrees stay outside.
+ * The session is therefore stored under the target's project, and is resumed by its ID or name.
  * No --allowedTools: a bare Read/Glob/Grep allow rule is path-unrestricted and widens reads beyond them.
  */
-export function claudeReviewArguments({model,sessionId,instruction,cwd,targetDirectory,ephemeral,name}){
+export function claudeReviewArguments({model,sessionId,instruction,ephemeral,name}){
  const args=['-p','--model',model,'--output-format','json','--restricted','--permission-mode','dontAsk','--tools','Read,Glob,Grep','--strict-mcp-config','--settings','{"disableAllHooks":true}','--session-id',sessionId,'--append-system-prompt',instruction];
- if(targetDirectory!==cwd)args.push('--add-dir',targetDirectory);
  if(ephemeral)args.push('--no-session-persistence');else args.push('-n',name);
  return args;
 }
@@ -163,8 +164,12 @@ function command(executable,args,{cwd,input,timeout,out,err}){
 
 export async function runHostSession(options){
  const {host,model,ephemeral,timeout,executable}=options;
- const {cwd,targetDirectory,targetHead,readHead,gitCommonDir}=sessionLocation(options.cwd);
- const targetInstruction=`ASC session location: ${JSON.stringify({sessionRoot:cwd,targetDirectory,targetHead})}. The sessionRoot is only the launch/listing location. Review and read files in targetDirectory, never substitute the primary checkout or another worktree. Use absolute paths (or git -C targetDirectory). Read the target's applicable AGENTS.md/CLAUDE.md and nested project rules before work. Verify the target HEAD when Git is available; report a mismatch instead of reviewing another checkout. Do not modify files or use external write tools.`;
+ const location=sessionLocation(options.cwd),{targetDirectory,targetHead,readHead,gitCommonDir}=location;
+ // Claude confines reads to its launch directory, so it starts (and is renamed) in the target; Codex limits reads by
+ // its permission profile and keeps the primary checkout as the thread cwd for listing.
+ const cwd=host==='claude'?targetDirectory:location.cwd;
+ const rootNote=cwd===targetDirectory?'The sessionRoot is the review target itself.':'The sessionRoot is only the launch/listing location.';
+ const targetInstruction=`ASC session location: ${JSON.stringify({sessionRoot:cwd,targetDirectory,targetHead})}. ${rootNote} Review and read files in targetDirectory, never substitute the primary checkout or another worktree. Use absolute paths (or git -C targetDirectory). Read the target's applicable AGENTS.md/CLAUDE.md and nested project rules before work. Verify the target HEAD when Git is available; report a mismatch instead of reviewing another checkout. Do not modify files or use external write tools.`;
  const prompt=fs.readFileSync(options.promptFile,'utf8');if(!prompt.trim())throw Error('Empty session prompt');
  const outputDir=path.resolve(options.outputDir);
  // A new private directory prevents overwriting another run, symlinks, or review results.
@@ -177,7 +182,7 @@ export async function runHostSession(options){
  try{
   if(host==='claude'){
    state.sessionId=randomUUID();save();
-   const args=claudeReviewArguments({model,sessionId:state.sessionId,instruction:targetInstruction,cwd,targetDirectory,ephemeral,name:state.name});
+   const args=claudeReviewArguments({model,sessionId:state.sessionId,instruction:targetInstruction,ephemeral,name:state.name});
    const result=await command(executable,args,{cwd,input:prompt,timeout,out:b=>write('events.jsonl',b),err:b=>write('stderr.txt',b)});
    state.process=result;
    if(result.error||result.code!==0)throw Error(result.error??`Claude exited ${result.code}`);
