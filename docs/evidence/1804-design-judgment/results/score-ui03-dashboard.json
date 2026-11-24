@@ -66,19 +66,19 @@
    "bytes": 13993,
    "notesExist": true,
    "eval": {
-    "id": "cpco",
+    "id": "rqap",
     "totals": [
      17,
-     16
+     15
     ],
     "axes": {
      "subject": [
-      1,
+      2,
       1
      ],
      "hierarchy": [
       2,
-      2
+      1
      ],
      "typography": [
       2,
@@ -101,19 +101,19 @@
       1
      ],
      "consistency": [
-      2,
-      1
+      1,
+      2
      ],
      "decoration": [
       2,
-      2
+      1
      ],
      "rationale": [
       2,
       2
      ]
     },
-    "mean": 16.5,
+    "mean": 16,
     "gray": [
      {
       "recall": 1,
@@ -191,14 +191,14 @@
    "bytes": 13227,
    "notesExist": true,
    "eval": {
-    "id": "6oqr",
+    "id": "wm6d",
     "totals": [
      17,
-     17
+     16
     ],
     "axes": {
      "subject": [
-      1,
+      2,
       1
      ],
      "hierarchy": [
@@ -210,8 +210,8 @@
       1
      ],
      "composition": [
-      2,
-      2
+      1,
+      1
      ],
      "color": [
       2,
@@ -238,7 +238,7 @@
       2
      ]
     },
-    "mean": 17,
+    "mean": 16.5,
     "gray": [
      {
       "recall": 1,
@@ -316,14 +316,14 @@
    "bytes": 13656,
    "notesExist": true,
    "eval": {
-    "id": "q6g4",
+    "id": "irpy",
     "totals": [
-     17,
+     18,
      17
     ],
     "axes": {
      "subject": [
-      1,
+      2,
       1
      ],
      "hierarchy": [
@@ -340,11 +340,11 @@
      ],
      "color": [
       2,
-      2
+      1
      ],
      "spacing": [
       1,
-      1
+      2
      ],
      "distinctiveness": [
       1,
@@ -363,7 +363,7 @@
       2
      ]
     },
-    "mean": 17,
+    "mean": 17.5,
     "gray": [
      {
       "recall": 1,
@@ -442,10 +442,10 @@
    "bytes": 18611,
    "notesExist": true,
    "eval": {
-    "id": "v0f7",
+    "id": "yw15",
     "totals": [
      18,
-     19
+     18
     ],
     "axes": {
      "subject": [
@@ -474,7 +474,7 @@
      ],
      "distinctiveness": [
       2,
-      2
+      1
      ],
      "consistency": [
       2,
@@ -489,7 +489,7 @@
       2
      ]
     },
-    "mean": 18.5,
+    "mean": 18,
     "gray": [
      {
       "recall": 1,
@@ -567,18 +567,18 @@
    "bytes": 15249,
    "notesExist": true,
    "eval": {
-    "id": "tyeo",
+    "id": "3kwo",
     "totals": [
-     14,
-     17
+     17,
+     16
     ],
     "axes": {
      "subject": [
-      1,
-      2
+      2,
+      1
      ],
      "hierarchy": [
-      1,
+      2,
       2
      ],
      "typography": [
@@ -586,8 +586,8 @@
       1
      ],
      "composition": [
-      1,
-      2
+      2,
+      1
      ],
      "color": [
       2,
@@ -595,7 +595,7 @@
      ],
      "spacing": [
       1,
-      1
+      2
      ],
      "distinctiveness": [
       1,
@@ -614,7 +614,7 @@
       2
      ]
     },
-    "mean": 15.5,
+    "mean": 16.5,
     "gray": [
      {
       "recall": 1,
@@ -692,10 +692,10 @@
    "bytes": 17116,
    "notesExist": true,
    "eval": {
-    "id": "32ue",
+    "id": "r70a",
     "totals": [
-     19,
-     19
+     17,
+     17
     ],
     "axes": {
      "subject": [
@@ -723,12 +723,12 @@
       1
      ],
      "distinctiveness": [
-      2,
-      2
+      1,
+      1
      ],
      "consistency": [
-      2,
-      2
+      1,
+      1
      ],
      "decoration": [
       2,
@@ -739,11 +739,11 @@
       2
      ]
     },
-    "mean": 19,
+    "mean": 17,
     "gray": [
      {
       "recall": 1,
-      "falsePositives": 1
+      "falsePositives": 0
      },
      {
       "recall": 1,
@@ -818,14 +818,14 @@
    "bytes": 15432,
    "notesExist": true,
    "eval": {
-    "id": "4g8u",
+    "id": "t9yd",
     "totals": [
-     17,
-     19
+     20,
+     18
     ],
     "axes": {
      "subject": [
-      1,
+      2,
       2
      ],
      "hierarchy": [
@@ -833,7 +833,7 @@
       2
      ],
      "typography": [
-      1,
+      2,
       1
      ],
      "composition": [
@@ -849,8 +849,8 @@
       2
      ],
      "distinctiveness": [
-      1,
-      2
+      2,
+      1
      ],
      "consistency": [
       2,
@@ -865,7 +865,7 @@
       2
      ]
     },
-    "mean": 18,
+    "mean": 19,
     "gray": [
      {
       "recall": 1,
@@ -943,10 +943,10 @@
    "bytes": 14334,
    "notesExist": true,
    "eval": {
-    "id": "td9l",
+    "id": "a1ff",
     "totals": [
-     20,
-     19
+     19,
+     18
     ],
     "axes": {
      "subject": [
@@ -959,7 +959,7 @@
      ],
      "typography": [
       2,
-      2
+      1
      ],
      "composition": [
       2,
@@ -974,7 +974,7 @@
       2
      ],
      "distinctiveness": [
-      2,
+      1,
       1
      ],
      "consistency": [
@@ -990,7 +990,7 @@
       2
      ]
     },
-    "mean": 19.5,
+    "mean": 18.5,
     "gray": [
      {
       "recall": 1,
@@ -1069,14 +1069,14 @@
    "bytes": 14380,
    "notesExist": true,
    "eval": {
-    "id": "66to",
+    "id": "5avi",
     "totals": [
-     14,
+     16,
      15
     ],
     "axes": {
      "subject": [
-      1,
+      2,
       1
      ],
      "hierarchy": [
@@ -1104,7 +1104,7 @@
       1
      ],
      "consistency": [
-      1,
+      2,
       1
      ],
      "decoration": [
@@ -1116,7 +1116,7 @@
       1
      ]
     },
-    "mean": 14.5,
+    "mean": 15.5,
     "gray": [
      {
       "recall": 1,
@@ -1195,9 +1195,9 @@
    "bytes": 15696,
    "notesExist": true,
    "eval": {
-    "id": "t5bh",
+    "id": "67hq",
     "totals": [
-     17,
+     18,
      15
     ],
     "axes": {
@@ -1218,7 +1218,7 @@
       2
      ],
      "color": [
-      1,
+      2,
       1
      ],
      "spacing": [
@@ -1226,11 +1226,11 @@
       2
      ],
      "distinctiveness": [
-      2,
+      1,
       1
      ],
      "consistency": [
-      1,
+      2,
       1
      ],
      "decoration": [
@@ -1242,7 +1242,7 @@
       1
      ]
     },
-    "mean": 16,
+    "mean": 16.5,
     "gray": [
      {
       "recall": 1,
@@ -1320,23 +1320,23 @@
    "bytes": 13405,
    "notesExist": true,
    "eval": {
-    "id": "60l4",
+    "id": "jvc6",
     "totals": [
      18,
      16
     ],
     "axes": {
      "subject": [
-      1,
+      2,
       1
      ],
      "hierarchy": [
       2,
-      2
+      1
      ],
      "typography": [
       2,
-      1
+      2
      ],
      "composition": [
       2,
@@ -1347,8 +1347,8 @@
       2
      ],
      "spacing": [
-      2,
-      1
+      1,
+      2
      ],
      "distinctiveness": [
       1,
@@ -1356,7 +1356,7 @@
      ],
      "consistency": [
       2,
-      2
+      1
      ],
      "decoration": [
       2,
@@ -1445,14 +1445,14 @@
    "bytes": 13954,
    "notesExist": true,
    "eval": {
-    "id": "o7kf",
+    "id": "oruc",
     "totals": [
-     14,
-     14
+     16,
+     13
     ],
     "axes": {
      "subject": [
-      1,
+      2,
       1
      ],
      "hierarchy": [
@@ -1480,8 +1480,8 @@
       1
      ],
      "consistency": [
-      1,
-      2
+      2,
+      1
      ],
      "decoration": [
       2,
@@ -1492,7 +1492,7 @@
       2
      ]
     },
-    "mean": 14,
+    "mean": 14.5,
     "gray": [
      {
       "recall": 1,

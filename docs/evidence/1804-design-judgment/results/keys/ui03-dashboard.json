@@ -1,19 +1,33 @@
 {
  "case": "ui03-dashboard",
- "seed": "1804-ui03-dashboard",
+ "seed": "1804r-ui03-dashboard",
  "key": {
-  "cpco": "A-r1",
-  "6oqr": "A-r2",
-  "q6g4": "A-r3",
-  "v0f7": "B-r1",
-  "tyeo": "B-r2",
-  "32ue": "B-r3",
-  "4g8u": "D-r1",
-  "td9l": "D-r2",
-  "66to": "D-r3",
-  "t5bh": "E-r1",
-  "60l4": "E-r2",
-  "o7kf": "E-r3"
+  "rqap": "A-r1",
+  "wm6d": "A-r2",
+  "irpy": "A-r3",
+  "yw15": "B-r1",
+  "3kwo": "B-r2",
+  "r70a": "B-r3",
+  "t9yd": "D-r1",
+  "a1ff": "D-r2",
+  "5avi": "D-r3",
+  "67hq": "E-r1",
+  "jvc6": "E-r2",
+  "oruc": "E-r3"
  },
- "excluded": []
+ "excluded": [],
+ "redacted": {
+  "rqap": 0,
+  "wm6d": 0,
+  "irpy": 1,
+  "yw15": 0,
+  "3kwo": 1,
+  "r70a": 1,
+  "t9yd": 2,
+  "a1ff": 1,
+  "5avi": 2,
+  "67hq": 0,
+  "jvc6": 0,
+  "oruc": 0
+ }
 }

@@ -6,6 +6,8 @@
 
 **4候補とMotion Atlasのどれも、ASCの標準配布にも既存Skillの拡張にも採用しない（現状維持）。配布Skill・CLI・CIは変更しない。** 判定は、モデル実行の前にcommit `59a88e84`で固定した[EVAL_PLAN.md](EVAL_PLAN.md)の規則による（[results/decision.json](results/decision.json)）。
 
+初回の評価では、生成者のnotesに残ったSkill名で盲検が崩れていた（独立レビューの指摘）。そこで、ui02・ui03をSkill名を伏せた盲検folderで評価し直した。判定はその結果による（下記「計画からの逸脱」）。初回の評価（[results/initial/](results/initial/)）でも、分類は同じだった。
+
 | 候補 | 分類 | 主な根拠 |
 | --- | --- | --- |
 | Anthropic frontend-design（B） | `reject` | 3ケースのどれでも、Aと3回の範囲が分かれなかった。ui02で、axe-coreのserious違反（文字のコントラスト）が1件あった（非劣化の失敗） |
@@ -18,11 +20,14 @@
 
 根拠の要約：
 
-- **現行ASCだけ（A）で、品質がすでに上限に近い。** 評価者2名の平均合計（20点満点）は、Aでui02 18〜19、ui03 16.5〜17、ui08 15.5〜19だった。必須情報の網羅、横scrollなし、axeの違反0、外部要求0、focus表示、reduced-motionは、全条件のほぼ全試行で満たした。
-- **差が出たのは採点項目の平均だけで、3回の範囲は重なった。** 例：ui03で、Aの「題材適合」と「独自性」は平均1.0だった。Bはそれぞれ1.83・1.67、Dは1.5・1.33だった。しかし、Bの合計は15.5〜19で、Aの16.5〜17と重なる。これは「区別できる」の条件を満たさない。
-- **外部Skillの読まれ方が、想定と違った。** 全48試行で、Skill toolの呼出しは0回だった。モデルは`.claude/skills/`をGlobし、`SKILL.md`をReadで読んだ。デザインの依頼（ui02・ui03）では、B・Dは全試行、Eは3/6試行で本文を読んだ。既存デザインシステム上の画面（ui08）とCLIの修正（ui10）では、どの候補も読まなかった。既存デザインシステム上の画面とCLIの修正で、B・D・Eの18試行は外部Skillを読まなかった（誤発火0件）。
+- **現行ASCだけ（A）で、品質がすでに上限に近い。** 評価者2名の平均合計（20点満点）は、Aでui02 17〜17.5、ui03 16〜17.5、ui08 15.5〜19だった。必須情報の網羅、横scrollなし、axeの違反0、外部要求0、focus表示、reduced-motionは、全条件のほぼ全試行で満たした。
+- **差が出たのは採点項目の平均だけで、3回の範囲は重なった。** 例：ui03で、Aの「題材適合」は平均1.5、「構図」は1.33だった。B・Dの「題材適合」は1.83、Dの「構図」は1.67だった。しかし、Bの合計は16.5〜18、Dは15.5〜19で、Aの16〜17.5と重なる。これは「区別できる」の条件を満たさない。
+- **外部Skillの読まれ方が、想定と違った。** 全48試行で、Skill toolの呼出しは0回だった。モデルは`.claude/skills/`をGlobし、`SKILL.md`をReadで読んだ。デザインの依頼（ui02・ui03）では、B・Dは全試行、Eは3/6試行で本文を読んだ。既存デザインシステム上の画面（ui08）とCLIの修正（ui10）では、B・D・Eの18試行のどれも外部Skillを読まなかった（誤発火0件）。
 - **費用は、ほぼ同じだった。** 生成費用の中央値（ui02・ui03・ui08）は、Aに対しB 1.07倍、D 1.24倍、E 0.98倍だった。Dはcache readが約1.6〜2倍に増えた。
-- **全体を通じて、同じ型への収束が見えた。** ui02（郷土資料館の企画展）では、12試行すべてが水面と舟の図を置き、11試行が暗色（紺・深緑）の見出し帯と明朝体の見出しを使った（[12試行の狭幅の初期表示](results/screenshots/ui02-exhibition-all-mobile-top.jpg)。上段がA1〜A3・B1〜B3、下段がD1〜D3・E1〜E3）。背景色は、A・D・Eの9試行が生成り（`rgb(244〜246, 238〜241, 226〜231)`）で、Bの3試行だけが灰緑・白系だった。ただし、評価者はこの構成を題材に合うとして高く採点した（独自性の平均：A 2.0、B 2.0、D 2.0、E 1.67）。収束そのものは、今回の規則では品質の低下として測られない（下記「限界」）。
+- **全体を通じて、同じ型への収束が見えた。** ui02（郷土資料館の企画展）では、12試行すべてが水面と舟の図を置き、11試行が暗色（紺・深緑）の見出し帯と明朝体の見出しを使った（[12試行の狭幅の初期表示](results/screenshots/ui02-exhibition-all-mobile-top.jpg)。上段がA1〜A3・B1〜B3、下段がD1〜D3・E1〜E3）。背景色は、A・D・Eの9試行が生成り（`rgb(244〜246, 238〜241, 226〜231)`）で、Bの3試行だけが灰緑・白系だった。
+  - Skill名を伏せた評価では、ui02の「独自性」の平均がA 1.17、B 1.17、D 1.0、E 1.17と、全条件で低かった。
+  - 初回の評価（Skill名が見えていた）では、A・B・D 2.0、E 1.67だった。
+  - どちらでも、外部Skillは収束を減らさなかった。
 
 ## 記録
 
@@ -37,7 +42,7 @@
 | 外部Skill | [ext-commits.json](ext-commits.json)。Issueの調査基点と同じcommit（AD `046e42c7`、PD `af656d5f`、MA `8cff7604`）。frontend-designは`anthropics/skills` `e4bb5d96`、UI/UX Pro Maxは`8db36338`（取得時のHEAD） |
 | 外部network | 固定commitの取得（git clone）、image build時のpackage取得、出典リンクの到達確認（27 URL）と内容確認（3 URL）だけ。生成・評価のAgentにnetworkのtoolは無い |
 | 外部送信 | repositoryや他projectの内容は送っていない。Hostのモデルに送ったのは、架空の依頼文・生成物・screenshot・採点基準だけ |
-| 費用 | 合計15.61 USD（上限30）。生成48回 8.06、評価6回 7.54、隔離の反例 0.003、評価器のdry run 0.014。全試行で再実行なし |
+| 費用 | 評価の合計21.09 USD（上限30）：生成48回 8.06、初回の評価6回 7.54、伏字にした再評価4回 5.48、隔離の反例2回 0.006、評価器のdry run 0.014。生成の再実行なし。別に独立レビュー1回 2.09（合計23.18） |
 
 ## Phase A：現行ASCの能力・責務・不足
 
@@ -60,9 +65,10 @@ Hostの標準能力とASCの責務の分離：Skillの登録・選択・本文�
 現行ASCだけで生成した画面の観測（条件A、9試行）：
 
 - 改善の余地が見えた点：
-  - ui02の書体・余白（評価の平均1.5）。
-  - ui03の題材適合・独自性（各1.0。汎用の業務dashboardの型）。
+  - ui02の書体・構図（各1.5）、余白（1.33）、独自性（1.17）。
+  - ui03の独自性（1.0。汎用の業務dashboardの型）、構図（1.33）、題材適合（1.5）。
   - ui08の一貫性（0.67）。既存画面と、見出しや余白の扱いが一部異なった。
+  - 値は評価者2名・3試行の平均（2点満点）。ui02・ui03はSkill名を伏せた評価、ui08は初回の評価（伏せる行が無かった）。
 - 要求適合・既存規約の遵守は満たした。
   - 網羅率：ui02の1試行だけ0.885。gold側の不備による。下記の逸脱を参照。
   - token違反0、既存fileの変更0。
@@ -130,8 +136,8 @@ READMEの宣伝と実装・作例・実証の区別：
 | --- | --- | --- |
 | 題材理解・情報設計・視覚的階層 | 満たした（hierarchy 1.83〜2.0） | 区別できず |
 | 操作設計（フォーム、ui08） | 合格数8〜11/11 | D 9〜11、E 9〜11、B 9〜11。区別できず |
-| Art Direction（書体・配色・構図・余白） | ui02の書体・余白が1.5 | 区別できず。Bはui03の題材適合・独自性の平均が高い（1.83・1.67）が、合計の範囲は重なる |
-| デザイン根拠（notes） | rationale 1.83〜2.0 | Dは、未確認・未実施を最も多く明記した。採点は区別できず |
+| Art Direction（書体・配色・構図・余白） | ui02の書体・構図1.5、余白1.33 | 区別できず。B・Dはui03の題材適合の平均が高い（1.83）が、合計の範囲は重なる |
+| デザイン根拠（notes） | rationale 2.0 | Dは、未確認・未実施を最も多く明記した。採点は区別できず |
 | デザインシステム遵守 | token違反0・既存file変更0 | 全条件で同じ（どの候補も、ui08ではSkillを読まなかった） |
 | 実画面評価・比較設計・モーション | 生成Agentにブラウザーが無いため測っていない | 測っていない |
 
@@ -145,10 +151,11 @@ READMEの宣伝と実装・作例・実証の区別：
 - Product Designの検出は、次の内訳だった。
   - networkの字面14件：検証scriptのURL解析。
   - 秘密の字面29件：試験用の`process.env`のflag。
-  - 実行の字面20件。
+  - 実行の字面20件、外部scriptの字面1件（同梱したWCAGのHTML）、書込みの字面2件（試験と`tokens.py`）。
 
-  中身を見たところ、評価campaignの試験用で、Skillの通常手順からは呼ばれない。
-- UI/UX Pro Maxのscriptに、通信の実装は見当たらなかった。環境変数は`COLORTERM`だけを読む。
+  該当fileを人が読んだところ、評価campaignの試験用で、Skillの通常手順からは呼ばれない。
+- UI/UX Pro Maxの字面の検出は、network 10件・外部script 3件・実行7件・秘密9件だった。多くはCSVの指針文（例：fetchの使い方の説明）とtestである。`scripts/`の本体（`core.py`・`design_system.py`・`search.py`）を人が読み、通信の実装が無いこと、環境変数は`COLORTERM`だけを読むことを確認した（全fileは読んでいない）。
+- Motion Atlasの検出は、書込み3件（build・package・verify script）、秘密1件（`serve.mjs`）、network 2件（検証scriptと`systems.js`）だった。中身は読んでいない（動的評価の対象外のため。未確認）。
 - 字面の一致は安全の証明ではない（#1773の結論）。
 
 登録前の扱い：
@@ -158,7 +165,7 @@ READMEの宣伝と実装・作例・実証の区別：
 - 起動設定の反例（[results/isolation-probe.json](results/isolation-probe.json)、合格）：
   - fixture外の読取り・symlink経由の読取り・fixture外への書込みは拒否された。
   - networkのtoolは無い。
-- 評価AgentはHOME・本番repository・goldに到達できない（cwdの外の読取りは拒否される）。
+- 評価用の起動設定（`dontAsk`、`Read,Glob,Grep`）でも同じ反例を行った。fixture外・symlink経由の読取りは拒否され、書込み・networkのtoolは無かった（合格。独立レビューの指摘で追加した）。
 
 license：
 
@@ -181,11 +188,14 @@ license：
 - 事前のdry run（モデルの呼出し0回。評価器だけhaikuで1回）：次の合成試行で、描画・採点・盲検・評価・集計が各種を区別することを確認した。
   - 正しい画面、空の出力、出力なし、外部要求あり、生成失敗、壊れたHTML、規約違反のフォーム、UI-10の正常と誤発火。
   - 評価器は、画像の無い試行を`null`、空の画面を0点にした。
-- 盲検：乱数IDで条件名を伏せた。表示順は評価者ごとに変えた。評価者はcwdの外（keyとgold）を読めない。
+- 盲検：乱数IDで条件名を伏せ、表示順を評価者ごとに変えた。評価者はcwdの外（keyとgold）を読めない。
+  - 初回は、生成者のnotesに残ったSkill名（ui02で4試行、ui03で6試行）が評価者に見えていた。
+  - 再評価では、Skill名・Skillのpath・`.claude`を含む行を、全条件で同じ規則で伏せた（`make-blind.mjs --redact`、伏せた行はui02 4行・ui03 8行・ui08 0行）。
+  - Dのnotesにある「見本の実見は未完了」等の書き方の癖は残る。条件を推測できる手掛かりを、完全には除けていない。
 - 実行：
   - 生成：4条件×3ケース×3回と、ui10の4条件×3回、計48回。全て`success`で、失敗・timeout・上限到達・再実行は0件。
   - 1巡目の後の見込みは23.3 USDだった。停止の規則（28 USD）に当たらなかったので、全試行を行った。
-- 評価者間の一致：360項目対のうち87.8%が同点で、合計点の差の平均は0.89点だった。同じモデル（opus）の2回なので、独立した人間の評価者間の一致ではない。
+- 評価者間の一致：判定に使った評価で、360項目対のうち84.7%が同点、合計点の差の平均は0.97点だった（初回は87.8%・0.89点）。同じモデル（opus）の2回なので、独立した人間の評価者間の一致ではない。
 
 ## Phase I〜K：審美・UX・アクセシビリティ
 
@@ -193,10 +203,10 @@ license：
 
 | ケース | 指標 | A | B | D | E |
 | --- | --- | --- | --- | --- | --- |
-| ui02 | 評価合計 | 19, 19, 18 | 17.5, 17.5, 18.5 | 16.5, 17.5, 19.5 | 19, 17.5, 19 |
+| ui02 | 評価合計 | 17.5, 17.5, 17 | 19, 14.5, 17.5 | 17, 17, 18 | 18.5, 17, 17.5 |
 | ui02 | 網羅率 | 0.885, 1, 1 | 1, 1, 1 | 0.885, 1, 0.885 | 1, 1, 0.885 |
 | ui02 | axe serious・criticalのnode数 | 0, 0, 0 | 1, 0, 0 | 0, 0, 0 | 0, 0, 0 |
-| ui03 | 評価合計 | 16.5, 17, 17 | 18.5, 15.5, 19 | 18, 19.5, 14.5 | 16, 17, 14 |
+| ui03 | 評価合計 | 16, 16.5, 17.5 | 18, 16.5, 17 | 19, 18.5, 15.5 | 16.5, 17, 14.5 |
 | ui03 | 白黒での異常の読取り（再現率） | 1, 1, 1 | 1, 1, 1 | 1, 1, 1 | 1, 1, 1 |
 | ui08 | 評価合計 | 18, 15.5, 19 | 19, 19, 18 | 20, 19.5, 17.5 | 19.5, 19.5, 18.5 |
 | ui08 | フォーム操作の合格数（11項目） | 8, 9, 11 | 9, 9, 11 | 11, 11, 9 | 10, 9, 11 |
@@ -208,7 +218,7 @@ license：
 - 次は、全試行で0だった：狭幅の横scroll、外部への要求、reduced-motion非対応、page error。
 - focus表示は、全試行で全tab stopにあった。
 - LCP（lab値）は61〜313 ms、CLSは0だった。
-- 生成物の大きさは8〜19 KB（HTML 1 file）だった。
+- 生成物の大きさは8〜19 KBだった（ui02・ui03はHTML 1 file、ui08はHTMLと画面用CSS）。
 
 フォーム操作の失敗：主に「空で保存したとき、`aria-invalid`の付いた項目が5件以上」の判定である。ブラウザー標準の`required`検証を使った試行では、送信自体が止まり、`aria-invalid`は付かない。そのため不合格になる。全条件に同じく起き、条件の差ではない。
 
@@ -222,7 +232,7 @@ UXは、Agentの模擬操作（Playwright）で測った。人の所要時間・
 
 ## Phase N：判断根拠の追跡
 
-全条件の生成物に`DESIGN-NOTES.md`がある（[results/outputs/](results/outputs/)）。「説明可能性」の採点は、Aで1.83〜2.0だった。どの条件とも区別できなかった。
+全条件の生成物に`DESIGN-NOTES.md`がある（[results/outputs/](results/outputs/)）。「説明可能性」の採点は、Aで2.0だった。どの条件とも区別できなかった。
 
 外部の出典URLを書いた試行は0件だった（networkが無いため）。Dは「見本の実見は未完了」と明記した。これは後付けの説明ではなく、Skillの指示どおりの未確認の表明である。
 
@@ -231,7 +241,7 @@ UXは、Agentの模擬操作（Playwright）で測った。人の所要時間・
 ## Phase O：再現性
 
 - 低品質の試行（品質下限の定義による）：A 1、B 0、D 2、E 1。全て、ui02の網羅率0.885による（gold側の不備。下記）。
-- 評価合計の最低値：A 15.5、B 15.5、D 14.5、E 14。
+- 評価合計の最低値：A 15.5、B 14.5、D 15.5、E 14.5。
 - 同じケースの3回で、構成は大きく変わらなかった。ui02は全条件で同じ型だった。
 - 長期の再現性・モデルの変更による影響は測っていない。
 
@@ -242,7 +252,7 @@ UXは、Agentの模擬操作（Playwright）で測った。人の所要時間・
 | 配置・一覧 | 外部Skillは、Hostの一覧に入った（initのSkill一覧）。入れ子の`modules/*/SKILL.md`（Product Design）は、一覧に現れなかった |
 | 選択 | Skill toolによる呼出しは、全48試行で0回だった。デザインの依頼では、モデルが`SKILL.md`を直接Readした（B 6/6、D 6/6、E 3/6） |
 | 不要時の非適用 | ui08（既存デザインシステム）とui10（CLI）で、B・D・Eが外部Skillを読んだ試行は0/18だった |
-| reference取得 | Dは`visual-direction.md`だけを読んだ（作品案内・書体データは0回）。Eは担当Skillを読まなかった |
+| reference取得 | Dは`SKILL.md`・`visual-direction.md`と、作例HTML 1件（1試行）を読んだ。作品案内・書体データは0回。Eは担当Skillを読まなかった |
 | 他Skillへの影響 | Aは、ASCの`contracts-and-ui.md`を5/6試行で読んだ。B・D・Eのデザイン依頼では読まなかった（0/18）。外部Skillが、ASCの既存referenceの読込みを置き換えた形である。品質の差は観測されなかった |
 
 Claude Codeだけで測った。Codexの登録・読込みとの違いは測っていない。
@@ -270,7 +280,7 @@ Claude Codeだけで測った。Codexの登録・読込みとの違いは測っ�
 
 | 候補 | 残存リスク・限界 | 再評価の条件 |
 | --- | --- | --- |
-| frontend-design | ui03の題材適合・独自性の平均は高かったが、3回では区別できない。コントラスト違反が1件あった | 業務画面のケースで反復を増やす（例：各5回以上）。採否の規則を事前に固定する |
+| frontend-design | ui03の題材適合の平均は高かったが、3回では区別できない。コントラスト違反が1件あった | 業務画面のケースで反復を増やす（例：各5回以上）。採否の規則を事前に固定する |
 | Art Direction | 中心の手順（見本の実見・実画面2案の比較）は、network・ブラウザーが無いと実行されない。事例資料は読まれなかった。出典の1行で、記載とリンク先が一致しなかった | 生成Agentに、閲覧（固定のallowlist）とブラウザーのscreenshotを許す評価環境を用意できたとき。同時に、外部閲覧の安全条件（redirect・動的内容）を設計する |
 | Product Design | 担当Skillは選ばれなかった。ASCの`user-journey-acceptance`・`implementation.md`と重なる | 複数画面の操作フロー（UI-05・UI-06）を、実接続で評価するとき |
 | UI/UX Pro Max | 第三者のPython実行が前提 | 検索結果を、事前に隔離環境で生成した静的資料として渡す方式を評価するとき |
@@ -290,16 +300,25 @@ Claude Codeだけで測った。Codexの登録・読込みとの違いは測っ�
 ## 計画からの逸脱
 
 - **デザインSkillの利用の判定**：計画では「デザインSkillの呼出し」とした。1巡目の途中で、Skill toolが呼ばれず、`SKILL.md`がReadで読まれることが分かった。そこで、`SKILL.md`・referenceのReadも「利用」に含めるよう`score.mjs`を変えた。ui10（誤発火）の結果を見る前に変えた。どちらの定義でも、ui10の誤発火は0件である。
-- **goldの不備**：ui02の関連イベントの日付を「4月24日」の形で求めていた。しかし生成物の一部は、カレンダー型（「4月」「24」「土」を別の行に置く）や「4/24」の形で表示した。その場合、「日」が無いので不合格になった（A 1・D 2・E 1試行で網羅率0.885、低品質に数えられた）。計画どおり、goldは直していない。
+- **goldの不備**：ui02の関連イベントの日付を「4月24日」の形で求めていた。しかし生成物の一部は、カレンダー型（「4月」「24」「土」を別の行に置く）で表示した。その場合、「日」が無いので、3つの日付（4月24日・5月15日・6月5日）が不合格になった（A 1・D 2・E 1試行で網羅率0.885、低品質に数えられた）。「4/24」の形はgoldの正解に含めていた。計画どおり、goldは直していない。
   - この不備で、Dの非劣化（低品質の試行数）が失敗になった。
   - ただし、全候補の判定は「改善なし」で決まっている。goldを直しても、分類は変わらない。
 - **評価のkey**：盲検のfolderから、描画できなかった試行を除く処理（`make-blind.mjs`）を、本番の前に加えた。本番で除かれた試行は0件だった。
+- **盲検の不備と再評価**：初回の評価では、`make-blind.mjs`がnotesをそのまま写した。そのため、Skill名（`frontend-design`・`anything-frontend-art-direction`、ASCの`contracts-and-ui.md`等）が評価者に見えていた（独立レビューのMedium指摘）。
+  - 再評価の前に、次の規則をcommit `bfa65807`で固定した：ui02・ui03は伏字の新しい盲検folder（新しい乱数ID・表示順）で2回ずつ評価し直し、その結果を判定の正とする。ui08は伏せる行が0件なので、初回の評価を使う。判定の規則（EVAL_PLAN.md）は変えない。
+  - 結果：分類は初回と同じ（B・D・Eとも`reject`）。3試行の平均の評価合計は、ui02で全条件0.8〜1.3点下がった（A 18.67→17.33）。ui03では−0.5〜＋0.3点の変化だった。
+  - 初回の評価は[results/initial/](results/initial/)に残した。
+  - 再評価の4回（5.48 USD）は、計画の費用見込みに含めていなかった。合計は上限30 USDの内である。
+- **集計の補正**：`aggregate.mjs`の`defer`の判定が、ui10に適用されていなかった（EVAL_PLANは「いずれかのケース」）。結果を見た後に直したが、ui10は全12試行が成功しているので、判定は変わらない。
+- **未修正の採点器の弱点**：reduced-motionの判定は、`prefers-reduced-motion`の記述があれば、動きが止まらなくても合格になる。今回は、reduced-motionで動いていた試行が0件なので、影響は無い。再利用する場合は直す。
 
 ## 限界と未確認
 
 - 人間による審美的評価は行っていない。評価は、同じモデル（opus）の2回である。評価者の好みや、モデル特有の偏りは除けない。
-- 評価者は上限近くを付けた（Aでも16.5〜19）。上限効果で、小さな差を区別できない可能性がある。
-- 「独自性」は、評価者が題材との関係で採点した。全条件で同じ型に収束した（ui02）ことは、この採点では減点されなかった。収束を直接の指標にする方法（構造の類似度等）は、審美的品質の代理としての限界もあり、今回は記述統計だけにした。
+- 評価者は上限近くを付けた（Aでも15.5〜19）。上限効果で、小さな差を区別できない可能性がある。
+- UXの指標も上限に張り付いた。ui03の白黒での読取りは全試行1.0、ui08のフォーム操作はAの最大値が11/11だった。そのため、「Xの最小値がAの最大値を超える」という改善の規則は、UXでは構造的に成立し得なかった。UXについて言えるのは、非劣化だけである。
+- 生成者のnotesの自己申告は、実際の操作と一致しないことがあった。例：ui02のE 3回目は「`.claude/skills`の資料も参照していない」と書いたが、実際には`SKILL.md`を読んでいた。Dが「未実施を明記した」という評価は、notesの記述に基づくもので、操作の記録で裏付けたものではない。
+- 「独自性」は、評価者が題材との関係で採点した。全条件で同じ型に収束したこと（ui02）は、伏字の評価では全条件の減点として現れた。しかし、初回の評価では減点されなかった。評価者の判断が、notesの内容に左右された可能性がある。収束を直接の指標にする方法（構造の類似度等）は、審美的品質の代理としての限界もあり、今回は記述統計だけにした。
 - 生成Agentには、ブラウザー・network・Bashが無い。実画面の確認・外部事例の参照・2案の比較を手順に含むSkill（Art Direction・Product Design）には不利な条件である。ただし、条件は全候補で同じで、事前に固定した。
 - 代表ケースは4件だけである。UI-01・UI-04・UI-06・UI-09・UI-12の一部・UI-13は評価していない。モデルはsonnetだけで、Host・モデルの非劣性（Stage 4）は測っていない。
 - 1回の生成だけを測った。修正の対話・手戻りを含む総費用（H6）は測っていない。
@@ -312,7 +331,7 @@ Claude Codeだけで測った。Codexの登録・読込みとの違いは測っ�
 git -c core.hooksPath=/dev/null clone --filter=blob:none --no-checkout <url> <name> && git -C <name> -c core.hooksPath=/dev/null checkout <commit>
 ```
 
-`<name>`は`ad`・`pd`・`ma`・`as`・`uipm`（[ext-commits.json](ext-commits.json)）。
+`<name>`は`ad`・`pd`・`ma`・`as`・`uipm`。[ext-commits.json](ext-commits.json)では、`as`（anthropics/skills）のうちfrontend-designの部分を`fd`のkeyで記録している。
 
 描画imageの作成：
 
@@ -335,8 +354,8 @@ RUN npm init -y >/dev/null && npm install --no-audit --no-fund playwright@1.49.1
 ASC1804_EXT=<ext> node harness/run-gen.mjs <RUNS> <case> <A|B|D|E> <rep> --budget 1.5   # ui10-cliは0.5
 node harness/run-render.mjs <worktree> <RUNS> <case> <RENDER>/<case>
 node harness/run-ui10-tests.mjs <worktree> <RUNS> <OUT>/ui10-tests.json
-node harness/make-blind.mjs <RUNS> <RENDER>/<case> <case> <BLIND>/<case> <KEYS>/<case>.json 1804-<case>
-node harness/run-eval.mjs <BLIND>/<case> <EVALS>/<case>-e1.json order-1 --model opus --budget 4   # e2はorder-2
+node harness/make-blind.mjs <RUNS> <RENDER>/<case> <case> <BLIND>/<case> <KEYS>/<case>.json 1804r-<case> --redact   # 初回は seed 1804-<case>、--redactなし
+node harness/run-eval.mjs <BLIND>/<case> <EVALS>/<case>-e1.json order-r1 --model opus --budget 4   # e2はorder-r2。初回はorder-1・order-2
 node harness/score.mjs <RUNS> <RENDER>/<case> <case> <SCORE>/<case>.json --key <KEYS>/<case>.json --evals <EVALS>/<case>-e1.json,<EVALS>/<case>-e2.json
 node harness/aggregate.mjs <OUT>/decision.json <SCORE>/ui02-exhibition.json <SCORE>/ui03-dashboard.json <SCORE>/ui08-existing-ds.json <SCORE>/ui10-cli.json <OUT>/ui10-tests.json
 ```
@@ -346,7 +365,8 @@ dry run：`node harness/make-dryrun.mjs <DRY>/runs`の後、同じ描画・採�
 保存したもの：
 
 - `results/gen-runs.json`：全48試行のmeta。
-- `results/score-*.json`、`results/evals/`、`results/keys/`、`results/decision.json`、`results/ui10-tests.json`。
+- `results/score-*.json`、`results/evals/`、`results/keys/`、`results/decision.json`、`results/ui10-tests.json`：判定に使ったもの（ui02・ui03は伏字の再評価、ui08は初回の評価）。
+- `results/initial/`：初回の評価（ui02・ui03）と、その結果での判定。
 - `results/outputs/`：生成されたHTML・CSS・notes・CLIの修正。
 - `results/screenshots/`：代表8枚と、ui02の12試行の初期表示を並べた1枚（縮小JPEG）。
 - `results/source-sample.json`：出典の抽出と確認。

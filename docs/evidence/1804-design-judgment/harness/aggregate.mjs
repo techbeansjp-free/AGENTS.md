@@ -61,6 +61,7 @@ for (const X of candidates) {
   const mis = m10(X).filter((t) => t.gen.designSkillInvoked || (t.uiFilesCreated ?? []).length).length;
   const oraclePass = (cond) => m10(cond).filter((t) => ok(t) && tests10[t.trial]?.oracle?.fail === 0 && tests10[t.trial]?.oracle?.pass > 0).length;
   r.ui10 = {misfires: mis, trials: m10(X).length, oraclePassCandidate: oraclePass(X), oraclePassControl: oraclePass(control)};
+  if (m10(control).length < 3 || m10(X).length < 3 || m10(control).filter((t) => !ok(t)).length >= 2 || m10(X).filter((t) => !ok(t)).length >= 2) r.missingCells.push('ui10');
   if (mis > 0) r.nonInferiorityFailures.push('ui10:misfire');
   if (oraclePass(X) < oraclePass(control)) r.nonInferiorityFailures.push('ui10:oracle');
   const costs = (cond) => ['ui02', 'ui03', 'ui08'].flatMap((c) => of(c, cond).map((t) => t.gen.costUsd));

@@ -1,0 +1,312 @@
+{
+ "schema": "asc-1804-eval/v1",
+ "blind": "ui03-dashboard",
+ "order": [
+  "td9l",
+  "4g8u",
+  "6oqr",
+  "t5bh",
+  "66to",
+  "o7kf",
+  "v0f7",
+  "60l4",
+  "cpco",
+  "32ue",
+  "q6g4",
+  "tyeo"
+ ],
+ "exit": 0,
+ "wallMs": 160627,
+ "subtype": "success",
+ "isError": false,
+ "costUsd": 1.3320912000000003,
+ "numTurns": 53,
+ "usage": {
+  "input_tokens": 28,
+  "cache_creation_input_tokens": 111278,
+  "cache_read_input_tokens": 692341,
+  "output_tokens": 15157,
+  "output_tokens_details": {
+   "thinking_tokens": 4088
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 111278,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 5968,
+    "cache_read_input_tokens": 104251,
+    "cache_creation_input_tokens": 10250,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 10250
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-haiku-5-5": {
+   "inputTokens": 1345,
+   "outputTokens": 25,
+   "cacheReadInputTokens": 0,
+   "cacheCreationInputTokens": 0,
+   "webSearchRequests": 0,
+   "costUSD": 0.00014700000000000002,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 0,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 0,
+   "canonicalModel": "claude-haiku-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  },
+  "claude-opus-5-5": {
+   "inputTokens": 28,
+   "outputTokens": 15157,
+   "cacheReadInputTokens": 692341,
+   "cacheCreationInputTokens": 111278,
+   "webSearchRequests": 0,
+   "costUSD": 1.3319442000000001,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 4088,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 111278,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "scores": {
+  "td9l": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "最上部の「▲要対処4件」帯、データ取得失敗帯と再試行、超過レーンを上に寄せた表（▲遅延超過の札・赤い進捗バー）に加え、琥珀色の「締切経過・未出荷222件」の札でしきい値判定と区別した参考情報を出しており、800px幅でもKPIが3×2になるだけで表の列関係は保たれている。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "4g8u": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "要約帯に超過項目を名前とリンク付きで並べ、レーンは運送会社名と遅延件数を大きくしたカード（4×2から2×4）で関係が保たれているが、作りは汎用のカード一覧で、KPIの「しきい値 ≥ 120 件/時」が不自然に折り返している。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "6oqr": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "要約帯・黄色の失敗帯・▲上限超過のKPI・超過レーンを上に寄せた表という汎用の構成で、遅延超過の札と同じ行に置いたレーンIDが「COLDCHA/IN」（desktop）や「TOHO/KU」（tablet）と語の途中で折れて読みにくい。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "t5bh": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 2,
+   "color": 1,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "状態列に「締切まで28分」「締切超過・未完」を出し、締切までの残りを題材に固有の形で見せているが、しきい値内のC01の「締切超過・未完」も超過と同じ赤で塗っていて赤の意味が混ざり、tablet では「未/完」「148/分」と途中で折り返している。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "66to": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 1,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": 1,
+   "evidence": "常時表示を想定した暗い背景に珊瑚色（要対処）と黄色（取得失敗）を分けて使っているが、tablet で締切・担当の列が消えて担当者が見えず、要約帯は「要対処3件」なのに4項目を並べ、失敗帯の下に空きがあり、notes の「KPI超過2件」「担当をレーン名の下に移す」とも画面が合わない。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "o7kf": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 1,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "要約帯と取得失敗帯は上部にまとまっているが、desktop の表は右端の約300pxが空き、tablet のレーンカードは遅延と担当が離れて間延びし、B01 のIDは「COLDCHAI/N」と折れ、しきい値内のKPIには状態ラベルが無く超過のKPIだけにある。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "v0f7": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "超過レーンだけ担当者・遅延件数（しきい値8件）・注文参照を最初から開き、締切列に「あと0時間28分」「締切超過・残9」を出す判断が題材に固有だが、「締切超過・残/222」が途中で折り返し、失敗帯の下に空きがある。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "60l4": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "要約帯・琥珀色の失敗帯・状態ラベル付きKPI（監視対象外／✓正常／▲しきい値超過）・▲要対処の行を上に寄せたレーン表という汎用の構成で、担当者は行を押して開く詳細に置き、tablet では長いIDを省略記号で切っている。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "cpco": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 1,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "赤い帯の中に要対処の一覧と失敗の詳細・再試行をまとめているが、8行すべてに同じ「詳細を見る」ボタンが並んで担当者は隠れ、tablet では運送会社と締切の列も消えている。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "32ue": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "赤く塗った「▲対処が必要: 4件」帯と塗りつぶしの超過KPIが最も目立ち、レーンを ▲遅延超過 → ◆締切超過 → ✔通常 → 出荷完了 の順に並べて締切超過を独自の状態にしているが、tablet のレーンカードは右側に遅延・締切・担当を縦積みにしたため縦に間延びしている。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02",
+    "LANE-C01"
+   ]
+  },
+  "q6g4": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "内訳を札で示した要約帯・赤枠の失敗帯・「▲基準超過（基準5%以下）」のKPI・▲要対応のレーン表という汎用の構成で、失敗帯の下（tablet では全幅の再試行ボタンの下）に空きが残り、desktop のレーン列は広すぎる。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "tyeo": {
+   "subject": 1,
+   "hierarchy": 1,
+   "typography": 1,
+   "composition": 1,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "要約帯は種別の札とリンク付きで分かりやすく、残り件数も出しているが、取得失敗の詳細と再試行ボタンは画面最下部のデータ源欄に埋もれ、「しきい値8件/超」や tablet の「要対/処」が途中で折り返し、正常なデータ源のカードには空きが目立つ。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  }
+ },
+ "rawResult": "12画面すべてについて、desktop・tablet・gray の画像とnotesをReadで開いて確認し、採点しました。\n\n採点の判断として、2点を付けにくかった項目と、迷った点を先に書きます。\n\n- **題材適合・独自性**：12画面とも「要約帯 → KPIカード → レーン表」という同じ型です。2点は、締切までの残り時間や締切超過を独自の表示にしたもの（td9l、t5bh、v0f7、32ue）だけにしました。\n- **白黒で読み取れた要対処（flaggedInGray）**：32ue だけ `LANE-C01` を含めました。白黒画面の上部の帯で「対処が必要: 4件」の中に「◆締切超過」として数えられ、行にも「◆締切超過」の札があるためです。td9l と t5bh も C01 の締切超過を出していますが、要対処の件数には入れず「参考表示」としているので含めていません。\n- **画面とnotesの食い違い**：66to には2つあります。notesにある「タブレットでは担当をレーン名の下に移す」が画面では見当たらず、要約帯は「要対処 3件」なのに4項目を並べています。また t5bh は「赤は超過専用」としながら、しきい値を超えていない C01 の「締切超過・未完」を赤で表示しています。\n\n```json\n{\"scores\": {\n\"td9l\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"最上部の「▲要対処4件」帯、データ取得失敗帯と再試行、超過レーンを上に寄せた表（▲遅延超過の札・赤い進捗バー）に加え、琥珀色の「締切経過・未出荷222件」の札でしきい値判定と区別した参考情報を出しており、800px幅でもKPIが3×2になるだけで表の列関係は保たれている。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"4g8u\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"要約帯に超過項目を名前とリンク付きで並べ、レーンは運送会社名と遅延件数を大きくしたカード（4×2から2×4）で関係が保たれているが、作りは汎用のカード一覧で、KPIの「しきい値 ≥ 120 件/時」が不自然に折り返している。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"6oqr\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"要約帯・黄色の失敗帯・▲上限超過のKPI・超過レーンを上に寄せた表という汎用の構成で、遅延超過の札と同じ行に置いたレーンIDが「COLDCHA/IN」（desktop）や「TOHO/KU」（tablet）と語の途中で折れて読みにくい。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"t5bh\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 1, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 1, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"状態列に「締切まで28分」「締切超過・未完」を出し、締切までの残りを題材に固有の形で見せているが、しきい値内のC01の「締切超過・未完」も超過と同じ赤で塗っていて赤の意味が混ざり、tablet では「未/完」「148/分」と途中で折り返している。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"66to\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 1, \"decoration\": 2, \"rationale\": 1, \"evidence\": \"常時表示を想定した暗い背景に珊瑚色（要対処）と黄色（取得失敗）を分けて使っているが、tablet で締切・担当の列が消えて担当者が見えず、要約帯は「要対処3件」なのに4項目を並べ、失敗帯の下に空きがあり、notes の「KPI超過2件」「担当をレーン名の下に移す」とも画面が合わない。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"o7kf\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 1, \"composition\": 1, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 1, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"要約帯と取得失敗帯は上部にまとまっているが、desktop の表は右端の約300pxが空き、tablet のレーンカードは遅延と担当が離れて間延びし、B01 のIDは「COLDCHAI/N」と折れ、しきい値内のKPIには状態ラベルが無く超過のKPIだけにある。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"v0f7\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"超過レーンだけ担当者・遅延件数（しきい値8件）・注文参照を最初から開き、締切列に「あと0時間28分」「締切超過・残9」を出す判断が題材に固有だが、「締切超過・残/222」が途中で折り返し、失敗帯の下に空きがある。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"60l4\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"要約帯・琥珀色の失敗帯・状態ラベル付きKPI（監視対象外／✓正常／▲しきい値超過）・▲要対処の行を上に寄せたレーン表という汎用の構成で、担当者は行を押して開く詳細に置き、tablet では長いIDを省略記号で切っている。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"cpco\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"赤い帯の中に要対処の一覧と失敗の詳細・再試行をまとめているが、8行すべてに同じ「詳細を見る」ボタンが並んで担当者は隠れ、tablet では運送会社と締切の列も消えている。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"32ue\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"赤く塗った「▲対処が必要: 4件」帯と塗りつぶしの超過KPIが最も目立ち、レーンを ▲遅延超過 → ◆締切超過 → ✔通常 → 出荷完了 の順に並べて締切超過を独自の状態にしているが、tablet のレーンカードは右側に遅延・締切・担当を縦積みにしたため縦に間延びしている。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\", \"LANE-C01\"]},\n\"q6g4\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"内訳を札で示した要約帯・赤枠の失敗帯・「▲基準超過（基準5%以下）」のKPI・▲要対応のレーン表という汎用の構成で、失敗帯の下（tablet では全幅の再試行ボタンの下）に空きが残り、desktop のレーン列は広すぎる。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"tyeo\": {\"subject\": 1, \"hierarchy\": 1, \"typography\": 1, \"composition\": 1, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"要約帯は種別の札とリンク付きで分かりやすく、残り件数も出しているが、取得失敗の詳細と再試行ボタンは画面最下部のデータ源欄に埋もれ、「しきい値8件/超」や tablet の「要対/処」が途中で折り返し、正常なデータ源のカードには空きが目立つ。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]}\n}}\n```"
+}

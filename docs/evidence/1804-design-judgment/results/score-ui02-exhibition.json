@@ -72,10 +72,10 @@
    "bytes": 13937,
    "notesExist": true,
    "eval": {
-    "id": "az0r",
+    "id": "to38",
     "totals": [
-     19,
-     19
+     18,
+     17
     ],
     "axes": {
      "subject": [
@@ -92,7 +92,7 @@
      ],
      "composition": [
       2,
-      2
+      1
      ],
      "color": [
       2,
@@ -103,8 +103,8 @@
       2
      ],
      "distinctiveness": [
-      2,
-      2
+      1,
+      1
      ],
      "consistency": [
       2,
@@ -119,7 +119,7 @@
       2
      ]
     },
-    "mean": 19
+    "mean": 17.5
    },
    "lowQuality": true
   },
@@ -190,10 +190,10 @@
    "bytes": 15503,
    "notesExist": true,
    "eval": {
-    "id": "ms4t",
+    "id": "tb44",
     "totals": [
-     19,
-     19
+     18,
+     17
     ],
     "axes": {
      "subject": [
@@ -206,7 +206,7 @@
      ],
      "typography": [
       2,
-      2
+      1
      ],
      "composition": [
       2,
@@ -221,8 +221,8 @@
       1
      ],
      "distinctiveness": [
-      2,
-      2
+      1,
+      1
      ],
      "consistency": [
       2,
@@ -237,7 +237,7 @@
       2
      ]
     },
-    "mean": 19
+    "mean": 17.5
    },
    "lowQuality": false
   },
@@ -308,10 +308,10 @@
    "bytes": 16168,
    "notesExist": true,
    "eval": {
-    "id": "23k4",
+    "id": "xfoi",
     "totals": [
-     18,
-     18
+     17,
+     17
     ],
     "axes": {
      "subject": [
@@ -323,11 +323,11 @@
       2
      ],
      "typography": [
-      1,
+      2,
       2
      ],
      "composition": [
-      2,
+      1,
       1
      ],
      "color": [
@@ -335,12 +335,12 @@
       2
      ],
      "spacing": [
-      2,
+      1,
       1
      ],
      "distinctiveness": [
       2,
-      2
+      1
      ],
      "consistency": [
       2,
@@ -355,7 +355,7 @@
       2
      ]
     },
-    "mean": 18
+    "mean": 17
    },
    "lowQuality": false
   },
@@ -428,10 +428,10 @@
    "bytes": 12789,
    "notesExist": true,
    "eval": {
-    "id": "stld",
+    "id": "7nzv",
     "totals": [
-     16,
-     19
+     20,
+     18
     ],
     "axes": {
      "subject": [
@@ -439,7 +439,7 @@
       2
      ],
      "hierarchy": [
-      1,
+      2,
       2
      ],
      "typography": [
@@ -447,7 +447,7 @@
       1
      ],
      "composition": [
-      1,
+      2,
       2
      ],
      "color": [
@@ -455,19 +455,19 @@
       2
      ],
      "spacing": [
-      1,
+      2,
       2
      ],
      "distinctiveness": [
       2,
-      2
+      1
      ],
      "consistency": [
       2,
       2
      ],
      "decoration": [
-      1,
+      2,
       2
      ],
      "rationale": [
@@ -475,7 +475,7 @@
       2
      ]
     },
-    "mean": 17.5
+    "mean": 19
    },
    "lowQuality": false
   },
@@ -545,10 +545,10 @@
    "bytes": 15354,
    "notesExist": true,
    "eval": {
-    "id": "dsyf",
+    "id": "i30u",
     "totals": [
-     16,
-     19
+     15,
+     14
     ],
     "axes": {
      "subject": [
@@ -557,15 +557,15 @@
      ],
      "hierarchy": [
       1,
-      2
+      1
      ],
      "typography": [
       1,
-      2
+      1
      ],
      "composition": [
       2,
-      2
+      1
      ],
      "color": [
       2,
@@ -576,8 +576,8 @@
       1
      ],
      "distinctiveness": [
-      2,
-      2
+      1,
+      1
      ],
      "consistency": [
       2,
@@ -589,10 +589,10 @@
      ],
      "rationale": [
       1,
-      2
+      1
      ]
     },
-    "mean": 17.5
+    "mean": 14.5
    },
    "lowQuality": false
   },
@@ -662,10 +662,10 @@
    "bytes": 12726,
    "notesExist": true,
    "eval": {
-    "id": "agix",
+    "id": "z98c",
     "totals": [
-     19,
-     18
+     18,
+     17
     ],
     "axes": {
      "subject": [
@@ -674,10 +674,10 @@
      ],
      "hierarchy": [
       2,
-      1
+      2
      ],
      "typography": [
-      2,
+      1,
       1
      ],
      "composition": [
@@ -685,16 +685,16 @@
       2
      ],
      "color": [
-      1,
+      2,
       2
      ],
      "spacing": [
       2,
-      2
+      1
      ],
      "distinctiveness": [
-      2,
-      2
+      1,
+      1
      ],
      "consistency": [
       2,
@@ -709,7 +709,7 @@
       2
      ]
     },
-    "mean": 18.5
+    "mean": 17.5
    },
    "lowQuality": false
   },
@@ -784,9 +784,9 @@
    "bytes": 12756,
    "notesExist": true,
    "eval": {
-    "id": "254u",
+    "id": "9557",
     "totals": [
-     17,
+     18,
      16
     ],
     "axes": {
@@ -803,7 +803,7 @@
       1
      ],
      "composition": [
-      1,
+      2,
       1
      ],
      "color": [
@@ -815,12 +815,12 @@
       1
      ],
      "distinctiveness": [
-      2,
-      2
-     ],
-     "consistency": [
       1,
       1
+     ],
+     "consistency": [
+      2,
+      2
      ],
      "decoration": [
       2,
@@ -831,7 +831,7 @@
       2
      ]
     },
-    "mean": 16.5
+    "mean": 17
    },
    "lowQuality": true
   },
@@ -901,10 +901,10 @@
    "bytes": 14724,
    "notesExist": true,
    "eval": {
-    "id": "jm6k",
+    "id": "vm6g",
     "totals": [
-     17,
-     18
+     18,
+     16
     ],
     "axes": {
      "subject": [
@@ -920,7 +920,7 @@
       1
      ],
      "composition": [
-      1,
+      2,
       1
      ],
      "color": [
@@ -928,12 +928,12 @@
       2
      ],
      "spacing": [
-      1,
-      2
+      2,
+      1
      ],
      "distinctiveness": [
-      2,
-      2
+      1,
+      1
      ],
      "consistency": [
       2,
@@ -948,7 +948,7 @@
       2
      ]
     },
-    "mean": 17.5
+    "mean": 17
    },
    "lowQuality": false
   },
@@ -1023,10 +1023,10 @@
    "bytes": 16001,
    "notesExist": true,
    "eval": {
-    "id": "xkvu",
+    "id": "lab8",
     "totals": [
-     20,
-     19
+     18,
+     18
     ],
     "axes": {
      "subject": [
@@ -1050,12 +1050,12 @@
       2
      ],
      "spacing": [
-      2,
+      1,
       1
      ],
      "distinctiveness": [
-      2,
-      2
+      1,
+      1
      ],
      "consistency": [
       2,
@@ -1070,7 +1070,7 @@
       2
      ]
     },
-    "mean": 19.5
+    "mean": 18
    },
    "lowQuality": true
   },
@@ -1141,10 +1141,10 @@
    "bytes": 17192,
    "notesExist": true,
    "eval": {
-    "id": "lf4z",
+    "id": "csq8",
     "totals": [
-     18,
-     20
+     19,
+     18
     ],
     "axes": {
      "subject": [
@@ -1173,11 +1173,11 @@
      ],
      "distinctiveness": [
       2,
-      2
+      1
      ],
      "consistency": [
-      1,
-      2
+      2,
+      1
      ],
      "decoration": [
       2,
@@ -1188,7 +1188,7 @@
       2
      ]
     },
-    "mean": 19
+    "mean": 18.5
    },
    "lowQuality": false
   },
@@ -1258,10 +1258,10 @@
    "bytes": 12880,
    "notesExist": true,
    "eval": {
-    "id": "qi9o",
+    "id": "yn0t",
     "totals": [
      17,
-     18
+     17
     ],
     "axes": {
      "subject": [
@@ -1274,7 +1274,7 @@
      ],
      "typography": [
       2,
-      2
+      1
      ],
      "composition": [
       2,
@@ -1305,7 +1305,7 @@
       2
      ]
     },
-    "mean": 17.5
+    "mean": 17
    },
    "lowQuality": false
   },
@@ -1380,10 +1380,10 @@
    "bytes": 12376,
    "notesExist": true,
    "eval": {
-    "id": "z895",
+    "id": "t1q5",
     "totals": [
-     19,
-     19
+     18,
+     17
     ],
     "axes": {
      "subject": [
@@ -1408,11 +1408,11 @@
      ],
      "spacing": [
       2,
-      2
+      1
      ],
      "distinctiveness": [
-      2,
-      2
+      1,
+      1
      ],
      "consistency": [
       2,
@@ -1427,7 +1427,7 @@
       2
      ]
     },
-    "mean": 19
+    "mean": 17.5
    },
    "lowQuality": true
   }

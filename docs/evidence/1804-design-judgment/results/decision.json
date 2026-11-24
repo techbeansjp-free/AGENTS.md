@@ -7,14 +7,14 @@
     "ui02": {
      "evalTotal": {
       "control": [
-       19,
-       19,
-       18
+       17.5,
+       17.5,
+       17
       ],
       "candidate": [
-       17.5,
-       17.5,
-       18.5
+       19,
+       14.5,
+       17.5
       ]
      },
      "coverage": {
@@ -48,14 +48,14 @@
     "ui03": {
      "evalTotal": {
       "control": [
+       16,
        16.5,
-       17,
-       17
+       17.5
       ],
       "candidate": [
-       18.5,
-       15.5,
-       19
+       18,
+       16.5,
+       17
       ]
      },
      "coverage": {
@@ -186,14 +186,14 @@
     "ui02": {
      "evalTotal": {
       "control": [
-       19,
-       19,
-       18
+       17.5,
+       17.5,
+       17
       ],
       "candidate": [
-       16.5,
-       17.5,
-       19.5
+       17,
+       17,
+       18
       ]
      },
      "coverage": {
@@ -227,14 +227,14 @@
     "ui03": {
      "evalTotal": {
       "control": [
+       16,
        16.5,
-       17,
-       17
+       17.5
       ],
       "candidate": [
-       18,
-       19.5,
-       14.5
+       19,
+       18.5,
+       15.5
       ]
      },
      "coverage": {
@@ -365,14 +365,14 @@
     "ui02": {
      "evalTotal": {
       "control": [
-       19,
-       19,
-       18
+       17.5,
+       17.5,
+       17
       ],
       "candidate": [
-       19,
-       17.5,
-       19
+       18.5,
+       17,
+       17.5
       ]
      },
      "coverage": {
@@ -404,14 +404,14 @@
     "ui03": {
      "evalTotal": {
       "control": [
+       16,
        16.5,
-       17,
-       17
+       17.5
       ],
       "candidate": [
-       16,
+       16.5,
        17,
-       14
+       14.5
       ]
      },
      "coverage": {
@@ -538,8 +538,8 @@
  },
  "evaluatorAgreement": {
   "axisPairs": 360,
-  "exactRate": 0.878,
-  "meanAbsTotalDiff": 0.89
+  "exactRate": 0.847,
+  "meanAbsTotalDiff": 0.97
  },
  "fingerprints": {
   "A": [

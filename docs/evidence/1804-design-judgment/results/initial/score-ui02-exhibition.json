@@ -1,0 +1,1435 @@
+{
+ "schema": "asc-1804-score/v1",
+ "case": "ui02-exhibition",
+ "trials": [
+  {
+   "trial": "A-r1",
+   "condition": "A",
+   "rep": 1,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.1877664,
+    "turns": 7,
+    "wallMs": 70750,
+    "inputTokens": 8,
+    "outputTokens": 9817,
+    "cacheRead": 45404,
+    "cacheWrite": 21194,
+    "toolCalls": 6,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": false,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 0.885,
+   "missing": [
+    "4月24日",
+    "5月15日",
+    "6月5日"
+   ],
+   "englishSentences": 2,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 8,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 3,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 312.6999999999998,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(246, 241, 231)",
+    "top": [
+     "rgb(27, 42, 48)",
+     "rgb(20, 50, 63)",
+     "rgb(255, 255, 255)",
+     "rgb(207, 195, 169)"
+    ]
+   },
+   "bytes": 13937,
+   "notesExist": true,
+   "eval": {
+    "id": "az0r",
+    "totals": [
+     19,
+     19
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      1,
+      1
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      2,
+      2
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 19
+   },
+   "lowQuality": true
+  },
+  {
+   "trial": "A-r2",
+   "condition": "A",
+   "rep": 2,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.23502470000000003,
+    "turns": 13,
+    "wallMs": 83070,
+    "inputTokens": 12,
+    "outputTokens": 12589,
+    "cacheRead": 97552,
+    "cacheWrite": 24778,
+    "toolCalls": 12,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2,
+     "Edit": 6
+    },
+    "skillCalls": [],
+    "designSkillInvoked": false,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "englishSentences": 3,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 10,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 3,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 121.10000000000036,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(246, 241, 230)",
+    "top": [
+     "rgb(28, 42, 46)",
+     "rgb(255, 255, 255)",
+     "rgb(15, 45, 54)",
+     "rgb(68, 85, 90)"
+    ]
+   },
+   "bytes": 15503,
+   "notesExist": true,
+   "eval": {
+    "id": "ms4t",
+    "totals": [
+     19,
+     19
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      2,
+      2
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      1,
+      1
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 19
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "A-r3",
+   "condition": "A",
+   "rep": 3,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.1972546,
+    "turns": 8,
+    "wallMs": 73986,
+    "inputTokens": 10,
+    "outputTokens": 11002,
+    "cacheRead": 64731,
+    "cacheWrite": 20125,
+    "toolCalls": 7,
+    "toolCounts": {
+     "Read": 2,
+     "Glob": 1,
+     "Write": 2,
+     "Edit": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": false,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 0,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "englishSentences": 2,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 11,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 7,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 97.29999999999927,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(246, 241, 230)",
+    "top": [
+     "rgb(29, 43, 42)",
+     "rgb(255, 255, 255)",
+     "rgb(47, 74, 44)",
+     "rgb(201, 190, 166)"
+    ]
+   },
+   "bytes": 16168,
+   "notesExist": true,
+   "eval": {
+    "id": "23k4",
+    "totals": [
+     18,
+     18
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      1,
+      2
+     ],
+     "typography": [
+      1,
+      2
+     ],
+     "composition": [
+      2,
+      1
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      2,
+      1
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 18
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "B-r1",
+   "condition": "B",
+   "rep": 1,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.20882360000000003,
+    "turns": 9,
+    "wallMs": 82043,
+    "inputTokens": 10,
+    "outputTokens": 10872,
+    "cacheRead": 71291,
+    "cacheWrite": 23183,
+    "toolCalls": 8,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2,
+     "Edit": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "englishSentences": 4,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 1,
+   "axeRules": [
+    "color-contrast:serious:1"
+   ],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 5,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 2,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 1,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 100,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(238, 240, 234)",
+    "top": [
+     "rgb(27, 40, 36)",
+     "rgb(238, 240, 234)",
+     "rgb(29, 56, 50)",
+     "rgb(217, 198, 143)"
+    ]
+   },
+   "bytes": 12789,
+   "notesExist": true,
+   "eval": {
+    "id": "stld",
+    "totals": [
+     16,
+     19
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      1,
+      2
+     ],
+     "typography": [
+      2,
+      1
+     ],
+     "composition": [
+      1,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      1,
+      2
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      1,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 17.5
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "B-r2",
+   "condition": "B",
+   "rep": 2,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.207749,
+    "turns": 7,
+    "wallMs": 78310,
+    "inputTokens": 8,
+    "outputTokens": 11118,
+    "cacheRead": 46140,
+    "cacheWrite": 22927,
+    "toolCalls": 6,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "englishSentences": 3,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 5,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 3,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 1,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 91.09999999999854,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(248, 250, 248)",
+    "top": [
+     "rgb(22, 35, 45)",
+     "rgb(255, 255, 255)",
+     "rgb(20, 48, 74)",
+     "rgb(44, 90, 56)"
+    ]
+   },
+   "bytes": 15354,
+   "notesExist": true,
+   "eval": {
+    "id": "dsyf",
+    "totals": [
+     16,
+     19
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      1,
+      2
+     ],
+     "typography": [
+      1,
+      2
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      1,
+      1
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      1,
+      2
+     ]
+    },
+    "mean": 17.5
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "B-r3",
+   "condition": "B",
+   "rep": 3,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.1867231,
+    "turns": 7,
+    "wallMs": 66706,
+    "inputTokens": 8,
+    "outputTokens": 9567,
+    "cacheRead": 46131,
+    "cacheWrite": 21542,
+    "toolCalls": 6,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "englishSentences": 3,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 7,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 3,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 60.70000000000073,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(231, 236, 233)",
+    "top": [
+     "rgb(18, 48, 58)",
+     "rgb(255, 255, 255)",
+     "rgb(247, 249, 247)",
+     "rgb(36, 92, 107)"
+    ]
+   },
+   "bytes": 12726,
+   "notesExist": true,
+   "eval": {
+    "id": "agix",
+    "totals": [
+     19,
+     18
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      1
+     ],
+     "typography": [
+      2,
+      1
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      1,
+      2
+     ],
+     "spacing": [
+      2,
+      2
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 18.5
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "D-r1",
+   "condition": "D",
+   "rep": 1,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.26691030000000004,
+    "turns": 13,
+    "wallMs": 91694,
+    "inputTokens": 14,
+    "outputTokens": 12282,
+    "cacheRead": 142483,
+    "cacheWrite": 32391,
+    "toolCalls": 12,
+    "toolCounts": {
+     "Read": 5,
+     "Glob": 1,
+     "Write": 2,
+     "Edit": 4
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 3,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 0.885,
+   "missing": [
+    "4月24日",
+    "5月15日",
+    "6月5日"
+   ],
+   "englishSentences": 4,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 7,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 3,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 87.5,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(244, 240, 230)",
+    "top": [
+     "rgb(28, 42, 38)",
+     "rgb(255, 255, 255)",
+     "rgb(20, 60, 71)",
+     "rgb(30, 85, 99)"
+    ]
+   },
+   "bytes": 12756,
+   "notesExist": true,
+   "eval": {
+    "id": "254u",
+    "totals": [
+     17,
+     16
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      2,
+      1
+     ],
+     "composition": [
+      1,
+      1
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      1,
+      1
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      1,
+      1
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 16.5
+   },
+   "lowQuality": true
+  },
+  {
+   "trial": "D-r2",
+   "condition": "D",
+   "rep": 2,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.241861,
+    "turns": 8,
+    "wallMs": 80153,
+    "inputTokens": 10,
+    "outputTokens": 11248,
+    "cacheRead": 73600,
+    "cacheWrite": 30434,
+    "toolCalls": 7,
+    "toolCounts": {
+     "Read": 4,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 2,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "englishSentences": 3,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 7,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 4,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 80.40000000000146,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(244, 238, 226)",
+    "top": [
+     "rgb(43, 42, 38)",
+     "rgb(246, 240, 226)",
+     "rgb(255, 255, 255)",
+     "rgb(143, 58, 23)"
+    ]
+   },
+   "bytes": 14724,
+   "notesExist": true,
+   "eval": {
+    "id": "jm6k",
+    "totals": [
+     17,
+     18
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      1,
+      1
+     ],
+     "composition": [
+      1,
+      1
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      1,
+      2
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 17.5
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "D-r3",
+   "condition": "D",
+   "rep": 3,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.27689529999999996,
+    "turns": 12,
+    "wallMs": 92083,
+    "inputTokens": 12,
+    "outputTokens": 13341,
+    "cacheRead": 107398,
+    "cacheWrite": 33119,
+    "toolCalls": 11,
+    "toolCounts": {
+     "Read": 4,
+     "Glob": 1,
+     "Write": 2,
+     "Edit": 4
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 2,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 0.885,
+   "missing": [
+    "4月24日",
+    "5月15日",
+    "6月5日"
+   ],
+   "englishSentences": 4,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 7,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 3,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": false,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 142.60000000000582,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(245, 241, 230)",
+    "top": [
+     "rgb(27, 42, 38)",
+     "rgb(245, 241, 230)",
+     "rgb(61, 76, 71)",
+     "rgb(185, 177, 154)"
+    ]
+   },
+   "bytes": 16001,
+   "notesExist": true,
+   "eval": {
+    "id": "xkvu",
+    "totals": [
+     20,
+     19
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      2,
+      2
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      2,
+      1
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 19.5
+   },
+   "lowQuality": true
+  },
+  {
+   "trial": "E-r1",
+   "condition": "E",
+   "rep": 1,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.2212913,
+    "turns": 8,
+    "wallMs": 79775,
+    "inputTokens": 10,
+    "outputTokens": 11829,
+    "cacheRead": 74378,
+    "cacheWrite": 23825,
+    "toolCalls": 7,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2,
+     "Edit": 1
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "englishSentences": 3,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 7,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 3,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 73.69999999999709,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(246, 241, 231)",
+    "top": [
+     "rgb(29, 42, 44)",
+     "rgb(207, 196, 172)",
+     "rgb(20, 53, 51)",
+     "rgb(255, 255, 255)"
+    ]
+   },
+   "bytes": 17192,
+   "notesExist": true,
+   "eval": {
+    "id": "lf4z",
+    "totals": [
+     18,
+     20
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      1,
+      2
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      2,
+      2
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      1,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 19
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "E-r2",
+   "condition": "E",
+   "rep": 2,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.1831725,
+    "turns": 7,
+    "wallMs": 64246,
+    "inputTokens": 8,
+    "outputTokens": 9312,
+    "cacheRead": 48240,
+    "cacheWrite": 21248,
+    "toolCalls": 6,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "englishSentences": 2,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 9,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 3,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 75.59999999999854,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(246, 241, 230)",
+    "top": [
+     "rgb(27, 42, 51)",
+     "rgb(255, 255, 255)",
+     "rgb(207, 227, 234)",
+     "rgb(23, 64, 79)"
+    ]
+   },
+   "bytes": 12880,
+   "notesExist": true,
+   "eval": {
+    "id": "qi9o",
+    "totals": [
+     17,
+     18
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      2,
+      2
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      1,
+      1
+     ],
+     "spacing": [
+      2,
+      2
+     ],
+     "distinctiveness": [
+      1,
+      1
+     ],
+     "consistency": [
+      1,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 17.5
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "E-r3",
+   "condition": "E",
+   "rep": 3,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.1917208,
+    "turns": 9,
+    "wallMs": 67634,
+    "inputTokens": 10,
+    "outputTokens": 9671,
+    "cacheRead": 72243,
+    "cacheWrite": 21887,
+    "toolCalls": 8,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2,
+     "Edit": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 0.885,
+   "missing": [
+    "4月24日",
+    "5月15日",
+    "6月5日"
+   ],
+   "englishSentences": 3,
+   "firstViewportMobile": true,
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 5,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": 3,
+   "tabsToRetry": null,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 177.90000000000146,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Serif CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(246, 241, 230)",
+    "top": [
+     "rgb(28, 42, 46)",
+     "rgb(255, 255, 255)",
+     "rgb(23, 65, 77)",
+     "rgb(77, 91, 94)"
+    ]
+   },
+   "bytes": 12376,
+   "notesExist": true,
+   "eval": {
+    "id": "z895",
+    "totals": [
+     19,
+     19
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      1,
+      1
+     ],
+     "typography": [
+      2,
+      2
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      2,
+      2
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 19
+   },
+   "lowQuality": true
+  }
+ ]
+}

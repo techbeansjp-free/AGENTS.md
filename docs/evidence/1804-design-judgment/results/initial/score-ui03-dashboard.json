@@ -1,0 +1,1510 @@
+{
+ "schema": "asc-1804-score/v1",
+ "case": "ui03-dashboard",
+ "trials": [
+  {
+   "trial": "A-r1",
+   "condition": "A",
+   "rep": 1,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.2025061,
+    "turns": 8,
+    "wallMs": 68610,
+    "inputTokens": 8,
+    "outputTokens": 10577,
+    "cacheRead": 46276,
+    "cacheWrite": 22965,
+    "toolCalls": 7,
+    "toolCounts": {
+     "Read": 4,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": false,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 9,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 1,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": false,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 191.39999999999418,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(243, 245, 247)",
+    "top": [
+     "rgb(27, 36, 48)",
+     "rgb(74, 85, 101)",
+     "rgb(255, 255, 255)",
+     "rgb(253, 236, 234)"
+    ]
+   },
+   "bytes": 13993,
+   "notesExist": true,
+   "eval": {
+    "id": "cpco",
+    "totals": [
+     17,
+     16
+    ],
+    "axes": {
+     "subject": [
+      1,
+      1
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      2,
+      2
+     ],
+     "composition": [
+      1,
+      1
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      2,
+      2
+     ],
+     "distinctiveness": [
+      1,
+      1
+     ],
+     "consistency": [
+      2,
+      1
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 16.5,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "A-r2",
+   "condition": "A",
+   "rep": 2,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.19489780000000004,
+    "turns": 8,
+    "wallMs": 65144,
+    "inputTokens": 8,
+    "outputTokens": 10024,
+    "cacheRead": 46273,
+    "cacheWrite": 22441,
+    "toolCalls": 7,
+    "toolCounts": {
+     "Read": 4,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": false,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 1,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 1,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": false,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 116.10000000000582,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(243, 244, 246)",
+    "top": [
+     "rgb(27, 31, 36)",
+     "rgb(85, 93, 104)",
+     "rgb(253, 236, 234)",
+     "rgb(255, 255, 255)"
+    ]
+   },
+   "bytes": 13227,
+   "notesExist": true,
+   "eval": {
+    "id": "6oqr",
+    "totals": [
+     17,
+     17
+    ],
+    "axes": {
+     "subject": [
+      1,
+      1
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      1,
+      1
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      2,
+      2
+     ],
+     "distinctiveness": [
+      1,
+      1
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 17,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "A-r3",
+   "condition": "A",
+   "rep": 3,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.2017533,
+    "turns": 8,
+    "wallMs": 67872,
+    "inputTokens": 8,
+    "outputTokens": 10480,
+    "cacheRead": 46288,
+    "cacheWrite": 23012,
+    "toolCalls": 7,
+    "toolCounts": {
+     "Read": 4,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": false,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 1,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 1,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": false,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 117.09999999999127,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(244, 245, 247)",
+    "top": [
+     "rgb(27, 31, 36)",
+     "rgb(88, 96, 105)",
+     "rgb(179, 38, 30)",
+     "rgb(253, 236, 235)"
+    ]
+   },
+   "bytes": 13656,
+   "notesExist": true,
+   "eval": {
+    "id": "q6g4",
+    "totals": [
+     17,
+     17
+    ],
+    "axes": {
+     "subject": [
+      1,
+      1
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      2,
+      2
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      1,
+      1
+     ],
+     "distinctiveness": [
+      1,
+      1
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 17,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "B-r1",
+   "condition": "B",
+   "rep": 1,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.2597279,
+    "turns": 9,
+    "wallMs": 92745,
+    "inputTokens": 10,
+    "outputTokens": 14223,
+    "cacheRead": 76394,
+    "cacheWrite": 27399,
+    "toolCalls": 8,
+    "toolCounts": {
+     "Read": 4,
+     "Glob": 1,
+     "Write": 2,
+     "Edit": 1
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 13,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 5,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 109.19999999999709,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgba(0, 0, 0, 0)",
+    "top": [
+     "rgb(23, 33, 43)",
+     "rgb(74, 86, 99)",
+     "rgb(201, 207, 210)",
+     "rgb(45, 94, 70)"
+    ]
+   },
+   "bytes": 18611,
+   "notesExist": true,
+   "eval": {
+    "id": "v0f7",
+    "totals": [
+     18,
+     19
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      1,
+      1
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      1,
+      2
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 18.5,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "B-r2",
+   "condition": "B",
+   "rep": 2,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.23095249999999998,
+    "turns": 8,
+    "wallMs": 82655,
+    "inputTokens": 8,
+    "outputTokens": 12442,
+    "cacheRead": 47000,
+    "cacheWrite": 25396,
+    "toolCalls": 7,
+    "toolCounts": {
+     "Read": 4,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 5,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 5,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 96.80000000000291,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgba(0, 0, 0, 0)",
+    "top": [
+     "rgb(27, 38, 48)",
+     "rgb(75, 90, 102)",
+     "rgb(179, 38, 30)",
+     "rgb(201, 210, 216)"
+    ]
+   },
+   "bytes": 15249,
+   "notesExist": true,
+   "eval": {
+    "id": "tyeo",
+    "totals": [
+     14,
+     17
+    ],
+    "axes": {
+     "subject": [
+      1,
+      2
+     ],
+     "hierarchy": [
+      1,
+      2
+     ],
+     "typography": [
+      1,
+      1
+     ],
+     "composition": [
+      1,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      1,
+      1
+     ],
+     "distinctiveness": [
+      1,
+      1
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 15.5,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "B-r3",
+   "condition": "B",
+   "rep": 3,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.2532476,
+    "turns": 8,
+    "wallMs": 93208,
+    "inputTokens": 8,
+    "outputTokens": 14165,
+    "cacheRead": 47006,
+    "cacheWrite": 26657,
+    "toolCalls": 7,
+    "toolCounts": {
+     "Read": 4,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 1,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 1,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": true,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 121.69999999999709,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgba(0, 0, 0, 0)",
+    "top": [
+     "rgb(23, 37, 45)",
+     "rgb(74, 91, 101)",
+     "rgb(255, 255, 255)",
+     "rgb(45, 106, 79)"
+    ]
+   },
+   "bytes": 17116,
+   "notesExist": true,
+   "eval": {
+    "id": "32ue",
+    "totals": [
+     19,
+     19
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      2,
+      2
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      1,
+      1
+     ],
+     "distinctiveness": [
+      2,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 19,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 1
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "D-r1",
+   "condition": "D",
+   "rep": 1,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.2720763,
+    "turns": 10,
+    "wallMs": 88701,
+    "inputTokens": 12,
+    "outputTokens": 12847,
+    "cacheRead": 96303,
+    "cacheWrite": 33427,
+    "toolCalls": 9,
+    "toolCounts": {
+     "Read": 5,
+     "Glob": 1,
+     "Grep": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 2,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 4,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 4,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": false,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 199.3000000000029,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgba(0, 0, 0, 0)",
+    "top": [
+     "rgb(29, 35, 41)",
+     "rgb(79, 90, 100)",
+     "rgb(255, 255, 255)",
+     "rgb(179, 38, 30)"
+    ]
+   },
+   "bytes": 15432,
+   "notesExist": true,
+   "eval": {
+    "id": "4g8u",
+    "totals": [
+     17,
+     19
+    ],
+    "axes": {
+     "subject": [
+      1,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      1,
+      1
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      2,
+      2
+     ],
+     "distinctiveness": [
+      1,
+      2
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 18,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "D-r2",
+   "condition": "D",
+   "rep": 2,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.2224143,
+    "turns": 8,
+    "wallMs": 78680,
+    "inputTokens": 8,
+    "outputTokens": 11529,
+    "cacheRead": 49543,
+    "cacheWrite": 25505,
+    "toolCalls": 7,
+    "toolCounts": {
+     "Read": 4,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 1,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 1,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 1,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": false,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 291.1999999999971,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(244, 245, 247)",
+    "top": [
+     "rgb(27, 36, 48)",
+     "rgb(86, 98, 115)",
+     "rgb(253, 236, 234)",
+     "rgb(179, 38, 30)"
+    ]
+   },
+   "bytes": 14334,
+   "notesExist": true,
+   "eval": {
+    "id": "td9l",
+    "totals": [
+     20,
+     19
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      2,
+      2
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      2,
+      2
+     ],
+     "distinctiveness": [
+      2,
+      1
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 19.5,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "D-r3",
+   "condition": "D",
+   "rep": 3,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.2643206,
+    "turns": 10,
+    "wallMs": 81459,
+    "inputTokens": 14,
+    "outputTokens": 11994,
+    "cacheRead": 131591,
+    "cacheWrite": 32736,
+    "toolCalls": 9,
+    "toolCounts": {
+     "Read": 5,
+     "Glob": 1,
+     "Grep": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": true,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 2,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 1,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 1,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": false,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 181.40000000000873,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(18, 23, 29)",
+    "top": [
+     "rgb(233, 238, 243)",
+     "rgb(169, 182, 195)",
+     "rgb(58, 32, 27)",
+     "rgb(255, 138, 107)"
+    ]
+   },
+   "bytes": 14380,
+   "notesExist": true,
+   "eval": {
+    "id": "66to",
+    "totals": [
+     14,
+     15
+    ],
+    "axes": {
+     "subject": [
+      1,
+      1
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      2,
+      2
+     ],
+     "composition": [
+      1,
+      1
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      1,
+      2
+     ],
+     "distinctiveness": [
+      1,
+      1
+     ],
+     "consistency": [
+      1,
+      1
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      1,
+      1
+     ]
+    },
+    "mean": 14.5,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "E-r1",
+   "condition": "E",
+   "rep": 1,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.222053,
+    "turns": 9,
+    "wallMs": 75002,
+    "inputTokens": 10,
+    "outputTokens": 11796,
+    "cacheRead": 73900,
+    "cacheWrite": 24110,
+    "toolCalls": 8,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2,
+     "Edit": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": false,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 0,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 1,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 1,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": false,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 124.80000000000291,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(243, 244, 246)",
+    "top": [
+     "rgb(27, 31, 36)",
+     "rgb(74, 83, 96)",
+     "rgb(179, 38, 30)",
+     "rgb(213, 217, 223)"
+    ]
+   },
+   "bytes": 15696,
+   "notesExist": true,
+   "eval": {
+    "id": "t5bh",
+    "totals": [
+     17,
+     15
+    ],
+    "axes": {
+     "subject": [
+      2,
+      2
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      1,
+      1
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      1,
+      1
+     ],
+     "spacing": [
+      2,
+      2
+     ],
+     "distinctiveness": [
+      2,
+      1
+     ],
+     "consistency": [
+      1,
+      1
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      1
+     ]
+    },
+    "mean": 16,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "E-r2",
+   "condition": "E",
+   "rep": 2,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.1912454,
+    "turns": 7,
+    "wallMs": 66787,
+    "inputTokens": 8,
+    "outputTokens": 9866,
+    "cacheRead": 47954,
+    "cacheWrite": 21883,
+    "toolCalls": 6,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": false,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 0,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 9,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 1,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": false,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 168.8000000000029,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(244, 245, 247)",
+    "top": [
+     "rgb(27, 36, 48)",
+     "rgb(88, 98, 111)",
+     "rgb(29, 107, 58)",
+     "rgb(213, 217, 223)"
+    ]
+   },
+   "bytes": 13405,
+   "notesExist": true,
+   "eval": {
+    "id": "60l4",
+    "totals": [
+     18,
+     16
+    ],
+    "axes": {
+     "subject": [
+      1,
+      1
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      2,
+      1
+     ],
+     "composition": [
+      2,
+      2
+     ],
+     "color": [
+      2,
+      2
+     ],
+     "spacing": [
+      2,
+      1
+     ],
+     "distinctiveness": [
+      1,
+      1
+     ],
+     "consistency": [
+      2,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 17,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  },
+  {
+   "trial": "E-r3",
+   "condition": "E",
+   "rep": 3,
+   "gen": {
+    "exit": 0,
+    "subtype": "success",
+    "isError": false,
+    "costUsd": 0.1943858,
+    "turns": 7,
+    "wallMs": 64118,
+    "inputTokens": 8,
+    "outputTokens": 10098,
+    "cacheRead": 47948,
+    "cacheWrite": 22088,
+    "toolCalls": 6,
+    "toolCounts": {
+     "Read": 3,
+     "Glob": 1,
+     "Write": 2
+    },
+    "skillCalls": [],
+    "designSkillInvoked": false,
+    "designSkillCalledViaTool": false,
+    "otherSkillCalls": [],
+    "skillFileReads": 0,
+    "model": "claude-sonnet-5-5"
+   },
+   "status": "ok",
+   "outputExists": true,
+   "coverage": 1,
+   "missing": [],
+   "overflowNarrow": false,
+   "overflowDesktop": false,
+   "axeSeriousNodes": 0,
+   "axeRules": [],
+   "externalRequests": 0,
+   "pageErrors": 0,
+   "tabStops": 1,
+   "focusIndicatorRatio": 1,
+   "tabsToReserve": null,
+   "tabsToRetry": 1,
+   "motion": {
+    "animations": 0,
+    "reducedQuery": false,
+    "runningWhenReduced": 0
+   },
+   "motionOk": true,
+   "lcpMs": 188.70000000001164,
+   "cls": 0,
+   "fingerprint": {
+    "h1": "Noto Sans CJK JP",
+    "body": "Noto Sans CJK JP",
+    "bg": "rgb(244, 245, 247)",
+    "top": [
+     "rgb(27, 36, 48)",
+     "rgb(86, 98, 114)",
+     "rgb(179, 38, 30)",
+     "rgb(213, 218, 225)"
+    ]
+   },
+   "bytes": 13954,
+   "notesExist": true,
+   "eval": {
+    "id": "o7kf",
+    "totals": [
+     14,
+     14
+    ],
+    "axes": {
+     "subject": [
+      1,
+      1
+     ],
+     "hierarchy": [
+      2,
+      2
+     ],
+     "typography": [
+      1,
+      1
+     ],
+     "composition": [
+      1,
+      1
+     ],
+     "color": [
+      2,
+      1
+     ],
+     "spacing": [
+      1,
+      1
+     ],
+     "distinctiveness": [
+      1,
+      1
+     ],
+     "consistency": [
+      1,
+      2
+     ],
+     "decoration": [
+      2,
+      2
+     ],
+     "rationale": [
+      2,
+      2
+     ]
+    },
+    "mean": 14,
+    "gray": [
+     {
+      "recall": 1,
+      "falsePositives": 0
+     },
+     {
+      "recall": 1,
+      "falsePositives": 0
+     }
+    ]
+   },
+   "lowQuality": false
+  }
+ ]
+}

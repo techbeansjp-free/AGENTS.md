@@ -2,32 +2,32 @@
  "schema": "asc-1804-eval/v1",
  "blind": "ui02-exhibition",
  "order": [
-  "xkvu",
-  "ms4t",
-  "254u",
-  "23k4",
-  "stld",
-  "z895",
-  "jm6k",
-  "lf4z",
-  "qi9o",
-  "dsyf",
-  "az0r",
-  "agix"
+  "vm6g",
+  "tb44",
+  "7nzv",
+  "t1q5",
+  "to38",
+  "9557",
+  "xfoi",
+  "yn0t",
+  "csq8",
+  "i30u",
+  "lab8",
+  "z98c"
  ],
  "exit": 0,
- "wallMs": 145024,
+ "wallMs": 137628,
  "subtype": "success",
  "isError": false,
- "costUsd": 1.4375312,
+ "costUsd": 1.4165172,
  "numTurns": 88,
  "usage": {
   "input_tokens": 28,
-  "cache_creation_input_tokens": 126250,
-  "cache_read_input_tokens": 791967,
-  "output_tokens": 13444,
+  "cache_creation_input_tokens": 126182,
+  "cache_read_input_tokens": 793714,
+  "output_tokens": 12403,
   "output_tokens_details": {
-   "thinking_tokens": 3058
+   "thinking_tokens": 2427
   },
   "server_tool_use": {
    "web_search_requests": 0,
@@ -35,19 +35,19 @@
   },
   "service_tier": "standard",
   "cache_creation": {
-   "ephemeral_1h_input_tokens": 126250,
+   "ephemeral_1h_input_tokens": 126182,
    "ephemeral_5m_input_tokens": 0
   },
   "inference_geo": "global",
   "iterations": [
    {
     "input_tokens": 2,
-    "output_tokens": 3889,
-    "cache_read_input_tokens": 118997,
-    "cache_creation_input_tokens": 10476,
+    "output_tokens": 2489,
+    "cache_read_input_tokens": 119091,
+    "cache_creation_input_tokens": 10314,
     "cache_creation": {
      "ephemeral_5m_input_tokens": 0,
-     "ephemeral_1h_input_tokens": 10476
+     "ephemeral_1h_input_tokens": 10314
     },
     "type": "message"
    }
@@ -57,12 +57,12 @@
  },
  "modelUsage": {
   "claude-haiku-5-5": {
-   "inputTokens": 1338,
-   "outputTokens": 24,
+   "inputTokens": 1339,
+   "outputTokens": 25,
    "cacheReadInputTokens": 0,
    "cacheCreationInputTokens": 0,
    "webSearchRequests": 0,
-   "costUSD": 0.0001458,
+   "costUSD": 0.0001464,
    "contextWindow": 1000000,
    "maxOutputTokens": 128000,
    "thinkingTokens": 0,
@@ -74,127 +74,114 @@
   },
   "claude-opus-5-5": {
    "inputTokens": 28,
-   "outputTokens": 13444,
-   "cacheReadInputTokens": 791967,
-   "cacheCreationInputTokens": 126250,
+   "outputTokens": 12403,
+   "cacheReadInputTokens": 793714,
+   "cacheCreationInputTokens": 126182,
    "webSearchRequests": 0,
-   "costUSD": 1.4373854,
+   "costUSD": 1.4163708000000002,
    "contextWindow": 1000000,
    "maxOutputTokens": 128000,
-   "thinkingTokens": 3058,
+   "thinkingTokens": 2427,
    "cacheCreationEphemeral5mInputTokens": 0,
-   "cacheCreationEphemeral1hInputTokens": 126250,
+   "cacheCreationEphemeral1hInputTokens": 126182,
    "canonicalModel": "claude-opus-5-5",
    "provider": "firstParty",
    "costBasis": "list"
   }
  },
  "scores": {
-  "xkvu": {
-   "subject": 2,
-   "hierarchy": 2,
-   "typography": 2,
-   "composition": 2,
-   "color": 2,
-   "spacing": 2,
-   "distinctiveness": 2,
-   "consistency": 2,
-   "decoration": 2,
-   "rationale": 2,
-   "evidence": "ヒーローで題名と大きな会期、ベか舟と海苔ひびのSVGの直下に開館時間・休館日・料金・アクセスの4項目帯があり、錆色はイベント日付だけに使い、mobileでも4項目帯の縦積みと日付カードの関係が保たれ、notesの配色・順序の記述が画面と一致している。"
-  },
-  "ms4t": {
+  "9557": {
    "subject": 2,
    "hierarchy": 2,
    "typography": 2,
    "composition": 2,
    "color": 2,
    "spacing": 1,
-   "distinctiveness": 2,
+   "distinctiveness": 1,
    "consistency": 2,
    "decoration": 2,
    "rationale": 2,
-   "evidence": "ヒーローに会期・時間と「関連イベントを予約する」ボタン、舟と海苔ひびの絵、その下に要点カード3枚があり、英語欄も上の方にあるが、ご来館の案内の「開館時間・休館日」カードの下半分が大きく空いている。"
+   "evidence": "広幅ヒーローを2段組にし、右に会期・時間・料金と錆色の予約ボタンを並べて、予約という操作だけに色を割り当てているが、左上の題名の上に大きな空白が残っている。"
   },
-  "254u": {
-   "subject": 2,
-   "hierarchy": 2,
-   "typography": 2,
-   "composition": 1,
-   "color": 2,
-   "spacing": 1,
-   "distinctiveness": 2,
-   "consistency": 1,
-   "decoration": 2,
-   "rationale": 2,
-   "evidence": "desktopのヒーローは会期・料金・赤茶の予約ボタンを右上に固め、題名が左下に寄って左上が大きく空いており、概要の1段落目と2段落目で字の色・大きさが違い、予約欄にWeb予約のリンクが無く「準備中」の注記だけになっている。"
-  },
-  "23k4": {
-   "subject": 2,
-   "hierarchy": 1,
-   "typography": 1,
-   "composition": 2,
-   "color": 2,
-   "spacing": 2,
-   "distinctiveness": 2,
-   "consistency": 2,
-   "decoration": 2,
-   "rationale": 2,
-   "evidence": "白い会期帯と舟の絵、駅から館までの徒歩8分の略図は題材と用途に固有だが、観覧料がヒーローに無くリンクボタンの先に回り、mobileでは略図の文字がごく小さく読みにくい。"
-  },
-  "stld": {
-   "subject": 2,
-   "hierarchy": 1,
-   "typography": 2,
-   "composition": 1,
-   "color": 2,
-   "spacing": 1,
-   "distinctiveness": 2,
-   "consistency": 2,
-   "decoration": 1,
-   "rationale": 2,
-   "evidence": "desktopでは舟と竹ひびの大きな絵が約300pxを占めて開館時間・料金の帯を最初の画面の下端に押し出しており、mobileの英語欄は値の列が狭く1行数語で折り返している。"
-  },
-  "z895": {
-   "subject": 2,
-   "hierarchy": 1,
-   "typography": 2,
-   "composition": 2,
-   "color": 2,
-   "spacing": 2,
-   "distinctiveness": 2,
-   "consistency": 2,
-   "decoration": 2,
-   "rationale": 2,
-   "evidence": "舟と海苔ひびのヒーロー、要点3つの帯、錆朱を予約の行動だけに使う点は整っているが、英語欄が日本語の概要より前に大きく置かれ、mobileでは日本語の情報がかなり下まで押し下げられている。"
-  },
-  "jm6k": {
-   "subject": 2,
-   "hierarchy": 2,
-   "typography": 1,
-   "composition": 1,
-   "color": 2,
-   "spacing": 1,
-   "distinctiveness": 2,
-   "consistency": 2,
-   "decoration": 2,
-   "rationale": 2,
-   "evidence": "ヒーローに会期・時間とボタン2つ、直下に4項目帯はあるが、desktopの題名で「年」だけが次の行に落ち、ボタンがヒーローの下端に接し、mobileでは上部の帯の館名が左端に余白無しで接している。"
-  },
-  "lf4z": {
+  "vm6g": {
    "subject": 2,
    "hierarchy": 2,
    "typography": 1,
    "composition": 2,
    "color": 2,
    "spacing": 2,
-   "distinctiveness": 2,
-   "consistency": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
    "decoration": 2,
    "rationale": 2,
-   "evidence": "舟と海苔ひびの絵、題名の直下の要点ボックス、駅から館への略図は用途に合うが、イベントの「4月」が日付の上に小さく浮いてずれ、イベント名の開始位置がカードごとに違う。"
+   "evidence": "ヒーローにベか舟・海苔ひびのSVGを置き、海苔の黒緑と舟の錆色を使い、直下に会期・時間・料金・行き方の4項目帯があって判断しやすいが、広幅で題名が「百／年」と1字だけ改行され、会期も「（日）」だけ次の行に落ちている。"
   },
-  "qi9o": {
+  "tb44": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "ヒーローに題名・会期・予約ボタンがあり、干潟と舟のSVGに要点3カードが重なる構成は明快だが、ボタンと絵の間に大きな空白があり、来館案内の開館時間カードも下半分が空いている。"
+  },
+  "7nzv": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "全幅の干潟・平底舟・竹ひびの大きな絵、日付を見出しにしてカードを使わない罫線のイベント一覧、藁色の予約ボタンなど題材に固有の判断が多く、要点4項目もすぐ下にまとまっている。"
+  },
+  "t1q5": {
+   "subject": 2,
+   "hierarchy": 1,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "舟と海苔ひびの絵と要点3項目の帯はよいが、大きな英語ブロックが日本語の概要より前にあり、日本語が主の利用者には展覧会の内容が下に押し下げられている。予約は錆朱の行動色で統一されている。"
+  },
+  "to38": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "干潟と舟のSVGの下に会期・時間・料金・アクセスの4枠があって階層は明確だが、広幅の会期枠で「6月／27日」が途中で改行され、全体は汎用的な案内ページの型になっている。"
+  },
+  "xfoi": {
+   "subject": 2,
+   "hierarchy": 1,
+   "typography": 2,
+   "composition": 1,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "駅から館までの徒歩経路の略図など固有の工夫はあるが、観覧料がヒーローに無く下の表まで見えない。モバイルでは略図が縮んで文字が読めず、広幅ではヒーローに空白がある。"
+  },
+  "yn0t": {
    "subject": 2,
    "hierarchy": 2,
    "typography": 2,
@@ -205,47 +192,60 @@
    "consistency": 1,
    "decoration": 2,
    "rationale": 2,
-   "evidence": "要点帯に会期・時間・休館日・料金が揃うが、錆色が休館日の強調と予約ボタンの両方に使われて白黒では休館日の強調が消え、電話番号がボタンと予約欄で重複しており、小さな絵以外は汎用の構成である。"
+   "evidence": "小さめのヒーローと要点4項目の帯で必要な情報が早く読めるが、錆色が休館日の注意と予約ボタンの両方に使われて意味が混ざり、電話番号も直後の予約欄でボタンと下線リンクの2通りに表現されている。"
   },
-  "dsyf": {
+  "csq8": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "冒頭の舟の絵、枠で囲んだ要点ボックス、駐車場まで示した位置関係の略図、朱色をWeb予約と経路だけに使う配色が題材と用途に合っているが、イベントの日付は「4月」を小さく上に置く表記で読みにくい。"
+  },
+  "i30u": {
    "subject": 2,
    "hierarchy": 1,
    "typography": 1,
    "composition": 2,
    "color": 2,
    "spacing": 1,
-   "distinctiveness": 2,
+   "distinctiveness": 1,
    "consistency": 2,
    "decoration": 2,
    "rationale": 1,
-   "evidence": "藍のヒーローは会期の下が大きく空き、予約欄にWeb予約のボタンやリンクが無く、mobileではイベントの日付「24日（土）」が途中で折れ、notesの「ヒーロー右上のリンク」「#reserveへのリンク」が画面と合わない。"
+   "evidence": "題名は大きく基本情報もまとまっているが、上部に予約への導線が無く、ヒーロー内の空白が大きく、モバイルではイベントの「（土）」が次の行に落ちる。notesの「右上のリンク」は画面では中央上にある。"
   },
-  "az0r": {
+  "lab8": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "題名・会期・要点4項目の帯と、錆色をイベントの日付だけに使う配色は整っているが、ヒーローの文字と絵の間に大きな空白があり、料金・休館日がヒーロー・帯・表で3回繰り返されている。"
+  },
+  "z98c": {
    "subject": 2,
    "hierarchy": 2,
    "typography": 1,
    "composition": 2,
    "color": 2,
    "spacing": 2,
-   "distinctiveness": 2,
+   "distinctiveness": 1,
    "consistency": 2,
    "decoration": 2,
    "rationale": 2,
-   "evidence": "干潟・舟・海苔ひびの絵と要点4枠、大きな電話番号の予約欄があるが、desktopの要点枠で「4月10日（土）〜6月／27日（日）」「徒歩8／分」が不自然に折れ、mobileでは上部の帯の館名が2行に折れている。"
-  },
-  "agix": {
-   "subject": 2,
-   "hierarchy": 2,
-   "typography": 2,
-   "composition": 2,
-   "color": 1,
-   "spacing": 2,
-   "distinctiveness": 2,
-   "consistency": 2,
-   "decoration": 2,
-   "rationale": 2,
-   "evidence": "竹ひびと舟の絵、会期・時間・料金の帯、黒緑の予約帯とボタン2つは明快だが、ヒーロー上部の会期が暗い地に若緑の小さな字で、白黒画面では読みにくい。"
+   "evidence": "海苔の黒緑のヒーローに杭と網と舟の全幅SVG、直下に会期・時間・料金の3項目、イベントの直後に予約帯と順序は明快だが、要点の会期で「（日）」だけ改行され、全体は汎用的な型になっている。"
   }
  },
- "rawResult": "12件すべてについて、desktop・mobile・grayの画像とnotesを開いて確認しました。\n\n**採点の要点**\n- **満点（20点）は xkvu だけです。** 上部の4項目の帯、日付を大きくしたイベントカード、本格的な英語欄があり、どの幅でも崩れがありませんでした。\n- **12件とも subject（題材適合）は2点です。** 全件がベか舟・海苔ひび（海苔養殖の竹の杭）・干潟を描いた絵と、題材から取った配色を使っています。\n- **主な減点理由**\n  - Web予約フォームへのリンクやボタンが画面に無い（254u、jm6k、dsyf、az0r、qi9o）。\n  - 文字の折返し（jm6k の題名で「年」だけが次の行に落ちる、az0r の要点カードと dsyf の mobile で日付が途中で折れる）。\n  - stld はヒーローの絵が大きく、来館の要点が下に押し出されている。\n  - z895 は英語欄が日本語の概要より前にあり、日本語が主という依頼に合わない。\n- **notes と画面の食い違い**：dsyf の notes は「ヒーロー右上のリンク」「`#reserve` へのリンク」と書いていますが、画面ではリンクは上部中央にあり、予約欄にWeb予約のリンクはありません。\n\n```json\n{\"scores\": {\n\"xkvu\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"ヒーローで題名と大きな会期、ベか舟と海苔ひびのSVGの直下に開館時間・休館日・料金・アクセスの4項目帯があり、錆色はイベント日付だけに使い、mobileでも4項目帯の縦積みと日付カードの関係が保たれ、notesの配色・順序の記述が画面と一致している。\"},\n\"ms4t\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"ヒーローに会期・時間と「関連イベントを予約する」ボタン、舟と海苔ひびの絵、その下に要点カード3枚があり、英語欄も上の方にあるが、ご来館の案内の「開館時間・休館日」カードの下半分が大きく空いている。\"},\n\"254u\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 1, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"desktopのヒーローは会期・料金・赤茶の予約ボタンを右上に固め、題名が左下に寄って左上が大きく空いており、概要の1段落目と2段落目で字の色・大きさが違い、予約欄にWeb予約のリンクが無く「準備中」の注記だけになっている。\"},\n\"23k4\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"白い会期帯と舟の絵、駅から館までの徒歩8分の略図は題材と用途に固有だが、観覧料がヒーローに無くリンクボタンの先に回り、mobileでは略図の文字がごく小さく読みにくい。\"},\n\"stld\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 1, \"rationale\": 2, \"evidence\": \"desktopでは舟と竹ひびの大きな絵が約300pxを占めて開館時間・料金の帯を最初の画面の下端に押し出しており、mobileの英語欄は値の列が狭く1行数語で折り返している。\"},\n\"z895\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"舟と海苔ひびのヒーロー、要点3つの帯、錆朱を予約の行動だけに使う点は整っているが、英語欄が日本語の概要より前に大きく置かれ、mobileでは日本語の情報がかなり下まで押し下げられている。\"},\n\"jm6k\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 1, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"ヒーローに会期・時間とボタン2つ、直下に4項目帯はあるが、desktopの題名で「年」だけが次の行に落ち、ボタンがヒーローの下端に接し、mobileでは上部の帯の館名が左端に余白無しで接している。\"},\n\"lf4z\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 1, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"舟と海苔ひびの絵、題名の直下の要点ボックス、駅から館への略図は用途に合うが、イベントの「4月」が日付の上に小さく浮いてずれ、イベント名の開始位置がカードごとに違う。\"},\n\"qi9o\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 1, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 1, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"要点帯に会期・時間・休館日・料金が揃うが、錆色が休館日の強調と予約ボタンの両方に使われて白黒では休館日の強調が消え、電話番号がボタンと予約欄で重複しており、小さな絵以外は汎用の構成である。\"},\n\"dsyf\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 1, \"evidence\": \"藍のヒーローは会期の下が大きく空き、予約欄にWeb予約のボタンやリンクが無く、mobileではイベントの日付「24日（土）」が途中で折れ、notesの「ヒーロー右上のリンク」「#reserveへのリンク」が画面と合わない。\"},\n\"az0r\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"干潟・舟・海苔ひびの絵と要点4枠、大きな電話番号の予約欄があるが、desktopの要点枠で「4月10日（土）〜6月／27日（日）」「徒歩8／分」が不自然に折れ、mobileでは上部の帯の館名が2行に折れている。\"},\n\"agix\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 1, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"竹ひびと舟の絵、会期・時間・料金の帯、黒緑の予約帯とボタン2つは明快だが、ヒーロー上部の会期が暗い地に若緑の小さな字で、白黒画面では読みにくい。\"}\n}}\n```"
+ "rawResult": "12件すべて、desktop・mobile・gray の画像と notes.md を開いて確認しました。読めなかった画像はありません。\n\n```json\n{\"scores\": {\n\"vm6g\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"ヒーローにベか舟・海苔ひびのSVGを置き、海苔の黒緑と舟の錆色を使い、直下に会期・時間・料金・行き方の4項目帯があって判断しやすいが、広幅で題名が「百／年」と1字だけ改行され、会期も「（日）」だけ次の行に落ちている。\"},\n\"tb44\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"ヒーローに題名・会期・予約ボタンがあり、干潟と舟のSVGに要点3カードが重なる構成は明快だが、ボタンと絵の間に大きな空白があり、来館案内の開館時間カードも下半分が空いている。\"},\n\"7nzv\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"全幅の干潟・平底舟・竹ひびの大きな絵、日付を見出しにしてカードを使わない罫線のイベント一覧、藁色の予約ボタンなど題材に固有の判断が多く、要点4項目もすぐ下にまとまっている。\"},\n\"t1q5\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"舟と海苔ひびの絵と要点3項目の帯はよいが、大きな英語ブロックが日本語の概要より前にあり、日本語が主の利用者には展覧会の内容が下に押し下げられている。予約は錆朱の行動色で統一されている。\"},\n\"to38\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"干潟と舟のSVGの下に会期・時間・料金・アクセスの4枠があって階層は明確だが、広幅の会期枠で「6月／27日」が途中で改行され、全体は汎用的な案内ページの型になっている。\"},\n\"9557\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"広幅ヒーローを2段組にし、右に会期・時間・料金と錆色の予約ボタンを並べて、予約という操作だけに色を割り当てているが、左上の題名の上に大きな空白が残っている。\"},\n\"xfoi\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"駅から館までの徒歩経路の略図など固有の工夫はあるが、観覧料がヒーローに無く下の表まで見えない。モバイルでは略図が縮んで文字が読めず、広幅ではヒーローに空白がある。\"},\n\"yn0t\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 1, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 1, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"小さめのヒーローと要点4項目の帯で必要な情報が早く読めるが、錆色が休館日の注意と予約ボタンの両方に使われて意味が混ざり、電話番号も直後の予約欄でボタンと下線リンクの2通りに表現されている。\"},\n\"csq8\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"冒頭の舟の絵、枠で囲んだ要点ボックス、駐車場まで示した位置関係の略図、朱色をWeb予約と経路だけに使う配色が題材と用途に合っているが、イベントの日付は「4月」を小さく上に置く表記で読みにくい。\"},\n\"i30u\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 1, \"evidence\": \"題名は大きく基本情報もまとまっているが、上部に予約への導線が無く、ヒーロー内の空白が大きく、モバイルではイベントの「（土）」が次の行に落ちる。notesの「右上のリンク」は画面では中央上にある。\"},\n\"lab8\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"題名・会期・要点4項目の帯と、錆色をイベントの日付だけに使う配色は整っているが、ヒーローの文字と絵の間に大きな空白があり、料金・休館日がヒーロー・帯・表で3回繰り返されている。\"},\n\"z98c\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"海苔の黒緑のヒーローに杭と網と舟の全幅SVG、直下に会期・時間・料金の3項目、イベントの直後に予約帯と順序は明快だが、要点の会期で「（日）」だけ改行され、全体は汎用的な型になっている。\"}\n}}\n```"
 }
