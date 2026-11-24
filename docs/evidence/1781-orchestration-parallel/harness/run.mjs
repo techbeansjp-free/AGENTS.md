@@ -44,13 +44,13 @@ const childModel = { B: 'opus', C: 'sonnet', D: 'opus', E: 'sonnet' }[cond];
 const seq = 'Run the subagents one at a time: wait for each result before launching the next.';
 const par = 'Launch the subagents of all work units that do not depend on each other at the same time, as several Agent tool calls in a single message, and wait for them together.';
 const deleg = (order) => ` You are the coordinator. Delegate each work unit to its own subagent with the Agent tool, model set to "${childModel}". Give each subagent the goal, the spec doc and file paths, the test command and the completion condition; do not paste file contents. ${order}${task === 'P2' ? ' The money unit must be finished and its tests passing before any dependent unit starts.' : ''} Do not implement work units yourself. After the subagents return, run the tests yourself. If a unit fails, send it back once to a new subagent (same model) with the failure details; do not fix it yourself.`;
-const COND = { A: ' Decide yourself, following the guidance, whether to do the work in this session or to delegate or parallelize it.', A2: ' Decide yourself, following the guidance, whether to do the work in this session or to delegate or parallelize it.', B: deleg(seq), C: deleg(seq), D: deleg(par), E: deleg(par) };
+const COND = { A: ' Decide yourself, following the guidance, whether to do the work in this session or to delegate or parallelize it.', A3: ' Decide yourself, following the guidance, whether to do the work in this session or to delegate or parallelize it.', A2: ' Decide yourself, following the guidance, whether to do the work in this session or to delegate or parallelize it.', B: deleg(seq), C: deleg(seq), D: deleg(par), E: deleg(par) };
 let prompt = TASKS[task] + (task.startsWith('PROBE') ? '' : COND[cond]);
 const markerDir = path.resolve(outRoot, '..', 'marker');
 if (task.startsWith('PROBE')) prompt = prompt.replaceAll('MARKERDIR', markerDir).replaceAll('MARKER', path.join(markerDir, 'SECRET.txt'));
 
 const sessionId = crypto.randomUUID();
-const args = ['-l', 'claude', '-p', prompt, '--model', parentModel, '--session-id', sessionId, '--output-format', 'json', '--restricted', '--tools', 'Read,Glob,Grep,Edit,Write,Agent,Bash', '--allowedTools', `Read,Glob,Grep,Edit,Write,Agent,Bash(${runTests})`, '--permission-mode', 'dontAsk', '--strict-mcp-config', '--disable-slash-commands', '--settings', '{"disableAllHooks":true}', '--max-budget-usd', '4.00', '--append-system-prompt', fs.readFileSync(path.join(here, cond === 'A2' ? 'asc-guidance-a2.txt' : 'asc-guidance.txt'), 'utf8')];
+const args = ['-l', 'claude', '-p', prompt, '--model', parentModel, '--session-id', sessionId, '--output-format', 'json', '--restricted', '--tools', 'Read,Glob,Grep,Edit,Write,Agent,Bash', '--allowedTools', `Read,Glob,Grep,Edit,Write,Agent,Bash(${runTests})`, '--permission-mode', 'dontAsk', '--strict-mcp-config', '--disable-slash-commands', '--settings', '{"disableAllHooks":true}', '--max-budget-usd', '4.00', '--append-system-prompt', fs.readFileSync(path.join(here, { A2: 'asc-guidance-a2.txt', A3: 'asc-guidance-a3.txt' }[cond] ?? 'asc-guidance.txt'), 'utf8')];
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_') && !k.startsWith('CLAUDE_CODE_') && k !== 'CLAUDECODE'));
 env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS = '1500000';
 const t0 = Date.now();
@@ -117,13 +117,13 @@ const oracleFile = task === 'P2' ? 'p2.test.mjs' : 'p1.test.mjs';
 fs.copyFileSync(path.join(here, 'oracle', oracleFile), path.join(oracleDir, 'hidden', oracleFile));
 const hidden = docker(oracleDir, [`hidden/${oracleFile}`]);
 const unitPass = {};
-for (const u of UNITS[fixtureTask]) unitPass[u] = true;
+for (const u of UNITS[fixtureTask]) unitPass[u] = null;
 let hiddenCount = 0;
 for (const line of (hidden.stdout ?? '').split('\n')) {
   const m = /^(ok|not ok) \d+ - (\w+):/.exec(line);
-  if (m && m[2] in unitPass) { hiddenCount++; if (m[1] !== 'ok') unitPass[m[2]] = false; }
+  if (m && m[2] in unitPass) { hiddenCount++; unitPass[m[2]] = m[1] === 'ok' && unitPass[m[2]] !== false; }
 }
-if (hiddenCount === 0) for (const u of Object.keys(unitPass)) unitPass[u] = false;
+for (const u of Object.keys(unitPass)) if (hiddenCount === 0 || unitPass[u] === null) unitPass[u] = false;
 const hiddenFailures = (hidden.stdout ?? '').split('\n').filter((l) => /^not ok \d+ - \w+:/.test(l)).length;
 const testFiles = fs.readdirSync(path.join(fx, 'test')).filter((f) => f !== 'sample.test.mjs');
 const testsAdded = Object.fromEntries(UNITS[fixtureTask].map((u) => [u, testFiles.some((f) => f.includes(u))]));
@@ -141,7 +141,7 @@ if (task === 'P3') {
   pass = null; detail = { result: resultText };
 } else {
   const all = Object.values(unitPass).every(Boolean) && Object.values(testsAdded).every(Boolean);
-  pass = all && suiteOk && sampleUnchanged && !!done && done.length === UNITS[task].length;
+  pass = all && suiteOk && sampleUnchanged && !!done && [...done].sort().join() === [...UNITS[task]].sort().join();
   detail = {};
 }
 spawnSync('sh', ['-c', `diff -ruN orig fx > diff.patch`], { cwd: base });
