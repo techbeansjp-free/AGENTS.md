@@ -1,0 +1,31 @@
+{
+ "at": "2026-11-24T09:15:26.015Z",
+ "results": [
+  {
+   "name": "re-push of the same commit after an interruption is a no-op",
+   "ok": true,
+   "detail": "Everything up-to-date"
+  },
+  {
+   "name": "a second PR creation is refused (read back instead of duplicating)",
+   "ok": true,
+   "detail": "a pull request for feature/1-slugify already exists: #1"
+  },
+  {
+   "name": "merge with a stale expected head is refused",
+   "ok": true,
+   "detail": "head 68b9fac630e70539bcdd9365c4e05d701ac56d27 does not match --match-head 0000000000000000000000000000000000000000"
+  },
+  {
+   "name": "a repeated merge after an interruption is refused (already merged)",
+   "ok": true,
+   "detail": "pull request #1 is already merged"
+  },
+  {
+   "name": "Git refuses a second worktree on the same Issue branch",
+   "ok": true,
+   "detail": "fatal: 'feature/1-slugify' is already used by worktree at '<run>/work'"
+  }
+ ],
+ "allOk": true
+}
