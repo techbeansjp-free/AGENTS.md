@@ -1,12 +1,12 @@
 /** Read-only, named Host sessions. Result artifacts are independent of display-name updates. */
 import fs from 'node:fs';
 import path from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,randomBytes} from 'node:crypto';
 import {spawn,spawnSync} from 'node:child_process';
 import {setTimeout,clearTimeout} from 'node:timers';
 import {sessionRpc} from './session-rpc.mjs';
 import {GIT_NULL_DEVICE,gitPathOutput} from './source-limits.mjs';
-import {codexRuntimeRoots,sandboxFilesystemBase} from './codex-runtime.mjs';
+import {codexRuntimeRoots,sandboxFilesystemBase,MACOS_MIN_CODEX_VERSION} from './codex-runtime.mjs';
 
 export function sessionOptions(args){
  const options={ephemeral:false,timeout:900000},seen=new Set();
@@ -79,14 +79,18 @@ export function claudeReviewArguments({model,sessionId,instruction,cwd,targetDir
  * Project instructions are not auto-loaded: Codex reads them from that cwd, which the profile cannot read
  * (thread start fails) and which holds another revision; the Reviewer reads the target's rules itself.
  * Keys are TOML basic strings (JSON escaping is valid TOML for these paths).
+ * Codex merges a same-named `[permissions.<name>]` table from user or project configuration into the `-c` table
+ * (measured: a user read entry survived), so each run uses a fresh, unguessable profile name.
  */
-export const CODEX_REVIEW_PROFILE='asc_review';
-export function codexReviewProfileArguments({targetDirectory,providerRoots,node,readablePaths=[],platform=process.platform}){
+export const CODEX_REVIEW_PROFILE_PREFIX='asc_review_';
+export function codexReviewProfileName(){return CODEX_REVIEW_PROFILE_PREFIX+randomBytes(12).toString('hex');}
+export function codexReviewProfileArguments({profile,targetDirectory,providerRoots,node,readablePaths=[],platform=process.platform}){
+ if(typeof profile!=='string'||!/^asc_review_[a-f0-9]{24}$/.test(profile))throw Error('Codex review profile name must be generated per run');
  for(const item of [targetDirectory,node,...providerRoots,...readablePaths])if(typeof item!=='string'||!path.isAbsolute(item))throw Error('Codex review paths must be absolute');
  if(!providerRoots.length)throw Error('Codex runtime roots are required');
  const filesystem={...sandboxFilesystemBase({providerRoots,node,platform}),...Object.fromEntries(readablePaths.map(item=>[item,'read'])),[targetDirectory]:'read'};
  const table=`{${Object.entries(filesystem).map(([key,access])=>`${JSON.stringify(key)}=${JSON.stringify(access)}`).join(',')}}`;
- return ['-c','project_doc_max_bytes=0','-c',`default_permissions=${JSON.stringify(CODEX_REVIEW_PROFILE)}`,'-c',`permissions.${CODEX_REVIEW_PROFILE}.filesystem=${table}`,'-c',`permissions.${CODEX_REVIEW_PROFILE}.network.enabled=false`];
+ return ['-c','project_doc_max_bytes=0','-c',`default_permissions=${JSON.stringify(profile)}`,'-c',`permissions.${profile}.filesystem=${table}`,'-c',`permissions.${profile}.network.enabled=false`];
 }
 
 /**
@@ -94,7 +98,8 @@ export function codexReviewProfileArguments({targetDirectory,providerRoots,node,
  * Windows names are tried with PATHEXT; command-shell wrappers are rejected because their target is unknown.
  */
 export function resolveExecutable(executable,searchPath=process.env.PATH??'',platform=process.platform,pathExt=process.env.PATHEXT??'.EXE;.CMD;.BAT'){
- const extensions=platform==='win32'&&!path.extname(executable)?['',...pathExt.split(';').filter(Boolean)]:[''];
+ // Windows never runs an extensionless file (npm also writes a POSIX shell script without one).
+ const extensions=platform==='win32'&&!path.extname(executable)?pathExt.split(';').filter(Boolean):[''];
  const bases=executable.includes('/')||(platform==='win32'&&executable.includes('\\'))?[path.resolve(executable)]:searchPath.split(path.delimiter).filter(Boolean).map(dir=>path.join(dir,executable));
  for(const base of bases)for(const extension of extensions){
   try{
@@ -103,6 +108,16 @@ export function resolveExecutable(executable,searchPath=process.env.PATH??'',pla
   }catch(error){if(/command shell wrapper/.test(error.message))throw error;/* try the next candidate */}
  }
  throw Error('Host executable not found');
+}
+
+/** Oldest Codex whose macOS sandbox denies the shared temporaries (see codex-runtime.mjs); older ones fail closed here. */
+export function assertCodexVersion(versionText,platform=process.platform){
+ if(platform!=='darwin')return;
+ const match=/codex-cli (\d+)\.(\d+)\.(\d+)/.exec(versionText??'');
+ const [major,minor,patch]=MACOS_MIN_CODEX_VERSION.split('.').map(Number);
+ const version=match?match.slice(1).map(Number):null;
+ const older=!version||version[0]<major||(version[0]===major&&(version[1]<minor||(version[1]===minor&&version[2]<patch)));
+ if(older)throw Error(`Codex ${MACOS_MIN_CODEX_VERSION} or later is required on macOS for the review read scope`);
 }
 
 /**
@@ -173,22 +188,25 @@ export async function runHostSession(options){
   }else{
    // The npm launcher (bin/codex.js) runs under this Node; its package and native runtime become readable.
    const codex=resolveExecutable(executable),node=fs.realpathSync(process.execPath),script=/\.m?js$/i.test(codex);
-   const profile=codexReviewProfileArguments({targetDirectory,providerRoots:codexRuntimeRoots(codex),node,readablePaths:codexReviewReadablePaths({gitCommonDir})});
-   state.permissionProfile=CODEX_REVIEW_PROFILE;
-   rpc=sessionRpc(script?node:codex,cwd,{prefix:script?[codex]:[],args:profile,env:hostEnvironment(),timeout,record:line=>{
+   const launch=script?node:codex,prefix=script?[codex]:[];
+   if(process.platform==='darwin')assertCodexVersion(spawnSync(launch,[...prefix,'--version'],{encoding:'utf8',timeout:30000,env:hostEnvironment()}).stdout);
+   const permissionProfile=codexReviewProfileName();
+   const profile=codexReviewProfileArguments({profile:permissionProfile,targetDirectory,providerRoots:codexRuntimeRoots(codex),node,readablePaths:codexReviewReadablePaths({gitCommonDir})});
+   state.permissionProfile=permissionProfile;
+   rpc=sessionRpc(launch,cwd,{prefix,args:profile,env:hostEnvironment(),timeout,record:line=>{
     write('events.jsonl',line);
     const message=JSON.parse(line),item=message.params?.item;
     if(message.method==='item/completed'&&message.params?.threadId===state.sessionId&&item?.type==='agentMessage'&&typeof item.text==='string')write('result.txt',item.text+'\n');
    },stderr:b=>write('stderr.txt',b)});
    // experimentalApi exposes the named-profile fields; the thread must report that profile before any turn.
    await rpc.initialize({experimentalApi:true});
-   const response=await rpc.call('thread/start',{cwd,model,ephemeral,approvalPolicy:'never',permissions:CODEX_REVIEW_PROFILE,developerInstructions:targetInstruction});
+   const response=await rpc.call('thread/start',{cwd,model,ephemeral,approvalPolicy:'never',permissions:state.permissionProfile,developerInstructions:targetInstruction});
    state.sessionId=response.thread?.id;if(typeof state.sessionId!=='string'||!state.sessionId)throw Error('Missing Codex thread ID');save();
    // A same-named profile extended elsewhere could widen reads, so only the unextended profile is accepted.
    const active=response.activePermissionProfile;
-   if(active?.id!==CODEX_REVIEW_PROFILE||active.extends!=null)throw Error('Codex did not apply the review permission profile');
+   if(active?.id!==state.permissionProfile||active.extends!=null)throw Error('Codex did not apply the review permission profile');
    if(!ephemeral){await rpc.call('thread/name/set',{threadId:state.sessionId,name:state.name});state.naming='started';save();}
-   const started=await rpc.call('turn/start',{threadId:state.sessionId,input:[{type:'text',text:prompt}],approvalPolicy:'never',permissions:CODEX_REVIEW_PROFILE});
+   const started=await rpc.call('turn/start',{threadId:state.sessionId,input:[{type:'text',text:prompt}],approvalPolicy:'never',permissions:state.permissionProfile});
    const completed=await rpc.wait(message=>message.method==='turn/completed'&&message.params?.threadId===state.sessionId&&message.params?.turn?.id===started.turn.id);
    if(completed.params.turn.status!=='completed')throw Error(`Codex turn ${completed.params.turn.status}`);
    if(!fs.readFileSync(path.join(outputDir,'result.txt'),'utf8').trim())throw Error('Codex returned no response');

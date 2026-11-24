@@ -1,5 +1,7 @@
 {
   "condition": "legacy-read-only",
+  "codexHomeConfig": [],
+  "codexHomeInstructions": false,
   "codexVersion": "codex-cli 0.171.0",
   "codexArgs": [],
   "checks": {
@@ -80,7 +82,7 @@
     "localNetwork": {
       "exitCode": 7,
       "reached": false,
-      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53280 after 0 ms: Couldn't connect to server\n"
+      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53489 after 0 ms: Couldn't connect to server\n"
     },
     "gitLog": {
       "exitCode": 0,

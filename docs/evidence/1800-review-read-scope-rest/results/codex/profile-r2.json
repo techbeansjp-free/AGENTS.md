@@ -1,15 +1,17 @@
 {
   "condition": "profile",
+  "codexHomeConfig": [],
+  "codexHomeInstructions": false,
   "codexVersion": "codex-cli 0.171.0",
   "codexArgs": [
     "-c",
     "project_doc_max_bytes=0",
     "-c",
-    "default_permissions=\"asc_review\"",
+    "default_permissions=\"<profile>\"",
     "-c",
-    "permissions.asc_review.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\"/tmp\"=\"deny\",\"/private/tmp\"=\"deny\",\"/var/tmp\"=\"deny\",\"/private/var/tmp\"=\"deny\",\"/System/Library/OpenSSL\"=\"read\",\"<codex>\"=\"read\",\"<home>/.anyenv/envs/nodenv/versions/20.12.2/bin/node\"=\"read\",\"<fixture>/repo/.git\"=\"read\",\"/Library/Developer/CommandLineTools\"=\"read\",\"<fixture>/repo/.worktrees/target\"=\"read\"}",
+    "permissions.<profile>.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\"/tmp\"=\"deny\",\"/private/tmp\"=\"deny\",\"/var/tmp\"=\"deny\",\"/private/var/tmp\"=\"deny\",\"/System/Library/OpenSSL\"=\"read\",\"<codex>\"=\"read\",\"<node>\"=\"read\",\"<fixture>/repo/.git\"=\"read\",\"/Library/Developer/CommandLineTools\"=\"read\",\"<fixture>/repo/.worktrees/target\"=\"read\"}",
     "-c",
-    "permissions.asc_review.network.enabled=false"
+    "permissions.<profile>.network.enabled=false"
   ],
   "checks": {
     "target": {
@@ -89,7 +91,7 @@
     "localNetwork": {
       "exitCode": 7,
       "reached": false,
-      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53276 after 0 ms: Couldn't connect to server\n"
+      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53485 after 0 ms: Couldn't connect to server\n"
     },
     "gitLog": {
       "exitCode": 0,
@@ -106,7 +108,7 @@
       "networkAccess": false
     },
     "activePermissionProfile": {
-      "id": "asc_review",
+      "id": "asc_review_7484d0bcc1945a045f918170",
       "extends": null
     },
     "cwd": "<fixture>/repo",

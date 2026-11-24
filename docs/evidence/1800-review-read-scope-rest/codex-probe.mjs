@@ -1,9 +1,10 @@
 // Codex read-scope probe without any model call: app-server `initialize`, `thread/start` (ephemeral) and
 // `command/exec` only. No `turn/start` is sent, so nothing is sent to a model.
-// Usage: CODEX_HOME=<disposable dir> node codex-probe.mjs <fixture-dir> <legacy-read-only|profile> <out.json>
+// Usage: CODEX_HOME=<disposable dir> node codex-probe.mjs <fixture-dir> <legacy-read-only|profile|fixed-name> <out.json>
 //   legacy-read-only: the launch before #1800 (`sandbox: read-only`).
 //   profile: the #1800 launch (codexReviewProfileArguments, thread `permissions`), with the same readable paths
-//            as host-session (Host executable, shared Git metadata, macOS developer tools).
+//            as host-session (Host executable, shared Git metadata, macOS developer tools) and a per-run profile name.
+//   fixed-name: the same profile under the fixed name `asc_review` (shows how a same-named configured profile merges).
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -11,12 +12,12 @@ import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
-import {CODEX_REVIEW_PROFILE,codexReviewProfileArguments,codexReviewReadablePaths,resolveExecutable} from '../../../src/host-session.mjs';
+import {codexReviewProfileName,codexReviewProfileArguments,codexReviewReadablePaths,resolveExecutable} from '../../../src/host-session.mjs';
 import {codexRuntimeRoots} from '../../../src/codex-runtime.mjs';
 
 const [fixture, condition, out] = process.argv.slice(2);
 if (!process.env.CODEX_HOME) throw Error('Set CODEX_HOME to a disposable directory');
-if (!['legacy-read-only', 'profile'].includes(condition)) throw Error('unknown condition');
+if (!['legacy-read-only', 'profile', 'fixed-name'].includes(condition)) throw Error('unknown condition');
 const F = fs.realpathSync(fixture), repo = path.join(F, 'repo'), target = path.join(repo, '.worktrees/target');
 // A non-temporary path: this checkout's public AGENTS.md (content is not a secret; only the exit code is recorded).
 const nonTmp = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../AGENTS.md');
@@ -33,7 +34,9 @@ const files = {
 };
 const codex = resolveExecutable('codex');
 // Same construction as host-session (native executable; the npm launcher form is not exercised here).
-const extra = condition === 'profile' ? codexReviewProfileArguments({targetDirectory: target, providerRoots: codexRuntimeRoots(codex), node: fs.realpathSync(process.execPath), readablePaths: codexReviewReadablePaths({gitCommonDir: fs.realpathSync(path.join(repo, '.git'))})}) : [];
+const generated = codexReviewProfileName(), profileName = condition === 'fixed-name' ? 'asc_review' : generated;
+const built = condition === 'legacy-read-only' ? [] : codexReviewProfileArguments({profile: generated, targetDirectory: target, providerRoots: codexRuntimeRoots(codex), node: fs.realpathSync(process.execPath), readablePaths: codexReviewReadablePaths({gitCommonDir: fs.realpathSync(path.join(repo, '.git'))})});
+const extra = built.map(arg => arg.replaceAll(generated, profileName));
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
 const server = http.createServer((q, s) => s.end('LOCAL-LISTENER')); await new Promise(r => server.listen(0, '127.0.0.1', r));
 const child = spawn(codex, ['app-server', ...extra], {cwd: repo, env, stdio: ['pipe', 'pipe', 'pipe']});
@@ -45,9 +48,13 @@ createInterface({input: child.stdout}).on('line', line => {
 });
 let stderr = ''; child.stderr.on('data', b => { stderr += b; });
 const call = (method, params) => new Promise((resolve, reject) => { const n = ++id; pending.set(n, {resolve, reject}); child.stdin.write(JSON.stringify({id: n, method, params}) + '\n'); });
-const hide = text => String(text ?? '').replaceAll(F, '<fixture>').replaceAll(path.dirname(nonTmp), '<checkout>').replaceAll(codex, '<codex>').replaceAll(process.env.CODEX_HOME, '<codex-home>').replaceAll(process.env.HOME ?? '\0', '<home>');
-const result = {condition, codexVersion: spawnSync(codex, ['--version'], {encoding: 'utf8'}).stdout.trim(), codexArgs: extra.map(hide), checks: {}};
-const policy = condition === 'profile' ? {} : {sandboxPolicy: {type: 'readOnly'}};
+const hide = text => String(text ?? '').replaceAll(F, '<fixture>').replaceAll(path.dirname(nonTmp), '<checkout>').replaceAll(codex, '<codex>').replaceAll(fs.realpathSync(process.execPath), '<node>').replaceAll(generated, '<profile>').replaceAll(process.env.CODEX_HOME, '<codex-home>').replaceAll(process.env.HOME ?? '\0', '<home>');
+// Configuration placed in the disposable CODEX_HOME: table and key names only, never values.
+const configFile = path.join(process.env.CODEX_HOME, 'config.toml');
+const codexHomeConfig = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf8').split('\n').map(l => l.trim()).filter(l => l.startsWith('[') || l.includes('=')).map(l => l.startsWith('[') ? l : l.split('=')[0].trim()) : [];
+const codexHomeInstructions = fs.existsSync(path.join(process.env.CODEX_HOME, 'AGENTS.md'));
+const result = {condition, codexHomeConfig: codexHomeConfig.map(hide), codexHomeInstructions, codexVersion: spawnSync(codex, ['--version'], {encoding: 'utf8'}).stdout.trim(), codexArgs: extra.map(hide), checks: {}};
+const policy = condition === 'legacy-read-only' ? {sandboxPolicy: {type: 'readOnly'}} : {};
 const exec = async (command, extraEnv = {}) => {
   try { const r = await call('command/exec', {command, cwd: repo, timeoutMs: 20000, env: {HOME: target, ...extraEnv}, ...policy}); return r; }
   catch (error) { return {rpcError: hide(error.message).slice(0, 200)}; }
@@ -55,7 +62,7 @@ const exec = async (command, extraEnv = {}) => {
 try {
   await call('initialize', {clientInfo: {name: 'asc_probe', version: '0'}, capabilities: {experimentalApi: true}});
   child.stdin.write(JSON.stringify({method: 'initialized', params: {}}) + '\n');
-  const started = await call('thread/start', {cwd: repo, ephemeral: true, approvalPolicy: 'never', ...(condition === 'profile' ? {permissions: CODEX_REVIEW_PROFILE} : {sandbox: 'read-only'})});
+  const started = await call('thread/start', {cwd: repo, ephemeral: true, approvalPolicy: 'never', ...(condition === 'legacy-read-only' ? {sandbox: 'read-only'} : {permissions: profileName})});
   result.thread = {sandbox: started.sandbox, activePermissionProfile: started.activePermissionProfile ?? null, cwd: hide(started.cwd), instructionSources: JSON.parse(hide(JSON.stringify(started.instructionSources ?? null)))};
   for (const [name, file] of Object.entries(files)) {
     const r = await exec(['/bin/cat', file]);
