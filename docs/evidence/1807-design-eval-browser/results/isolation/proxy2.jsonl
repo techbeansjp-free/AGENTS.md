@@ -1,0 +1,1 @@
+{"t":"2026-11-24T23:31:13.948Z","listener":"browse","method":"GET","url":"http://allowed.test/ok","decision":"deny","reason":"private-address","detail":["172.20.0.2"]}

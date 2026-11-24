@@ -1,0 +1,8 @@
+{
+  "schema": "asc-1807-allowlist/v1",
+  "note": "閲覧の許可範囲はownerの判断待ち。判断が出るまでbrowse.hostsは空とし、生成の起動器（harness/run-gen-docker.mjs）は空のままでは起動しない。推奨案はenv/ALLOWLIST_PROPOSAL.md。",
+  "ports": [443],
+  "denyPrivateAddresses": true,
+  "model": {"port": 3128, "hosts": ["api.anthropic.com"], "maxRequests": null},
+  "browse": {"port": 3129, "hosts": [], "maxRequests": null}
+}
