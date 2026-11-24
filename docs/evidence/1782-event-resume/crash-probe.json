@@ -1,12 +1,12 @@
 {
  "runs": 2,
- "totalCostUsd": 0,
+ "totalCostUsd": null,
  "costMissingRuns": 2,
  "totals": {
   "B": {
    "n": 2,
    "pass": 2,
-   "costUsd": 0,
+   "costUsd": null,
    "costMissing": 2,
    "wallS": 277.576,
    "hostS": 277.57099999999997,
@@ -17,7 +17,8 @@
    "cacheWrite": 23310,
    "assistantMessages": 42,
    "cpuS": 20.09,
-   "cpuMissing": 0
+   "cpuMissing": 0,
+   "invocationsWithCpu": 4
   }
  },
  "rows": [

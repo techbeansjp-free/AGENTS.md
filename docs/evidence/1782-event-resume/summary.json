@@ -17,7 +17,8 @@
    "cacheWrite": 81349,
    "assistantMessages": 124,
    "cpuS": 49.559999999999995,
-   "cpuMissing": 0
+   "cpuMissing": 1,
+   "invocationsWithCpu": 9
   },
   "B": {
    "n": 9,
@@ -33,7 +34,8 @@
    "cacheWrite": 90633,
    "assistantMessages": 146,
    "cpuS": 57.24,
-   "cpuMissing": 0
+   "cpuMissing": 0,
+   "invocationsWithCpu": 9
   },
   "C": {
    "n": 9,
@@ -49,7 +51,8 @@
    "cacheWrite": 79071,
    "assistantMessages": 122,
    "cpuS": 80.37,
-   "cpuMissing": 0
+   "cpuMissing": 0,
+   "invocationsWithCpu": 22
   },
   "D": {
    "n": 9,
@@ -65,7 +68,8 @@
    "cacheWrite": 106940,
    "assistantMessages": 120,
    "cpuS": 72.02,
-   "cpuMissing": 0
+   "cpuMissing": 1,
+   "invocationsWithCpu": 20
   }
  },
  "rows": [
@@ -1131,7 +1135,7 @@
      "final": "merged",
      "waiting": false,
      "maxRssKb": 303776,
-     "cpuS": 0
+     "cpuS": null
     }
    ],
    "tracker": {
@@ -2119,7 +2123,7 @@
      "final": null,
      "waiting": true,
      "maxRssKb": 251100,
-     "cpuS": 0
+     "cpuS": null
     },
     {
      "resume": false,

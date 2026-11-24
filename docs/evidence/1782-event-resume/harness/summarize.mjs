@@ -14,7 +14,8 @@ const runCost = (r) => {
   for (const i of r.invocations) if (i.sessionId && typeof i.costUsd === 'number') bySession.set(i.sessionId, i.costUsd);
   return bySession.size === new Set(r.invocations.map((i) => i.sessionId)).size ? [...bySession.values()].reduce((a, b) => a + b, 0) : null;
 };
-const cpuSeconds = (text) => { const m = /^(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)$/.exec(text ?? ''); return m ? Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null; };
+// run.mjs starts from '0:00.00' and keeps the last sample, so 0 means the sample was lost at exit: missing, not zero.
+const cpuSeconds = (text) => { const m = /^(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)$/.exec(text ?? ''); const v = m ? Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null; return v ? v : null; };
 // Tracker calls of the run (if its directory is still present). t0 is approximated by the last file make-fixture writes.
 function trackerCalls(r) {
   const dir = path.join(outDir, `${r.case}-${r.cond}-${r.rep}`, 'tracker-data');
@@ -56,11 +57,12 @@ const totals = {};
 for (const r of runs) {
   const t = (totals[r.cond] ??= { n: 0, pass: 0, costUsd: 0, costMissing: 0, wallS: 0, hostS: 0, invocations: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, assistantMessages: 0, cpuS: 0, cpuMissing: 0 });
   t.n++; t.pass += r.pass ? 1 : 0; if (r.costUsd === null) t.costMissing++; else t.costUsd += r.costUsd;
-  t.wallS += r.wallS; t.hostS += r.hostS; t.invocations += r.invocations.length;
+  t.wallS += r.wallS; t.hostS += r.hostS; t.invocations += r.invocations.length; t.invocationsWithCpu = t.invocations;
   for (const k of ['input', 'output', 'cacheRead', 'cacheWrite', 'assistantMessages']) t[k] += r.usage[k];
   for (const i of r.invocations) if (i.cpuS === null) t.cpuMissing++; else t.cpuS += i.cpuS;
 }
 const costs = runs.map((r) => r.costUsd);
-const out = { runs: recs.length, totalCostUsd: Number(costs.filter((c) => c !== null).reduce((a, b) => a + b, 0).toFixed(4)), costMissingRuns: costs.filter((c) => c === null).length, totals, rows, perRun: runs };
+for (const t of Object.values(totals)) { if (t.costMissing === t.n) t.costUsd = null; if (t.cpuMissing === t.invocationsWithCpu) t.cpuS = null; }
+const out = { runs: recs.length, totalCostUsd: costs.some((c) => c !== null) ? Number(costs.filter((c) => c !== null).reduce((a, b) => a + b, 0).toFixed(4)) : null, costMissingRuns: costs.filter((c) => c === null).length, totals, rows, perRun: runs };
 if (target) fs.writeFileSync(target, JSON.stringify(out, null, 1) + '\n');
 console.log(JSON.stringify({ runs: out.runs, totalCostUsd: out.totalCostUsd, costMissingRuns: out.costMissingRuns, totals }, null, 1));
