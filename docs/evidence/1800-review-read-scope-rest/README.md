@@ -100,13 +100,21 @@
 | `host-session`の終了コード、`status`・`naming` | 0、`completed`・`completed`（3回とも） |
 | `status.json`の`cwd` | 対象worktree（主要checkoutではない）、`targetHead`は対象のHEADと一致 |
 | 1〜5 外のRead・Glob・Grep、外へのsymlink | 拒否 |
-| 6〜7 対象のRead・Glob（陽性対照） | 成功（対象のmarkerが出た） |
+| 6〜7 対象のRead・Glob（陽性対照） | 成功（6のReadで対象のmarkerが出た。7のGlobはfile名だけを返すためmarkerを含まない） |
 | 8〜13 主要checkoutのGit管理・Git管理外file、別worktree、`.worktrees`のGlob、主要checkoutのGrep、主要checkoutを指すsymlink | 拒否 |
 | transcriptと出力全体のmarker | 対象のmarkerだけ（外・主要checkoutのGit管理/管理外・別worktreeは出ない） |
 | 保存先project | 対象worktreeのproject（主要checkoutのprojectには無い） |
 | 主要checkoutから実行ID・表示名で`--resume`（削除前・削除後） | 4件とも成功し、同じsession |
 
 本体の費用は1回あたり約0.0036 USD（haiku、3回の`total_cost_usd`）。最初の1回はtranscriptの重複を数え分けないscriptで行ったため結果を採らず、scriptを直して3回を測り直した（判定は同じだった）。測定後、fixtureのsessionを`claude purge -y <fixtureの主要checkout>`で削除し（入れ子の対象worktreeのprojectも削除された）、`--dry-run`で残りが無いことを確かめた。
+
+### 指示fileの自動読込み（`instructions-probe.mjs`、各1回×3、`results/instructions/`）
+
+1回目の独立レビューの指摘（主要checkoutが起動先の祖先になるため、祖先の`CLAUDE.md`が読み込まれうる）を受けて測った。主要checkoutと対象worktreeのそれぞれに乱数の合言葉を書いた`CLAUDE.md`を置き、`host-session`と同じ引数（非永続）で対象worktreeから起動し、toolを使わずに与えられた合言葉を答えさせた。
+
+- 3回とも、どちらの合言葉も報告されず`NONE`と答えた（費用は計約0.0019 USD）。
+- 読み込まれた場合の陽性対照は無く、報告されないことは読み込まれなかったことの弱い根拠にとどまる。`--restricted`がproject指示の自動読込みも止めている可能性があるが、確定していない。少なくとも主要checkoutの`CLAUDE.md`だけが読み込まれる結果は出なかった。
+- このため配布文書では、file toolでの拒否を実測として書き、指示fileの自動読込みは確定していないと書いた。Reviewerは従来どおり対象側の規約をfile toolで読む。
 
 ### CIで検査すること（追加分）
 
@@ -116,6 +124,14 @@
 - Codexでは従来どおり起動先が主要checkoutで、profileは対象と共有のGit metadataだけを読ませる。
 - 対象が主要checkoutそのもの・非Gitのdirectoryの場合、両Hostで起動先＝対象になる。
 - `claudeReviewArguments`は永続・非永続とも`--add-dir`を含まない。
+
+### 独立レビュー（2回目のPR）
+
+`host-session claude`（本変更後の経路。Read・Glob・Grepだけ、`--restricted`、起動先は対象worktree）で新しいContextに依頼した。Reviewerは対象worktreeしか読めないため、git差分（結果fileを除く）を依頼文に添えた。
+
+| 回 | 対象 | 判定 | 主な指摘と是正 |
+| --- | --- | --- | --- |
+| 1 | `c96e2b91` | 条件付き合格（条件：help文の是正か根拠、最終HEADのCI） | High・Mediumなし。Low：CLIのhelp文が「repository rootから起動」のまま（直した）、陽性対照のGlobにmarkerは出ない（表を直した）、祖先の`CLAUDE.md`の自動読込みが未実測なのに配布文書が「読めない」と断定（実測を追加し、文書をfile toolの範囲に限定）、Claude Codeへの追加指示が「sessionRootは一覧用」のまま（起動先＝対象のときは文言を変え、unit testで固定） |
 
 ### 品質検査（2回目のPR）
 
@@ -195,7 +211,7 @@
 
 - Codex：modelを呼ぶturnでの読取り（外部serviceへ送らない方針による）。turnのshell実行は`command/exec`と同じprofileの下で動く前提で、`activePermissionProfile`で適用を確かめている。shell以外の組込みtool（画像の表示等）の読取りがprofileに従うか。
 - Codex：Linux・Windowsでのprofileの効き方。npm導入（launcherをNodeで起動し、`codexRuntimeRoots`のpackageを許可する。ASCの他のCodex起動と同じ扱い）等、Homebrew cask以外の導入形態。許可が足りなければ`thread/start`かturn中のtoolが失敗する想定で、読取りを広げては続行しない。`/usr/bin/git`以外のgit。家directoryのfileへの反例（実設定を読まないため、一時directory外のfileとしてこのcheckoutの公開fileで代用した）。
-- Claude Code：案Dの一覧所属。案Wでの指示file（CLAUDE.md等）の読込み元。session pickerの表示。Linux・Windowsでの案W（起動先の解決はunit testで検査した）。
+- Claude Code：案Dの一覧所属。案Wでの指示file（CLAUDE.md等）の読込み元は陽性対照が無く確定していない（上の節）。session pickerの表示。Linux・Windowsでの案W（起動先の解決はunit testで検査した）。
 - `host-session codex`の全経路（turnがmodelを呼ぶため）。起動引数の組立ては偽のHostで検査した。
 
 ## 残る制限
@@ -239,8 +255,9 @@
 - `src/host-session.mjs`：Claude Code経路の起動先を対象worktreeにし、`--add-dir`を外した。配布物に含まれる。
 - `skills/asc/references/host-session.md`：起動先・読取り範囲・一覧の確認方法の説明を実態に合わせた。配布物に含まれる。
 - `v05/USAGE.md`：`host-session`の起動先の説明を実態に合わせた。配布物に含まれる。
+- `bin/asc-v05.mjs`：`host-session`のhelp文の起動先を実態に合わせた（1回目の独立レビューの指摘）。配布物に含まれる。
 
-`skills/asc/references/review.md`は、Claude Code経路の一覧所属や`--add-dir`に触れる記述が無いため変更していない。2回目のPRで配布物に入らない変更path：`test/test_host_session.mjs`、`docs/evidence/1800-review-read-scope-rest/`（`README.md`、`host-session-probe.mjs`、`results/host-session/`）。
+`skills/asc/references/review.md`は、Claude Code経路の一覧所属や`--add-dir`に触れる記述が無いため変更していない。2回目のPRで配布物に入らない変更path：`test/test_host_session.mjs`、`docs/evidence/1800-review-read-scope-rest/`（`README.md`、`host-session-probe.mjs`、`instructions-probe.mjs`、`results/host-session/`、`results/instructions/`）。
 
 ## 品質検査
 

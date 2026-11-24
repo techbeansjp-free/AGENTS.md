@@ -161,10 +161,11 @@ for(const host of ['claude','codex'])test(`${host}: launch and rename in the exp
   assert(!calls.some(call=>call.includes('--add-dir')),'The primary checkout is never a working directory');
   const instruction=calls[0][calls[0].indexOf('--append-system-prompt')+1];assert(instruction.includes(head));assert(instruction.includes(JSON.stringify(target)));
   assert(!instruction.includes(JSON.stringify(primary)),'The instruction does not point the Reviewer at the primary checkout');
+  assert(instruction.includes('the review target itself')&&!instruction.includes('only the launch/listing location'));
   assert(calls[1].includes(result.sessionId));assert.equal(calls[1][calls[1].indexOf('-n')+1],'済: '+result.name);
  }else{
   const start=calls.find(c=>c.method==='thread/start');assert.equal(start.params.cwd,primary);
-  assert(start.params.developerInstructions.includes(head));assert(start.params.developerInstructions.includes(JSON.stringify(target)));
+  assert(start.params.developerInstructions.includes(head));assert(start.params.developerInstructions.includes('only the launch/listing location'));assert(start.params.developerInstructions.includes(JSON.stringify(target)));
   assert.equal(calls.find(c=>c.method==='turn/start').params.cwd,undefined,'Do not move the persisted thread cwd to the worktree');
   const argv=JSON.parse(fs.readFileSync(path.join(root,'argv'),'utf8').trim());
   assert.deepEqual(argv.slice(1),expectedProfile(fs.realpathSync(options.executable),target,fs.realpathSync(path.join(primary,'.git')),result.permissionProfile),'Only the target and shared Git metadata, not the primary checkout, become readable');

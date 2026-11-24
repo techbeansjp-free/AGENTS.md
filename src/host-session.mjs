@@ -168,7 +168,8 @@ export async function runHostSession(options){
  // Claude confines reads to its launch directory, so it starts (and is renamed) in the target; Codex limits reads by
  // its permission profile and keeps the primary checkout as the thread cwd for listing.
  const cwd=host==='claude'?targetDirectory:location.cwd;
- const targetInstruction=`ASC session location: ${JSON.stringify({sessionRoot:cwd,targetDirectory,targetHead})}. The sessionRoot is only the launch/listing location. Review and read files in targetDirectory, never substitute the primary checkout or another worktree. Use absolute paths (or git -C targetDirectory). Read the target's applicable AGENTS.md/CLAUDE.md and nested project rules before work. Verify the target HEAD when Git is available; report a mismatch instead of reviewing another checkout. Do not modify files or use external write tools.`;
+ const rootNote=cwd===targetDirectory?'The sessionRoot is the review target itself.':'The sessionRoot is only the launch/listing location.';
+ const targetInstruction=`ASC session location: ${JSON.stringify({sessionRoot:cwd,targetDirectory,targetHead})}. ${rootNote} Review and read files in targetDirectory, never substitute the primary checkout or another worktree. Use absolute paths (or git -C targetDirectory). Read the target's applicable AGENTS.md/CLAUDE.md and nested project rules before work. Verify the target HEAD when Git is available; report a mismatch instead of reviewing another checkout. Do not modify files or use external write tools.`;
  const prompt=fs.readFileSync(options.promptFile,'utf8');if(!prompt.trim())throw Error('Empty session prompt');
  const outputDir=path.resolve(options.outputDir);
  // A new private directory prevents overwriting another run, symlinks, or review results.
