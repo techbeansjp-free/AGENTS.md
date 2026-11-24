@@ -1,0 +1,269 @@
+{
+ "schema": "asc-1804-ext-commits/v1",
+ "retrievedAt": "2026-11-25",
+ "note": "git clone（blobless）後に固定commitをcheckout。hookは無効化（core.hooksPath=/dev/null）。contentSha256は対象pathのgit管理fileを「path NUL 内容」の順に連結したsha256（harness/inventory.mjs）。第三者のfileはrepositoryへcommitしない。",
+ "repos": {
+  "ad": {
+   "url": "https://github.com/RNA4219/anything-frontend-art-direction",
+   "commit": "046e42c7de149373993109cf4a211a577b1c3bcc",
+   "path": ".",
+   "files": 50,
+   "bytes": 8358811,
+   "contentSha256": "b982cd28e1a5755cdd1f5bc5be96ccbe86d1e2ff864051fd0941ecf15545b230",
+   "ext": {
+    "(none)": 1,
+    ".md": 29,
+    ".sqlite3": 1,
+    ".csv": 2,
+    ".webp": 1,
+    ".png": 3,
+    ".html": 13
+   },
+   "codeFiles": 0,
+   "urlCount": 3429,
+   "urlHosts": 391,
+   "topHosts": [
+    [
+     "html.spec.whatwg.org",
+     329
+    ],
+    [
+     "faculty.washington.edu",
+     163
+    ],
+    [
+     "www.w3.org",
+     149
+    ],
+    [
+     "web.dev",
+     124
+    ],
+    [
+     "drafts.csswg.org",
+     108
+    ],
+    [
+     "doi.org",
+     96
+    ],
+    [
+     "raw.githubusercontent.com",
+     81
+    ],
+    [
+     "developer.mozilla.org",
+     81
+    ]
+   ],
+   "patternHits": {}
+  },
+  "pd": {
+   "url": "https://github.com/RNA4219/anything-frontend-product-design",
+   "commit": "af656d5fafc982daabcbccffe5a331802977f492",
+   "path": ".",
+   "files": 1650,
+   "bytes": 14230203,
+   "contentSha256": "a78ad07e2daa77b06712742481451d5f451b0504907b463fde44ca56c776ff80",
+   "ext": {
+    "(none)": 13,
+    ".md": 240,
+    ".webp": 4,
+    ".jsonl": 13,
+    ".py": 51,
+    ".json": 1163,
+    ".txt": 76,
+    ".html": 32,
+    ".mjs": 47,
+    ".ks": 1,
+    ".yaml": 3,
+    ".css": 2,
+    ".js": 1,
+    ".njk": 1,
+    ".csv": 2,
+    ".png": 1
+   },
+   "codeFiles": 99,
+   "urlCount": 5563,
+   "urlHosts": 485,
+   "topHosts": [
+    [
+     "www.w3.org",
+     1294
+    ],
+    [
+     "www.gov.uk",
+     332
+    ],
+    [
+     "designsystem.digital.gov",
+     318
+    ],
+    [
+     "design-system.service.gov.uk",
+     283
+    ],
+    [
+     "github.com",
+     193
+    ],
+    [
+     "doi.org",
+     104
+    ],
+    [
+     "www.carbondesignsystem.com",
+     103
+    ],
+    [
+     "html.spec.whatwg.org",
+     100
+    ]
+   ],
+   "patternHits": {
+    "network": 14,
+    "exec": 20,
+    "secrets": 29,
+    "fsWrite": 2,
+    "remoteScript": 1
+   }
+  },
+  "ma": {
+   "url": "https://github.com/RNA4219/motion-atlas",
+   "commit": "8cff76041b06a30d7f4b4b9f79979b8e30512f60",
+   "path": ".",
+   "files": 73,
+   "bytes": 2254160,
+   "contentSha256": "20c18114f77f2a72b73cc6f3e21b930259494864bcadfa92aabd4bbdc3dc926d",
+   "ext": {
+    "(none)": 3,
+    ".yml": 1,
+    ".md": 6,
+    ".yaml": 1,
+    ".svg": 1,
+    ".html": 1,
+    ".json": 9,
+    ".jpg": 7,
+    ".png": 11,
+    ".mjs": 11,
+    ".py": 1,
+    ".js": 19,
+    ".css": 2
+   },
+   "codeFiles": 31,
+   "urlCount": 37,
+   "urlHosts": 6,
+   "topHosts": [
+    [
+     "github.com",
+     21
+    ],
+    [
+     "registry.npmjs.org",
+     12
+    ],
+    [
+     "127.0.0.1",
+     1
+    ],
+    [
+     "kumagi.com",
+     1
+    ],
+    [
+     "www.w3.org",
+     1
+    ],
+    [
+     "localhost",
+     1
+    ]
+   ],
+   "patternHits": {
+    "fsWrite": 3,
+    "secrets": 1,
+    "network": 2
+   }
+  },
+  "fd": {
+   "url": "https://github.com/anthropics/skills",
+   "commit": "e4bb5d960d87126ff3b3a8af1a104b7db67560ba",
+   "path": "skills/frontend-design",
+   "files": 2,
+   "bytes": 19564,
+   "contentSha256": "3eddd39d9bf14af14d2ec6357f6513a0299dc6cad4057ed036f0cdb8fd036975",
+   "ext": {
+    ".txt": 1,
+    ".md": 1
+   },
+   "codeFiles": 0,
+   "urlCount": 1,
+   "urlHosts": 1,
+   "topHosts": [
+    [
+     "www.apache.org",
+     1
+    ]
+   ],
+   "patternHits": {}
+  },
+  "uipm": {
+   "url": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+   "commit": "8db36338810d0942567b97ce439affd1619fcf31",
+   "path": ".claude/skills/ui-ux-pro-max",
+   "files": 81,
+   "bytes": 3719864,
+   "contentSha256": "321e41d4292f96495a23ec6193b83af5a64943ff8371bc12f2a5ea9725f8f3ba",
+   "ext": {
+    ".md": 3,
+    ".csv": 37,
+    ".json": 15,
+    ".py": 26
+   },
+   "codeFiles": 26,
+   "urlCount": 3333,
+   "urlHosts": 81,
+   "topHosts": [
+    [
+     "fonts.google.com",
+     1947
+    ],
+    [
+     "learn.microsoft.com",
+     170
+    ],
+    [
+     "fonts.googleapis.com",
+     152
+    ],
+    [
+     "ui.nuxt.com",
+     83
+    ],
+    [
+     "nuxt.com",
+     67
+    ],
+    [
+     "ui.shadcn.com",
+     65
+    ],
+    [
+     "openjfx.io",
+     59
+    ],
+    [
+     "docs.avaloniaui.net",
+     56
+    ]
+   ],
+   "patternHits": {
+    "secrets": 9,
+    "network": 10,
+    "remoteScript": 3,
+    "fsWrite": 2,
+    "exec": 7
+   }
+  }
+ }
+}

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>会員一覧 | 管理画面</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+</head>
+<body>
+<header class="app-header">
+  <p class="app-header__title">会員管理</p>
+  <nav class="app-nav" aria-label="主要">
+    <a href="members.html" aria-current="page">会員一覧</a>
+    <a href="billing.html">請求先</a>
+  </nav>
+</header>
+<main class="page">
+  <h1 class="page__title">会員一覧</h1>
+  <div class="card">
+    <table class="table">
+      <thead><tr><th scope="col">会員番号</th><th scope="col">氏名</th><th scope="col">状態</th></tr></thead>
+      <tbody>
+        <tr><td>M-000182</td><td>青木 陽子</td><td><span class="badge">有効</span></td></tr>
+        <tr><td>M-000219</td><td>石井 健</td><td><span class="badge">停止中</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>

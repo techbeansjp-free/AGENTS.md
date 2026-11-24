@@ -1,0 +1,29 @@
+/* 共通部品。画面固有の見た目は画面のCSSへ置き、ここに追加しない。 */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); font-size: var(--font-size-md); line-height: 1.6; }
+.app-header { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-6); background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+.app-header__title { font-size: var(--font-size-lg); font-weight: 700; margin: 0; }
+.app-nav { display: flex; gap: var(--space-4); }
+.app-nav a { color: var(--color-text-muted); text-decoration: none; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); }
+.app-nav a[aria-current="page"] { color: var(--color-primary); font-weight: 700; }
+.page { max-width: var(--content-max); margin: 0 auto; padding: var(--space-6); }
+.page__title { font-size: var(--font-size-xl); margin: 0 0 var(--space-4); }
+.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); padding: var(--space-6); }
+.btn { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font: inherit; cursor: pointer; }
+.btn--primary { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
+.btn--primary:hover { background: var(--color-primary-hover); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn:focus-visible, .field__input:focus-visible, .app-nav a:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.field { display: grid; gap: var(--space-1); margin-bottom: var(--space-4); }
+.field__label { font-weight: 700; }
+.field__hint { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.field__input { min-height: 44px; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font: inherit; background: var(--color-surface); color: var(--color-text); }
+.field__input[aria-invalid="true"] { border-color: var(--color-danger); }
+.field__error { color: var(--color-danger); font-size: var(--font-size-sm); }
+.badge { display: inline-block; padding: 0 var(--space-2); border-radius: var(--radius-sm); font-size: var(--font-size-sm); border: 1px solid currentColor; }
+.alert { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); margin-bottom: var(--space-4); }
+.alert--danger { background: var(--color-danger-bg); color: var(--color-danger); }
+.alert--success { background: var(--color-success-bg); color: var(--color-success); }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

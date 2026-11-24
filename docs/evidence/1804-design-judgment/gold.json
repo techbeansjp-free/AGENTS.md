@@ -1,0 +1,33 @@
+{
+  "schema": "asc-1804-gold/v1",
+  "note": "決定論の採点に使う正解。各requiredは代替表記のどれか1つが描画後の本文（desktop）に含まれれば満たす。比較の前に空白を除き、全角数字・記号を半角へ寄せる。",
+  "ui02": {
+    "required": [
+      ["干潟と海苔の百年"], ["ACenturyofTidalFlatsandNori"], ["4月10日", "4/10"], ["6月27日", "6/27"], ["9:30"], ["17:00"], ["16:30"],
+      ["月曜"], ["400円", "¥400"], ["200円", "¥200"], ["汐見町3-14"], ["徒歩8分"], ["12台"],
+      ["4月24日", "4/24"], ["5月15日", "5/15"], ["6月5日", "6/5"], ["ギャラリートーク"], ["海苔すき体験"], ["干潟の暮らし"],
+      ["定員20名", "20名"], ["045-000-1234"], ["エレベーター"], ["車いす", "車椅子"], ["多目的トイレ"], ["65歳以上"], ["介助者"]
+    ],
+    "englishSentencesMin": 2,
+    "firstViewportMobile": ["干潟と海苔の百年", "4月10日"]
+  },
+  "ui03": {
+    "required": [
+      ["出荷済み件数"], ["出荷進捗率"], ["出荷遅延率"], ["ピッキング速度"], ["誤ピッキング"], ["稼働人数"],
+      ["LANE-A01-OSAKA-KANSAI-EXPRESS"], ["LANE-A02-NAGOYA"], ["LANE-B01-TOHOKU-REFRIGERATED-COLDCHAIN"], ["LANE-B02-KANTO"],
+      ["LANE-C01-KYUSHU"], ["LANE-C02-HOKURIKU"], ["LANE-D01-SHIKOKU"], ["LANE-D02-RETURNS"],
+      ["12.4"], ["温度センサー"], ["10:42"], ["14:32"]
+    ],
+    "flagged": ["出荷遅延率", "LANE-B01", "LANE-C02"],
+    "notFlagged": ["出荷済み件数", "出荷進捗率", "ピッキング速度", "誤ピッキング", "稼働人数", "LANE-A01", "LANE-A02", "LANE-B02", "LANE-C01", "LANE-D01", "LANE-D02"]
+  },
+  "ui08": {
+    "required": [["請求先"], ["名称"], ["部署"], ["担当者"], ["メール"], ["郵便番号"], ["住所"], ["電話"], ["保存"]],
+    "existingFiles": ["app/tokens.css", "app/components.css", "app/DESIGN-SYSTEM.md", "app/members.html"],
+    "componentClasses": ["app-header", "app-nav", "page", "card", "btn", "field", "alert"]
+  },
+  "ui10": {
+    "uiFilesMustNotAppear": ["*.html", "*.css", "DESIGN-NOTES.md"],
+    "designSkills": ["frontend-design", "anything-frontend-art-direction", "anything-frontend-product-design"]
+  }
+}
