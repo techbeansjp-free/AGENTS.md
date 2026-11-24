@@ -1,0 +1,70 @@
+{
+ "A": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 3.7071552,
+  "durationSeconds": 190,
+  "partial": false,
+  "runs": 18,
+  "errors": []
+ },
+ "B": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 4.4734466,
+  "durationSeconds": 168,
+  "partial": false,
+  "runs": 18,
+  "errors": []
+ },
+ "C": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 6.8408408000000005,
+  "durationSeconds": 249,
+  "partial": false,
+  "runs": 27,
+  "errors": []
+ },
+ "F": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 7.2058042,
+  "durationSeconds": 436,
+  "partial": false,
+  "runs": 27,
+  "errors": []
+ },
+ "iso": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 0.1840258,
+  "durationSeconds": 10,
+  "partial": false,
+  "runs": 3,
+  "errors": [],
+  "graders": [
+   {
+    "case": "iso-net",
+    "passed": [
+     true
+    ]
+   },
+   {
+    "case": "iso-read",
+    "passed": [
+     true
+    ]
+   },
+   {
+    "case": "iso-write",
+    "passed": [
+     true
+    ]
+   }
+  ]
+ },
+ "diag": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 0.5950926,
+  "durationSeconds": 43,
+  "partial": false,
+  "runs": 5,
+  "errors": []
+ }
+}

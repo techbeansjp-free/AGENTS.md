@@ -638,6 +638,8 @@ Skill登録は発見のためのmetadata配置であり、本文を読むこと�
 
 新しいHostセッションで、(1) Skillが発見される、(2)入口から正本本文・必要referenceを実際に読む、(3)依頼に該当する手順を適用する、を別々に確認する。例えばmerge前ならCI未完了を合格にしないこと、後片付けなら未保存の成果を削除しないことを使い捨てfixtureで観測する。翻訳等の非開発依頼への過剰適用も確認する。回答の「Skillを使った」だけを証拠にせず、tool記録と実際の成果を照合する。未測定Hostや版で自動適用を保証しない。
 
+Claude Codeは、Skillの一覧をContext容量の1%（1M Contextで約30,000文字）に収める。超えると、使用回数の少ないSkillから説明文を省いて名前だけにする。使用回数が同じなら、個人用Skillがprojectに登録したSkillより先に残る。個人用Skillが多い環境では、未使用のASCの入口が名前だけになり、開始・再開・レビューの依頼が別のSkillへ流れることがある（2.1.323で観測）。超過は`claude --debug`のログの`Skill listing over budget`と、`/context`のSkills行が予算に達していることで分かる。`/context`のSkillごとの行は、説明文が省かれたかどうかと一致しない場合がある。対処は利用者が設定で選ぶ：`skillListingBudgetFraction`（例：`0.02`）で予算を上げる、使わないSkillを`skillOverrides`で`"name-only"`か`"off"`にする。ASCはこれらの設定を変更しない。Codexの一覧は別の仕様（既定でContextの2%、repo登録のSkillを個人用より先に残す、`skills.max_context_tokens`で変更）であり、Claude Codeの設定を流用しない。
+
 ### 明示依頼専用の協議手順（Codexへの任意導入）
 
 複数モデル協議は通常の全Skill登録から除外している。必要な利用者だけが、同梱packageの `v05/optional-skills/model-deliberation/` 全体を、利用先の `.agents/skills/model-deliberation/` へ変更内容を確認して採用する。既存同名directoryがあれば上書きせず、本文とmetadataを照合する。`agents/openai.yaml` の `policy.allow_implicit_invocation: false` も含めて保持する。本文だけをコピーした登録は提供対象外である。
