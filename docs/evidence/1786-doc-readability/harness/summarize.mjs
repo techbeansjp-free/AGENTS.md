@@ -115,7 +115,13 @@ out.decision.overallStrict = anyImprove
       ? '現行方式で十分'
       : '計画の分岐外（Aの安全性の閾値が計画に無い）';
 // overall は参考の値（Aの安全性を有害な指摘だけで判定する、結果を見た後の解釈）。
-out.decision.overall = anyImprove ? '既存Skillの限定改善候補' : out.decision.aRecallMean >= 0.8 && aSafe ? '現行方式で十分' : '追加評価が必要';
+out.decision.overall = anyImprove
+  ? '既存Skillの限定改善候補'
+  : out.decision.aRecallMean < 0.8
+    ? '追加評価が必要'
+    : aSafe
+      ? '現行方式で十分'
+      : '計画の分岐外';
 // 補足：A0（照合の段落なし、結果を見た後に追加）。採否基準の対象外
 const a0 = rows.filter((r) => r.cond === 'A0');
 if (a0.length) {
