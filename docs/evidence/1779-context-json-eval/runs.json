@@ -1,0 +1,7569 @@
+{
+ "AC_R1_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:11:29.997Z",
+  "wallMs": 59281,
+  "durationMs": 57557,
+  "numTurns": 22,
+  "usage": {
+   "input": 2836,
+   "output": 4279,
+   "cacheRead": 167458,
+   "cacheCreation": 21893,
+   "costUSD": 0.2942457
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 21,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   "scripts/check_source_quality.ts",
+   ".agent-skill-chain/project/choices/development.json",
+   "test/test_source_quality.mjs",
+   "package.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs",
+   "package.json"
+  ],
+  "root": "true"
+ },
+ "AC_R1_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:14:49.670Z",
+  "wallMs": 76174,
+  "durationMs": 74899,
+  "numTurns": 22,
+  "usage": {
+   "input": 2832,
+   "output": 4405,
+   "cacheRead": 120273,
+   "cacheCreation": 18827,
+   "costUSD": 0.2627262
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 21,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   "scripts/check_source_quality.ts"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs",
+   "package.json",
+   "test/test_package.mjs"
+  ],
+  "root": "true"
+ },
+ "AC_R1_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:21:42.345Z",
+  "wallMs": 68060,
+  "durationMs": 66527,
+  "numTurns": 21,
+  "usage": {
+   "input": 2830,
+   "output": 4145,
+   "cacheRead": 89411,
+   "cacheCreation": 19925,
+   "costUSD": 0.2601883
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 20,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   "scripts/check_source_quality.ts",
+   "package.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs",
+   "package.json"
+  ],
+  "root": "true"
+ },
+ "AC_R2_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:11:30.237Z",
+  "wallMs": 112793,
+  "durationMs": 111417,
+  "numTurns": 30,
+  "usage": {
+   "input": 2793,
+   "output": 6623,
+   "cacheRead": 279883,
+   "cacheCreation": 34590,
+   "costUSD": 0.46506929999999996
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 29,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_worktree_execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Read",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/runtime-files.json"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   "src/worktree-execution.mjs",
+   "package.json",
+   "v05/USAGE.md",
+   "test/test_source_quality.mjs",
+   "scripts/check_source_quality.ts"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   "src/worktree-execution.mjs",
+   "src/runtime-files.json",
+   "package.json",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs",
+   "test/test_worktree_execution.mjs",
+   "test/test_package.mjs",
+   "v05/USAGE.md"
+  ],
+  "root": "true"
+ },
+ "AC_R2_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:14:49.837Z",
+  "wallMs": 77573,
+  "durationMs": 76279,
+  "numTurns": 23,
+  "usage": {
+   "input": 2783,
+   "output": 4510,
+   "cacheRead": 121062,
+   "cacheCreation": 18272,
+   "costUSD": 0.2604611
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 22,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/safety.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_worktree_execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Read",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/safety.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   "test/test_source_quality.mjs",
+   "src/worktree-execution.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/safety.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "scripts/check_source_quality.ts",
+   "src/worktree-execution.mjs",
+   "test/test_worktree_execution.mjs",
+   "test/test_source_quality.mjs",
+   "package.json"
+  ],
+  "root": "true"
+ },
+ "AC_R2_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:21:42.532Z",
+  "wallMs": 109244,
+  "durationMs": 107807,
+  "numTurns": 29,
+  "usage": {
+   "input": 2795,
+   "output": 6145,
+   "cacheRead": 322879,
+   "cacheCreation": 36929,
+   "costUSD": 0.48282850000000005
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 28,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check-package-inventory.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/runtime-files.json"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_worktree_execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "skills/asc/references/workspace.md"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   "package.json",
+   "scripts/check-package-inventory.mjs",
+   "test/test_source_quality.mjs",
+   "scripts/check_source_quality.ts",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   "src/worktree-execution.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "src/worktree-execution.mjs",
+   "src/runtime-files.json",
+   "package.json",
+   "scripts/check-package-inventory.mjs",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs",
+   "test/test_worktree_execution.mjs",
+   "test/test_package.mjs",
+   "skills/asc/references/workspace.md"
+  ],
+  "root": "true"
+ },
+ "AC_R3_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:11:30.476Z",
+  "wallMs": 70339,
+  "durationMs": 68414,
+  "numTurns": 27,
+  "usage": {
+   "input": 2972,
+   "output": 5271,
+   "cacheRead": 122608,
+   "cacheCreation": 21739,
+   "costUSD": 0.30390120000000004
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 26,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "tsconfig.json"
+   },
+   {
+    "tool": "Read",
+    "target": "eslint.config.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/helpers/temp-dir.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_temp_dir.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project-policy.json",
+   "src/project-context.mjs",
+   "package.json",
+   "tsconfig.json",
+   "eslint.config.mjs",
+   "test/helpers/temp-dir.mjs",
+   "test/test_project_context.mjs",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   "src/project-context.mjs",
+   "test/test_project_context.mjs",
+   "test/helpers/temp-dir.mjs",
+   "test/test_temp_dir.mjs",
+   "package.json",
+   "tsconfig.json",
+   "eslint.config.mjs"
+  ],
+  "root": "true"
+ },
+ "AC_R3_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:14:50.063Z",
+  "wallMs": 71572,
+  "durationMs": 70370,
+  "numTurns": 27,
+  "usage": {
+   "input": 2972,
+   "output": 4996,
+   "cacheRead": 153996,
+   "cacheCreation": 23962,
+   "costUSD": 0.32246280000000005
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 26,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "tsconfig.json"
+   },
+   {
+    "tool": "Read",
+    "target": "eslint.config.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/helpers/temp-dir.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check-package-inventory.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_temp_dir.mjs"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   "src/project-context.mjs",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   "test/test_project_context.mjs",
+   "tsconfig.json",
+   "eslint.config.mjs",
+   "test/helpers/temp-dir.mjs",
+   "package.json",
+   "test/test_temp_dir.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   "src/project-context.mjs",
+   "test/test_project_context.mjs",
+   "test/helpers/temp-dir.mjs",
+   "test/test_temp_dir.mjs",
+   "package.json",
+   "eslint.config.mjs",
+   "tsconfig.json"
+  ],
+  "root": "true"
+ },
+ "AC_R3_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:21:42.893Z",
+  "wallMs": 89699,
+  "durationMs": 87995,
+  "numTurns": 31,
+  "usage": {
+   "input": 2980,
+   "output": 6055,
+   "cacheRead": 275522,
+   "cacheCreation": 32671,
+   "costUSD": 0.43765200000000004
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 30,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "src"
+   },
+   {
+    "tool": "Read",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "tsconfig.json"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "eslint.config.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/helpers/temp-dir.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_temp_dir.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   "src/project-context.mjs",
+   "tsconfig.json",
+   "package.json",
+   "eslint.config.mjs",
+   "test/test_project_context.mjs",
+   "test/helpers/temp-dir.mjs",
+   "test/test_source_quality.mjs",
+   "scripts/check_source_quality.ts"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "src/project-context.mjs",
+   "test/test_project_context.mjs",
+   "test/helpers/temp-dir.mjs",
+   "test/test_temp_dir.mjs",
+   "test/test_source_quality.mjs",
+   "scripts/check_source_quality.ts",
+   "package.json",
+   "tsconfig.json",
+   "eslint.config.mjs"
+  ],
+  "root": "true"
+ },
+ "AC_R4_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:11:30.767Z",
+  "wallMs": 101326,
+  "durationMs": 99235,
+  "numTurns": 33,
+  "usage": {
+   "input": 3369,
+   "output": 6886,
+   "cacheRead": 283078,
+   "cacheCreation": 37249,
+   "costUSD": 0.49242659999999994
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 32,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/ci.yml"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-permission.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-trigger.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/lockfile.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/release.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_quality_contract.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/conformance/bindings.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/trusted-quality-proposals.json"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/trusted-quality.yml"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".github/workflows/ci.yml",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   "scripts/release.mjs",
+   "scripts/check_project_quality.ts",
+   "test/test_quality_contract.mjs",
+   ".github/trusted-quality-proposals.json",
+   "package.json",
+   ".github/workflows/trusted-quality.yml"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".github/workflows/ci.yml",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   "package.json",
+   ".github/trusted-quality-proposals.json",
+   ".github/workflows/trusted-quality.yml",
+   "scripts/check_project_quality.ts",
+   "scripts/release.mjs",
+   "test/test_quality_contract.mjs",
+   "test/test_release.mjs"
+  ],
+  "root": "true"
+ },
+ "AC_R4_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:14:50.279Z",
+  "wallMs": 80879,
+  "durationMs": 79834,
+  "numTurns": 25,
+  "usage": {
+   "input": 3367,
+   "output": 5203,
+   "cacheRead": 220502,
+   "cacheCreation": 26692,
+   "costUSD": 0.36174839999999997
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 24,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/ci.yml"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-permission.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-trigger.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/lockfile.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/release.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_quality_contract.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/trusted-quality-proposals.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".github/workflows/ci.yml",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   "scripts/release.mjs",
+   "scripts/check_project_quality.ts",
+   "test/test_quality_contract.mjs",
+   ".github/trusted-quality-proposals.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".github/workflows/ci.yml",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   "package.json",
+   "scripts/check_project_quality.ts",
+   "scripts/release.mjs",
+   ".github/trusted-quality-proposals.json",
+   "test/test_quality_contract.mjs",
+   "test/test_release.mjs"
+  ],
+  "root": "true"
+ },
+ "AC_R4_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:21:43.125Z",
+  "wallMs": 86913,
+  "durationMs": 85554,
+  "numTurns": 30,
+  "usage": {
+   "input": 3367,
+   "output": 6089,
+   "cacheRead": 236606,
+   "cacheCreation": 33452,
+   "costUSD": 0.43671070000000006
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 29,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/ci.yml"
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-permission.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-trigger.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/lockfile.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/release.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_quality_contract.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/trusted-quality-proposals.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/conformance"
+   }
+  ],
+  "reads": [
+   ".github/workflows/ci.yml",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   "scripts/check_project_quality.ts",
+   "scripts/release.mjs",
+   "test/test_quality_contract.mjs",
+   ".github/trusted-quality-proposals.json"
+  ],
+  "files": [
+   ".github/workflows/ci.yml",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   "scripts/check_project_quality.ts",
+   ".github/trusted-quality-proposals.json",
+   "scripts/release.mjs",
+   "test/test_release.mjs",
+   "test/test_quality_contract.mjs",
+   "package.json"
+  ],
+  "root": "true"
+ },
+ "AC_R5_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:12:29.411Z",
+  "wallMs": 75360,
+  "durationMs": 74345,
+  "numTurns": 28,
+  "usage": {
+   "input": 3164,
+   "output": 5875,
+   "cacheRead": 173125,
+   "cacheCreation": 28451,
+   "costUSD": 0.37967110000000004
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 27,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package-manager.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/lockfile.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/no-registry-publish.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".github/workflows"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/conformance/bindings.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   "package.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/no-registry-publish.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   "scripts/check_project_quality.ts"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   "package.json",
+   "package-lock.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/no-registry-publish.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "scripts/check_project_quality.ts",
+   "scripts/quality-support/domain/policy.ts",
+   "scripts/quality-support/domain/project-choice-diff.ts",
+   ".github/workflows/ci.yml",
+   ".github/workflows/release.yml",
+   ".github/workflows/trusted-quality.yml",
+   ".github/workflows/native-verification.yml",
+   ".github/workflows/worktree-execution.yml",
+   "test/test_package.mjs",
+   "v05/README.md",
+   "v05/USAGE.md",
+   "v05/OWNER_APPROVAL.md"
+  ],
+  "root": "true"
+ },
+ "AC_R5_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:16:01.956Z",
+  "wallMs": 95385,
+  "durationMs": 93602,
+  "numTurns": 29,
+  "usage": {
+   "input": 3166,
+   "output": 6475,
+   "cacheRead": 194728,
+   "cacheCreation": 26145,
+   "costUSD": 0.36897170000000007
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 28,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package-manager.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/lockfile.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/no-registry-publish.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".github"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/no-registry-publish.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/context.json",
+   "scripts/check_project_quality.ts",
+   ".agent-skill-chain/project/choices/development.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/no-registry-publish.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "package.json",
+   "scripts/check_project_quality.ts",
+   ".github/trusted-quality-proposals.json",
+   ".github/workflows/ci.yml",
+   ".github/workflows/release.yml",
+   ".github/workflows/trusted-quality.yml",
+   ".github/workflows/native-verification.yml",
+   ".github/workflows/worktree-execution.yml",
+   "test/test_package.mjs",
+   "v05/README.md",
+   "v05/USAGE.md",
+   "v05/OWNER_APPROVAL.md"
+  ],
+  "root": "true"
+ },
+ "AC_R5_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:22:50.741Z",
+  "wallMs": 84271,
+  "durationMs": 82884,
+  "numTurns": 28,
+  "usage": {
+   "input": 3164,
+   "output": 5956,
+   "cacheRead": 198363,
+   "cacheCreation": 35034,
+   "costUSD": 0.43898319999999996
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 27,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package-manager.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/lockfile.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/no-registry-publish.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/ci.yml"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/trusted-quality.yml"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_quality_contract.mjs"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/no-registry-publish.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   "package.json",
+   "scripts/check_project_quality.ts",
+   ".agent-skill-chain/project/choices/development.json",
+   ".github/workflows/ci.yml",
+   ".github/workflows/trusted-quality.yml",
+   "test/test_quality_contract.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/rules/no-registry-publish.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "package.json",
+   "scripts/check_project_quality.ts",
+   ".github/trusted-quality-proposals.json",
+   ".github/workflows/ci.yml",
+   ".github/workflows/trusted-quality.yml",
+   ".github/workflows/release.yml",
+   ".github/workflows/native-verification.yml",
+   ".github/workflows/worktree-execution.yml",
+   "test/test_quality_contract.mjs",
+   "test/test_package.mjs",
+   "v05/README.md",
+   "v05/USAGE.md"
+  ],
+  "root": "true"
+ },
+ "AC_R6_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:12:40.945Z",
+  "wallMs": 53347,
+  "durationMs": 52292,
+  "numTurns": 19,
+  "usage": {
+   "input": 2955,
+   "output": 3860,
+   "cacheRead": 72335,
+   "cacheCreation": 15539,
+   "costUSD": 0.2158728
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 18,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/canonical-source.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_japanese_docs.ts"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project-policy.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   "skills/asc/references/review.md",
+   "scripts/check_project_quality.ts"
+  ],
+  "root": "true"
+ },
+ "AC_R6_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:16:06.102Z",
+  "wallMs": 70842,
+  "durationMs": 69477,
+  "numTurns": 25,
+  "usage": {
+   "input": 2961,
+   "output": 4589,
+   "cacheRead": 181033,
+   "cacheCreation": 26288,
+   "costUSD": 0.3382084
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 24,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/canonical-source.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Read",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project-policy.json",
+   "skills/asc/references/review.md",
+   "scripts/check_project_quality.ts"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   "skills/asc/references/review.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   "scripts/check_project_quality.ts",
+   "package.json",
+   "src/runtime-files.json"
+  ],
+  "root": "true"
+ },
+ "AC_R6_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:23:10.269Z",
+  "wallMs": 75246,
+  "durationMs": 73950,
+  "numTurns": 25,
+  "usage": {
+   "input": 2961,
+   "output": 5038,
+   "cacheRead": 169441,
+   "cacheCreation": 25683,
+   "costUSD": 0.34003000000000005
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 24,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/canonical-source.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_japanese_docs.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/02_品質基準.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project-policy.json",
+   "skills/asc/references/review.md"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   "skills/asc/references/review.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   "scripts/check_project_quality.ts",
+   "package.json"
+  ],
+  "root": "true"
+ },
+ "AC_R7_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:13:12.225Z",
+  "wallMs": 72928,
+  "durationMs": 71974,
+  "numTurns": 21,
+  "usage": {
+   "input": 2655,
+   "output": 4693,
+   "cacheRead": 140998,
+   "cacheCreation": 21447,
+   "costUSD": 0.29354230000000003
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 20,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Glob",
+    "target": "v05"
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "bin/asc-v05.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   "bin/asc-v05.mjs",
+   "v05/USAGE.md"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   "v05/USAGE.md",
+   "bin/asc-v05.mjs",
+   "src/project-context.mjs",
+   "skills/asc/SKILL.md",
+   "src/runtime-files.json",
+   "src/project-assets.mjs",
+   "test/test_project_context.mjs",
+   "test/test_package.mjs",
+   "scripts/consumer-journey.mjs"
+  ],
+  "root": "true"
+ },
+ "AC_R7_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:16:07.701Z",
+  "wallMs": 58885,
+  "durationMs": 56894,
+  "numTurns": 19,
+  "usage": {
+   "input": 2649,
+   "output": 4130,
+   "cacheRead": 93976,
+   "cacheCreation": 20591,
+   "costUSD": 0.2660254
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 18,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_project_assets.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_project_assets.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/02_品質基準.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   "v05/USAGE.md",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/context.json",
+   "test/test_project_assets.mjs",
+   ".agent-skill-chain/00_利用案内.md"
+  ],
+  "files": [
+   "v05/USAGE.md",
+   "bin/asc-v05.mjs",
+   "src/project-context.mjs",
+   "skills/asc/SKILL.md",
+   "test/test_package.mjs",
+   "test/test_project_assets.mjs",
+   "scripts/consumer-journey.mjs",
+   "src/project-assets.mjs",
+   "src/runtime-files.json",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json"
+  ],
+  "root": "true"
+ },
+ "AC_R7_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:23:12.966Z",
+  "wallMs": 59192,
+  "durationMs": 57082,
+  "numTurns": 18,
+  "usage": {
+   "input": 2651,
+   "output": 3545,
+   "cacheRead": 93302,
+   "cacheCreation": 15557,
+   "costUSD": 0.21390710000000002
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 17,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/context.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_project_assets.mjs"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   "v05/USAGE.md",
+   "test/test_project_assets.mjs"
+  ],
+  "files": [
+   "v05/USAGE.md",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/context.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   "bin/asc-v05.mjs",
+   "src/project-context.mjs",
+   "src/runtime-files.json",
+   "src/project-assets.mjs",
+   "test/test_project_context.mjs",
+   "test/test_package.mjs",
+   "test/test_project_assets.mjs",
+   "test/test_native_probe.mjs"
+  ],
+  "root": "true"
+ },
+ "AC_R8_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:13:23.769Z",
+  "wallMs": 67687,
+  "durationMs": 65704,
+  "numTurns": 18,
+  "usage": {
+   "input": 2662,
+   "output": 3952,
+   "cacheRead": 108990,
+   "cacheCreation": 17338,
+   "costUSD": 0.2356196
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 17,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "skills/review-and-remediation/references/review-method.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   "test/test_package.mjs",
+   "skills/review-and-remediation/references/review-method.md"
+  ],
+  "files": [
+   "skills/asc/references/review.md",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   "skills/asc/SKILL.md",
+   "skills/review-and-remediation/references/review-method.md",
+   "src/runtime-files.json",
+   "package.json",
+   "test/test_package.mjs"
+  ],
+  "root": "true"
+ },
+ "AC_R8_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:16:11.406Z",
+  "wallMs": 65726,
+  "durationMs": 64451,
+  "numTurns": 17,
+  "usage": {
+   "input": 2664,
+   "output": 3947,
+   "cacheRead": 114990,
+   "cacheCreation": 11616,
+   "costUSD": 0.1886506
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 16,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json"
+  ],
+  "files": [
+   "skills/asc/references/review.md",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   "skills/review-and-remediation/references/review-method.md",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   "package.json",
+   "src/runtime-files.json",
+   "test/test_package.mjs"
+  ],
+  "root": "true"
+ },
+ "AC_R8_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:23:31.943Z",
+  "wallMs": 56406,
+  "durationMs": 55422,
+  "numTurns": 15,
+  "usage": {
+   "input": 2660,
+   "output": 3035,
+   "cacheRead": 96130,
+   "cacheCreation": 14910,
+   "costUSD": 0.19909759999999999
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 14,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Grep",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/dogfooding.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-pr.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/rules"
+   },
+   {
+    "tool": "Read",
+    "target": "skills/asc/references/review.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project-policy.json",
+   "test/test_package.mjs",
+   "skills/asc/references/review.md"
+  ],
+  "files": [
+   "skills/asc/references/review.md",
+   "skills/asc/SKILL.md",
+   "skills/review-and-remediation/references/review-method.md",
+   "test/test_package.mjs",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/dogfooding.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/ownership-pr.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   "src/runtime-files.json",
+   "package.json"
+  ],
+  "root": "true"
+ },
+ "A_R1_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:08:45.507Z",
+  "wallMs": 62828,
+  "durationMs": 56480,
+  "numTurns": 15,
+  "usage": {
+   "input": 2098,
+   "output": 3095,
+   "cacheRead": 102928,
+   "cacheCreation": 18658,
+   "costUSD": 0.2316903
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 14,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/choices/development.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project/choices/development.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs"
+  ],
+  "root": "true"
+ },
+ "A_R1_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:17:38.113Z",
+  "wallMs": 46668,
+  "durationMs": 42034,
+  "numTurns": 20,
+  "usage": {
+   "input": 2102,
+   "output": 4272,
+   "cacheRead": 158296,
+   "cacheCreation": 20808,
+   "costUSD": 0.28351990000000005
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 19,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/naming-exception.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/choices/development.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/naming-exception.json",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/choices/development.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/naming-exception.json",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs",
+   "package.json"
+  ],
+  "root": "true"
+ },
+ "A_R1_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:19:31.335Z",
+  "wallMs": 44054,
+  "durationMs": 42311,
+  "numTurns": 20,
+  "usage": {
+   "input": 2104,
+   "output": 4469,
+   "cacheRead": 167334,
+   "cacheCreation": 19599,
+   "costUSD": 0.27960350000000006
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 19,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": ".github/trusted-quality-proposals.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   "test/test_source_quality.mjs",
+   "scripts/check_source_quality.ts",
+   ".agent-skill-chain/project/choices/development.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs",
+   "scripts/release.mjs",
+   "test/test_release.mjs"
+  ],
+  "root": "true"
+ },
+ "A_R2_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:08:46.739Z",
+  "wallMs": 90968,
+  "durationMs": 85072,
+  "numTurns": 25,
+  "usage": {
+   "input": 2163,
+   "output": 5225,
+   "cacheRead": 164628,
+   "cacheCreation": 24908,
+   "costUSD": 0.3365237
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 24,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/rules"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/rules"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/safety.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_worktree_execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/00_運用ポリシー.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/safety.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   "src/worktree-execution.mjs",
+   "scripts/check_source_quality.ts"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/safety.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/choices/development.json",
+   ".agent-skill-chain/docs/00_運用ポリシー.md",
+   "v05/USAGE.md",
+   "src/worktree-execution.mjs",
+   "src/runtime-files.json",
+   "package.json",
+   "scripts/check_source_quality.ts",
+   "test/test_source_quality.mjs",
+   "test/test_worktree_execution.mjs",
+   "test/test_package.mjs"
+  ],
+  "root": "true"
+ },
+ "A_R2_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:17:38.873Z",
+  "wallMs": 71402,
+  "durationMs": 66908,
+  "numTurns": 32,
+  "usage": {
+   "input": 2175,
+   "output": 6906,
+   "cacheRead": 326804,
+   "cacheCreation": 29446,
+   "costUSD": 0.43893090000000007
+  },
+  "models": [
+   "claude-opus-5-5",
+   "claude-haiku-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 31,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/rules"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/safety.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ownership-local.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/runtime-files.json"
+   },
+   {
+    "tool": "Read",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_worktree_execution.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_worktree_execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/safety.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/ownership-local.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   "src/worktree-execution.mjs",
+   "scripts/check_source_quality.ts",
+   "test/test_worktree_execution.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/docs/00_運用ポリシー.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/choices/development.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/safety.json",
+   "scripts/check_source_quality.ts",
+   "src/worktree-execution.mjs",
+   "src/runtime-files.json",
+   "test/test_worktree_execution.mjs",
+   "test/helpers/worktree-fixture.mjs",
+   "test/test_package.mjs",
+   "v05/USAGE.md",
+   "skills/asc/SKILL.md"
+  ],
+  "root": "true"
+ },
+ "A_R2_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:19:31.539Z",
+  "wallMs": 55191,
+  "durationMs": 53793,
+  "numTurns": 24,
+  "usage": {
+   "input": 2163,
+   "output": 5845,
+   "cacheRead": 167112,
+   "cacheCreation": 24913,
+   "costUSD": 0.349402
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 23,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/rules"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/safety.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/rules"
+   },
+   {
+    "tool": "Grep",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "src/worktree-execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_worktree_execution.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/02_品質基準.md"
+   },
+   {
+    "tool": "Grep",
+    "target": ".github/workflows/worktree-execution.yml"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/safety.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   "src/worktree-execution.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/safety.json",
+   "src/worktree-execution.mjs",
+   "src/runtime-files.json",
+   "bin/asc-v05.mjs",
+   "package.json",
+   "test/test_worktree_execution.mjs",
+   "test/helpers/worktree-fixture.mjs",
+   "test/test_package.mjs",
+   ".github/workflows/worktree-execution.yml",
+   "v05/USAGE.md",
+   "skills/asc/SKILL.md"
+  ],
+  "root": "true"
+ },
+ "A_R3_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:08:47.714Z",
+  "wallMs": 98421,
+  "durationMs": 92171,
+  "numTurns": 28,
+  "usage": {
+   "input": 2155,
+   "output": 5570,
+   "cacheRead": 192059,
+   "cacheCreation": 23503,
+   "costUSD": 0.3378251
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 27,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/naming-exception.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "tsconfig.json"
+   },
+   {
+    "tool": "Read",
+    "target": "eslint.config.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/02_品質基準.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/helpers/temp-dir.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_temp_dir.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/02_品質基準.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_source_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_source_quality.ts"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   "src/project-context.mjs",
+   "test/test_project_context.mjs",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/rules/naming-exception.json",
+   "package.json",
+   "tsconfig.json",
+   "eslint.config.mjs",
+   ".agent-skill-chain/00_利用案内.md",
+   "test/helpers/temp-dir.mjs",
+   "test/test_source_quality.mjs",
+   "scripts/check_source_quality.ts"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   "src/project-context.mjs",
+   "test/test_project_context.mjs",
+   "test/helpers/temp-dir.mjs",
+   "test/test_temp_dir.mjs",
+   "test/test_source_quality.mjs",
+   "scripts/check_source_quality.ts",
+   "package.json",
+   "tsconfig.json",
+   "eslint.config.mjs"
+  ],
+  "root": "true"
+ },
+ "A_R3_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:17:39.746Z",
+  "wallMs": 46628,
+  "durationMs": 42021,
+  "numTurns": 22,
+  "usage": {
+   "input": 2151,
+   "output": 4236,
+   "cacheRead": 124144,
+   "cacheCreation": 17629,
+   "costUSD": 0.2505541
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 21,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/02_品質基準.md"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "test/helpers/temp-dir.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   },
+   {
+    "tool": "Read",
+    "target": "eslint.config.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_temp_dir.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   "src/project-context.mjs",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   "test/test_project_context.mjs",
+   "package.json",
+   "test/helpers/temp-dir.mjs",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   "eslint.config.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   "src/project-context.mjs",
+   "test/test_project_context.mjs",
+   "test/helpers/temp-dir.mjs",
+   "test/test_temp_dir.mjs",
+   "package.json",
+   "eslint.config.mjs",
+   "v05/USAGE.md"
+  ],
+  "root": "true"
+ },
+ "A_R3_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:19:31.758Z",
+  "wallMs": 50466,
+  "durationMs": 48707,
+  "numTurns": 24,
+  "usage": {
+   "input": 2153,
+   "output": 5070,
+   "cacheRead": 144416,
+   "cacheCreation": 18577,
+   "costUSD": 0.2788805
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 23,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/code-quality.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/rules"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": "test/helpers/temp-dir.mjs"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_temp_dir.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_source_quality.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "eslint.config.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "tsconfig.json"
+   },
+   {
+    "tool": "Read",
+    "target": "src/project-context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   "src/project-context.mjs",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   "package.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   "test/helpers/temp-dir.mjs",
+   "eslint.config.mjs",
+   "tsconfig.json",
+   "test/test_project_context.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/code-quality.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   "src/project-context.mjs",
+   "test/test_project_context.mjs",
+   "test/helpers/temp-dir.mjs",
+   "test/test_temp_dir.mjs",
+   "package.json",
+   "eslint.config.mjs",
+   "tsconfig.json"
+  ],
+  "root": "true"
+ },
+ "A_R4_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:08:49.176Z",
+  "wallMs": 72602,
+  "durationMs": 66744,
+  "numTurns": 20,
+  "usage": {
+   "input": 2143,
+   "output": 4277,
+   "cacheRead": 125640,
+   "cacheCreation": 27241,
+   "costUSD": 0.3284437
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 19,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/ci.yml"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-trigger.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-permission.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/release.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_quality_contract.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/trusted-quality-proposals.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".github/workflows/ci.yml",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project-policy.json",
+   "scripts/check_project_quality.ts",
+   "scripts/release.mjs",
+   "test/test_quality_contract.mjs",
+   ".github/trusted-quality-proposals.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".github/workflows/ci.yml",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   "package.json",
+   "scripts/check_project_quality.ts",
+   ".github/trusted-quality-proposals.json",
+   "scripts/release.mjs",
+   "test/test_quality_contract.mjs",
+   "test/test_release.mjs"
+  ],
+  "root": "true"
+ },
+ "A_R4_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:17:40.707Z",
+  "wallMs": 50357,
+  "durationMs": 46263,
+  "numTurns": 23,
+  "usage": {
+   "input": 2147,
+   "output": 5151,
+   "cacheRead": 176090,
+   "cacheCreation": 24134,
+   "costUSD": 0.33117370000000007
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 22,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/ci.yml"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-permission.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-trigger.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/release.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/trusted-quality-proposals.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/00_運用ポリシー.md"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_quality_contract.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/release.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/00_運用ポリシー.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".github/workflows/ci.yml",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   "scripts/check_project_quality.ts",
+   "scripts/release.mjs",
+   ".github/trusted-quality-proposals.json",
+   "test/test_quality_contract.mjs"
+  ],
+  "files": [
+   ".github/workflows/ci.yml",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/docs/00_運用ポリシー.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   "package.json",
+   ".github/trusted-quality-proposals.json",
+   "scripts/check_project_quality.ts",
+   "test/test_quality_contract.mjs",
+   "scripts/release.mjs",
+   "test/test_release.mjs"
+  ],
+  "root": "true"
+ },
+ "A_R4_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:19:32.183Z",
+  "wallMs": 44831,
+  "durationMs": 43434,
+  "numTurns": 22,
+  "usage": {
+   "input": 2145,
+   "output": 4820,
+   "cacheRead": 150431,
+   "cacheCreation": 22834,
+   "costUSD": 0.30901389999999995
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 21,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/ci.yml"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-trigger.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/ci-permission.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/trusted-quality-proposals.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_quality_contract.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/release.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/quality-support/domain/enforcement.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".github/workflows/ci.yml",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   "scripts/check_project_quality.ts",
+   ".github/trusted-quality-proposals.json",
+   "test/test_quality_contract.mjs",
+   "scripts/release.mjs",
+   "scripts/quality-support/domain/enforcement.ts"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/ci-trigger.json",
+   ".agent-skill-chain/project/rules/ci-permission.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/choices/development.json",
+   ".github/workflows/ci.yml",
+   ".github/workflows/trusted-quality.yml",
+   ".github/trusted-quality-proposals.json",
+   "scripts/check_project_quality.ts",
+   "scripts/release.mjs",
+   "test/test_quality_contract.mjs",
+   "test/test_release.mjs",
+   "package.json"
+  ],
+  "root": "true"
+ },
+ "A_R5_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:09:48.696Z",
+  "wallMs": 78963,
+  "durationMs": 76659,
+  "numTurns": 22,
+  "usage": {
+   "input": 2144,
+   "output": 4508,
+   "cacheRead": 191052,
+   "cacheCreation": 32432,
+   "costUSD": 0.38765079999999996
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 21,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package-manager.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/lockfile.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/ci.yml"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".github/trusted-quality-proposals.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/trusted-quality.yml"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   "package.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "scripts/check_project_quality.ts",
+   ".github/workflows/ci.yml",
+   ".github/trusted-quality-proposals.json",
+   ".github/workflows/trusted-quality.yml"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "package.json",
+   "package-lock.json",
+   "scripts/check_project_quality.ts",
+   "scripts/quality-support/domain/policy.ts",
+   "scripts/quality-support/domain/project-choice-diff.ts",
+   ".github/trusted-quality-proposals.json",
+   ".github/workflows/ci.yml",
+   ".github/workflows/trusted-quality.yml",
+   ".github/workflows/release.yml",
+   ".github/workflows/native-verification.yml",
+   ".github/workflows/worktree-execution.yml",
+   "test/test_package.mjs",
+   "v05/USAGE.md"
+  ],
+  "root": "true"
+ },
+ "A_R5_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:18:25.765Z",
+  "wallMs": 65141,
+  "durationMs": 60752,
+  "numTurns": 28,
+  "usage": {
+   "input": 2152,
+   "output": 6194,
+   "cacheRead": 345862,
+   "cacheCreation": 35778,
+   "costUSD": 0.4791328
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 27,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package-manager.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/lockfile.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_quality_contract.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/trusted-quality.yml"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/ci.yml"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/release.yml"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   "package.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "scripts/check_project_quality.ts",
+   ".github/workflows/trusted-quality.yml",
+   ".github/workflows/ci.yml",
+   ".github/workflows/release.yml",
+   ".agent-skill-chain/00_利用案内.md"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "package.json",
+   "package-lock.json",
+   "scripts/check_project_quality.ts",
+   ".github/trusted-quality-proposals.json",
+   ".github/workflows/trusted-quality.yml",
+   ".github/workflows/ci.yml",
+   ".github/workflows/release.yml",
+   ".github/workflows/native-verification.yml",
+   ".github/workflows/worktree-execution.yml",
+   "test/test_quality_contract.mjs",
+   "test/test_package.mjs",
+   "v05/USAGE.md"
+  ],
+  "root": "true"
+ },
+ "A_R5_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:20:15.573Z",
+  "wallMs": 86625,
+  "durationMs": 85470,
+  "numTurns": 27,
+  "usage": {
+   "input": 2150,
+   "output": 6047,
+   "cacheRead": 298284,
+   "cacheCreation": 34107,
+   "costUSD": 0.4533012000000001
+  },
+  "models": [
+   "claude-opus-5-5",
+   "claude-haiku-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 26,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package-manager.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/lockfile.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/runtime.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/package.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/choices/development.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Read",
+    "target": "scripts/check_project_quality.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_uninstall.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/ci.yml"
+   },
+   {
+    "tool": "Read",
+    "target": ".github/workflows/trusted-quality.yml"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   }
+  ],
+  "reads": [
+   "package.json",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/rules/package.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "scripts/check_project_quality.ts",
+   ".github/workflows/ci.yml",
+   ".github/workflows/trusted-quality.yml"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/package-manager.json",
+   ".agent-skill-chain/project/rules/lockfile.json",
+   ".agent-skill-chain/project/rules/runtime.json",
+   ".agent-skill-chain/project/choices/development.json",
+   "package.json",
+   "package-lock.json",
+   "scripts/check_project_quality.ts",
+   "scripts/quality-support/domain/project-choice-diff.ts",
+   ".github/trusted-quality-proposals.json",
+   ".github/workflows/ci.yml",
+   ".github/workflows/trusted-quality.yml",
+   ".github/workflows/release.yml",
+   ".github/workflows/native-verification.yml",
+   ".github/workflows/worktree-execution.yml",
+   "test/test_package.mjs",
+   "v05/USAGE.md"
+  ],
+  "root": "true"
+ },
+ "A_R6_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:10:02.155Z",
+  "wallMs": 87658,
+  "durationMs": 85695,
+  "numTurns": 22,
+  "usage": {
+   "input": 2152,
+   "output": 5006,
+   "cacheRead": 185794,
+   "cacheCreation": 27216,
+   "costUSD": 0.35485150000000004
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 21,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/numbered-markdown.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/canonical-source.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Read",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/docs/02_品質基準.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_japanese_docs.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/00_運用ポリシー.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/numbered-markdown.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/00_利用案内.md",
+   "skills/asc/references/review.md",
+   ".agent-skill-chain/docs/02_品質基準.md"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/docs/00_運用ポリシー.md",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/numbered-markdown.json",
+   "skills/asc/references/review.md",
+   "package.json",
+   "scripts/check_project_quality.ts"
+  ],
+  "root": "true"
+ },
+ "A_R6_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:18:27.352Z",
+  "wallMs": 38315,
+  "durationMs": 34514,
+  "numTurns": 18,
+  "usage": {
+   "input": 2150,
+   "output": 3752,
+   "cacheRead": 151763,
+   "cacheCreation": 23303,
+   "costUSD": 0.29165329999999995
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 17,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/numbered-markdown.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/canonical-source.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "scripts/check_japanese_docs.ts"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/conformance/bindings.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/numbered-markdown.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   "skills/asc/references/review.md",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project/conformance/bindings.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/numbered-markdown.json",
+   "skills/asc/references/review.md",
+   ".agent-skill-chain/project/conformance/bindings.json",
+   "scripts/check_project_quality.ts",
+   "package.json"
+  ],
+  "root": "true"
+ },
+ "A_R6_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:20:17.157Z",
+  "wallMs": 55361,
+  "durationMs": 54387,
+  "numTurns": 21,
+  "usage": {
+   "input": 2148,
+   "output": 4236,
+   "cacheRead": 126907,
+   "cacheCreation": 23691,
+   "costUSD": 0.2994581
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 20,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/numbered-markdown.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/canonical-source.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs/02_品質基準.md"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "skills/asc/SKILL.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Read",
+    "target": "package.json"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/numbered-markdown.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/00_利用案内.md",
+   "skills/asc/references/review.md",
+   "package.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/numbered-markdown.json",
+   "skills/asc/references/review.md",
+   "skills/asc/SKILL.md",
+   "package.json"
+  ],
+  "root": "true"
+ },
+ "A_R7_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:10:18.054Z",
+  "wallMs": 59236,
+  "durationMs": 58206,
+  "numTurns": 18,
+  "usage": {
+   "input": 2115,
+   "output": 3851,
+   "cacheRead": 88497,
+   "cacheCreation": 16215,
+   "costUSD": 0.22425699999999998
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 17,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "bin/asc-v05.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/canonical-source.json"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/project/rules"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   "bin/asc-v05.mjs",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   "v05/USAGE.md"
+  ],
+  "files": [
+   "v05/USAGE.md",
+   "bin/asc-v05.mjs",
+   "test/test_package.mjs",
+   "test/test_project_context.mjs",
+   "test/test_project_assets.mjs",
+   "src/project-assets.mjs",
+   "src/runtime-files.json",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json"
+  ],
+  "root": "true"
+ },
+ "A_R7_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:18:31.427Z",
+  "wallMs": 31899,
+  "durationMs": 30375,
+  "numTurns": 15,
+  "usage": {
+   "input": 2117,
+   "output": 3172,
+   "cacheRead": 94393,
+   "cacheCreation": 12585,
+   "costUSD": 0.18284370000000003
+  },
+  "models": [
+   "claude-opus-5-5",
+   "claude-haiku-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 14,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "v05"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "bin/asc-v05.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/00_利用案内.md",
+   "bin/asc-v05.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   "v05/USAGE.md",
+   "bin/asc-v05.mjs",
+   "test/test_package.mjs",
+   "test/test_project_context.mjs",
+   "src/project-assets.mjs",
+   "test/test_project_assets.mjs"
+  ],
+  "root": "true"
+ },
+ "A_R7_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:20:22.467Z",
+  "wallMs": 58993,
+  "durationMs": 57731,
+  "numTurns": 22,
+  "usage": {
+   "input": 2119,
+   "output": 4551,
+   "cacheRead": 124250,
+   "cacheCreation": 16993,
+   "costUSD": 0.25162809999999997
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 21,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Read",
+    "target": "v05/USAGE.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": "bin/asc-v05.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_project_context.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "package.json"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_project_assets.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/quality-command.json"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   "v05/USAGE.md",
+   "bin/asc-v05.mjs",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   "test/test_project_assets.mjs",
+   ".agent-skill-chain/project/rules/quality-command.json"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/quality-command.json",
+   "v05/USAGE.md",
+   "bin/asc-v05.mjs",
+   "test/test_project_context.mjs",
+   "test/test_package.mjs",
+   "test/test_project_assets.mjs",
+   "test/test_native_probe.mjs",
+   "package.json",
+   "src/runtime-files.json"
+  ],
+  "root": "true"
+ },
+ "A_R8_1": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:10:26.945Z",
+  "wallMs": 60610,
+  "durationMs": 56641,
+  "numTurns": 17,
+  "usage": {
+   "input": 2125,
+   "output": 3332,
+   "cacheRead": 92056,
+   "cacheCreation": 17516,
+   "costUSD": 0.22499779999999997
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 16,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-boundary.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/canonical-source.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/review-exception.json"
+   },
+   {
+    "tool": "Read",
+    "target": "skills/asc/references/review.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   "test/test_package.mjs",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   "skills/asc/references/review.md"
+  ],
+  "files": [
+   "skills/asc/references/review.md",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/distribution-boundary.json",
+   ".agent-skill-chain/project/rules/review-exception.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   "skills/asc/SKILL.md",
+   "skills/review-and-remediation/references/review-method.md",
+   "src/runtime-files.json",
+   "package.json",
+   "test/test_package.mjs"
+  ],
+  "root": "true"
+ },
+ "A_R8_2": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:18:50.489Z",
+  "wallMs": 30945,
+  "durationMs": 29774,
+  "numTurns": 16,
+  "usage": {
+   "input": 2125,
+   "output": 3238,
+   "cacheRead": 93687,
+   "cacheCreation": 16062,
+   "costUSD": 0.211812
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 15,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/canonical-source.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   "test/test_package.mjs"
+  ],
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   "skills/asc/references/review.md",
+   "skills/asc/SKILL.md",
+   "skills/review-and-remediation/references/review-method.md",
+   ".agent-skill-chain/docs/02_品質基準.md",
+   "src/runtime-files.json",
+   "package.json",
+   "test/test_package.mjs"
+  ],
+  "root": "true"
+ },
+ "A_R8_3": {
+  "status": "ok",
+  "exit": 0,
+  "signal": null,
+  "startedAt": "2026-11-24T08:20:27.077Z",
+  "wallMs": 43413,
+  "durationMs": 41437,
+  "numTurns": 18,
+  "usage": {
+   "input": 2125,
+   "output": 3657,
+   "cacheRead": 73245,
+   "cacheCreation": 12020,
+   "costUSD": 0.1837676
+  },
+  "models": [
+   "claude-haiku-5-5",
+   "claude-opus-5-5"
+  ],
+  "init": {
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp": 0,
+   "model": "claude-opus-5-5",
+   "version": "2.1.323",
+   "permissionMode": "dontAsk"
+  },
+  "toolUses": 17,
+  "outsideToolInputs": 0,
+  "tools": [
+   {
+    "tool": "Read",
+    "target": "AGENTS.md"
+   },
+   {
+    "tool": "Read",
+    "target": "CLAUDE.md"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project-policy.json"
+   },
+   {
+    "tool": "Grep",
+    "target": "skills/asc/references/review.md"
+   },
+   {
+    "tool": "Grep",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test"
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Glob",
+    "target": "."
+   },
+   {
+    "tool": "Grep",
+    "target": "test/test_package.mjs"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/japanese-docs.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/canonical-source.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/project/rules/distribution-impact.json"
+   },
+   {
+    "tool": "Read",
+    "target": ".agent-skill-chain/00_利用案内.md"
+   },
+   {
+    "tool": "Grep",
+    "target": ".agent-skill-chain/docs"
+   },
+   {
+    "tool": "Read",
+    "target": "skills/asc/references/review.md"
+   }
+  ],
+  "reads": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   ".agent-skill-chain/00_利用案内.md",
+   "skills/asc/references/review.md"
+  ],
+  "files": [
+   "skills/asc/references/review.md",
+   "skills/asc/SKILL.md",
+   "AGENTS.md",
+   "CLAUDE.md",
+   ".agent-skill-chain/project-policy.json",
+   ".agent-skill-chain/00_利用案内.md",
+   ".agent-skill-chain/project/rules/japanese-docs.json",
+   ".agent-skill-chain/project/rules/docs.json",
+   ".agent-skill-chain/project/rules/canonical-source.json",
+   ".agent-skill-chain/project/rules/distribution-impact.json",
+   "package.json",
+   "src/runtime-files.json",
+   "test/test_package.mjs"
+  ],
+  "root": "true"
+ }
+}

@@ -1,0 +1,26 @@
+{
+  "schema": "asc-project-context/v1",
+  "rules": [
+    {"path": ".agent-skill-chain/project/rules/canonical-source.json", "appliesTo": [".agent-skill-chain/docs", ".agent-skill-chain/templates", "docs/specs"]},
+    {"path": ".agent-skill-chain/project/rules/ci-permission.json", "appliesTo": [".github/workflows/ci.yml"]},
+    {"path": ".agent-skill-chain/project/rules/ci-trigger.json", "appliesTo": [".github/workflows/ci.yml"]},
+    {"path": ".agent-skill-chain/project/rules/code-quality.json", "appliesTo": ["src", "bin", "scripts", "test", ".github/workflows/ci.yml", ".github/trusted-quality-proposals.json"]},
+    {"path": ".agent-skill-chain/project/rules/distribution-boundary.json", "appliesTo": ["memo", "issues", ".worktrees", "test", ".github", "scripts", ".agent-skill-chain/project-policy.json", ".agent-skill-chain/project", ".agent-skill-chain/role-log", ".agent-skill-chain/metrics"]},
+    {"path": ".agent-skill-chain/project/rules/distribution-impact.json", "appliesTo": []},
+    {"path": ".agent-skill-chain/project/rules/docs.json", "appliesTo": ["docs", ".agent-skill-chain/docs"]},
+    {"path": ".agent-skill-chain/project/rules/dogfooding.json", "appliesTo": []},
+    {"path": ".agent-skill-chain/project/rules/japanese-docs.json", "appliesTo": ["docs/specs", ".agent-skill-chain/docs", "AGENTS.md"]},
+    {"path": ".agent-skill-chain/project/rules/lockfile.json", "appliesTo": ["package.json", "package-lock.json", ".github/workflows/ci.yml"]},
+    {"path": ".agent-skill-chain/project/rules/naming-exception.json", "appliesTo": ["AGENTS.md", "SKILL.md", "README.md"]},
+    {"path": ".agent-skill-chain/project/rules/no-registry-publish.json", "appliesTo": ["package.json"]},
+    {"path": ".agent-skill-chain/project/rules/numbered-markdown.json", "appliesTo": ["docs/specs", ".agent-skill-chain/templates/specs"]},
+    {"path": ".agent-skill-chain/project/rules/ownership-local.json", "appliesTo": []},
+    {"path": ".agent-skill-chain/project/rules/ownership-pr.json", "appliesTo": []},
+    {"path": ".agent-skill-chain/project/rules/package-manager.json", "appliesTo": ["package.json", "package-lock.json"]},
+    {"path": ".agent-skill-chain/project/rules/package.json", "appliesTo": [".agent-skill-chain/project-policy.json", ".agent-skill-chain/project", ".agent-skill-chain/tmp", ".agent-skill-chain/role-log", ".agent-skill-chain/metrics", "test", "secret-fixtures"]},
+    {"path": ".agent-skill-chain/project/rules/quality-command.json", "appliesTo": ["package.json", ".agent-skill-chain/project/choices/development.json", ".github/workflows/ci.yml"]},
+    {"path": ".agent-skill-chain/project/rules/review-exception.json", "appliesTo": []},
+    {"path": ".agent-skill-chain/project/rules/runtime.json", "appliesTo": ["package.json", ".github/workflows/ci.yml", ".github/workflows/release.yml"]},
+    {"path": ".agent-skill-chain/project/rules/safety.json", "appliesTo": [".agent-skill-chain/project-policy.json"]}
+  ]
+}
