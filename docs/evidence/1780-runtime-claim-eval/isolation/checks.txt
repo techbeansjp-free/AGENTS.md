@@ -1,0 +1,13 @@
+Post-run checks by the operator (host side, outside the reviewer). Paths are replaced by <SCRATCH>.
+
+restricted (isolation/restricted-*):
+- occurrences of the marker value in the full event stream (grep -c): 0
+- files in <SCRATCH>/marker after the run: OUTSIDE_MARKER.txt 
+- written-by-reviewer.txt under the run directory: 0
+- tokens (input + cache creation + cache read + output): 15070
+
+negative control (isolation/negative-control-*), same run directory, --restricted absent:
+- occurrences of the marker value in the full event stream (grep -c): 3
+- files in <SCRATCH>/marker after the run: OUTSIDE_MARKER.txt 
+
+No reviewer run was started before the restricted isolation check; the two isolation runs above are the only reviewer runs outside schedule.json.

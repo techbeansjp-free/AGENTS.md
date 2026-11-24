@@ -9,11 +9,11 @@
 - **誤った断定**：R0は回ごとに0・0・1件、R1は0・0・0件。範囲が重なるので「差が不明」になり、Issueの規則で不採用になる。R0の1件は、#1774と同じuserinfo形式の誤り（F3-T4で「`fetch`は`@`の後のhostへ接続する」と断定）だった。
 - **検出力**：両条件とも真の欠陥を7/7件、全9回で検出し、critical欠落は0件。悪化は無い。
 - **過剰な保留と誤検知**：R1は0・0・1件、R0は0・0・0件で、区別できる差ではない。ただし、正しい挙動を未確認として扱った記述は、R1にだけ4件あった（下の「観察」）。
-- **費用**：tokenは1回あたり平均で約1.5%増（R0 40,072、R1 40,667）。3回の範囲が重ならないので、区別できる増加である。壁時計は範囲が重なった。
+- **費用**：tokenは1回あたり平均で約1.5%増（R0 40,072、R1 40,667）。3回の範囲が重ならないので、区別できる増加である。増分の約88%は出力（応答が長くなった分）で、一文そのものの読込みは1回あたり約70 token（約0.2%）と見積もる。壁時計は範囲が重なった。
 
 この結果からは、一文が誤りを減らすとも、検出力を下げるとも言えない。採否を変える根拠にもならない。R1の一文は、Reviewerが実行できない状況で「確認」を求める。そのため、誤った断定を保留に変える方向と、正しい事実まで保留にする方向の両方に働いた例があった。どちらも件数が少なく、区別できない。
 
-この節より下の「測定の準備」は、測定の実行前にcommit `9ad603b0`で固定した。採点は条件を伏せて行い、条件と突き合わせる前にcommit `adf7614c`で固定した。
+この節より下の「測定の準備」は、測定の実行前にcommit `9ad603b0`で固定した。採点は条件と突き合わせる前にcommit `adf7614c`で固定した。ただし条件を伏せることは手順上の約束で、仕組みでは強制していない（「欠測と限界」）。測定後に準備の節を直した箇所は「独立レビューと是正」に列挙する。
 
 ## 測定の準備（実行前に固定）
 
@@ -94,9 +94,9 @@ claude -p --model opus --output-format stream-json --verbose --restricted --perm
 | fixture外へ書き込めない | 目印のdirectoryとfixtureへのfile作成を求める | Hostが報告したtoolは`Glob`・`Grep`・`Read`だけで、書込みの手段が無い。両方のfileとも作成されず、run directoryのdigestは実行前後で一致 |
 | 外部networkへ接続できない | `http://192.0.2.1/`・`https://example.com/`への接続を求める | network接続のtoolが無い（MCP serverは0件）。tool呼出しはRead・Glob・Grepの各1回だけ |
 
-記録は[isolation/restricted-status.json](isolation/restricted-status.json)・[isolation/restricted-result.txt](isolation/restricted-result.txt)にある。
+記録は[isolation/restricted-status.json](isolation/restricted-status.json)・[isolation/restricted-result.txt](isolation/restricted-result.txt)、host側での事後確認（event中の目印の値の出現数、目印のdirectoryに作られたfileの有無、token数）は[isolation/checks.txt](isolation/checks.txt)にある。隔離の確認より前に起動したReviewerは無い。
 
-**対照（不合格の環境）**：`host-session`と同じ引数（`--restricted`無し、`--allowedTools Read,Glob,Grep`あり）で同じ依頼を実行すると、Read・Glob・Grepのいずれでも目印fileを読めた（[isolation/negative-control-result.txt](isolation/negative-control-result.txt)）。この環境は合格条件を満たさないので、測定には使わない。`host-session`の独立レビューがworktree外を読めることの扱いは、本Issueの対象外として報告する（「ownerの判断事項」）。
+**対照（不合格の環境）**：`host-session`と同じtool制限（`--tools Read,Glob,Grep --allowedTools Read,Glob,Grep`、`--restricted`無し）で同じ依頼を実行すると、Read・Glob・Grepのいずれでも目印fileを読めた（[isolation/negative-control-result.txt](isolation/negative-control-result.txt)、起動引数は[isolation/negative-control-status.json](isolation/negative-control-status.json)）。`host-session`の実際の引数は、ほかに`--output-format json`・`--session-id`・`--append-system-prompt`等を含み、完全には同一でない。この環境は合格条件を満たさないので、測定には使わない。`host-session`の独立レビューがworktree外を読めることの扱いは、本Issueの対象外として報告する（「ownerの判断事項」）。
 
 ### 実行の予定
 
@@ -110,7 +110,7 @@ claude -p --model opus --output-format stream-json --verbose --restricted --perm
 採点は、条件を伏せたまま行う。各runの最終JSONをrun ID（乱数）だけで読み、全runの採点を`scores.json`に書いてcommitした後で、`schedule.json`の条件と突き合わせる。
 
 1. **項目の対応付け**：Reviewerの各itemを、file・仕組みの記述からgoldの項目に対応付ける。対応しないitemは`extras`に記録し、採否の指標には含めない。
-2. **検出（recall）**：真の項目が、`accept`に含まれるverdict（confirmedかneeds_validation）で報告されたら検出。報告が無いかrejectedなら未検出で、criticalなら「critical欠落」。
+2. **検出（recall）**：真の項目が、その項目の`accept`に含まれるverdict（runtimeに依存する項目はconfirmedかneeds_validation、依存しない項目はconfirmedだけ）で報告されたら検出。報告が無いかrejectedなら未検出で、criticalなら「critical欠落」。
 3. **誤検知**：負例をconfirmedかneeds_validationの欠陥として報告したら1件。hardeningとしての記述は数えない。
 4. **誤った断定**：goldで確かめた事実（RF1〜RF10）と矛盾する主張を、未確認とせずに根拠・影響として述べたもの。itemのverdictを問わず、`reason`・`impact`・`hardening`の文面で判定する。
    - 例：Acmeのtokenがredirect先へ漏れる（RF3と矛盾）、userinfo形式のURLで`@`の後のhostへ届く（RF10と矛盾）、backslashや絶対pathでexport directoryの外へ出られる（RF5・RF6と矛盾）、mergeで`Object.prototype`が汚染される（RF9と矛盾）、日付だけの文字列はlocal時刻として解釈される（RF8と矛盾）、`x-api-key`はredirectで落ちる（RF2と矛盾）。
@@ -156,7 +156,7 @@ claude -p --model opus --output-format stream-json --verbose --restricted --perm
 
 `score.mjs`の判定：`erroneousReduced: false`、`recallNotWorse: true`、`criticalMissNotWorse: true`、`overHoldNotIncreased: true`。決定は`reject`。
 
-1回あたりでは、tokenはR0 40,072、R1 40,667（Hostの`usage`の合計。うちcache読取りはR0 193,262、R1 193,590の9回合計）。Hostが報告した費用の見積りは、R0の9回で2.18 USD、R1の9回で2.27 USDだった（請求額ではない）。隔離の確認2回（合格の環境と対照）は、計30,799 tokenだった。
+1回あたりでは、tokenはR0 40,072、R1 40,667（Hostの`usage`の合計）。9回合計の差+5,359の内訳は、出力+4,692、cache作成+339、cache読取り+328である。cache読取りの9回合計はR0 193,262、R1 193,590。Hostが報告した費用の見積りは、R0の9回で2.18 USD、R1の9回で2.27 USDだった（請求額ではない）。隔離の確認2回（合格の環境と対照）は、計30,799 tokenだった。
 
 ### 観察（採点規則の外の記述を含む）
 
@@ -166,7 +166,7 @@ claude -p --model opus --output-format stream-json --verbose --restricted --perm
   - F3のR1 1回目（`c6e4ee332590`）と3回目（`eb0b622872e4`）は、userinfo形式を`fetch`が拒否するか（RF10、正しい）を未確認の事実として、内部serviceへの到達をneeds_validationにした。F3-T4自体はconfirmedのままなので、規則5の過剰な保留には数えていない。
   - R0の9回に、この種の記述は無かった。
 - **R1の一文を明示的に参照した記述**：F2のR1 1回目（`ed40922ecca3`）は、F2-Cの根拠に「手順はruntimeに依存する事実の確認を求めているが、これは標準の`RegExp.prototype.test`の挙動」と書き、confirmedを維持した。R1の`4e5f92845f52`・`5a6c7209e8c4`・`5a8121d96f29`も、runtimeの挙動に依る根拠に「実行では確かめていない」と添えたうえで、判定を下げなかった。
-- まとめると、R1は「断定を保留へ変える」方向に働いた。その結果、R1では誤った断定が0件だった一方、正しい挙動を未確認にした記述が4件出た。誤りの基準率が低い（R0で9回中1件）ため、3回×3 fixtureでは、どちらの効果も区別できない。
+- まとめると、R1では「断定を保留へ変える」方向に働いたと読める記述があった（区別できる差ではない）。その結果、R1では誤った断定が0件だった一方、正しい挙動を未確認にした記述が4件出た。誤りの基準率が低い（R0で9回中1件）ため、3回×3 fixtureでは、どちらの効果も区別できない。
 
 ## 採否
 
@@ -189,17 +189,45 @@ claude -p --model opus --output-format stream-json --verbose --restricted --perm
 - **合成fixtureでの結果**である。実際のレビューでの効果は未確認。対象はNode.js 22の小さなHTTP service 3件（計29 file）だけで、他の言語・runtime・大規模なrepositoryは測っていない。
 - **model・Host**：Opus 5.5（Claude Code 2.1.323）だけ。他のmodelでは誤りの基準率が違い得る。
 - **依頼文**：全体レビューの固定の依頼文1種類だけ。差分レビューや、Issueの要求に沿ったレビューでの効果は測っていない。
-- **伏せた採点の限界**：採点者は技術担当1名で、goldを作った本人である。Reviewerの文面が手順の一文に触れると、条件が推測できる（`ed40922ecca3`）。採点は条件と突き合わせる前にcommitで固定した。
+- **伏せた採点の限界**：採点者は技術担当1名で、goldを作った本人である。条件を伏せることは手順上の約束にすぎず、仕組みでは強制していない。
+  - 採点は測定と並行して、各回の完了ごとに進めた。
+  - 採点中も、各runの`status.json`（作業用の一時directory）には条件が書かれていた。技術担当は採点を固定するまでそれを開かなかったが、それを示す記録は無い。
+  - `run-all.mjs`の順序は固定なので、fixtureごとの完了順から条件を推定できた。
+  - Reviewerの文面が手順の一文に触れると、条件が推測できる（`ed40922ecca3`）。
+  - 独立レビューが全18 runを採点し直し、結果は`scores.json`と一致した。
 - **採点規則の外の記述**：gold外のruntimeの主張（例：「undiciはCookie・Proxy-Authorization・Hostも除去する」「httpsからhttpへのredirectを許す」「`fetch`はTLSを検証する」）は採点していない。正誤も確かめていない。規則5は、真の項目の判定を下げた場合だけを数える。そのため、extrasの中で正しい挙動を未確認とした記述（R1の2件）は、表の数値に入っていない。
-- **goldの確認範囲**：redirectの挙動は、httpのloopback（別portの別origin）で確かめた。httpsの別hostでは実行していない（規則はoriginで同じ）。RF10のsuffix形式は、network無しのため名前解決の段までしか実行していない。
+- **goldの確認範囲**：redirectの挙動は、httpのloopback（別portの別origin）で確かめた。`gold-check.mjs`は1つ目の接続先（partner）が受け取ったheaderを記録していなかったので、独立レビューの指摘を受けて陽性対照を測定後に追加した（[probe/rf3-control.mjs](probe/rf3-control.mjs)、結果は[probe/rf3-control-results.txt](probe/rf3-control-results.txt)）。partnerには`authorization: Bearer DUMMY-ACME-TOKEN`が届き、shardでは`null`だった。`x-api-key`は両方に届いた。goldは変えていない。httpsの別hostでは実行していない（規則はoriginで同じ）。RF10のsuffix形式は、network無しのため名前解決の段までしか実行していない。
 - **原データ**：最終応答は`raw-outputs.json`に残した。Hostのevent記録（`events.jsonl`。tool呼出しの全文を含む）は、作業用の一時directoryに置いただけで、commitしていない。絶対path（利用者名とsession IDを含む）を多く含むためである。費用とtool呼出し数は、そこから`costs.json`へ抜き出した。
 - **費用**：tokenはHostの`result`の`usage`の合計。API課金額は欠測（Hostの見積りだけを記録）。親sessionの調整・採点の消費は含まない。並列3 laneの壁時計は、相互の干渉を含む参考値である。
 
 ## ownerの判断事項
 
 1. **`host-session`の読取り範囲**（本Issueの対象外）：`host-session`と同じ引数（`--restricted`無し、`--allowedTools Read,Glob,Grep`）では、Reviewerが対象の外のfileを読めた（「隔離」の対照）。独立レビューで対象repositoryの外を読めることを許容するか、`--restricted`等で閉じ込めるかは、別Issueで判断する事項である。本PRでは変えない。
-2. **閾値と費用の上限**：Issueの規則（3回の範囲が重ならない）と、「代表ケース数件×条件×3回」の上限をそのまま使った。数値の閾値と追加測定の上限は、決まっていない。
+2. **commitのmetadata**：本PRのcommitの作者・記録者のemailは、ローカルのGit設定から作られた形式（利用者名とホスト名を含む）である。mainの既存commitにも同じ形式がある。公開repositoryで今後この形式を避けるか、Git設定を変えるかはownerの判断に当たる。
+3. **閾値と費用の上限**：Issueの規則（3回の範囲が重ならない）と、「代表ケース数件×条件×3回」の上限をそのまま使った。数値の閾値と追加測定の上限は、決まっていない。
 
 ## 検証
 
-（PR作成前の検証結果を記入する。）
+- `node score.mjs`（本directory）：上の表の値と`decision: reject`を出力する（読取りだけで、networkを使わない）。
+- goldの確認：`probe/gold-results.txt`（3 fixtureとも`exit=0`、container削除済み）。陽性対照は`probe/rf3-control-results.txt`。
+- `npm run package:check`：Node 24.11.0（CIと同系）で12件中12件成功。Node 20.12.2（このHostの既定）では3件失敗した。失敗は、testが`npm pack`の出力をJSONとして読む箇所で、npm 10.5.0がlifecycleの出力（`> agent-sk…`）を混ぜたことによる`SyntaxError`だった。本PRの差分は`docs/evidence/`だけで、package・testの対象を変えない。
+- `npm run quality`（lintと`npm test`）：Node 24.11.0で、651件中、成功504・失敗0・skip 147。
+- 公開物の確認：本directoryの全fileに、ローカルの絶対path・利用者名・session ID・秘密が無いことを`grep`で確かめた。
+
+## 独立レビューと是正
+
+`host-session claude <worktree> --name '1780 独立レビュー' --model opus`（新Context、Read・Glob・Grepのみ）で、HEAD `7e9f995f`をレビューした。判定は条件付き合格（High 0、Medium 1、Low 6）。採点は全18 runで正しく、数値はREADMEと一致し、採否は覆らないとされた。是正は次のとおり。
+
+| 指摘 | 是正 |
+| --- | --- |
+| Medium：条件を伏せた採点は手順上の約束にすぎない | 「欠測と限界」に、並行採点・`status.json`・完了順・独立レビューでの再採点の一致を記録し、結論の節の表現を弱めた |
+| Low 1：tokenの増分の内訳 | 出力+4,692、cache作成+339、cache読取り+328と、一文の読込み費用の見積りを記録 |
+| Low 2：観察のまとめが強い | 「働いたと読める記述があった（区別できる差ではない）」に修正 |
+| Low 3：採点規則2の括弧書きがgoldと合わない | 準備の節の文言を、goldの`accept`の定義（依存しない項目はconfirmedだけ）に合わせた。採点と`score.mjs`は元からgoldに従っており、結果は変わらない |
+| Low 4：隔離の主張の一部が記録に無い／「同じ引数」 | `isolation/checks.txt`・`isolation/negative-control-status.json`を追加し、「同じtool制限」に修正（準備の節） |
+| Low 5：RF3の陽性対照が無い | `probe/rf3-control.mjs`を追加して実行。goldは変えていない |
+| Low 6：検証の節が未記入 | 本節を記入 |
+
+測定後に準備の節を直したのは、Low 3・Low 4の文言と、記録へのlinkの追加だけである。gold・fixture・依頼文・R0/R1の文言・採点規則の判定内容・`score.mjs`は変えていない（`git diff 9ad603b0 -- gold.json score.mjs prompt-review.txt run-reviewer.mjs run-all.mjs make-fixture.mjs probe/gold-check.mjs`は空）。
+
+レビューの未確認事項のうち、commitの作者・記録者のemailにローカルのホスト名が入っている点は、本directoryの内容ではなくGitのmetadataである。mainの既存commitにも同じ形式がある。push済みのcommitを書き換えるにはforce pushが要るので、本PRでは変えず、ownerの判断事項に加えた。

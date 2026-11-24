@@ -1,0 +1,5 @@
+## node probe/run-sandbox.mjs 30 <fixture F1> <worktree> -- /probe/rf3-control.mjs
+{"check":"RF3-positive-control-acme","authorizationAtPartner":"Bearer DUMMY-ACME-TOKEN","authorizationAtShard":null}
+{"check":"RF2-positive-control-globex","xApiKeyAtPartner":"DUMMY-GLOBEX-KEY","xApiKeyAtShard":"DUMMY-GLOBEX-KEY"}
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":14925,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+exit=0
