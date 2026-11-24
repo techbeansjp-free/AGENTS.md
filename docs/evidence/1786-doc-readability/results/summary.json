@@ -1,0 +1,423 @@
+{
+ "review": {
+  "A": {
+   "runs": 18,
+   "valid": 18,
+   "recallPerRep": [
+    1,
+    1,
+    1
+   ],
+   "detectedPerRep": [
+    "37/37",
+    "37/37",
+    "37/37"
+   ],
+   "harmful": 0,
+   "cleanFlagged": 3,
+   "misquoted": 0,
+   "unmatched": 25,
+   "findingsMean": 8.11111111111111,
+   "r5Retained": [
+    "6/6",
+    "6/6",
+    "6/6"
+   ],
+   "r5RevisedChars": [
+    516,
+    573,
+    469
+   ],
+   "costMean": 0.1231744,
+   "costSum": 2.2171392,
+   "outputMean": 2664.277777777778,
+   "cacheReadMean": 649,
+   "cacheWriteMean": 8630.277777777777,
+   "inputMean": 2,
+   "wallMeanS": 32.59066666666667,
+   "wallRangeS": "23.663〜47.383",
+   "turns": [
+    1
+   ]
+  },
+  "B": {
+   "runs": 18,
+   "valid": 18,
+   "recallPerRep": [
+    1,
+    1,
+    1
+   ],
+   "detectedPerRep": [
+    "37/37",
+    "37/37",
+    "37/37"
+   ],
+   "harmful": 0,
+   "cleanFlagged": 3,
+   "misquoted": 0,
+   "unmatched": 34,
+   "findingsMean": 8.61111111111111,
+   "r5Retained": [
+    "6/6",
+    "6/6",
+    "6/6"
+   ],
+   "r5RevisedChars": [
+    507,
+    557,
+    506
+   ],
+   "costMean": 0.1281122222222222,
+   "costSum": 2.3060199999999997,
+   "outputMean": 2836.8888888888887,
+   "cacheReadMean": 649,
+   "cacheWriteMean": 8812.888888888889,
+   "inputMean": 2,
+   "wallMeanS": 33.93833333333333,
+   "wallRangeS": "25.793〜39.160",
+   "turns": [
+    1
+   ]
+  },
+  "C": {
+   "runs": 18,
+   "valid": 18,
+   "recallPerRep": [
+    1,
+    1,
+    1
+   ],
+   "detectedPerRep": [
+    "37/37",
+    "37/37",
+    "37/37"
+   ],
+   "harmful": 0,
+   "cleanFlagged": 3,
+   "misquoted": 0,
+   "unmatched": 34,
+   "findingsMean": 8.61111111111111,
+   "r5Retained": [
+    "6/6",
+    "6/6",
+    "6/6"
+   ],
+   "r5RevisedChars": [
+    541,
+    483,
+    534
+   ],
+   "costMean": 0.13050543333333334,
+   "costSum": 2.3490978,
+   "outputMean": 2906.6666666666665,
+   "cacheReadMean": 649,
+   "cacheWriteMean": 8934.166666666666,
+   "inputMean": 2,
+   "wallMeanS": 34.68644444444444,
+   "wallRangeS": "26.528〜48.271",
+   "turns": [
+    1
+   ]
+  }
+ },
+ "reader": {
+  "A": {
+   "runs": 9,
+   "valid": 9,
+   "correctPerRep": [
+    "20/21",
+    "20/21",
+    "21/21"
+   ],
+   "ambPerRep": [
+    "7/7",
+    "7/7",
+    "7/7"
+   ],
+   "misread": 2,
+   "overUnknown": 0,
+   "unknownOk": "22/24",
+   "wrongDirection": 0,
+   "missing": 0,
+   "ambReportedMean": 3.6666666666666665,
+   "p1AmbReported": [
+    4,
+    3,
+    4
+   ],
+   "perQ": {
+    "P1": [
+     "BBCBBXBB",
+     "BBCBBXBB",
+     "BBCBBXBB"
+    ],
+    "P2": [
+     "YXXXBCB",
+     "YXXXBCB",
+     "YXXXBCB"
+    ],
+    "P3": [
+     "YBBXAA",
+     "YBBXAA",
+     "YYBXAA"
+    ]
+   },
+   "costMean": 0.09090688888888888,
+   "costSum": 0.818162,
+   "outputMean": 2744.1111111111113,
+   "wallMeanS": 30.665444444444447
+  },
+  "C": {
+   "runs": 9,
+   "valid": 9,
+   "correctPerRep": [
+    "20/21",
+    "20/21",
+    "21/21"
+   ],
+   "ambPerRep": [
+    "7/7",
+    "7/7",
+    "7/7"
+   ],
+   "misread": 2,
+   "overUnknown": 0,
+   "unknownOk": "22/24",
+   "wrongDirection": 0,
+   "missing": 0,
+   "ambReportedMean": 8.444444444444445,
+   "p1AmbReported": [
+    9,
+    11,
+    8
+   ],
+   "perQ": {
+    "P1": [
+     "BBCBBXBB",
+     "BBCBBXBB",
+     "BBCBBXBB"
+    ],
+    "P2": [
+     "YXXXBCB",
+     "YXXXBCB",
+     "YXXXBCB"
+    ],
+    "P3": [
+     "YBBXAA",
+     "YBBXAA",
+     "YYBXAA"
+    ]
+   },
+   "costMean": 0.12664446666666665,
+   "costSum": 1.1398001999999998,
+   "outputMean": 4468.666666666667,
+   "wallMeanS": 47.655666666666676
+  }
+ },
+ "perCase": {
+  "R1-A": {
+   "detected": [
+    7,
+    7,
+    7
+   ],
+   "of": 7,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R2-A": {
+   "detected": [
+    8,
+    8,
+    8
+   ],
+   "of": 8,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R3-A": {
+   "detected": [
+    6,
+    6,
+    6
+   ],
+   "of": 6,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R4-A": {
+   "detected": [
+    5,
+    5,
+    5
+   ],
+   "of": 5,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R5-A": {
+   "detected": [
+    3,
+    3,
+    3
+   ],
+   "of": 3,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R6-A": {
+   "detected": [
+    8,
+    8,
+    8
+   ],
+   "of": 8,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R1-B": {
+   "detected": [
+    7,
+    7,
+    7
+   ],
+   "of": 7,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R2-B": {
+   "detected": [
+    8,
+    8,
+    8
+   ],
+   "of": 8,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R3-B": {
+   "detected": [
+    6,
+    6,
+    6
+   ],
+   "of": 6,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R4-B": {
+   "detected": [
+    5,
+    5,
+    5
+   ],
+   "of": 5,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R5-B": {
+   "detected": [
+    3,
+    3,
+    3
+   ],
+   "of": 3,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R6-B": {
+   "detected": [
+    8,
+    8,
+    8
+   ],
+   "of": 8,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R1-C": {
+   "detected": [
+    7,
+    7,
+    7
+   ],
+   "of": 7,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R2-C": {
+   "detected": [
+    8,
+    8,
+    8
+   ],
+   "of": 8,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R3-C": {
+   "detected": [
+    6,
+    6,
+    6
+   ],
+   "of": 6,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R4-C": {
+   "detected": [
+    5,
+    5,
+    5
+   ],
+   "of": 5,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R5-C": {
+   "detected": [
+    3,
+    3,
+    3
+   ],
+   "of": 3,
+   "missedCounts": [],
+   "harmful": []
+  },
+  "R6-C": {
+   "detected": [
+    8,
+    8,
+    8
+   ],
+   "of": 8,
+   "missedCounts": [],
+   "harmful": []
+  }
+ },
+ "decision": {
+  "review-B": {
+   "improve": false,
+   "safe": true,
+   "costOk": true,
+   "dRecall": 0,
+   "costRatio": 1.04
+  },
+  "review-C": {
+   "improve": false,
+   "safe": true,
+   "costOk": true,
+   "dRecall": 0,
+   "costRatio": 1.06
+  },
+  "reader-C": {
+   "improveCorrect": false,
+   "improveAmb": false,
+   "safe": true,
+   "costRatio": 1.39
+  },
+  "aRecallMean": 1
+ }
+}
