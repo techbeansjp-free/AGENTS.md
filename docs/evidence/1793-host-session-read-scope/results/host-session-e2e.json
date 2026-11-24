@@ -1,0 +1,62 @@
+{
+  "e2e-1": {
+    "code": "fix branch (uncommitted at run time; same arguments as the committed claudeReviewArguments)",
+    "model": "haiku",
+    "ephemeral": true,
+    "status": "completed",
+    "exitCode": 0,
+    "outsideMarkerInResult": false,
+    "outsideMarkerInEvents": false,
+    "insideMarkerInResult": true,
+    "deniedByRestricted": 5
+  },
+  "e2e-opus": {
+    "code": "fix branch, model opus",
+    "model": "opus",
+    "ephemeral": true,
+    "status": "completed",
+    "exitCode": 0,
+    "outsideMarkerInResult": false,
+    "outsideMarkerInEvents": false,
+    "insideMarkerInResult": true,
+    "deniedByRestricted": 5
+  },
+  "e2e-base": {
+    "code": "main checkout, host-session.mjs identical to base",
+    "model": "haiku",
+    "ephemeral": true,
+    "status": "completed",
+    "exitCode": 0,
+    "outsideMarkerInResult": true,
+    "outsideMarkerInEvents": true,
+    "insideMarkerInResult": true,
+    "deniedByRestricted": 0
+  },
+  "e2e-external-worktree": {
+    "code": "fix branch HEAD 307ddc6f, target worktree outside the primary checkout (reachable only through --add-dir)",
+    "model": "haiku",
+    "ephemeral": true,
+    "status": "completed",
+    "exitCode": 0,
+    "targetOutsidePrimaryCheckout": true,
+    "outsideMarkerInResult": false,
+    "outsideMarkerInEvents": false,
+    "externalTargetMarkerInResult": true,
+    "deniedByRestricted": 1,
+    "requested": [
+      "Read <external-target>/inside.txt",
+      "Glob *.txt in <external-target>",
+      "Read <outside>/marker.txt"
+    ],
+    "note": "Marker presence is checked mechanically; per-tool outcomes are only in the model's reply (output-format json keeps no tool events)."
+  },
+  "independent-review-persisted": {
+    "code": "fix branch HEAD 307ddc6f, persisted (non-ephemeral) session with --restricted, then completion rename via --resume",
+    "model": "opus",
+    "ephemeral": false,
+    "status": "completed",
+    "exitCode": 0,
+    "naming": "completed",
+    "renameExitCode": 0
+  }
+}

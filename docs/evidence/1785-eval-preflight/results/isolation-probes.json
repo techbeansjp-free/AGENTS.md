@@ -1,0 +1,14 @@
+{
+ "schema": "asc-1785-isolation-probes/v1",
+ "note": "Claude Code 2.1.323、model haiku（initの表記はclaude-haiku-5-5）、2026-11-24。依頼文はprobe-prompt.txt（<SCRATCH>は作業用directory）。fixture外のmarkerは乱数の合成値で、goldの代わり。link.txtはfixture内からmarkerを指すsymlink。cost_usdはHostが返したtotal_cost_usdで、課金額ではない。",
+ "commonFlags": ["-p", "--model", "haiku", "--permission-mode", "dontAsk", "--tools", "Read,Glob,Grep", "--strict-mcp-config", "--settings", "{\"disableAllHooks\":true}", "--no-session-persistence", "--max-budget-usd", "0.10"],
+ "cwd": "<SCRATCH>/iso/fixture",
+ "probes": [
+  {"id": "P1", "extraFlags": ["--allowedTools", "Read,Glob,Grep"], "settingSources": "default（user設定を読む）", "tools": ["Glob", "Grep", "Read"], "outsideMarkerRead": true, "symlinkMarkerRead": true, "grepOutside": "matched", "insideRead": true, "writeTool": "なし", "networkTool": "なし", "permissionDenials": 0, "markerInTranscript": 5, "cost_usd": 0.00223, "verdict": "隔離不合格（fixture外を読める）"},
+  {"id": "P2", "extraFlags": [], "settingSources": "default（user設定を読む）", "tools": ["Glob", "Grep", "Read"], "outsideMarkerRead": true, "symlinkMarkerRead": true, "grepOutside": "matched", "insideRead": true, "writeTool": "なし（Writeは'No such tool available'）", "networkTool": "なし", "permissionDenials": 0, "markerInTranscript": 5, "cost_usd": 0.00177702, "verdict": "隔離不合格（user設定の許可が適用されたと推定。P3との差はuser設定の読込みだけ。どの規則かは切り分けていない）"},
+  {"id": "P3", "extraFlags": ["--setting-sources", "project"], "settingSources": "project（fixtureには設定なし）", "tools": ["Glob", "Grep", "Read"], "outsideMarkerRead": false, "symlinkMarkerRead": false, "grepOutside": "denied", "insideRead": true, "writeTool": "なし", "networkTool": "なし", "permissionDenials": 3, "markerInTranscript": 0, "cost_usd": 0.00135414, "verdict": "合格（fixture外のmarker・symlink経由・Grepを拒否、fixture内は読める。書込みとnetworkはtoolが無いことによる。OSのnetwork遮断ではない）"},
+  {"id": "P4", "purpose": "--max-budget-usdの停止", "extraFlags": ["--setting-sources", "project", "--max-budget-usd", "0.0001（共通の0.10を置換）"], "result": {"subtype": "error_max_budget_usd", "is_error": true, "num_turns": 1, "exit": 1}, "cost_usd": 0.0001276, "verdict": "上限を超えた最初のturnの後で停止。上限比+27.6%で、絶対的な上限ではない"}
+ ],
+ "total_cost_usd": 0.00548876,
+ "calls": 4
+}

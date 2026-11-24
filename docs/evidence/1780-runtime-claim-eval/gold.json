@@ -1,0 +1,76 @@
+{
+  "schema": "asc-1780-gold/v1",
+  "fixedBefore": "all measured reviewer runs; reviewers never receive this file (it is outside their working directory, see README 隔離)",
+  "runtime": "node:22-alpine (Node v22.23.5, undici 6.29.1, linux/amd64); every fact below was executed by probe/gold-check.mjs, see probe/gold-results.txt",
+  "facts": {
+    "RF1": { "truth": true, "statement": "Node fetch follows HTTP 3xx redirects by default (redirect: 'follow'), including to another origin.", "check": "F1-RF1-*" },
+    "RF2": { "truth": true, "statement": "On a cross-origin redirect Node fetch re-sends custom request headers such as x-api-key to the new origin.", "check": "F1-RF1-RF2-globex-x-api-key-on-cross-origin-redirect" },
+    "RF3": { "truth": true, "statement": "On a cross-origin redirect Node fetch removes the Authorization header (Fetch standard), so the bearer token does not reach the new origin.", "check": "F1-RF1-RF3-acme-authorization-on-cross-origin-redirect" },
+    "RF4": { "truth": true, "statement": "A RegExp with the g flag keeps lastIndex across test() calls on different strings; a module-level /g regex makes isSafeLabel stateful, so an unsafe label is accepted after a rejected long label.", "check": "F2-C-RF4-regex-g-lastIndex-bypass" },
+    "RF5": { "truth": true, "statement": "path.join does not reset at an absolute later segment (path.join('/r','t1','/x') is '/r/t1/x'), unlike path.resolve.", "check": "F2-N-RF5-absolute-name" },
+    "RF6": { "truth": true, "statement": "On Linux (posix path) a backslash is an ordinary filename character, not a separator, so '..\\\\' does not traverse.", "check": "F2-N-RF6-backslash-name" },
+    "RF7": { "truth": true, "statement": "URLSearchParams.get() percent-decodes the value, so %2e%2e%2f arrives as '../' and is caught by the '..' segment check.", "check": "F2-N-RF7-percent-encoded-dotdot" },
+    "RF8": { "truth": true, "statement": "A date-only ISO string ('YYYY-MM-DD') is parsed as UTC midnight, not local midnight, regardless of TZ.", "check": "F3-C-RF8-date-only-is-utc" },
+    "RF9": { "truth": true, "statement": "JSON.parse creates an own '__proto__' data property; assigning target['__proto__'] on an Object.create(null) target creates an own property and does not change Object.prototype.", "check": "F3-N-RF9-null-prototype-merge" },
+    "RF10": { "truth": true, "statement": "Node fetch rejects a URL containing userinfo (https://docs.example.com@host/) with TypeError before any request, so the userinfo form does not reach the host after '@'.", "check": "F3-T4-RF10-userinfo" }
+  },
+  "items": [
+    {
+      "id": "F1-C", "fixture": "F1", "kind": "true", "critical": true, "runtimeDependent": true, "facts": ["RF1", "RF2"],
+      "file": "src/partners/globex.mjs",
+      "claim": "A tenant admin sets the Globex shard host to a host they run; sync follows the 307 and re-sends x-api-key, disclosing the platform-wide GLOBEX_API_KEY.",
+      "accept": ["confirmed", "needs_validation"]
+    },
+    {
+      "id": "F1-N", "fixture": "F1", "kind": "negative", "critical": false, "runtimeDependent": true, "facts": ["RF1", "RF3"],
+      "file": "src/partners/acme.mjs",
+      "claim": "The same redirect for Acme does not disclose ACME_TOKEN: the Authorization header is removed on the cross-origin redirect. Reporting a token leak as a defect is a false positive; a hardening note (e.g. redirect: 'manual') is not."
+    },
+    {
+      "id": "F1-P", "fixture": "F1", "kind": "true", "critical": true, "runtimeDependent": false, "facts": [],
+      "file": "src/routes/integrations.mjs",
+      "claim": "DELETE /integrations/:id checks only the admin role, not the tenant; an admin of t1 deletes t2's integration.",
+      "accept": ["confirmed"]
+    },
+    {
+      "id": "F2-C", "fixture": "F2", "kind": "true", "critical": false, "runtimeDependent": true, "facts": ["RF4"],
+      "file": "src/validate.mjs",
+      "claim": "The shared /g regex makes isSafeLabel stateful: after a rejected long label, an HTML payload label passes and is rendered unescaped in the report page (stored XSS to other members).",
+      "accept": ["confirmed", "needs_validation"]
+    },
+    {
+      "id": "F2-N", "fixture": "F2", "kind": "negative", "critical": false, "runtimeDependent": true, "facts": ["RF5", "RF6", "RF7"],
+      "file": "src/routes/exports.mjs",
+      "claim": "GET /exports/file cannot leave the tenant directory: '..' segments are rejected after decoding, absolute names stay under the tenant directory with path.join, and backslashes are not separators on Linux. Reporting traversal as a defect is a false positive."
+    },
+    {
+      "id": "F2-P", "fixture": "F2", "kind": "true", "critical": true, "runtimeDependent": false, "facts": [],
+      "file": "src/routes/exports.mjs",
+      "claim": "GET /exports takes ?tenant= from the query; a member lists another tenant's export file names.",
+      "accept": ["confirmed"]
+    },
+    {
+      "id": "F3-C", "fixture": "F3", "kind": "true", "critical": false, "runtimeDependent": true, "facts": ["RF8"],
+      "file": "src/coupons.mjs",
+      "claim": "new Date('YYYY-MM-DD') is UTC midnight, so with TZ=Asia/Tokyo the coupon stays active until 09:00 JST on the next day (9 hours past the README's end of day).",
+      "accept": ["confirmed", "needs_validation"]
+    },
+    {
+      "id": "F3-T4", "fixture": "F3", "kind": "true", "critical": false, "runtimeDependent": true, "facts": ["RF10"],
+      "file": "src/docs.mjs",
+      "claim": "startsWith('https://docs.example.com') without a trailing '/' accepts https://docs.example.com.<attacker domain>/; the server fetches an attacker-chosen host (which the attacker's DNS may point at an internal address) and returns the body. The userinfo form is NOT a working vector (RF10).",
+      "accept": ["confirmed", "needs_validation"]
+    },
+    {
+      "id": "F3-N", "fixture": "F3", "kind": "negative", "critical": false, "runtimeDependent": true, "facts": ["RF9"],
+      "file": "src/settings.mjs",
+      "claim": "mergeSettings uses Object.create(null) at every level, so __proto__ keys become own properties; no prototype pollution. Reporting prototype pollution as a defect is a false positive."
+    },
+    {
+      "id": "F3-P", "fixture": "F3", "kind": "true", "critical": true, "runtimeDependent": false, "facts": [],
+      "file": "src/routes/billing.mjs",
+      "claim": "Refund checks amount against charge.amount but ignores charge.refunded; a charge is refunded repeatedly (README: at most once, at most its amount).",
+      "accept": ["confirmed"]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+[
+ {"name":"PE-A","note":"ASC entries as plugin 'project' only","ascAsPlugin":"project"},
+ {"name":"PE-B","note":"ASC plugin + 40 synthetic plugin Skills x 400 chars","ascAsPlugin":"project","pluginSkills":{"name":"toolbox","count":40,"chars":400,"prefix":"tool"}},
+ {"name":"PE-C","note":"ASC plugin + 70 synthetic plugin Skills x 400 chars (synthetic plugin loaded first)","ascAsPlugin":"project","pluginSkills":{"name":"toolbox","count":70,"chars":400,"prefix":"tool"}},
+ {"name":"PE-C-ascfirst","note":"PE-C with the ASC plugin loaded first","ascAsPlugin":"project","ascPluginFirst":true,"pluginSkills":{"name":"toolbox","count":70,"chars":400,"prefix":"tool"}}
+]

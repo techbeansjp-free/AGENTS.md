@@ -1,0 +1,614 @@
+[
+ {
+  "key": "R2-A0-1",
+  "case": "R2",
+  "cond": "A0",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 23943,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1097225,
+   "numTurns": 1,
+   "durationApiMs": 23233,
+   "usage": {
+    "input": 2,
+    "output": 2144,
+    "cacheRead": 649,
+    "cacheWrite": 8254
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R2-A0-2",
+  "case": "R2",
+  "cond": "A0",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 31086,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.11870299999999999,
+   "numTurns": 1,
+   "durationApiMs": 24495,
+   "usage": {
+    "input": 2,
+    "output": 2593,
+    "cacheRead": 649,
+    "cacheWrite": 8254
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R2-A0-3",
+  "case": "R2",
+  "cond": "A0",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 22284,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.10915749999999999,
+   "numTurns": 1,
+   "durationApiMs": 21116,
+   "usage": {
+    "input": 2,
+    "output": 2131,
+    "cacheRead": 649,
+    "cacheWrite": 8216
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 8,
+   "detected": [
+    "R2-d1",
+    "R2-d2",
+    "R2-d3",
+    "R2-d4",
+    "R2-d5",
+    "R2-d6",
+    "R2-d7",
+    "R2-d8"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 0,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R3-A0-1",
+  "case": "R3",
+  "cond": "A0",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 31380,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1227973,
+   "numTurns": 1,
+   "durationApiMs": 28204,
+   "usage": {
+    "input": 2,
+    "output": 2834,
+    "cacheRead": 649,
+    "cacheWrite": 8165
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R3-A0-2",
+  "case": "R3",
+  "cond": "A0",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 30793,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.11772529999999999,
+   "numTurns": 1,
+   "durationApiMs": 27295,
+   "usage": {
+    "input": 2,
+    "output": 2582,
+    "cacheRead": 649,
+    "cacheWrite": 8161
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R3-A0-3",
+  "case": "R3",
+  "cond": "A0",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 28252,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.11714129999999999,
+   "numTurns": 1,
+   "durationApiMs": 26180,
+   "usage": {
+    "input": 2,
+    "output": 2552,
+    "cacheRead": 649,
+    "cacheWrite": 8163
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 6,
+   "detected": [
+    "R3-d1",
+    "R3-d2",
+    "R3-d3",
+    "R3-d4",
+    "R3-d5",
+    "R3-d6"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 8
+  }
+ },
+ {
+  "key": "R4-A0-1",
+  "case": "R4",
+  "cond": "A0",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 27504,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.12210210000000002,
+   "numTurns": 1,
+   "durationApiMs": 25788,
+   "usage": {
+    "input": 2,
+    "output": 2811,
+    "cacheRead": 649,
+    "cacheWrite": 8135
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 7
+  }
+ },
+ {
+  "key": "R4-A0-2",
+  "case": "R4",
+  "cond": "A0",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 25391,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1114821,
+   "numTurns": 1,
+   "durationApiMs": 22063,
+   "usage": {
+    "input": 2,
+    "output": 2266,
+    "cacheRead": 649,
+    "cacheWrite": 8170
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 9
+  }
+ },
+ {
+  "key": "R4-A0-3",
+  "case": "R4",
+  "cond": "A0",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 23422,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.10910610000000001,
+   "numTurns": 1,
+   "durationApiMs": 22062,
+   "usage": {
+    "input": 2,
+    "output": 2146,
+    "cacheRead": 649,
+    "cacheWrite": 8173
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 5,
+   "detected": [
+    "R4-d1",
+    "R4-d2",
+    "R4-d3",
+    "R4-d4",
+    "R4-d5"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 1,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 7
+  }
+ },
+ {
+  "key": "R5-A0-1",
+  "case": "R5",
+  "cond": "A0",
+  "rep": 1,
+  "metrics": {
+   "wallMs": 25931,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1176603,
+   "numTurns": 1,
+   "durationApiMs": 23631,
+   "usage": {
+    "input": 2,
+    "output": 2525,
+    "cacheRead": 649,
+    "cacheWrite": 8293
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 3,
+   "findings": 6,
+   "revised": {
+    "present": true,
+    "chars": 483,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R5-A0-2",
+  "case": "R5",
+  "cond": "A0",
+  "rep": 2,
+  "metrics": {
+   "wallMs": 29970,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.1210928,
+   "numTurns": 1,
+   "durationApiMs": 26105,
+   "usage": {
+    "input": 2,
+    "output": 2681,
+    "cacheRead": 649,
+    "cacheWrite": 8332
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 2,
+   "findings": 5,
+   "revised": {
+    "present": true,
+    "chars": 458,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ },
+ {
+  "key": "R5-A0-3",
+  "case": "R5",
+  "cond": "A0",
+  "rep": 3,
+  "metrics": {
+   "wallMs": 26647,
+   "exit": 0,
+   "signal": null,
+   "timedOut": false,
+   "isError": false,
+   "subtype": "success",
+   "costUsd": 0.10860879999999999,
+   "numTurns": 1,
+   "durationApiMs": 20839,
+   "usage": {
+    "input": 2,
+    "output": 2056,
+    "cacheRead": 649,
+    "cacheWrite": 8334
+   },
+   "models": [
+    "claude-haiku-5-5",
+    "claude-opus-5-5"
+   ],
+   "permissionDenials": 0
+  },
+  "score": {
+   "valid": true,
+   "recovered": false,
+   "defects": 3,
+   "detected": [
+    "R5-d1",
+    "R5-r1",
+    "R5-r2"
+   ],
+   "missed": [],
+   "recall": 1,
+   "harmful": [],
+   "cleanFlagged": 0,
+   "misquoted": 0,
+   "unmatched": 1,
+   "findings": 4,
+   "revised": {
+    "present": true,
+    "chars": 486,
+    "checks": {
+     "R5-v1": true,
+     "R5-v2": true,
+     "R5-v3": true,
+     "R5-v4": true,
+     "R5-v5": true,
+     "R5-v6": true
+    },
+    "retained": 6,
+    "total": 6
+   }
+  }
+ }
+]

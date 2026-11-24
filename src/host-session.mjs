@@ -55,6 +55,24 @@ function sessionLocation(directory){
  return {cwd,targetDirectory:target,targetHead,readHead};
 }
 
+/**
+ * Claude review launch. Read scope is enforced by launch settings, not prompt text:
+ * --restricted ignores user/project/local settings (their allow rules and additionalDirectories)
+ * and confines the file tools to the working directories (cwd and --add-dir).
+ * No --allowedTools: a bare Read/Glob/Grep allow rule is path-unrestricted and widens reads beyond them.
+ */
+export function claudeReviewArguments({model,sessionId,instruction,cwd,targetDirectory,ephemeral,name}){
+ const args=['-p','--model',model,'--output-format','json','--restricted','--permission-mode','dontAsk','--tools','Read,Glob,Grep','--strict-mcp-config','--settings','{"disableAllHooks":true}','--session-id',sessionId,'--append-system-prompt',instruction];
+ if(targetDirectory!==cwd)args.push('--add-dir',targetDirectory);
+ if(ephemeral)args.push('--no-session-persistence');else args.push('-n',name);
+ return args;
+}
+
+/** Claude completion rename: no tools at all, so it has no file access to confine. */
+export function claudeRenameArguments({sessionId,name,model}){
+ return ['-p','--resume',sessionId,'-n',`済: ${name}`,'--model',model,'--max-turns','1','--tools','','--allowedTools','','--permission-mode','dontAsk','--strict-mcp-config','--settings','{"disableAllHooks":true}'];
+}
+
 /** Strip inherited Git routing/config overrides without changing Host authentication or PATH. */
 function hostEnvironment(){
  return Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^GIT_/i.test(key)));
@@ -87,9 +105,7 @@ export async function runHostSession(options){
  try{
   if(host==='claude'){
    state.sessionId=randomUUID();save();
-   const args=['-p','--model',model,'--output-format','json','--permission-mode','dontAsk','--tools','Read,Glob,Grep','--allowedTools','Read,Glob,Grep','--strict-mcp-config','--settings','{"disableAllHooks":true}','--session-id',state.sessionId,'--append-system-prompt',targetInstruction];
-   if(targetDirectory!==cwd)args.push('--add-dir',targetDirectory);
-   if(ephemeral)args.push('--no-session-persistence');else args.push('-n',state.name);
+   const args=claudeReviewArguments({model,sessionId:state.sessionId,instruction:targetInstruction,cwd,targetDirectory,ephemeral,name:state.name});
    const result=await command(executable,args,{cwd,input:prompt,timeout,out:b=>write('events.jsonl',b),err:b=>write('stderr.txt',b)});
    state.process=result;
    if(result.error||result.code!==0)throw Error(result.error??`Claude exited ${result.code}`);
@@ -99,7 +115,7 @@ export async function runHostSession(options){
    if(readHead&&readHead()!==targetHead)throw Error('Target HEAD changed during session');
    state.naming=ephemeral?'not-persisted':'started';save();
    if(!ephemeral){
-    const renamed=await command(executable,['-p','--resume',state.sessionId,'-n',`済: ${state.name}`,'--model',options.renameModel??model,'--max-turns','1','--tools','','--allowedTools','','--permission-mode','dontAsk','--strict-mcp-config','--settings','{"disableAllHooks":true}'],{cwd,input:'Reply OK only. Do not use tools.',timeout:Math.min(timeout,60000),out:b=>write('rename.stdout',b),err:b=>write('rename.stderr',b)});
+    const renamed=await command(executable,claudeRenameArguments({sessionId:state.sessionId,name:state.name,model:options.renameModel??model}),{cwd,input:'Reply OK only. Do not use tools.',timeout:Math.min(timeout,60000),out:b=>write('rename.stdout',b),err:b=>write('rename.stderr',b)});
     state.rename=renamed;state.naming=!renamed.error&&renamed.code===0?'completed':'failed';
    }
   }else{

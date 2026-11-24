@@ -1,0 +1,396 @@
+{
+ "s67": {
+  "correct": {
+   "exit": 0,
+   "err": "",
+   "row": "A_K1_1 recall 1.00 critmiss 0 extra 0 tok 50000 tu 8 s 30 []",
+   "runs": 1,
+   "recall": 1
+  },
+  "wrong": {
+   "exit": 0,
+   "err": "",
+   "row": "A_K1_1 recall 0.00 critmiss 0 extra 2 tok 50000 tu 8 s 30 [\"src/project-context.mjs\",\"test/test_project_context.mjs\",\"v05/USAGE.md\"]",
+   "runs": 1,
+   "recall": 0
+  },
+  "partial": {
+   "exit": 0,
+   "err": "",
+   "row": "A_K1_1 recall 0.33 critmiss 0 extra 0 tok 50000 tu 8 s 30 [\"test/test_project_context.mjs\",\"v05/USAGE.md\"]",
+   "runs": 1,
+   "recall": 0.33
+  },
+  "empty": {
+   "exit": 0,
+   "err": "",
+   "row": "A_K1_1 recall 0.00 critmiss 0 extra 1 tok 50000 tu 8 s 30 [\"src/project-context.mjs\",\"test/test_project_context.mjs\",\"v05/USAGE.md\"]",
+   "runs": 1,
+   "recall": 0
+  },
+  "timeout": {
+   "exit": 1,
+   "err": "TypeError: Cannot read properties of null (reading 'split')",
+   "row": null,
+   "runs": null,
+   "recall": null
+  },
+  "broken": {
+   "exit": 1,
+   "err": "SyntaxError: Unterminated string in JSON at position 30 (line 1 column 31)",
+   "row": null,
+   "runs": null,
+   "recall": null
+  },
+  "duplicate": {
+   "exit": 0,
+   "err": "",
+   "row": "A_K1_1 recall 0.00 critmiss 0 extra 1 tok 50000 tu 8 s 30 [\"src/project-context.mjs\",\"test/test_project_context.mjs\",\"v05/USAGE.md\"]",
+   "runs": 1,
+   "recall": 0
+  },
+  "missing": {
+   "exit": 0,
+   "err": "",
+   "row": "A_K1_1 recall 1.00 critmiss 0 extra 0 tok 50000 tu 8 s 30 []",
+   "runs": 2,
+   "recall": 1
+  }
+ },
+ "s74": {
+  "correct": {
+   "exit": 0,
+   "err": "",
+   "rows": 2,
+   "n": 1,
+   "detected": "5/5",
+   "critMiss": 0,
+   "nvOK": "1/1",
+   "fp": "0/4"
+  },
+  "wrong": {
+   "exit": 0,
+   "err": "",
+   "rows": 2,
+   "n": 1,
+   "detected": "0/5",
+   "critMiss": 2,
+   "nvOK": "0/1",
+   "fp": "4/4"
+  },
+  "partial": {
+   "exit": 0,
+   "err": "",
+   "rows": 2,
+   "n": 1,
+   "detected": "3/5",
+   "critMiss": 0,
+   "nvOK": "0/1",
+   "fp": "0/4"
+  },
+  "empty": {
+   "exit": 0,
+   "err": "",
+   "rows": 2,
+   "n": 1,
+   "detected": "0/5",
+   "critMiss": 2,
+   "nvOK": "0/1",
+   "fp": "0/4"
+  },
+  "timeout": {
+   "exit": 1,
+   "err": "TypeError: Cannot read properties of null (reading 'T1')",
+   "rows": 0,
+   "n": null,
+   "detected": null,
+   "critMiss": null,
+   "nvOK": null,
+   "fp": null
+  },
+  "broken": {
+   "exit": 1,
+   "err": "SyntaxError: Unterminated string in JSON at position 40 (line 1 column 41)",
+   "rows": 0,
+   "n": null,
+   "detected": null,
+   "critMiss": null,
+   "nvOK": null,
+   "fp": null
+  },
+  "duplicate": {
+   "exit": 0,
+   "err": "",
+   "rows": 5,
+   "n": 4,
+   "detected": "5/5",
+   "critMiss": 0,
+   "nvOK": "1/1",
+   "fp": "0/4"
+  },
+  "missing": {
+   "exit": 0,
+   "err": "",
+   "rows": 3,
+   "n": 2,
+   "detected": "5/5",
+   "critMiss": 0,
+   "nvOK": "1/1",
+   "fp": "0/4"
+  }
+ },
+ "mutants": {
+  "s67 original": {
+   "perfectRecall": 1,
+   "emptyRecall": 0,
+   "wrongRecall": 0,
+   "defect2": false,
+   "defect3": false
+  },
+  "s67 M+ substring": {
+   "perfectRecall": 1,
+   "emptyRecall": 1,
+   "wrongRecall": 0,
+   "defect2": true,
+   "defect3": true
+  },
+  "s67 M- no-trim": {
+   "perfectRecall": 0.33,
+   "emptyRecall": 0,
+   "wrongRecall": 0,
+   "defect2": true,
+   "defect3": true
+  },
+  "s67 M+ nonempty": {
+   "perfectRecall": 1,
+   "emptyRecall": 0,
+   "wrongRecall": 1,
+   "defect2": false,
+   "defect3": true
+  },
+  "s74 original": {
+   "perfectDetected": "5/5",
+   "emptyDetected": "0/5",
+   "wrongDetected": "0/5",
+   "defect2": false,
+   "defect3": false
+  },
+  "s74 M+ default-confirmed": {
+   "perfectDetected": "5/5",
+   "emptyDetected": "5/5",
+   "wrongDetected": "0/5",
+   "defect2": true,
+   "defect3": true
+  },
+  "s74 M- label-typo": {
+   "perfectDetected": "0/5",
+   "emptyDetected": "0/5",
+   "wrongDetected": "0/5",
+   "defect2": true,
+   "defect3": true
+  },
+  "s74 M+ any-verdict": {
+   "perfectDetected": "5/5",
+   "emptyDetected": "0/5",
+   "wrongDetected": "5/5",
+   "defect2": false,
+   "defect3": true
+  }
+ },
+ "r68": {
+  "correct": {
+   "harnessExit": 0,
+   "pass": true,
+   "detail": "bravo,echo,hotel,kilo,nova",
+   "exit": 0,
+   "isError": false,
+   "costUsd": 0.05,
+   "parentOutputTokens": 100
+  },
+  "wrong": {
+   "harnessExit": 0,
+   "pass": false,
+   "detail": "alpha,charlie",
+   "exit": 0,
+   "isError": false,
+   "costUsd": 0.05,
+   "parentOutputTokens": 100
+  },
+  "partial": {
+   "harnessExit": 0,
+   "pass": false,
+   "detail": "bravo,echo",
+   "exit": 0,
+   "isError": false,
+   "costUsd": 0.05,
+   "parentOutputTokens": 100
+  },
+  "empty": {
+   "harnessExit": 0,
+   "pass": false,
+   "detail": "",
+   "exit": 0,
+   "isError": false,
+   "costUsd": 0.05,
+   "parentOutputTokens": 100
+  },
+  "broken": {
+   "harnessExit": 0,
+   "pass": false,
+   "detail": "",
+   "exit": 0,
+   "isError": null,
+   "costUsd": null,
+   "parentOutputTokens": 100
+  },
+  "timeout": {
+   "harnessExit": 0,
+   "pass": false,
+   "detail": "",
+   "exit": null,
+   "isError": null,
+   "costUsd": null,
+   "parentOutputTokens": 100
+  },
+  "ratelimit": {
+   "harnessExit": 0,
+   "pass": false,
+   "detail": "",
+   "exit": 0,
+   "isError": true,
+   "costUsd": 0,
+   "parentOutputTokens": 100
+  },
+  "missing": {
+   "harnessExit": 0,
+   "pass": false,
+   "detail": "",
+   "exit": 0,
+   "isError": null,
+   "costUsd": null,
+   "parentOutputTokens": 0
+  },
+  "duplicate": {
+   "harnessExit": 0,
+   "pass": true,
+   "detail": "bravo,echo,hotel,kilo,nova",
+   "exit": 0,
+   "isError": false,
+   "costUsd": 0.05,
+   "parentOutputTokens": 200
+  }
+ },
+ "hs": {
+  "correct": {
+   "cliExit": 0,
+   "status": "completed",
+   "error": null,
+   "resultSaved": true
+  },
+  "wrong": {
+   "cliExit": 0,
+   "status": "completed",
+   "error": null,
+   "resultSaved": true
+  },
+  "partial": {
+   "cliExit": 0,
+   "status": "completed",
+   "error": null,
+   "resultSaved": true
+  },
+  "empty": {
+   "cliExit": 2,
+   "status": "failed",
+   "error": "Claude did not return a successful session result",
+   "resultSaved": false
+  },
+  "broken": {
+   "cliExit": 2,
+   "status": "failed",
+   "error": "Unterminated string in JSON at position 39 (line 1 column 40)",
+   "resultSaved": false
+  },
+  "timeout": {
+   "cliExit": 2,
+   "status": "failed",
+   "error": "Host command timeout",
+   "resultSaved": false
+  },
+  "ratelimit": {
+   "cliExit": 2,
+   "status": "failed",
+   "error": "Claude did not return a successful session result",
+   "resultSaved": false
+  },
+  "stale": {
+   "cliExit": 2,
+   "status": "failed",
+   "error": "Claude did not return a successful session result",
+   "resultSaved": false
+  },
+  "missing": {
+   "cliExit": 2,
+   "status": "failed",
+   "error": "Unexpected end of JSON input",
+   "resultSaved": false
+  }
+ },
+ "aggregation": {
+  "recordedLines": 2,
+  "lastValue": 100,
+  "r68LastWins": 100,
+  "firstWinsMutant": 10,
+  "sumAllLinesMutant": 110
+ },
+ "goldPrecondition": {
+  "seedless": {
+   "generatorExit": 0,
+   "S1": {
+    "postRoute": false,
+    "seed": false,
+    "reachable": false
+   },
+   "S2": {
+    "postRoute": false,
+    "seed": false,
+    "reachable": false
+   },
+   "S3": {
+    "postRoute": false,
+    "seed": false,
+    "reachable": false
+   }
+  },
+  "seeded": {
+   "generatorExit": 0,
+   "S1": {
+    "postRoute": false,
+    "seed": true,
+    "reachable": true
+   },
+   "S2": {
+    "postRoute": false,
+    "seed": true,
+    "reachable": true
+   },
+   "S3": {
+    "postRoute": false,
+    "seed": true,
+    "reachable": true
+   }
+  }
+ },
+ "invocations": {
+  "correct": 4,
+  "wrong": 2,
+  "partial": 2,
+  "empty": 2,
+  "broken": 2,
+  "timeout": 2,
+  "ratelimit": 2,
+  "missing": 2,
+  "stale": 1
+ },
+ "elapsedMs": 56980
+}
