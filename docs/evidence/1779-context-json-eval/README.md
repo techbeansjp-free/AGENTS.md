@@ -4,9 +4,9 @@
 
 ## 結論
 
-**不採用とする。`context.json`はこのrepositoryに追加しない。** 事前に固定した採否の規則（下記）のうち「Aで必須規則の欠落が1件以上」を満たさなかった。現行のA（`context.json`無し、`start`のnoticeだけ）は、8ケース×3回の24回で必須規則33件を全て挙げ、critical欠落も0件だった。A+Cも同じく欠落0件で、改善の余地を示せない。
+**不採用とする。`context.json`はこのrepositoryに追加しない。** 事前に固定した採否の規則（下記）のうち「Aで必須規則の欠落が1件以上」を満たさなかった。現行のA（`context.json`無し、`start`のnoticeだけ）は、8ケース×3回の24回（recallの対象はR1〜R6の18回、必須規則の枠は計33件）で必須規則を全て挙げ、critical欠落も0件だった。A+Cも同じく欠落0件で、改善の余地を示せない。
 
-A+Cは、不要な規則fileの読込みをAより区別できる差で減らした（回ごとに10〜11件→1件）。一方で、列挙された規則（全pathに掛かる5規則を含む）を読むため、開いた規則fileは平均3.75→7.79件、tool呼出しは平均20.6→23.3回に増えた（tool呼出しの差は区別できる）。tokenとwall-clockの差は区別できない。いずれも採否の条件ではなく、判断に添える情報である。
+A+Cは、不要な規則fileの読込みをAより区別できる差で減らした（回ごとに10〜11件→1件）。一方で、列挙された規則（全pathに掛かる5規則を含む）を読むため、開いた規則fileは平均3.75→7.79件、tool呼出しは平均20.6→23.3回に増えた（tool呼出しの差は区別できる）。tokenとwall-clockの差は区別できない。いずれも採否の条件ではなく、判断に添える情報である。なお「不要な規則file」はgoldの`optional`・`repositoryWideOptional`に依存し、goldと`context.json`の案はどちらも同じ規則の`scope`から作ったため、A+Cが列挙どおりに読めば構造上「不要」に数えられない。この減少は案から独立した指標ではない。
 
 外部サービスへの送信は無い。読取り役は、反例で合格を確かめた隔離設定（`--restricted`等）でだけ動かした。
 
@@ -69,7 +69,7 @@ Issueの「A：現行。`start`のnoticeだけが出る」は、実際のASCの�
 - 欠落は「ケース×回×必須規則file」の単位で数える。R7・R8はrecallの対象にせず、不要な列挙と読込みにだけ使う。
 - 不要な規則fileは、`.agent-skill-chain/project/rules/`配下で、そのケースの`required`・`optional`・`repositoryWideOptional`のどれでもないfile。
 - token（input・output・cache read・cache creationの合計。Claude Codeの`modelUsage`の全model合計）、tool呼出し数、wall-clock（process起動から終了まで）、Host表示の費用（`costUSD`、list価格の推定値で課金額ではない）を記録する。取得できない値は欠測とする。
-- 回答にFILES行が無い、または終了codeが0でない試行は失敗とする。失敗した試行は件数と費用に計上し、同じケース・条件・回を1回だけやり直してrecallにはやり直しの結果を使う。
+- 回答にFILES行が無い、または終了codeが0でない試行は失敗とする。失敗した試行は件数と費用に計上し、同じケース・条件・回を1回だけやり直してrecallにはやり直しの結果を使う。やり直しは手動で行う：失敗した試行の生出力を`<key>.failed1.*`へ改名してから同じ引数で`run.mjs`を再実行する（`run.mjs`は同じprefixへ上書きするため）。`extract.mjs`は改名したfileも`.failed1`付きのkeyとして出力し、`score.mjs`はそれを失敗として数える。
 - 差は、回ごとの値（全ケースの合計または平均）の範囲（最小〜最大）が条件間で重ならない場合だけ「区別できる」とする（Issueの既定どおり）。
 
 ### 採否の規則
@@ -105,13 +105,13 @@ Aで欠落が無ければ不採用とする。不要な規則fileの読込みと
 
 測定は2026-11-24 08:08〜08:23（UTC）に、準備のcommit（`44e6def5`）をpushした後で行った。48回とも終了code 0で、回答にFILES行があり、失敗・破棄・やり直しは0件である。各試行の値は[runs.json](runs.json)（`extract.mjs`で生出力から抜き出した。fixtureの絶対pathはrepo相対へ直した）。再現：このdirectoryで`node score.mjs cases.json runs.json`。
 
-全48回の起動記録（init）は、tools `Glob,Grep,Read`、MCP server 0件、Claude Code 2.1.323、permission mode `dontAsk`だった。tool入力がfixtureの外を指した件数は0件。測定の前後で両fixtureの全fileのSHA-256（1,405／1,406 files）は変わらなかった。
+全48回の起動記録（init）は、tools `Glob,Grep,Read`、MCP server 0件、Claude Code 2.1.323、permission mode `dontAsk`だった。tool入力の`file_path`・`path`がfixtureの外を指した件数は0件（Globの`pattern`やGrepの`glob`は数えていないため下限である。隔離の保証は上の反例による）。測定の前後で両fixtureの全fileのSHA-256（1,405／1,406 files）は変わらなかった。
 
 ### 条件別
 
 | 指標 | A（24回） | A+C（24回） |
 | --- | --- | --- |
-| 必須規則の欠落（18回×必須33件中） | 0 | 0 |
+| 必須規則の欠落（recall対象18回、必須規則の枠は計33件） | 0 | 0 |
 | critical欠落 | 0 | 0 |
 | 必須規則を挙げたが開かなかった件数 | 0 | 0 |
 | 不要な規則fileを挙げた件数（合計） | 27 | 4 |
@@ -175,11 +175,12 @@ Aの不要な読込みは、主にR7・R8（規則が適用されないpath）�
 - 欠測：課金額（Host表示は推定値）。親session（進行役）の調整・採点・レビューの消費。読んだ範囲の妥当性と、実装・テスト・レビューまで進めた場合の手戻り。
 - 標本：fixtureは1 repository・8ケース・各3回、Hostは1つ（Claude Code）・modelは1つ（Opus 5.5）。Codex等の別Hostは調べていない。
 - goldは、独立Reviewerではなく技術担当が元の規則と変更pathから決めた。R7のように、規則の`scope`外でも内容から関連すると判断できる規則（`japanese-docs`等）を「不要」と数えている。
+- Aへの手掛かりが強い条件である。Aの`start`出力が参照する`project-policy.json`は`ruleFiles`に21規則を全件列挙しており、依頼文も「applicable project rules」を挙げるよう求めている。このような規則の一覧が無いproject、または規則を挙げるよう明示しない依頼では、結果が変わりうる。
 - 合成fixtureでの結果であり、実際の作業での効果は未確認である。
 
 ## 測定後の変更
 
-測定の後で変えたのは、本READMEの「結論」「結果」「再評価の条件」の記入と、`runs.json`の追加だけである。gold・採点規則・`context.json`の案・起動設定は変えていない。
+測定の後で変えたのは、本READMEの「結論」「結果」「再評価の条件」の記入と、`runs.json`の追加だけである。gold・採点規則・`context.json`の案・起動設定は変えていない。独立レビューの指摘（Low）を受けて、READMEの記述（指標の独立性、やり直しの手順、fixture外判定の範囲、Aへの手掛かりの限界、欠落の分母の表記、`host-session`の発見の根拠）を補った。採点の論理と数値は変えていない。
 
 ## 再評価の条件
 
@@ -191,4 +192,4 @@ Aの不要な読込みは、主にR7・R8（規則が適用されないpath）�
 
 ## 関連する発見（本Issueの範囲外）
 
-- `host-session claude`の既定の起動設定（`--tools Read,Glob,Grep --allowedTools Read,Glob,Grep --permission-mode dontAsk`）は`--restricted`を含まない。user設定がfixture外のReadを許可している端末では、読取り役が作業directory外のfileを読める（上の対照で確認）。独立レビューの読取り専用はこの範囲での保証であり、秘密に届かないことの保証ではない。必要なら別Issueで扱う。
+- `host-session claude`の既定の起動設定（`--tools Read,Glob,Grep --allowedTools Read,Glob,Grep --permission-mode dontAsk`）は`--restricted`を含まない。user設定がfixture外のReadを許可している端末では、読取り役が作業directory外のfileを読める（上の対照で確認）。独立レビューの読取り専用は書込みとtoolの種類についての保証であり、読取り範囲を作業directoryへ閉じる保証ではない（秘密を含む作業directory外のfileに届きうる）。根拠は`src/host-session.mjs`の起動引数（`--restricted`が無い）と、上の対照の結果である。本Issueの対象外（`src/`の改修を含むため）であり、起票と対応はownerの判断に回す。
