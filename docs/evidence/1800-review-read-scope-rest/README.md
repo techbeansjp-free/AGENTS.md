@@ -155,7 +155,7 @@
 ## 残る制限
 
 - Claude Code経路：主要checkout内のfile（Git管理外のfile、他のworktree）は引き続き読める。ownerの判断後に対応する。
-- Codex経路：共有のGit metadata（全branchの履歴、ref、`.git/config`、他worktreeのindex・stage済みの内容・stash）は読める。macOSの開発toolのdirectoryは`xcode-select -p`の結果で、`DEVELOPER_DIR`等で利用者が変えられる（PATHと同じく利用者の管理下とした）。ただし名前が`Developer`か`CommandLineTools`で終わるdirectoryだけを許可し、それ以外（`/`や家directory等）は加えない。同名のprofileは設定から合成されるが（実測）、profile名を実行ごとに生成するため衝突しない。managed設定の`requirements.toml`による制約は確認していない。
+- Codex経路：共有のGit metadata（全branchの履歴、ref、`.git/config`、他worktreeのindex・stage済みの内容・stash）は読める。macOSの開発toolのdirectoryは`xcode-select -p`の結果で、`DEVELOPER_DIR`等で利用者が変えられる（PATHと同じく利用者の管理下とした）。ただし名前が`Developer`か`CommandLineTools`で終わるdirectoryだけを許可し、それ以外（`/`や家directory等）は加えない。判定は名前だけなので、`DEVELOPER_DIR`を家directoryの下の`Developer`等の同名directoryに向けると、その全体が読取りに入る（利用者の設定の誤りが必要なため、構造の判定は加えていない）。この判定はmacOSでしか動かず、単体テストでは固定していない。同名のprofileは設定から合成されるが（実測）、profile名を実行ごとに生成するため衝突しない。managed設定の`requirements.toml`による制約は確認していない。
 - Codex経路の`thread/start`・`turn/start`の`permissions`と`activePermissionProfile`は実験的APIの項目で、版により変わりうる。応答に無ければ失敗して止まる。
 - Codex経路：Codexが起動するMCP server等はsandboxの外で動き、このprofileでは読取りを限定できない（Claude Code経路の`--strict-mcp-config`に当たるものは入れていない）。
 - 対象が主要checkoutそのものの場合、読取りは主要checkout全体（`.worktrees/`下の他worktreeを含む）になる。両経路とも構造上避けられない。
@@ -170,10 +170,9 @@
 | 2 | `7de8b4d8` | 条件付き | Medium 2件：既存の`src/codex-runtime.mjs`を使わず独自に組み立てていた（共通基盤に揃え、`/var/tmp`・npm導入・Windows・`extends`を扱う）、品質検査の結果が未記録（記録） |
 | 3 | `aa353db6` | 条件付き合格 | Medium 1件：同名のprofileが設定から合成される場合を検出できない（実測で合成を確認し、profile名を実行ごとに生成）。Low：Evidenceに残ったNodeのpathを伏せる、macOSの版の検査、Windowsの拡張子なしfile、MCPと主要checkout自体の記載、npm launcherのテスト、追加確認の条件の記録 |
 | 4 | `eaf0f705` | 条件付き合格（条件：最終HEADのCI） | High・Mediumなし。Low：`xcode-select -p`の結果を確かめずに許可していた（`Developer`・`CommandLineTools`で終わるdirectoryだけに限った）、macOS専用の経路がCIで通らない（下に明記）、`criteriaSha256`が定数（下に明記）、見出しの欠落（修正） |
+| 5 | `1df1fcf6`（4回目の是正だけ） | 条件付き合格（条件：最終HEADのCI） | High・Mediumなし。Low：開発toolの判定が名前だけ、判定の単体テストが無い、空行（いずれも記述で対応し、判定は変えていない） |
 
 ## 片付け
-
-
 
 - 永続sessionの測定で作ったClaude Codeのproject data（合成fixtureのpathのものだけ）は、`claude purge -y <fixtureのpath>`で削除し、`--dry-run`で残りが無いことを確かめた。
 - Docker：自分で作ったcontainer（`--rm`）とvolume（`asc-1800-work`、label `asc.worktree`）だけを使い、終了後に削除した。
