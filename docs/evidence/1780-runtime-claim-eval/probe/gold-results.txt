@@ -1,0 +1,28 @@
+image sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603 amd64
+## node probe/run-sandbox.mjs 30 <fixture F1> <worktree> -- /probe/gold-check.mjs F1
+{"fixture":"F1","check":"runtime","node":"v22.23.5","undici":"6.29.1","platform":"linux"}
+{"fixture":"F1","check":"F1-RF1-RF3-acme-authorization-on-cross-origin-redirect","status":200,"shardReached":true,"authorizationAtShard":null}
+{"fixture":"F1","check":"F1-RF1-RF2-globex-x-api-key-on-cross-origin-redirect","status":200,"shardReached":true,"xApiKeyAtShard":"DUMMY-GLOBEX-KEY"}
+{"fixture":"F1","check":"F1-P-delete-other-tenant","actorTenant":"t1","targetTenant":"t2","status":204,"t2ListAfter":"[]"}
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":1004,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+exit=0
+## node probe/run-sandbox.mjs 30 <fixture F2> <worktree> -- /probe/gold-check.mjs F2
+{"fixture":"F2","check":"runtime","node":"v22.23.5","undici":"6.29.1","platform":"linux"}
+{"fixture":"F2","check":"F2-C-control-payload-alone","status":400}
+{"fixture":"F2","check":"F2-C-RF4-regex-g-lastIndex-bypass","primeStatus":400,"payloadStatus":201,"viewContainsPayload":true}
+{"fixture":"F2","check":"F2-P-list-other-tenant","actorTenant":"t1","status":200,"body":"[\"secret.csv\"]"}
+{"fixture":"F2","check":"F2-N-RF5-absolute-name","name":"/scratch/exports/t2/secret.csv","status":404,"leakedT2":false}
+{"fixture":"F2","check":"F2-N-RF6-backslash-name","name":"..\\t2\\secret.csv","status":404,"leakedT2":false}
+{"fixture":"F2","check":"F2-N-RF7-percent-encoded-dotdot","rawQuery":"name=%2e%2e%2ft2%2fsecret.csv","status":400,"leakedT2":false}
+{"fixture":"F2","check":"F2-N-control-own-file","status":200,"body":"dummy,t1\n"}
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":1058,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+exit=0
+## node probe/run-sandbox.mjs 30 <fixture F3> <worktree> -- /probe/gold-check.mjs F3
+{"fixture":"F3","check":"runtime","node":"v22.23.5","undici":"6.29.1","platform":"linux"}
+{"fixture":"F3","check":"F3-C-RF8-date-only-is-utc","parsedExpiresOn":"2026-11-30T00:00:00.000Z","active_2026_11_30_2300_JST":true,"active_2026_12_01_0800_JST":true,"active_2026_12_01_0930_JST":false}
+{"fixture":"F3","check":"F3-T4-RF10-userinfo","url":"https://docs.example.com@127.0.0.1:39249/","fetched":false,"error":"TypeError: Request cannot be constructed from a URL that includes credentials: https://docs.example.com@127.0.0.1:39249/","internalHits":0}
+{"fixture":"F3","check":"F3-T4-suffix-host-passes-prefix-check","passedCheck":true,"error":"TypeError: EAI_AGAIN"}
+{"fixture":"F3","check":"F3-P-double-refund","first":200,"second":200,"body":"{\"refunded\":10000}"}
+{"fixture":"F3","check":"F3-N-RF9-null-prototype-merge","patchStatus":200,"stored":"{\"__proto__\":{\"role\":\"admin\",\"polluted\":true},\"ui\":{\"__proto__\":{\"polluted2\":true}}}","objectPrototypePolluted":false,"memberPatchStatus":403}
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":5870,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+exit=0
