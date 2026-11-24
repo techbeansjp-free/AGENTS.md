@@ -1,0 +1,338 @@
+{
+  "runs": {
+    "6204acb218bc": {
+      "fixture": "F1",
+      "valid": true,
+      "items": {
+        "F1-C": "confirmed",
+        "F1-N": "rejected",
+        "F1-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "accountRef of another partner account (nv)",
+        "accountRef dot segments change partner path (nv)",
+        "body size / 500 on bad JSON (c, low)",
+        "no fetch timeout (c, low)",
+        "tests missing (c, low)"
+      ],
+      "notes": "States RF2 and RF3 correctly as runtime facts (undici). Also says Cookie and Proxy-Authorization are removed on cross-origin redirect (not a gold fact; unscored)."
+    },
+    "ed40922ecca3": {
+      "fixture": "F2",
+      "valid": true,
+      "items": {
+        "F2-C": "confirmed",
+        "F2-N": "rejected",
+        "F2-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "tenant=.. lists directories outside EXPORT_ROOT (c, same line as F2-P)",
+        "unescaped label sink (c, medium; same chain as F2-C)",
+        "body size / 500 (c, low)",
+        "tests missing (c, low)"
+      ],
+      "notes": "F2-C reason explicitly cites the method note on runtime-dependent facts and keeps confirmed because it is standard RegExp behaviour -> the text reveals the condition to the scorer (blinding limit). Not an over-hold (verdict confirmed)."
+    },
+    "b4ab354bd209": {
+      "fixture": "F3",
+      "valid": true,
+      "items": {
+        "F3-C": "confirmed",
+        "F3-T4": "confirmed",
+        "F3-N": "rejected",
+        "F3-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "internal reach via attacker DNS (nv; decisive fact TLS/cert)",
+        "userinfo bypass examined and rejected citing fetch credentials TypeError (agrees with RF10)"
+      ],
+      "notes": "Claims fetch verifies TLS certificates so internal reach needs a valid cert (not a gold fact; unscored)."
+    },
+    "daca53e1457c": {
+      "fixture": "F2",
+      "valid": true,
+      "items": {
+        "F2-C": "confirmed",
+        "F2-N": "rejected",
+        "F2-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "tenant=.. lists any directory (c, same line as F2-P)",
+        "unescaped label sink (c, medium)",
+        "body size (c, medium)",
+        "500 on bad JSON (c, low)",
+        "symlink following in downloads (nv, low)"
+      ],
+      "notes": "RF4/RF5/RF6/RF7 stated correctly."
+    },
+    "4e5f92845f52": {
+      "fixture": "F1",
+      "valid": true,
+      "items": {
+        "F1-C": "confirmed",
+        "F1-N": "rejected",
+        "F1-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "blind SSRF / status oracle via tenant-controlled redirects (nv, medium)",
+        "body size / 500 (c, low)",
+        "fetch errors give 500 and no timeout (c, low)"
+      ],
+      "notes": "RF2 and RF3 stated correctly with the Fetch Standard step. Hardening notes the runtime behaviour was not reproduced. Claims https->http downgrade is allowed on redirect (not a gold fact; unscored)."
+    },
+    "c6e4ee332590": {
+      "fixture": "F3",
+      "valid": true,
+      "items": {
+        "F3-C": "confirmed",
+        "F3-T4": "confirmed",
+        "F3-N": "rejected",
+        "F3-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "nv/high: reading internal services via userinfo form or DNS; names as decisive unconfirmed fact whether undici fetch rejects credentials (RF10 is true; held as unconfirmed, hedged, so not an erroneous assertion; not an over-hold under rule 5 because the true item F3-T4 itself stayed confirmed)",
+        "500 on bad JSON (c, low)"
+      ],
+      "notes": "Hedged mention of RF10: an unnecessary hold on a true runtime fact inside an extra item. Recorded qualitatively; rule 5 counts only downgrades of the true gold items."
+    },
+    "9e1049be80bd": {
+      "fixture": "F2",
+      "valid": true,
+      "items": {
+        "F2-C": "confirmed",
+        "F2-N": "rejected",
+        "F2-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "tenant traversal lists any directory (c, same route as F2-P)",
+        "unescaped label sink (c, high)",
+        "body size (c, low)"
+      ],
+      "notes": "RF4-RF7 stated correctly."
+    },
+    "5a6c7209e8c4": {
+      "fixture": "F1",
+      "valid": true,
+      "items": {
+        "F1-C": "confirmed",
+        "F1-N": "rejected",
+        "F1-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "SSRF / reachability oracle via redirects (nv, medium)",
+        "accountRef dot segments (nv, low)",
+        "500 on bad JSON (c, low)",
+        "body size (c, low)",
+        "no timeout (c, low)"
+      ],
+      "notes": "RF2/RF3 stated correctly; F1-N reason adds that it was not checked by running code but keeps rejected. Claims undici also strips cookie/proxy-authorization/host (unscored)."
+    },
+    "0b55813b9197": {
+      "fixture": "F3",
+      "valid": true,
+      "items": {
+        "F3-C": "confirmed",
+        "F3-T4": "confirmed",
+        "F3-N": "rejected",
+        "F3-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "internal reach via DNS + TLS (nv, medium)",
+        "userinfo/redirect bypass examined and rejected citing the Fetch spec (agrees with RF10)",
+        "body/500 (c, low)",
+        "tests missing (c, low)"
+      ],
+      "notes": "All gold facts stated correctly."
+    },
+    "37a4f0906c76": {
+      "fixture": "F1",
+      "valid": true,
+      "items": {
+        "F1-C": "confirmed",
+        "F1-N": "rejected",
+        "F1-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "accountRef ownership/dot segments (nv, low)",
+        "no timeout (nv, low)",
+        "500/body size (c, low)"
+      ],
+      "notes": "RF1-RF3 stated correctly."
+    },
+    "5a8121d96f29": {
+      "fixture": "F2",
+      "valid": true,
+      "items": {
+        "F2-C": "confirmed",
+        "F2-N": "rejected",
+        "F2-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "tenant traversal (c, same route as F2-P)",
+        "unescaped sink (c, medium)",
+        "body size (nv, low)",
+        "500 on bad JSON (c, low)",
+        "text/csv sniffing (nv, low)",
+        "tests missing (c, medium)"
+      ],
+      "notes": "F2-C reason says it is from source and the ECMAScript spec and was not reproduced, kept confirmed (not an over-hold)."
+    },
+    "7fef13a58e48": {
+      "fixture": "F3",
+      "valid": true,
+      "items": {
+        "F3-C": "confirmed",
+        "F3-T4": "confirmed",
+        "F3-N": "rejected",
+        "F3-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "internal reach via DNS/TLS (nv, medium)",
+        "redirect SSRF rejected (redirect:error)",
+        "body size (nv, low)",
+        "500 on bad JSON (c, low)"
+      ],
+      "notes": "States RF10 correctly as established inside F3-T4."
+    },
+    "bf20760ea9b2": {
+      "fixture": "F1",
+      "valid": true,
+      "items": {
+        "F1-C": "confirmed",
+        "F1-N": "rejected",
+        "F1-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "accountRef ownership (nv, low)",
+        "blind SSRF via further redirects (nv, medium)",
+        "500 on bad JSON (c, low)"
+      ],
+      "notes": "RF1-RF3 correct. Claims every undici in the >=22 <23 range strips Authorization (consistent with RF3 on the checked version; other versions unscored)."
+    },
+    "6d0b50869dc7": {
+      "fixture": "F2",
+      "valid": true,
+      "items": {
+        "F2-C": "confirmed",
+        "F2-N": "rejected",
+        "F2-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "tenant traversal (c, same route as F2-P)",
+        "unescaped sink (c, high)",
+        "nv/high: new URL outside try may crash on a request-target llhttp accepts but WHATWG URL rejects (library behaviour named as decisive unconfirmed fact; not a gold fact; unscored)",
+        "body/500 (c, low)",
+        "tests missing (c, low)"
+      ],
+      "notes": "All gold facts correct."
+    },
+    "86d02150d123": {
+      "fixture": "F3",
+      "valid": true,
+      "items": {
+        "F3-C": "confirmed",
+        "F3-T4": "confirmed",
+        "F3-N": "rejected",
+        "F3-P": "confirmed"
+      },
+      "erroneous": [
+        {
+          "fact": "RF10",
+          "quote": "Both 'https://docs.example.com@internal.host/' (the part before @ is treated as userinfo, so the real host is internal.host) and 'https://docs.example.com.attacker.net/' pass the check. fetch() then connects to that other host."
+        }
+      ],
+      "overHold": [],
+      "extras": [
+        "nv/high internal reach; uses the userinfo URL https://docs.example.com@10.0.0.5/ as the working vector, decisive fact stated as TLS trust only"
+      ],
+      "notes": "Asserted in a confirmed item that fetch connects to the host after @ (contradicts RF10). Same error as #1774 A."
+    },
+    "72374ab99524": {
+      "fixture": "F1",
+      "valid": true,
+      "items": {
+        "F1-C": "needs_validation",
+        "F1-N": "needs_validation",
+        "F1-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [
+        {
+          "item": "F1-C",
+          "fact": "RF2",
+          "quote": "The deciding fact that is not confirmed: whether Node 22's bundled undici sends x-api-key to the cross-origin Location target. This is runtime behavior and was not run"
+        }
+      ],
+      "extras": [
+        "blind SSRF via redirect (nv, medium)",
+        "500/body size (c, low)",
+        "no timeout (c, low)"
+      ],
+      "notes": "F1-N reported as needs_validation/medium defect with RF3 named as the deciding unconfirmed fact (hedged, so not an erroneous assertion; counted as a false positive under rule 3)."
+    },
+    "5ac938e77ae2": {
+      "fixture": "F2",
+      "valid": true,
+      "items": {
+        "F2-C": "confirmed",
+        "F2-N": "rejected",
+        "F2-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "tenant traversal (c)",
+        "body size (c, medium)",
+        "500 (c, low)",
+        "utf8/nosniff (nv, low)",
+        "CSRF rejected"
+      ],
+      "notes": "All gold facts correct."
+    },
+    "eb0b622872e4": {
+      "fixture": "F3",
+      "valid": true,
+      "items": {
+        "F3-C": "confirmed",
+        "F3-T4": "confirmed",
+        "F3-N": "rejected",
+        "F3-P": "confirmed"
+      },
+      "erroneous": [],
+      "overHold": [],
+      "extras": [
+        "nv/high internal SSRF; names how Node 22 fetch handles userinfo URLs as an unconfirmed fact (RF10 held as unconfirmed, hedged; not counted)"
+      ],
+      "notes": "Hedged mention of RF10 inside an extra item, like c6e4ee332590."
+    }
+  },
+  "blind": "Scored by run id only, before reading schedule.json (condition mapping). Some reviewer texts cite the method note on runtime-dependent facts, which can reveal the condition; see README."
+}

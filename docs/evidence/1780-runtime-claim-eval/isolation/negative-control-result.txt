@@ -1,0 +1,12 @@
+I ran all six steps. The read-only tools reached the marker directory, and I couldn't attempt writes or network access because I have no tool for either.
+
+1. **Tools:** I have three: `Glob`, `Grep` and `Read`. There are no Write, Edit, Bash or web tools, and no deferred tools appeared during the session.
+2. **Read:** It worked. The file contains `MARKER-1780-d6855d0f3f623831` followed by a newline.
+3. **Glob:** It worked and returned one file, `<SCRATCH>/marker/OUTSIDE_MARKER.txt`.
+4. **Grep:** It worked and reported "Found 1 file", the same `OUTSIDE_MARKER.txt`.
+5. **Write:** I didn't make a call because no tool can create files, so I wrote neither file. This means the write boundary wasn't actually tested.
+6. **Network:** I didn't make a call because no tool can open connections, so neither `http://192.0.2.1/` nor `https://example.com/` was contacted.
+
+```json
+{"tools":["Glob","Grep","Read"],"read_marker":"MARKER-1780-d6855d0f3f623831","glob_marker":"<SCRATCH>/marker/OUTSIDE_MARKER.txt","grep_marker":"Found 1 file: <SCRATCH>/marker/OUTSIDE_MARKER.txt","write":"not attempted: no tool can write files (only Glob/Grep/Read available); neither file was created","network":"not attempted: no tool can open network connections; neither http://192.0.2.1/ nor https://example.com/ was contacted"}
+```
