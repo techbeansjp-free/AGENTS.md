@@ -31,5 +31,26 @@
     "outsideMarkerInEvents": true,
     "insideMarkerInResult": true,
     "deniedByRestricted": 0
+  },
+  "e2e-external-worktree": {
+    "code": "fix branch HEAD 307ddc6f, target worktree outside the primary checkout (reachable only through --add-dir)",
+    "model": "haiku",
+    "ephemeral": true,
+    "status": "completed",
+    "exitCode": 0,
+    "targetOutsidePrimaryCheckout": true,
+    "outsideMarkerInResult": false,
+    "outsideMarkerInEvents": false,
+    "externalTargetMarkerInResult": true,
+    "deniedByRestricted": 1
+  },
+  "independent-review-persisted": {
+    "code": "fix branch HEAD 307ddc6f, persisted (non-ephemeral) session with --restricted, then completion rename via --resume",
+    "model": "opus",
+    "ephemeral": false,
+    "status": "completed",
+    "exitCode": 0,
+    "naming": "completed",
+    "renameExitCode": 0
   }
 }

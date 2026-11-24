@@ -33,7 +33,7 @@ codex exec --ephemeral -s read-only -C /absolute/worktree \
 
 これは起動形式の例であり、実際の依頼には未記入の要求・base・HEAD・検証記録を補う。`read-only`はそのHostのローカル実行制限であり、MCP等の外部ツールの書込み可否まで証明しない。読取り範囲もworkspaceに限定しない。書込みを要するbuild・テストはその場で成功したとせず、実装担当の同一対象のログを照合するか、許可された実行担当へ依頼する。レビューのためにsandboxを解除しない。
 
-Claude Codeの任意例は、導入済み版の`claude --help`で`-p`・`--tools`・`--restricted`を確認し、プロジェクト契約が許す読取りツールに限定する。例えば `claude -p --no-session-persistence --restricted --tools Read,Glob,Grep --permission-mode dontAsk -- '<要求と参照を含む依頼>'`。`--allowedTools`でpathを指定せずに許可すると、user設定等と同様に作業directory外の読取りを許す。Bash・外部連携を追加すればその権限も別途確認する。フラグが存在するだけで安全性が成立したとは扱わず、保護した使い捨てファイルへの書込み拒否などを実環境で検証する。本例の存在をClaude Codeでの実証済み保証としない。
+Claude Codeの任意例は、導入済み版の`claude --help`で`-p`・`--tools`・`--restricted`を確認し、プロジェクト契約が許す読取りツールに限定する。例えば `claude -p --no-session-persistence --restricted --tools Read,Glob,Grep --permission-mode dontAsk --strict-mcp-config --settings '{"disableAllHooks":true}' -- '<要求と参照を含む依頼>'`。`--allowedTools`でpathを指定せずに許可すると、user設定等と同様に作業directory外の読取りを許す。Bash・外部連携を追加すればその権限も別途確認する。フラグが存在するだけで安全性が成立したとは扱わず、保護した使い捨てファイルへの書込み拒否などを実環境で検証する。本例の存在をClaude Codeでの実証済み保証としない。
 
 親Hostの完了通知・管理されたjob/sessionの終了イベントを優先し、同じjob IDから結果を回収する。通知がなければHostが返す実行IDのwait/pollを使い、既知の進捗と残る独立作業に応じて待つ。`sleep`と`pgrep`を繰り返してプロセス名の消滅を成功判定にしない。通信断や時間切れでは実行ID・最後の出力・所有者を残し、未完了として復旧する。親の終了やinterruptだけで子の終了を推定しない。
 

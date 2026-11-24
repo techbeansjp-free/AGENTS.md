@@ -23,7 +23,7 @@
 
 ## 方法
 
-`setup-fixture.sh`で一時directoryに合成fixtureを作る。Git repository（`repo`、一覧用の主要checkoutに当たる）、その中のworktree（`repo/.worktrees/target`、レビュー対象に当たる）、repositoryの外の`outside/marker.txt`の構成である。markerは乱数の無害な値で、worktreeには外のfile・directoryを指すsymlinkを置いた。
+`setup-fixture.mjs`で一時directoryに合成fixtureを作る。Git repository（`repo`、一覧用の主要checkoutに当たる）、その中のworktree（`repo/.worktrees/target`、レビュー対象に当たる）、repositoryの外の`outside/marker.txt`の構成である。markerは乱数の無害な値で、worktreeには外のfile・directoryを指すsymlinkを置いた。主要checkoutの外にもworktree（`external-target`）を置く（`--add-dir`だけで届く配置の確認用）。
 
 `probe-run.mjs <条件> <出力先>`は、`host-session`と同じ配置（cwdは`repo`、`--add-dir`でworktree）で`claude -p`を起動する。次の7件のtool呼出しを依頼し、stream-jsonのtool結果にmarkerの値が出たかを機械的に判定する。
 
@@ -92,13 +92,18 @@ repositoryの直下とworktreeの`.claude/settings.json`に、外のdirectoryの
 | 修正後 | opus | 出現0（5件とも`--restricted`で拒否） | 読めた |
 | 修正前（main） | haiku | 出現あり（5件とも読めた） | 読めた |
 
-修正後の実測は、commit前の作業treeから起動した。起動引数はcommitした`claudeReviewArguments`と同じである。
+修正後の実測（haiku・opus）は、commit前の作業treeから起動した。起動引数はcommitした`claudeReviewArguments`と同じである。
+
+独立レビューの指摘を受けて、commit後（`307ddc6f`）に次の2つを追加で実測した。
+
+- 主要checkoutの外にあるworktreeを対象にした起動：対象内のmarkerをReadで読め、Globで列挙できた。外のmarkerは`--restricted`で拒否された（`e2e-external-worktree`）。`--add-dir`で加えた対象は、主要checkoutの外でも読取り範囲に入る。
+- 永続session（`--ephemeral`なし）：独立レビュー自体を`--restricted`付きの本体で実行し、完了後に`--resume`での改名まで成功した（`independent-review-persisted`、`naming: completed`）。
 
 ## 同じfileの他の経路と他Host
 
-- 完了時の改名（`済: …`）：`--tools ''`で全toolを外しているため、fileを読む手段が無い。変更していない（CIのテストで`--tools ''`を確かめる）。
+- 完了時の改名（`済: …`）：`--tools ''`で全toolを外しているため、fileを読む手段が無い。変更していない（CIのテストで`--tools ''`を確かめる）。`--restricted`付きで作った永続sessionの改名は成功した（上記）。
 - Codex：`sandbox: read-only`は読取り範囲をworkspaceに限定しない。modelを呼ばない`codex sandbox -P :read-only -C <repo> -- cat <外のmarker>`でmarkerを読めた。同じprofileで`touch`は「Operation not permitted」で拒否され、sandbox自体は効いていた。app-serverの`sandbox: read-only`が同じ範囲かは、modelを呼ぶ実行をしていないため未実測である（外部serviceへ送らない方針による）。app-serverのschema（`TurnStartParams`の`sandboxPolicy`）の`readOnly`には、読取り範囲を指定する項目が無い。修正の対象外とし、`skills/asc/references/host-session.md`と`review.md`に制限として明記した。
-- `skills/asc/references/review.md`の手動起動例：Claude Codeの例が`--allowedTools Read Glob Grep`だったため、`--restricted --tools Read,Glob,Grep --permission-mode dontAsk`へ直した。
+- `skills/asc/references/review.md`の手動起動例：Claude Codeの例が`--allowedTools Read Glob Grep`だったため、`--restricted --tools Read,Glob,Grep --permission-mode dontAsk --strict-mcp-config --settings '{"disableAllHooks":true}'`へ直した（手動起動例の実行は未実測）。
 
 ## CIで検査すること
 
@@ -117,7 +122,8 @@ repositoryの直下とworktreeの`.claude/settings.json`に、外のdirectoryの
 
 - 原因の切り分け（A〜D）。
 - 採用案での外部のRead・Glob・Grep・symlinkの拒否。
-- 陽性対照。
+- 陽性対照（主要checkoutの中と外のworktreeの両方）。
+- 永続sessionでの`--restricted`付き起動と、`--resume`による完了時の改名。
 - 広い許可を持つ実user設定の下での拒否。
 - `--restricted`がproject設定を無視すること。
 - `host-session`経由の修正前後の比較。
@@ -129,7 +135,6 @@ repositoryの直下とworktreeの`.claude/settings.json`に、外のdirectoryの
 - project設定の許可で読取りが実際に広がる状況での反例（この版・信頼状態では拡大自体が起きなかった）。
 - Linux・Windowsでの実測。
 - Codex app-serverでmodelを呼ぶ実行。
-- 改名経路の実起動（tool無しのため読取り経路が無い。永続sessionを利用者環境へ作らないため未実行）。
 
 ## 残る制限
 
@@ -138,3 +143,13 @@ repositoryの直下とworktreeの`.claude/settings.json`に、外のdirectoryの
 - `--restricted`はuser・project・localの設定fileを読まない。それらの`env`や`apiKeyHelper`に認証を頼る環境では起動に失敗する（読取り範囲を広げずに止まる）。
 - `--restricted`の無い古い版では、未知のoptionとして起動に失敗する。
 - Codex経路のReviewerはworkspace外を読める。
+
+## 品質検査
+
+- `node --test test/test_host_session.mjs`：Linux container（`node:20.19.5-bookworm`、network none、read-only root）で29件成功した。
+- `npm run quality`・`npm run package:check`は、macOS上の実行で失敗した（quality：653件中35件、package:check：12件中3件）。
+  - host-session：作成直後の実行fileの初回起動に数秒かかり、テストの2秒の上限を超える。baseでも同じ21件が失敗した。
+  - package：`npm pack`の出力にJSON以外の行が混ざる。
+  - Git失敗の診断に関するテスト群：本変更が触れないfileのテストである。baseでの再実行はしていない。
+  - source-language検査：最初のcommitの`setup-fixture.sh`が対象外のsourceとして拒否された。`setup-fixture.mjs`へ置き換えた。
+- 同じ最初のcommit（`307ddc6f`）でのPRのCI（Linux）では、失敗はsource-language検査の1件だけだった（host-session・package・Git診断のテストは成功）。最終的な判定はPRの必須CIの結果による。
