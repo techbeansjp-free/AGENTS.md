@@ -7,6 +7,7 @@ const listen = (handler) => new Promise((resolve) => {
   const server = http.createServer(handler).listen(0, '127.0.0.1', () => resolve(server));
 });
 const base = (server) => `http://127.0.0.1:${server.address().port}`;
+console.log(JSON.stringify({ check: 'runtime', node: process.version, undici: process.versions.undici, platform: process.platform }));
 const seen = { partner: [], shard: [] };
 const shard = await listen((req, res) => { seen.shard.push(req.headers); res.end('{}'); });
 const partner = await listen((req, res) => {

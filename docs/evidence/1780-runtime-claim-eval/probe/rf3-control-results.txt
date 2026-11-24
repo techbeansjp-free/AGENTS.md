@@ -1,5 +1,7 @@
+image sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603 amd64
 ## node probe/run-sandbox.mjs 30 <fixture F1> <worktree> -- /probe/rf3-control.mjs
+{"check":"runtime","node":"v22.23.5","undici":"6.29.1","platform":"linux"}
 {"check":"RF3-positive-control-acme","authorizationAtPartner":"Bearer DUMMY-ACME-TOKEN","authorizationAtShard":null}
 {"check":"RF2-positive-control-globex","xApiKeyAtPartner":"DUMMY-GLOBEX-KEY","xApiKeyAtShard":"DUMMY-GLOBEX-KEY"}
-{"containerExit":0,"wallClockKilled":false,"elapsedMs":14925,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
+{"containerExit":0,"wallClockKilled":false,"elapsedMs":15416,"runError":null,"waitError":null,"logsStatus":0,"truncated":false,"removed":true}
 exit=0

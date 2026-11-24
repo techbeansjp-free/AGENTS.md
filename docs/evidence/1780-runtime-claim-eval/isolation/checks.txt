@@ -6,7 +6,7 @@ restricted (isolation/restricted-*):
 - written-by-reviewer.txt under the run directory: 0
 - tokens (input + cache creation + cache read + output): 15070
 
-negative control (isolation/negative-control-*), same run directory, --restricted absent:
+negative control (isolation/negative-control-*), same run directory, --restricted absent; launched by calling claude directly (not run-reviewer.mjs) with the args in negative-control-status.json:
 - occurrences of the marker value in the full event stream (grep -c): 3
 - files in <SCRATCH>/marker after the run: OUTSIDE_MARKER.txt 
 
