@@ -76,7 +76,7 @@ const score74 = (source, runsText) => {
 const src74 = fs.readFileSync(ev('1774-security-audit-eval/score.mjs'), 'utf8');
 for (const [k, v] of Object.entries(variants74)) report.s74[k] = score74(src74, v);
 
-// ---- 採点器の反例：goldから作る較正用回答（完全・空）で、M+／M−を検出できるか ----
+// ---- 採点器の反例：goldから作る較正用回答（完全・空、および全て誤り）で、M+／M−を検出できるか ----
 const mutate = (src, from, to) => {
   if (!src.includes(from)) throw Error(`mutation anchor missing: ${from}`);
   return src.replace(from, to);
@@ -88,13 +88,17 @@ const mut67 = {
   'M+ substring': mutate(src67, 'const missed = req.filter((x) => !got.has(x)).sort();', 'const missed = req.filter((x) => ![...got].some((g) => x.includes(g))).sort();'),
   // M−：区切りの空白を除かない（", "区切りの正解の2件目以降が一致しない）
   'M- no-trim': mutate(src67, "files.split(',').map((x) => x.trim())", "files.split(',')"),
+  // M+（空でない回答）：FILES行が空でなければ欠落なしとする（空の回答では発火しない）
+  'M+ nonempty': mutate(src67, 'const missed = req.filter((x) => !got.has(x)).sort();', "const missed = files.trim() ? [] : req.filter((x) => !got.has(x)).sort();"),
 };
 const calibrate67 = (src) => {
   const d = dir(`m67-${Math.random().toString(36).slice(2)}`);
   fs.writeFileSync(path.join(d, 'score.mjs'), src);
   const p = score67(path.join(d, 'score.mjs'), variants67.correct);
   const e = score67(path.join(d, 'score.mjs'), variants67.empty);
-  return { perfectRecall: p.recall, emptyRecall: e.recall, defect: !(p.recall === 1 && e.recall === 0) };
+  const w = score67(path.join(d, 'score.mjs'), variants67.wrong);
+  // 2点の較正（完全・空）と、全て誤りの回答を加えた3点の較正を別々に判定する
+  return { perfectRecall: p.recall, emptyRecall: e.recall, wrongRecall: w.recall, defect2: !(p.recall === 1 && e.recall === 0), defect3: !(p.recall === 1 && e.recall === 0 && w.recall === 0) };
 };
 for (const [k, s] of Object.entries(mut67)) report.mutants[`s67 ${k}`] = calibrate67(s);
 const mut74 = {
@@ -103,12 +107,16 @@ const mut74 = {
   'M+ default-confirmed': mutate(src74, 'if (reported && item.accept.includes(full[v])) s.detected++;', "if (item.accept.includes(full[v] ?? 'confirmed')) s.detected++;"),
   // M−：判定名の写し間違い（confirmedが一致しない）
   'M- label-typo': mutate(src74, "const full = { c: 'confirmed',", "const full = { c: 'confirm',"),
+  // M+（空でない回答）：何らかの判定があれば検出とする（rejectedも数える）
+  'M+ any-verdict': mutate(src74, 'if (reported && item.accept.includes(full[v])) s.detected++;', 'if (v) s.detected++;'),
 };
 const calibrate74 = (src) => {
   const p = score74(src, variants74.correct);
   const e = score74(src, variants74.empty);
   const trueTotal = gold74.items.filter((i) => i.kind === 'true').length;
-  return { perfectDetected: p.detected, emptyDetected: e.detected, defect: !(p.detected === `${trueTotal}/${trueTotal}` && e.detected === `0/${trueTotal}`) };
+  const w = score74(src, variants74.wrong);
+  const ok2 = p.detected === `${trueTotal}/${trueTotal}` && e.detected === `0/${trueTotal}`;
+  return { perfectDetected: p.detected, emptyDetected: e.detected, wrongDetected: w.detected, defect2: !ok2, defect3: !(ok2 && w.detected === `0/${trueTotal}`) };
 };
 for (const [k, s] of Object.entries(mut74)) report.mutants[`s74 ${k}`] = calibrate74(s);
 

@@ -143,32 +143,58 @@
   "s67 original": {
    "perfectRecall": 1,
    "emptyRecall": 0,
-   "defect": false
+   "wrongRecall": 0,
+   "defect2": false,
+   "defect3": false
   },
   "s67 M+ substring": {
    "perfectRecall": 1,
    "emptyRecall": 1,
-   "defect": true
+   "wrongRecall": 0,
+   "defect2": true,
+   "defect3": true
   },
   "s67 M- no-trim": {
    "perfectRecall": 0.33,
    "emptyRecall": 0,
-   "defect": true
+   "wrongRecall": 0,
+   "defect2": true,
+   "defect3": true
+  },
+  "s67 M+ nonempty": {
+   "perfectRecall": 1,
+   "emptyRecall": 0,
+   "wrongRecall": 1,
+   "defect2": false,
+   "defect3": true
   },
   "s74 original": {
    "perfectDetected": "5/5",
    "emptyDetected": "0/5",
-   "defect": false
+   "wrongDetected": "0/5",
+   "defect2": false,
+   "defect3": false
   },
   "s74 M+ default-confirmed": {
    "perfectDetected": "5/5",
    "emptyDetected": "5/5",
-   "defect": true
+   "wrongDetected": "0/5",
+   "defect2": true,
+   "defect3": true
   },
   "s74 M- label-typo": {
    "perfectDetected": "0/5",
    "emptyDetected": "0/5",
-   "defect": true
+   "wrongDetected": "0/5",
+   "defect2": true,
+   "defect3": true
+  },
+  "s74 M+ any-verdict": {
+   "perfectDetected": "5/5",
+   "emptyDetected": "0/5",
+   "wrongDetected": "5/5",
+   "defect2": false,
+   "defect3": true
   }
  },
  "r68": {
@@ -366,5 +392,5 @@
   "missing": 2,
   "stale": 1
  },
- "elapsedMs": 10821
+ "elapsedMs": 56980
 }
