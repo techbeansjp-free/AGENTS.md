@@ -40,14 +40,16 @@ const extra = built.map(arg => arg.replaceAll(generated, profileName));
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
 const server = http.createServer((q, s) => s.end('LOCAL-LISTENER')); await new Promise(r => server.listen(0, '127.0.0.1', r));
 const child = spawn(codex, ['app-server', ...extra], {cwd: repo, env, stdio: ['pipe', 'pipe', 'pipe']});
-let id = 0; const pending = new Map();
+let id = 0, closed; const pending = new Map();
+// An app-server that exits early rejects every pending and later call, so the probe still records and stops.
+child.on('close', code => { closed = Error(`app-server exited (${code})`); for (const p of pending.values()) p.reject(closed); pending.clear(); });
 createInterface({input: child.stdout}).on('line', line => {
   const m = JSON.parse(line);
   if (m.method && Object.hasOwn(m, 'id')) { child.stdin.write(JSON.stringify({id: m.id, error: {code: -32601, message: 'denied'}}) + '\n'); return; }
   if (Object.hasOwn(m, 'id') && pending.has(m.id)) { const p = pending.get(m.id); pending.delete(m.id); m.error ? p.reject(Error(m.error.message)) : p.resolve(m.result); }
 });
 let stderr = ''; child.stderr.on('data', b => { stderr += b; });
-const call = (method, params) => new Promise((resolve, reject) => { const n = ++id; pending.set(n, {resolve, reject}); child.stdin.write(JSON.stringify({id: n, method, params}) + '\n'); });
+const call = (method, params) => new Promise((resolve, reject) => { if (closed) return reject(closed); const n = ++id; pending.set(n, {resolve, reject}); child.stdin.write(JSON.stringify({id: n, method, params}) + '\n'); });
 const hide = text => String(text ?? '').replaceAll(F, '<fixture>').replaceAll(path.dirname(nonTmp), '<checkout>').replaceAll(codex, '<codex>').replaceAll(fs.realpathSync(process.execPath), '<node>').replaceAll(generated, '<profile>').replaceAll(process.env.CODEX_HOME, '<codex-home>').replaceAll(process.env.HOME ?? '\0', '<home>');
 // Configuration placed in the disposable CODEX_HOME: table and key names only, never values.
 const configFile = path.join(process.env.CODEX_HOME, 'config.toml');

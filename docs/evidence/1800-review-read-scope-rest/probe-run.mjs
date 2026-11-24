@@ -51,6 +51,7 @@ const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GI
 const r = spawnSync('claude', run.args, {cwd: run.cwd, input: prompt, env, encoding: 'utf8', timeout: 600000, maxBuffer: 64 * 1024 * 1024});
 const events = r.stdout.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return {}; } });
 const uses = {}, results = [];
+const listed = (c, text, target) => uses[c.tool_use_id]?.tool === 'Glob' && !c.is_error && text.includes(target);
 const hide = text => text.replaceAll(F, '<fixture>');
 for (const e of events) for (const c of e.message?.content ?? []) {
   if (c.type === 'tool_use') uses[c.id] = {tool: c.name, input: c.input};
@@ -58,7 +59,8 @@ for (const e of events) for (const c of e.message?.content ?? []) {
     const text = (typeof c.content === 'string' ? c.content : JSON.stringify(c.content)) + (e.tool_use_result ? JSON.stringify(e.tool_use_result) : '');
     results.push({...uses[c.tool_use_id], input: JSON.parse(hide(JSON.stringify(uses[c.tool_use_id]?.input ?? {}))), isError: !!c.is_error,
       markers: Object.entries(markers).filter(([, v]) => text.includes(v)).map(([k]) => k),
-      listedOtherWorktree: text.includes(path.join(repo, '.worktrees/other')), listedOutside: text.includes(path.join(outside, 'marker.txt')),
+      // Listing evidence only from a successful Glob: a denied call echoes the requested path in its message.
+      listedOtherWorktree: listed(c, text, path.join(repo, '.worktrees/other')), listedOutside: listed(c, text, path.join(outside, 'marker.txt')),
       message: c.is_error ? hide(text).slice(0, 220) : undefined});
   }
 }

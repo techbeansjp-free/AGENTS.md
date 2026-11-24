@@ -88,8 +88,12 @@ export function codexReviewProfileArguments({profile,targetDirectory,providerRoo
  if(typeof profile!=='string'||!/^asc_review_[a-f0-9]{24}$/.test(profile))throw Error('Codex review profile name must be generated per run');
  for(const item of [targetDirectory,node,...providerRoots,...readablePaths])if(typeof item!=='string'||!path.isAbsolute(item))throw Error('Codex review paths must be absolute');
  if(!providerRoots.length)throw Error('Codex runtime roots are required');
- const filesystem={...sandboxFilesystemBase({providerRoots,node,platform}),...Object.fromEntries(readablePaths.map(item=>[item,'read'])),[targetDirectory]:'read'};
- const table=`{${Object.entries(filesystem).map(([key,access])=>`${JSON.stringify(key)}=${JSON.stringify(access)}`).join(',')}}`;
+ // Added directories use the scoped form {"."="read"}: Codex treats a bare key with glob characters such as [ ] as a
+ // glob, which it allows only for deny (measured), while the scoped base path is literal.
+ const scoped={'.':'read'};
+ const filesystem={...sandboxFilesystemBase({providerRoots,node,platform}),...Object.fromEntries(readablePaths.map(item=>[item,scoped])),[targetDirectory]:scoped};
+ const value=access=>typeof access==='string'?JSON.stringify(access):`{${Object.entries(access).map(([key,mode])=>`${JSON.stringify(key)}=${JSON.stringify(mode)}`).join(',')}}`;
+ const table=`{${Object.entries(filesystem).map(([key,access])=>`${JSON.stringify(key)}=${value(access)}`).join(',')}}`;
  return ['-c','project_doc_max_bytes=0','-c',`default_permissions=${JSON.stringify(profile)}`,'-c',`permissions.${profile}.filesystem=${table}`,'-c',`permissions.${profile}.network.enabled=false`];
 }
 

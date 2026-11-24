@@ -12,7 +12,7 @@
     "-c",
     "default_permissions=\"asc_review\"",
     "-c",
-    "permissions.asc_review.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\"/tmp\"=\"deny\",\"/private/tmp\"=\"deny\",\"/var/tmp\"=\"deny\",\"/private/var/tmp\"=\"deny\",\"/System/Library/OpenSSL\"=\"read\",\"<codex>\"=\"read\",\"<node>\"=\"read\",\"<fixture>/repo/.git\"=\"read\",\"/Library/Developer/CommandLineTools\"=\"read\",\"<fixture>/repo/.worktrees/target\"=\"read\"}",
+    "permissions.asc_review.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\"/tmp\"=\"deny\",\"/private/tmp\"=\"deny\",\"/var/tmp\"=\"deny\",\"/private/var/tmp\"=\"deny\",\"/System/Library/OpenSSL\"=\"read\",\"<codex>\"=\"read\",\"<node>\"=\"read\",\"<fixture>/repo/.git\"={\".\"=\"read\"},\"/Library/Developer/CommandLineTools\"={\".\"=\"read\"},\"<fixture>/repo/.worktrees/target\"={\".\"=\"read\"}}",
     "-c",
     "permissions.asc_review.network.enabled=false"
   ],
@@ -94,7 +94,7 @@
     "localNetwork": {
       "exitCode": 7,
       "reached": false,
-      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53508 after 0 ms: Couldn't connect to server\n"
+      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53782 after 0 ms: Couldn't connect to server\n"
     },
     "gitLog": {
       "exitCode": 0,

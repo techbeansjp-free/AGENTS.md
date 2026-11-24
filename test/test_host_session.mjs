@@ -243,11 +243,12 @@ test('codex review profile reads only the platform minimum, the runtime, the tar
  const profile='asc_review_'+'0'.repeat(24);
  const common={profile,targetDirectory:'/r/.worktrees/t',providerRoots:['/opt/codex/bin/codex'],node:'/opt/node/bin/node',readablePaths:['/r/.git']};
  const darwin=codexReviewProfileArguments({...common,platform:'darwin'});
- assert.deepEqual(darwin,['-c','project_doc_max_bytes=0','-c',`default_permissions="${profile}"`,'-c',`permissions.${profile}.filesystem={":root"="deny",":minimal"="read","/tmp"="deny","/private/tmp"="deny","/var/tmp"="deny","/private/var/tmp"="deny","/System/Library/OpenSSL"="read","/opt/codex/bin/codex"="read","/opt/node/bin/node"="read","/r/.git"="read","/r/.worktrees/t"="read"}`,'-c',`permissions.${profile}.network.enabled=false`]);
+ assert.deepEqual(darwin,['-c','project_doc_max_bytes=0','-c',`default_permissions="${profile}"`,'-c',`permissions.${profile}.filesystem={":root"="deny",":minimal"="read","/tmp"="deny","/private/tmp"="deny","/var/tmp"="deny","/private/var/tmp"="deny","/System/Library/OpenSSL"="read","/opt/codex/bin/codex"="read","/opt/node/bin/node"="read","/r/.git"={"."="read"},"/r/.worktrees/t"={"."="read"}}`,'-c',`permissions.${profile}.network.enabled=false`]);
  const linux=codexReviewProfileArguments({...common,platform:'linux'});
- assert.equal(linux[5],`permissions.${profile}.filesystem={":root"="deny",":minimal"="read","/opt/codex/bin/codex"="read","/opt/node/bin/node"="read","/r/.git"="read","/r/.worktrees/t"="read"}`,'Linux mounts private temporaries, so no denial keys');
+ assert.equal(linux[5],`permissions.${profile}.filesystem={":root"="deny",":minimal"="read","/opt/codex/bin/codex"="read","/opt/node/bin/node"="read","/r/.git"={"."="read"},"/r/.worktrees/t"={"."="read"}}`,'Linux mounts private temporaries, so no denial keys');
  for(const args of [darwin,linux]){const text=args.join(' ');assert(!text.includes('"write"')&&!text.includes(':workspace_roots')&&!text.includes(':root"="read'),'No writes, no full-disk read, not the primary checkout as workspace root');}
- assert(codexReviewProfileArguments({...common,targetDirectory:'/a "b"\\c'})[5].endsWith('"/a \\"b\\"\\\\c"="read"}'),'Paths are escaped as TOML basic strings');
+ assert(codexReviewProfileArguments({...common,targetDirectory:'/a "b"\\c'})[5].endsWith('"/a \\"b\\"\\\\c"={"."="read"}}'),'Paths are escaped as TOML basic strings');
+ assert(codexReviewProfileArguments({...common,targetDirectory:'/r/review[1]'})[5].endsWith('"/r/review[1]"={"."="read"}}'),'Glob characters stay literal through the scoped form');
  assert.throws(()=>codexReviewProfileArguments({...common,targetDirectory:'relative'}),/absolute/);
  assert.throws(()=>codexReviewProfileArguments({...common,readablePaths:['relative']}),/absolute/);
  assert.throws(()=>codexReviewProfileArguments({...common,providerRoots:[]}),/runtime roots/);

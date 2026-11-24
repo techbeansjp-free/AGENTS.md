@@ -46,7 +46,7 @@
 | 13 主要checkoutを指すsymlink | 読めた | 拒否 | 拒否 |
 | event全体のmarker（外・主要checkout・別worktree） | 主要checkoutと別worktreeのmarkerが出た | 出ない | 出ない |
 
-3回とも同じ結果だった。費用は9回で計0.029 USD（haiku）。
+3回とも同じ結果だった。費用は9回で計0.029 USD（haiku）。結果fileの`listedOutside`・`listedOtherWorktree`は、拒否のメッセージに要求したpathが出た場合も真になっている（測定時のscript）。表はこれらでなく、各呼出しの成否（`isError`）とmarkerの出現から作った。scriptは、成功したGlobの結果だけで判定するように後から直した。
 
 - 案W：拒否は`--restricted`の作業directory制限による。#1793の反例（作業directory外のmarker、外へのsymlink）の拒否も維持された。家directoryのfileは反例に使っていない（実設定を読まないため）。
 - 案D：主要checkoutから対象までの経路上の兄弟entryを、起動時に列挙して`--settings`の`Read(...)`拒否ruleにした（`probe-run.mjs`の`primary-cwd-deny`）。列挙は起動時点のものなので、review中に主要checkoutへ作られたfileや、並行するIssueが作ったworktreeは拒否されない。拒否ruleに否定（除外）の書き方が無いため、「主要checkoutのうち対象以外」を将来分まで表せない。
@@ -110,7 +110,7 @@
 ### 実装（`src/host-session.mjs`）
 
 - app-serverを`-c project_doc_max_bytes=0 -c default_permissions="<名前>" -c permissions.<名前>.filesystem={…} -c permissions.<名前>.network.enabled=false`で起動する（`codexReviewProfileArguments`）。名前は`codexReviewProfileName`が実行ごとに生成する`asc_review_<24桁の16進>`で、それ以外の名前は拒否する。
-- filesystemは、ASCの他のCodex起動（`restricted-agent.mjs`・`native-probe.mjs`）と共通の`sandboxFilesystemBase`（`src/codex-runtime.mjs`）に、読取りだけを足したものである。共通部分は`:root`の拒否、`:minimal`の読取り、macOSの共有一時directory（`/tmp`・`/var/tmp`を`/private`付きの表記とあわせて）の拒否、Codexの実行時file（`codexRuntimeRoots`）とNodeの読取りである。足すのは`codexReviewReadablePaths`のpathと対象worktreeの読取りで、書込みのentryは無い。
+- filesystemは、ASCの他のCodex起動（`restricted-agent.mjs`・`native-probe.mjs`）と共通の`sandboxFilesystemBase`（`src/codex-runtime.mjs`）に、読取りだけを足したものである。共通部分は`:root`の拒否、`:minimal`の読取り、macOSの共有一時directory（`/tmp`・`/var/tmp`を`/private`付きの表記とあわせて）の拒否、Codexの実行時file（`codexRuntimeRoots`）とNodeの読取りである。足すのは`codexReviewReadablePaths`のpathと対象worktreeの読取りで、書込みのentryは無い。足すentryは`"<path>"={"."="read"}`の形にする。`"<path>"="read"`の形では、pathに`[`・`]`等があるとCodexがglobと解釈し、globの読取りを拒否して起動できなかった（PRのCodeRabbitの指摘を受けて実測。`<path>={"."="read"}`の形では読めた。`profile-bracket-path.json`は角括弧を含むpathのfixtureでの結果）。
   - 最初の実装は共通部分を使わず独自に組み立てていた。再レビューの指摘（`/var/tmp`の表記漏れ、npm導入の扱い、Linuxでの不要な拒否key、`:root`とnetworkの明示）を受けて、共通部分に揃えた。
 - `codexReviewReadablePaths`は、共有のGit metadata（`git rev-parse --git-common-dir`）と、macOSでは`xcode-select -p`の開発toolを返す。
 - 実行fileは`resolveExecutable`で実体へ解決する（PATH、WindowsではPATHEXTの拡張子だけ。`.cmd`・`.bat`は拒否）。macOSでは`--version`がCodex 0.156.0未満か読めなければ起動前に失敗する（`assertCodexVersion`）。npmのlauncher（`.js`）はNodeで起動し、`codexRuntimeRoots`がpackageと現在のplatform用のnative packageを読取りに加える。
