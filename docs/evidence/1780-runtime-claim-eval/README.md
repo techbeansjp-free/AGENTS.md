@@ -213,7 +213,7 @@ claude -p --model opus --output-format stream-json --verbose --restricted --perm
 - goldの確認：`probe/gold-results.txt`（3 fixtureとも`exit=0`、container削除済み）。陽性対照は`probe/rf3-control-results.txt`。
 - `npm run package:check`：Node 24.11.0（CIと同系）で12件中12件成功。Node 20.12.2（このHostの既定）では3件失敗した。失敗は、testが`npm pack`の出力をJSONとして読む箇所で、npm 10.5.0がlifecycleの出力（`> agent-sk…`）を混ぜたことによる`SyntaxError`だった。本PRの差分は`docs/evidence/`だけで、package・testの対象を変えない。
 - `npm run quality`（lintと`npm test`）：Node 24.11.0で、651件中、成功504・失敗0・skip 147。
-- 上の`package:check`と`quality`は、内容が`7e9f995f`と同じ作業treeで実行した。その後の是正（`0fccdb08`以後）は本directoryの文書・記録・陽性対照のprobeだけで、test・package の対象を変えない。合否はCIでも確認する。
+- 上の`package:check`と`quality`は、内容が`7e9f995f`と同じ作業treeで実行した。その後の是正（`0fccdb08`以後）は、本directoryの文書・記録・陽性対照のprobeと、`run-reviewer.mjs`の終了codeの扱い（`5d77ddcd`）だけである。lintの対象（`src`・`bin`・`test`・`v05`）にもtestの入力にも入らないので、test・packageの対象を変えない。合否はCIでも確認する。
 - 公開物の確認：本directoryの全fileに、ローカルの絶対path・利用者名・session ID・秘密が無いことを`grep`で確かめた。
 
 ## 独立レビューと是正
@@ -224,16 +224,18 @@ claude -p --model opus --output-format stream-json --verbose --restricted --perm
 | --- | --- |
 | Medium：条件を伏せた採点は手順上の約束にすぎない | 「欠測と限界」に、並行採点・`status.json`・完了順・独立レビューでの再採点の一致を記録し、結論の節の表現を弱めた |
 | Low 1：tokenの増分の内訳 | 出力+4,692、cache作成+339、cache読取り+328と、一文の読込み費用の見積りを記録 |
-| Low 2：観察のまとめが強い | 「働いたと読める記述があった（区別できる差ではない）」に修正 |
+| Low 2：観察のまとめが強い | 表現を弱めた（再レビューを受けて`9609f969`でさらに直した。最終形は「観察」のまとめ） |
 | Low 3：採点規則2の括弧書きがgoldと合わない | 準備の節の文言を、goldの`accept`の定義（依存しない項目はconfirmedだけ）に合わせた。採点と`score.mjs`は元からgoldに従っており、結果は変わらない |
 | Low 4：隔離の主張の一部が記録に無い／「同じ引数」 | `isolation/checks.txt`・`isolation/negative-control-status.json`を追加し、「同じtool制限」に修正（準備の節） |
 | Low 5：RF3の陽性対照が無い | `probe/rf3-control.mjs`を追加して実行。goldは変えていない |
 | Low 6：検証の節が未記入 | 本節を記入 |
 
-CodeRabbit（`0fccdb08`に対するreview）は、`run-reviewer.mjs`がHostのprocessの非0終了・signal終了をrunnerの終了codeへ反映せず、`run-all.mjs`が失敗した試行を成功と扱い得ると指摘した（Minor）。指摘は成立するので、非0のときrunnerを`exitCode = 1`で終えるよう直した。測定した18回は全て、Hostのprocessの終了codeが0、`result`の`subtype`が`success`、`is_error`が`false`だった（作業用の一時directoryの`status.json`で確認）。そのため、この修正は測定結果に影響しない。
+CodeRabbit（`0fccdb08`に対するreview）は、`run-reviewer.mjs`がHostのprocessの非0終了・signal終了をrunnerの終了codeへ反映せず、`run-all.mjs`が失敗した試行を成功と扱い得ると指摘した（Minor）。指摘は成立するので、非0のときrunnerを`exitCode = 1`で終えるよう直した。測定した18回は全て、Hostのprocessの終了codeが0、`result`の`subtype`が`success`、`is_error`が`false`だった。commit済みの記録では、`costs.json`の`resultSubtype`が18回とも`success`、`schedule.json`の`parsedJson`が18回とも`true`である。Hostの終了code・`is_error`は、commitしていない作業用の一時directoryの`status.json`による。そのため、この修正は測定結果に影響しない。なお、killされてevent記録の最終行が切れた場合は、`run-reviewer.mjs`が`status.json`を書く前に例外で終わり、その試行の費用が残らない経路が修正前から残っている（今回の18回では失敗0件）。
 
-測定後に準備の節を直したのは、Low 3・Low 4の文言と、記録へのlinkの追加だけである。gold・fixture・依頼文・R0/R1の文言・採点規則の判定内容・`score.mjs`は変えていない。`run-reviewer.mjs`は上のCodeRabbitの指摘で終了codeの扱いだけを直した（起動引数・手順の写しの作り方は変えていない）。（`git diff 9ad603b0 -- gold.json score.mjs prompt-review.txt run-reviewer.mjs run-all.mjs make-fixture.mjs probe/gold-check.mjs`は、この修正の前まで空）。
+測定後に準備の節を直したのは、Low 3・Low 4の文言と、記録へのlinkの追加だけである。gold・fixture・依頼文・R0/R1の文言・採点規則の判定内容・`score.mjs`は変えていない。`run-reviewer.mjs`は上のCodeRabbitの指摘で終了codeの扱いだけを直した（起動引数・手順の写しの作り方は変えていない）。`git diff 9ad603b0 9609f969 -- gold.json score.mjs prompt-review.txt run-reviewer.mjs run-all.mjs make-fixture.mjs probe/gold-check.mjs`は空で、測定と隔離の確認に使ったのはこの範囲の版である。現在の`run-reviewer.mjs`は、`5d77ddcd`の2行だけが違う。
 
-是正後の`0fccdb08`を、別の新Context（`host-session claude <worktree> --name '1780 独立再レビュー' --model opus`）で再レビューした。判定は条件付き合格（High 0、Medium 0、Low 6）。Mediumは是正済み、数値はデータと一致、不採用は正しいとされた。Lowの内容は、「同じ引数」の残り2か所、観察のまとめの因果表現、陽性対照の実行環境の記録、対照の起動方法の記録、再採点が伏せた採点の代わりにならないこと、検証の記録とcommitの対応である。全て文書と記録の精度の問題で、振る舞い・gold・採点の判定・採否を変えない。1 commitで是正し、陽性対照は版を記録して再実行した。文言だけの是正なので、`review.md`に従い再々レビューは行わない。
+是正後の`0fccdb08`を、別の新Context（`host-session claude <worktree> --name '1780 独立再レビュー' --model opus`）で再レビューした。判定は条件付き合格（High 0、Medium 0、Low 6）。Mediumは是正済み、数値はデータと一致、不採用は正しいとされた。Lowの内容は、「同じ引数」の残り2か所、観察のまとめの因果表現、陽性対照の実行環境の記録、対照の起動方法の記録、再採点が伏せた採点の代わりにならないこと、検証の記録とcommitの対応である。全て文書と記録の精度の問題で、振る舞い・gold・採点の判定・採否を変えない。`9609f969`で是正した。文言のほか、陽性対照のprobeに版の出力を足して再実行した。
+
+probeとrunnerのcodeが変わったので、`5d77ddcd`を、さらに別の新Context（`--name '1780 独立再確認' --model opus`）で範囲を限って確認した。判定は条件付き合格（High 0、Medium 0、Low 5）。runnerの修正は正しく、不採用は変わらず、秘密・path・他のproject名は0件とされた。Lowは、本節と「検証」の記述が後のcommitで古くなった点と、根拠の書き方で、全て本文の文言だけで是正した（文書だけの変更なので、これ以上の再レビューは行わない）。
 
 レビューの未確認事項のうち、commitの作者・記録者のemailにローカルのホスト名が入っている点は、本directoryの内容ではなくGitのmetadataである。mainの既存commitにも同じ形式がある。push済みのcommitを書き換えるにはforce pushが要るので、本PRでは変えず、ownerの判断事項に加えた。
