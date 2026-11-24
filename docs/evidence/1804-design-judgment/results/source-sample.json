@@ -1,0 +1,259 @@
+{
+ "schema": "asc-1804-source-sample/v1",
+ "date": "2026-11-25",
+ "method": "作品案内（references/design-works.md、247行・6節）の各節から先頭と中央の行を抽出。リンクはcurlで到達（redirect追従）を確認し、3件だけ本文を開いて行の記載と照合した。第三者の本文は転載しない。",
+ "rowsTotal": 247,
+ "rowsSampled": 12,
+ "rowsUnchecked": 235,
+ "rows": [
+  {
+   "section": "商業・ゲーム・Webの作品（日本と世界）",
+   "index": 0,
+   "work": "キッコーマン卓上しょうゆ瓶／榮久庵憲司・GK、1961",
+   "urls": [
+    {
+     "url": "https://www.gk-design.co.jp/archives/history/2242/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false,
+     "contentCheck": "不一致：リンク先は1961年の卓上びんと赤い注ぎ口・ロゴと醤油の色の調和を述べるが、「液だれ」への言及は無い（本文の文字列検索で0件）"
+    },
+    {
+     "url": "https://www.moma.org/collection/works/90106",
+     "status": 403,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  },
+  {
+   "section": "商業・ゲーム・Webの作品（日本と世界）",
+   "index": 92,
+   "work": "国鉄 DISCOVER JAPAN no.3／川原司郎・松田敬一ほか、1970",
+   "urls": [
+    {
+     "url": "https://icakyoto.art/realkyoto/blogs/15595/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  },
+  {
+   "section": "駅・空港の案内",
+   "index": 0,
+   "work": "新宿駅南口コンコース／JR東日本建築設計ほか、2024",
+   "urls": [
+    {
+     "url": "https://www.jred.co.jp/projects/p173.html",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://www.jred.co.jp/projects/img/p173-slide1-pic03.jpg",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://www.jred.co.jp/projects/img/p173-slide1-pic04.jpg",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://www.jred.co.jp/projects/img/p173-more.pdf?20260216=",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  },
+  {
+   "section": "駅・空港の案内",
+   "index": 2,
+   "work": "ミネアポリス・セントポール空港の触図／Entro・空港委員会、制作年未確定",
+   "urls": [
+    {
+     "url": "https://accessability.rgd.ca/case-studies/minneapolis-st-paul-airport-wayfinding/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  },
+  {
+   "section": "映画・放送・音楽の動き",
+   "index": 0,
+   "work": "『007／ノー・タイム・トゥ・ダイ』メインタイトル／Daniel Kleinman・Rattling Stick・Framestore、2021",
+   "urls": [
+    {
+     "url": "https://www.framestore.com/work/no-time-die-title-sequence",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false,
+     "contentCheck": "一致：Daniel Kleinman（監督）とRattling Stick（制作会社）、Framestoreの関与が記載されている"
+    }
+   ]
+  },
+  {
+   "section": "映画・放送・音楽の動き",
+   "index": 7,
+   "work": "余白のための楽譜 #01／山崎晴太郎、東京、2021",
+   "urls": [
+    {
+     "url": "https://seiyamazaki.com/artworks/music-for-the-margin/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://prtimes.jp/main/html/rd/p/000000029.000004862.html",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  },
+  {
+   "section": "海外ゲーム・映像の視点",
+   "index": 0,
+   "work": "WipEout／Psygnosis・The Designers Republicほか、1995、英国",
+   "urls": [
+    {
+     "url": "https://www.playstation.com/en-us/playstation-history/1994-ps-one/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://www.dnpfcp.jp/publications/annual/pdf/annual_10-11.pdf#page=68",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://www.bfi.org.uk/features/wipeout-psygnosis-sony-playstation",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  },
+  {
+   "section": "海外ゲーム・映像の視点",
+   "index": 1,
+   "work": "God of War／Santa Monica Studio・Dori Araziほか、2018、米国",
+   "urls": [
+    {
+     "url": "https://blog.playstation.com/archive/2018/09/28/3-key-scenes-from-god-of-war-that-helped-define-its-incredible-cinematic-style/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=Q-PBSz92XiQ",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  },
+  {
+   "section": "世界の商業・ブランド",
+   "index": 0,
+   "work": "Zyda 飲食向け商業基盤／Mutlaq Studio、クウェート・エジプト、制作年未確認",
+   "urls": [
+    {
+     "url": "https://mutlaqstudio.com/projects/zyda",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://zyda.com/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://zyda.com/ar/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://zyda.com/kw/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  },
+  {
+   "section": "世界の商業・ブランド",
+   "index": 12,
+   "work": "Arnotts EC／WONDR、アイルランド、制作年未確定",
+   "urls": [
+    {
+     "url": "https://wondr.io/our-work/arnotts-ecommerce/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false,
+     "contentCheck": "一致：WONDRによるEC再構築。制作年の記載は無い（行の「制作年未確定」と一致）"
+    },
+    {
+     "url": "https://wondr.io/the-digital-branding-of-arnotts-ie/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  },
+  {
+   "section": "世界の作品台帳",
+   "index": 0,
+   "work": "三越の広告／杉浦非水、1914、日本",
+   "urls": [
+    {
+     "url": "https://www.ehime-art.jp/sugiurahisui/detail/9525",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://www.ehime-art.jp/sugiurahisui/detail/13579",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://www.ehime-art.jp/files/FreepageDocuments/cd6f4c1c-b7e2-4e07-9e7e-18c88b735d34/05.7_nakayama.pdf",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  },
+  {
+   "section": "世界の作品台帳",
+   "index": 8,
+   "work": "A fonte／Gilvan Samico、1990、ブラジル",
+   "urls": [
+    {
+     "url": "https://mam.rio/wp-content/uploads/2024/07/2024-07-10_Gilvan-Samico_site_02.jpg",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    },
+    {
+     "url": "https://mam.rio/artistas/gilvan-samico/",
+     "status": 200,
+     "redirects": 0,
+     "finalHostChanged": false
+    }
+   ]
+  }
+ ]
+}

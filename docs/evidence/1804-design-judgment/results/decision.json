@@ -1,0 +1,578 @@
+{
+ "schema": "asc-1804-decision/v1",
+ "control": "A",
+ "candidates": {
+  "B": {
+   "cases": {
+    "ui02": {
+     "evalTotal": {
+      "control": [
+       19,
+       19,
+       18
+      ],
+      "candidate": [
+       17.5,
+       17.5,
+       18.5
+      ]
+     },
+     "coverage": {
+      "control": [
+       0.885,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       1
+      ]
+     },
+     "axeSeriousNodes": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       1,
+       0,
+       0
+      ]
+     },
+     "nonInferiorityFailures": [
+      "axe"
+     ]
+    },
+    "ui03": {
+     "evalTotal": {
+      "control": [
+       16.5,
+       17,
+       17
+      ],
+      "candidate": [
+       18.5,
+       15.5,
+       19
+      ]
+     },
+     "coverage": {
+      "control": [
+       1,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       1
+      ]
+     },
+     "axeSeriousNodes": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "grayRecall": {
+      "control": [
+       1,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       1
+      ]
+     },
+     "nonInferiorityFailures": []
+    },
+    "ui08": {
+     "evalTotal": {
+      "control": [
+       18,
+       15.5,
+       19
+      ],
+      "candidate": [
+       19,
+       19,
+       18
+      ]
+     },
+     "coverage": {
+      "control": [
+       1,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       1
+      ]
+     },
+     "axeSeriousNodes": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "tokenViolations": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "formScore": {
+      "control": [
+       8,
+       9,
+       11
+      ],
+      "candidate": [
+       9,
+       9,
+       11
+      ]
+     },
+     "nonInferiorityFailures": []
+    }
+   },
+   "improvedAesthetic": [],
+   "improvedUx": [],
+   "worse": [],
+   "nonInferiorityFailures": [
+    "ui02:axe"
+   ],
+   "missingCells": [],
+   "ui10": {
+    "misfires": 0,
+    "trials": 3,
+    "oraclePassCandidate": 3,
+    "oraclePassControl": 3
+   },
+   "medianCost": {
+    "control": 0.19489780000000004,
+    "candidate": 0.207749
+   },
+   "costRatio": 1.07,
+   "designSkillInvokedRate": "6/9",
+   "decision": "reject"
+  },
+  "D": {
+   "cases": {
+    "ui02": {
+     "evalTotal": {
+      "control": [
+       19,
+       19,
+       18
+      ],
+      "candidate": [
+       16.5,
+       17.5,
+       19.5
+      ]
+     },
+     "coverage": {
+      "control": [
+       0.885,
+       1,
+       1
+      ],
+      "candidate": [
+       0.885,
+       1,
+       0.885
+      ]
+     },
+     "axeSeriousNodes": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "nonInferiorityFailures": [
+      "lowQuality"
+     ]
+    },
+    "ui03": {
+     "evalTotal": {
+      "control": [
+       16.5,
+       17,
+       17
+      ],
+      "candidate": [
+       18,
+       19.5,
+       14.5
+      ]
+     },
+     "coverage": {
+      "control": [
+       1,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       1
+      ]
+     },
+     "axeSeriousNodes": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "grayRecall": {
+      "control": [
+       1,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       1
+      ]
+     },
+     "nonInferiorityFailures": []
+    },
+    "ui08": {
+     "evalTotal": {
+      "control": [
+       18,
+       15.5,
+       19
+      ],
+      "candidate": [
+       20,
+       19.5,
+       17.5
+      ]
+     },
+     "coverage": {
+      "control": [
+       1,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       1
+      ]
+     },
+     "axeSeriousNodes": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "tokenViolations": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "formScore": {
+      "control": [
+       8,
+       9,
+       11
+      ],
+      "candidate": [
+       11,
+       11,
+       9
+      ]
+     },
+     "nonInferiorityFailures": []
+    }
+   },
+   "improvedAesthetic": [],
+   "improvedUx": [],
+   "worse": [],
+   "nonInferiorityFailures": [
+    "ui02:lowQuality"
+   ],
+   "missingCells": [],
+   "ui10": {
+    "misfires": 0,
+    "trials": 3,
+    "oraclePassCandidate": 3,
+    "oraclePassControl": 3
+   },
+   "medianCost": {
+    "control": 0.19489780000000004,
+    "candidate": 0.241861
+   },
+   "costRatio": 1.24,
+   "designSkillInvokedRate": "6/9",
+   "decision": "reject"
+  },
+  "E": {
+   "cases": {
+    "ui02": {
+     "evalTotal": {
+      "control": [
+       19,
+       19,
+       18
+      ],
+      "candidate": [
+       19,
+       17.5,
+       19
+      ]
+     },
+     "coverage": {
+      "control": [
+       0.885,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       0.885
+      ]
+     },
+     "axeSeriousNodes": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "nonInferiorityFailures": []
+    },
+    "ui03": {
+     "evalTotal": {
+      "control": [
+       16.5,
+       17,
+       17
+      ],
+      "candidate": [
+       16,
+       17,
+       14
+      ]
+     },
+     "coverage": {
+      "control": [
+       1,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       1
+      ]
+     },
+     "axeSeriousNodes": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "grayRecall": {
+      "control": [
+       1,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       1
+      ]
+     },
+     "nonInferiorityFailures": []
+    },
+    "ui08": {
+     "evalTotal": {
+      "control": [
+       18,
+       15.5,
+       19
+      ],
+      "candidate": [
+       19.5,
+       19.5,
+       18.5
+      ]
+     },
+     "coverage": {
+      "control": [
+       1,
+       1,
+       1
+      ],
+      "candidate": [
+       1,
+       1,
+       1
+      ]
+     },
+     "axeSeriousNodes": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "tokenViolations": {
+      "control": [
+       0,
+       0,
+       0
+      ],
+      "candidate": [
+       0,
+       0,
+       0
+      ]
+     },
+     "formScore": {
+      "control": [
+       8,
+       9,
+       11
+      ],
+      "candidate": [
+       10,
+       9,
+       11
+      ]
+     },
+     "nonInferiorityFailures": []
+    }
+   },
+   "improvedAesthetic": [],
+   "improvedUx": [],
+   "worse": [],
+   "nonInferiorityFailures": [],
+   "missingCells": [],
+   "ui10": {
+    "misfires": 0,
+    "trials": 3,
+    "oraclePassCandidate": 3,
+    "oraclePassControl": 3
+   },
+   "medianCost": {
+    "control": 0.19489780000000004,
+    "candidate": 0.1912454
+   },
+   "costRatio": 0.98,
+   "designSkillInvokedRate": "3/9",
+   "decision": "reject"
+  }
+ },
+ "evaluatorAgreement": {
+  "axisPairs": 360,
+  "exactRate": 0.878,
+  "meanAbsTotalDiff": 0.89
+ },
+ "fingerprints": {
+  "A": [
+   "ui02:Noto Serif CJK JP|rgb(246, 241, 231)",
+   "ui02:Noto Serif CJK JP|rgb(246, 241, 230)",
+   "ui02:Noto Serif CJK JP|rgb(246, 241, 230)",
+   "ui03:Noto Sans CJK JP|rgb(243, 245, 247)",
+   "ui03:Noto Sans CJK JP|rgb(243, 244, 246)",
+   "ui03:Noto Sans CJK JP|rgb(244, 245, 247)"
+  ],
+  "B": [
+   "ui02:Noto Serif CJK JP|rgb(238, 240, 234)",
+   "ui02:Noto Serif CJK JP|rgb(248, 250, 248)",
+   "ui02:Noto Serif CJK JP|rgb(231, 236, 233)",
+   "ui03:Noto Sans CJK JP|rgba(0, 0, 0, 0)",
+   "ui03:Noto Sans CJK JP|rgba(0, 0, 0, 0)",
+   "ui03:Noto Sans CJK JP|rgba(0, 0, 0, 0)"
+  ],
+  "D": [
+   "ui02:Noto Serif CJK JP|rgb(244, 240, 230)",
+   "ui02:Noto Serif CJK JP|rgb(244, 238, 226)",
+   "ui02:Noto Serif CJK JP|rgb(245, 241, 230)",
+   "ui03:Noto Sans CJK JP|rgba(0, 0, 0, 0)",
+   "ui03:Noto Sans CJK JP|rgb(244, 245, 247)",
+   "ui03:Noto Sans CJK JP|rgb(18, 23, 29)"
+  ],
+  "E": [
+   "ui02:Noto Serif CJK JP|rgb(246, 241, 231)",
+   "ui02:Noto Serif CJK JP|rgb(246, 241, 230)",
+   "ui02:Noto Serif CJK JP|rgb(246, 241, 230)",
+   "ui03:Noto Sans CJK JP|rgb(243, 244, 246)",
+   "ui03:Noto Sans CJK JP|rgb(244, 245, 247)",
+   "ui03:Noto Sans CJK JP|rgb(244, 245, 247)"
+  ]
+ }
+}

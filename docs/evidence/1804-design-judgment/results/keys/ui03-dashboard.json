@@ -1,0 +1,19 @@
+{
+ "case": "ui03-dashboard",
+ "seed": "1804-ui03-dashboard",
+ "key": {
+  "cpco": "A-r1",
+  "6oqr": "A-r2",
+  "q6g4": "A-r3",
+  "v0f7": "B-r1",
+  "tyeo": "B-r2",
+  "32ue": "B-r3",
+  "4g8u": "D-r1",
+  "td9l": "D-r2",
+  "66to": "D-r3",
+  "t5bh": "E-r1",
+  "60l4": "E-r2",
+  "o7kf": "E-r3"
+ },
+ "excluded": []
+}

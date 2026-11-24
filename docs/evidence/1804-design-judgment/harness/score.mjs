@@ -27,7 +27,8 @@ for (const trial of fs.readdirSync(path.join(runs, caseId)).sort()) {
     turns: meta.numTurns, wallMs: meta.wallMs, inputTokens: meta.usage?.input_tokens ?? null, outputTokens: meta.usage?.output_tokens ?? null,
     cacheRead: meta.usage?.cache_read_input_tokens ?? null, cacheWrite: meta.usage?.cache_creation_input_tokens ?? null,
     toolCalls: Object.values(meta.toolCounts ?? {}).reduce((a, b) => a + b, 0), toolCounts: meta.toolCounts, skillCalls: meta.skillCalls,
-    designSkillInvoked: (meta.skillCalls ?? []).some((s) => DESIGN.some((d) => String(s).includes(d))), skillFileReads: (meta.skillFileReads ?? []).length,
+    designSkillInvoked: (meta.skillCalls ?? []).some((s) => DESIGN.some((d) => String(s).includes(d))) || (meta.skillFileReads ?? []).some((f) => DESIGN.some((d) => f.startsWith(`.claude/skills/${d}/`))),
+    designSkillCalledViaTool: (meta.skillCalls ?? []).some((s) => DESIGN.some((d) => String(s).includes(d))), otherSkillCalls: (meta.skillCalls ?? []).filter((s) => !DESIGN.some((d) => String(s).includes(d))), skillFileReads: (meta.skillFileReads ?? []).length,
     model: meta.initModel}};
   t.status = meta.exit !== 0 || meta.isError ? 'gen-failed' : 'ok';
   if (short === 'ui10') {

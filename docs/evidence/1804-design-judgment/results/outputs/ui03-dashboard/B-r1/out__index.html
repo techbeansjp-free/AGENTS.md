@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出荷オペレーション監視</title>
+<style>
+:root {
+  --paper: #eff1ee;
+  --panel: #fbfbf9;
+  --ink: #17212b;
+  --ink-sub: #4a5663;
+  --line: #c9cfd2;
+  --line-soft: #dde1e1;
+  --alert: #b3261e;
+  --alert-bg: #fbe9e6;
+  --warn: #7a4e00;
+  --warn-bg: #fdf1d6;
+  --ok: #2d5e46;
+  --bar: #3b5870;
+  --bar-bg: #dbe1e4;
+  --focus: #0b57d0;
+}
+* { box-sizing: border-box; }
+html { background: var(--paper); }
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+.wrap { max-width: 1440px; margin: 0 auto; padding: 16px 24px 32px; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* header */
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 24px; padding-bottom: 12px; border-bottom: 2px solid var(--ink); }
+header.top h1 { margin: 0; font-size: 20px; font-weight: 700; }
+header.top .sub { color: var(--ink-sub); margin-left: 12px; font-weight: 400; font-size: 14px; }
+.updated { font-size: 14px; color: var(--ink-sub); }
+.updated b { color: var(--ink); font-size: 22px; font-weight: 700; margin-left: 6px; }
+
+/* status band */
+.band { margin-top: 16px; padding: 12px 16px; border-left: 8px solid var(--alert); background: var(--alert-bg); display: grid; grid-template-columns: auto 1fr; gap: 6px 24px; align-items: start; }
+.band.clear { border-left-color: var(--ok); background: #e5f0ea; }
+.band h2 { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.3; }
+.band ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 20px; }
+.band li a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.band li .kind { font-weight: 700; margin-right: 6px; }
+
+/* sections */
+section { margin-top: 24px; }
+h2.sec { margin: 0 0 8px; font-size: 16px; font-weight: 700; }
+h2.sec small { font-weight: 400; color: var(--ink-sub); margin-left: 10px; font-size: 13px; }
+
+/* source errors */
+.src-err { border: 2px solid var(--warn); background: var(--warn-bg); padding: 12px 16px; display: grid; grid-template-columns: 1fr auto; gap: 8px 24px; align-items: center; margin-bottom: 8px; }
+.src-err .t { font-weight: 700; font-size: 16px; }
+.src-err .d { color: #3d2900; font-size: 14px; }
+.src-err .d b { font-weight: 700; }
+button.retry { font: inherit; font-weight: 700; min-height: 44px; padding: 0 20px; border: 2px solid var(--warn); background: var(--panel); color: var(--warn); cursor: pointer; }
+button.retry:hover { background: #fff; }
+button.retry[disabled] { opacity: .65; cursor: default; }
+.retry-msg { grid-column: 1 / -1; font-size: 14px; min-height: 1.2em; }
+
+/* KPI */
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--line); padding: 10px 12px 12px; min-width: 0; }
+.kpi.breach { border: 3px solid var(--alert); background: #fff; padding: 8px 10px 10px; }
+.kpi .lbl { font-size: 13px; color: var(--ink-sub); font-weight: 500; }
+.kpi .val { font-size: 38px; font-weight: 700; line-height: 1.15; margin-top: 2px; }
+.kpi .val .u { font-size: 14px; font-weight: 500; margin-left: 3px; color: var(--ink-sub); }
+.kpi.breach .val { color: var(--alert); }
+.kpi .ref { font-size: 12.5px; color: var(--ink-sub); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 0 12px; }
+.tag { display: inline-block; font-weight: 700; font-size: 13px; padding: 1px 8px; margin-top: 6px; }
+.tag.bad { background: var(--alert); color: #fff; }
+.tag.good { color: var(--ok); padding-left: 0; }
+.meter { height: 6px; background: var(--bar-bg); margin-top: 8px; position: relative; }
+.meter i { position: absolute; inset: 0 auto 0 0; background: var(--bar); }
+
+/* lanes */
+.lanes { background: var(--panel); border: 1px solid var(--line); }
+.lane-head, .lane summary { display: grid; grid-template-columns: 7.5rem minmax(0, 1.5fr) minmax(0, 1.3fr) 6.5rem 5.5rem; gap: 0 16px; align-items: center; padding: 8px 16px 8px 12px; }
+.lane-head { font-size: 12.5px; color: var(--ink-sub); border-bottom: 1px solid var(--ink); font-weight: 500; }
+.lane { border-bottom: 1px solid var(--line-soft); border-left: 8px solid transparent; }
+.lane:last-child { border-bottom: 0; }
+.lane.breach { border-left-color: var(--alert); background: #fff; }
+.lane summary { cursor: pointer; list-style: none; min-height: 56px; }
+.lane summary::-webkit-details-marker { display: none; }
+.lane summary:hover { background: #f1f3f1; }
+.lane .id { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; word-break: break-all; line-height: 1.35; }
+.lane .carrier { font-size: 13px; color: var(--ink-sub); }
+.lane .prog { min-width: 0; }
+.lane .prog .n { font-size: 13px; }
+.lane .prog .n b { font-size: 16px; }
+.lane .delayed { font-size: 22px; font-weight: 700; text-align: right; }
+.lane.breach .delayed { color: var(--alert); }
+.lane .delayed small { font-size: 12px; font-weight: 500; color: var(--ink-sub); margin-left: 2px; }
+.lane .cut { font-size: 15px; text-align: right; }
+.lane .cut small { display: block; font-size: 12px; color: var(--ink-sub); }
+.lane .cut .over { color: var(--warn); font-weight: 700; }
+.st { font-size: 13px; font-weight: 700; }
+.st.bad { background: var(--alert); color: #fff; padding: 2px 6px; display: inline-block; }
+.st.ok { color: var(--ok); }
+.detail { padding: 8px 16px 14px 20px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; font-size: 14px; border-top: 1px dashed var(--line); margin-left: 7.5rem; }
+.detail dt { color: var(--ink-sub); }
+.detail dd { margin: 0; overflow-wrap: anywhere; word-break: break-all; }
+
+/* sources ok */
+.srcs { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 28px; font-size: 13.5px; color: var(--ink-sub); }
+.srcs b { color: var(--ok); font-weight: 700; }
+
+@media (max-width: 1100px) {
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .band { grid-template-columns: 1fr; }
+}
+@media (max-width: 860px) {
+  .wrap { padding: 12px 16px 24px; }
+  .lane-head { display: none; }
+  .lane summary { grid-template-columns: 7rem minmax(0, 1fr) 5.5rem; grid-template-areas: "st id del" "st prog cut"; row-gap: 6px; }
+  .lane summary > .c-st { grid-area: st; align-self: start; }
+  .lane summary > .c-id { grid-area: id; }
+  .lane summary > .prog { grid-area: prog; }
+  .lane summary > .delayed { grid-area: del; }
+  .lane summary > .cut { grid-area: cut; }
+  .detail { margin-left: 0; }
+  .src-err { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 id="site"></h1>
+    <div class="updated">最終更新<b id="updated"></b></div>
+  </header>
+
+  <div id="band" class="band" role="status"></div>
+
+  <section aria-labelledby="h-src" id="src-section" hidden>
+    <h2 class="sec" id="h-src">データ取得の失敗</h2>
+    <div id="src-errors"></div>
+  </section>
+
+  <section aria-labelledby="h-kpi">
+    <h2 class="sec" id="h-kpi">KPI<small>目標と、しきい値（超過で ▲ 表示）</small></h2>
+    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section aria-labelledby="h-lane">
+    <h2 class="sec" id="h-lane">レーン別の出荷状況<small id="lane-note"></small></h2>
+    <div class="lanes">
+      <div class="lane-head" aria-hidden="true">
+        <span>状態</span><span>レーン / 運送会社</span><span>出荷済み / 予定</span><span style="text-align:right">遅延</span><span style="text-align:right">締切</span>
+      </div>
+      <div id="lanes"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-ok">
+    <h2 class="sec" id="h-ok">データ源の状態</h2>
+    <ul class="srcs" id="srcs"></ul>
+  </section>
+</div>
+
+<script>
+const DATA = {
+  "site": "第2物流センター（架空）",
+  "shift": "日勤 08:00–17:00",
+  "updated_at": "2027-03-08T14:32:00+09:00",
+  "kpis": [
+    {"key": "shipped", "label": "出荷済み件数", "value": 3184, "unit": "件", "target": 5200, "threshold": null},
+    {"key": "progress", "label": "出荷進捗率", "value": 61.2, "unit": "%", "target": 64.0, "threshold": {"type": "min", "value": 58.0}},
+    {"key": "delay_rate", "label": "出荷遅延率", "value": 12.4, "unit": "%", "target": 3.0, "threshold": {"type": "max", "value": 5.0}},
+    {"key": "pick_rate", "label": "ピッキング速度", "value": 142, "unit": "件/時", "target": 150, "threshold": {"type": "min", "value": 120}},
+    {"key": "mispick", "label": "誤ピッキング", "value": 3, "unit": "件", "target": 0, "threshold": {"type": "max", "value": 5}},
+    {"key": "staff", "label": "稼働人数", "value": 47, "unit": "人", "target": 50, "threshold": {"type": "min", "value": 40}}
+  ],
+  "lanes": [
+    {"id": "LANE-A01-OSAKA-KANSAI-EXPRESS", "carrier": "関西急便", "cutoff": "15:00", "planned": 820, "shipped": 611, "delayed": 4, "lead": "田中", "order_ref": "ORD-20270308-A01-000000611-KX"},
+    {"id": "LANE-A02-NAGOYA", "carrier": "中部運輸", "cutoff": "15:30", "planned": 640, "shipped": 402, "delayed": 2, "lead": "鈴木", "order_ref": "ORD-20270308-A02-000000402"},
+    {"id": "LANE-B01-TOHOKU-REFRIGERATED-COLDCHAIN", "carrier": "北日本冷凍", "cutoff": "14:00", "planned": 410, "shipped": 188, "delayed": 61, "lead": "佐藤", "order_ref": "ORD-20270308-B01-000000188-COLDCHAIN-PRIORITY"},
+    {"id": "LANE-B02-KANTO", "carrier": "関東ロジ", "cutoff": "16:00", "planned": 1120, "shipped": 744, "delayed": 5, "lead": "高橋", "order_ref": "ORD-20270308-B02-000000744"},
+    {"id": "LANE-C01-KYUSHU", "carrier": "九州便", "cutoff": "13:30", "planned": 380, "shipped": 371, "delayed": 0, "lead": "伊藤", "order_ref": "ORD-20270308-C01-000000371"},
+    {"id": "LANE-C02-HOKURIKU", "carrier": "北陸トラック", "cutoff": "15:00", "planned": 300, "shipped": 176, "delayed": 9, "lead": "渡辺", "order_ref": "ORD-20270308-C02-000000176"},
+    {"id": "LANE-D01-SHIKOKU", "carrier": "四国フェリー便", "cutoff": "12:30", "planned": 260, "shipped": 260, "delayed": 0, "lead": "山本", "order_ref": "ORD-20270308-D01-000000260"},
+    {"id": "LANE-D02-RETURNS", "carrier": "返品処理", "cutoff": "17:00", "planned": 1270, "shipped": 432, "delayed": 1, "lead": "中村", "order_ref": "ORD-20270308-D02-000000432"}
+  ],
+  "lane_delay_threshold": 8,
+  "sources": [
+    {"name": "WMS 出荷実績", "status": "ok", "last_success": "2027-03-08T14:32:00+09:00"},
+    {"name": "ハンディ端末 ピッキング記録", "status": "ok", "last_success": "2027-03-08T14:31:40+09:00"},
+    {"name": "冷蔵庫 温度センサー", "status": "error", "last_success": "2027-03-08T10:42:00+09:00", "error": "接続タイムアウト"}
+  ]
+};
+
+const $ = (id) => document.getElementById(id);
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+const nf = new Intl.NumberFormat('ja-JP');
+const hm = (iso) => iso.slice(11, 16);            // ISO文字列の時刻部分（+09:00のまま表示）
+const hms = (iso) => iso.slice(11, 19);
+const fmt = (v, unit) => (unit === '%' ? v.toFixed(1) : nf.format(v));
+const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+
+const nowMin = toMin(hm(DATA.updated_at));
+
+// ---- header
+$('site').textContent = DATA.site;
+$('site').appendChild(el('span', 'sub', DATA.shift));
+$('updated').textContent = DATA.updated_at.slice(0, 10).replace(/-/g, '/') + ' ' + hms(DATA.updated_at);
+
+// ---- evaluation
+const kpiBreach = (k) => k.threshold && (k.threshold.type === 'max' ? k.value > k.threshold.value : k.value < k.threshold.value);
+const laneBreach = (l) => l.delayed > DATA.lane_delay_threshold;
+const errSources = DATA.sources.filter((s) => s.status === 'error');
+
+// ---- status band
+const issues = [];
+DATA.kpis.filter(kpiBreach).forEach((k) => issues.push({ kind: 'KPI', text: k.label + ' ' + fmt(k.value, k.unit) + k.unit, href: '#kpi-' + k.key }));
+DATA.lanes.filter(laneBreach).forEach((l) => issues.push({ kind: 'レーン', text: l.id + ' 遅延' + l.delayed + '件', href: '#lane-' + l.id }));
+errSources.forEach((s) => issues.push({ kind: 'データ源', text: s.name + ' 取得失敗', href: '#src-section' }));
+
+const band = $('band');
+if (issues.length) {
+  band.appendChild(el('h2', null, '▲ 対処が必要：' + issues.length + '件'));
+  const ul = el('ul');
+  issues.forEach((i) => {
+    const li = el('li');
+    li.appendChild(el('span', 'kind', i.kind));
+    const a = el('a', null, i.text);
+    a.href = i.href;
+    li.appendChild(a);
+    ul.appendChild(li);
+  });
+  band.appendChild(ul);
+} else {
+  band.classList.add('clear');
+  band.appendChild(el('h2', null, '✓ 対処が必要な項目はありません'));
+}
+
+// ---- source errors
+if (errSources.length) {
+  $('src-section').hidden = false;
+  errSources.forEach((s, idx) => {
+    const box = el('div', 'src-err');
+    box.setAttribute('role', 'alert');
+    const left = el('div');
+    left.appendChild(el('div', 't', '▲ ' + s.name + '：取得に失敗しています' + (s.error ? '（' + s.error + '）' : '')));
+    const d = el('div', 'd');
+    d.appendChild(document.createTextNode('最後に成功した時刻 '));
+    d.appendChild(el('b', null, s.last_success.slice(0, 10).replace(/-/g, '/') + ' ' + hm(s.last_success)));
+    const ago = nowMin - toMin(hm(s.last_success));
+    d.appendChild(document.createTextNode('（最終更新の ' + Math.floor(ago / 60) + '時間' + (ago % 60) + '分前）。この間の値は画面に反映されていません。'));
+    left.appendChild(d);
+    box.appendChild(left);
+    const btn = el('button', 'retry', '再試行する');
+    btn.type = 'button';
+    const msg = el('div', 'retry-msg');
+    msg.setAttribute('aria-live', 'polite');
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      msg.textContent = '再試行しています…';
+      setTimeout(() => {
+        btn.disabled = false;
+        msg.textContent = '再試行を受け付けました（' + new Date().toLocaleTimeString('ja-JP') + '）。この画面では実際の再取得は行いません。';
+      }, 800);
+    });
+    box.appendChild(btn);
+    box.appendChild(msg);
+    $('src-errors').appendChild(box);
+  });
+}
+
+// ---- KPIs
+const kb = $('kpis');
+DATA.kpis.forEach((k) => {
+  const bad = kpiBreach(k);
+  const c = el('div', 'kpi' + (bad ? ' breach' : ''));
+  c.id = 'kpi-' + k.key;
+  c.appendChild(el('div', 'lbl', k.label));
+  const v = el('div', 'val', fmt(k.value, k.unit));
+  v.appendChild(el('span', 'u', k.unit));
+  c.appendChild(v);
+  if (k.key === 'shipped') {
+    const m = el('div', 'meter'); const i = el('i'); i.style.width = Math.min(100, k.value / k.target * 100) + '%';
+    m.appendChild(i); c.appendChild(m);
+  }
+  const ref = el('div', 'ref');
+  ref.appendChild(el('span', null, '目標 ' + fmt(k.target, k.unit) + k.unit));
+  if (k.threshold) ref.appendChild(el('span', null, (k.threshold.type === 'max' ? '上限 ' : '下限 ') + fmt(k.threshold.value, k.unit) + k.unit));
+  c.appendChild(ref);
+  if (bad) c.appendChild(el('div', 'tag bad', '▲ ' + (k.threshold.type === 'max' ? '上限超過' : '下限割れ')));
+  else if (k.threshold) c.appendChild(el('div', 'tag good', '✓ 範囲内'));
+  kb.appendChild(c);
+});
+
+// ---- lanes (超過を先頭、同条件内は元の順)
+const lanes = DATA.lanes.map((l, i) => ({ l, i })).sort((a, b) => (laneBreach(b.l) - laneBreach(a.l)) || (laneBreach(a.l) ? b.l.delayed - a.l.delayed : 0) || a.i - b.i).map((x) => x.l);
+$('lane-note').textContent = '遅延' + DATA.lane_delay_threshold + '件を超えたレーンを先頭に表示。行を押すと担当者と注文参照を表示';
+const lb = $('lanes');
+lanes.forEach((l) => {
+  const bad = laneBreach(l);
+  const d = el('details', 'lane' + (bad ? ' breach' : ''));
+  d.id = 'lane-' + l.id;
+  if (bad) d.open = true;
+  const s = el('summary');
+  const stc = el('div', 'c-st');
+  stc.appendChild(el('span', 'st ' + (bad ? 'bad' : 'ok'), bad ? '▲ 遅延超過' : '✓ 範囲内'));
+  s.appendChild(stc);
+  const idc = el('div', 'c-id');
+  idc.appendChild(el('div', 'id', l.id));
+  idc.appendChild(el('div', 'carrier', l.carrier));
+  s.appendChild(idc);
+  const pr = el('div', 'prog');
+  const pct = l.shipped / l.planned * 100;
+  const n = el('div', 'n');
+  n.appendChild(el('b', null, nf.format(l.shipped)));
+  n.appendChild(document.createTextNode(' / ' + nf.format(l.planned) + '件（' + pct.toFixed(0) + '%）'));
+  pr.appendChild(n);
+  const m = el('div', 'meter'); const i = el('i'); i.style.width = pct + '%'; m.appendChild(i); pr.appendChild(m);
+  s.appendChild(pr);
+  const dl = el('div', 'delayed', String(l.delayed));
+  dl.appendChild(el('small', null, '件'));
+  s.appendChild(dl);
+  const cut = el('div', 'cut', l.cutoff);
+  const remain = l.planned - l.shipped;
+  if (toMin(l.cutoff) <= nowMin && remain > 0) cut.appendChild(el('small', 'over', '締切超過・残' + nf.format(remain)));
+  else if (remain === 0) cut.appendChild(el('small', null, '出荷完了'));
+  else cut.appendChild(el('small', null, 'あと' + Math.floor((toMin(l.cutoff) - nowMin) / 60) + '時間' + ((toMin(l.cutoff) - nowMin) % 60) + '分'));
+  s.appendChild(cut);
+  d.appendChild(s);
+  const dd = el('dl', 'detail');
+  dd.style.marginBottom = '0';
+  [['担当者', l.lead], ['遅延件数', l.delayed + '件（しきい値 ' + DATA.lane_delay_threshold + '件）'], ['注文参照', l.order_ref]].forEach(([k, v]) => {
+    dd.appendChild(el('dt', null, k));
+    dd.appendChild(el('dd', null, v));
+  });
+  d.appendChild(dd);
+  lb.appendChild(d);
+});
+
+// ---- ok sources
+DATA.sources.filter((s) => s.status !== 'error').forEach((s) => {
+  const li = el('li');
+  li.appendChild(el('b', null, '✓ '));
+  li.appendChild(document.createTextNode(s.name + '　最終成功 ' + hms(s.last_success)));
+  $('srcs').appendChild(li);
+});
+if (errSources.length) {
+  errSources.forEach((s) => {
+    const li = el('li');
+    li.appendChild(el('b', null, '▲ '));
+    li.lastChild.style.color = 'var(--alert)';
+    li.appendChild(document.createTextNode(s.name + '　失敗（最終成功 ' + hm(s.last_success) + '）'));
+    $('srcs').appendChild(li);
+  });
+}
+</script>
+</body>
+</html>

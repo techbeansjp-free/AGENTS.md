@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出荷オペレーション監視 — 第2物流センター</title>
+<style>
+:root {
+  --bg: #f3f2ee;
+  --panel: #ffffff;
+  --ink: #1d2329;
+  --ink-sub: #4f5a64;
+  --line: #cfd3d6;
+  --line-strong: #8d979f;
+  --ok: #1f6b4a;
+  --alert: #b3261e;
+  --alert-bg: #fdecea;
+  --warn-bg: #fff4d6;
+  --warn-ink: #6b4a00;
+  --bar: #3d5a73;
+  --bar-bg: #e3e7ea;
+  --sans: "Noto Sans CJK JP", "DejaVu Sans", "Liberation Sans", sans-serif;
+  --mono: "DejaVu Sans Mono", "Liberation Mono", monospace;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0; padding: 16px 24px 32px;
+  font-family: var(--sans); color: var(--ink);
+  font-size: 15px; line-height: 1.5;
+  max-width: 1600px; margin-inline: auto;
+}
+h1, h2 { margin: 0; font-weight: 700; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 24px; margin-bottom: 12px; }
+.top h1 { font-size: 20px; }
+.top .meta { color: var(--ink-sub); font-size: 14px; }
+.top .updated { font-size: 16px; color: var(--ink); font-weight: 700; }
+
+/* summary banner: answers "対処が必要か" */
+.summary { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; padding: 12px 16px; border: 2px solid var(--alert); background: var(--alert-bg); border-radius: 4px; margin-bottom: 12px; }
+.summary.clear { border-color: var(--ok); background: #e7f3ec; }
+.summary .head { font-size: 20px; font-weight: 800; color: var(--alert); }
+.summary.clear .head { color: var(--ok); }
+.summary ul { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; font-size: 15px; font-weight: 700; }
+.summary li a { color: inherit; text-underline-offset: 3px; }
+
+/* data source error */
+.sources { margin-bottom: 20px; display: grid; gap: 8px; }
+.src-err { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; align-items: center; padding: 10px 16px; background: var(--warn-bg); border: 2px solid #b8860b; border-radius: 4px; color: var(--warn-ink); }
+.src-err .t { font-weight: 800; font-size: 16px; }
+.src-err .d { font-size: 14px; }
+.src-err .d b { font-weight: 700; }
+button.retry { font: inherit; font-weight: 700; min-height: 44px; min-width: 120px; padding: 0 18px; border: 2px solid var(--ink); background: #fff; color: var(--ink); border-radius: 4px; cursor: pointer; }
+button.retry:hover { background: var(--ink); color: #fff; }
+button.retry:focus-visible, a:focus-visible { outline: 3px solid #1a5fb4; outline-offset: 2px; }
+button.retry[disabled] { opacity: .6; cursor: progress; }
+.src-ok { font-size: 13px; color: var(--ink-sub); }
+.src-ok span { margin-right: 16px; white-space: nowrap; }
+
+/* sections */
+section > h2 { font-size: 16px; margin: 0 0 8px; display: flex; gap: 12px; align-items: baseline; }
+section > h2 small { font-weight: 400; color: var(--ink-sub); font-size: 13px; }
+section + section { margin-top: 24px; }
+
+/* KPI */
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--line-strong); border-radius: 4px; padding: 10px 12px 10px; min-width: 0; }
+.kpi .label { font-size: 13px; color: var(--ink-sub); font-weight: 700; }
+.kpi .value { font-size: 34px; font-weight: 700; line-height: 1.15; margin: 2px 0; white-space: nowrap; }
+.kpi .value .unit { font-family: var(--sans); font-size: 14px; font-weight: 400; margin-left: 3px; color: var(--ink-sub); }
+.kpi .ref { font-size: 12px; color: var(--ink-sub); display: block; }
+.kpi .state { font-size: 13px; font-weight: 700; margin-top: 4px; color: var(--ok); }
+.kpi.nothr .state { color: var(--ink-sub); font-weight: 400; }
+.kpi.breach { border: 2px solid var(--alert); border-top-width: 6px; background: var(--alert-bg); }
+.kpi.breach .value { color: var(--alert); }
+.kpi.breach .state { color: #fff; background: var(--alert); display: inline-block; padding: 1px 8px; border-radius: 3px; }
+
+/* lanes */
+.lanes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.lane { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 4px; padding: 10px 12px; min-width: 0; display: grid; gap: 6px; align-content: start; }
+.lane.breach { border: 2px solid var(--alert); border-left-width: 8px; background: var(--alert-bg); }
+.lane .row1 { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.lane .carrier { font-weight: 700; font-size: 16px; min-width: 0; overflow-wrap: anywhere; }
+.tag { flex: none; font-size: 12px; font-weight: 800; padding: 1px 8px; border-radius: 3px; white-space: nowrap; border: 1px solid var(--line-strong); color: var(--ink-sub); background: #fff; }
+.lane.breach .tag { background: var(--alert); border-color: var(--alert); color: #fff; }
+.lane.done .tag { color: var(--ok); border-color: var(--ok); }
+.lane .id { font-family: var(--mono); font-size: 12px; color: var(--ink-sub); overflow-wrap: anywhere; word-break: break-all; line-height: 1.35; }
+.bar { height: 10px; background: var(--bar-bg); border-radius: 2px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--bar); }
+.lane.breach .bar > i { background: var(--alert); }
+.lane .prog { display: flex; justify-content: space-between; font-size: 13px; gap: 8px; }
+.lane .delay { font-size: 15px; font-weight: 700; display: flex; align-items: baseline; gap: 6px; }
+.lane .delay .n { font-family: var(--mono); font-size: 26px; line-height: 1.1; }
+.lane.breach .delay { color: var(--alert); }
+.lane dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 13px; }
+.lane dt { color: var(--ink-sub); }
+.lane dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.lane dd.ref { font-family: var(--mono); font-size: 11.5px; word-break: break-all; line-height: 1.35; }
+
+/* tablet */
+@media (max-width: 1200px) {
+  body { padding: 12px 16px 24px; }
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lanes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .kpis, .lanes { grid-template-columns: minmax(0, 1fr); }
+  .src-err { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 id="site"></h1>
+  <div class="meta" id="shift"></div>
+  <div class="updated">最終更新 <span class="num" id="updated"></span></div>
+</header>
+
+<div id="summary" role="status" aria-live="polite"></div>
+<div class="sources" id="sources"></div>
+
+<section aria-labelledby="kpi-h">
+  <h2 id="kpi-h">KPI <small>しきい値を超えた項目は赤枠と「▲ しきい値超過」で表示</small></h2>
+  <div class="kpis" id="kpis"></div>
+</section>
+
+<section aria-labelledby="lane-h">
+  <h2 id="lane-h">レーン別の出荷状況 <small id="lane-note"></small></h2>
+  <div class="lanes" id="lanes"></div>
+</section>
+
+<script>
+const DATA = {
+  "site": "第2物流センター（架空）",
+  "shift": "日勤 08:00–17:00",
+  "updated_at": "2027-03-08T14:32:00+09:00",
+  "kpis": [
+    {"key": "shipped", "label": "出荷済み件数", "value": 3184, "unit": "件", "target": 5200, "threshold": null},
+    {"key": "progress", "label": "出荷進捗率", "value": 61.2, "unit": "%", "target": 64.0, "threshold": {"type": "min", "value": 58.0}},
+    {"key": "delay_rate", "label": "出荷遅延率", "value": 12.4, "unit": "%", "target": 3.0, "threshold": {"type": "max", "value": 5.0}},
+    {"key": "pick_rate", "label": "ピッキング速度", "value": 142, "unit": "件/時", "target": 150, "threshold": {"type": "min", "value": 120}},
+    {"key": "mispick", "label": "誤ピッキング", "value": 3, "unit": "件", "target": 0, "threshold": {"type": "max", "value": 5}},
+    {"key": "staff", "label": "稼働人数", "value": 47, "unit": "人", "target": 50, "threshold": {"type": "min", "value": 40}}
+  ],
+  "lanes": [
+    {"id": "LANE-A01-OSAKA-KANSAI-EXPRESS", "carrier": "関西急便", "cutoff": "15:00", "planned": 820, "shipped": 611, "delayed": 4, "lead": "田中", "order_ref": "ORD-20270308-A01-000000611-KX"},
+    {"id": "LANE-A02-NAGOYA", "carrier": "中部運輸", "cutoff": "15:30", "planned": 640, "shipped": 402, "delayed": 2, "lead": "鈴木", "order_ref": "ORD-20270308-A02-000000402"},
+    {"id": "LANE-B01-TOHOKU-REFRIGERATED-COLDCHAIN", "carrier": "北日本冷凍", "cutoff": "14:00", "planned": 410, "shipped": 188, "delayed": 61, "lead": "佐藤", "order_ref": "ORD-20270308-B01-000000188-COLDCHAIN-PRIORITY"},
+    {"id": "LANE-B02-KANTO", "carrier": "関東ロジ", "cutoff": "16:00", "planned": 1120, "shipped": 744, "delayed": 5, "lead": "高橋", "order_ref": "ORD-20270308-B02-000000744"},
+    {"id": "LANE-C01-KYUSHU", "carrier": "九州便", "cutoff": "13:30", "planned": 380, "shipped": 371, "delayed": 0, "lead": "伊藤", "order_ref": "ORD-20270308-C01-000000371"},
+    {"id": "LANE-C02-HOKURIKU", "carrier": "北陸トラック", "cutoff": "15:00", "planned": 300, "shipped": 176, "delayed": 9, "lead": "渡辺", "order_ref": "ORD-20270308-C02-000000176"},
+    {"id": "LANE-D01-SHIKOKU", "carrier": "四国フェリー便", "cutoff": "12:30", "planned": 260, "shipped": 260, "delayed": 0, "lead": "山本", "order_ref": "ORD-20270308-D01-000000260"},
+    {"id": "LANE-D02-RETURNS", "carrier": "返品処理", "cutoff": "17:00", "planned": 1270, "shipped": 432, "delayed": 1, "lead": "中村", "order_ref": "ORD-20270308-D02-000000432"}
+  ],
+  "lane_delay_threshold": 8,
+  "sources": [
+    {"name": "WMS 出荷実績", "status": "ok", "last_success": "2027-03-08T14:32:00+09:00"},
+    {"name": "ハンディ端末 ピッキング記録", "status": "ok", "last_success": "2027-03-08T14:31:40+09:00"},
+    {"name": "冷蔵庫 温度センサー", "status": "error", "last_success": "2027-03-08T10:42:00+09:00", "error": "接続タイムアウト"}
+  ]
+};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => n.toLocaleString('ja-JP');
+// ISO文字列の日時部分をそのまま表示（閲覧環境のタイムゾーンに依存させない）
+const hm = iso => iso.slice(11, 16);
+const md = iso => iso.slice(5, 10).replace('-', '/');
+const full = iso => md(iso) + ' ' + hm(iso);
+const REF = new Date(DATA.updated_at).getTime();
+const ago = iso => {
+  const m = Math.round((REF - new Date(iso).getTime()) / 60000);
+  if (m < 1) return '直前';
+  return m >= 60 ? `${Math.floor(m / 60)}時間${m % 60}分前` : `${m}分前`;
+};
+
+const breached = k => k.threshold && (k.threshold.type === 'max' ? k.value > k.threshold.value : k.value < k.threshold.value);
+const thrText = k => k.threshold ? (k.threshold.type === 'max' ? '≤ ' : '≥ ') + fmt(k.threshold.value) + k.unit : null;
+const laneBreached = l => l.delayed > DATA.lane_delay_threshold;
+
+// header
+$('site').textContent = DATA.site;
+$('shift').textContent = DATA.shift;
+$('updated').textContent = full(DATA.updated_at);
+
+// summary
+const badK = DATA.kpis.filter(breached);
+const badL = DATA.lanes.filter(laneBreached);
+const errS = DATA.sources.filter(s => s.status === 'error');
+const items = [];
+badK.forEach(k => items.push(`<li>▲ KPI：<a href="#kpi-${k.key}">${esc(k.label)} ${fmt(k.value)}${esc(k.unit)}</a></li>`));
+badL.forEach(l => items.push(`<li>▲ レーン：<a href="#lane-${esc(l.id)}">${esc(l.carrier)}（遅延 ${l.delayed}件）</a></li>`));
+errS.forEach(s => items.push(`<li>⚠ データ取得失敗：${esc(s.name)}</li>`));
+$('summary').innerHTML = items.length
+  ? `<div class="summary"><span class="head">対処が必要：${badK.length + badL.length + errS.length}件</span><ul>${items.join('')}</ul></div>`
+  : `<div class="summary clear"><span class="head">✓ しきい値超過・取得失敗なし</span></div>`;
+
+// sources
+function renderSources() {
+  const err = errS.map((s, i) => `
+    <div class="src-err" role="alert">
+      <div>
+        <div class="t">⚠ データ取得に失敗：${esc(s.name)}</div>
+        <div class="d">原因：${esc(s.error || '不明')} ／ 最後に成功した時刻：<b class="num">${full(s.last_success)}</b>（${ago(s.last_success)}）
+          <br>この間の値は更新されていません。表示中の関連数値は古い可能性があります。</div>
+      </div>
+      <div><button type="button" class="retry" data-i="${i}">再試行</button>
+        <div class="d" id="retry-msg-${i}" aria-live="polite"></div></div>
+    </div>`).join('');
+  const ok = DATA.sources.filter(s => s.status === 'ok')
+    .map(s => `<span>✓ ${esc(s.name)} <span class="num">${hm(s.last_success)}</span></span>`).join('');
+  $('sources').innerHTML = err + `<div class="src-ok" aria-label="正常なデータ源">${ok}</div>`;
+}
+renderSources();
+$('sources').addEventListener('click', e => {
+  const b = e.target.closest('button.retry');
+  if (!b) return;
+  const msg = $('retry-msg-' + b.dataset.i);
+  b.disabled = true; msg.textContent = '再試行中…';
+  setTimeout(() => {
+    b.disabled = false;
+    msg.textContent = '再試行しましたが、まだ取得できていません（このデモでは実際の再取得は行いません）。';
+  }, 1200);
+});
+
+// KPIs
+$('kpis').innerHTML = DATA.kpis.map(k => {
+  const bad = breached(k);
+  const t = thrText(k);
+  const state = bad ? '▲ しきい値超過' : (t ? '✓ 範囲内' : 'しきい値なし');
+  return `<article class="kpi ${bad ? 'breach' : ''} ${t ? '' : 'nothr'}" id="kpi-${k.key}">
+    <div class="label">${esc(k.label)}</div>
+    <div class="value num">${fmt(k.value)}<span class="unit">${esc(k.unit)}</span></div>
+    <span class="ref">目標 <span class="num">${fmt(k.target)}</span>${esc(k.unit)}${t ? ` ／ しきい値 <span class="num">${t}</span>` : ''}</span>
+    <div class="state">${state}</div>
+  </article>`;
+}).join('');
+
+// lanes: しきい値超過を先頭へ（元の順序は保つ）
+$('lane-note').textContent = `遅延 ${DATA.lane_delay_threshold}件超で「▲ 要対処」・先頭に表示`;
+const ordered = [...DATA.lanes.filter(laneBreached), ...DATA.lanes.filter(l => !laneBreached(l))];
+$('lanes').innerHTML = ordered.map(l => {
+  const bad = laneBreached(l);
+  const done = l.shipped >= l.planned;
+  const pct = Math.round(l.shipped / l.planned * 100);
+  const tag = bad ? '▲ 要対処' : done ? '✓ 完了' : '進行中';
+  return `<article class="lane ${bad ? 'breach' : ''} ${done ? 'done' : ''}" id="lane-${esc(l.id)}">
+    <div class="row1"><div class="carrier">${esc(l.carrier)}</div><span class="tag">${tag}</span></div>
+    <div class="id" title="${esc(l.id)}">${esc(l.id)}</div>
+    <div class="delay"><span class="n">${l.delayed}</span>件 遅延</div>
+    <div>
+      <div class="prog"><span class="num">${fmt(l.shipped)} / ${fmt(l.planned)}件</span><b class="num">${pct}%</b></div>
+      <div class="bar" role="img" aria-label="出荷 ${pct}%"><i style="width:${pct}%"></i></div>
+    </div>
+    <dl>
+      <dt>担当</dt><dd>${esc(l.lead)}</dd>
+      <dt>締切</dt><dd class="num">${esc(l.cutoff)}</dd>
+      <dt>注文参照</dt><dd class="ref">${esc(l.order_ref)}</dd>
+    </dl>
+  </article>`;
+}).join('');
+</script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>請求先の編集 | 管理画面</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<link rel="stylesheet" href="billing.css">
+</head>
+<body>
+<header class="app-header">
+  <p class="app-header__title">会員管理</p>
+  <nav class="app-nav" aria-label="主要">
+    <a href="members.html">会員一覧</a>
+    <a href="billing.html" aria-current="page">請求先</a>
+  </nav>
+</header>
+<main class="page">
+  <h1 class="page__title">請求先の編集</h1>
+
+  <div id="status" class="billing-form__status" hidden></div>
+
+  <div class="card">
+    <div id="viewer-notice" class="billing-notice" hidden>
+      <strong>この画面は閲覧のみです。</strong>
+      お使いのアカウントには請求先を編集する権限がないため、入力欄は変更できず、保存もできません。編集が必要な場合は、契約者または管理者に権限の付与を依頼してください。
+    </div>
+
+    <form id="billing-form" class="billing-form" novalidate>
+      <p class="field__hint"><span class="billing-form__req">*</span> は必須項目です。</p>
+
+      <div class="field">
+        <label class="field__label" for="name">請求先の名称 <span class="billing-form__req">（必須）</span></label>
+        <input class="field__input" id="name" name="name" type="text" autocomplete="organization" aria-describedby="name-hint name-error">
+        <span class="field__hint" id="name-hint">50文字以内で入力してください。</span>
+        <span class="field__error" id="name-error"></span>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="dept">部署名 <span class="billing-form__opt">（任意）</span></label>
+        <input class="field__input" id="dept" name="dept" type="text" autocomplete="organization-title" aria-describedby="dept-error">
+        <span class="field__error" id="dept-error"></span>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="contact">担当者名 <span class="billing-form__req">（必須）</span></label>
+        <input class="field__input" id="contact" name="contact" type="text" autocomplete="name" aria-describedby="contact-error">
+        <span class="field__error" id="contact-error"></span>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="email">メールアドレス <span class="billing-form__req">（必須）</span></label>
+        <input class="field__input" id="email" name="email" type="email" inputmode="email" autocomplete="email" aria-describedby="email-hint email-error">
+        <span class="field__hint" id="email-hint">例：billing@example.com</span>
+        <span class="field__error" id="email-error"></span>
+      </div>
+
+      <div class="billing-form__row">
+        <div class="field">
+          <label class="field__label" for="zip">郵便番号 <span class="billing-form__req">（必須）</span></label>
+          <input class="field__input" id="zip" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" aria-describedby="zip-hint zip-error">
+          <span class="field__hint" id="zip-hint">7桁の数字。ハイフンは付けても付けなくても構いません。</span>
+          <span class="field__error" id="zip-error"></span>
+        </div>
+        <div class="field">
+          <label class="field__label" for="tel">電話番号 <span class="billing-form__opt">（任意）</span></label>
+          <input class="field__input" id="tel" name="tel" type="tel" inputmode="tel" autocomplete="tel" aria-describedby="tel-error">
+          <span class="field__error" id="tel-error"></span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="address">住所 <span class="billing-form__req">（必須）</span></label>
+        <textarea class="field__input" id="address" name="address" rows="3" autocomplete="street-address" aria-describedby="address-error"></textarea>
+        <span class="field__error" id="address-error"></span>
+      </div>
+
+      <div class="billing-form__actions">
+        <button class="btn btn--primary" id="save" type="submit" aria-describedby="save-note">保存</button>
+        <span class="field__hint" id="save-note"></span>
+      </div>
+    </form>
+  </div>
+</main>
+
+<script>
+(function () {
+  var form = document.getElementById('billing-form');
+  var saveBtn = document.getElementById('save');
+  var saveNote = document.getElementById('save-note');
+  var statusBox = document.getElementById('status');
+  var isViewer = new URLSearchParams(location.search).get('role') === 'viewer';
+  var saving = false;
+
+  var fields = {
+    name:    { required: true,  label: '請求先の名称' },
+    dept:    { required: false, label: '部署名' },
+    contact: { required: true,  label: '担当者名' },
+    email:   { required: true,  label: 'メールアドレス' },
+    zip:     { required: true,  label: '郵便番号' },
+    tel:     { required: false, label: '電話番号' },
+    address: { required: true,  label: '住所' }
+  };
+  var order = ['name', 'dept', 'contact', 'email', 'zip', 'tel', 'address'];
+
+  function el(id) { return document.getElementById(id); }
+
+  // 全角数字・全角ハイフンを半角へ寄せる（入力欄の値自体は書き換えない）
+  function normalizeDigits(s) {
+    return s.replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+            .replace(/[－ー‐−]/g, '-');
+  }
+
+  function validate(id, value) {
+    var v = value.trim();
+    var f = fields[id];
+    if (f.required && v === '') {
+      return f.label + 'を入力してください。';
+    }
+    if (id === 'name' && v.length > 50) {
+      return f.label + 'は50文字以内で入力してください（現在' + v.length + '文字）。';
+    }
+    if (id === 'email' && v !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+      return 'メールアドレスの形式が正しくありません。「name@example.com」のように入力してください。';
+    }
+    if (id === 'zip' && v !== '' && !/^\d{3}-?\d{4}$/.test(normalizeDigits(v))) {
+      return '郵便番号は7桁の数字で入力してください（例：1500001 または 150-0001）。';
+    }
+    return '';
+  }
+
+  function setError(id, msg) {
+    var input = el(id);
+    el(id + '-error').textContent = msg;
+    if (msg) { input.setAttribute('aria-invalid', 'true'); }
+    else { input.removeAttribute('aria-invalid'); }
+  }
+
+  function showStatus(kind, text) {
+    statusBox.hidden = false;
+    statusBox.className = 'alert alert--' + kind + ' billing-form__status';
+    statusBox.setAttribute('role', kind === 'danger' ? 'alert' : 'status');
+    statusBox.textContent = text;
+  }
+  function clearStatus() {
+    statusBox.hidden = true;
+    statusBox.textContent = '';
+  }
+
+  // 初期値（模擬）
+  var initial = {
+    name: '株式会社サンプル商事', dept: '経理部', contact: '青木 陽子',
+    email: 'billing@example.com', zip: '150-0001',
+    tel: '03-0000-0000', address: '東京都渋谷区神宮前1-1-1 サンプルビル3階'
+  };
+  order.forEach(function (id) { el(id).value = initial[id]; });
+
+  if (isViewer) {
+    el('viewer-notice').hidden = false;
+    order.forEach(function (id) {
+      el(id).readOnly = true;
+      el(id).setAttribute('aria-readonly', 'true');
+    });
+    saveBtn.disabled = true;
+    saveNote.textContent = '閲覧権限のため保存できません。';
+  }
+
+  // 入力し直した項目は、その項目の誤り表示だけを消す
+  order.forEach(function (id) {
+    el(id).addEventListener('input', function () {
+      if (el(id).getAttribute('aria-invalid') === 'true') { setError(id, ''); }
+    });
+  });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (isViewer || saving) { return; }
+    clearStatus();
+
+    var firstInvalid = null;
+    var count = 0;
+    order.forEach(function (id) {
+      var msg = validate(id, el(id).value);
+      setError(id, msg);
+      if (msg) { count++; if (!firstInvalid) { firstInvalid = id; } }
+    });
+    if (firstInvalid) {
+      showStatus('danger', '入力内容に誤りがあります（' + count + '件）。各項目のメッセージを確認して修正してください。保存はされていません。');
+      el(firstInvalid).focus();
+      return;
+    }
+
+    saving = true;
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    form.setAttribute('aria-busy', 'true');
+    saveNote.textContent = '保存しています。しばらくお待ちください。';
+    var email = el('email').value.trim();
+
+    // 模擬の保存処理：1秒後に成功。fail@example.com は失敗。
+    setTimeout(function () {
+      saving = false;
+      form.removeAttribute('aria-busy');
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存';
+      saveNote.textContent = '';
+      if (email.toLowerCase() === 'fail@example.com') {
+        showStatus('danger', '保存に失敗しました。入力内容はそのまま残っています。時間をおいてもう一度「保存」を押してください。');
+      } else {
+        showStatus('success', '請求先を保存しました。');
+      }
+      statusBox.scrollIntoView({ block: 'nearest' });
+    }, 1000);
+  });
+})();
+</script>
+</body>
+</html>

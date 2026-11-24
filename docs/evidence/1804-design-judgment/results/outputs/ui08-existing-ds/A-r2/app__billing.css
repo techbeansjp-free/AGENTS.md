@@ -1,0 +1,13 @@
+/* 請求先編集画面専用。色・余白・書体は tokens.css の変数のみを使う。 */
+.billing-form { max-width: 640px; }
+.billing-form__row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-4); }
+.billing-form__actions { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-6); flex-wrap: wrap; }
+.billing-form__req { color: var(--color-danger); font-weight: 400; font-size: var(--font-size-sm); }
+.billing-form__opt { color: var(--color-text-muted); font-weight: 400; font-size: var(--font-size-sm); }
+.billing-notice { padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-left-width: var(--space-1); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); margin-bottom: var(--space-4); }
+.field__input[readonly] { background: var(--color-bg); color: var(--color-text-muted); }
+textarea.field__input { resize: vertical; }
+.billing-form__status[hidden] { display: none; }
+@media (max-width: 560px) {
+  .billing-form__row { grid-template-columns: 1fr; }
+}

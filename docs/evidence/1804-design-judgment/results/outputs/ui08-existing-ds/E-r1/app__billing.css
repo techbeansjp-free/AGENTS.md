@@ -1,0 +1,15 @@
+/* 請求先の編集画面専用。値は tokens.css の変数のみ使う。 */
+.billing-form { max-width: 640px; }
+.billing-form fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.billing-form .field__input { width: 100%; }
+.billing-form .field__input:disabled { background: var(--color-bg); color: var(--color-text-muted); cursor: not-allowed; }
+.billing-form .field__input--short { max-width: 12em; }
+.billing-form__req { color: var(--color-danger); font-weight: 400; font-size: var(--font-size-sm); margin-left: var(--space-1); }
+.billing-form__opt { color: var(--color-text-muted); font-weight: 400; font-size: var(--font-size-sm); margin-left: var(--space-1); }
+.billing-form__actions { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
+.billing-form__note { margin: 0 0 var(--space-4); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+/* 閲覧権限の案内。.alert の色変種は success/danger のみのため、中立の変種をここで足す。 */
+.alert--neutral { background: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text); }
+.alert[hidden] { display: none; }
+.alert__list { margin: var(--space-2) 0 0; padding-left: var(--space-6); }
+.alert__list a { color: inherit; }

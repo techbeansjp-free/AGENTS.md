@@ -1,0 +1,251 @@
+{
+ "schema": "asc-1804-eval/v1",
+ "blind": "ui08-existing-ds",
+ "order": [
+  "q97d",
+  "kbw0",
+  "cjpy",
+  "7ao0",
+  "841s",
+  "77uw",
+  "ym2n",
+  "ff62",
+  "s1vg",
+  "w0mh",
+  "cnzw",
+  "903y"
+ ],
+ "exit": 0,
+ "wallMs": 123757,
+ "subtype": "success",
+ "isError": false,
+ "costUsd": 1.017884,
+ "numTurns": 54,
+ "usage": {
+  "input_tokens": 30,
+  "cache_creation_input_tokens": 82113,
+  "cache_read_input_tokens": 565566,
+  "output_tokens": 12380,
+  "output_tokens_details": {
+   "thinking_tokens": 1825
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 82113,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 3037,
+    "cache_read_input_tokens": 79071,
+    "cache_creation_input_tokens": 6265,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 6265
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-haiku-5-5": {
+   "inputTokens": 1343,
+   "outputTokens": 25,
+   "cacheReadInputTokens": 0,
+   "cacheCreationInputTokens": 0,
+   "webSearchRequests": 0,
+   "costUSD": 0.00014680000000000002,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 0,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 0,
+   "canonicalModel": "claude-haiku-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  },
+  "claude-opus-5-5": {
+   "inputTokens": 30,
+   "outputTokens": 12380,
+   "cacheReadInputTokens": 565566,
+   "cacheCreationInputTokens": 82113,
+   "webSearchRequests": 0,
+   "costUSD": 1.0177372,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1825,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 82113,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "scores": {
+  "q97d": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 1,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "既存ヘッダー・カード・入力欄・緑の保存ボタンを踏襲し必須/任意も文言で示すが、2列にした電話番号の入力欄が郵便番号欄より下にずれ高さも異なる。"
+  },
+  "kbw0": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 1,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "既存の.badgeで「必須」を示し、狭い幅では保存ボタンを全幅にしているが、広い幅では電話番号の入力欄が郵便番号欄とずれ高さも異なる。"
+  },
+  "cjpy": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "参考画面と同じ幅のカードに1列で項目を並べ、必須（赤字）・任意を文言で示して保存ボタンを末尾に置いており、広い幅と狭い幅で同じ構成を保つ。"
+  },
+  "7ao0": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "部品は既存のものだが、ページ本体を中央寄せの640px幅にして見出しの位置が参考画面からずれ、閲覧時用に独自の.billing__noticeを追加している。"
+  },
+  "841s": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "ラベルに「（必須）」を併記し補足文を入力欄の上にそろえ、郵便番号・電話番号は内容に合った短い入力欄にしており、既存部品だけで構成している。"
+  },
+  "77uw": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "1列で既存部品を使うが、カード上端と案内文の間に不自然な空きがあり、notesによれば既存に無い.alert--infoを追加している。"
+  },
+  "ym2n": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "必須・任意を枠付きの表示で示しているが、必須を参考画面の黒枠と違う赤枠にしており、閲覧時用に.alert--noticeも追加している。"
+  },
+  "ff62": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "見出しの下に用途の説明を置き、全項目で「*必須」「任意」の表記と補足文の位置（入力欄の上）をそろえ、既存のカード・入力欄・ボタンだけを使っている。"
+  },
+  "s1vg": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "1列で入力欄の幅を内容の長さに合わせ必須を赤字の文言で示すが、notesによれば既存に無い.alert--neutralを画面側で追加している。"
+  },
+  "w0mh": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 1,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 0,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "「* は必須項目です」と書きながらラベルは「（必須）」表記で*が無く、電話番号欄が郵便番号欄とずれ、カード上端も空き過ぎで、独自の.billing-noticeも追加している。"
+  },
+  "cnzw": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "参考画面と同じ幅のカードに1列で「（必須）」「（任意）」を統一して示すが、閲覧時用に既存に無い情報用の通知枠を画面側で作っている。"
+  },
+  "903y": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 0,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "既存部品だけで構成しているが、「* は必須項目です」に対しラベルに*が無く、補足文も入力欄の上（名称・メール・郵便番号）と下（担当者名・住所）に混在している。"
+  }
+ },
+ "rawResult": "12件すべての画像（desktop・mobile・gray）とnotesを開いて確認し、採点しました。\n\n**採点の要点**\n- **全件共通（減点なし）：** どの画面も既存のヘッダー（「請求先」が選択中）、カード、入力欄、緑の保存ボタンを使っています。必須・任意は文字でも示されており、白黒画面でも区別できます。\n- **最も評価が高い画面：** cjpy、841s、ff62 は20点満点です。\n- **電話番号欄のずれ：** q97d、kbw0、w0mh は郵便番号と電話番号を2列に並べています。この3件では電話番号欄が郵便番号欄より下にずれ、高さも違っていたため、構図と一貫性で減点しました。\n- **凡例と表示の食い違い：** w0mh と 903y は「* は必須項目です」と書いていますが、各ラベルは「（必須）」表記で「*」がありません。903y は補足文が欄の上にある項目と下にある項目が混在しているため、一貫性を0点にしました。\n- **独自部品の追加（UI-08の既存デザインとの一致で減点）：** notesに既存に無い部品を追加したと書いてある画面は、独自性を1点にしました。対象は 7ao0、77uw、ym2n、s1vg、w0mh、cnzw です。追加の多くは閲覧権限用の通知です。ym2n は「必須」を赤枠の表示にしており、参考画面の黒枠と違う点も減点理由に含めています。\n- **閲覧権限・エラー・保存中の状態：** どの画面も画像は初期状態だけです。これらの状態はnotesでしか確認できず、採点は初期状態の見た目とnotesの対応で行いました。\n\n```json\n{\"scores\": {\n\"q97d\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 1, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"既存ヘッダー・カード・入力欄・緑の保存ボタンを踏襲し必須/任意も文言で示すが、2列にした電話番号の入力欄が郵便番号欄より下にずれ高さも異なる。\"},\n\"kbw0\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 1, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"既存の.badgeで「必須」を示し、狭い幅では保存ボタンを全幅にしているが、広い幅では電話番号の入力欄が郵便番号欄とずれ高さも異なる。\"},\n\"cjpy\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"参考画面と同じ幅のカードに1列で項目を並べ、必須（赤字）・任意を文言で示して保存ボタンを末尾に置いており、広い幅と狭い幅で同じ構成を保つ。\"},\n\"7ao0\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"部品は既存のものだが、ページ本体を中央寄せの640px幅にして見出しの位置が参考画面からずれ、閲覧時用に独自の.billing__noticeを追加している。\"},\n\"841s\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"ラベルに「（必須）」を併記し補足文を入力欄の上にそろえ、郵便番号・電話番号は内容に合った短い入力欄にしており、既存部品だけで構成している。\"},\n\"77uw\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"1列で既存部品を使うが、カード上端と案内文の間に不自然な空きがあり、notesによれば既存に無い.alert--infoを追加している。\"},\n\"ym2n\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"必須・任意を枠付きの表示で示しているが、必須を参考画面の黒枠と違う赤枠にしており、閲覧時用に.alert--noticeも追加している。\"},\n\"ff62\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"見出しの下に用途の説明を置き、全項目で「*必須」「任意」の表記と補足文の位置（入力欄の上）をそろえ、既存のカード・入力欄・ボタンだけを使っている。\"},\n\"s1vg\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"1列で入力欄の幅を内容の長さに合わせ必須を赤字の文言で示すが、notesによれば既存に無い.alert--neutralを画面側で追加している。\"},\n\"w0mh\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 0, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"「* は必須項目です」と書きながらラベルは「（必須）」表記で*が無く、電話番号欄が郵便番号欄とずれ、カード上端も空き過ぎで、独自の.billing-noticeも追加している。\"},\n\"cnzw\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"参考画面と同じ幅のカードに1列で「（必須）」「（任意）」を統一して示すが、閲覧時用に既存に無い情報用の通知枠を画面側で作っている。\"},\n\"903y\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 0, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"既存部品だけで構成しているが、「* は必須項目です」に対しラベルに*が無く、補足文も入力欄の上（名称・メール・郵便番号）と下（担当者名・住所）に混在している。\"}\n}}\n```"
+}
