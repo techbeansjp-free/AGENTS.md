@@ -85,4 +85,6 @@ Object.assign(status, {
 });
 fs.writeFileSync(path.join(outDir, 'result.txt'), result?.result ?? '');
 fs.writeFileSync(path.join(outDir, 'status.json'), `${JSON.stringify(status, null, 2)}\n`);
+// A non-zero or signal exit of the Host process makes this runner fail too (run-all.mjs then retries the slot).
+if (code !== 0) process.exitCode = 1;
 console.log(JSON.stringify({ runId, exit: code, resultSubtype: status.resultSubtype, unchanged: status.runDirDigestBefore === status.runDirDigestAfter }));

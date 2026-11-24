@@ -230,7 +230,9 @@ claude -p --model opus --output-format stream-json --verbose --restricted --perm
 | Low 5：RF3の陽性対照が無い | `probe/rf3-control.mjs`を追加して実行。goldは変えていない |
 | Low 6：検証の節が未記入 | 本節を記入 |
 
-測定後に準備の節を直したのは、Low 3・Low 4の文言と、記録へのlinkの追加だけである。gold・fixture・依頼文・R0/R1の文言・採点規則の判定内容・`score.mjs`は変えていない（`git diff 9ad603b0 -- gold.json score.mjs prompt-review.txt run-reviewer.mjs run-all.mjs make-fixture.mjs probe/gold-check.mjs`は空）。
+CodeRabbit（`0fccdb08`に対するreview）は、`run-reviewer.mjs`がHostのprocessの非0終了・signal終了をrunnerの終了codeへ反映せず、`run-all.mjs`が失敗した試行を成功と扱い得ると指摘した（Minor）。指摘は成立するので、非0のときrunnerを`exitCode = 1`で終えるよう直した。測定した18回は全て、Hostのprocessの終了codeが0、`result`の`subtype`が`success`、`is_error`が`false`だった（作業用の一時directoryの`status.json`で確認）。そのため、この修正は測定結果に影響しない。
+
+測定後に準備の節を直したのは、Low 3・Low 4の文言と、記録へのlinkの追加だけである。gold・fixture・依頼文・R0/R1の文言・採点規則の判定内容・`score.mjs`は変えていない。`run-reviewer.mjs`は上のCodeRabbitの指摘で終了codeの扱いだけを直した（起動引数・手順の写しの作り方は変えていない）。（`git diff 9ad603b0 -- gold.json score.mjs prompt-review.txt run-reviewer.mjs run-all.mjs make-fixture.mjs probe/gold-check.mjs`は、この修正の前まで空）。
 
 是正後の`0fccdb08`を、別の新Context（`host-session claude <worktree> --name '1780 独立再レビュー' --model opus`）で再レビューした。判定は条件付き合格（High 0、Medium 0、Low 6）。Mediumは是正済み、数値はデータと一致、不採用は正しいとされた。Lowの内容は、「同じ引数」の残り2か所、観察のまとめの因果表現、陽性対照の実行環境の記録、対照の起動方法の記録、再採点が伏せた採点の代わりにならないこと、検証の記録とcommitの対応である。全て文書と記録の精度の問題で、振る舞い・gold・採点の判定・採否を変えない。1 commitで是正し、陽性対照は版を記録して再実行した。文言だけの是正なので、`review.md`に従い再々レビューは行わない。
 
