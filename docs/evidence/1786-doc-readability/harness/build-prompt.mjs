@@ -1,5 +1,6 @@
 // 評価対象Agentへ渡すpromptを決定論的に作る（#1786）。goldは読まない。
-// 使い方: node build-prompt.mjs <caseId: R1..R5|P1..P3> <cond: A|B|C> [repoRoot]
+// 使い方: node build-prompt.mjs <caseId: R1..R6|P1..P3> <cond: A|A0|B|C> [repoRoot]
+// A0（補足、結果を見た後に独立レビューの指摘で追加）：Aから tracker-issue-writing の照合の段落だけを除いたもの。
 // 現行ASCの規定は固定commitからgit showで取得し、作業treeの変更に影響されない。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -82,7 +83,7 @@ export function buildPrompt(caseId, cond, repoRoot) {
   const caseDir = path.join(evDir, 'cases', caseId);
   const doc = fs.readFileSync(path.join(caseDir, 'document.md'), 'utf8').trim();
   if (caseId.startsWith('R')) {
-    if (!['A', 'B', 'C'].includes(cond)) throw new Error(`unknown cond ${cond}`);
+    if (!['A', 'A0', 'B', 'C'].includes(cond)) throw new Error(`unknown cond ${cond}`);
     const src = fs.readFileSync(path.join(caseDir, 'source.md'), 'utf8').trim();
     const rr = body(gitShow(repoRoot, 'skills/review-and-remediation/SKILL.md'));
     const rm = body(gitShow(repoRoot, 'skills/review-and-remediation/references/review-method.md'));
@@ -101,11 +102,8 @@ export function buildPrompt(caseId, cond, repoRoot) {
       '## review-and-remediation/references/review-method.md',
       '',
       rm,
-      '',
-      '## tracker-issue-writing（起票前の読み手確認の1段目）',
-      '',
-      tc,
     ];
+    if (cond !== 'A0') parts.push('', '## tracker-issue-writing（起票前の読み手確認の1段目）', '', tc);
     if (cond === 'B') parts.push('', REVERSE_OUTLINE);
     if (cond === 'C') parts.push('', MEANING_CHECK);
     parts.push('', '# 元資料', '', src, '', '# 文書', '', doc, '', REVIEW_FORMAT.replace('%REVISED%', revise ? ',"revised":"修正版の文書全文（Markdown）"' : ''));

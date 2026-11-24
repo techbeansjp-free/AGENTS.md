@@ -174,7 +174,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(im
   const [runsDir, outJson] = process.argv.slice(2);
   const gold = JSON.parse(fs.readFileSync(path.join(evDir, 'gold.json'), 'utf8'));
   const rows = [];
-  for (const f of fs.readdirSync(runsDir).filter((x) => /^[RP]\d-[ABC]-\d\.json$/u.test(x)).sort()) {
+  for (const f of fs.readdirSync(runsDir).filter((x) => /^[RP]\d-(?:A0|[ABC])-\d\.json$/u.test(x)).sort()) {
     const rec = JSON.parse(fs.readFileSync(path.join(runsDir, f), 'utf8'));
     rows.push({ key: f.replace(/\.json$/u, ''), case: rec.case, cond: rec.cond, rep: rec.rep, metrics: rec.metrics, score: scoreRecord(rec, gold) });
   }

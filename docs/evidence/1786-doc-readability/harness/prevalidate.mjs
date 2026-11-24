@@ -49,6 +49,15 @@ for (const c of ['R1', 'R5']) {
   check(`${c} B/C は A と同じ資料・出力形式`, b.endsWith(tailA) && cc.endsWith(tailA) && b.startsWith(a.slice(0, a.indexOf('# 元資料')).trimEnd()));
 }
 
+// A0（補足）は A から tracker-issue-writing の照合の段落だけを除いたもの
+for (const c of ['R2', 'R3', 'R4', 'R5']) {
+  const a = buildPrompt(c, 'A', repoRoot);
+  const a0 = buildPrompt(c, 'A0', repoRoot);
+  const i = a.indexOf('\n\n## tracker-issue-writing（起票前の読み手確認の1段目）');
+  const j = a.indexOf('\n\n# 元資料');
+  check(`${c} A0 は A から照合の段落だけを除いたもの`, i > 0 && j > i && a0 === a.slice(0, i) + a.slice(j));
+}
+
 // 3. 合成出力：正解・誤答・空・壊れたJSON・部分出力・重複・捏造引用
 const perfect = (c) => {
   const g = gold.review[c];

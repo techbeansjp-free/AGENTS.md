@@ -14,6 +14,7 @@ const repoRoot = path.resolve(here, '../../../..');
 const key = `${caseId}-${cond}-${rep}`;
 const outFile = path.join(outDir, `${key}.json`);
 if (fs.existsSync(outFile)) throw new Error(`already exists: ${key}（上書きしない）`);
+if (!fs.statSync(outDir, { throwIfNoEntry: false })?.isDirectory()) throw new Error(`outDir がない: 有料の呼出しの前に止める`);
 const prompt = buildPrompt(caseId, cond, repoRoot);
 const work = path.join(workRoot, key);
 fs.mkdirSync(path.dirname(work), { recursive: true });

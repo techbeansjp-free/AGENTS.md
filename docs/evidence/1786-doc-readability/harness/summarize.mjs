@@ -1,8 +1,9 @@
 // score.mjs の出力（scores.json）を条件・反復ごとに集計し、EVAL_PLAN の採否基準を機械的に当てはめる（#1786）。
-// 使い方: node summarize.mjs <scores.json>
+// 使い方: node summarize.mjs <scores.json> [scores-a0.json]
+// A0 の記録が含まれていれば supplementA0 に別に集計する（採否基準には使わない）。
 import fs from 'node:fs';
 
-const rows = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const rows = process.argv.slice(2).flatMap((f) => JSON.parse(fs.readFileSync(f, 'utf8')));
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
 const mean = (xs) => (xs.length ? sum(xs) / xs.length : NaN);
 const range = (xs) => `${Math.min(...xs).toFixed(3)}〜${Math.max(...xs).toFixed(3)}`;
@@ -80,7 +81,8 @@ const A = out.review.A;
 for (const k of ['B', 'C']) {
   const K = out.review[k];
   const improve = Math.min(...K.recallPerRep) > Math.max(...A.recallPerRep);
-  const safe = K.harmful + K.cleanFlagged + K.misquoted <= A.harmful + A.cleanFlagged + A.misquoted;
+  const retained = (x) => sum(x.r5Retained.map((v) => Number(v.split('/')[0])));
+  const safe = K.harmful + K.cleanFlagged + K.misquoted <= A.harmful + A.cleanFlagged + A.misquoted && retained(K) >= retained(A);
   const dRecall = mean(K.recallPerRep) - mean(A.recallPerRep);
   const costOk = K.costMean <= 1.5 * A.costMean || dRecall >= 0.15;
   out.decision[`review-${k}`] = { improve, safe, costOk, dRecall: Number(dRecall.toFixed(3)), costRatio: Number((K.costMean / A.costMean).toFixed(2)) };
@@ -95,4 +97,29 @@ out.decision['reader-C'] = {
   costRatio: Number((RC.costMean / RA.costMean).toFixed(2)),
 };
 out.decision.aRecallMean = Number(mean(A.recallPerRep).toFixed(3));
+// 基準4の判定（EVAL_PLAN）
+const aSafe = A.harmful === 0;
+const verdict = (d) => (!d.safe || !d.costOk ? '不採用' : d.improve ? '既存Skillの限定改善候補' : '採用しない（改善なし）');
+out.decision.candidates = { 'review-B': verdict(out.decision['review-B']), 'review-C': verdict(out.decision['review-C']), 'reader-C': out.decision['reader-C'].safe ? (out.decision['reader-C'].improveCorrect || out.decision['reader-C'].improveAmb ? '既存Skillの限定改善候補' : '採用しない（改善なし）') : '不採用' };
+const anyImprove = Object.values(out.decision.candidates).includes('既存Skillの限定改善候補');
+out.decision.overall = anyImprove ? '既存Skillの限定改善候補' : out.decision.aRecallMean >= 0.8 && aSafe ? '現行方式で十分' : '追加評価が必要';
+// 補足：A0（照合の段落なし、結果を見た後に追加）。採否基準の対象外
+const a0 = rows.filter((r) => r.cond === 'A0');
+if (a0.length) {
+  const v = a0.filter((r) => r.score.valid);
+  out.supplementA0 = {
+    runs: a0.length,
+    valid: v.length,
+    perCase: Object.fromEntries(['R2', 'R3', 'R4', 'R5'].map((c) => [c, v.filter((r) => r.case === c).map((r) => `${r.score.detected.length}/${r.score.defects}`)])),
+    missed: v.flatMap((r) => r.score.missed),
+    harmful: sum(v.map((r) => r.score.harmful.length)),
+    cleanFlagged: sum(v.map((r) => r.score.cleanFlagged)),
+    misquoted: sum(v.map((r) => r.score.misquoted)),
+    r5Retained: v.filter((r) => r.case === 'R5').map((r) => `${r.score.revised?.retained}/${r.score.revised?.total}`),
+    costMean: mean(a0.map((r) => r.metrics.costUsd ?? 0)),
+    costSum: sum(a0.map((r) => r.metrics.costUsd ?? 0)),
+    aSameCasesCostMean: mean(rev.filter((r) => r.cond === 'A' && ['R2', 'R3', 'R4', 'R5'].includes(r.case)).map((r) => r.metrics.costUsd ?? 0)),
+    wallMeanS: mean(a0.map((r) => r.metrics.wallMs / 1000)),
+  };
+}
 console.log(JSON.stringify(out, null, 1));

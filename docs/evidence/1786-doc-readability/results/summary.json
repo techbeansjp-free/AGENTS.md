@@ -418,6 +418,51 @@
    "safe": true,
    "costRatio": 1.39
   },
-  "aRecallMean": 1
+  "aRecallMean": 1,
+  "candidates": {
+   "review-B": "採用しない（改善なし）",
+   "review-C": "採用しない（改善なし）",
+   "reader-C": "採用しない（改善なし）"
+  },
+  "overall": "現行方式で十分"
+ },
+ "supplementA0": {
+  "runs": 12,
+  "valid": 12,
+  "perCase": {
+   "R2": [
+    "8/8",
+    "8/8",
+    "8/8"
+   ],
+   "R3": [
+    "6/6",
+    "6/6",
+    "6/6"
+   ],
+   "R4": [
+    "5/5",
+    "5/5",
+    "5/5"
+   ],
+   "R5": [
+    "3/3",
+    "3/3",
+    "3/3"
+   ]
+  },
+  "missed": [],
+  "harmful": 0,
+  "cleanFlagged": 3,
+  "misquoted": 0,
+  "r5Retained": [
+   "6/6",
+   "6/6",
+   "6/6"
+  ],
+  "costMean": 0.11544159166666668,
+  "costSum": 1.3852991000000001,
+  "aSameCasesCostMean": 0.12291198333333336,
+  "wallMeanS": 27.216916666666666
  }
 }

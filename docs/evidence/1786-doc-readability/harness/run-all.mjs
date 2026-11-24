@@ -1,6 +1,6 @@
 // 本実行の順序・費用上限・再実行1回を管理する（#1786）。
 // 使い方: node run-all.mjs <outDir> <workRoot> <model> <budgetUsd>
-// 既に記録がある件は飛ばす（中断後の再開）。無効試行は <key>.invalid<n>.json として残し、1回だけ再実行する。
+// 既に記録がある件は飛ばす（中断後の再開）。無効試行は <key>.invalid<n>.json として残し、再実行は合計1回まで。
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -41,7 +41,9 @@ for (const rep of [1, 2, 3]) {
     const key = `${c}-${k}-${rep}`;
     const file = path.join(outDir, `${key}.json`);
     if (fs.existsSync(file)) continue;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    // 中断後の再開でも再実行が1回を超えないよう、残っている無効試行の数から始める
+    const prior = fs.readdirSync(outDir).filter((f) => f.startsWith(`${key}.invalid`)).length;
+    for (let attempt = prior; attempt < 2; attempt++) {
       if (spent() >= budget) {
         console.log(`STOP: budget reached (${spent().toFixed(3)} USD)`);
         process.exit(3);
