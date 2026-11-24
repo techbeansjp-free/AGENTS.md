@@ -69,7 +69,7 @@
 
 - 公式資料（[Manage sessions](https://code.claude.com/docs/en/sessions)）では、`claude -p`で作ったsessionはsession pickerに表示されない。現行でも案Wでも、`host-session`のsessionはpickerの既定一覧に出ず、IDか名前で再開する。pickerは既定で現在のworktreeのsessionを表示し、`Ctrl+W`で同じrepositoryの全worktreeに広げられる（資料による。pickerは実測していない）。
 - 案Wでは、主要checkoutから実行IDでも表示名でも再開でき、worktreeの削除後も再開できた（実測）。失うのは保存先projectが主要checkoutであることで、主要checkoutのprojectだけを`claude purge`等で扱う運用や、project単位の一覧（pickerの既定表示等）では見つからない。
-- 案Wでは、起動先の指示file（CLAUDE.md等）が主要checkoutの版でなく対象worktreeの版になる（資料と起動先の違いからの推測。未実測）。
+- 案Wでは、起動先の指示file（CLAUDE.md等）が主要checkoutの版でなく対象worktreeの版になる（資料と起動先の違いからの推測。未実測）。採用後の実測では対象・主要checkoutのどちらの`CLAUDE.md`の内容も報告されず、確定していない（下の「指示fileの自動読込み」の節）。
 - 保存先projectを起動先と別に指定する`CLAUDE_CODE_PROJECT_DIR_NAME`は、`CLAUDE_CONFIG_DIR`の設定を要する（資料）。#1793では、別の`CLAUDE_CONFIG_DIR`では未ログインで起動できなかった。このため候補にしていない（未実測）。
 
 推奨（判断はASC owner）：案W。ownerは2026-11-24に推奨どおり案Wを選んだ（[Claude Code経路の実装](#claude-code経路の実装案wの採用)）。読取り範囲をHostの作業directory制限で強制でき、失うのは項目5だけで、IDと名前での再開はworktreeの削除後も保たれた。案Dは起動後のfileを防げないため、推奨しない。
@@ -132,6 +132,7 @@
 | 回 | 対象 | 判定 | 主な指摘と是正 |
 | --- | --- | --- | --- |
 | 1 | `c96e2b91` | 条件付き合格（条件：help文の是正か根拠、最終HEADのCI） | High・Mediumなし。Low：CLIのhelp文が「repository rootから起動」のまま（直した）、陽性対照のGlobにmarkerは出ない（表を直した）、祖先の`CLAUDE.md`の自動読込みが未実測なのに配布文書が「読めない」と断定（実測を追加し、文書をfile toolの範囲に限定）、Claude Codeへの追加指示が「sessionRootは一覧用」のまま（起動先＝対象のときは文言を変え、unit testで固定） |
+| 2 | `15abb0ca`（1回目の是正だけ） | 合格 | High・Mediumなし。Low：比較の節に残った採用前の推測へ実測の参照を追加、主要checkout・非Gitの入力での追加指示の文言をunit testで固定（いずれも是正。振る舞いは変えていない） |
 
 ### 品質検査（2回目のPR）
 

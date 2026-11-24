@@ -175,6 +175,7 @@ for(const host of ['claude','codex'])test(`${host}: launch and rename in the exp
 for(const host of ['claude','codex'])test(`${host}: root input and non-Git input preserve their launch directory`,async t=>{
  const {root,options}=fixture(t,host);const {primary}=linkedTarget(root);options.cwd=primary;
  const result=await runHostSession(options);assert.equal(result.status,'completed');assert.equal(result.cwd,primary);assert.equal(result.targetDirectory,primary);
+ const sent=fs.readFileSync(path.join(root,'calls'),'utf8');assert(sent.includes('the review target itself')&&!sent.includes('only the launch/listing location'),'A launch in the target is not called a listing-only root');
  const plain=path.join(root,'plain');fs.mkdirSync(plain);options.cwd=plain;options.outputDir=path.join(root,'result-plain');
  const other=await runHostSession(options);assert.equal(other.status,'completed');assert.equal(other.cwd,fs.realpathSync(plain));assert.equal(other.targetDirectory,fs.realpathSync(plain));assert.equal(other.targetHead,null);
 });
