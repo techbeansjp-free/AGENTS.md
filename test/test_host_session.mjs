@@ -5,7 +5,7 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {sessionOptions,runHostSession} from '../src/host-session.mjs';
+import {sessionOptions,runHostSession,claudeReviewArguments,claudeRenameArguments} from '../src/host-session.mjs';
 
 function fixture(t,host,mode='success'){
  const root=tempDir('asc-session-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -55,7 +55,7 @@ for(const host of ['claude','codex']){
   if(host==='claude'){
    assert(calls[0].includes('自動: '+options.name));assert(calls[1].includes('済: 自動: '+options.name));
    assert(calls[1].includes(result.sessionId));assert(calls[0].includes('dontAsk'));assert(calls[0].includes('--strict-mcp-config'));
-   assert.equal(calls[0][calls[0].indexOf('--allowedTools')+1],'Read,Glob,Grep');
+   assert.deepEqual(calls[0],claudeReviewArguments({model:options.model,sessionId:result.sessionId,instruction:calls[0][calls[0].indexOf('--append-system-prompt')+1],cwd:result.cwd,targetDirectory:result.targetDirectory,ephemeral:false,name:result.name}),'The Host receives exactly the read-scope-confined arguments');
    assert.equal(calls[1][calls[1].indexOf('--tools')+1],'');
    for(const call of calls)assert.deepEqual(JSON.parse(call[call.indexOf('--settings')+1]),{disableAllHooks:true});
    assert.equal(calls[1][calls[1].indexOf('--model')+1],options.model);
@@ -192,4 +192,28 @@ for(const host of ['claude','codex'])test(`${host}: Host and rename drop Git ove
   assert.equal(environments.length,host==='claude'?2:1);
   for(const env of environments){assert.deepEqual(env.git,[]);assert.equal(env.sentinel,'keep-me');}
  }finally{for(const [k,v]of Object.entries(old)){if(v===undefined)delete process.env[k];else process.env[k]=v;}}
+});
+
+// #1793: read scope must come from launch settings. Live counterexamples are recorded in docs/evidence/1793-host-session-read-scope/.
+test('claude review arguments confine reads by launch settings and never grant path-unrestricted reads',()=>{
+ const common={model:'m',sessionId:'00000000-0000-4000-8000-000000000000',instruction:'i',cwd:'/r',name:'自動: n'};
+ for(const [targetDirectory,ephemeral] of [['/r',false],['/r/.worktrees/t',false],['/r/.worktrees/t',true]]){
+  const args=claudeReviewArguments({...common,targetDirectory,ephemeral});
+  assert(args.includes('--restricted'),'Ignore user/project/local settings and confine file tools to working directories');
+  assert.equal(args.indexOf('--restricted'),args.lastIndexOf('--restricted'));
+  assert(!args.some(a=>/^--allowed-?tools$/i.test(a)),'A bare Read/Glob/Grep allow rule has no path limit');
+  assert(!args.includes('--setting-sources')&&!args.includes('--dangerously-skip-permissions'));
+  assert.equal(args[args.indexOf('--permission-mode')+1],'dontAsk');
+  assert.equal(args[args.indexOf('--tools')+1],'Read,Glob,Grep');
+  assert(args.includes('--strict-mcp-config'));
+  assert.deepEqual(JSON.parse(args[args.indexOf('--settings')+1]),{disableAllHooks:true},'No extra allow rules or additionalDirectories through flag settings');
+  const dirs=args.flatMap((a,i)=>a==='--add-dir'?[args[i+1]]:[]);
+  assert.deepEqual(dirs,targetDirectory===common.cwd?[]:[targetDirectory],'Only the reviewed worktree is added to the working directories');
+  assert.equal(args.includes('--no-session-persistence'),ephemeral);assert.equal(args.includes('-n'),!ephemeral);
+ }
+});
+test('claude rename arguments expose no tools',()=>{
+ const args=claudeRenameArguments({sessionId:'s',name:'自動: n',model:'m'});
+ assert.equal(args[args.indexOf('--tools')+1],'');assert.equal(args[args.indexOf('--allowedTools')+1],'');
+ assert.equal(args[args.indexOf('-n')+1],'済: 自動: n');assert.equal(args[args.indexOf('--max-turns')+1],'1');
 });

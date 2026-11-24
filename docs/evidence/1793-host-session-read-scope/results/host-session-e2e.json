@@ -1,0 +1,35 @@
+{
+  "e2e-1": {
+    "code": "fix branch (uncommitted at run time; same arguments as the committed claudeReviewArguments)",
+    "model": "haiku",
+    "ephemeral": true,
+    "status": "completed",
+    "exitCode": 0,
+    "outsideMarkerInResult": false,
+    "outsideMarkerInEvents": false,
+    "insideMarkerInResult": true,
+    "deniedByRestricted": 5
+  },
+  "e2e-opus": {
+    "code": "fix branch, model opus",
+    "model": "opus",
+    "ephemeral": true,
+    "status": "completed",
+    "exitCode": 0,
+    "outsideMarkerInResult": false,
+    "outsideMarkerInEvents": false,
+    "insideMarkerInResult": true,
+    "deniedByRestricted": 5
+  },
+  "e2e-base": {
+    "code": "main checkout, host-session.mjs identical to base",
+    "model": "haiku",
+    "ephemeral": true,
+    "status": "completed",
+    "exitCode": 0,
+    "outsideMarkerInResult": true,
+    "outsideMarkerInEvents": true,
+    "insideMarkerInResult": true,
+    "deniedByRestricted": 0
+  }
+}
