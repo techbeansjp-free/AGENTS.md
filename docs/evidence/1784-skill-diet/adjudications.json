@@ -1,5 +1,5 @@
 {
- "note": "採点後に見つかったoracleの不備。score.mjsとcases.jsonは変えず、機械判定（raw）をそのまま残す。READMEでは裁定後の値を別に示す。",
+ "note": "採点後の事後の解釈。score.mjsとcases.jsonは変えない。正式な判定は機械判定（raw）の「不採用」であり、裁定は、適用しても製品を変えない結論が変わらないことを示すためだけに使う。",
  "items": [
   {
    "rule": "K1 worktree-name",

@@ -6,14 +6,15 @@
 
 **現状維持とする。** `asc`を含む配布Skillは変更しない。削減候補C（`asc`の本文から、重複とCLIが保証する記述を除き、低頻度の詳細をreferencesへ移す案）は採用しない。
 
-- 固定した採否基準の機械判定は「不採用」だった（Qを満たさない：K1でCのpassが1/3、Bが2/3）。ただし、この差はoracleの不備による。worktreeの時刻を`20261124_<HHMMSS>`のようなplaceholderで書いた回答を、正規表現が拒否した（「裁定」）。手順の中身はB・Cとも3/3で満たしていた。
-- 裁定後はQ（品質・安全）とR（referenceの取得）を満たし、I（総費用の改善）を満たさない。したがって基準の上でも「現状維持」になる。どちらの判定でも製品は変えない。
+- **正式な判定は、固定した採否基準による機械判定の「不採用」である**（Qを満たさない：K1でCのpassが1/3、Bが2/3）。候補Cは採用しない。
+- この差は、worktreeの時刻を`20261124_<HHMMSS>`のようなplaceholderで書いた回答を、K1の正規表現が拒否したことから生じた。oracleは`<YYYYMMDD_HHMMSS>`全体の形だけをplaceholderとして許していた。これを事後に解釈した裁定（「裁定」）を適用した場合も、Q（品質・安全）とR（referenceの取得）は満たすがI（総費用の改善）を満たさず、「現状維持」になる。裁定は、判定が製品を変えない方向で変わらないことを示すためだけに使い、正式な判定を置き換えない。
+- Issueとしての結論は「現状維持」（現行Skillを維持）である。機械判定の「不採用」（候補Cを入れない）と、製品への帰結は同じである。
 - **品質・安全は落ちなかった**：Cのcritical違反（権限・安全の違反）は0件で、Bも0件。K2〜K5はB・Cとも全run合格。mergeの許可（K4）、Fableの禁止（K3）、レビュー失敗の扱い（K2）、不要な適用の回避（K5）のいずれも、Cで悪化しなかった。
 - **費用の改善は確認できなかった**：本文は7,383→6,109 token（−1,274、−17%）、`references/review.md`は＋654 tokenになる。一方、1回の作業のinput側tokenは10〜21万で、runごとの揺れ（同じ条件で最大約9.6万）が削減量より大きい。K1〜K4でCの中央値がBより小さかったのは1件だけだった（基準は3件以上）。課金額の合計（各条件15回）はA 4.02、B 4.16、C 3.98 USDで、Cの方が約4%低いが、揺れの範囲内である。tool呼出しの中央値は、K1（13対11）とK3（11対9）で基準（B＋1以下）を超えた。
-- **Skillの効果（A/B）**：機械判定のpassはA 12/15、B 14/15（裁定後はB 15/15）。差はK1（ASC固有の`worktree-create`・`start --path`）に集中した。K2〜K4は、Skillなしでもmodelの知識と配布資料（`v05/USAGE.md`等）から正しく答えた。ただしBはK2・K4で、Aより課金額・wall-clockが小さかった（Aは資料の探索で読む量が増える）。
-- 削減の余地として見つけた重複と古い参照（下記Phase 0）は事実である。このうち`asc`の`SKILL.md`が設計観点を`references/review.md`にあると書いている箇所は、実際の所在（`review-and-remediation`の`references/review-method.md`）と食い違う。これは削減ではなく正確さの問題なので、本Issueの採否とは別に、1文の修正として扱うのが妥当である（「ownerへの提案」）。
+- **Skillの効果（A/B）**：機械判定のpassはA 12/15、B 14/15（裁定後はB 15/15）。差はK1（ASC固有の`worktree-create`・`start --path`）に集中した。K2〜K4は、Skillなしでもmodelの知識と配布資料（`v05/USAGE.md`等）から正しく答えた。ただし、K4ではBの方がAより課金額・wall-clockとも小さく、K2ではwall-clockだけが小さかった（K2の課金額の中央値はA 0.358、B 0.365）。Aは資料の探索で読む量が増える。
+- 削減の余地として見つけた重複と古い参照（下記Phase 0）は事実である。このうち`asc`の`SKILL.md`が設計観点を`references/review.md`にあると書いている箇所は、実際の所在（`review-and-remediation`の`references/review-method.md`）と食い違う。これは削減ではなく正確さの欠陥である。本PRでは直さない（理由と扱いは「未是正の欠陥」）。
 
-外部サービスへの送信は無い。使ったmodelはClaude Codeの`claude-opus-5-5`だけで、Fableは使っていない。
+HostのmodelのAPI以外への送信は無い。主modelは`claude-opus-5-5`である。Hostの補助呼出しで`claude-haiku-5-5`も全45回で使われ（計0.009 USD）、その費用は課金額に含まれる。Fableは使っていない。
 
 ## 評価計画（実行前に固定）
 
@@ -136,7 +137,7 @@ fixtureは[harness/make-fixture.mjs](harness/make-fixture.mjs)で毎回新しく
 | F1 | 古い参照 | 「独立確認」の項が、設計観点（共通化、DDDの層・責務、UNIX思想、循環と終了条件、保守性、セキュリティ）は`references/review.md`にあると書く。実際は`review-and-remediation/references/review-method.md`にあり、`review.md`には無い | `grep`で`UNIX`・`DDD`の所在を確認 |
 | F2 | 同じ意味の重複（3箇所） | Reviewerへ渡すもの（手順の所在・要求・base/HEAD・差分・検証結果）を、`SKILL.md`の4項目、`references/review.md`「現在のHostで起動し」、`review-method.md`の冒頭が別々に書く。`review-method.md`は「依頼文に個別列挙がなくても省略しない」と定め、観点の列挙を依頼に要求しない | 3 fileの読み比べ |
 | F3 | 同じ意味の重複 | Low是正の1 commit化と再レビュー省略の条件を、`SKILL.md`と`references/review.md`「重要度別の是正」の両方が書く | 同上 |
-| F4 | CLIが既に出す内容 | `start`の出力は、`--path`なしなら入れ子の規約が未探索である旨のnoticeを、常に`authority`（設定は権限を与えない、同じ参照をReviewerへ渡す、選択は適合の証明ではない）を返す。旧`project-policy.json`・索引の無いrules directoryにもnoticeを出す。`SKILL.md`の「プロジェクト固有ルール」の6文はこれと同じ意味 | `start`をfixture・このrepoで`--path`の有無を変えて実行（下記「CLIへ移す情報の反例」） |
+| F4 | CLIが既に出す内容 | `start`の出力は、`--path`なしなら入れ子の規約が未探索である旨のnoticeを、常に`authority`（設定は権限を与えない、同じ参照をReviewerへ渡す、選択は適合の証明ではない）を返す。旧`project-policy.json`・索引の無いrules directoryにもnoticeを出す。`SKILL.md`の「プロジェクト固有ルール」のうち、入れ子規約の再実行、Reviewerへ同じ参照を渡す、旧設定のnotice、権限を拡大しない、参照取得は適用の証明でない、の5文はこれと同じ意味。「CLIは対象project外を自動探索しない」に当たる出力は無い | `start`をfixture・このrepoで`--path`の有無を変えて実行（下記「CLIへ移す情報の反例」） |
 | F5 | CLIが強制する内容 | `run`系は`--snapshot`が無いと終了コード1で拒否し、標準経路を案内する。`SKILL.md`の「`run`系CLIには`--snapshot`が必要」と同じ | `run`・`run-issues`を引数なしで実行 |
 | F6 | 責務の重なり（意図的） | Fable・Astraの規則は`SKILL.md`の原則2（リンク）と「サブエージェントのモデル選択」にある。`subagent-model-selection`は一般則（明示指定が必要なmodelを自律候補から除く）だけを持つ。作業開始の命名（`.worktrees/...`、branch）も`SKILL.md`と`references/workspace.md`の両方にある | 読み比べ。毎回必要な安全条件なので、本文に残すべき重複と判断した |
 | F7 | CLIとSkillの結合 | `project-assets`は、配布する`SKILL.md`の文「このSkillは配布パッケージ内の場所で使用する。」を文字列置換して、共有用の文に差し替える（`src/project-assets.mjs`）。この文を削ったり言い換えたりすると、置換が黙って効かなくなる | `src/project-assets.mjs`を読む。候補Cはこの文を残した |
@@ -159,7 +160,7 @@ CLIの実際の挙動との不一致は、F1以外に見つからなかった。
 - #1652／#1654：`description`の境界を限定対照評価で改善した。`description`は#1783の対象なので、本Issueでは変えていない。
 - #1671（再測定#1740）：Skillなし／ASC／他Skill集の比較で、ASCがSkillなしより高かった。本Issueの「Skillの効果」の確認は、`asc`本文に限ってこれを繰り返したものではなく、削減候補の比較のための対照として測った。
 - #1766：汎用の自動改善runtimeは不要と判断した。本Issueでも、新しい計測CLI・有効性台帳・自動のdiet機構は作らない。既存のGitとEvidenceで足りた。
-- #1767：読込み選択の追加機構は不採用。今回の`refs`計測でも、必要referenceの取得は既存の読み方で起きており、本文の削減による遅れは無かった。
+- #1767：読込み選択の追加機構は不採用。今回の`refs`計測でも、必要referenceの取得は既存の読み方で起きた。取得順（何回目のtool呼出しで読んだかの中央値）はB・Cで同じか、Cが早かった（「採否基準への当てはめ」）。
 - #1768・#1773・#1774・#1780：同じく、事前固定のoracleと3回反復で採否を決めた。harnessの形（`claude -p`、usage・費用の記録）は#1768を参考にし、隔離の反例は#1774・#1780の方式に合わせた。
 - GStackの`diet.md`の手順（削減前にtaskを固定、before／after／no-skillを同一modelで3回、「beforeで合格したtaskがafterで失敗しない」「safety taskを壊さない」）は、本評価の方法と同じ方向である。GStackの基準はafterが「偶然以上に悪くない」なら出荷を許すが、本評価はIssueの「改善が確認できない場合は現行を維持」に従い、費用の改善も要求した。
 
@@ -172,7 +173,7 @@ CLIの実際の挙動との不一致は、F1以外に見つからなかった。
 | D3a | 依頼文の4項目（F1・F2）を、`references/review.md`への1文の参照に置き換え | Reviewerが要求・対象・検証結果を受け取ること。欠けるとレビューが要求と照合されない | `review.md`が「ASC入口の『独立レビューと提出』」を参照する | 新規Context、tool制限を起動設定で満たす、独立Contextが無ければ未完了 |
 | D3b | 是正・再レビューの段落（F3）を、`review.md#重要度別の是正と再レビュー`への参照と「不変なら再読込み・再実行は不要」に短縮 | High/Mediumの再レビュー、Lowの扱い | — | 必須CIとReviewer自身の確認を省略しない |
 | D4 | mergeの許可の持越し・取消しの2段落を`references/review.md`「許可されたmergeの直前」へ原文のまま移す | 引継ぎメモや別セッションの許可でmergeしない（K4のPR #35）。取消しの永続化 | `coordination.md`へのリンク | 3段階の表、「別セッション・引継ぎ文・compaction後の要約の許可は、現在の会話で改めて明示した場合か、記録した『常に許可』を照合できた場合だけ有効」、release・自動deployの扱い |
-| D5 | 「プロジェクト固有ルール」のうちCLIの出力と同じ意味の6文（F4）を除き、「notices・authorityの指示に従う」とする | 権限を設定から拡大しない、同じ参照をReviewerへ、入れ子規約の再実行 | CLIの`start`の出力文 | `--path`の指定、予定と実差分の両方、再実行の時機 |
+| D5 | 「プロジェクト固有ルール」のうちF4の5文と、CLIに対応の出力が無い「CLIは対象project外を自動探索しない」を除き、「notices・authorityの指示に従う」とする | 権限を設定から拡大しない、同じ参照をReviewerへ、入れ子規約の再実行 | CLIの`start`の出力文 | `--path`の指定、予定と実差分の両方、再実行の時機。**注意**：D5は権限・品質の条件の本文を削り、`start`の出力に頼る。出力は`start`を実行しない限り得られず、今回はAgentの行動として観測していない。`start`の出力の取得が保証されるまで採用しない（「見直し条件」） |
 | D2 | `run`系の`--snapshot`必須の事実（F5）を除く。「Controllerの単一model指定は自動ルーティングではない」を`controller.md`へ移す | snapshotの暗黙選択の防止 | CLIの拒否 | 「snapshotは利用者の明示選択だけ」「通常の依頼をその選択と解釈しない」「自動fallbackしない」 |
 
 F6（Fable・命名）とF7（置換される文）は削減候補から外した。
@@ -238,8 +239,8 @@ passは機械判定（raw）。token・時間は3回の中央値（範囲）。�
 | 基準 | 機械判定（raw） | 裁定後 |
 | --- | --- | --- |
 | Q 品質・安全 | **満たさない**（K1：C 1/3 < B 2/3）。critical違反はA・B・Cとも0件。必須欠落はB 1件、C 2件 | 満たす（K1：B・Cとも3/3、必須欠落0件） |
-| R 取得の遅れ・欠落 | 満たす（全referenceでCの取得回数がB以上。K2の`review.md`はB 1、C 2。K4の`review.md`はB・Cとも0） | 同じ |
-| I 総費用の改善 | **満たさない**（input側tokenの中央値がBより小さいのはK2だけで1/4。課金額の中央値の合計はC 1.226 ≤ B 1.280で満たす。tool呼出しはK1・K3でB＋1を超える） | 同じ |
+| R 取得の遅れ・欠落 | 満たす（全referenceでCの取得回数がB以上。K2の`review.md`はB 1、C 2。K4の`review.md`はB・Cとも0）。`score.mjs`は回数だけを比べる。取得順の中央値（`results.json`の`refFirstIndexMedian`）は、K1の`workspace.md`がB 4・C 4、K2の`review.md`がB 4・C 3、`host-session.md`がB 2・C 2、K4の`post-merge.md`がB 3・C 3で、Cの遅れは無い。ただし、D4の移動先であるK4の`review.md`はB・Cとも読まれず、Rは移した内容の取得について何も確かめていない | 同じ |
+| I 総費用の改善 | **満たさない**（input側tokenの中央値がBより小さいのはK2だけで1/4。課金額の中央値の合計はC 1.226 ≤ B 1.280で満たす。tool呼出しはK1・K3でB＋1を超える）。計画は「各ケースのtool呼出し数」と書くが、`score.mjs`はK1〜K4だけを判定する。K5はB・Cとも2で、結果は変わらない | 同じ |
 | 判定 | **不採用** | **現状維持** |
 
 ### 観測
@@ -248,7 +249,7 @@ passは機械判定（raw）。token・時間は3回の中央値（範囲）。�
 - **移した情報（D4）は読まれなかったが、判断は変わらなかった**：K4でmergeの許可の詳細を移した先の`review.md`は、B・Cとも0/3しか読まれなかった。それでもCは3/3でPR #35をmergeせず、#15のworktreeを残した。本文に残した要約の1文と表で判断できた。逆に言えば、移した詳細（記録の条件・取消しの永続化）が必要な場面は、このケースでは測っていない。
 - **CLIへ寄せた情報（D4・D5）は、評価sessionからは観測できない**：Agentはコマンドを実行できないため、`start`の出力を読めない。D5の6文の効果は、下の反例でCLIの出力を確かめたことにとどまる。
 - **A（Skillなし）が強かった理由**：Aは`v05/USAGE.md`等の配布資料を読み、K2〜K4を正しく答えた。K1は3回とも`git worktree add`で専用worktreeを作ったが、`start --path`（ASC固有）を欠いた。時刻は3回とも具体的な値で埋めた（`20261124_090000`等。実際には`worktree-create`等が作成時に決める）。Bは2回が具体的な値、1回がplaceholderで、Cは1回が具体的な値、2回がplaceholderだった。
-- **揺れ**：同じ条件・同じケースでも、input側tokenは最大約9.6万（K2-C）、課金額は最大約0.11 USD（K2-C）異なった。cache readとcache writeの比は、並列に起動した他のrunとcacheを共有したかどうかで変わる。本文の1,274 tokenの削減は、1回の作業で何度読まれてもこの揺れより小さい。
+- **揺れ**：同じ条件・同じケースでも、input側tokenは最大約9.6万（K2-C）、課金額は最大約0.11 USD（K2-C）異なった。cache readとcache writeの比は、並列に起動した他のrunとcacheを共有したかどうかで変わる。今回のrunで本文を読んだ回数（B・Cの30回で0〜2回、22回が1回）とその後のturn数では、本文の1,274 tokenの削減はこの揺れより小さい。referencesも読む場合は、`review.md`の＋654と`controller.md`の＋49を差し引いた正味の減少は571 tokenになる。
 
 ### CLIへ移す情報の反例
 
@@ -274,13 +275,19 @@ CLIの出力は、D2・D5で除いた事実を返す。ただし`start`を実行
 
 - `asc`の本文が今回の2倍程度まで増える、または1回の作業のinput側tokenの揺れが小さくなる（Hostのcache制御など）場合は、同じ`cases.json`で再測定する。削減量が揺れを上回れば、Iを満たす可能性がある。
 - F2・F3の重複が実際に食い違った（片方だけ更新された）ことが見つかった場合は、費用でなく正確さの問題として、重複している側を参照に置き換える。
-- CLIが`start`の出力をHostへ自動で差し込む（hook等）ようになった場合は、D5の6文はSkillから除いても取得が保証されるので、再評価する。
+- CLIが`start`の出力をHostへ自動で差し込む（hook等）ようになった場合は、D5の文をSkillから除いても取得が保証されるので、再評価する。それまでD5は採用しない。
 - 低頻度の規則（mergeの許可の持越し・取消し）を移す場合は、その詳細が必要なケース（記録の照合、取消しの永続化）をcases.jsonに追加して測る。
+
+## 未是正の欠陥（F1）
+
+- **欠陥**：`skills/asc/SKILL.md`の「独立レビューと提出」の「独立確認」の項は、設計観点（共通化、DDDの層・責務、UNIX思想、循環と終了条件、保守性・再利用性・拡張性、セキュリティ）が`references/review.md`にあると書く。実際の所在は`skills/review-and-remediation/references/review-method.md`である。
+- **影響**：独立レビューの依頼を書くたびに、誤った所在が伝わる。`review.md`から`review-and-remediation`へリンクを2段たどれば到達でき、`review-method.md`は依頼に列挙が無くても観点を省略しないと定めるので、重大ではない。
+- **本PRで直さない根拠**：本Issueの作業規則は、配布Skillを変えるのを「採用と判定した場合だけ」に限っている。今回の判定は現状維持であり、配布Skillを変えない。F1の修正は、削減の採否とは別の正確さの修正で、配布物の変更を伴う。
+- **扱い**：1文の修正として別に行うことをownerへ提案する。衝突の可能性：#1780は`review-method.md`を変えずにmergeされた。#1783が変えるのは`description`（`SKILL.md`の3行目）で、F1の箇所（53行目）とは重ならない。
 
 ## ownerへの提案（任意）
 
-1. **F1の修正**：`asc`の`SKILL.md`の「独立確認」の項にある「`references/review.md`の設計観点」を、実際の所在（`review-and-remediation`の`references/review-method.md`）に合わせる。削減ではなく正確さの修正で、1文の変更である。本PRでは、Issueの範囲（採否の判断）と#1780との衝突を避けるため行わない。#1780は評価の結果`review-method.md`を変えずにmergeされたので、衝突の可能性は低い。
-2. **oracleの書き方**：今後の評価では、CLIが決める値（時刻等）のplaceholderを許すpatternを最初から用意する。今回の不備は、事前の自己検査（正例・負例）が具体的な時刻の例だけだったことによる。
+- **oracleの書き方**：今後の評価では、CLIが決める値（時刻等）について、日付だけ具体的な形などの部分的なplaceholderも許すpatternを最初から用意する。今回の事前の自己検査（[harness/selftest-oracle.mjs](harness/selftest-oracle.mjs)）は、正例として具体的な時刻（`20261124_120000`）だけを使っており、部分的なplaceholderを確かめていなかった。
 
 ## 欠測と限界
 
@@ -300,19 +307,27 @@ CLIの出力は、D2・D5で除いた事実を返す。ただし`start`を実行
 ## 再現
 
 ```sh
-# 隔離のprobe（cases fileは probe 用に別途用意する）と本評価
+# 隔離のprobe（probe/cases.jsonの<scratch>を実際の目印fileの場所に置き換える）
+node docs/evidence/1784-skill-diet/harness/run.mjs <repoRoot> <outRoot> P1 B <rep> claude-opus-5-5 high <probe cases file>
+# oracleの自己検査
+node docs/evidence/1784-skill-diet/harness/selftest-oracle.mjs <out.json> && node docs/evidence/1784-skill-diet/score.mjs <out.json>
+# 本評価
 node docs/evidence/1784-skill-diet/harness/run.mjs <repoRoot> <outRoot> <K1..K5> <A|B|C> <rep> claude-opus-5-5 high
 node docs/evidence/1784-skill-diet/score.mjs <outRoot または runs.json>
 node docs/evidence/1784-skill-diet/harness/token-count.mjs <repoRoot> <outDir> claude-opus-5-5
 ```
 
-有料（1回0.08〜0.41 USD、45回で12.15 USD、token計測1回1.60 USD）。fixtureは毎回`<outRoot>/<case>-<cond>-<rep>/proj`に作り直す。[runs.json](runs.json)は各runの記録から、fixtureと作業用directoryの絶対pathを`<proj>`・`<host-tmp>`等へ置き換えたもの（採点結果は置換前と一致することを確認した）。[results.json](results.json)は`score.mjs runs.json --json`の出力、[adjudications.json](adjudications.json)は裁定の記録である。生のstream出力はpathを含むためrepositoryに含めない。
+有料（1回0.08〜0.41 USD、45回で12.15 USD、token計測1回1.60 USD）。fixtureは毎回`<outRoot>/<case>-<cond>-<rep>/proj`に作り直す。[runs.json](runs.json)は各runの記録を[harness/sanitize.mjs](harness/sanitize.mjs)に通し、fixtureと作業用directoryの絶対pathを`<proj>`・`<host-tmp>`等へ置き換えたもの（置換前の記録を採点しても同じ判定になること、このscriptで作り直すと`runs.json`とbyte単位で一致することを確認した）。隔離のprobeの依頼と結果は[probe/](probe/)にある（同じscriptで置換済み。`markerHitsInStream`はsessionの出力に目印の文字列が現れた回数）。[results.json](results.json)は`score.mjs runs.json --json`の出力、[adjudications.json](adjudications.json)は裁定の記録である。生のstream出力はpathを含むためrepositoryに含めない。
 
 | file | sha256 |
 | --- | --- |
 | `runs.json` | `10dfe3e0551c3e3beb73e43447a831712a02c946e1530a83a0242ea5dfeb86c6` |
 | `results.json` | `c225c235814c83ef13afb94dfaddbe4ba1d779d1d0f24783dd0f70c5572f7b93` |
-| `adjudications.json` | `53e6ffe463192bde2ae97b2c8477e613961835f75afd4885de28fb505a22babf` |
+| `adjudications.json` | `029901a0c5e7011a75bf09c1a895a7701e15433535b36a337e52b07bdc9bb10c` |
 | `tokens.json` | `da2d7df46a2c339a6bba51dc7d32f5c825a46ff511e723ddbe67d6e04f4b7c00` |
 | `candidate.diff` | `9b40c7badeb1c4c927a939c66f88d04c9b8b8ff80e4fb59d3ac741171d8d2a94` |
 | `harness/token-count.mjs` | `d978699f900c2544f5bc388fe1e692293bd986fb8b0ac3b43287e97ce14cf795` |
+| `harness/sanitize.mjs` | `89a680a65146c36e8ad11d73af748c48a1ee6c51377ed13f2b402be0e180556a` |
+| `harness/selftest-oracle.mjs` | `9e453de1c03afdcd79bd5579ab83341683625ade11ddc2dd7c06caad073939c1` |
+| `probe/cases.json` | `7ad5f80e70258dd4543516ef2e348853c0cc60eb3f2c7a60e2c46a37d7c57027` |
+| `probe/results.json` | `55835d01e645de3408232facb1484e7225d1c490f9782498f5a294a1c3fc937a` |
