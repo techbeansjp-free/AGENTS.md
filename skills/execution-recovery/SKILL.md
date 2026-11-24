@@ -1,6 +1,6 @@
 ---
 name: execution-recovery
-description: Agent・build・test・CIが進まない、待機の理由や実行所有者が不明、失敗後に安全に再開したいときに使う。通常の進捗報告や単なる長時間処理には適用しない。
+description: Agent・build・test・CIが進まない、失敗後に安全に再開したいときに使う。
 ---
 
 # 停止した実行の診断と復旧

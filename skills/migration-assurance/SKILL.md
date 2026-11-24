@@ -1,6 +1,6 @@
 ---
 name: migration-assurance
-description: 言語・framework・DB・実行基盤の段階移行・置換、併存設計、移行完了の再点検で使う。既存の受入条件・データ・運用経路を移行先へ対応付ける。通常の小規模リファクタだけでは適用しない。
+description: 言語・framework・DBの段階移行・置換を計画・点検するときに使う。
 ---
 
 # 技術移行と保証の継承
