@@ -1,0 +1,24 @@
+{
+ "schema": "asc-1801-candidates/v1",
+ "candidates": [
+  {"id": "A", "note": "Current distributed descriptions (base 02bb1a0d)", "descriptions": null},
+  {"id": "B", "note": "Every ASC description rewritten to one short trigger sentence (what request it is for). Boundary and negative clauses are dropped.", "descriptions": {
+   "asc": "Issue・タスクの開発の開始・再開、worktreeでの実装、PR提出、許可されたmergeで使う。",
+   "contract-enforcement": "型・schema・依存方向等の規約を機械検査へ接続し、検査漏れを直すときに使う。",
+   "decision-ownership": "依頼や議事録の未決事項・判断者・リスク・仮置き案を整理するときに使う。",
+   "engineering-judgment": "設計案を比較し、採用理由と見直し条件を示すときに使う。",
+   "estimate-and-scope": "工数・納期・費用の見積、保守範囲の判断をするときに使う。",
+   "execution-recovery": "Agent・build・test・CIが進まない、失敗後に安全に再開したいときに使う。",
+   "migration-assurance": "言語・framework・DBの段階移行・置換を計画・点検するときに使う。",
+   "project-foundation": "新規プロジェクトの環境構築・アーキテクチャ・開発規約を整備するときに使う。",
+   "research-to-implementation": "技術を調べて比較・実証し、採用案を実装計画へつなぐときに使う。",
+   "review-and-remediation": "変更をレビューする、レビュー指摘を是正・再検証するときに使う。",
+   "security-evidence": "依存・コンテナの脆弱性監査、SBOM、監査証拠を整備するときに使う。",
+   "subagent-model-selection": "サブエージェントへ委譲する仕事のモデル・推論設定を選ぶときに使う。",
+   "tracker-issue-writing": "Issue等の起票・課題分割・本文更新を依頼されたときに使う。",
+   "user-journey-acceptance": "Web画面のユースケースをブラウザーで実操作確認するときに使う。",
+   "verification-optimization": "CI・ローカル検証の遅さや費用を計測・改善するときに使う。",
+   "work-coordination": "複数作業の分担・依存を調整し、未完了作業を引き継ぐときに使う。"
+  }}
+ ]
+}

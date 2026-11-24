@@ -1,0 +1,6 @@
+[
+ {"name": "m1x200", "model": "claude-haiku-4-5", "userSkills": {"count": 1, "chars": 200}},
+ {"name": "m1x400", "model": "claude-haiku-4-5", "userSkills": {"count": 1, "chars": 400}},
+ {"name": "m2x400", "model": "claude-haiku-4-5", "userSkills": {"count": 2, "chars": 400}},
+ {"name": "m3x400", "model": "claude-haiku-4-5", "userSkills": {"count": 3, "chars": 400}}
+]

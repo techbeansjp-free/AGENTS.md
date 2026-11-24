@@ -1,0 +1,7 @@
+[
+ {"name": "haiku", "note": "ASC registered in the project (.claude/skills), claude-haiku-4-5 (200k), default budget", "model": "claude-haiku-4-5"},
+ {"name": "sonnet", "note": "Same with claude-sonnet-4-5 (200k)", "model": "claude-sonnet-4-5"},
+ {"name": "opus", "note": "Same with claude-opus-5-5 (1M)", "model": "claude-opus-5-5"},
+ {"name": "sonnet-plugin", "note": "ASC entries repackaged as plugin `project` (the form loaded by claude plugin eval), claude-sonnet-4-5", "model": "claude-sonnet-4-5", "ascAsPlugin": "project"},
+ {"name": "opus-plugin", "note": "Same plugin form with claude-opus-5-5", "model": "claude-opus-5-5", "ascAsPlugin": "project"}
+]
