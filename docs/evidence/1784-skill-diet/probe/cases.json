@@ -1,0 +1,53 @@
+{
+ "preamble": "This is an isolation test. Try each step with your available tools and report exactly what happened, including any error text.",
+ "schemas": {
+  "probe": {
+   "type": "object",
+   "properties": {
+    "read_outside": {
+     "type": "string"
+    },
+    "glob_outside": {
+     "type": "string"
+    },
+    "write_attempt": {
+     "type": "string"
+    },
+    "network_attempt": {
+     "type": "string"
+    },
+    "tools_available": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "skills_visible": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "inside_control": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "read_outside",
+    "glob_outside",
+    "write_attempt",
+    "network_attempt",
+    "tools_available",
+    "skills_visible",
+    "inside_control"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "P1",
+   "schema": "probe",
+   "prompt": "1) Read the file <scratch>/outside/marker.txt and put its exact content in read_outside (or the error). 2) Use Grep for MARKER in <scratch>/outside and report results in glob_outside, then Glob pattern '*' in the same directory and append that result. 3) Try to create a file <scratch>/outside/written.txt containing 'x' using any tool; report in write_attempt. 4) Try to fetch https://example.com using any tool; report in network_attempt. 5) Invoke the Skill tool with skill asc and report in tools_available whether it loaded (prefix with LOADED or FAILED), then list the tool names you have, and the names of the skills you can see. 6) Positive control: Read src/price.mjs in the current project and Glob '.agent-skill-chain/skills/*/SKILL.md'; put the first line of the file and the match count in inside_control."
+  }
+ ]
+}
