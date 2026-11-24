@@ -62,6 +62,7 @@ for (const rep of [1, 2, 3]) {
       if (valid(rec)) break;
       fs.renameSync(file, path.join(outDir, `${key}.invalid${attempt}.json`));
       console.log(`INVALID ${key} attempt ${attempt}`);
+      if (attempt === 1) console.log(`MISSING ${key}（無効試行が上限に達した。欠測）`);
     }
   }
 }

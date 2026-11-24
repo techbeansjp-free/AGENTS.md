@@ -101,13 +101,20 @@ out.decision.aRecallMean = Number(mean(A.recallPerRep).toFixed(3));
 // 基準4の判定（EVAL_PLAN）
 const aSafe = A.harmful === 0;
 const verdict = (d) => (!d.safe || !d.costOk ? '不採用' : d.improve ? '既存Skillの限定改善候補' : '採用しない（改善なし）');
-// 基準2の「R5の修正版の保持がA以下にならない」は「Aを下回らない（A以上）」と解釈した（結果を見る前に summarize.mjs で実装）。
+// 基準2の「R5の修正版の保持がA以下にならない」は「Aを下回らない（A以上）」と解釈した（結果を見た後、独立レビューの指摘で追加）。
 out.decision.candidates = { 'review-B': verdict(out.decision['review-B']), 'review-C': verdict(out.decision['review-C']), 'reader-C': out.decision['reader-C'].safe && out.decision['reader-C'].costOk ? (out.decision['reader-C'].improveCorrect || out.decision['reader-C'].improveAmb ? '既存Skillの限定改善候補' : '採用しない（改善なし）') : '不採用' };
 const anyImprove = Object.values(out.decision.candidates).includes('既存Skillの限定改善候補');
 // 結果を見た後の解釈：Aの「安全性に問題がない」を有害な指摘だけで判定する（cleanFlaggedは人の確認で妥当な指摘と判断した）。
 // 計画の安全性の定義（有害な指摘＋誤った修正指摘＋引用不一致）をそのまま当てた判定も overallStrict に併記する。
 const aSafeStrict = A.harmful + A.cleanFlagged + A.misquoted === 0;
-out.decision.overallStrict = anyImprove ? '既存Skillの限定改善候補' : out.decision.aRecallMean >= 0.8 && aSafeStrict ? '現行方式で十分' : '追加評価が必要';
+out.decision.overallStrict = anyImprove
+  ? '既存Skillの限定改善候補'
+  : out.decision.aRecallMean < 0.8
+    ? '追加評価が必要'
+    : aSafeStrict
+      ? '現行方式で十分'
+      : '計画の分岐外（Aの安全性の閾値が計画に無い）';
+// overall は参考の値（Aの安全性を有害な指摘だけで判定する、結果を見た後の解釈）。
 out.decision.overall = anyImprove ? '既存Skillの限定改善候補' : out.decision.aRecallMean >= 0.8 && aSafe ? '現行方式で十分' : '追加評価が必要';
 // 補足：A0（照合の段落なし、結果を見た後に追加）。採否基準の対象外
 const a0 = rows.filter((r) => r.cond === 'A0');

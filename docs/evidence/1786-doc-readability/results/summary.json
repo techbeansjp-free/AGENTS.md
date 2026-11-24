@@ -425,7 +425,7 @@
    "review-C": "採用しない（改善なし）",
    "reader-C": "採用しない（改善なし）"
   },
-  "overallStrict": "追加評価が必要",
+  "overallStrict": "計画の分岐外（Aの安全性の閾値が計画に無い）",
   "overall": "現行方式で十分"
  },
  "supplementA0": {
