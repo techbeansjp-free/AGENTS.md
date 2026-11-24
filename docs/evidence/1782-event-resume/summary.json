@@ -1,0 +1,942 @@
+{
+ "runs": 36,
+ "totalCostUsd": 4.3048,
+ "rows": [
+  {
+   "key": "K1-A",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "merged",
+    "merged",
+    "merged"
+   ],
+   "costUsd": [
+    0.1229477,
+    0.17602810000000002
+   ],
+   "wallS": [
+    153.555,
+    175.241
+   ],
+   "hostS": [
+    153.553,
+    175.238
+   ],
+   "invocations": [
+    1,
+    1,
+    1
+   ],
+   "assistantMessages": [
+    18,
+    22,
+    15
+   ],
+   "input": [
+    30,
+    44
+   ],
+   "output": [
+    2444,
+    3420
+   ],
+   "cacheRead": [
+    595924,
+    909328
+   ],
+   "cacheWrite": [
+    9680,
+    12668
+   ],
+   "maxRssMb": [
+    296.65625,
+    327.81640625
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    1,
+    1,
+    1
+   ],
+   "ciRuns": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "key": "K1-B",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "merged",
+    "merged",
+    "merged"
+   ],
+   "costUsd": [
+    0.1448375,
+    0.1875586
+   ],
+   "wallS": [
+    151.252,
+    179.949
+   ],
+   "hostS": [
+    151.249,
+    179.945
+   ],
+   "invocations": [
+    1,
+    1,
+    1
+   ],
+   "assistantMessages": [
+    18,
+    20,
+    25
+   ],
+   "input": [
+    36,
+    50
+   ],
+   "output": [
+    2722,
+    3543
+   ],
+   "cacheRead": [
+    728502,
+    1029268
+   ],
+   "cacheWrite": [
+    11140,
+    12214
+   ],
+   "maxRssMb": [
+    267.8125,
+    277.69140625
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    1,
+    1,
+    1
+   ],
+   "ciRuns": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "key": "K1-C",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "merged",
+    "merged",
+    "merged"
+   ],
+   "costUsd": [
+    0.1340037,
+    0.1590203
+   ],
+   "wallS": [
+    178.026,
+    235.344
+   ],
+   "hostS": [
+    83.349,
+    130.921
+   ],
+   "invocations": [
+    3,
+    3,
+    3
+   ],
+   "assistantMessages": [
+    18,
+    21,
+    17
+   ],
+   "input": [
+    34,
+    42
+   ],
+   "output": [
+    2673,
+    3187
+   ],
+   "cacheRead": [
+    679024,
+    849000
+   ],
+   "cacheWrite": [
+    9792,
+    10487
+   ],
+   "maxRssMb": [
+    250.7421875,
+    258.390625
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    1,
+    1,
+    1
+   ],
+   "ciRuns": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "key": "K1-D",
+   "n": 3,
+   "pass": 2,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "ready",
+    "ready",
+    "stopped"
+   ],
+   "costUsd": [
+    0.13813330000000001,
+    0.15968140000000003
+   ],
+   "wallS": [
+    148.342,
+    182.743
+   ],
+   "hostS": [
+    77.265,
+    96.386
+   ],
+   "invocations": [
+    3,
+    3,
+    2
+   ],
+   "assistantMessages": [
+    18,
+    17,
+    16
+   ],
+   "input": [
+    32,
+    36
+   ],
+   "output": [
+    2664,
+    3018
+   ],
+   "cacheRead": [
+    618548,
+    685322
+   ],
+   "cacheWrite": [
+    12307,
+    16578
+   ],
+   "maxRssMb": [
+    247.60546875,
+    251.8203125
+   ],
+   "humanNeeded": [
+    1,
+    1,
+    1
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    0,
+    0,
+    0
+   ],
+   "ciRuns": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "key": "K2-A",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "ready",
+    "ready",
+    "ready"
+   ],
+   "costUsd": [
+    0.1012072,
+    0.1112773
+   ],
+   "wallS": [
+    90.946,
+    143.341
+   ],
+   "hostS": [
+    90.943,
+    143.339
+   ],
+   "invocations": [
+    1,
+    1,
+    1
+   ],
+   "assistantMessages": [
+    14,
+    12,
+    13
+   ],
+   "input": [
+    24,
+    28
+   ],
+   "output": [
+    2077,
+    2203
+   ],
+   "cacheRead": [
+    466900,
+    547011
+   ],
+   "cacheWrite": [
+    8261,
+    8565
+   ],
+   "maxRssMb": [
+    270.4453125,
+    314.41015625
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    0,
+    0,
+    0
+   ],
+   "ciRuns": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "key": "K2-B",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "ready",
+    "ready",
+    "ready"
+   ],
+   "costUsd": [
+    0.1158976,
+    0.1300426
+   ],
+   "wallS": [
+    95.16,
+    150.562
+   ],
+   "hostS": [
+    95.157,
+    150.56
+   ],
+   "invocations": [
+    1,
+    1,
+    1
+   ],
+   "assistantMessages": [
+    15,
+    17,
+    14
+   ],
+   "input": [
+    28,
+    34
+   ],
+   "output": [
+    2220,
+    2228
+   ],
+   "cacheRead": [
+    551399,
+    676474
+   ],
+   "cacheWrite": [
+    9559,
+    9978
+   ],
+   "maxRssMb": [
+    254.3125,
+    286.6171875
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    0,
+    0,
+    0
+   ],
+   "ciRuns": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "key": "K2-C",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "ready",
+    "ready",
+    "ready"
+   ],
+   "costUsd": [
+    0.087181,
+    0.11774639999999999
+   ],
+   "wallS": [
+    108.349,
+    191.132
+   ],
+   "hostS": [
+    64.377,
+    141.261
+   ],
+   "invocations": [
+    2,
+    3,
+    2
+   ],
+   "assistantMessages": [
+    14,
+    14,
+    10
+   ],
+   "input": [
+    20,
+    28
+   ],
+   "output": [
+    1777,
+    2599
+   ],
+   "cacheRead": [
+    384978,
+    551830
+   ],
+   "cacheWrite": [
+    7667,
+    9082
+   ],
+   "maxRssMb": [
+    259.2578125,
+    262.08203125
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    0,
+    0,
+    0
+   ],
+   "ciRuns": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "key": "K2-D",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "ready",
+    "ready",
+    "ready"
+   ],
+   "costUsd": [
+    0.1101945,
+    0.11939980000000001
+   ],
+   "wallS": [
+    99.8,
+    167.377
+   ],
+   "hostS": [
+    59.484,
+    117.212
+   ],
+   "invocations": [
+    2,
+    2,
+    2
+   ],
+   "assistantMessages": [
+    12,
+    13,
+    12
+   ],
+   "input": [
+    24,
+    26
+   ],
+   "output": [
+    2059,
+    2255
+   ],
+   "cacheRead": [
+    452629,
+    494605
+   ],
+   "cacheWrite": [
+    10500,
+    12790
+   ],
+   "maxRssMb": [
+    243.0625,
+    324.83984375
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    0,
+    0,
+    0
+   ],
+   "ciRuns": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "key": "K3-A",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "ready",
+    "stopped",
+    "stopped"
+   ],
+   "costUsd": [
+    0.07561899999999999,
+    0.1137273
+   ],
+   "wallS": [
+    77.167,
+    118.553
+   ],
+   "hostS": [
+    77.165,
+    118.55
+   ],
+   "invocations": [
+    1,
+    1,
+    1
+   ],
+   "assistantMessages": [
+    14,
+    8,
+    8
+   ],
+   "input": [
+    16,
+    28
+   ],
+   "output": [
+    1600,
+    2374
+   ],
+   "cacheRead": [
+    304095,
+    550800
+   ],
+   "cacheWrite": [
+    7203,
+    8679
+   ],
+   "maxRssMb": [
+    251.4765625,
+    274.015625
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    0,
+    0,
+    0
+   ],
+   "ciRuns": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "key": "K3-B",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "stopped",
+    "stopped",
+    "stopped"
+   ],
+   "costUsd": [
+    0.0965139,
+    0.1071913
+   ],
+   "wallS": [
+    79.993,
+    121.201
+   ],
+   "hostS": [
+    79.991,
+    121.198
+   ],
+   "invocations": [
+    1,
+    1,
+    1
+   ],
+   "assistantMessages": [
+    12,
+    12,
+    13
+   ],
+   "input": [
+    24,
+    26
+   ],
+   "output": [
+    1738,
+    2081
+   ],
+   "cacheRead": [
+    464746,
+    508900
+   ],
+   "cacheWrite": [
+    8119,
+    9074
+   ],
+   "maxRssMb": [
+    264.83984375,
+    265.515625
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    0,
+    0,
+    0
+   ],
+   "ciRuns": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "key": "K3-C",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "stopped",
+    "ready",
+    "stopped"
+   ],
+   "costUsd": [
+    0.07543119999999999,
+    0.09714600000000001
+   ],
+   "wallS": [
+    89.247,
+    136.971
+   ],
+   "hostS": [
+    48.682,
+    89.704
+   ],
+   "invocations": [
+    2,
+    2,
+    2
+   ],
+   "assistantMessages": [
+    8,
+    11,
+    9
+   ],
+   "input": [
+    16,
+    22
+   ],
+   "output": [
+    1529,
+    2172
+   ],
+   "cacheRead": [
+    304039,
+    426467
+   ],
+   "cacheWrite": [
+    7200,
+    8150
+   ],
+   "maxRssMb": [
+    234.5546875,
+    259.484375
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    0,
+    0,
+    0
+   ],
+   "ciRuns": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "key": "K3-D",
+   "n": 3,
+   "pass": 3,
+   "violations": [],
+   "outcomes": [
+    "finished",
+    "finished",
+    "finished"
+   ],
+   "finals": [
+    "ready",
+    "ready",
+    "stopped"
+   ],
+   "costUsd": [
+    0.0995923,
+    0.102244
+   ],
+   "wallS": [
+    94.909,
+    134.084
+   ],
+   "hostS": [
+    52.345,
+    87.337
+   ],
+   "invocations": [
+    2,
+    2,
+    2
+   ],
+   "assistantMessages": [
+    10,
+    11,
+    11
+   ],
+   "input": [
+    20,
+    22
+   ],
+   "output": [
+    1977,
+    2154
+   ],
+   "cacheRead": [
+    378375,
+    418759
+   ],
+   "cacheWrite": [
+    9612,
+    9938
+   ],
+   "maxRssMb": [
+    250.4609375,
+    253.83203125
+   ],
+   "humanNeeded": [
+    0,
+    0,
+    0
+   ],
+   "prCreateCalls": [
+    1,
+    1,
+    1
+   ],
+   "mergeCalls": [
+    0,
+    0,
+    0
+   ],
+   "ciRuns": [
+    1,
+    1,
+    1
+   ]
+  }
+ ]
+}
