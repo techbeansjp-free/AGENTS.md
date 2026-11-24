@@ -1,0 +1,769 @@
+{
+ "note": "Per-run timing and cost from the claude plugin eval result JSON (paths removed). Used for the suite B cost-cap analysis.",
+ "suites": {
+  "A": [
+   {
+    "run": "A-asc-1-1",
+    "startedAt": "2026-11-24T12:01:51.481Z",
+    "durationSeconds": 133,
+    "costUsd": 0.40667219999999993,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-asc-1-2",
+    "startedAt": "2026-11-24T12:01:51.481Z",
+    "durationSeconds": 103,
+    "costUsd": 0.3307491,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-asc-1-3",
+    "startedAt": "2026-11-24T12:01:51.481Z",
+    "durationSeconds": 58,
+    "costUsd": 0.3312576,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-asc-2-1",
+    "startedAt": "2026-11-24T12:01:51.481Z",
+    "durationSeconds": 110,
+    "costUsd": 0.3530859,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-asc-2-2",
+    "startedAt": "2026-11-24T12:02:49.310Z",
+    "durationSeconds": 84,
+    "costUsd": 0.34907039999999995,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-asc-2-3",
+    "startedAt": "2026-11-24T12:03:34.152Z",
+    "durationSeconds": 103,
+    "costUsd": 0.39047220000000005,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-ma-1-1",
+    "startedAt": "2026-11-24T12:03:41.560Z",
+    "durationSeconds": 59,
+    "costUsd": 0.1622469,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-ma-1-2",
+    "startedAt": "2026-11-24T12:04:04.356Z",
+    "durationSeconds": 46,
+    "costUsd": 0.0919257,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-ma-1-3",
+    "startedAt": "2026-11-24T12:04:13.165Z",
+    "durationSeconds": 41,
+    "costUsd": 0.09000269999999999,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-neg-1-1",
+    "startedAt": "2026-11-24T12:04:40.730Z",
+    "durationSeconds": 9,
+    "costUsd": 0.046868999999999994,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-neg-1-2",
+    "startedAt": "2026-11-24T12:04:49.598Z",
+    "durationSeconds": 8,
+    "costUsd": 0.046613999999999996,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-neg-1-3",
+    "startedAt": "2026-11-24T12:04:49.904Z",
+    "durationSeconds": 8,
+    "costUsd": 0.046725,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-neg-2-1",
+    "startedAt": "2026-11-24T12:04:53.816Z",
+    "durationSeconds": 15,
+    "costUsd": 0.051237000000000005,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-neg-2-2",
+    "startedAt": "2026-11-24T12:04:57.940Z",
+    "durationSeconds": 13,
+    "costUsd": 0.050519999999999995,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-neg-2-3",
+    "startedAt": "2026-11-24T12:04:58.132Z",
+    "durationSeconds": 13,
+    "costUsd": 0.051093,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-ri-1-1",
+    "startedAt": "2026-11-24T12:05:08.720Z",
+    "durationSeconds": 170,
+    "costUsd": 0.39739500000000005,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-ri-1-2",
+    "startedAt": "2026-11-24T12:05:10.578Z",
+    "durationSeconds": 387,
+    "costUsd": 0.8539068,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-ri-1-3",
+    "startedAt": "2026-11-24T12:05:10.819Z",
+    "durationSeconds": 83,
+    "costUsd": 0.17855669999999998,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-rr-1-1",
+    "startedAt": "2026-11-24T12:05:16.714Z",
+    "durationSeconds": 27,
+    "costUsd": 0.0678486,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-rr-1-2",
+    "startedAt": "2026-11-24T12:05:43.873Z",
+    "durationSeconds": 23,
+    "costUsd": 0.06654479999999999,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-rr-1-3",
+    "startedAt": "2026-11-24T12:06:07.236Z",
+    "durationSeconds": 22,
+    "costUsd": 0.0667338,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-se-1-1",
+    "startedAt": "2026-11-24T12:06:29.198Z",
+    "durationSeconds": 114,
+    "costUsd": 0.3296832,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-se-1-2",
+    "startedAt": "2026-11-24T12:06:33.632Z",
+    "durationSeconds": 59,
+    "costUsd": 0.2101611,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-se-1-3",
+    "startedAt": "2026-11-24T12:07:32.161Z",
+    "durationSeconds": 55,
+    "costUsd": 0.192408,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-tw-1-1",
+    "startedAt": "2026-11-24T12:07:58.583Z",
+    "durationSeconds": 75,
+    "costUsd": 0.21343169999999997,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-tw-1-2",
+    "startedAt": "2026-11-24T12:08:23.514Z",
+    "durationSeconds": 93,
+    "costUsd": 0.21893129999999997,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "A-tw-1-3",
+    "startedAt": "2026-11-24T12:08:27.427Z",
+    "durationSeconds": 78,
+    "costUsd": 0.2120814,
+    "judgeCostUsd": 0
+   }
+  ],
+  "B": [
+   {
+    "run": "B-asc-1-1",
+    "startedAt": "2026-11-24T12:01:51.474Z",
+    "durationSeconds": 85,
+    "costUsd": 0.29220060000000003,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-asc-1-2",
+    "startedAt": "2026-11-24T12:01:51.474Z",
+    "durationSeconds": 92,
+    "costUsd": 0.3425283,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-asc-1-3",
+    "startedAt": "2026-11-24T12:01:51.474Z",
+    "durationSeconds": 91,
+    "costUsd": 0.3499302000000001,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-asc-2-1",
+    "startedAt": "2026-11-24T12:01:51.475Z",
+    "durationSeconds": 73,
+    "costUsd": 0.2552352,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-asc-2-2",
+    "startedAt": "2026-11-24T12:03:04.455Z",
+    "durationSeconds": 93,
+    "costUsd": 0.3332745,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-asc-2-3",
+    "startedAt": "2026-11-24T12:03:16.835Z",
+    "durationSeconds": 121,
+    "costUsd": 0.4188591,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-ma-1-1",
+    "startedAt": "2026-11-24T12:03:22.422Z",
+    "durationSeconds": 64,
+    "costUsd": 0.140394,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-ma-1-2",
+    "startedAt": "2026-11-24T12:03:23.974Z",
+    "durationSeconds": 153,
+    "costUsd": 0.39218400000000003,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-ma-1-3",
+    "startedAt": "2026-11-24T12:04:26.835Z",
+    "durationSeconds": 37,
+    "costUsd": 0.1110291,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-neg-1-1",
+    "startedAt": "2026-11-24T12:04:37.575Z",
+    "durationSeconds": 9,
+    "costUsd": 0.047607,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-neg-1-2",
+    "startedAt": "2026-11-24T12:04:46.593Z",
+    "durationSeconds": 9,
+    "costUsd": 0.047855999999999996,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-neg-1-3",
+    "startedAt": "2026-11-24T12:04:56.000Z",
+    "durationSeconds": 10,
+    "costUsd": 0.047757,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-neg-2-1",
+    "startedAt": "2026-11-24T12:05:03.772Z",
+    "durationSeconds": 12,
+    "costUsd": 0.050706,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-neg-2-2",
+    "startedAt": "2026-11-24T12:05:05.972Z",
+    "durationSeconds": 11,
+    "costUsd": 0.050565000000000006,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-neg-2-3",
+    "startedAt": "2026-11-24T12:05:15.652Z",
+    "durationSeconds": 16,
+    "costUsd": 0.049842000000000004,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-ri-1-1",
+    "startedAt": "2026-11-24T12:05:16.963Z",
+    "durationSeconds": 230,
+    "costUsd": 0.4783085999999999,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-ri-1-2",
+    "startedAt": "2026-11-24T12:05:18.002Z",
+    "durationSeconds": 76,
+    "costUsd": 0.1582353,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-ri-1-3",
+    "startedAt": "2026-11-24T12:05:31.340Z",
+    "durationSeconds": 217,
+    "costUsd": 0.5073558,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-rr-1-1",
+    "startedAt": "2026-11-24T12:05:57.283Z",
+    "durationSeconds": 20,
+    "costUsd": 0.06367980000000001,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-rr-1-2",
+    "startedAt": "2026-11-24T12:06:17.151Z",
+    "durationSeconds": 20,
+    "costUsd": 0.0645918,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-rr-1-3",
+    "startedAt": "2026-11-24T12:06:33.772Z",
+    "durationSeconds": 22,
+    "costUsd": 0.06565979999999999,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-se-1-1",
+    "startedAt": "2026-11-24T12:06:37.060Z",
+    "durationSeconds": 161,
+    "costUsd": 0.4956465,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-se-1-2",
+    "startedAt": "2026-11-24T12:06:56.194Z",
+    "durationSeconds": 204,
+    "costUsd": 0.5864370000000001,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-se-1-3",
+    "startedAt": "2026-11-24T12:09:07.187Z",
+    "durationSeconds": 181,
+    "costUsd": 0.4317279,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-tw-1-1",
+    "startedAt": "2026-11-24T12:09:08.461Z",
+    "durationSeconds": 67,
+    "costUsd": 0.1947852,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-tw-1-2",
+    "startedAt": "2026-11-24T12:09:17.858Z",
+    "durationSeconds": 79,
+    "costUsd": 0.1893777,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "B-tw-1-3",
+    "startedAt": "2026-11-24T12:10:15.721Z",
+    "durationSeconds": 88,
+    "costUsd": 0.2449188,
+    "judgeCostUsd": 0
+   }
+  ],
+  "C": [
+   {
+    "run": "C-asc-1-1",
+    "startedAt": "2026-11-24T12:12:29.346Z",
+    "durationSeconds": 40,
+    "costUsd": 0.328842,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-asc-1-2",
+    "startedAt": "2026-11-24T12:12:29.347Z",
+    "durationSeconds": 33,
+    "costUsd": 0.2751,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-asc-1-3",
+    "startedAt": "2026-11-24T12:12:29.347Z",
+    "durationSeconds": 38,
+    "costUsd": 0.29286960000000006,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-asc-2-1",
+    "startedAt": "2026-11-24T12:12:29.348Z",
+    "durationSeconds": 25,
+    "costUsd": 0.2688218,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-asc-2-2",
+    "startedAt": "2026-11-24T12:12:54.257Z",
+    "durationSeconds": 21,
+    "costUsd": 0.2544614,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-asc-2-3",
+    "startedAt": "2026-11-24T12:13:01.936Z",
+    "durationSeconds": 26,
+    "costUsd": 0.27577019999999997,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-ma-1-1",
+    "startedAt": "2026-11-24T12:13:07.680Z",
+    "durationSeconds": 66,
+    "costUsd": 0.33525499999999997,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-ma-1-2",
+    "startedAt": "2026-11-24T12:13:09.779Z",
+    "durationSeconds": 52,
+    "costUsd": 0.2330466,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-ma-1-3",
+    "startedAt": "2026-11-24T12:13:15.373Z",
+    "durationSeconds": 64,
+    "costUsd": 0.252953,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-neg-1-1",
+    "startedAt": "2026-11-24T12:13:28.365Z",
+    "durationSeconds": 3,
+    "costUsd": 0.052917799999999994,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-neg-1-2",
+    "startedAt": "2026-11-24T12:13:31.576Z",
+    "durationSeconds": 4,
+    "costUsd": 0.0536778,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-neg-1-3",
+    "startedAt": "2026-11-24T12:13:35.164Z",
+    "durationSeconds": 4,
+    "costUsd": 0.054257799999999995,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-neg-2-1",
+    "startedAt": "2026-11-24T12:13:38.898Z",
+    "durationSeconds": 9,
+    "costUsd": 0.0640018,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-neg-2-2",
+    "startedAt": "2026-11-24T12:13:47.560Z",
+    "durationSeconds": 8,
+    "costUsd": 0.0642618,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-neg-2-3",
+    "startedAt": "2026-11-24T12:13:55.667Z",
+    "durationSeconds": 8,
+    "costUsd": 0.0636818,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-ri-1-1",
+    "startedAt": "2026-11-24T12:14:01.820Z",
+    "durationSeconds": 63,
+    "costUsd": 0.2572672,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-ri-1-2",
+    "startedAt": "2026-11-24T12:14:03.785Z",
+    "durationSeconds": 54,
+    "costUsd": 0.2404516,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-ri-1-3",
+    "startedAt": "2026-11-24T12:14:13.895Z",
+    "durationSeconds": 58,
+    "costUsd": 0.28421779999999996,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-rr-1-1",
+    "startedAt": "2026-11-24T12:14:19.258Z",
+    "durationSeconds": 31,
+    "costUsd": 0.2163352,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-rr-1-2",
+    "startedAt": "2026-11-24T12:14:50.003Z",
+    "durationSeconds": 32,
+    "costUsd": 0.2043796,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-rr-1-3",
+    "startedAt": "2026-11-24T12:14:57.375Z",
+    "durationSeconds": 32,
+    "costUsd": 0.2090162,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-se-1-1",
+    "startedAt": "2026-11-24T12:15:04.568Z",
+    "durationSeconds": 34,
+    "costUsd": 0.30318760000000006,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-se-1-2",
+    "startedAt": "2026-11-24T12:15:11.954Z",
+    "durationSeconds": 28,
+    "costUsd": 0.2157172,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-se-1-3",
+    "startedAt": "2026-11-24T12:15:22.104Z",
+    "durationSeconds": 31,
+    "costUsd": 0.2331096,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-tw-1-1",
+    "startedAt": "2026-11-24T12:15:28.910Z",
+    "durationSeconds": 37,
+    "costUsd": 0.249202,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-tw-1-2",
+    "startedAt": "2026-11-24T12:15:38.456Z",
+    "durationSeconds": 36,
+    "costUsd": 0.2442614,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "C-tw-1-3",
+    "startedAt": "2026-11-24T12:15:39.930Z",
+    "durationSeconds": 32,
+    "costUsd": 0.2053942,
+    "judgeCostUsd": 0
+   }
+  ],
+  "D": [
+   {
+    "run": "D-asc-1-1",
+    "startedAt": "2026-11-24T12:12:29.335Z",
+    "durationSeconds": 40,
+    "costUsd": 0.2739108,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-asc-1-2",
+    "startedAt": "2026-11-24T12:12:29.335Z",
+    "durationSeconds": 34,
+    "costUsd": 0.30508419999999997,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-asc-1-3",
+    "startedAt": "2026-11-24T12:12:29.335Z",
+    "durationSeconds": 41,
+    "costUsd": 0.27892659999999997,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-asc-2-1",
+    "startedAt": "2026-11-24T12:12:29.336Z",
+    "durationSeconds": 28,
+    "costUsd": 0.259454,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-asc-2-2",
+    "startedAt": "2026-11-24T12:12:56.890Z",
+    "durationSeconds": 27,
+    "costUsd": 0.2666776,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-asc-2-3",
+    "startedAt": "2026-11-24T12:13:03.519Z",
+    "durationSeconds": 28,
+    "costUsd": 0.301763,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-ma-1-1",
+    "startedAt": "2026-11-24T12:13:08.983Z",
+    "durationSeconds": 65,
+    "costUsd": 0.24412879999999998,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-ma-1-2",
+    "startedAt": "2026-11-24T12:13:10.356Z",
+    "durationSeconds": 53,
+    "costUsd": 0.2640358,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-ma-1-3",
+    "startedAt": "2026-11-24T12:13:23.998Z",
+    "durationSeconds": 62,
+    "costUsd": 0.24223719999999999,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-neg-1-1",
+    "startedAt": "2026-11-24T12:13:31.482Z",
+    "durationSeconds": 5,
+    "costUsd": 0.0444498,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-neg-1-2",
+    "startedAt": "2026-11-24T12:13:36.107Z",
+    "durationSeconds": 4,
+    "costUsd": 0.043149799999999995,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-neg-1-3",
+    "startedAt": "2026-11-24T12:13:39.945Z",
+    "durationSeconds": 4,
+    "costUsd": 0.0440338,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-neg-2-1",
+    "startedAt": "2026-11-24T12:13:44.113Z",
+    "durationSeconds": 8,
+    "costUsd": 0.0529298,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-neg-2-2",
+    "startedAt": "2026-11-24T12:13:51.914Z",
+    "durationSeconds": 9,
+    "costUsd": 0.054973799999999996,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-neg-2-3",
+    "startedAt": "2026-11-24T12:14:01.182Z",
+    "durationSeconds": 8,
+    "costUsd": 0.05149379999999999,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-ri-1-1",
+    "startedAt": "2026-11-24T12:14:03.790Z",
+    "durationSeconds": 62,
+    "costUsd": 0.2715472,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-ri-1-2",
+    "startedAt": "2026-11-24T12:14:08.729Z",
+    "durationSeconds": 51,
+    "costUsd": 0.29693559999999997,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-ri-1-3",
+    "startedAt": "2026-11-24T12:14:13.979Z",
+    "durationSeconds": 59,
+    "costUsd": 0.26721839999999997,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-rr-1-1",
+    "startedAt": "2026-11-24T12:14:26.325Z",
+    "durationSeconds": 31,
+    "costUsd": 0.202574,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-rr-1-2",
+    "startedAt": "2026-11-24T12:14:57.476Z",
+    "durationSeconds": 34,
+    "costUsd": 0.2074424,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-rr-1-3",
+    "startedAt": "2026-11-24T12:14:59.617Z",
+    "durationSeconds": 33,
+    "costUsd": 0.24611819999999998,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-se-1-1",
+    "startedAt": "2026-11-24T12:15:05.322Z",
+    "durationSeconds": 30,
+    "costUsd": 0.24542700000000003,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-se-1-2",
+    "startedAt": "2026-11-24T12:15:12.977Z",
+    "durationSeconds": 29,
+    "costUsd": 0.2064386,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-se-1-3",
+    "startedAt": "2026-11-24T12:15:31.586Z",
+    "durationSeconds": 26,
+    "costUsd": 0.19896580000000003,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-tw-1-1",
+    "startedAt": "2026-11-24T12:15:32.653Z",
+    "durationSeconds": 41,
+    "costUsd": 0.2358412,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-tw-1-2",
+    "startedAt": "2026-11-24T12:15:35.092Z",
+    "durationSeconds": 33,
+    "costUsd": 0.2181998,
+    "judgeCostUsd": 0
+   },
+   {
+    "run": "D-tw-1-3",
+    "startedAt": "2026-11-24T12:15:42.386Z",
+    "durationSeconds": 35,
+    "costUsd": 0.2215448,
+    "judgeCostUsd": 0
+   }
+  ]
+ }
+}

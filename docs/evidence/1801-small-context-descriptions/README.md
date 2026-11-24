@@ -12,7 +12,7 @@
 - 1M Context（`claude-opus-5-5`）では、到達・本文の読込みが21/21のまま、手順適用は18から17（許容幅2の範囲）。負例の過剰適用はどの条件も0/6。基準2（非劣性）のすべての項目が成立した。
 - 条件A〜Dの失敗・API error・traceの欠落は0件。モデル実行の費用は合計24.05 USD（上限30 USD）。
 
-見直し条件：Claude Codeの一覧の予算・順序・同梱Skillが変わり、200k ContextでASCの説明文が再び省かれる場合（containerの観測で、同梱Skill相当を約400文字足すと予算超過の警告が出て同梱の`security-review`が省かれ、約800文字でASCも省かれ始めた。「余裕」）。隣接するSkillへの誤選択（境界の文を落としたことによる）や、削った適用場面（後片付け・引継ぎ・runnerの選択等）の依頼で到達の低下が観測された場合は、予算内でその語を戻す。1M Contextで個人用Skillが多い環境の劣化は対象外で、#1783の判定（Host設定の案内）のままである。
+見直し条件：Claude Codeの一覧の予算・順序・同梱Skillが変わり、200k ContextでASCの説明文が再び省かれる場合（containerの観測で、約200文字を足すと収まり、約400文字では32文字超過して警告が出て同梱の`security-review`が名前だけになり、約800文字ではASCが11/16に減った。400〜800文字の間は測っていない。「余裕」）。隣接するSkillへの誤選択（境界の文を落としたことによる）や、削った適用場面（後片付け・引継ぎ・runnerの選択等）の依頼で到達の低下が観測された場合は、予算内でその語を戻す。1M Contextで個人用Skillが多い環境の劣化は対象外で、#1783の判定（Host設定の案内）のままである。
 
 ## 対象版と実行環境
 
@@ -53,11 +53,11 @@
 | --- | --- | --- | --- |
 | 200文字×1 | B | 16/16 | なし |
 | 400文字×1 | B | 16/16（省かれたのは`security-review`だけ） | 30件、8,032文字＞8,000 |
-| 400文字×1 | A | 4/16 | 超過 |
+| 400文字×1 | A | 4/16 | 30件、10,726文字＞8,000 |
 | 400文字×2 | B | 11/16 | 31件、8,454文字＞8,000 |
 | 400文字×3 | B | 4/16 | 32件、8,886文字＞8,000 |
 
-候補Bの余裕は約400文字で、実Hostの構成ではほぼ使い切ると見られる。個人用Skillや同梱Skillがさらに増えれば、200k Contextでは候補Bでも省かれる（そのときの対処は#1783のHost設定の案内）。
+候補Bの余裕は、予算超過の警告までが約200〜370文字、ASCが省かれるまでが約400〜800文字の間（未測定）で、実Hostの構成（`schedule`を含む）では警告が出る程度まで使い切ると見られる。個人用Skillや同梱Skillがさらに増えれば、200k Contextでは候補Bでも省かれる（そのときの対処は#1783のHost設定の案内）。
 
 実Hostの`/context`（[results/context/](results/context/)、モデルを呼ばないため費用0）では、候補Bの各行は説明文があっても`< 20`や`~20`の表示で、名前だけの行と区別できなかった。実Hostの要求本文は観測していない。
 
@@ -72,7 +72,7 @@
 | C | `claude-opus-5-5`（1M） | A | ASC 16/16に説明文 |
 | D | `claude-opus-5-5`（1M） | B | ASC 16/16に説明文 |
 
-モデル実行の環境の`/context`（[results/context/](results/context/)）には、containerに無い同梱Skill `schedule`があり、同梱Skillは14件だった。これを約400文字の個人用Skillで模した観測（「余裕」のm1x400）では、候補Aは4/16（`asc`・`contract-enforcement`・`decision-ownership`・`execution-recovery`）、候補Bは16/16（予算をわずかに超え、同梱の`security-review`が名前だけ）だった。どちらでも`security-evidence`・`migration-assurance`・`review-and-remediation`等は候補Aで名前だけである。
+モデル実行の環境の`/context`（[results/context/](results/context/)）には、containerに無い同梱Skill `schedule`があり、同梱Skillは14件だった。これを約400文字の個人用Skillで模した観測（「余裕」のm1x400）では、候補Aは4/16（`asc`・`contract-enforcement`・`decision-ownership`・`execution-recovery`）、候補Bは16/16（予算をわずかに超え、同梱の`security-review`が名前だけ）だった。containerの観測（5/16）とこの観測（4/16）のどちらでも、候補Aでは`security-evidence`・`migration-assurance`・`review-and-remediation`等が名前だけである。
 
 隔離の確認（`evals-iso`、反例、2つのモデルで各3件）：fixture外の目印fileの`Read`は「don't ask mode」で拒否され、目印の文字列はtraceに無かった。書込み・network系のtool（`Write`・`Edit`・`Bash`・`WebFetch`・`WebSearch`）はsessionに無く、`ToolSearch`で探しても見つからなかった。目印fileは作られず、network系toolの呼出しも無かった。6件とも合格した後で条件A〜Dを実行した。fixture外へ書けないことの根拠は、graderの合格（作業ディレクトリ内の`probe-write.txt`の不在）ではなく、書込み系のtoolがsessionに無かったこと（[results/suites.json](results/suites.json)の`sessionTools`）である。graderは作業ディレクトリの外への書込みを検出できない。`claude-sonnet-4-5`の書込みの確認は、`ToolSearch`を繰り返して最大turn数（5）に達して終了した（graderは合格）。
 
@@ -137,12 +137,12 @@
 | 2 負例 | 過剰適用 B 0 ≤ A 0、D 0 ≤ C 0 | 成立 |
 | 3 採否 | 1・2とも成立 | **採用** |
 
-固定した手順からの逸脱（suite Bの費用上限）の影響：Bの試行を終了時刻の順に並べると、累計費用が6 USDを超えたのは最後に終わった1試行（`se-1`の3回目、終了の約3分前に開始）で、累計6 USDを超えた後に開始した試行は無い（[results/suites.json](results/suites.json)の元になった`claude plugin eval`の`startedAt`・`durationSeconds`・`costUsd`から計算）。上限が新しい試行の開始を止める方式なら、欠ける試行は無い。実行中の試行も打ち切る方式なら、最後の1試行が欠け、基準4により不成功とみなす。その場合も、到達はB 16（改善の差5≥3）、手順適用は5（≥5−2）、`se-1`はAで0/3のため基準2のケース別の条件に掛からず、判定は変わらない。上限がどの方式かは確かめていない。
+固定した手順からの逸脱（suite Bの費用上限）の影響：Bの試行を終了時刻の順に並べると、累計費用が6 USDを超えたのは最後に終わった1試行（`se-1`の3回目、終了の約3分前に開始）で、累計6 USDを超えた後に開始した試行は無い（[results/suites.json](results/suites.json)の元になった`claude plugin eval`の`startedAt`・`durationSeconds`・`costUsd`から計算）。上限が新しい試行の開始を止める方式なら、欠ける試行は無い。実行中の試行も打ち切る方式なら、最後の1試行が欠け、基準4により不成功とみなす。その場合も、到達はB 16（改善の差5≥3）、手順適用は5（≥5−2）、`se-1`はAで0/3のため基準2のケース別の条件に掛からず、判定は変わらない。上限がどの方式かは確かめていない。この分析は、費用が試行の完了時に計上される前提に立つ。実行中の費用も逐次計上される方式なら、終盤に並列で実行中だった複数の試行が欠けうる。その場合も、到達・本文・手順適用の各3試行までの欠落なら基準1・2は成立する（到達14−11＝3、手順適用3≥5−2）が、Aで到達3/3の`asc-2`・`tw-1`・`ri-1`のいずれかで2試行が欠けると、基準2のケース別の条件を満たさない。終盤に実行中だった試行（開始の遅い6件）は`se-1`の3件と`tw-1`の3件で、`tw-1`の3試行がすべて欠ける場合は判定が変わる。試行ごとの開始時刻・所要時間・費用は[results/run-timing.json](results/run-timing.json)に残した（pathは除いた）。
 
 採否の扱い：
 
 - 配布Skill 16件の`SKILL.md`の`description`の行を、[candidates.json](candidates.json)の候補Bの文面へ置き換えた。本文・reference・Skill名・配布処理・登録処理は変えていない。mainをmergeする前の変更後のtree（commit `780756461cc76618cff6c4104132687bd24c91d5`の内容）から作り直したfixtureで、`project-assets`が配置するClaude Codeの入口（`.claude/skills`）・本文（`.agent-skill-chain/skills`）・同梱本体（`.agent-skill-chain/managed-runtime/skills`）が、評価に使った候補Bのfixtureとbyte単位で一致することを`diff -r`で確かめた。
-- 落とした文：各descriptionの後半にあった境界・否定の文（例：`asc`の「変更のレビューや指摘の是正、調査・見積などは目的別Skillが扱う」、`decision-ownership`の担当外のSkillの列挙、各Skillの「〜だけには適用しない」）と、適用場面を示す肯定文の一部（例：`asc`の「後片付け」、`execution-recovery`の「待機の理由や実行所有者が不明」、`work-coordination`の「Context交代や別セッションへ未完了作業を引き継ぐ」「確認事項の回答と反映状況」、`verification-optimization`のrunnerの種類・並列化・テスト構成、`user-journey-acceptance`の「画面デモを見せる」、`estimate-and-scope`の「外部サービスの費用と管理責任」）。これらはSkillを選ぶ前の一覧の文であり、適用の規則は各Skillの本文に残る。境界を問う依頼（#1654の`research-to-implementation`と`engineering-judgment`の取り違え等）と、削った適用場面の依頼は、この依頼集合では測っていない（「欠測・限界」）。
+- 落とした文：各descriptionの後半にあった境界・否定の文（例：`asc`の「変更のレビューや指摘の是正、調査・見積などは目的別Skillが扱う」、`decision-ownership`の担当外のSkillの列挙、各Skillの「〜だけには適用しない」）と、適用場面を示す肯定文の一部（例：`asc`の「後片付け」、`execution-recovery`の「待機の理由や実行所有者が不明」、`work-coordination`の「Context交代や別セッションへ」（引継ぎの場面の一部。「未完了作業を引き継ぐ」は残した）「確認事項の回答と反映状況」、`verification-optimization`のrunnerの種類・並列化・テスト構成、`user-journey-acceptance`の「画面デモを見せる」、`estimate-and-scope`の「外部サービスの費用と管理責任」）。これらはSkillを選ぶ前の一覧の文であり、適用の規則は各Skillの本文に残る。境界を問う依頼（#1654の`research-to-implementation`と`engineering-judgment`の取り違え等）と、削った適用場面の依頼は、この依頼集合では測っていない（「欠測・限界」）。
 - Host設定（`skillListingBudgetFraction`等）は変えない。#1783で`v05/USAGE.md`へ追記したHost設定の案内のうち、「200k ContextではASCの入口と同梱Skillだけで予算を超え、11件が名前だけになった」の1文だけを、短縮前の観測であることと、短縮後はASCの説明文が残るが余裕はほぼ無く、同梱Skillや個人用Skillが増えると超えることへ直した。設定の選択肢・代償・Codexの記述は変えていない。
 
 ## 配布物への影響
@@ -156,7 +156,7 @@
 ## 欠測・限界
 
 - 200k Contextのモデル実行は`claude-sonnet-4-5`の1種類だけで、`claude-haiku-4-5`は一覧の観測だけである。1M Contextは`claude-opus-5-5`だけ。fixtureは1つ、各ケース3回。統計的な発火率ではない。
-- 依頼集合は#1783の正例7件（6 Skill）と負例2件で、`execution-recovery`・`verification-optimization`・`work-coordination`等の、短縮で説明文が見えるようになった他のSkillの到達は測っていない。隣接するSkillの境界を問う依頼も無い。短縮で削った適用場面（後片付け・待機の理由が不明・Context交代の引継ぎ・runnerの選択・画面デモ・外部サービスの管理責任等）の依頼の到達も測っていない。
+- 依頼集合は#1783の正例7件（6 Skill）と負例2件で、`execution-recovery`・`verification-optimization`・`work-coordination`等の、短縮で説明文が見えるようになった他のSkillの到達は測っていない。隣接するSkillの境界を問う依頼も無い。短縮で削った適用場面（後片付け・待機の理由が不明・Context交代や別セッションへの引継ぎ・runnerの選択・画面デモ・外部サービスの管理責任等）の依頼の到達も測っていない。
 - モデル実行ではASCの入口をplugin（`project:<name>`）として読み込んだ。実際のproject登録とは名前と読込み順が異なる。一覧の観測では、どちらの形でも候補Bは16/16、候補Aは5/16だった。
 - 実Hostの要求本文は観測していない。モデル実行の環境の同梱Skillは14件（`schedule`を含む）で、条件表の一覧の状態はcontainer（13件）の観測である。containerには同梱Skillの`schedule`が無く、余裕の評価は個人用Skillで模した推定である。実Hostの`/context`の個別行では候補Bの可視性を判定できなかった。
 - 手順適用の判定は、本文・referenceの`Read`と回答の固定した語の有無である。回答の質は採点していない。
