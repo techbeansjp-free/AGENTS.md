@@ -2,13 +2,54 @@
  "schema": "asc-1807-conditions/v1",
  "note": "#1804のconditions.jsonのA・D・Eと同じ構成。全条件で、fixtureの.claude/skills/にASCの配布Skill（base時点のskills/*）を置き、同じ生成環境・同じtool（env/mcp.json）・同じ依頼（env/gen-prompt.txt）で比べる。fromは#1804のext-commits.jsonの固定commitのcheckoutからの相対path。",
  "conditions": {
-  "A": {"label": "現行ASCのみ", "skills": []},
-  "D": {"label": "ASC + Anything Frontend Art Direction", "skills": [{"name": "anything-frontend-art-direction", "from": "ad"}]},
-  "E": {"label": "ASC + Anything Frontend Art Direction + Product Design", "skills": [{"name": "anything-frontend-art-direction", "from": "ad"}, {"name": "anything-frontend-product-design", "from": "pd"}]}
+  "A": {
+   "label": "現行ASCのみ",
+   "skills": []
+  },
+  "D": {
+   "label": "ASC + Anything Frontend Art Direction",
+   "skills": [
+    {
+     "name": "anything-frontend-art-direction",
+     "from": "ad"
+    }
+   ]
+  },
+  "E": {
+   "label": "ASC + Anything Frontend Art Direction + Product Design",
+   "skills": [
+    {
+     "name": "anything-frontend-art-direction",
+     "from": "ad"
+    },
+    {
+     "name": "anything-frontend-product-design",
+     "from": "pd"
+    }
+   ]
+  }
  },
  "cases": {
-  "ui03-dashboard": {"from": "../1804-design-judgment/cases/ui03-dashboard", "narrow": 800, "wide": 1440},
-  "ui04-parts-search": {"from": "cases/ui04-parts-search", "narrow": 390, "wide": 1440},
-  "ui07-bus-mobile": {"from": "cases/ui07-bus-mobile", "narrow": 390, "wide": 1440}
+  "ui03-dashboard": {
+   "from": "../1804-design-judgment/cases/ui03-dashboard",
+   "narrow": 800,
+   "wide": 1440
+  },
+  "ui04-parts-search": {
+   "from": "cases/ui04-parts-search",
+   "narrow": 390,
+   "wide": 1440
+  },
+  "ui07-bus-mobile": {
+   "from": "cases/ui07-bus-mobile",
+   "narrow": 390,
+   "wide": 1440
+  },
+  "ui10-cli": {
+   "from": "../1804-design-judgment/cases/ui10-cli",
+   "narrow": null,
+   "wide": null,
+   "note": "誤発火の確認（UI-10相当）。D・Eだけ各3回（ownerの判断）"
+  }
  }
 }

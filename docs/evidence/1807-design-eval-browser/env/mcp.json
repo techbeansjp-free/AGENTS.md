@@ -1,1 +1,0 @@
-{"mcpServers": {"browser": {"type": "stdio", "command": "node", "args": ["/opt/env/mcp-server.mjs"], "env": {"BROWSE_PROXY": "http://proxy:3129", "ALLOWLIST": "/config/allowlist.json", "WORK_DIR": "/work", "TOOL_LOG": "/log/tools.jsonl", "SHOT_DIR": "/log/shots", "NODE_PATH": "/opt/node_modules"}}}}

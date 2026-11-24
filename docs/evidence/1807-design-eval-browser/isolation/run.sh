@@ -7,10 +7,10 @@ set -eu
 W="$1"; S="$2"; OUT="$3"
 E="$W/docs/evidence/1807-design-eval-browser"
 L="asc.worktree=$W"
-IMG=asc-1807-browser:1
+IMG=${IMG:-asc-1807-browser:1}   # IMG=asc-1807-tools:1 SKIP_BUILD=1 re-runs the probes on the image used for the run
 mkdir -p "$S/ctx" "$S/work" "$S/log" "$S/home-sim" "$OUT"
 cp "$E/env/Dockerfile" "$S/pkg/playwright-core-1.49.1.tgz" "$S/ctx/"
-docker build --network none --target browser --label "$L" -t "$IMG" "$S/ctx" > "$S/build.log" 2>&1
+[ "${SKIP_BUILD:-0}" = 1 ] || docker build --network none --target browser --label "$L" -t "$IMG" "$S/ctx" > "$S/build.log" 2>&1
 MARK=marker-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 echo "$MARK-token" > "$S/home-sim/$MARK"
 
