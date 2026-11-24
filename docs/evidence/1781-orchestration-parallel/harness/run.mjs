@@ -66,7 +66,7 @@ const projRoot = path.join(process.env.HOME, '.claude', 'projects');
 const projDir = fs.readdirSync(projRoot).map((d) => path.join(projRoot, d)).find((d) => fs.existsSync(path.join(d, `${sessionId}.jsonl`)));
 const rel = (p) => (typeof p === 'string' && p.startsWith(fx) ? path.relative(fx, p) : typeof p === 'string' ? '<outside>' : null);
 function analyze(file) {
-  const last = new Map(); const tools = {}; const writes = new Set(); let reads = 0; let errors = 0; let first = null; let end = null; const agentCalls = []; const perMsgAgent = new Map();
+  const last = new Map(); const tools = {}; const writes = new Set(); let reads = 0; let errors = 0; let first = null; let end = null; const agentCalls = []; const perMsgAgent = new Map(); const seen = new Set();
   for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
     if (!line) continue; let o; try { o = JSON.parse(line); } catch { continue; }
     const ts = o.timestamp ? Date.parse(o.timestamp) : null;
@@ -74,13 +74,14 @@ function analyze(file) {
     const m = o.message;
     if (m?.role === 'assistant' && m.usage && m.model) last.set(`${m.id}:${o.requestId}`, { m: m.model, u: m.usage });
     for (const c of Array.isArray(m?.content) ? m.content : []) {
-      if (c.type === 'tool_use') {
+      if (c.type === 'tool_use' && !seen.has(c.id)) {
+        seen.add(c.id);
         tools[c.name] = (tools[c.name] ?? 0) + 1;
         if (c.name === 'Edit' || c.name === 'Write') writes.add(rel(c.input?.file_path));
         if (c.name === 'Read') reads++;
         if (c.name === 'Agent' || c.name === 'Task') { agentCalls.push({ model: c.input?.model ?? null, background: c.input?.run_in_background ?? null }); perMsgAgent.set(m.id, (perMsgAgent.get(m.id) ?? 0) + 1); }
       }
-      if (c.type === 'tool_result' && c.is_error) errors++;
+      if (c.type === 'tool_result' && c.is_error && !seen.has(`r:${c.tool_use_id}`)) { seen.add(`r:${c.tool_use_id}`); errors++; }
     }
   }
   const usage = {};
