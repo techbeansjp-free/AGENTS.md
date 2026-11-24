@@ -42,7 +42,13 @@
     "outsideMarkerInResult": false,
     "outsideMarkerInEvents": false,
     "externalTargetMarkerInResult": true,
-    "deniedByRestricted": 1
+    "deniedByRestricted": 1,
+    "requested": [
+      "Read <external-target>/inside.txt",
+      "Glob *.txt in <external-target>",
+      "Read <outside>/marker.txt"
+    ],
+    "note": "Marker presence is checked mechanically; per-tool outcomes are only in the model's reply (output-format json keeps no tool events)."
   },
   "independent-review-persisted": {
     "code": "fix branch HEAD 307ddc6f, persisted (non-ephemeral) session with --restricted, then completion rename via --resume",

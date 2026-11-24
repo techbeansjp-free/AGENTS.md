@@ -96,7 +96,7 @@ repositoryの直下とworktreeの`.claude/settings.json`に、外のdirectoryの
 
 独立レビューの指摘を受けて、commit後（`307ddc6f`）に次の2つを追加で実測した。
 
-- 主要checkoutの外にあるworktreeを対象にした起動：対象内のmarkerをReadで読め、Globで列挙できた。外のmarkerは`--restricted`で拒否された（`e2e-external-worktree`）。`--add-dir`で加えた対象は、主要checkoutの外でも読取り範囲に入る。
+- 主要checkoutの外にあるworktreeを対象にした起動：対象内のRead・対象内のGlob・外のmarkerのReadの3件を依頼した。応答には対象内のmarkerの値が出て、外のmarkerの値は応答にもeventにも出なかった。`--restricted`の拒否文は1件だった（`e2e-external-worktree`）。toolごとの成否はmodelの応答による（この起動はtool単位のeventを保存しない）。`--add-dir`で加えた対象は、主要checkoutの外でも読取り範囲に入る。
 - 永続session（`--ephemeral`なし）：独立レビュー自体を`--restricted`付きの本体で実行し、完了後に`--resume`での改名まで成功した（`independent-review-persisted`、`naming: completed`）。
 
 ## 同じfileの他の経路と他Host
@@ -147,9 +147,9 @@ repositoryの直下とworktreeの`.claude/settings.json`に、外のdirectoryの
 ## 品質検査
 
 - `node --test test/test_host_session.mjs`：Linux container（`node:20.19.5-bookworm`、network none、read-only root）で29件成功した。
-- `npm run quality`・`npm run package:check`は、macOS上の実行で失敗した（quality：653件中35件、package:check：12件中3件）。
-  - host-session：作成直後の実行fileの初回起動に数秒かかり、テストの2秒の上限を超える。baseでも同じ21件が失敗した。
-  - package：`npm pack`の出力にJSON以外の行が混ざる。
-  - Git失敗の診断に関するテスト群：本変更が触れないfileのテストである。baseでの再実行はしていない。
-  - source-language検査：最初のcommitの`setup-fixture.sh`が対象外のsourceとして拒否された。`setup-fixture.mjs`へ置き換えた。
+- `npm run quality`・`npm run package:check`は、macOS上の実行で失敗した。qualityは最初のcommit（`307ddc6f`）の`src`・`test`を含む作業treeで実行し、653件中35件が失敗した。package:checkは同じcommitで実行し、12件中3件が失敗した。qualityの失敗の内訳は次のとおり。
+  - host-session（21件）：作成直後の実行fileの初回起動に数秒かかり、テストの2秒の上限を超える。baseでも同じ21件が失敗した。
+  - package（3件、package:checkの3件と同じ）：`npm pack`の出力にJSON以外の行が混ざる。
+  - Git失敗の診断に関するテスト群（10件）：本変更が触れないfileのテストである。baseでの再実行はしていない。
+  - source-language検査（1件）：実行中に置いた`setup-fixture.sh`が対象外のsourceとして拒否された。`setup-fixture.mjs`へ置き換え、`47dd449d`以降ではmacOS上でも`test/test_source_quality.mjs`が成功した。
 - 同じ最初のcommit（`307ddc6f`）でのPRのCI（Linux）では、失敗はsource-language検査の1件だけだった（host-session・package・Git診断のテストは成功）。最終的な判定はPRの必須CIの結果による。
