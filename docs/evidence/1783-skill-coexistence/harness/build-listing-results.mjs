@@ -5,8 +5,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 const [dir, out] = process.argv.slice(2);
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const rows = [];
 for (const d of fs.readdirSync(dir).sort()) {
   const p = path.join(dir, d);

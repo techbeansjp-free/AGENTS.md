@@ -4,7 +4,7 @@
 
 ## 結論
 
-**判定は「不採用」とする（事前に固定した[採否基準](decision-criteria.md)の4。判定の対象は、モデル実行を行った1M Context（`claude-opus-5-5`）の条件である。200k Contextは一覧の観測だけで、採否は判定していない）。ASC固有の仕組み・Skillのdescription・配布処理は変更しない。基準4が許すHost設定の案内だけを、`v05/USAGE.md`の既存の節へ1段落追記する。**
+**判定は「不採用」とする（事前に固定した[採否基準](decision-criteria.md)の4。基準4へ進んだのは、基準3を「読み方すべてで成立する場合だけ成立」とする事後の扱いで不成立としたためである。判定の対象は、モデル実行を行った1M Context（`claude-opus-5-5`）の条件である。200k Contextは一覧の観測だけで、採否は判定していない）。ASC固有の仕組み・Skillのdescription・配布処理は変更しない。基準4が許すHost設定の案内だけを、`v05/USAGE.md`の既存の節へ1段落追記する。**
 
 - 問題は実在する。Claude Code 2.1.323・1M Context（`claude-opus-5-5`）では一覧の予算が30,000文字で、ASC単体では起きず、他のSkillとの共存時だけに起きる。使用回数0の個人用Skillが70件（各400文字以下）あると、projectに登録したASC 16件のうち15件の説明文が省かれ、名前だけになった（隔離環境での要求本文の観測）。
 - Context容量200kのモデル（`claude-haiku-4-5`・`claude-sonnet-4-5`で観測）では予算が8,000文字で、**ASC単体でも同梱Skillと合わせて超過し、ASC 16件のうち11件の説明文が省かれた**（`asc`は残った）。この観測はモデル実行の後、再レビューの指摘を受けて追加したもので、採否基準の対象外である。全descriptionを60文字に短縮すると13/16が残った。選択精度への影響は測っていない（「Context容量の小さいモデル」）。
@@ -22,7 +22,7 @@
 | 項目 | 値 |
 | --- | --- |
 | 調査基点 | main `c45a8abcb1441a034f3d0b53db22644b77a9fc7f`（ASC `package.json` 0.5.0） |
-| oracleと採否基準の固定 | モデル実行の前にcommit `2e09cf3e000c2fd6353523fcdfc2176c9e3d9c75`で固定した。採点script [harness/score.mjs](harness/score.mjs)はこのcommitの後、条件Aの実行中に`cases.json`の`scoring`の定義どおりに書き、Aの採点前に完成した。以後、`cases.json`・採否基準・採点に使うharnessは変えていない。モデル実行の後、レビューの是正で`run-suite`の終了code・欠落の記録、`analyze-listing.mjs`の行の解析（1M Contextの結果は不変を確認）、`build-listing-results.mjs`と200k Contextの条件を追加した。実行時の`run-observe`・`run-suite`は同じ処理のshell scriptで、CIの言語規約（TypeScript/JavaScript以外のsourceを拒否）に合わせてNode版へ置き換え、Node版でも条件Aの一覧観測と隔離確認の3件が同じ結果になることを確かめた（[cases.json](cases.json) sha256 `846c724a04510e820f9c97b79ffe75ee285452c747bfb0648f531c21d04f2c15`、[decision-criteria.md](decision-criteria.md) sha256 `59331ccdd388f1f4a404588a59470c67fc19d97887f9fac0bb4f74310cbae10b`） |
+| oracleと採否基準の固定 | モデル実行の前にcommit `2e09cf3e000c2fd6353523fcdfc2176c9e3d9c75`で固定した。採点script [harness/score.mjs](harness/score.mjs)はこのcommitの後、条件Aの実行中に`cases.json`の`scoring`の定義どおりに書き、Aの採点前に完成した。以後、`cases.json`・採否基準・採点に使うharnessは変えていない。モデル実行の後、レビューの是正で`run-suite`の終了code・欠落の記録、`analyze-listing.mjs`の行の解析（1M Contextの結果は不変を確認）、`build-listing-results.mjs`と200k Contextの条件を追加した。実行時の`run-observe`・`run-suite`は同じ処理のshell scriptで、CIの言語規約（TypeScript/JavaScript以外のsourceを拒否）に合わせてNode版へ置き換え、Node版でも条件Aの一覧観測（29件・説明文29件・8,572文字）と隔離確認の3件（全て合格、0.187 USD）が同じ結果になることを、`878e2961`の版で確かめた（出力はrepositoryに含めない。その後、レビューのLow是正で引数の絶対path化・失敗時の記録を足した）。採点scriptのコメントの参照名だけ直した（処理は不変）。固定したfileのhash：[cases.json](cases.json) sha256 `846c724a04510e820f9c97b79ffe75ee285452c747bfb0648f531c21d04f2c15`、[decision-criteria.md](decision-criteria.md) sha256 `59331ccdd388f1f4a404588a59470c67fc19d97887f9fac0bb4f74310cbae10b` |
 | Host | Claude Code 2.1.323（macOS上の実Hostと、同版のLinux build） |
 | モデル | `claude-opus-5-5`、Context容量1,000,000 tokens（`/context`の表示） |
 | 隔離環境1（一覧の観測） | Docker 29.8.0、`node:22-alpine`にClaude Code 2.1.323を導入した使い捨てcontainer。`--network none`、read-only root、HOMEはtmpfs、秘密・HOMEのmountなし、メモリ1GB・CPU 2・pids 256、label `asc.worktree`。モデルの代わりに同じcontainer内のcapture server（[harness/capture-server.mjs](harness/capture-server.mjs)）へ接続する |
@@ -140,7 +140,7 @@ Claude Codeの設定はCodexに適用されない。Codexの一覧は[公式資�
 | haiku＋全descriptionを60文字に短縮 | 200k | 29 | 25 | 13/16 | 29件、8,381文字＞8,000 |
 | haiku＋`skillListingBudgetFraction: 0.02` | 200k | 29 | 29 | 16/16 | なし |
 
-- 予算は8,000文字で、1%×200k×4文字/tokenと一致する（`skillListingBudgetFraction: 0.02`で警告が消えたので、Context容量に応じて計算されている）。1M Contextの30,000文字は同じ計算（40,000文字）より小さく、上限がある可能性がある（未確認）。
+- 予算は8,000文字で、1%×200k×4文字/tokenと一致する。ただし「3文字/token（1M→30,000、200k→6,000）に8,000文字の下限がある」という仮説も全ての観測と合い（0.02では12,000＞10,305で警告が出ない）、この観測では区別できない。1M Contextの30,000文字に上限がある可能性も含め、計算式は未確認である。
 - ASCの16件と同梱の13件だけで超過する。説明文が残ったのは`asc`から`estimate-and-scope`まで（名前順の先頭5件）で、`review-and-remediation`・`security-evidence`・`migration-assurance`・`tracker-issue-writing`・`research-to-implementation`等の11件は名前だけになった。同梱Skillは`security-review`以外の説明文が残った。
 - 1M Contextと違い、ここではdescriptionの短縮が効く（13/16）。ただし短縮後の文面で選択・適用の精度が保たれるかは測っていない。#1652・#1654はdescriptionの用途と境界の書き方で到達が変わることを示しており、短縮はその改善を失う恐れがある。
 - 200k Contextでのモデル実行は行っていない。名前だけになった`review-and-remediation`がレビュー依頼で同梱の`code-review`へ流れるかは、1M Contextの条件Cから類推できるだけである。
@@ -212,7 +212,7 @@ Cの誤選択の行き先：asc-1は`work-coordination`（1回）。asc-2は`exe
 | suite全体の実時間（秒、並列4） | 190 | 168 | 249 | 436 |
 | 初期Context（`/context`のTokens／Skills行） | 5.7k／3k | 10.7k／8.7k | 12k／10k | Cと同じ構成 |
 
-モデル実行全体（隔離確認・診断を含む）の推定費用は23.0 USDで、上限50 USDを下回った。
+モデル実行全体（隔離確認・診断を含む）の推定費用は23.0 USDで、上限50 USDを下回った。これとは別に、採点の設定を誤って捨てた最初の隔離確認（0.21 USD）と、Node版の確認の隔離確認（0.19 USD）がある。合計は23.4 USD。
 
 ## 配布物への影響
 
@@ -240,7 +240,7 @@ Cの誤選択の行き先：asc-1は`work-coordination`（1回）。asc-2は`exe
 | Fを14試行へ換算した成功数 | 11 | 9.33 | 1.67 | 成立 |
 | 成功数そのまま | 11 | 14 | Fが上回る | 成立 |
 
-読み方は結果を見た後に選ぶことになるため、本記録は「表の読み方すべてで成立した場合だけ基準3を成立とする」とした（結果を見て有利な読み方を選ばない＝基準を緩めない側）。この扱い自体も事後の決定であり、ownerが別の読み方を指定すれば基準3が成立しうる。その場合の結論は「利用手順の限定改善」（既存の任意文例と予算設定の案内）で、本PRの追記との差は既存文例を推奨に含めるかどうかである。基準1は「Bで2/2のときCで1/3以下」（rr-1・asc-2）で成立する。「Bより3試行以上少ない」の部分は、失敗数で読めば到達（B失敗0、C失敗7）で成立し、成功数そのまま（14対14）で読めば成立しないが、後者の条件だけで判定は変わらない。
+読み方は結果を見た後に選ぶことになるため、本記録は「表の読み方すべてで成立した場合だけ基準3を成立とする」とした（結果を見て有利な読み方を選ばない＝基準を緩めない側）。この扱い自体も事後の決定であり、ownerが別の読み方を指定すれば基準3が成立しうる。その場合の結論は「利用手順の限定改善」（既存の任意文例と予算設定の案内）で、本PRの追記との差は既存文例を推奨に含めるかどうかである。基準1は「Bで2/2のときCで1/3以下」（rr-1・asc-2）で成立する。「Bより3試行以上少ない」の部分は、失敗数で読めば到達（B失敗0、C失敗7）で成立し、成功数そのまま（14対14）で読めば成立しないが、「Bで2/2のときCで1/3以下」の条件だけで成立するため判定は変わらない。
 
 採否の扱い：
 

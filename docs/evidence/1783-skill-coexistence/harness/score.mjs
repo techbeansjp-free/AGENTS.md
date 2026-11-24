@@ -1,6 +1,6 @@
 // Scores the model runs against the fixed oracle (cases.json). Reads only the copied traces.
 // Usage: node score.mjs <cases.json> <traces-dir> <condition>... [--runs-json <out.json>]
-// Trace files are named <condition>-<case>-<n>.jsonl (copied by run-suite.sh).
+// Trace files are named <condition>-<case>-<n>.jsonl (copied by run-suite).
 import fs from 'node:fs';
 import path from 'node:path';
 const args = process.argv.slice(2);

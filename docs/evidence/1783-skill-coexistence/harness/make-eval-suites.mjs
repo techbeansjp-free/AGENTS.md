@@ -7,8 +7,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 const [fixture, root, marker] = process.argv.slice(2).map((p) => path.resolve(p));
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const cases = JSON.parse(fs.readFileSync(path.join(here, '../cases.json'), 'utf8')).cases;
 const usage = fs.readFileSync(path.join(here, '../../../../v05/USAGE.md'), 'utf8');
 const template = /### ASCを読む契機を利用先へ採用する（任意）[\s\S]*?```text\n([\s\S]*?)\n```/.exec(usage)[1];
