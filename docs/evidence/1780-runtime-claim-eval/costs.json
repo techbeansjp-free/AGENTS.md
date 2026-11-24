@@ -1,0 +1,923 @@
+{
+  "note": "tokens = input + cache creation + cache read + output from the Host result event; totalCostUsd is the Host estimate, not a billed amount",
+  "runs": {
+    "6204acb218bc": {
+      "fixture": "F1",
+      "condition": "R0",
+      "replicate": 1,
+      "position": 1,
+      "startedAt": "2026-11-23T08:55:05.356Z",
+      "tokens": 40115,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11350,
+        "cacheRead": 21472,
+        "output": 7287
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 63297,
+      "hostDurationMs": 62491,
+      "numTurns": 14,
+      "totalCostUsd": 0.2410405,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "4e5f92845f52": {
+      "fixture": "F1",
+      "condition": "R1",
+      "replicate": 1,
+      "position": 2,
+      "startedAt": "2026-11-23T08:56:08.848Z",
+      "tokens": 40532,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11398,
+        "cacheRead": 21511,
+        "output": 7617
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 69876,
+      "hostDurationMs": 69044,
+      "numTurns": 14,
+      "totalCostUsd": 0.2480325,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "337b761d6d5cc1939c8004981fa9e68b1962f9799128ed97c7b8079a3d1267d2",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "5a6c7209e8c4": {
+      "fixture": "F1",
+      "condition": "R1",
+      "replicate": 2,
+      "position": 3,
+      "startedAt": "2026-11-23T08:57:18.909Z",
+      "tokens": 40652,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11433,
+        "cacheRead": 21535,
+        "output": 7678
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 68137,
+      "hostDurationMs": 67174,
+      "numTurns": 14,
+      "totalCostUsd": 0.2495377,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "337b761d6d5cc1939c8004981fa9e68b1962f9799128ed97c7b8079a3d1267d2",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "37a4f0906c76": {
+      "fixture": "F1",
+      "condition": "R0",
+      "replicate": 2,
+      "position": 4,
+      "startedAt": "2026-11-23T08:58:27.230Z",
+      "tokens": 39472,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11368,
+        "cacheRead": 21485,
+        "output": 6613
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 59579,
+      "hostDurationMs": 58698,
+      "numTurns": 14,
+      "totalCostUsd": 0.2277073,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "bf20760ea9b2": {
+      "fixture": "F1",
+      "condition": "R0",
+      "replicate": 3,
+      "position": 5,
+      "startedAt": "2026-11-23T08:59:26.995Z",
+      "tokens": 39846,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11383,
+        "cacheRead": 21492,
+        "output": 6965
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 62732,
+      "hostDurationMs": 61762,
+      "numTurns": 14,
+      "totalCostUsd": 0.2348729,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "72374ab99524": {
+      "fixture": "F1",
+      "condition": "R1",
+      "replicate": 3,
+      "position": 6,
+      "startedAt": "2026-11-23T09:00:29.916Z",
+      "tokens": 41165,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11367,
+        "cacheRead": 21495,
+        "output": 8297
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 73272,
+      "hostDurationMs": 72461,
+      "numTurns": 14,
+      "totalCostUsd": 0.2613859,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "337b761d6d5cc1939c8004981fa9e68b1962f9799128ed97c7b8079a3d1267d2",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "ed40922ecca3": {
+      "fixture": "F2",
+      "condition": "R1",
+      "replicate": 1,
+      "position": 1,
+      "startedAt": "2026-11-23T08:55:05.361Z",
+      "tokens": 39536,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 10802,
+        "cacheRead": 21509,
+        "output": 7219
+      },
+      "toolCalls": 12,
+      "toolCallsByName": {
+        "Read": 11,
+        "Glob": 1
+      },
+      "wallClockMs": 63584,
+      "hostDurationMs": 62784,
+      "numTurns": 13,
+      "totalCostUsd": 0.23530410000000002,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "337b761d6d5cc1939c8004981fa9e68b1962f9799128ed97c7b8079a3d1267d2",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "daca53e1457c": {
+      "fixture": "F2",
+      "condition": "R0",
+      "replicate": 1,
+      "position": 2,
+      "startedAt": "2026-11-23T08:56:09.131Z",
+      "tokens": 39604,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 10749,
+        "cacheRead": 21458,
+        "output": 7391
+      },
+      "toolCalls": 12,
+      "toolCallsByName": {
+        "Read": 11,
+        "Glob": 1
+      },
+      "wallClockMs": 68182,
+      "hostDurationMs": 67136,
+      "numTurns": 13,
+      "totalCostUsd": 0.2383147,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "9e1049be80bd": {
+      "fixture": "F2",
+      "condition": "R0",
+      "replicate": 2,
+      "position": 3,
+      "startedAt": "2026-11-23T08:57:17.507Z",
+      "tokens": 39056,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 10764,
+        "cacheRead": 21467,
+        "output": 6819
+      },
+      "toolCalls": 12,
+      "toolCallsByName": {
+        "Read": 11,
+        "Glob": 1
+      },
+      "wallClockMs": 61681,
+      "hostDurationMs": 60903,
+      "numTurns": 13,
+      "totalCostUsd": 0.2269917,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "5a8121d96f29": {
+      "fixture": "F2",
+      "condition": "R1",
+      "replicate": 2,
+      "position": 4,
+      "startedAt": "2026-11-23T08:58:19.370Z",
+      "tokens": 40656,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 10796,
+        "cacheRead": 21497,
+        "output": 8357
+      },
+      "toolCalls": 12,
+      "toolCallsByName": {
+        "Read": 11,
+        "Glob": 1
+      },
+      "wallClockMs": 74560,
+      "hostDurationMs": 73761,
+      "numTurns": 13,
+      "totalCostUsd": 0.2580137,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "337b761d6d5cc1939c8004981fa9e68b1962f9799128ed97c7b8079a3d1267d2",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "6d0b50869dc7": {
+      "fixture": "F2",
+      "condition": "R1",
+      "replicate": 3,
+      "position": 5,
+      "startedAt": "2026-11-23T08:59:34.117Z",
+      "tokens": 40299,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 10817,
+        "cacheRead": 21518,
+        "output": 7958
+      },
+      "toolCalls": 12,
+      "toolCallsByName": {
+        "Read": 11,
+        "Glob": 1
+      },
+      "wallClockMs": 70989,
+      "hostDurationMs": 70030,
+      "numTurns": 13,
+      "totalCostUsd": 0.25021109999999996,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "337b761d6d5cc1939c8004981fa9e68b1962f9799128ed97c7b8079a3d1267d2",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "5ac938e77ae2": {
+      "fixture": "F2",
+      "condition": "R0",
+      "replicate": 3,
+      "position": 6,
+      "startedAt": "2026-11-23T09:00:45.306Z",
+      "tokens": 40207,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 10785,
+        "cacheRead": 21488,
+        "output": 7928
+      },
+      "toolCalls": 12,
+      "toolCallsByName": {
+        "Read": 11,
+        "Glob": 1
+      },
+      "wallClockMs": 72501,
+      "hostDurationMs": 71681,
+      "numTurns": 13,
+      "totalCostUsd": 0.2493491,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "b4ab354bd209": {
+      "fixture": "F3",
+      "condition": "R0",
+      "replicate": 1,
+      "position": 1,
+      "startedAt": "2026-11-23T08:55:05.362Z",
+      "tokens": 41009,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11470,
+        "cacheRead": 21470,
+        "output": 8063
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 73567,
+      "hostDurationMs": 72723,
+      "numTurns": 14,
+      "totalCostUsd": 0.2575243,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "c6e4ee332590": {
+      "fixture": "F3",
+      "condition": "R1",
+      "replicate": 1,
+      "position": 2,
+      "startedAt": "2026-11-23T08:56:19.114Z",
+      "tokens": 40847,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11506,
+        "cacheRead": 21508,
+        "output": 7827
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 70050,
+      "hostDurationMs": 69284,
+      "numTurns": 14,
+      "totalCostUsd": 0.2530959,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "337b761d6d5cc1939c8004981fa9e68b1962f9799128ed97c7b8079a3d1267d2",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "0b55813b9197": {
+      "fixture": "F3",
+      "condition": "R1",
+      "replicate": 2,
+      "position": 3,
+      "startedAt": "2026-11-23T08:57:29.353Z",
+      "tokens": 41437,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11493,
+        "cacheRead": 21505,
+        "output": 8433
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 75125,
+      "hostDurationMs": 74242,
+      "numTurns": 14,
+      "totalCostUsd": 0.2651111,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "337b761d6d5cc1939c8004981fa9e68b1962f9799128ed97c7b8079a3d1267d2",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "7fef13a58e48": {
+      "fixture": "F3",
+      "condition": "R0",
+      "replicate": 2,
+      "position": 4,
+      "startedAt": "2026-11-23T08:58:44.669Z",
+      "tokens": 40605,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11474,
+        "cacheRead": 21478,
+        "output": 7647
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 68159,
+      "hostDurationMs": 67341,
+      "numTurns": 14,
+      "totalCostUsd": 0.2492339,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "86d02150d123": {
+      "fixture": "F3",
+      "condition": "R0",
+      "replicate": 3,
+      "position": 5,
+      "startedAt": "2026-11-23T08:59:53.053Z",
+      "tokens": 40732,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11438,
+        "cacheRead": 21452,
+        "output": 7836
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 69993,
+      "hostDurationMs": 69240,
+      "numTurns": 14,
+      "totalCostUsd": 0.2527203,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "9a8eead9b578b14332d95b20a64c31785fe77049b6be0727c665519a7b7db675",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    },
+    "eb0b622872e4": {
+      "fixture": "F3",
+      "condition": "R1",
+      "replicate": 3,
+      "position": 6,
+      "startedAt": "2026-11-23T09:01:03.237Z",
+      "tokens": 40881,
+      "usage": {
+        "input": 6,
+        "cacheCreation": 11508,
+        "cacheRead": 21512,
+        "output": 7855
+      },
+      "toolCalls": 13,
+      "toolCallsByName": {
+        "Read": 12,
+        "Glob": 1
+      },
+      "wallClockMs": 71321,
+      "hostDurationMs": 70205,
+      "numTurns": 14,
+      "totalCostUsd": 0.2536732,
+      "modelReported": "claude-opus-5-5",
+      "hostVersion": "2.1.323",
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcpServers": [],
+      "resultSubtype": "success",
+      "runDirUnchanged": true,
+      "methodSha256": "337b761d6d5cc1939c8004981fa9e68b1962f9799128ed97c7b8079a3d1267d2",
+      "args": [
+        "-p",
+        "--model",
+        "opus",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Glob,Grep",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"disableAllHooks\":true}",
+        "--no-session-persistence"
+      ]
+    }
+  }
+}

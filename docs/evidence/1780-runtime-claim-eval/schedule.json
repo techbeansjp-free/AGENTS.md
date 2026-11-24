@@ -1,0 +1,293 @@
+{
+  "model": "opus",
+  "slots": [
+    {
+      "fixture": "F1",
+      "replicate": 1,
+      "position": 1,
+      "condition": "R0",
+      "attempts": [
+        {
+          "runId": "6204acb218bc",
+          "startedAt": "2026-11-23T08:55:05.356Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "6204acb218bc"
+    },
+    {
+      "fixture": "F1",
+      "replicate": 1,
+      "position": 2,
+      "condition": "R1",
+      "attempts": [
+        {
+          "runId": "4e5f92845f52",
+          "startedAt": "2026-11-23T08:56:08.848Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "4e5f92845f52"
+    },
+    {
+      "fixture": "F1",
+      "replicate": 2,
+      "position": 3,
+      "condition": "R1",
+      "attempts": [
+        {
+          "runId": "5a6c7209e8c4",
+          "startedAt": "2026-11-23T08:57:18.909Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "5a6c7209e8c4"
+    },
+    {
+      "fixture": "F1",
+      "replicate": 2,
+      "position": 4,
+      "condition": "R0",
+      "attempts": [
+        {
+          "runId": "37a4f0906c76",
+          "startedAt": "2026-11-23T08:58:27.230Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "37a4f0906c76"
+    },
+    {
+      "fixture": "F1",
+      "replicate": 3,
+      "position": 5,
+      "condition": "R0",
+      "attempts": [
+        {
+          "runId": "bf20760ea9b2",
+          "startedAt": "2026-11-23T08:59:26.995Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "bf20760ea9b2"
+    },
+    {
+      "fixture": "F1",
+      "replicate": 3,
+      "position": 6,
+      "condition": "R1",
+      "attempts": [
+        {
+          "runId": "72374ab99524",
+          "startedAt": "2026-11-23T09:00:29.916Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "72374ab99524"
+    },
+    {
+      "fixture": "F2",
+      "replicate": 1,
+      "position": 1,
+      "condition": "R1",
+      "attempts": [
+        {
+          "runId": "ed40922ecca3",
+          "startedAt": "2026-11-23T08:55:05.361Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "ed40922ecca3"
+    },
+    {
+      "fixture": "F2",
+      "replicate": 1,
+      "position": 2,
+      "condition": "R0",
+      "attempts": [
+        {
+          "runId": "daca53e1457c",
+          "startedAt": "2026-11-23T08:56:09.131Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "daca53e1457c"
+    },
+    {
+      "fixture": "F2",
+      "replicate": 2,
+      "position": 3,
+      "condition": "R0",
+      "attempts": [
+        {
+          "runId": "9e1049be80bd",
+          "startedAt": "2026-11-23T08:57:17.507Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "9e1049be80bd"
+    },
+    {
+      "fixture": "F2",
+      "replicate": 2,
+      "position": 4,
+      "condition": "R1",
+      "attempts": [
+        {
+          "runId": "5a8121d96f29",
+          "startedAt": "2026-11-23T08:58:19.370Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "5a8121d96f29"
+    },
+    {
+      "fixture": "F2",
+      "replicate": 3,
+      "position": 5,
+      "condition": "R1",
+      "attempts": [
+        {
+          "runId": "6d0b50869dc7",
+          "startedAt": "2026-11-23T08:59:34.117Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "6d0b50869dc7"
+    },
+    {
+      "fixture": "F2",
+      "replicate": 3,
+      "position": 6,
+      "condition": "R0",
+      "attempts": [
+        {
+          "runId": "5ac938e77ae2",
+          "startedAt": "2026-11-23T09:00:45.306Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "5ac938e77ae2"
+    },
+    {
+      "fixture": "F3",
+      "replicate": 1,
+      "position": 1,
+      "condition": "R0",
+      "attempts": [
+        {
+          "runId": "b4ab354bd209",
+          "startedAt": "2026-11-23T08:55:05.362Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "b4ab354bd209"
+    },
+    {
+      "fixture": "F3",
+      "replicate": 1,
+      "position": 2,
+      "condition": "R1",
+      "attempts": [
+        {
+          "runId": "c6e4ee332590",
+          "startedAt": "2026-11-23T08:56:19.114Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "c6e4ee332590"
+    },
+    {
+      "fixture": "F3",
+      "replicate": 2,
+      "position": 3,
+      "condition": "R1",
+      "attempts": [
+        {
+          "runId": "0b55813b9197",
+          "startedAt": "2026-11-23T08:57:29.353Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "0b55813b9197"
+    },
+    {
+      "fixture": "F3",
+      "replicate": 2,
+      "position": 4,
+      "condition": "R0",
+      "attempts": [
+        {
+          "runId": "7fef13a58e48",
+          "startedAt": "2026-11-23T08:58:44.669Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "7fef13a58e48"
+    },
+    {
+      "fixture": "F3",
+      "replicate": 3,
+      "position": 5,
+      "condition": "R0",
+      "attempts": [
+        {
+          "runId": "86d02150d123",
+          "startedAt": "2026-11-23T08:59:53.053Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "86d02150d123"
+    },
+    {
+      "fixture": "F3",
+      "replicate": 3,
+      "position": 6,
+      "condition": "R1",
+      "attempts": [
+        {
+          "runId": "eb0b622872e4",
+          "startedAt": "2026-11-23T09:01:03.237Z",
+          "runnerExit": 0,
+          "parsedJson": true,
+          "ok": true
+        }
+      ],
+      "scoredRunId": "eb0b622872e4"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "args": [
+    "-p",
+    "--model",
+    "opus",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--restricted",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "Read,Glob,Grep",
+    "--strict-mcp-config",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--no-session-persistence"
+  ],
+  "cwd": "<SCRATCH>/runs/iso-1",
+  "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+  ],
+  "mcpServers": [],
+  "hostVersion": "2.1.323",
+  "modelReported": "claude-opus-5-5",
+  "toolCalls": {
+    "Read": 1,
+    "Glob": 1,
+    "Grep": 1
+  },
+  "exit": 0,
+  "resultSubtype": "success",
+  "runDirUnchanged": true,
+  "startedAt": "2026-11-23T08:51:46.959Z"
+}
