@@ -110,7 +110,7 @@
 ### 実装（`src/host-session.mjs`）
 
 - app-serverを`-c project_doc_max_bytes=0 -c default_permissions="<名前>" -c permissions.<名前>.filesystem={…} -c permissions.<名前>.network.enabled=false`で起動する（`codexReviewProfileArguments`）。名前は`codexReviewProfileName`が実行ごとに生成する`asc_review_<24桁の16進>`で、それ以外の名前は拒否する。
-- filesystemは、ASCの他のCodex起動（`restricted-agent.mjs`・`native-probe.mjs`）と共通の`sandboxFilesystemBase`（`src/codex-runtime.mjs`）に、読取りだけを足したものである。共通部分は`:root`の拒否、`:minimal`の読取り、macOSの共有一時directory（`/tmp`・`/var/tmp`を`/private`付きの表記とあわせて）の拒否、Codexの実行時file（`codexRuntimeRoots`）とNodeの読取りである。足すのは`codexReviewReadablePaths`のpathと対象worktreeの読取りで、書込みのentryは無い。足すentryは`"<path>"={"."="read"}`の形にする。`"<path>"="read"`の形では、pathに`[`・`]`等があるとCodexがglobと解釈し、globの読取りを拒否して起動できなかった（PRのCodeRabbitの指摘を受けて実測。`<path>={"."="read"}`の形では読めた。`profile-bracket-path.json`は角括弧を含むpathのfixtureでの結果）。
+- filesystemは、ASCの他のCodex起動（`restricted-agent.mjs`・`native-probe.mjs`）と共通の`sandboxFilesystemBase`（`src/codex-runtime.mjs`）に、読取りだけを足したものである。共通部分は`:root`の拒否、`:minimal`の読取り、macOSの共有一時directory（`/tmp`・`/var/tmp`を`/private`付きの表記とあわせて）の拒否、Codexの実行時file（`codexRuntimeRoots`）とNodeの読取りである。足すのは`codexReviewReadablePaths`のpathと対象worktreeの読取りで、書込みのentryは無い。足すentryは`"<path>"={"."="read"}`の形にする。`"<path>"="read"`の形では、pathに`[`・`]`等があるとCodexがglobと解釈し、globの読取りを拒否して起動できなかった（PRのCodeRabbitの指摘を受けて実測。`<path>={"."="read"}`の形では読めた。`profile-bracket-path.json`は角括弧を含むpathのfixtureでの結果で、`fixtureHasGlobChars`が真。拒否された方の出力は`bracket-bare-form.txt`）。
   - 最初の実装は共通部分を使わず独自に組み立てていた。再レビューの指摘（`/var/tmp`の表記漏れ、npm導入の扱い、Linuxでの不要な拒否key、`:root`とnetworkの明示）を受けて、共通部分に揃えた。
 - `codexReviewReadablePaths`は、共有のGit metadata（`git rev-parse --git-common-dir`）と、macOSでは`xcode-select -p`の開発toolを返す。
 - 実行fileは`resolveExecutable`で実体へ解決する（PATH、WindowsではPATHEXTの拡張子だけ。`.cmd`・`.bat`は拒否）。macOSでは`--version`がCodex 0.156.0未満か読めなければ起動前に失敗する（`assertCodexVersion`）。npmのlauncher（`.js`）はNodeで起動し、`codexRuntimeRoots`がpackageと現在のplatform用のnative packageを読取りに加える。
@@ -158,6 +158,7 @@
 - Codex経路：共有のGit metadata（全branchの履歴、ref、`.git/config`、他worktreeのindex・stage済みの内容・stash）は読める。macOSの開発toolのdirectoryは`xcode-select -p`の結果で、`DEVELOPER_DIR`等で利用者が変えられる（PATHと同じく利用者の管理下とした）。ただし名前が`Developer`か`CommandLineTools`で終わるdirectoryだけを許可し、それ以外（`/`や家directory等）は加えない。判定は名前だけなので、`DEVELOPER_DIR`を家directoryの下の`Developer`等の同名directoryに向けると、その全体が読取りに入る（利用者の設定の誤りが必要なため、構造の判定は加えていない）。この判定はmacOSでしか動かず、単体テストでは固定していない。同名のprofileは設定から合成されるが（実測）、profile名を実行ごとに生成するため衝突しない。managed設定の`requirements.toml`による制約は確認していない。
 - Codex経路の`thread/start`・`turn/start`の`permissions`と`activePermissionProfile`は実験的APIの項目で、版により変わりうる。応答に無ければ失敗して止まる。
 - Codex経路：Codexが起動するMCP server等はsandboxの外で動き、このprofileでは読取りを限定できない（Claude Code経路の`--strict-mcp-config`に当たるものは入れていない）。
+- 共通基盤のentry（Codexの実行時file・Node）は`"<path>"="read"`の形のままで、これらのpathに`[`等があると起動が拒否される（範囲は広がらない）。共通基盤は他のCodex起動と共有するため変えていない。
 - 対象が主要checkoutそのものの場合、読取りは主要checkout全体（`.worktrees/`下の他worktreeを含む）になる。両経路とも構造上避けられない。
 
 ## 独立レビュー
@@ -171,6 +172,7 @@
 | 3 | `aa353db6` | 条件付き合格 | Medium 1件：同名のprofileが設定から合成される場合を検出できない（実測で合成を確認し、profile名を実行ごとに生成）。Low：Evidenceに残ったNodeのpathを伏せる、macOSの版の検査、Windowsの拡張子なしfile、MCPと主要checkout自体の記載、npm launcherのテスト、追加確認の条件の記録 |
 | 4 | `eaf0f705` | 条件付き合格（条件：最終HEADのCI） | High・Mediumなし。Low：`xcode-select -p`の結果を確かめずに許可していた（`Developer`・`CommandLineTools`で終わるdirectoryだけに限った）、macOS専用の経路がCIで通らない（下に明記）、`criteriaSha256`が定数（下に明記）、見出しの欠落（修正） |
 | 5 | `1df1fcf6`（4回目の是正だけ） | 条件付き合格（条件：最終HEADのCI） | High・Mediumなし。Low：開発toolの判定が名前だけ、判定の単体テストが無い、空行（いずれも記述で対応し、判定は変えていない） |
+| 6 | `4204ddac`（PRのCodeRabbitの指摘3件の是正だけ） | 条件付き合格（条件：最終HEADのCI） | High・Mediumなし。Low：角括弧の実測を結果fileで検証できない（`fixtureHasGlobChars`と拒否時の出力を保存）、共通基盤のentryの扱い（残る制限に記載） |
 
 ## 片付け
 

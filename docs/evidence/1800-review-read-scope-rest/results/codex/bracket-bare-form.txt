@@ -1,0 +1,3 @@
+# codex sandbox (Codex CLI 0.171.0) with a profile whose target entry is the bare form "<fixture>/repo/.worktrees/target"="read"; <fixture> contains [3]
+Error: filesystem glob path `<S>/fx[3]/repo/.worktrees/target` only supports `deny` access; use an exact path or trailing `/**` for `read` subtree access
+exit=1

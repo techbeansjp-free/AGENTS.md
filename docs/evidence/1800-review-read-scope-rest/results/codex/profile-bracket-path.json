@@ -1,5 +1,6 @@
 {
   "condition": "profile",
+  "fixtureHasGlobChars": true,
   "codexHomeConfig": [],
   "codexHomeInstructions": false,
   "codexVersion": "codex-cli 0.171.0",
@@ -91,7 +92,7 @@
     "localNetwork": {
       "exitCode": 7,
       "reached": false,
-      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53786 after 0 ms: Couldn't connect to server\n"
+      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53823 after 0 ms: Couldn't connect to server\n"
     },
     "gitLog": {
       "exitCode": 0,
@@ -108,7 +109,7 @@
       "networkAccess": false
     },
     "activePermissionProfile": {
-      "id": "asc_review_ae16134554d0dbeacc75d8e1",
+      "id": "asc_review_3e61671d0abcbbcc2b2fea60",
       "extends": null
     },
     "cwd": "<fixture>/repo",

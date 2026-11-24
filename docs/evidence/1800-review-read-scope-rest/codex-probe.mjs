@@ -55,7 +55,7 @@ const hide = text => String(text ?? '').replaceAll(F, '<fixture>').replaceAll(pa
 const configFile = path.join(process.env.CODEX_HOME, 'config.toml');
 const codexHomeConfig = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf8').split('\n').map(l => l.trim()).filter(l => l.startsWith('[') || l.includes('=')).map(l => l.startsWith('[') ? l : l.split('=')[0].trim()) : [];
 const codexHomeInstructions = fs.existsSync(path.join(process.env.CODEX_HOME, 'AGENTS.md'));
-const result = {condition, codexHomeConfig: codexHomeConfig.map(hide), codexHomeInstructions, codexVersion: spawnSync(codex, ['--version'], {encoding: 'utf8'}).stdout.trim(), codexArgs: extra.map(hide), checks: {}};
+const result = {condition, fixtureHasGlobChars: /[[\]*?{}]/.test(F), codexHomeConfig: codexHomeConfig.map(hide), codexHomeInstructions, codexVersion: spawnSync(codex, ['--version'], {encoding: 'utf8'}).stdout.trim(), codexArgs: extra.map(hide), checks: {}};
 const policy = condition === 'legacy-read-only' ? {sandboxPolicy: {type: 'readOnly'}} : {};
 const exec = async (command, extraEnv = {}) => {
   try { const r = await call('command/exec', {command, cwd: repo, timeoutMs: 20000, env: {HOME: target, ...extraEnv}, ...policy}); return r; }
