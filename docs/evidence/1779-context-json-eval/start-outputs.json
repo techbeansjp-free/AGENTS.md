@@ -1,0 +1,857 @@
+{
+ "R1": {
+  "paths": [
+   "scripts/format_release_notes.py"
+  ],
+  "A": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "scripts/format_release_notes.py"
+   ],
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "9f30674cb7767e5581871c563b37c79a5dff75670d132d644138f42a237862cc",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant.",
+    "Project rules directory exists without context.json; read its index or identify applicable rules before implementation."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  },
+  "AC": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "scripts/format_release_notes.py"
+   ],
+   "manifest": {
+    "path": ".agent-skill-chain/project/context.json",
+    "sha256": "c2e78928a41aa4128095a9c69bb3f6becf72a8dc3d5e8c3d43032d58bf36e9d1"
+   },
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/code-quality.json",
+     "sha256": "ca6589ac20c314def82625fc5e24343940d593d098ed7f636f81b7cd2cc0cd58",
+     "bytes": 947
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-boundary.json",
+     "sha256": "b4bd67e066716a9c67b53555f2f433166f709130efdd32d3cfb3d389b87a3ce3",
+     "bytes": 1136
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-impact.json",
+     "sha256": "0aeaed22d9e45fe5beb3cddc9a486da0046ac1c201230cd28636cd917454a48f",
+     "bytes": 1194
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/dogfooding.json",
+     "sha256": "e39a6bc2a4ecda17c38688b38a23a4d7a2c691dc930cc96e8bd280cd1228d5a2",
+     "bytes": 1058
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-local.json",
+     "sha256": "03d6443bbfcdef65bffbfd16cc8af651aacf5b3c1f5184291b8402bc92c41b7b",
+     "bytes": 503
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-pr.json",
+     "sha256": "99108a3b33402ca8b709c3b21692bfdab2ac07e1ac19e05369cc5e0798893b4b",
+     "bytes": 531
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/review-exception.json",
+     "sha256": "66f988c2c24a91d0da0a0851c60b9a681982a9339186330290169879e61558fd",
+     "bytes": 1099
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "136c4f5a33e63584a8875015ce9a7862f4b0fea5329b5d334548ae555dccbd20",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  }
+ },
+ "R2": {
+  "paths": [
+   "src/cleanup-locks.sh",
+   "src/worktree-execution.mjs"
+  ],
+  "A": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "src/cleanup-locks.sh",
+    "src/worktree-execution.mjs"
+   ],
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "0865e502a6a25b4b197f4b7b0fcc3e3fd93b6b0a09d3cf4aaf04105328712c00",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant.",
+    "Project rules directory exists without context.json; read its index or identify applicable rules before implementation."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  },
+  "AC": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "src/cleanup-locks.sh",
+    "src/worktree-execution.mjs"
+   ],
+   "manifest": {
+    "path": ".agent-skill-chain/project/context.json",
+    "sha256": "c2e78928a41aa4128095a9c69bb3f6becf72a8dc3d5e8c3d43032d58bf36e9d1"
+   },
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/code-quality.json",
+     "sha256": "ca6589ac20c314def82625fc5e24343940d593d098ed7f636f81b7cd2cc0cd58",
+     "bytes": 947
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-impact.json",
+     "sha256": "0aeaed22d9e45fe5beb3cddc9a486da0046ac1c201230cd28636cd917454a48f",
+     "bytes": 1194
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/dogfooding.json",
+     "sha256": "e39a6bc2a4ecda17c38688b38a23a4d7a2c691dc930cc96e8bd280cd1228d5a2",
+     "bytes": 1058
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-local.json",
+     "sha256": "03d6443bbfcdef65bffbfd16cc8af651aacf5b3c1f5184291b8402bc92c41b7b",
+     "bytes": 503
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-pr.json",
+     "sha256": "99108a3b33402ca8b709c3b21692bfdab2ac07e1ac19e05369cc5e0798893b4b",
+     "bytes": 531
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/review-exception.json",
+     "sha256": "66f988c2c24a91d0da0a0851c60b9a681982a9339186330290169879e61558fd",
+     "bytes": 1099
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "dcb6db26059fba04f1522c98f2b2f444027b84c41d9cc8d924c06dda060d5b94",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  }
+ },
+ "R3": {
+  "paths": [
+   "test/test_project_context_symlink.mjs"
+  ],
+  "A": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "test/test_project_context_symlink.mjs"
+   ],
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "e327bdce9a4c44af347b5165e8e58a29c44b3020c3f0c2d96d96737f89b79b08",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant.",
+    "Project rules directory exists without context.json; read its index or identify applicable rules before implementation."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  },
+  "AC": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "test/test_project_context_symlink.mjs"
+   ],
+   "manifest": {
+    "path": ".agent-skill-chain/project/context.json",
+    "sha256": "c2e78928a41aa4128095a9c69bb3f6becf72a8dc3d5e8c3d43032d58bf36e9d1"
+   },
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/code-quality.json",
+     "sha256": "ca6589ac20c314def82625fc5e24343940d593d098ed7f636f81b7cd2cc0cd58",
+     "bytes": 947
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-boundary.json",
+     "sha256": "b4bd67e066716a9c67b53555f2f433166f709130efdd32d3cfb3d389b87a3ce3",
+     "bytes": 1136
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-impact.json",
+     "sha256": "0aeaed22d9e45fe5beb3cddc9a486da0046ac1c201230cd28636cd917454a48f",
+     "bytes": 1194
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/dogfooding.json",
+     "sha256": "e39a6bc2a4ecda17c38688b38a23a4d7a2c691dc930cc96e8bd280cd1228d5a2",
+     "bytes": 1058
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-local.json",
+     "sha256": "03d6443bbfcdef65bffbfd16cc8af651aacf5b3c1f5184291b8402bc92c41b7b",
+     "bytes": 503
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-pr.json",
+     "sha256": "99108a3b33402ca8b709c3b21692bfdab2ac07e1ac19e05369cc5e0798893b4b",
+     "bytes": 531
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/package.json",
+     "sha256": "d58a9e505283a2fb04f16078ab6bf6ff4f9185bc49922772aa8a1dd87da75072",
+     "bytes": 767
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/review-exception.json",
+     "sha256": "66f988c2c24a91d0da0a0851c60b9a681982a9339186330290169879e61558fd",
+     "bytes": 1099
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "96998f6b9ae741d2a4a52a7f780b1afbd9c02c5b528e55d9da22e8faa53916a7",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  }
+ },
+ "R4": {
+  "paths": [
+   ".github/workflows/ci.yml"
+  ],
+  "A": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    ".github/workflows/ci.yml"
+   ],
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "2985183d2b808da4fd9f70692fad39d9ae3977401a762d52b16981bffbaace27",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant.",
+    "Project rules directory exists without context.json; read its index or identify applicable rules before implementation."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  },
+  "AC": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    ".github/workflows/ci.yml"
+   ],
+   "manifest": {
+    "path": ".agent-skill-chain/project/context.json",
+    "sha256": "c2e78928a41aa4128095a9c69bb3f6becf72a8dc3d5e8c3d43032d58bf36e9d1"
+   },
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ci-permission.json",
+     "sha256": "5cf1077ac51fb905364c8764def2f4185beea1d7b8aee18ede26ca5d4e6a6794",
+     "bytes": 843
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ci-trigger.json",
+     "sha256": "afae04353ad4c7a0892b8cde8ed9d78536d8b9b1dc96d58a0c09602c555f5e77",
+     "bytes": 830
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/code-quality.json",
+     "sha256": "ca6589ac20c314def82625fc5e24343940d593d098ed7f636f81b7cd2cc0cd58",
+     "bytes": 947
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-boundary.json",
+     "sha256": "b4bd67e066716a9c67b53555f2f433166f709130efdd32d3cfb3d389b87a3ce3",
+     "bytes": 1136
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-impact.json",
+     "sha256": "0aeaed22d9e45fe5beb3cddc9a486da0046ac1c201230cd28636cd917454a48f",
+     "bytes": 1194
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/dogfooding.json",
+     "sha256": "e39a6bc2a4ecda17c38688b38a23a4d7a2c691dc930cc96e8bd280cd1228d5a2",
+     "bytes": 1058
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/lockfile.json",
+     "sha256": "bf3790bc2f932840ae584b4d250e737f8f51ed66b9966ecc14be8e61c3d69abf",
+     "bytes": 821
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-local.json",
+     "sha256": "03d6443bbfcdef65bffbfd16cc8af651aacf5b3c1f5184291b8402bc92c41b7b",
+     "bytes": 503
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-pr.json",
+     "sha256": "99108a3b33402ca8b709c3b21692bfdab2ac07e1ac19e05369cc5e0798893b4b",
+     "bytes": 531
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/quality-command.json",
+     "sha256": "b4541d9bffb33c2c0a1dc297c57987ad15d5686a11071e19c9e29d960916d2bc",
+     "bytes": 1037
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/review-exception.json",
+     "sha256": "66f988c2c24a91d0da0a0851c60b9a681982a9339186330290169879e61558fd",
+     "bytes": 1099
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/runtime.json",
+     "sha256": "13a1a3048699ed627e3af37b74abe2e0e7fd4584a5847585318fc04db78d0ad5",
+     "bytes": 920
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "55f6a2b41bf8b0a662ea66bc0a16e61fd82dca8a91edaf39a85f8ebb092b41a8",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  }
+ },
+ "R5": {
+  "paths": [
+   "package.json",
+   "pnpm-lock.yaml"
+  ],
+  "A": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "package.json",
+    "pnpm-lock.yaml"
+   ],
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "9c9276d6903e2751a4380e22ae09203a9ca1a3c577e397a22d0e812a2703b8ab",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant.",
+    "Project rules directory exists without context.json; read its index or identify applicable rules before implementation."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  },
+  "AC": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "package.json",
+    "pnpm-lock.yaml"
+   ],
+   "manifest": {
+    "path": ".agent-skill-chain/project/context.json",
+    "sha256": "c2e78928a41aa4128095a9c69bb3f6becf72a8dc3d5e8c3d43032d58bf36e9d1"
+   },
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-impact.json",
+     "sha256": "0aeaed22d9e45fe5beb3cddc9a486da0046ac1c201230cd28636cd917454a48f",
+     "bytes": 1194
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/dogfooding.json",
+     "sha256": "e39a6bc2a4ecda17c38688b38a23a4d7a2c691dc930cc96e8bd280cd1228d5a2",
+     "bytes": 1058
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/lockfile.json",
+     "sha256": "bf3790bc2f932840ae584b4d250e737f8f51ed66b9966ecc14be8e61c3d69abf",
+     "bytes": 821
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/no-registry-publish.json",
+     "sha256": "592c4026c4a2047cfb465ea8390f69ad4ad074617272c5247c0b5505ea457985",
+     "bytes": 808
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-local.json",
+     "sha256": "03d6443bbfcdef65bffbfd16cc8af651aacf5b3c1f5184291b8402bc92c41b7b",
+     "bytes": 503
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-pr.json",
+     "sha256": "99108a3b33402ca8b709c3b21692bfdab2ac07e1ac19e05369cc5e0798893b4b",
+     "bytes": 531
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/package-manager.json",
+     "sha256": "721e2b9d1a7b2d1b93425c90f1ac330a8f44fcaf961c33b26bb38c5b5ee4d0d5",
+     "bytes": 908
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/quality-command.json",
+     "sha256": "b4541d9bffb33c2c0a1dc297c57987ad15d5686a11071e19c9e29d960916d2bc",
+     "bytes": 1037
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/review-exception.json",
+     "sha256": "66f988c2c24a91d0da0a0851c60b9a681982a9339186330290169879e61558fd",
+     "bytes": 1099
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/runtime.json",
+     "sha256": "13a1a3048699ed627e3af37b74abe2e0e7fd4584a5847585318fc04db78d0ad5",
+     "bytes": 920
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "e19e2f5ea5cefc434b57e3567a1f8e0416f6032ce655e8b63ea837ea11f2c4f6",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  }
+ },
+ "R6": {
+  "paths": [
+   ".agent-skill-chain/docs/03_レビュー手順.md"
+  ],
+  "A": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    ".agent-skill-chain/docs/03_レビュー手順.md"
+   ],
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "a86e825c5c805afa978c91549c82ecc636350c5ce1e3f1813a7b94e7b6340487",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant.",
+    "Project rules directory exists without context.json; read its index or identify applicable rules before implementation."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  },
+  "AC": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    ".agent-skill-chain/docs/03_レビュー手順.md"
+   ],
+   "manifest": {
+    "path": ".agent-skill-chain/project/context.json",
+    "sha256": "c2e78928a41aa4128095a9c69bb3f6becf72a8dc3d5e8c3d43032d58bf36e9d1"
+   },
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/canonical-source.json",
+     "sha256": "c329becccc31cf881add2738d3892d571c70dd783680f14e69b086f2ae21f54c",
+     "bytes": 634
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-impact.json",
+     "sha256": "0aeaed22d9e45fe5beb3cddc9a486da0046ac1c201230cd28636cd917454a48f",
+     "bytes": 1194
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/docs.json",
+     "sha256": "fa3fe16486297a494c47d82b8ccbb226d7c1267174f3a634f5b2f6323aea2761",
+     "bytes": 491
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/dogfooding.json",
+     "sha256": "e39a6bc2a4ecda17c38688b38a23a4d7a2c691dc930cc96e8bd280cd1228d5a2",
+     "bytes": 1058
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/japanese-docs.json",
+     "sha256": "373b67434dd0f1fc38e888a36be2896627210ce290a943f591a1fb7fa67cd10e",
+     "bytes": 837
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-local.json",
+     "sha256": "03d6443bbfcdef65bffbfd16cc8af651aacf5b3c1f5184291b8402bc92c41b7b",
+     "bytes": 503
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-pr.json",
+     "sha256": "99108a3b33402ca8b709c3b21692bfdab2ac07e1ac19e05369cc5e0798893b4b",
+     "bytes": 531
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/review-exception.json",
+     "sha256": "66f988c2c24a91d0da0a0851c60b9a681982a9339186330290169879e61558fd",
+     "bytes": 1099
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "f579f337612416983dc60847a8668620d5f5fd92e8295a00a1eac549c5754f5a",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  }
+ },
+ "R7": {
+  "paths": [
+   "v05/USAGE.md"
+  ],
+  "A": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "v05/USAGE.md"
+   ],
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "614c976a9a72566a2fc1acd3f5192e8a5441d6fe4fb7f9b56a834a9a174e03dd",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant.",
+    "Project rules directory exists without context.json; read its index or identify applicable rules before implementation."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  },
+  "AC": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "v05/USAGE.md"
+   ],
+   "manifest": {
+    "path": ".agent-skill-chain/project/context.json",
+    "sha256": "c2e78928a41aa4128095a9c69bb3f6becf72a8dc3d5e8c3d43032d58bf36e9d1"
+   },
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-impact.json",
+     "sha256": "0aeaed22d9e45fe5beb3cddc9a486da0046ac1c201230cd28636cd917454a48f",
+     "bytes": 1194
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/dogfooding.json",
+     "sha256": "e39a6bc2a4ecda17c38688b38a23a4d7a2c691dc930cc96e8bd280cd1228d5a2",
+     "bytes": 1058
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-local.json",
+     "sha256": "03d6443bbfcdef65bffbfd16cc8af651aacf5b3c1f5184291b8402bc92c41b7b",
+     "bytes": 503
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-pr.json",
+     "sha256": "99108a3b33402ca8b709c3b21692bfdab2ac07e1ac19e05369cc5e0798893b4b",
+     "bytes": 531
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/review-exception.json",
+     "sha256": "66f988c2c24a91d0da0a0851c60b9a681982a9339186330290169879e61558fd",
+     "bytes": 1099
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "fc744feb2c2da5cc7603225c6ca6543e1a092543f8cfc3e35dc68a65a87488fe",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  }
+ },
+ "R8": {
+  "paths": [
+   "skills/asc/references/review.md"
+  ],
+  "A": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "skills/asc/references/review.md"
+   ],
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "b6a433f271e3c2032b1c197cde55ef941dc0ffd90feff9d93d8f95e0bf238535",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant.",
+    "Project rules directory exists without context.json; read its index or identify applicable rules before implementation."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  },
+  "AC": {
+   "schema": "asc-project-context-selection/v1",
+   "selection": "path-prefix",
+   "paths": [
+    "skills/asc/references/review.md"
+   ],
+   "manifest": {
+    "path": ".agent-skill-chain/project/context.json",
+    "sha256": "c2e78928a41aa4128095a9c69bb3f6becf72a8dc3d5e8c3d43032d58bf36e9d1"
+   },
+   "references": [
+    {
+     "path": "AGENTS.md",
+     "sha256": "21d5940e9c04cb4935d03ab1019c207a6d580141017736c7cf4d0aca14467404",
+     "bytes": 727
+    },
+    {
+     "path": "CLAUDE.md",
+     "sha256": "b643a5415704602c7553f0f046443d15f62d550ef89c47f241fa87bfdb060fc2",
+     "bytes": 581
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/distribution-impact.json",
+     "sha256": "0aeaed22d9e45fe5beb3cddc9a486da0046ac1c201230cd28636cd917454a48f",
+     "bytes": 1194
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/dogfooding.json",
+     "sha256": "e39a6bc2a4ecda17c38688b38a23a4d7a2c691dc930cc96e8bd280cd1228d5a2",
+     "bytes": 1058
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-local.json",
+     "sha256": "03d6443bbfcdef65bffbfd16cc8af651aacf5b3c1f5184291b8402bc92c41b7b",
+     "bytes": 503
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/ownership-pr.json",
+     "sha256": "99108a3b33402ca8b709c3b21692bfdab2ac07e1ac19e05369cc5e0798893b4b",
+     "bytes": 531
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/review-exception.json",
+     "sha256": "66f988c2c24a91d0da0a0851c60b9a681982a9339186330290169879e61558fd",
+     "bytes": 1099
+    },
+    {
+     "path": ".agent-skill-chain/project-policy.json",
+     "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+     "bytes": 2392
+    }
+   ],
+   "digest": "ca7d91a11c28542cf838567611685f8978fb70ca4fef7e17b8855afa0aecc713",
+   "notices": [
+    "Legacy project-policy.json requires Host interpretation; no automatic v0.4 policy execution or permission grant."
+   ],
+   "authority": "Project context does not grant permissions. Host must read applicable rules, resolve conflicts and pass the same references to independent review; selection is not semantic compliance."
+  }
+ }
+}
