@@ -1,0 +1,177 @@
+[
+ {
+  "condition": "S-A-haiku",
+  "entries": 29,
+  "withDescription": 17,
+  "listingChars": 7304,
+  "ascWithDescription": 5,
+  "asc": {
+   "asc": "desc:173",
+   "contract-enforcement": "desc:97",
+   "decision-ownership": "desc:283",
+   "engineering-judgment": "desc:157",
+   "estimate-and-scope": "desc:90",
+   "execution-recovery": "name-only",
+   "migration-assurance": "name-only",
+   "project-foundation": "name-only",
+   "research-to-implementation": "name-only",
+   "review-and-remediation": "name-only",
+   "security-evidence": "name-only",
+   "subagent-model-selection": "name-only",
+   "tracker-issue-writing": "name-only",
+   "user-journey-acceptance": "name-only",
+   "verification-optimization": "name-only",
+   "work-coordination": "name-only"
+  },
+  "othersNameOnly": 1,
+  "debugWarning": "Skill listing over budget: 29 skills, 10305 chars > 8000 budget",
+  "contextSkillsRow": "| Skills | 2k | 1.0% |",
+  "contextAscRow": "| asc | Project | ~50 |",
+  "skillUsageAfter": {}
+ },
+ {
+  "condition": "S-A-haiku-fraction002",
+  "entries": 29,
+  "withDescription": 29,
+  "listingChars": 8591,
+  "ascWithDescription": 16,
+  "asc": {
+   "asc": "desc:173",
+   "contract-enforcement": "desc:97",
+   "decision-ownership": "desc:283",
+   "engineering-judgment": "desc:157",
+   "estimate-and-scope": "desc:90",
+   "execution-recovery": "desc:82",
+   "migration-assurance": "desc:94",
+   "project-foundation": "desc:109",
+   "research-to-implementation": "desc:130",
+   "review-and-remediation": "desc:85",
+   "security-evidence": "desc:92",
+   "subagent-model-selection": "desc:85",
+   "tracker-issue-writing": "desc:129",
+   "user-journey-acceptance": "desc:108",
+   "verification-optimization": "desc:170",
+   "work-coordination": "desc:108"
+  },
+  "othersNameOnly": 0,
+  "debugWarning": null,
+  "contextSkillsRow": "| Skills | 2.1k | 1.1% |",
+  "contextAscRow": "| asc | Project | ~50 |",
+  "skillUsageAfter": {}
+ },
+ {
+  "condition": "S-A-haiku-short60",
+  "entries": 29,
+  "withDescription": 25,
+  "listingChars": 7300,
+  "ascWithDescription": 13,
+  "asc": {
+   "asc": "desc:60",
+   "contract-enforcement": "desc:60",
+   "decision-ownership": "desc:60",
+   "engineering-judgment": "desc:60",
+   "estimate-and-scope": "desc:60",
+   "execution-recovery": "desc:60",
+   "migration-assurance": "desc:60",
+   "project-foundation": "desc:60",
+   "research-to-implementation": "desc:60",
+   "review-and-remediation": "desc:60",
+   "security-evidence": "desc:60",
+   "subagent-model-selection": "desc:60",
+   "tracker-issue-writing": "desc:60",
+   "user-journey-acceptance": "name-only",
+   "verification-optimization": "name-only",
+   "work-coordination": "name-only"
+  },
+  "othersNameOnly": 1,
+  "debugWarning": "Skill listing over budget: 29 skills, 8381 chars > 8000 budget",
+  "contextSkillsRow": "| Skills | 1.9k | 0.9% |",
+  "contextAscRow": "| asc | Project | < 20 |",
+  "skillUsageAfter": {}
+ },
+ {
+  "condition": "S-A-haiku-used",
+  "entries": 29,
+  "withDescription": 19,
+  "listingChars": 7308,
+  "ascWithDescription": 7,
+  "asc": {
+   "asc": "desc:173",
+   "contract-enforcement": "desc:97",
+   "decision-ownership": "name-only",
+   "engineering-judgment": "name-only",
+   "estimate-and-scope": "name-only",
+   "execution-recovery": "name-only",
+   "migration-assurance": "desc:94",
+   "project-foundation": "name-only",
+   "research-to-implementation": "desc:130",
+   "review-and-remediation": "desc:85",
+   "security-evidence": "desc:92",
+   "subagent-model-selection": "name-only",
+   "tracker-issue-writing": "desc:129",
+   "user-journey-acceptance": "name-only",
+   "verification-optimization": "name-only",
+   "work-coordination": "name-only"
+  },
+  "othersNameOnly": 1,
+  "debugWarning": "Skill listing over budget: 29 skills, 10305 chars > 8000 budget",
+  "contextSkillsRow": "| Skills | 2k | 1.0% |",
+  "contextAscRow": "| asc | Project | ~50 |",
+  "skillUsageAfter": {
+   "asc": {
+    "usageCount": 20,
+    "lastUsedAt": 1795478400000
+   },
+   "review-and-remediation": {
+    "usageCount": 20,
+    "lastUsedAt": 1795478400000
+   },
+   "tracker-issue-writing": {
+    "usageCount": 20,
+    "lastUsedAt": 1795478400000
+   },
+   "research-to-implementation": {
+    "usageCount": 20,
+    "lastUsedAt": 1795478400000
+   },
+   "security-evidence": {
+    "usageCount": 20,
+    "lastUsedAt": 1795478400000
+   },
+   "migration-assurance": {
+    "usageCount": 20,
+    "lastUsedAt": 1795478400000
+   }
+  }
+ },
+ {
+  "condition": "S-A-sonnet",
+  "entries": 29,
+  "withDescription": 17,
+  "listingChars": 7304,
+  "ascWithDescription": 5,
+  "asc": {
+   "asc": "desc:173",
+   "contract-enforcement": "desc:97",
+   "decision-ownership": "desc:283",
+   "engineering-judgment": "desc:157",
+   "estimate-and-scope": "desc:90",
+   "execution-recovery": "name-only",
+   "migration-assurance": "name-only",
+   "project-foundation": "name-only",
+   "research-to-implementation": "name-only",
+   "review-and-remediation": "name-only",
+   "security-evidence": "name-only",
+   "subagent-model-selection": "name-only",
+   "tracker-issue-writing": "name-only",
+   "user-journey-acceptance": "name-only",
+   "verification-optimization": "name-only",
+   "work-coordination": "name-only"
+  },
+  "othersNameOnly": 1,
+  "debugWarning": "Skill listing over budget: 29 skills, 10305 chars > 8000 budget",
+  "contextSkillsRow": "| Skills | 2k | 1.0% |",
+  "contextAscRow": "| asc | Project | ~50 |",
+  "skillUsageAfter": {}
+ }
+]

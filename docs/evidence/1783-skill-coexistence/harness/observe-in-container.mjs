@@ -57,7 +57,7 @@ fs.rmSync(capture, {force: true});
 const server = spawn('node', ['/harness/capture-server.mjs', '8787', capture, ...(cond.skillCall ? [cond.skillCall] : [])], {stdio: 'ignore'});
 await new Promise((r) => setTimeout(r, 500));
 const env = {PATH: process.env.PATH, HOME: home, ANTHROPIC_BASE_URL: 'http://127.0.0.1:8787', ANTHROPIC_API_KEY: 'sk-ant-offline-capture', DISABLE_TELEMETRY: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1', ...(cond.env ?? {})};
-const base = ['--model', 'claude-opus-5-5', '--no-session-persistence', '--tools', 'Read,Glob,Grep,Skill', ...pluginArgs, ...(cond.settings ? ['--settings', JSON.stringify(cond.settings)] : [])];
+const base = ['--model', cond.model ?? 'claude-opus-5-5', '--no-session-persistence', '--tools', 'Read,Glob,Grep,Skill', ...pluginArgs, ...(cond.settings ? ['--settings', JSON.stringify(cond.settings)] : [])];
 const runs = {};
 const prompts = cond.prompts ?? {hello: 'hello', context: '/context'};
 for (const [label, prompt] of Object.entries(prompts)) {

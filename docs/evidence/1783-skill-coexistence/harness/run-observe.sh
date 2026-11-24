@@ -1,6 +1,6 @@
 #!/bin/sh
 # Runs one listing observation in a disposable container: no network, read-only root, no home or secret mounts.
-# Usage: run-observe.sh <worktree-label> <fixture-dir> <conditions.json> <condition> <out-dir>
+# Usage: run-observe.sh <worktree-label> <fixture-dir> <conditions.json> <condition> <out-dir>   (absolute paths; used as bind mounts)
 set -eu
 label=$1 fixture=$2 conds=$3 cond=$4 out=$5
 here=$(cd "$(dirname "$0")" && pwd)

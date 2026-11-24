@@ -14,7 +14,7 @@ if (!text) { console.log(JSON.stringify({dir: path.basename(dir), listing: null,
 const block = text.slice(text.indexOf(marker) + marker.length).replace(/^\n+/, '');
 const lines = [];
 for (const line of block.split('\n')) { if (line.startsWith('- ')) lines.push(line); else if (lines.length && line.trim() === '') break; else if (lines.length) lines[lines.length - 1] += '\n' + line; }
-const entries = lines.map((l) => { const m = /^- (.+?)(?:: ([\s\S]*))?$/.exec(l); return {name: m[1], description: m[2] ?? null}; });
+const entries = lines.map((l) => { const m = /^- ([^\n:]+(?::[^\s:][^\n:]*)*)(?:: ([\s\S]*)|\n[\s\S]*)?$/.exec(l); return {name: m[1], description: m[2] ?? null}; });
 const asc = JSON.parse(fs.readFileSync(new URL('../inventory.json', import.meta.url), 'utf8')).rows.filter((r) => r.kind === 'standard').map((r) => r.name);
 const isAsc = (name) => asc.includes(name) || asc.includes(name.replace(/^project:/, ''));
 const summary = {

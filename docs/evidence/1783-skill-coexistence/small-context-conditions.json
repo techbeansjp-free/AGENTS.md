@@ -1,0 +1,39 @@
+[
+ {
+  "name": "S-A-haiku",
+  "note": "ASC only with a 200k-context model (claude-haiku-4-5) at the default budget",
+  "model": "claude-haiku-4-5"
+ },
+ {
+  "name": "S-A-sonnet",
+  "note": "ASC only with claude-sonnet-4-5 at the default budget",
+  "model": "claude-sonnet-4-5"
+ },
+ {
+  "name": "S-A-haiku-short60",
+  "note": "S-A-haiku with every ASC description cut to 60 chars",
+  "model": "claude-haiku-4-5",
+  "shortenAsc": 60
+ },
+ {
+  "name": "S-A-haiku-fraction002",
+  "note": "S-A-haiku with skillListingBudgetFraction 0.02",
+  "model": "claude-haiku-4-5",
+  "settings": {
+   "skillListingBudgetFraction": 0.02
+  }
+ },
+ {
+  "name": "S-A-haiku-used",
+  "note": "S-A-haiku with the six evaluated ASC Skills used 20 times each",
+  "model": "claude-haiku-4-5",
+  "usage": {
+   "asc": 20,
+   "review-and-remediation": 20,
+   "tracker-issue-writing": 20,
+   "research-to-implementation": 20,
+   "security-evidence": 20,
+   "migration-assurance": 20
+  }
+ }
+]
