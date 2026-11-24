@@ -57,6 +57,7 @@ const r = spawnSync('/usr/bin/time', args, { cwd: fx, encoding: 'utf8', timeout:
 const wallMs = Date.now() - t0;
 let j = null;
 try { j = JSON.parse(r.stdout); } catch { /* keep null */ }
+fs.writeFileSync(path.join(base, 'host-raw.json'), JSON.stringify({ wallMs, exit: r.status, signal: r.signal, stdout: r.stdout, stderrTail: (r.stderr ?? '').slice(-2000) }));
 const tm = (re) => { const m = re.exec(r.stderr ?? ''); return m ? Number(m[1]) : null; };
 const rusage = { userSec: tm(/([\d.]+) user/), sysSec: tm(/([\d.]+) sys/), maxRssBytes: tm(/(\d+)\s+maximum resident set size/) };
 const resultText = j?.result ?? '';
@@ -128,7 +129,7 @@ const testsAdded = Object.fromEntries(UNITS[fixtureTask].map((u) => [u, testFile
 const lineOf = (k) => { const m = new RegExp(`^${k}:\\s*(.*)$`, 'm').exec(resultText); return m ? m[1].split(',').map((s) => s.trim()).filter((s) => s && s !== 'none') : null; };
 const done = lineOf('DONE'); const blocked = lineOf('BLOCKED');
 const sha = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
-const durUnchanged = sha(path.join(fx, 'src/duration/index.mjs')) === sha(path.join(orig, 'src/duration/index.mjs'));
+const durUnchanged = fixtureTask === 'P2' ? null : sha(path.join(fx, 'src/duration/index.mjs')) === sha(path.join(orig, 'src/duration/index.mjs'));
 const sampleUnchanged = sha(path.join(fx, 'test/sample.test.mjs')) === sha(path.join(orig, 'test/sample.test.mjs'));
 let pass; let detail;
 if (task === 'P3') {
