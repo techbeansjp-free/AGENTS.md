@@ -130,7 +130,8 @@ export function codexReviewReadablePaths({gitCommonDir}){
  if(process.platform==='darwin'){
   const result=spawnSync('xcode-select',['-p'],{encoding:'utf8',timeout:10000});
   const dir=result.status===0?result.stdout.trim():'';
-  if(path.isAbsolute(dir)&&fs.existsSync(dir))paths.push(fs.realpathSync(dir));
+  // Only an Xcode or Command Line Tools developer directory; never a broad path such as / or a home directory.
+  if(path.isAbsolute(dir)&&fs.existsSync(dir)){const real=fs.realpathSync(dir);if(/^(?:Developer|CommandLineTools)$/.test(path.basename(real)))paths.push(real);}
  }
  return paths;
 }

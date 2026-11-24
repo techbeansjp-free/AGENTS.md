@@ -26,7 +26,7 @@
 `setup-fixture.mjs <directory>`で合成fixtureを作る。主要checkout（`repo`、Git管理のfile・Git管理外のfile・AGENTS.md）、その中の対象worktree（`.worktrees/target`）と別のworktree（`.worktrees/other`）、主要checkout外のworktree（`external-target`）、repositoryの外の`outside`を置く。markerは乱数の無害な値である。対象worktreeには、外のfile・directoryと主要checkoutのGit管理外fileを指すsymlinkを置いた。fixtureは一時directory（`/private/tmp`の下）に作った。`setup-fixture.mjs`は新規か空のdirectoryにだけ作る。
 
 - `probe-run.mjs`：Claude Codeを`host-session`と同じ制限（`--restricted --tools Read,Glob,Grep --permission-mode dontAsk --strict-mcp-config`、hook無効、`--no-session-persistence`）で起動し、13件のtool呼出しを依頼する。stream-jsonのtool結果にmarkerが出たかを機械的に判定する。modelはhaiku。
-- `listing-probe.mjs`：永続sessionを`host-session`と同じ引数builder（`claudeReviewArguments`・`claudeRenameArguments`）で作り、改名し、主要checkoutから実行IDと表示名で`--resume`する。対象worktreeを削除した後にも同じことを行う。判定基準は測定前に`listing-criteria.md`として固定した（commit `4f6b12d8`、sha256 `da3cc1e9…e0e6`）。保存先は、資料にある保存場所（`<設定directory>/projects/<起動先のpathの英数字以外を-にした名前>/<session ID>.jsonl`）のfileの有無で判定し、真偽だけを出力する。Hostのstderrは利用者の設定fileの名前を含みうるため、空かどうかだけを残す。
+- `listing-probe.mjs`：永続sessionを`host-session`と同じ引数builder（`claudeReviewArguments`・`claudeRenameArguments`）で作り、改名し、主要checkoutから実行IDと表示名で`--resume`する。対象worktreeを削除した後にも同じことを行う。判定基準は測定前に`listing-criteria.md`として固定した（commit `4f6b12d8`、sha256 `da3cc1e9…e0e6`）。保存先は、資料にある保存場所（`<設定directory>/projects/<起動先のpathの英数字以外を-にした名前>/<session ID>.jsonl`）のfileの有無で判定し、真偽だけを出力する。結果fileの`criteriaSha256`は実行時に計算した値でなく、固定した基準のhashをscriptに定数として書いたものである（基準を測定前に固定したことはcommitの順序で確かめられる）。Hostのstderrは利用者の設定fileの名前を含みうるため、空かどうかだけを残す。
 - `codex-probe.mjs`：`codex app-server`に`initialize`、`thread/start`（ephemeral）、`command/exec`だけを送る。`turn/start`を送らないので、modelは呼ばれない。`command/exec`は、app-serverの設定で決まるpermissions（本変更では`default_permissions`）の下でcommandを実行する。`CODEX_HOME`は使い捨てのdirectoryにした（利用者の`~/.codex`は読み書きしない）。
 
 ## Claude Code経路の比較
@@ -136,7 +136,7 @@
 - `activePermissionProfile`が無い応答、別のprofileの応答、`extends`を持つ応答では、`turn/start`を送らずに失敗する。
 - 実行fileをPATH・symlink・Windowsの拡張子から実体へ解決し、見つからない・実行できない・`.cmd`のwrapperの場合は失敗する。Windowsでは拡張子の無いfileを選ばない。
 
-実際のHostでの実測はこのEvidenceだけにあり、CIでは行わない。
+実際のHostでの実測はこのEvidenceだけにあり、CIでは行わない。`test_host_session.mjs`はLinuxのCIで動くため、macOS専用の経路（`assertCodexVersion`の呼出しと`xcode-select -p`の追加）の配線はCIで検査しない。版の判定は関数単体でテストし、配線はmacOSでの実測（`codex-probe.mjs`）で確かめた。
 
 ## 実測済みと未実測
 
@@ -155,7 +155,7 @@
 ## 残る制限
 
 - Claude Code経路：主要checkout内のfile（Git管理外のfile、他のworktree）は引き続き読める。ownerの判断後に対応する。
-- Codex経路：共有のGit metadata（全branchの履歴、ref、`.git/config`、他worktreeのindex・stage済みの内容・stash）は読める。macOSの開発toolのdirectoryは`xcode-select -p`の結果で、`DEVELOPER_DIR`等で利用者が変えられる（PATHと同じく利用者の管理下とした）。同名のprofileは設定から合成されるが（実測）、profile名を実行ごとに生成するため衝突しない。managed設定の`requirements.toml`による制約は確認していない。
+- Codex経路：共有のGit metadata（全branchの履歴、ref、`.git/config`、他worktreeのindex・stage済みの内容・stash）は読める。macOSの開発toolのdirectoryは`xcode-select -p`の結果で、`DEVELOPER_DIR`等で利用者が変えられる（PATHと同じく利用者の管理下とした）。ただし名前が`Developer`か`CommandLineTools`で終わるdirectoryだけを許可し、それ以外（`/`や家directory等）は加えない。同名のprofileは設定から合成されるが（実測）、profile名を実行ごとに生成するため衝突しない。managed設定の`requirements.toml`による制約は確認していない。
 - Codex経路の`thread/start`・`turn/start`の`permissions`と`activePermissionProfile`は実験的APIの項目で、版により変わりうる。応答に無ければ失敗して止まる。
 - Codex経路：Codexが起動するMCP server等はsandboxの外で動き、このprofileでは読取りを限定できない（Claude Code経路の`--strict-mcp-config`に当たるものは入れていない）。
 - 対象が主要checkoutそのものの場合、読取りは主要checkout全体（`.worktrees/`下の他worktreeを含む）になる。両経路とも構造上避けられない。
@@ -169,6 +169,9 @@
 | 1 | `ccd35939` | 条件付き | Medium 3件：macOSの利用者単位の一時directoryが未実測（実測を追加）、Codexの導入形態が未記録（記録）、一覧所属の結果fileが手で要約されていた（scriptを直して再測定）。Low 5件も是正 |
 | 2 | `7de8b4d8` | 条件付き | Medium 2件：既存の`src/codex-runtime.mjs`を使わず独自に組み立てていた（共通基盤に揃え、`/var/tmp`・npm導入・Windows・`extends`を扱う）、品質検査の結果が未記録（記録） |
 | 3 | `aa353db6` | 条件付き合格 | Medium 1件：同名のprofileが設定から合成される場合を検出できない（実測で合成を確認し、profile名を実行ごとに生成）。Low：Evidenceに残ったNodeのpathを伏せる、macOSの版の検査、Windowsの拡張子なしfile、MCPと主要checkout自体の記載、npm launcherのテスト、追加確認の条件の記録 |
+| 4 | `eaf0f705` | 条件付き合格（条件：最終HEADのCI） | High・Mediumなし。Low：`xcode-select -p`の結果を確かめずに許可していた（`Developer`・`CommandLineTools`で終わるdirectoryだけに限った）、macOS専用の経路がCIで通らない（下に明記）、`criteriaSha256`が定数（下に明記）、見出しの欠落（修正） |
+
+## 片付け
 
 
 
@@ -188,7 +191,7 @@
 
 - PRのCI（commit `ee2554b49cb8913b8213acede4b55941497f7079`。最終HEADのCIはPRを参照）：「v0.5 Linux品質検証」（`npm ci --ignore-scripts`、`npm run quality`、`npm pack --dry-run`）、macOS・Windows・Linuxの「Host protocol」、「Current Host worktree execution」、「Native verification assets」、「trusted project品質契約」がすべて成功した。
 - Linux container（`node:20.19.5-bookworm`、network none、read-only root、`npm ci --ignore-scripts`はnetworkありの別containerで実行）：
-  - `node --test test/test_host_session.mjs`：37件成功（3回目のレビューの是正後）。
+  - `node --test test/test_host_session.mjs`：37件成功（4回目のレビューの是正後）。
   - `npm run lint`：成功。
   - `npm run package:check`：12件中11件成功。失敗の1件はcontainerに`bwrap`が無いための隔離実行テストで、`ASC_TEST_ISOLATION=0`では12件とも成功した。CIでは成功している。
   - `npm run quality`の全体：containerでは20分を超えても終わらず、打ち切った（欠測）。判定はCIの結果による。
