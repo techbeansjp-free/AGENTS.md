@@ -172,4 +172,10 @@
 
 ## 品質検査
 
-（下に追記する。）
+- PRのCI（commit `ee2554b49cb8913b8213acede4b55941497f7079`）：「v0.5 Linux品質検証」（`npm ci --ignore-scripts`、`npm run quality`、`npm pack --dry-run`）、macOS・Windows・Linuxの「Host protocol」、「Current Host worktree execution」、「Native verification assets」、「trusted project品質契約」がすべて成功した。
+- Linux container（`node:20.19.5-bookworm`、network none、read-only root、`npm ci --ignore-scripts`はnetworkありの別containerで実行）：
+  - `node --test test/test_host_session.mjs`：35件成功（`ee2554b4`の内容）。
+  - `npm run lint`：成功。
+  - `npm run package:check`：12件中11件成功。失敗の1件はcontainerに`bwrap`が無いための隔離実行テストで、`ASC_TEST_ISOLATION=0`では12件とも成功した。CIでは成功している。
+  - `npm run quality`の全体：containerでは20分を超えても終わらず、打ち切った（欠測）。判定はCIの結果による。
+- macOS上の`node --test test/test_host_session.mjs`：作成直後の実行fileの初回起動が遅く、テストの2秒の上限を超えて失敗する（baseでも29件中21件が失敗。#1793の記録と同じ）。
