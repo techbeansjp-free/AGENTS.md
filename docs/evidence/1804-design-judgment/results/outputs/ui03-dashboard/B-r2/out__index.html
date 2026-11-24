@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出荷オペレーション監視</title>
+<style>
+:root{
+  --paper:#eef1f3;
+  --panel:#ffffff;
+  --ink:#1b2630;
+  --ink-2:#4b5a66;
+  --line:#c9d2d8;
+  --ok:#2b6b52;
+  --alert:#b3261e;
+  --alert-bg:#fdecea;
+  --alert-ink:#7a130d;
+  --bar:#5d7788;
+  --focus:#0b57d0;
+  --sans:"Noto Sans CJK JP","Liberation Sans","DejaVu Sans",sans-serif;
+  --mono:"DejaVu Sans Mono","Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html{background:var(--paper)}
+body{margin:0;color:var(--ink);font:400 15px/1.6 var(--sans);min-width:760px}
+.page{max-width:1440px;margin:0 auto;padding:20px 28px 32px}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+
+header.top{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+h1{margin:0;font-size:20px;font-weight:700;letter-spacing:.02em}
+h1 small{font-weight:400;color:var(--ink-2);font-size:14px;margin-left:10px}
+.stamp{font-size:15px;color:var(--ink-2)}
+.stamp b{color:var(--ink);font-size:22px;font-weight:700;margin-left:6px}
+
+/* 要対処 */
+.attention{background:var(--panel);border:1px solid var(--line);border-left:10px solid var(--ok);padding:14px 20px;margin-bottom:20px}
+.attention.has{border-left-color:var(--alert);background:var(--alert-bg);border-color:#e3a8a3;border-left-color:var(--alert)}
+.attention h2{margin:0 0 6px;font-size:22px;font-weight:700}
+.attention.has h2{color:var(--alert-ink)}
+.attention ul{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:4px 28px}
+.attention li{display:flex;gap:8px;align-items:baseline;min-width:0}
+.attention li a{color:inherit;text-underline-offset:3px;overflow-wrap:anywhere}
+
+.mark{display:inline-block;flex:none;min-width:5.2em;text-align:center;font-weight:700;font-size:13px;line-height:1.5;padding:0 6px;border:2px solid var(--alert);color:#fff;background:var(--alert)}
+.mark.ok{border-color:var(--line);background:transparent;color:var(--ink-2);font-weight:400}
+
+h2.sec{margin:26px 0 10px;font-size:16px;font-weight:700}
+h2.sec span{font-weight:400;color:var(--ink-2);font-size:13px;margin-left:8px}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--line);padding:12px 14px;min-width:0;position:relative}
+.kpi.bad{border:3px solid var(--alert);padding:10px 12px;background:var(--alert-bg)}
+.kpi .label{font-size:14px;color:var(--ink-2);font-weight:500}
+.kpi.bad .label{color:var(--alert-ink)}
+.kpi .val{font-size:34px;line-height:1.2;font-weight:700;margin-top:2px;white-space:nowrap}
+.kpi .val small{font-size:14px;font-weight:400;color:var(--ink-2);margin-left:3px}
+.kpi dl{margin:6px 0 0;font-size:13px;color:var(--ink-2)}
+.kpi dl div{display:flex;justify-content:space-between;gap:6px}
+.kpi dt,.kpi dd{margin:0}
+.kpi .mark{margin-top:8px}
+
+/* レーン */
+.lanes{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line)}
+.lanes th{font-size:13px;font-weight:500;color:var(--ink-2);text-align:left;padding:8px 12px;border-bottom:2px solid var(--ink);white-space:nowrap}
+.lanes td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+.lanes tr.bad td{background:var(--alert-bg)}
+.lanes tr.bad td:first-child{border-left:10px solid var(--alert)}
+.lanes tr:not(.bad) td:first-child{border-left:10px solid transparent}
+.lanes .id{font-family:var(--mono);font-size:13px;font-weight:700;overflow-wrap:anywhere;word-break:break-all;line-height:1.4}
+.lanes .ref{font-family:var(--mono);font-size:12px;color:var(--ink-2);overflow-wrap:anywhere;word-break:break-all;line-height:1.4;margin-top:2px}
+.lanes .carrier{font-size:14px;margin-top:2px}
+.lanes .c-status{width:112px}
+.lanes .c-lane{width:36%}
+.lanes .c-prog{width:22%}
+.lanes .c-delay{width:100px;text-align:right}
+.lanes .c-cut,.lanes .c-lead{white-space:nowrap}
+.lanes td.c-delay{text-align:right}
+.lanes th.c-delay{text-align:right}
+.delay{font-size:24px;font-weight:700;line-height:1.2}
+.bad .delay{color:var(--alert-ink)}
+.delay-note{font-size:12px;color:var(--ink-2)}
+.pbar{height:8px;background:#dde3e7;margin-top:4px;position:relative}
+.pbar i{display:block;height:100%;background:var(--bar)}
+.bad .pbar i{background:var(--alert)}
+.pnum{font-size:14px;white-space:nowrap}
+.pnum b{font-size:18px}
+.sub{font-size:12px;color:var(--ink-2)}
+
+/* データ源 */
+.srcs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.src{background:var(--panel);border:1px solid var(--line);padding:10px 14px;min-width:0}
+.src .nm{font-weight:500;overflow-wrap:anywhere}
+.src .t{font-size:13px;color:var(--ink-2)}
+.src.err{border:3px solid var(--alert);padding:8px 12px;background:var(--alert-bg)}
+.src.err .nm{color:var(--alert-ink);font-weight:700}
+.src.err .t{color:var(--ink)}
+.src .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}
+button.retry{font:inherit;font-weight:700;font-size:15px;min-height:44px;padding:0 18px;border:2px solid var(--alert-ink);background:#fff;color:var(--alert-ink);cursor:pointer}
+button.retry:hover{background:var(--alert-ink);color:#fff}
+.retry-msg{font-size:13px}
+
+@media (max-width:1100px){
+  .page{padding:14px 16px 28px}
+  .kpis{grid-template-columns:repeat(3,1fr)}
+  .srcs{grid-template-columns:1fr}
+  .lanes .c-lane{width:40%}
+}
+@media (prefers-reduced-motion:no-preference){
+  .attention.has{animation:none}
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <h1 id="site">出荷オペレーション<small id="shift"></small></h1>
+    <div class="stamp">最終更新<b class="num" id="updated"></b></div>
+  </header>
+
+  <section class="attention" id="attention" aria-labelledby="att-h" role="status"></section>
+
+  <h2 class="sec">主要KPI<span>しきい値を外れた項目は「要対処」と太枠で表示</span></h2>
+  <section class="kpis" id="kpis"></section>
+
+  <h2 class="sec">レーン別の出荷状況<span id="lane-note"></span></h2>
+  <table class="lanes">
+    <thead><tr>
+      <th class="c-status">状態</th>
+      <th class="c-lane">レーン / 運送会社 / 注文参照</th>
+      <th class="c-prog">出荷 / 計画</th>
+      <th class="c-delay">遅延件数</th>
+      <th class="c-cut">締切</th>
+      <th class="c-lead">担当</th>
+    </tr></thead>
+    <tbody id="lanes"></tbody>
+  </table>
+
+  <h2 class="sec">データ源の状態</h2>
+  <section class="srcs" id="srcs"></section>
+</div>
+
+<script>
+const DATA = {
+  "site": "第2物流センター（架空）",
+  "shift": "日勤 08:00–17:00",
+  "updated_at": "2027-03-08T14:32:00+09:00",
+  "kpis": [
+    {"key": "shipped", "label": "出荷済み件数", "value": 3184, "unit": "件", "target": 5200, "threshold": null},
+    {"key": "progress", "label": "出荷進捗率", "value": 61.2, "unit": "%", "target": 64.0, "threshold": {"type": "min", "value": 58.0}},
+    {"key": "delay_rate", "label": "出荷遅延率", "value": 12.4, "unit": "%", "target": 3.0, "threshold": {"type": "max", "value": 5.0}},
+    {"key": "pick_rate", "label": "ピッキング速度", "value": 142, "unit": "件/時", "target": 150, "threshold": {"type": "min", "value": 120}},
+    {"key": "mispick", "label": "誤ピッキング", "value": 3, "unit": "件", "target": 0, "threshold": {"type": "max", "value": 5}},
+    {"key": "staff", "label": "稼働人数", "value": 47, "unit": "人", "target": 50, "threshold": {"type": "min", "value": 40}}
+  ],
+  "lanes": [
+    {"id": "LANE-A01-OSAKA-KANSAI-EXPRESS", "carrier": "関西急便", "cutoff": "15:00", "planned": 820, "shipped": 611, "delayed": 4, "lead": "田中", "order_ref": "ORD-20270308-A01-000000611-KX"},
+    {"id": "LANE-A02-NAGOYA", "carrier": "中部運輸", "cutoff": "15:30", "planned": 640, "shipped": 402, "delayed": 2, "lead": "鈴木", "order_ref": "ORD-20270308-A02-000000402"},
+    {"id": "LANE-B01-TOHOKU-REFRIGERATED-COLDCHAIN", "carrier": "北日本冷凍", "cutoff": "14:00", "planned": 410, "shipped": 188, "delayed": 61, "lead": "佐藤", "order_ref": "ORD-20270308-B01-000000188-COLDCHAIN-PRIORITY"},
+    {"id": "LANE-B02-KANTO", "carrier": "関東ロジ", "cutoff": "16:00", "planned": 1120, "shipped": 744, "delayed": 5, "lead": "高橋", "order_ref": "ORD-20270308-B02-000000744"},
+    {"id": "LANE-C01-KYUSHU", "carrier": "九州便", "cutoff": "13:30", "planned": 380, "shipped": 371, "delayed": 0, "lead": "伊藤", "order_ref": "ORD-20270308-C01-000000371"},
+    {"id": "LANE-C02-HOKURIKU", "carrier": "北陸トラック", "cutoff": "15:00", "planned": 300, "shipped": 176, "delayed": 9, "lead": "渡辺", "order_ref": "ORD-20270308-C02-000000176"},
+    {"id": "LANE-D01-SHIKOKU", "carrier": "四国フェリー便", "cutoff": "12:30", "planned": 260, "shipped": 260, "delayed": 0, "lead": "山本", "order_ref": "ORD-20270308-D01-000000260"},
+    {"id": "LANE-D02-RETURNS", "carrier": "返品処理", "cutoff": "17:00", "planned": 1270, "shipped": 432, "delayed": 1, "lead": "中村", "order_ref": "ORD-20270308-D02-000000432"}
+  ],
+  "lane_delay_threshold": 8,
+  "sources": [
+    {"name": "WMS 出荷実績", "status": "ok", "last_success": "2027-03-08T14:32:00+09:00"},
+    {"name": "ハンディ端末 ピッキング記録", "status": "ok", "last_success": "2027-03-08T14:31:40+09:00"},
+    {"name": "冷蔵庫 温度センサー", "status": "error", "last_success": "2027-03-08T10:42:00+09:00", "error": "接続タイムアウト"}
+  ]
+};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf = n => Number(n).toLocaleString('ja-JP');
+const hm = iso => iso.slice(11,16);               // 設定のタイムゾーン表記(+09:00)のまま時刻を読む
+const hms = iso => iso.slice(11,19);
+const ymd = iso => iso.slice(0,10).replace(/-/g,'/');
+const base = new Date(DATA.updated_at);
+function ago(iso){
+  const m = Math.round((base - new Date(iso)) / 60000);
+  if (m < 1) return '更新時点で最新';
+  if (m < 60) return m + '分前';
+  return Math.floor(m/60) + '時間' + (m%60 ? (m%60) + '分' : '') + '前';
+}
+function kpiBad(k){
+  const t = k.threshold; if (!t) return false;
+  return t.type === 'min' ? k.value < t.value : k.value > t.value;
+}
+function fmtVal(k){ return k.unit === '%' ? k.value.toFixed(1) : nf(k.value); }
+function fmtNum(v,u){ return u === '%' ? v.toFixed(1) : nf(v); }
+
+$('shift').textContent = DATA.site + ' ／ ' + DATA.shift;
+$('updated').textContent = ymd(DATA.updated_at) + ' ' + hms(DATA.updated_at);
+
+const badKpis = DATA.kpis.filter(kpiBad);
+const badLanes = DATA.lanes.filter(l => l.delayed > DATA.lane_delay_threshold);
+const errSrcs = DATA.sources.filter(s => s.status === 'error');
+const total = badKpis.length + badLanes.length + errSrcs.length;
+
+// 要対処サマリ
+(function(){
+  const el = $('attention');
+  if (!total){
+    el.innerHTML = '<h2 id="att-h">対処が必要な項目はありません</h2><div class="sub">全KPI・全レーン・全データ源がしきい値内です。</div>';
+    return;
+  }
+  el.classList.add('has');
+  let li = '';
+  badKpis.forEach(k => {
+    const t = k.threshold;
+    li += `<li><span class="mark">KPI</span><a href="#kpi-${k.key}">${esc(k.label)} ${fmtVal(k)}${esc(k.unit)}（しきい値 ${t.type==='max'?'上限':'下限'} ${fmtNum(t.value,k.unit)}${esc(k.unit)}）</a></li>`;
+  });
+  badLanes.forEach(l => {
+    li += `<li><span class="mark">レーン</span><a href="#lane-${esc(l.id)}">${esc(l.id)} 遅延 ${l.delayed}件（担当 ${esc(l.lead)}）</a></li>`;
+  });
+  errSrcs.forEach(s => {
+    li += `<li><span class="mark">取得失敗</span><a href="#srcs">${esc(s.name)}（最終成功 ${hm(s.last_success)}）</a></li>`;
+  });
+  el.innerHTML = `<h2 id="att-h">⚠ 要対処 ${total}件</h2><ul>${li}</ul>`;
+})();
+
+// KPI
+$('kpis').innerHTML = DATA.kpis.map(k => {
+  const bad = kpiBad(k), t = k.threshold;
+  const thr = t ? `<div><dt>${t.type==='max'?'上限':'下限'}</dt><dd class="num">${fmtNum(t.value,k.unit)}${esc(k.unit)}</dd></div>` : '<div><dt>しきい値</dt><dd>なし</dd></div>';
+  return `<article class="kpi${bad?' bad':''}" id="kpi-${k.key}">
+    <div class="label">${esc(k.label)}</div>
+    <div class="val num">${fmtVal(k)}<small>${esc(k.unit)}</small></div>
+    <dl><div><dt>目標</dt><dd class="num">${fmtNum(k.target,k.unit)}${esc(k.unit)}</dd></div>${thr}</dl>
+    ${bad ? `<span class="mark">⚠ 要対処</span>` : (t ? `<span class="mark ok">✓ 範囲内</span>` : '')}
+  </article>`;
+}).join('');
+
+// レーン: 要対処を上に、同順位はデータ順
+$('lane-note').textContent = `遅延 ${DATA.lane_delay_threshold}件超を「要対処」として上に表示`;
+const lanes = DATA.lanes.map((l,i)=>({l,i,bad:l.delayed > DATA.lane_delay_threshold}))
+  .sort((a,b)=> (b.bad-a.bad) || (b.bad ? b.l.delayed-a.l.delayed : a.i-b.i));
+$('lanes').innerHTML = lanes.map(({l,bad}) => {
+  const pct = l.shipped / l.planned * 100;
+  const done = l.shipped >= l.planned;
+  const rest = l.planned - l.shipped;
+  const status = bad ? '<span class="mark">⚠ 要対処</span>' : (done ? '<span class="mark ok">✓ 完了</span>' : '<span class="mark ok">通常</span>');
+  return `<tr class="${bad?'bad':''}" id="lane-${esc(l.id)}">
+    <td class="c-status">${status}</td>
+    <td class="c-lane"><div class="id">${esc(l.id)}</div><div class="carrier">${esc(l.carrier)}</div><div class="ref">${esc(l.order_ref)}</div></td>
+    <td class="c-prog"><div class="pnum num"><b>${nf(l.shipped)}</b> / ${nf(l.planned)}件（${pct.toFixed(0)}%）</div><div class="pbar" aria-hidden="true"><i style="width:${Math.min(100,pct).toFixed(1)}%"></i></div><div class="sub num">${done?'全件出荷済み':'残り '+nf(rest)+'件'}</div></td>
+    <td class="c-delay"><div class="delay num">${l.delayed}<span class="sub">件</span></div>${bad?'<div class="delay-note">しきい値 '+DATA.lane_delay_threshold+'件超</div>':''}</td>
+    <td class="c-cut num">${esc(l.cutoff)}</td>
+    <td class="c-lead">${esc(l.lead)}</td>
+  </tr>`;
+}).join('');
+
+// データ源
+$('srcs').innerHTML = DATA.sources.map((s,i) => {
+  if (s.status === 'error'){
+    return `<div class="src err" role="alert">
+      <div class="nm">⚠ 取得失敗：${esc(s.name)}</div>
+      <div class="t">${esc(s.error||'')}。表示中の値は古い可能性があります。</div>
+      <div class="t num">最後に成功した時刻：<b>${hm(s.last_success)}</b>（${ago(s.last_success)}）</div>
+      <div class="row"><button type="button" class="retry" data-i="${i}">再試行</button><span class="retry-msg" aria-live="polite"></span></div>
+    </div>`;
+  }
+  return `<div class="src"><div class="nm">✓ ${esc(s.name)}</div><div class="t num">最終成功 ${hms(s.last_success)}</div></div>`;
+}).join('');
+document.querySelectorAll('button.retry').forEach(b => b.addEventListener('click', () => {
+  const m = b.parentNode.querySelector('.retry-msg');
+  m.textContent = '再試行を受け付けました（この画面では再取得は行いません）';
+}));
+</script>
+</body>
+</html>

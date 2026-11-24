@@ -1,0 +1,32 @@
+/* 管理画面のデザイントークン（正本）。値はここでだけ定義する。 */
+:root {
+  --color-bg: #f6f7f5;
+  --color-surface: #ffffff;
+  --color-text: #1d2521;
+  --color-text-muted: #5a6660;
+  --color-border: #c9d1cc;
+  --color-primary: #1f6f5c;
+  --color-primary-hover: #185948;
+  --color-on-primary: #ffffff;
+  --color-danger: #b3261e;
+  --color-danger-bg: #fdecea;
+  --color-success: #1e6b2f;
+  --color-success-bg: #e7f4ea;
+  --color-focus: #1a5fb4;
+  --font-sans: "Noto Sans CJK JP", "Liberation Sans", sans-serif;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --shadow-card: 0 1px 2px rgba(29, 37, 33, 0.12);
+  --focus-ring: 0 0 0 3px var(--color-focus);
+  --content-max: 960px;
+}

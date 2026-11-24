@@ -1,0 +1,10 @@
+{
+  "schema": "asc-1804-conditions/v1",
+  "note": "全条件で、fixtureの.claude/skills/にASCの配布Skill（base時点のskills/*）を置く。条件ごとの差は、追加する外部Skillだけ。fromは外部repositoryの固定commitのcheckout（ext-commits.json）からの相対path。",
+  "conditions": {
+    "A": {"label": "現行ASCのみ", "skills": []},
+    "B": {"label": "ASC + Anthropic frontend-design", "skills": [{"name": "frontend-design", "from": "as/skills/frontend-design"}]},
+    "D": {"label": "ASC + Anything Frontend Art Direction", "skills": [{"name": "anything-frontend-art-direction", "from": "ad"}]},
+    "E": {"label": "ASC + Anything Frontend Product Design", "skills": [{"name": "anything-frontend-product-design", "from": "pd"}]}
+  }
+}

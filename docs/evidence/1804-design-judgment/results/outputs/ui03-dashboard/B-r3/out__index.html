@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出荷オペレーション監視 — 第2物流センター</title>
+<style>
+:root {
+  --bg: #e9edef;
+  --panel: #ffffff;
+  --ink: #17252d;
+  --ink-2: #4a5b65;
+  --line: #c5ced3;
+  --ok: #2d6a4f;
+  --alert: #b3261e;
+  --alert-bg: #fdecea;
+  --alert-ink: #7a1610;
+  --track: #d9e0e4;
+  --focus: #0b57d0;
+  --sans: "Noto Sans CJK JP", "DejaVu Sans", "Liberation Sans", sans-serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0; color: var(--ink); font-family: var(--sans);
+  font-size: 15px; line-height: 1.6; font-variant-numeric: tabular-nums;
+}
+.wrap { max-width: 1400px; margin: 0 auto; padding: 20px 24px 32px; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* header */
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 24px; }
+header.top h1 { margin: 0; font-size: 22px; font-weight: 700; }
+header.top .meta { color: var(--ink-2); margin: 0; }
+header.top .stamp { font-size: 20px; font-weight: 700; color: var(--ink); }
+
+/* verdict */
+.verdict {
+  margin: 14px 0 20px; padding: 14px 20px; background: var(--alert); color: #fff;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px;
+}
+.verdict.clear { background: var(--ok); }
+.verdict .head { font-size: 26px; font-weight: 900; line-height: 1.3; margin: 0; }
+.verdict ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: 16px; font-weight: 700; }
+
+h2 { font-size: 16px; margin: 0 0 8px; font-weight: 700; }
+section { margin-bottom: 24px; }
+
+/* sources */
+.src-err {
+  background: var(--alert-bg); border: 2px solid var(--alert); border-left-width: 10px;
+  padding: 12px 16px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 20px; align-items: center; margin-bottom: 8px;
+}
+.src-err .t { font-weight: 900; color: var(--alert-ink); font-size: 17px; margin: 0; }
+.src-err p { margin: 0; color: var(--alert-ink); }
+.src-err .note { font-size: 14px; }
+button.retry {
+  font: inherit; font-weight: 700; min-height: 44px; padding: 0 20px; cursor: pointer;
+  background: #fff; color: var(--alert-ink); border: 2px solid var(--alert); border-radius: 4px;
+}
+button.retry:hover { background: var(--alert); color: #fff; }
+.src-ok { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 24px; color: var(--ink-2); font-size: 14px; }
+.src-ok .mk { color: var(--ok); font-weight: 700; }
+
+/* KPI */
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-top: 6px solid var(--ok); padding: 10px 14px 12px; min-width: 0; }
+.kpi .lbl { font-size: 14px; color: var(--ink-2); font-weight: 700; margin: 0; }
+.kpi .val { margin: 2px 0 0; font-size: 36px; font-weight: 900; line-height: 1.15; white-space: nowrap; }
+.kpi .val small { font-size: 15px; font-weight: 700; margin-left: 3px; color: var(--ink-2); }
+.kpi .ref { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.kpi .flag { margin: 6px 0 0; font-size: 14px; font-weight: 700; color: var(--ok); }
+.kpi.breach { background: var(--alert); border-color: var(--alert); color: #fff; }
+.kpi.breach .lbl, .kpi.breach .val small, .kpi.breach .ref { color: #fff; }
+.kpi.breach .flag { color: #fff; background: #5c0d09; display: inline-block; padding: 1px 8px; }
+
+/* lanes */
+.lanes { margin: 0; padding: 0; list-style: none; background: var(--panel); border: 1px solid var(--line); }
+.lane-head, .lane {
+  display: grid; align-items: center; gap: 4px 16px; padding: 10px 16px;
+  grid-template-columns: 9.5rem minmax(0,2.2fr) minmax(0,1.6fr) 5rem 5rem 4.5rem;
+}
+.lane-head { font-size: 13px; color: var(--ink-2); font-weight: 700; background: #f3f6f7; border-bottom: 1px solid var(--line); }
+.lane { border-top: 1px solid var(--line); border-left: 8px solid transparent; }
+.lane:first-child { border-top: 0; }
+.lane.breach { background: var(--alert-bg); border-left-color: var(--alert); }
+.lane.late { border-left-color: #c2760a; }
+.lane.done { color: var(--ink-2); }
+.tag { display: inline-block; font-weight: 900; font-size: 14px; padding: 1px 8px; border: 2px solid transparent; line-height: 1.5; }
+.tag.breach { background: var(--alert); color: #fff; }
+.tag.late { color: #6b3f00; border-color: #c2760a; background: #fff4e0; }
+.tag.ok { color: var(--ok); border-color: var(--line); background: #fff; font-weight: 700; }
+.tag.done { color: var(--ink-2); border-color: var(--line); background: #fff; font-weight: 700; }
+.lane .id { font-weight: 700; overflow-wrap: anywhere; word-break: break-all; line-height: 1.4; }
+.lane .sub { display: block; font-size: 13px; color: var(--ink-2); font-weight: 400; overflow-wrap: anywhere; word-break: break-all; margin-top: 2px; }
+.bar { height: 10px; background: var(--track); position: relative; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink-2); }
+.lane.breach .bar i { background: var(--alert); }
+.prog { font-size: 13px; margin-top: 2px; }
+.num { text-align: right; font-weight: 700; white-space: nowrap; }
+.lane .num.dl { font-size: 20px; font-weight: 900; }
+.lane.breach .num.dl { color: var(--alert-ink); }
+.lane .cut small, .lane .lead small { display: none; }
+.legend { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; }
+
+/* tablet */
+@media (max-width: 1100px) {
+  .wrap { padding: 16px; }
+  .kpis { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .lane-head { display: none; }
+  .lane {
+    grid-template-columns: 8.5rem minmax(0,1fr) 5.5rem 5.5rem;
+    grid-template-areas: "st id id dl" "st pr pr cu" "st pr pr le";
+    align-items: start;
+  }
+  .lane > :nth-child(1) { grid-area: st; }
+  .lane > :nth-child(2) { grid-area: id; }
+  .lane > :nth-child(3) { grid-area: pr; }
+  .lane > :nth-child(4) { grid-area: dl; }
+  .lane > :nth-child(5) { grid-area: cu; }
+  .lane > :nth-child(6) { grid-area: le; }
+  .lane .cut small, .lane .lead small, .lane .dl small { display: block; font-size: 12px; color: var(--ink-2); font-weight: 400; }
+  .lane .dl small { display: block; }
+  .verdict .head { font-size: 22px; }
+}
+.dl small { display: none; }
+@media (max-width: 1100px) { .dl small { display: block; font-size: 12px; font-weight: 400; color: var(--ink-2); } .lane.breach .dl small { color: var(--alert-ink); } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1 id="site"></h1>
+      <p class="meta" id="shift"></p>
+    </div>
+    <p class="stamp" id="stamp"></p>
+  </header>
+
+  <div id="verdict" class="verdict" role="status"></div>
+
+  <section aria-labelledby="h-src">
+    <h2 id="h-src">データ源</h2>
+    <div id="sources"></div>
+  </section>
+
+  <section aria-labelledby="h-kpi">
+    <h2 id="h-kpi">主要指標</h2>
+    <ul class="kpis" id="kpis"></ul>
+  </section>
+
+  <section aria-labelledby="h-lane">
+    <h2 id="h-lane">レーン別の出荷状況（要対処を上に表示）</h2>
+    <div class="lanes" role="list" id="lanes"></div>
+    <p class="legend">▲超過＝遅延件数がしきい値を超えたレーン。◆締切超過＝出荷締切を過ぎても未出荷が残るレーン（参考表示）。</p>
+  </section>
+</div>
+
+<script>
+const DATA = {
+  "site": "第2物流センター（架空）",
+  "shift": "日勤 08:00–17:00",
+  "updated_at": "2027-03-08T14:32:00+09:00",
+  "kpis": [
+    {"key": "shipped", "label": "出荷済み件数", "value": 3184, "unit": "件", "target": 5200, "threshold": null},
+    {"key": "progress", "label": "出荷進捗率", "value": 61.2, "unit": "%", "target": 64.0, "threshold": {"type": "min", "value": 58.0}},
+    {"key": "delay_rate", "label": "出荷遅延率", "value": 12.4, "unit": "%", "target": 3.0, "threshold": {"type": "max", "value": 5.0}},
+    {"key": "pick_rate", "label": "ピッキング速度", "value": 142, "unit": "件/時", "target": 150, "threshold": {"type": "min", "value": 120}},
+    {"key": "mispick", "label": "誤ピッキング", "value": 3, "unit": "件", "target": 0, "threshold": {"type": "max", "value": 5}},
+    {"key": "staff", "label": "稼働人数", "value": 47, "unit": "人", "target": 50, "threshold": {"type": "min", "value": 40}}
+  ],
+  "lanes": [
+    {"id": "LANE-A01-OSAKA-KANSAI-EXPRESS", "carrier": "関西急便", "cutoff": "15:00", "planned": 820, "shipped": 611, "delayed": 4, "lead": "田中", "order_ref": "ORD-20270308-A01-000000611-KX"},
+    {"id": "LANE-A02-NAGOYA", "carrier": "中部運輸", "cutoff": "15:30", "planned": 640, "shipped": 402, "delayed": 2, "lead": "鈴木", "order_ref": "ORD-20270308-A02-000000402"},
+    {"id": "LANE-B01-TOHOKU-REFRIGERATED-COLDCHAIN", "carrier": "北日本冷凍", "cutoff": "14:00", "planned": 410, "shipped": 188, "delayed": 61, "lead": "佐藤", "order_ref": "ORD-20270308-B01-000000188-COLDCHAIN-PRIORITY"},
+    {"id": "LANE-B02-KANTO", "carrier": "関東ロジ", "cutoff": "16:00", "planned": 1120, "shipped": 744, "delayed": 5, "lead": "高橋", "order_ref": "ORD-20270308-B02-000000744"},
+    {"id": "LANE-C01-KYUSHU", "carrier": "九州便", "cutoff": "13:30", "planned": 380, "shipped": 371, "delayed": 0, "lead": "伊藤", "order_ref": "ORD-20270308-C01-000000371"},
+    {"id": "LANE-C02-HOKURIKU", "carrier": "北陸トラック", "cutoff": "15:00", "planned": 300, "shipped": 176, "delayed": 9, "lead": "渡辺", "order_ref": "ORD-20270308-C02-000000176"},
+    {"id": "LANE-D01-SHIKOKU", "carrier": "四国フェリー便", "cutoff": "12:30", "planned": 260, "shipped": 260, "delayed": 0, "lead": "山本", "order_ref": "ORD-20270308-D01-000000260"},
+    {"id": "LANE-D02-RETURNS", "carrier": "返品処理", "cutoff": "17:00", "planned": 1270, "shipped": 432, "delayed": 1, "lead": "中村", "order_ref": "ORD-20270308-D02-000000432"}
+  ],
+  "lane_delay_threshold": 8,
+  "sources": [
+    {"name": "WMS 出荷実績", "status": "ok", "last_success": "2027-03-08T14:32:00+09:00"},
+    {"name": "ハンディ端末 ピッキング記録", "status": "ok", "last_success": "2027-03-08T14:31:40+09:00"},
+    {"name": "冷蔵庫 温度センサー", "status": "error", "last_success": "2027-03-08T10:42:00+09:00", "error": "接続タイムアウト"}
+  ]
+};
+
+const $ = id => document.getElementById(id);
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+const nf = new Intl.NumberFormat("ja-JP");
+// ISO文字列の壁時計部分をそのまま使う（日本時間表記のため）
+const hm = iso => iso.slice(11, 16);
+const hms = iso => iso.slice(11, 19);
+const ymd = iso => iso.slice(0, 10).replace(/-/g, "/");
+const mins = iso => +iso.slice(11, 13) * 60 + +iso.slice(14, 16);
+const nowMin = mins(DATA.updated_at);
+function fmt(v, unit) {
+  return unit === "%" ? v.toFixed(1) : nf.format(v);
+}
+function ago(iso) {
+  const d = nowMin - mins(iso);
+  if (d < 1) return "";
+  const h = Math.floor(d / 60), m = d % 60;
+  return "（" + (h ? h + "時間" : "") + (m ? m + "分" : "") + "前）";
+}
+
+/* 判定 */
+const kpis = DATA.kpis.map(k => {
+  const t = k.threshold;
+  const breach = !!t && (t.type === "max" ? k.value > t.value : k.value < t.value);
+  return Object.assign({}, k, { breach });
+});
+const lanes = DATA.lanes.map(l => {
+  const breach = l.delayed > DATA.lane_delay_threshold;
+  const remain = l.planned - l.shipped;
+  const late = !breach && mins("0000-00-00T" + l.cutoff) < nowMin && remain > 0;
+  const done = remain === 0;
+  return Object.assign({}, l, { breach, remain, late, done, rank: breach ? 0 : late ? 1 : done ? 3 : 2 });
+});
+lanes.sort((a, b) => a.rank - b.rank || (b.delayed - a.delayed) || (mins("0000-00-00T" + a.cutoff) - mins("0000-00-00T" + b.cutoff)));
+const errSources = DATA.sources.filter(s => s.status === "error");
+const breachKpis = kpis.filter(k => k.breach);
+const breachLanes = lanes.filter(l => l.breach);
+const lateLanes = lanes.filter(l => l.late);
+
+/* header */
+$("site").textContent = DATA.site + " 出荷状況";
+$("shift").textContent = DATA.shift;
+$("stamp").textContent = "最終更新 " + ymd(DATA.updated_at) + " " + hm(DATA.updated_at);
+
+/* verdict */
+const vd = $("verdict");
+const need = breachKpis.length + breachLanes.length + errSources.length;
+if (need === 0 && lateLanes.length === 0) {
+  vd.classList.add("clear");
+  vd.appendChild(el("p", "head", "✔ 対処が必要な項目はありません"));
+} else {
+  vd.appendChild(el("p", "head", "▲ 対処が必要: " + need + "件"));
+  const ul = el("ul");
+  if (breachKpis.length) ul.appendChild(el("li", "", "指標超過 " + breachKpis.length + "（" + breachKpis.map(k => k.label).join("、") + "）"));
+  if (breachLanes.length) ul.appendChild(el("li", "", "遅延レーン " + breachLanes.length + "（" + breachLanes.map(l => l.carrier).join("、") + "）"));
+  if (errSources.length) ul.appendChild(el("li", "", "データ取得失敗 " + errSources.length + "（" + errSources.map(s => s.name).join("、") + "）"));
+  if (lateLanes.length) ul.appendChild(el("li", "", "◆締切超過・未出荷あり " + lateLanes.length + "（" + lateLanes.map(l => l.carrier).join("、") + "）"));
+  vd.appendChild(ul);
+}
+
+/* sources */
+const sb = $("sources");
+errSources.forEach(s => {
+  const box = el("div", "src-err");
+  const left = el("div");
+  left.appendChild(el("p", "t", "✖ 取得失敗: " + s.name + "（" + (s.error || "原因不明") + "）"));
+  left.appendChild(el("p", "", "最後に成功: " + hm(s.last_success) + ago(s.last_success) + "。この間の値は反映されていません。"));
+  const note = el("p", "note", "");
+  note.setAttribute("aria-live", "polite");
+  left.appendChild(note);
+  const btn = el("button", "retry", "再試行する");
+  btn.type = "button";
+  btn.addEventListener("click", () => {
+    note.textContent = hms(DATA.updated_at).slice(0, 5) + " の表示データのまま。再試行を受け付けました（この画面は実際の再取得を行いません）。";
+  });
+  box.appendChild(left); box.appendChild(btn);
+  sb.appendChild(box);
+});
+const okUl = el("ul", "src-ok");
+DATA.sources.filter(s => s.status === "ok").forEach(s => {
+  const li = el("li");
+  li.appendChild(el("span", "mk", "✔ "));
+  li.appendChild(document.createTextNode(s.name + " 正常（" + hm(s.last_success) + " 取得）"));
+  okUl.appendChild(li);
+});
+sb.appendChild(okUl);
+
+/* KPI */
+const kl = $("kpis");
+kpis.forEach(k => {
+  const li = el("li", "kpi" + (k.breach ? " breach" : ""));
+  li.appendChild(el("p", "lbl", k.label));
+  const v = el("p", "val", fmt(k.value, k.unit));
+  v.appendChild(el("small", "", k.unit));
+  li.appendChild(v);
+  let ref = "目標 " + fmt(k.target, k.unit) + k.unit;
+  if (k.threshold) ref += " ／ " + (k.threshold.type === "max" ? "上限 " : "下限 ") + fmt(k.threshold.value, k.unit) + k.unit;
+  li.appendChild(el("p", "ref", ref));
+  if (k.threshold) li.appendChild(el("p", "flag", k.breach ? "▲ しきい値超過" : "✔ 範囲内"));
+  else li.appendChild(el("p", "flag", "進捗 " + Math.round(k.value / k.target * 100) + "%（目標比）")).style.color = "var(--ink-2)";
+  kl.appendChild(li);
+});
+
+/* lanes */
+const ll = $("lanes");
+const head = el("div", "lane-head");
+head.setAttribute("aria-hidden", "true");
+["状態", "レーン／運送会社／注文参照", "出荷済み／予定", "遅延件数", "締切", "担当"].forEach((t, i) => head.appendChild(el("span", i >= 3 ? "num" : "", t)));
+ll.appendChild(head);
+lanes.forEach(l => {
+  const row = el("div", "lane" + (l.breach ? " breach" : l.late ? " late" : l.done ? " done" : ""));
+  row.setAttribute("role", "listitem");
+  const st = el("div");
+  st.appendChild(l.breach ? el("span", "tag breach", "▲ 遅延超過")
+    : l.late ? el("span", "tag late", "◆ 締切超過")
+    : l.done ? el("span", "tag done", "出荷完了")
+    : el("span", "tag ok", "✔ 通常"));
+  row.appendChild(st);
+
+  const id = el("div", "id", l.id);
+  id.appendChild(el("span", "sub", l.carrier + " ／ " + l.order_ref));
+  row.appendChild(id);
+
+  const pct = Math.round(l.shipped / l.planned * 100);
+  const pg = el("div");
+  const bar = el("div", "bar"); const fill = el("i"); fill.style.width = pct + "%"; bar.appendChild(fill);
+  pg.appendChild(bar);
+  pg.appendChild(el("div", "prog", pct + "%（" + nf.format(l.shipped) + " / " + nf.format(l.planned) + "件）" + (l.late ? " 残 " + nf.format(l.remain) + "件" : "")));
+  row.appendChild(pg);
+
+  const dl = el("div", "num dl", String(l.delayed));
+  dl.appendChild(el("small", "", "遅延件数"));
+  row.appendChild(dl);
+
+  const cu = el("div", "num cut", l.cutoff);
+  cu.appendChild(el("small", "", "締切"));
+  row.appendChild(cu);
+
+  const le = el("div", "num lead", l.lead);
+  le.appendChild(el("small", "", "担当"));
+  row.appendChild(le);
+
+  ll.appendChild(row);
+});
+</script>
+</body>
+</html>

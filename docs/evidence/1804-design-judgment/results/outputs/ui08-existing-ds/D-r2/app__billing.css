@@ -1,0 +1,8 @@
+/* 請求先編集画面専用。色・余白・書体は tokens.css の変数のみを使う。 */
+.billing-form { max-width: 640px; }
+.billing-form .field__input { width: 100%; }
+.billing-form .field__input:disabled { background: var(--color-bg); color: var(--color-text-muted); cursor: not-allowed; }
+.billing-form__req { color: var(--color-danger); font-weight: 400; font-size: var(--font-size-sm); margin-left: var(--space-2); }
+.billing-form__opt { color: var(--color-text-muted); font-weight: 400; font-size: var(--font-size-sm); margin-left: var(--space-2); }
+.billing-form__actions { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
+.billing-form__intro { margin: 0 0 var(--space-4); color: var(--color-text-muted); }

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出荷オペレーション監視</title>
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#fff; --ink:#1b2430; --sub:#566273; --line:#d5dae1;
+  --alert:#b3261e; --alert-bg:#fdecea; --alert-line:#e8a39e;
+  --ok:#2d6a4f; --info:#8a5a00; --info-bg:#fff4dc;
+  --bar:#4a6785; --bar-bg:#e3e8ee;
+  --sans:"Noto Sans CJK JP","DejaVu Sans","Liberation Sans",sans-serif;
+  --mono:"DejaVu Sans Mono","Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans)}
+.wrap{max-width:1440px;margin:0 auto;padding:16px 24px 32px}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:20px;margin:0;font-weight:700}
+h1 small{font-weight:400;color:var(--sub);font-size:14px;margin-left:8px}
+.updated{font-size:15px;color:var(--sub)}
+.updated b{color:var(--ink);font-size:20px;font-variant-numeric:tabular-nums}
+h2{font-size:15px;margin:24px 0 8px;font-weight:700}
+
+/* 総括 */
+.summary{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 16px;border:2px solid var(--alert);background:var(--alert-bg);border-radius:6px}
+.summary.clear{border-color:var(--ok);background:#e8f4ee}
+.summary .head{font-size:22px;font-weight:800;color:var(--alert)}
+.summary.clear .head{color:var(--ok)}
+.summary ul{list-style:none;margin:0;padding:0;display:flex;gap:8px 20px;flex-wrap:wrap}
+.summary li{font-size:16px;font-weight:600}
+.summary li b{font-size:20px;font-variant-numeric:tabular-nums}
+
+/* データ源 */
+.src-err{border:1px solid var(--alert-line);border-left:6px solid var(--alert);background:#fff;border-radius:4px;padding:10px 14px;margin-top:10px;display:flex;gap:12px 20px;align-items:center;flex-wrap:wrap}
+.src-err .t{font-weight:700;color:var(--alert)}
+.src-err .m{flex:1 1 320px;min-width:0;overflow-wrap:anywhere}
+.src-err .m span{color:var(--sub)}
+button{font:inherit;font-weight:700;padding:8px 18px;min-height:44px;border:2px solid var(--alert);background:#fff;color:var(--alert);border-radius:4px;cursor:pointer}
+button:hover{background:var(--alert-bg)}
+button:focus-visible{outline:3px solid #1a4fd0;outline-offset:2px}
+button[disabled]{opacity:.6;cursor:default}
+.src-ok{font-size:13px;color:var(--sub);margin-top:6px}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
+.kpi.bad{border:2px solid var(--alert);background:var(--alert-bg)}
+.kpi .l{font-size:13px;color:var(--sub);font-weight:600}
+.kpi .v{font-size:32px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.kpi .v small{font-size:14px;font-weight:500;margin-left:3px;color:var(--sub)}
+.kpi.bad .v{color:var(--alert)}
+.kpi .f{font-size:12.5px;color:var(--sub);font-variant-numeric:tabular-nums}
+.badge{display:inline-block;font-size:13px;font-weight:800;padding:1px 8px;border-radius:3px;background:var(--alert);color:#fff;white-space:nowrap}
+.badge.info{background:var(--info-bg);color:var(--info);border:1px solid #d9b46a;font-weight:700}
+.badge.ok{background:none;color:var(--ok);padding:0;font-weight:600}
+
+/* レーン */
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);table-layout:fixed}
+th,td{padding:8px 10px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+th{font-size:12.5px;color:var(--sub);background:#eef1f4;font-weight:700}
+tr.bad td{background:var(--alert-bg)}
+tr.bad td:first-child{box-shadow:inset 6px 0 0 var(--alert)}
+.c-st{width:104px}.c-car{width:150px}.c-prog{width:26%}.c-del{width:90px}.c-lead{width:84px}
+.id{font-family:var(--mono);font-size:13px;font-weight:700;overflow-wrap:anywhere;word-break:break-all}
+.ref{font-family:var(--mono);font-size:11.5px;color:var(--sub);overflow-wrap:anywhere;word-break:break-all}
+.num{font-variant-numeric:tabular-nums}
+.del{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+tr.bad .del{color:var(--alert)}
+.bar{height:10px;background:var(--bar-bg);border-radius:2px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:var(--bar)}
+tr.bad .bar i{background:var(--alert)}
+.note{font-size:12.5px;color:var(--sub);margin-top:8px}
+
+@media (max-width:1100px){
+  .wrap{padding:12px 14px 24px}
+  .kpis{grid-template-columns:repeat(3,1fr)}
+  .c-car{width:110px}.c-prog{width:24%}.c-st{width:92px}.c-del{width:70px}.c-lead{width:66px}
+  th,td{padding:8px 6px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="site"></h1>
+    <div class="updated">最終更新 <b id="upd"></b></div>
+  </header>
+
+  <section id="summary" aria-label="対処が必要な項目の総括"></section>
+  <div id="srcErr"></div>
+
+  <h2>KPI（6項目）</h2>
+  <section class="kpis" id="kpis"></section>
+
+  <h2>レーン別の状況（8レーン・要対処を上に表示）</h2>
+  <table>
+    <thead><tr>
+      <th class="c-st" scope="col">状態</th>
+      <th scope="col">レーンID / 注文参照</th>
+      <th class="c-car" scope="col">運送会社・締切</th>
+      <th class="c-prog" scope="col">出荷済み / 予定</th>
+      <th class="c-del" scope="col">遅延件数</th>
+      <th class="c-lead" scope="col">担当</th>
+    </tr></thead>
+    <tbody id="lanes"></tbody>
+  </table>
+  <p class="note" id="note"></p>
+  <div class="src-ok" id="srcOk"></div>
+</div>
+
+<script>
+const DATA = {
+  "site": "第2物流センター（架空）",
+  "shift": "日勤 08:00–17:00",
+  "updated_at": "2027-03-08T14:32:00+09:00",
+  "kpis": [
+    {"key": "shipped", "label": "出荷済み件数", "value": 3184, "unit": "件", "target": 5200, "threshold": null},
+    {"key": "progress", "label": "出荷進捗率", "value": 61.2, "unit": "%", "target": 64.0, "threshold": {"type": "min", "value": 58.0}},
+    {"key": "delay_rate", "label": "出荷遅延率", "value": 12.4, "unit": "%", "target": 3.0, "threshold": {"type": "max", "value": 5.0}},
+    {"key": "pick_rate", "label": "ピッキング速度", "value": 142, "unit": "件/時", "target": 150, "threshold": {"type": "min", "value": 120}},
+    {"key": "mispick", "label": "誤ピッキング", "value": 3, "unit": "件", "target": 0, "threshold": {"type": "max", "value": 5}},
+    {"key": "staff", "label": "稼働人数", "value": 47, "unit": "人", "target": 50, "threshold": {"type": "min", "value": 40}}
+  ],
+  "lanes": [
+    {"id": "LANE-A01-OSAKA-KANSAI-EXPRESS", "carrier": "関西急便", "cutoff": "15:00", "planned": 820, "shipped": 611, "delayed": 4, "lead": "田中", "order_ref": "ORD-20270308-A01-000000611-KX"},
+    {"id": "LANE-A02-NAGOYA", "carrier": "中部運輸", "cutoff": "15:30", "planned": 640, "shipped": 402, "delayed": 2, "lead": "鈴木", "order_ref": "ORD-20270308-A02-000000402"},
+    {"id": "LANE-B01-TOHOKU-REFRIGERATED-COLDCHAIN", "carrier": "北日本冷凍", "cutoff": "14:00", "planned": 410, "shipped": 188, "delayed": 61, "lead": "佐藤", "order_ref": "ORD-20270308-B01-000000188-COLDCHAIN-PRIORITY"},
+    {"id": "LANE-B02-KANTO", "carrier": "関東ロジ", "cutoff": "16:00", "planned": 1120, "shipped": 744, "delayed": 5, "lead": "高橋", "order_ref": "ORD-20270308-B02-000000744"},
+    {"id": "LANE-C01-KYUSHU", "carrier": "九州便", "cutoff": "13:30", "planned": 380, "shipped": 371, "delayed": 0, "lead": "伊藤", "order_ref": "ORD-20270308-C01-000000371"},
+    {"id": "LANE-C02-HOKURIKU", "carrier": "北陸トラック", "cutoff": "15:00", "planned": 300, "shipped": 176, "delayed": 9, "lead": "渡辺", "order_ref": "ORD-20270308-C02-000000176"},
+    {"id": "LANE-D01-SHIKOKU", "carrier": "四国フェリー便", "cutoff": "12:30", "planned": 260, "shipped": 260, "delayed": 0, "lead": "山本", "order_ref": "ORD-20270308-D01-000000260"},
+    {"id": "LANE-D02-RETURNS", "carrier": "返品処理", "cutoff": "17:00", "planned": 1270, "shipped": 432, "delayed": 1, "lead": "中村", "order_ref": "ORD-20270308-D02-000000432"}
+  ],
+  "lane_delay_threshold": 8,
+  "sources": [
+    {"name": "WMS 出荷実績", "status": "ok", "last_success": "2027-03-08T14:32:00+09:00"},
+    {"name": "ハンディ端末 ピッキング記録", "status": "ok", "last_success": "2027-03-08T14:31:40+09:00"},
+    {"name": "冷蔵庫 温度センサー", "status": "error", "last_success": "2027-03-08T10:42:00+09:00", "error": "接続タイムアウト"}
+  ]
+};
+
+const $ = id => document.getElementById(id);
+function el(tag, cls, text){const e=document.createElement(tag); if(cls)e.className=cls; if(text!=null)e.textContent=text; return e;}
+// ISO文字列のJST時刻部分をそのまま使う（端末のタイムゾーンに依存しない）
+const hm = iso => iso.slice(11,16);
+const hms = iso => iso.slice(11,19);
+const ymd = iso => iso.slice(0,10).replace(/-/g,'/');
+const nowMin = iso => +iso.slice(11,13)*60 + +iso.slice(14,16);
+const toMin = s => +s.slice(0,2)*60 + +s.slice(3,5);
+const fmt = n => n.toLocaleString('ja-JP');
+function ago(fromIso, toIso){
+  const m = nowMin(toIso)-nowMin(fromIso); const h=Math.floor(m/60), r=m%60;
+  return h>0 ? `${h}時間${r}分前` : `${r}分前`;
+}
+
+$('site').textContent = DATA.site;
+$('site').appendChild(el('small',null,DATA.shift));
+$('upd').textContent = `${ymd(DATA.updated_at)} ${hms(DATA.updated_at)}`;
+
+// 判定
+const kpiBad = k => k.threshold && (k.threshold.type==='max' ? k.value>k.threshold.value : k.value<k.threshold.value);
+const laneBad = l => l.delayed > DATA.lane_delay_threshold;
+const cur = nowMin(DATA.updated_at);
+const cutoffPassedOpen = l => toMin(l.cutoff) <= cur && l.shipped < l.planned;
+const errSrc = DATA.sources.filter(s=>s.status==='error');
+const badK = DATA.kpis.filter(kpiBad), badL = DATA.lanes.filter(laneBad);
+const total = badK.length+badL.length+errSrc.length;
+
+// 総括
+const sm = $('summary');
+sm.className = total ? 'summary' : 'summary clear';
+sm.appendChild(el('div','head', total ? `▲ 要対処 ${total}件` : '✔ 対処が必要な項目なし'));
+const ul = el('ul');
+[['KPI しきい値超過',badK.length],['レーン遅延超過',badL.length],['データ取得失敗',errSrc.length]].forEach(([t,n])=>{
+  const li = el('li'); li.append(t+' '); li.appendChild(el('b',null,String(n))); ul.appendChild(li);
+});
+sm.appendChild(ul);
+
+// データ源
+errSrc.forEach(s=>{
+  const box = el('div','src-err'); box.setAttribute('role','alert');
+  box.appendChild(el('div','t','✖ データ取得失敗'));
+  const m = el('div','m');
+  m.appendChild(el('b',null,s.name));
+  m.append(`：${s.error||'取得エラー'}　`);
+  m.appendChild(el('span',null,`最後に成功: ${hm(s.last_success)}（${ago(s.last_success,DATA.updated_at)}）。この間の値は更新されていません。`));
+  box.appendChild(m);
+  const b = el('button',null,'再試行'); b.type='button';
+  const st = el('span',null,''); st.setAttribute('role','status'); st.setAttribute('aria-live','polite'); st.style.cssText='font-size:13px;color:var(--sub)';
+  b.addEventListener('click',()=>{
+    b.disabled=true; b.textContent='再試行中…'; st.textContent='';
+    setTimeout(()=>{b.disabled=false; b.textContent='再試行'; st.textContent='再試行しました（この画面では再取得は行いません）';},800);
+  });
+  box.append(b,st);
+  $('srcErr').appendChild(box);
+});
+const oks = DATA.sources.filter(s=>s.status==='ok');
+$('srcOk').textContent = oks.map(s=>`${s.name}: 正常（${hms(s.last_success)}）`).join('　／　');
+
+// KPI
+DATA.kpis.forEach(k=>{
+  const bad = kpiBad(k);
+  const c = el('div','kpi'+(bad?' bad':''));
+  c.appendChild(el('div','l',k.label));
+  const v = el('div','v', k.unit==='%' ? k.value.toFixed(1) : fmt(k.value));
+  v.appendChild(el('small',null,k.unit)); c.appendChild(v);
+  const f = el('div','f');
+  if(bad){
+    const b = el('span','badge', '▲ しきい値超過'); f.appendChild(b); f.appendChild(document.createElement('br'));
+  } else if(k.threshold){
+    f.appendChild(el('span','badge ok','✔ 範囲内')); f.appendChild(document.createElement('br'));
+  } else {
+    f.appendChild(el('span',null,'しきい値なし')); f.appendChild(document.createElement('br'));
+  }
+  const tv = k.unit==='%' ? k.target.toFixed(1) : fmt(k.target);
+  let t = `目標 ${tv}${k.unit}`;
+  if(k.threshold){
+    const thv = k.unit==='%' ? k.threshold.value.toFixed(1) : fmt(k.threshold.value);
+    t += `／基準 ${thv}${k.unit}${k.threshold.type==='max'?'以下':'以上'}`;
+  }
+  f.append(t); c.appendChild(f);
+  $('kpis').appendChild(c);
+});
+
+// レーン（要対処を上に。同順位はデータ順）
+const lanes = DATA.lanes.map((l,i)=>({l,i})).sort((a,b)=>(laneBad(b.l)-laneBad(a.l))||(a.i-b.i)).map(x=>x.l);
+lanes.forEach(l=>{
+  const bad = laneBad(l);
+  const tr = el('tr', bad?'bad':'');
+  const td1 = el('td');
+  if(bad) td1.appendChild(el('span','badge','▲ 遅延超過'));
+  else td1.appendChild(el('span','badge ok', l.shipped>=l.planned?'✔ 完了':'✔ 範囲内'));
+  tr.appendChild(td1);
+
+  const td2 = el('td'); td2.appendChild(el('div','id',l.id)); td2.appendChild(el('div','ref',l.order_ref)); tr.appendChild(td2);
+
+  const td3 = el('td'); td3.appendChild(el('div',null,l.carrier));
+  const cu = el('div','num','締切 '+l.cutoff); td3.appendChild(cu);
+  if(cutoffPassedOpen(l)) td3.appendChild(el('span','badge info','締切経過・未出荷'+(l.planned-l.shipped)+'件'));
+  tr.appendChild(td3);
+
+  const pct = Math.round(l.shipped/l.planned*100);
+  const td4 = el('td','num'); td4.append(`${fmt(l.shipped)} / ${fmt(l.planned)}（${pct}%）`);
+  const bar = el('div','bar'); const i = el('i'); i.style.width = pct+'%'; bar.appendChild(i); td4.appendChild(bar); tr.appendChild(td4);
+
+  const td5 = el('td'); td5.appendChild(el('span','del',String(l.delayed))); td5.append(' 件'); tr.appendChild(td5);
+  tr.appendChild(el('td',null,l.lead));
+  $('lanes').appendChild(tr);
+});
+$('note').textContent = `レーンの遅延しきい値: 遅延件数 ${DATA.lane_delay_threshold} 件超で「遅延超過」。「締切経過・未出荷」は更新時刻（${hm(DATA.updated_at)}）時点で締切を過ぎ、出荷が予定に届いていないレーンの参考表示です（しきい値判定ではありません）。`;
+</script>
+</body>
+</html>

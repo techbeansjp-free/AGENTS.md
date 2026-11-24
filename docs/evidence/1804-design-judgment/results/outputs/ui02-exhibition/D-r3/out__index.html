@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>干潟と海苔の百年 ― 舟と手仕事の記録｜市立郷土資料館 企画展</title>
+<meta name="description" content="2027年4月10日〜6月27日、市立郷土資料館 企画展「干潟と海苔の百年」。会期・開館時間・観覧料・アクセス・関連イベントのご案内。">
+<style>
+:root{
+  --paper:#f5f1e6;      /* 和紙・乾いた干潟 */
+  --paper-2:#ebe5d3;
+  --ink:#1b2a26;        /* 海苔の黒緑 */
+  --ink-2:#3d4c47;
+  --sea:#1f4f5c;        /* 干潟の水の深緑青 */
+  --sea-dark:#173a44;
+  --rule:#b9b19a;
+  --mark:#a2431f;       /* 焼き海苔の裏の赤みではなく、杭の錆色。強調は日付のみ */
+  --serif:"Noto Serif CJK JP","Liberation Serif",serif;
+  --sans:"Noto Sans CJK JP","Liberation Sans",sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:1.0625rem;line-height:1.85;}
+a{color:var(--sea);text-underline-offset:.2em}
+a:focus-visible,button:focus-visible{outline:3px solid var(--mark);outline-offset:3px}
+.wrap{max-width:68rem;margin:0 auto;padding:0 1.25rem}
+.skip{position:absolute;left:-999px;top:0;background:var(--ink);color:#fff;padding:.6rem 1rem}
+.skip:focus{left:0;z-index:10}
+
+/* ヘッダー：英語導線を常に見える位置に */
+.top{background:var(--sea-dark);color:#f5f1e6}
+.top .wrap{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding-top:.6rem;padding-bottom:.6rem;flex-wrap:wrap}
+.top .org{font-size:.9375rem;letter-spacing:.04em}
+.top a{color:#fff;font-weight:700;border:1px solid #fff;padding:.3rem .9rem;border-radius:2rem;text-decoration:none;font-size:.9375rem}
+.top a:hover{background:#fff;color:var(--sea-dark)}
+
+/* ヒーロー */
+.hero{background:var(--sea-dark);color:#f5f1e6;position:relative;overflow:hidden}
+.hero .wrap{display:grid;gap:1.5rem;padding-top:2rem;padding-bottom:0}
+.kicker{margin:0;font-size:.9375rem;letter-spacing:.12em}
+h1{font-family:var(--serif);font-weight:900;margin:.2rem 0 0;line-height:1.3;font-size:clamp(2.1rem,8.5vw,4.4rem);letter-spacing:.02em}
+h1 .sub{display:block;font-weight:600;font-size:.45em;margin-top:.5rem;letter-spacing:.06em}
+.en-title{margin:.8rem 0 0;font-family:var(--serif);font-size:1rem;line-height:1.5;opacity:.92}
+.when{display:flex;flex-wrap:wrap;align-items:baseline;gap:.2rem 1rem;margin-top:1rem;font-family:var(--serif);font-weight:700}
+.when .big{font-size:clamp(1.6rem,6vw,2.6rem);line-height:1.3}
+.when .big small{font-size:.55em;font-weight:600}
+.when .arrow{font-size:1.4rem}
+.hero-art{display:block;width:100%;height:auto;margin-top:1rem}
+.hero-meta{display:flex;flex-wrap:wrap;gap:.4rem 1.6rem;font-size:1rem}
+.hero-meta b{font-weight:700}
+
+/* クイック情報 */
+.quick{background:var(--paper-2);border-bottom:1px solid var(--rule)}
+.quick dl{margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:0}
+.quick .item{padding:1rem 1.25rem;border-top:1px solid var(--rule)}
+.quick .item:first-child{border-top:0}
+.quick dt{font-size:.875rem;font-weight:700;color:var(--ink-2);letter-spacing:.08em;margin:0}
+.quick dd{margin:.1rem 0 0;font-family:var(--serif);font-weight:700;font-size:1.2rem;line-height:1.55}
+.quick dd span{display:block;font-family:var(--sans);font-weight:400;font-size:.9375rem;color:var(--ink-2)}
+@media(min-width:48rem){
+  .quick .item{border-top:0;border-left:1px solid var(--rule)}
+  .quick .item:first-child{border-left:0}
+}
+
+section{padding:2.75rem 0 .5rem}
+h2{font-family:var(--serif);font-weight:900;font-size:1.65rem;line-height:1.4;margin:0 0 1rem;padding-bottom:.5rem;border-bottom:3px solid var(--ink);display:flex;align-items:baseline;gap:.8rem;flex-wrap:wrap}
+h2 .en{font-family:var(--sans);font-size:.875rem;font-weight:400;color:var(--ink-2);letter-spacing:.06em}
+p{margin:.6rem 0}
+.lead{max-width:40rem}
+.cols{display:grid;gap:1.5rem}
+@media(min-width:48rem){.cols.two{grid-template-columns:1fr 1fr;gap:2.5rem}}
+
+/* 展示物の見出し */
+.things{list-style:none;margin:1rem 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.8rem}
+.things li{background:#fff8;border:1px solid var(--rule);padding:.8rem 1rem;font-family:var(--serif);font-weight:700;line-height:1.5}
+.things li span{display:block;font-family:var(--sans);font-weight:400;font-size:.9375rem;color:var(--ink-2)}
+
+/* 表 */
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;vertical-align:top;padding:.7rem .5rem;border-top:1px solid var(--rule)}
+tr:last-child th,tr:last-child td{border-bottom:1px solid var(--rule)}
+th{width:8.5em;font-weight:700;color:var(--ink-2);font-size:.9375rem}
+td strong{font-family:var(--serif);font-size:1.15rem}
+.free{background:var(--paper-2);padding:.8rem 1rem;margin-top:.8rem;border-left:5px solid var(--sea)}
+
+/* イベント */
+.events{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
+.ev{display:grid;grid-template-columns:5.5rem 1fr;gap:1rem;background:#fffa;border:1px solid var(--rule);padding:1rem}
+.ev .date{font-family:var(--serif);font-weight:900;text-align:center;line-height:1.1;border-right:1px solid var(--rule);padding-right:.8rem}
+.ev .date .m{font-size:.95rem}
+.ev .date .d{font-size:2.3rem;color:var(--mark);display:block}
+.ev .date .w{font-size:.95rem}
+.ev h3{margin:0;font-family:var(--serif);font-size:1.2rem;line-height:1.5}
+.ev p{margin:.2rem 0 0;font-size:.9375rem;color:var(--ink-2)}
+.note{font-size:.9375rem;color:var(--ink-2)}
+
+.btn{display:inline-block;background:var(--sea);color:#fff;font-weight:700;text-decoration:none;padding:.8rem 1.4rem;border-radius:.3rem;min-height:2.75rem;border:2px solid var(--sea)}
+.btn:hover{background:var(--sea-dark)}
+.btn.line{background:transparent;color:var(--sea)}
+.btn.line:hover{background:var(--sea);color:#fff}
+.btns{display:flex;flex-wrap:wrap;gap:.7rem;margin-top:1rem}
+.tel{font-family:var(--serif);font-weight:900;font-size:1.6rem;white-space:nowrap}
+
+/* 英語 */
+.en-sec{margin-top:3rem;background:var(--sea-dark);color:#f5f1e6;padding:2.5rem 0 2.5rem}
+.en-sec h2{border-color:#f5f1e6;font-family:var(--serif)}
+.en-sec a{color:#fff}
+.en-sec dl{margin:1rem 0 0;display:grid;grid-template-columns:8rem 1fr;gap:.6rem 1rem}
+.en-sec dt{font-weight:700}
+.en-sec dd{margin:0}
+@media(max-width:34rem){.en-sec dl{grid-template-columns:1fr;gap:0}.en-sec dd{margin-bottom:.8rem}}
+.en-sec{line-height:1.7}
+
+footer{padding:2rem 0 3rem;font-size:.9375rem;color:var(--ink-2)}
+@media(max-width:34rem){
+  .ev{grid-template-columns:4.2rem 1fr;gap:.7rem;padding:.8rem}
+  th{width:6.5em}
+  th,td{padding:.6rem .2rem}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">本文へ移動</a>
+
+<div class="top">
+  <div class="wrap">
+    <span class="org">市立郷土資料館 企画展</span>
+    <a href="#english" lang="en" hreflang="en">English information</a>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">企画展</p>
+    <h1>干潟と海苔の百年<span class="sub">― 舟と手仕事の記録</span></h1>
+    <p class="en-title" lang="en">A Century of Tidal Flats and Nori: Boats and Handwork</p>
+    <p class="when">
+      <span class="big">2027年4月10日<small>（土）</small></span>
+      <span class="arrow" aria-label="から">〜</span>
+      <span class="big">6月27日<small>（日）</small></span>
+    </p>
+    <p class="hero-meta"><span><b>観覧料</b> 一般400円</span><span><b>休館</b> 月曜</span><span><b>会場</b> 2階 企画展示室</span></p>
+    <!-- 写真の代わりの図：干潟、海苔ひびの杭列、ベか舟。装飾であり情報は本文にある -->
+    <svg class="hero-art" viewBox="0 0 1200 260" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
+      <rect width="1200" height="260" fill="#173a44"/>
+      <rect y="70" width="1200" height="190" fill="#1f4f5c"/>
+      <g stroke="#2d6877" stroke-width="2" fill="none">
+        <path d="M0 110h1200M0 140h1200M0 175h1200M0 215h1200" opacity=".7"/>
+      </g>
+      <!-- 干潟の砂洲 -->
+      <path d="M0 260V205c150-18 260-6 420-14s300 10 470-4 220 4 310-2v75z" fill="#cdbf9c"/>
+      <path d="M0 260V232c200-14 380 6 600-4s420 8 600-2v34z" fill="#b8a982"/>
+      <!-- 海苔ひび：杭と網 -->
+      <g stroke="#0f1f1b" stroke-width="5" stroke-linecap="round">
+        <path d="M60 205v-60M120 207v-60M180 205v-60M240 206v-60M300 205v-60"/>
+        <path d="M860 200v-55M920 202v-55M980 200v-55M1040 201v-55M1100 200v-55"/>
+      </g>
+      <g stroke="#0f1f1b" stroke-width="2.5" opacity=".85">
+        <path d="M60 160h240M60 175h240M60 190h240M860 158h240M860 172h240M860 186h240"/>
+      </g>
+      <!-- ベか舟：一人乗りの平底舟 -->
+      <g transform="translate(470 150)">
+        <path d="M0 40c40 22 230 22 290 0l22-34H-22z" fill="#2b1d14"/>
+        <path d="M-22 6h334" stroke="#5a4130" stroke-width="5"/>
+        <path d="M150 6l60-52" stroke="#2b1d14" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="132" cy="-24" r="14" fill="#cdbf9c"/>
+        <path d="M110 6c0-28 10-36 22-36s24 10 24 36z" fill="#e8dfc7"/>
+      </g>
+    </svg>
+  </div>
+</header>
+
+<div class="quick" aria-label="要点">
+  <div class="wrap">
+    <dl>
+      <div class="item"><dt>開館時間</dt><dd>9:30〜17:00<span>入館は16:30まで</span></dd></div>
+      <div class="item"><dt>休館日</dt><dd>月曜日<span>祝日の場合は翌平日</span></dd></div>
+      <div class="item"><dt>観覧料</dt><dd>一般 400円<span>中学生以下・65歳以上は無料</span></dd></div>
+      <div class="item"><dt>アクセス</dt><dd>汐見駅 南口から徒歩8分<span>駐車場12台（無料）</span></dd></div>
+    </dl>
+  </div>
+</div>
+
+<main id="main" class="wrap">
+
+  <section aria-labelledby="about">
+    <h2 id="about">展覧会について</h2>
+    <p class="lead">かつて市の沿岸で盛んだった海苔養殖を、ベか舟（一人乗りの平底舟）、海苔すき道具、漁師の日記、写真約120点でたどります。干潟の埋立てで途絶えた暮らしを、道具と記録から伝える展覧会です。</p>
+    <ul class="things">
+      <li>ベか舟<span>一人乗りの平底舟</span></li>
+      <li>海苔すき道具<span>手仕事の道具</span></li>
+      <li>漁師の日記<span>暮らしの記録</span></li>
+      <li>写真 約120点<span>干潟と海苔の百年</span></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="visit">
+    <h2 id="visit">ご来館の情報<span class="en">Visit</span></h2>
+    <div class="cols two">
+      <div>
+        <table>
+          <tr><th scope="row">会期</th><td><strong>2027年4月10日（土）〜6月27日（日）</strong></td></tr>
+          <tr><th scope="row">開館時間</th><td>9:30〜17:00（入館は16:30まで）</td></tr>
+          <tr><th scope="row">休館日</th><td>月曜日（祝日の場合は翌平日）</td></tr>
+          <tr><th scope="row">会場</th><td>市立郷土資料館 2階 企画展示室<br>港南区汐見町3-14</td></tr>
+        </table>
+      </div>
+      <div>
+        <table>
+          <tr><th scope="row">一般</th><td><strong>400円</strong></td></tr>
+          <tr><th scope="row">高校・大学生</th><td><strong>200円</strong></td></tr>
+          <tr><th scope="row">無料の方</th><td>中学生以下／65歳以上／障害者手帳をお持ちの方と介助者1名</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="events">
+    <h2 id="events">関連イベント<span class="en">Events</span></h2>
+    <p class="note">各回 定員20名・事前予約制・参加無料</p>
+    <ol class="events">
+      <li class="ev">
+        <div class="date"><span class="m">4月</span><span class="d">24</span><span class="w">土</span></div>
+        <div><h3>学芸員によるギャラリートーク</h3><p>14:00〜</p></div>
+      </li>
+      <li class="ev">
+        <div class="date"><span class="m">5月</span><span class="d">15</span><span class="w">土</span></div>
+        <div><h3>海苔すき体験</h3><p>10:00〜／小学生以上</p></div>
+      </li>
+      <li class="ev">
+        <div class="date"><span class="m">6月</span><span class="d">5</span><span class="w">土</span></div>
+        <div><h3>元漁師の方に聞く「干潟の暮らし」</h3><p>14:00〜</p></div>
+      </li>
+    </ol>
+  </section>
+
+  <section id="reserve" aria-labelledby="reserve-h">
+    <h2 id="reserve-h">イベントのご予約<span class="en">Reservation</span></h2>
+    <p>お電話またはWeb予約フォームでお申し込みください。各回 定員20名の事前予約制です。</p>
+    <div class="btns">
+      <a class="btn" href="tel:0450001234">電話で予約 <span class="tel-n">045-000-1234</span></a>
+      <a class="btn line" href="#reserve">Web予約フォーム</a>
+    </div>
+    <p class="note">電話受付 9:30〜17:00</p>
+  </section>
+
+  <section aria-labelledby="access">
+    <h2 id="access">アクセス・バリアフリー<span class="en">Access</span></h2>
+    <div class="cols two">
+      <div>
+        <table>
+          <tr><th scope="row">住所</th><td>港南区汐見町3-14</td></tr>
+          <tr><th scope="row">電車</th><td>汐見駅 南口から徒歩8分</td></tr>
+          <tr><th scope="row">お車</th><td>駐車場 12台（無料）</td></tr>
+        </table>
+      </div>
+      <div>
+        <table>
+          <tr><th scope="row">エレベーター</th><td>あり（企画展示室は2階）</td></tr>
+          <tr><th scope="row">車いす</th><td>貸出 2台</td></tr>
+          <tr><th scope="row">トイレ</th><td>多目的トイレ 1階</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="contact">
+    <h2 id="contact">お問い合わせ</h2>
+    <p>市立郷土資料館　電話 <a class="tel" href="tel:0450001234">045-000-1234</a>（9:30〜17:00）</p>
+  </section>
+</main>
+
+<section id="english" class="en-sec" lang="en" aria-labelledby="en-h">
+  <div class="wrap">
+    <h2 id="en-h">English Information</h2>
+    <p><strong>A Century of Tidal Flats and Nori: Boats and Handwork</strong></p>
+    <p>This exhibition traces the history of nori (seaweed) farming, once thriving along our city's coast, through about 120 photographs, a beka boat (a flat-bottomed, one-person boat), nori-making tools and a fisherman's diaries. It shows how a way of life ended when the tidal flats were reclaimed.</p>
+    <dl>
+      <dt>Dates</dt><dd>Saturday, April 10 – Sunday, June 27, 2027</dd>
+      <dt>Hours</dt><dd>9:30–17:00 (last entry 16:30). Closed on Mondays (if Monday is a public holiday, closed the next weekday).</dd>
+      <dt>Admission</dt><dd>Adults ¥400; high school and university students ¥200. Free for junior high school students and younger, visitors aged 65 and over, and visitors with a disability certificate plus one companion.</dd>
+      <dt>Venue</dt><dd>Municipal Local History Museum, 2nd floor special exhibition room. 3-14 Shiomi-cho, Konan Ward.</dd>
+      <dt>Access</dt><dd>8-minute walk from the South Exit of Shiomi Station. Free parking for 12 cars.</dd>
+      <dt>Events</dt><dd>Reservation required, free, 20 people each. Apr 24 (Sat) 14:00 gallery talk by a curator; May 15 (Sat) 10:00 nori-making workshop (elementary school age and up); Jun 5 (Sat) 14:00 talk by a former fisherman, “Life on the Tidal Flats”. To reserve, call 045-000-1234 (9:30–17:00) or use the <a href="#reserve">web reservation form</a>.</dd>
+      <dt>Accessibility</dt><dd>Elevator, 2 wheelchairs for loan, accessible restroom on the 1st floor.</dd>
+      <dt>Contact</dt><dd><a href="tel:0450001234">045-000-1234</a></dd>
+    </dl>
+  </div>
+</section>
+
+<footer><div class="wrap">市立郷土資料館（架空）</div></footer>
+</body>
+</html>

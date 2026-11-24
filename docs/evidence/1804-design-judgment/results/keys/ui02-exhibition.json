@@ -1,0 +1,33 @@
+{
+ "case": "ui02-exhibition",
+ "seed": "1804r-ui02-exhibition",
+ "key": {
+  "9557": "D-r1",
+  "to38": "A-r1",
+  "tb44": "A-r2",
+  "xfoi": "A-r3",
+  "7nzv": "B-r1",
+  "i30u": "B-r2",
+  "z98c": "B-r3",
+  "vm6g": "D-r2",
+  "lab8": "D-r3",
+  "csq8": "E-r1",
+  "yn0t": "E-r2",
+  "t1q5": "E-r3"
+ },
+ "excluded": [],
+ "redacted": {
+  "9557": 1,
+  "to38": 0,
+  "tb44": 0,
+  "xfoi": 0,
+  "7nzv": 0,
+  "i30u": 0,
+  "z98c": 0,
+  "vm6g": 1,
+  "lab8": 1,
+  "csq8": 0,
+  "yn0t": 0,
+  "t1q5": 1
+ }
+}

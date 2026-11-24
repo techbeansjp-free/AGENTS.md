@@ -1,0 +1,251 @@
+{
+ "schema": "asc-1804-eval/v1",
+ "blind": "ui08-existing-ds",
+ "order": [
+  "7ao0",
+  "q97d",
+  "841s",
+  "77uw",
+  "903y",
+  "cnzw",
+  "cjpy",
+  "ff62",
+  "w0mh",
+  "s1vg",
+  "ym2n",
+  "kbw0"
+ ],
+ "exit": 0,
+ "wallMs": 126721,
+ "subtype": "success",
+ "isError": false,
+ "costUsd": 0.9772490000000001,
+ "numTurns": 54,
+ "usage": {
+  "input_tokens": 20,
+  "cache_creation_input_tokens": 81254,
+  "cache_read_input_tokens": 322754,
+  "output_tokens": 13122,
+  "output_tokens_details": {
+   "thinking_tokens": 2639
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 81254,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 4462,
+    "cache_read_input_tokens": 78504,
+    "cache_creation_input_tokens": 5973,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 5973
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-haiku-5-5": {
+   "inputTokens": 1342,
+   "outputTokens": 24,
+   "cacheReadInputTokens": 0,
+   "cacheCreationInputTokens": 0,
+   "webSearchRequests": 0,
+   "costUSD": 0.0001462,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 0,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 0,
+   "canonicalModel": "claude-haiku-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  },
+  "claude-opus-5-5": {
+   "inputTokens": 20,
+   "outputTokens": 13122,
+   "cacheReadInputTokens": 322754,
+   "cacheCreationInputTokens": 81254,
+   "webSearchRequests": 0,
+   "costUSD": 0.9771028,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 2639,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 81254,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "scores": {
+  "7ao0": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "ヘッダーは既存と同じで「請求先」が緑の選択状態、必須/任意は文言で付き、カードとフォームの幅も揃っているが、本文を既存の左端位置（x≈184）から外して中央寄せの狭い列にしており、既存のページ配置と異なる。"
+  },
+  "q97d": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 1,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 2,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "既存のヘッダー・カード・緑ボタンを使っているが、2列にした郵便番号と電話番号で入力欄の高さと上端がずれ、640px幅のフォームの右にカードの空白が大きく残る。"
+  },
+  "841s": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "カード幅をフォームに合わせた1列で、ラベルに「（必須）」「（任意）」、上に入力形式の補足、短い項目は短い入力欄、という表現で統一され、既存の部品と配色だけで組まれている。"
+  },
+  "77uw": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "既存部品のみで必須/任意を色と文言の両方で示しているが、カード上端の余白が過大で、640px幅のフォームの右側にも大きな空白がある。"
+  },
+  "903y": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 0,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "「請求書の宛名に使います」など請求先ならではの補足があるが、「* は必須項目です」と書いてラベルは「（必須）」でアスタリスクが無く、補足文も欄の上と下に混在している。"
+  },
+  "cnzw": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "全項目を同じ形（ラベル＋（必須）/（任意）＋上の補足）で揃えた既存どおりの画面だが、入力欄がカード幅の約7割で止まり、右側に空白が残る。"
+  },
+  "cjpy": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "補足を入力欄の下に統一し、冒頭に「必須の項目をすべて入力して保存」と案内しているが、入力欄がカード右側の大きな空白を残して止まっている。"
+  },
+  "ff62": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "見出しの下に「請求書の送付先となる情報です」と題材を示し、「*必須」の表記が説明文とラベルで一致しているが、フォームの右にカードの空白が残る。"
+  },
+  "w0mh": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 1,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 2,
+   "consistency": 0,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "住所を複数行の入力欄にしているが、「* は必須項目です」に対しラベルにアスタリスクが無く、2列の電話番号欄だけ高さと位置がずれ、カード上部と右側の余白も過大。"
+  },
+  "s1vg": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "カード幅をフォームに合わせ、必須/任意を文言で付け、郵便番号と電話番号は短い入力欄にして、既存の部品と配色だけで一貫させている。"
+  },
+  "ym2n": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "既存の`.badge`を必須/任意の表示に再利用し全項目で統一しているが、既存では黒枠のバッジを赤枠・赤字に塗り替えており、既存画面に無い色の使い方になっている。"
+  },
+  "kbw0": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 1,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": 2,
+   "evidence": "既存と同じ黒枠の`.badge`「必須」を説明文とラベルで共用し、冒頭で請求書の送付先と示しているが、2列の電話番号欄だけ高さと上端がずれている。"
+  }
+ },
+ "rawResult": "12画面すべてについて、desktop・mobile・gray の画像とnotesを開いて採点しました。比較の基準には reference-desktop.png と DESIGN-SYSTEM.md を使いました。\n\n**点差が出た項目**\n- **余白（spacing）:** q97d・77uw・cnzw・cjpy・ff62・w0mh は、入力欄が640px幅で止まり、カードの右側が大きく空いています。\n- **構図（composition）:** q97d・w0mh・kbw0 は、2列にした郵便番号と電話番号で、入力欄の高さと上端が揃っていません。\n- **一貫性（consistency）:**\n  - 903y と w0mh は「* は必須項目です」と書いていますが、ラベルに「*」がありません。\n  - 903y は補足文（ヒント）の位置が、欄の上と下で混在しています。\n  - w0mh は上記に加えて、電話番号欄の高さも揃っていません。\n- **既存デザインとの一致（distinctiveness）:**\n  - 7ao0 は、本文の左端と幅を既存画面から変えて中央に寄せています。\n  - ym2n は、既存では黒枠の「必須」バッジを赤く塗り替えています。\n\n装飾は全画面で使われておらず、管理画面の用途に合っているので全件2点にしました。notesは全件、画面の要素と依頼・デザインシステムを結び付けており、画面との矛盾は見つかりませんでした。`flaggedInGray` は、RUBRICでUI-03専用とされているため省いています。\n\n```json\n{\"scores\": {\n\"7ao0\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"ヘッダーは既存と同じで「請求先」が緑の選択状態、必須/任意は文言で付き、カードとフォームの幅も揃っているが、本文を既存の左端位置（x≈184）から外して中央寄せの狭い列にしており、既存のページ配置と異なる。\"},\n\"q97d\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 1, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"既存のヘッダー・カード・緑ボタンを使っているが、2列にした郵便番号と電話番号で入力欄の高さと上端がずれ、640px幅のフォームの右にカードの空白が大きく残る。\"},\n\"841s\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"カード幅をフォームに合わせた1列で、ラベルに「（必須）」「（任意）」、上に入力形式の補足、短い項目は短い入力欄、という表現で統一され、既存の部品と配色だけで組まれている。\"},\n\"77uw\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"既存部品のみで必須/任意を色と文言の両方で示しているが、カード上端の余白が過大で、640px幅のフォームの右側にも大きな空白がある。\"},\n\"903y\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 0, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"「請求書の宛名に使います」など請求先ならではの補足があるが、「* は必須項目です」と書いてラベルは「（必須）」でアスタリスクが無く、補足文も欄の上と下に混在している。\"},\n\"cnzw\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"全項目を同じ形（ラベル＋（必須）/（任意）＋上の補足）で揃えた既存どおりの画面だが、入力欄がカード幅の約7割で止まり、右側に空白が残る。\"},\n\"cjpy\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"補足を入力欄の下に統一し、冒頭に「必須の項目をすべて入力して保存」と案内しているが、入力欄がカード右側の大きな空白を残して止まっている。\"},\n\"ff62\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"見出しの下に「請求書の送付先となる情報です」と題材を示し、「*必須」の表記が説明文とラベルで一致しているが、フォームの右にカードの空白が残る。\"},\n\"w0mh\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 2, \"consistency\": 0, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"住所を複数行の入力欄にしているが、「* は必須項目です」に対しラベルにアスタリスクが無く、2列の電話番号欄だけ高さと位置がずれ、カード上部と右側の余白も過大。\"},\n\"s1vg\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"カード幅をフォームに合わせ、必須/任意を文言で付け、郵便番号と電話番号は短い入力欄にして、既存の部品と配色だけで一貫させている。\"},\n\"ym2n\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"既存の`.badge`を必須/任意の表示に再利用し全項目で統一しているが、既存では黒枠のバッジを赤枠・赤字に塗り替えており、既存画面に無い色の使い方になっている。\"},\n\"kbw0\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 1, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 1, \"decoration\": 2, \"rationale\": 2, \"evidence\": \"既存と同じ黒枠の`.badge`「必須」を説明文とラベルで共用し、冒頭で請求書の送付先と示しているが、2列の電話番号欄だけ高さと上端がずれている。\"}\n}}\n```"
+}
