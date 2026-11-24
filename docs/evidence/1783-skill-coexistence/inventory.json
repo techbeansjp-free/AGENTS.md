@@ -1,0 +1,264 @@
+{
+ "standard": 16,
+ "optional": 1,
+ "standardDescriptionChars": 1992,
+ "maxDescriptionChars": 283,
+ "rows": [
+  {
+   "kind": "standard",
+   "name": "asc",
+   "source": "skills/asc/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 173,
+   "descriptionUtf8Bytes": 451,
+   "claudeEntry": ".claude/skills/asc/SKILL.md",
+   "codexEntry": ".agents/skills/asc/SKILL.md",
+   "body": ".agent-skill-chain/skills/asc/SKILL.md",
+   "references": [
+    "controller.md",
+    "coordination.md",
+    "host-session.md",
+    "implementation.md",
+    "post-merge.md",
+    "review.md",
+    "workspace.md"
+   ],
+   "description": "Issueやタスクの開発を始める・途中から再開する、専用worktreeで実装してPRを提出する、許可されたmergeと後片付けを行うときに使う。作業場所・プロジェクト規約・独立レビュー・提出をASCの配布済みCLIで結び付ける。変更のレビューや指摘の是正、調査・見積などは目的別Skillが扱う。通常の開発にASCの導入や固定工程を強制しない。"
+  },
+  {
+   "kind": "standard",
+   "name": "contract-enforcement",
+   "source": "skills/contract-enforcement/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 97,
+   "descriptionUtf8Bytes": 263,
+   "claudeEntry": ".claude/skills/contract-enforcement/SKILL.md",
+   "codexEntry": ".agents/skills/contract-enforcement/SKILL.md",
+   "body": ".agent-skill-chain/skills/contract-enforcement/SKILL.md",
+   "references": [
+    "counterexamples.md"
+   ],
+   "description": "型・schema・依存方向・循環・UI token等の規約を機械検査へ接続する、規約の抜け道や検査漏れを修正するときに使う。新しい設計思想を強制したり、通常変更ごとに全規約を作り直したりしない。"
+  },
+  {
+   "kind": "standard",
+   "name": "decision-ownership",
+   "source": "skills/decision-ownership/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 283,
+   "descriptionUtf8Bytes": 697,
+   "claudeEntry": ".claude/skills/decision-ownership/SKILL.md",
+   "codexEntry": ".agents/skills/decision-ownership/SKILL.md",
+   "body": ".agent-skill-chain/skills/decision-ownership/SKILL.md",
+   "references": [
+    "conditions-and-counterexamples.md"
+   ],
+   "description": "依頼・要望・議事録・チケット・会話の記録を点検し、未決事項と判断者、先に伝えるべきリスク、決めやすい仮置き案、相手ごとの渡し方を整理するときに使う。このまま進めてよいか、誰が決めるか、抜け漏れがないか、顧客にどう返すかを確かめる場面が対象。判断を代わりに確定しない。工数・費用・保守範囲の判断はestimate-and-scope、設計案の比較はengineering-judgment、確認事項の回答と反映の追跡や引継ぎ文はwork-coordination、起票はtracker-issue-writingが扱う。決定済みの作業や誤字修正だけの依頼には使わない。"
+  },
+  {
+   "kind": "standard",
+   "name": "engineering-judgment",
+   "source": "skills/engineering-judgment/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 157,
+   "descriptionUtf8Bytes": 419,
+   "claudeEntry": ".claude/skills/engineering-judgment/SKILL.md",
+   "codexEntry": ".agents/skills/engineering-judgment/SKILL.md",
+   "body": ".agent-skill-chain/skills/engineering-judgment/SKILL.md",
+   "references": [
+    "conditions-and-counterexamples.md"
+   ],
+   "description": "機能や技術の設計案を比較し、要求・利用者負担・運用費用から採用理由と見直し条件を示す。仕様の解釈が分かれる、提案の前提や過剰設計を問い直す場面で使う。技術を調べて比較・実証し実装計画まで進める依頼はresearch-to-implementationが扱う。決定済みの変更や変更差分の独立レビューだけには使わない。"
+  },
+  {
+   "kind": "standard",
+   "name": "estimate-and-scope",
+   "source": "skills/estimate-and-scope/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 90,
+   "descriptionUtf8Bytes": 270,
+   "claudeEntry": ".claude/skills/estimate-and-scope/SKILL.md",
+   "codexEntry": ".agents/skills/estimate-and-scope/SKILL.md",
+   "body": ".agent-skill-chain/skills/estimate-and-scope/SKILL.md",
+   "references": [],
+   "description": "工数・納期・費用を見積もる、追加依頼が保守範囲か判断する、外部サービスの費用と管理責任を整理するときに使う。契約と未確認事項から見積と回答案を作る。通常の設計比較だけでは使わない。"
+  },
+  {
+   "kind": "standard",
+   "name": "execution-recovery",
+   "source": "skills/execution-recovery/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 82,
+   "descriptionUtf8Bytes": 214,
+   "claudeEntry": ".claude/skills/execution-recovery/SKILL.md",
+   "codexEntry": ".agents/skills/execution-recovery/SKILL.md",
+   "body": ".agent-skill-chain/skills/execution-recovery/SKILL.md",
+   "references": [
+    "owned-execution.md"
+   ],
+   "description": "Agent・build・test・CIが進まない、待機の理由や実行所有者が不明、失敗後に安全に再開したいときに使う。通常の進捗報告や単なる長時間処理には適用しない。"
+  },
+  {
+   "kind": "standard",
+   "name": "migration-assurance",
+   "source": "skills/migration-assurance/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 94,
+   "descriptionUtf8Bytes": 260,
+   "claudeEntry": ".claude/skills/migration-assurance/SKILL.md",
+   "codexEntry": ".agents/skills/migration-assurance/SKILL.md",
+   "body": ".agent-skill-chain/skills/migration-assurance/SKILL.md",
+   "references": [
+    "acceptance-and-cutover.md"
+   ],
+   "description": "言語・framework・DB・実行基盤の段階移行・置換、併存設計、移行完了の再点検で使う。既存の受入条件・データ・運用経路を移行先へ対応付ける。通常の小規模リファクタだけでは適用しない。"
+  },
+  {
+   "kind": "standard",
+   "name": "project-foundation",
+   "source": "skills/project-foundation/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 109,
+   "descriptionUtf8Bytes": 327,
+   "claudeEntry": ".claude/skills/project-foundation/SKILL.md",
+   "codexEntry": ".agents/skills/project-foundation/SKILL.md",
+   "body": ".agent-skill-chain/skills/project-foundation/SKILL.md",
+   "references": [
+    "containers-and-worktrees.md",
+    "contracts-and-ui.md",
+    "foundation-decisions.md",
+    "verification-and-security.md"
+   ],
+   "description": "新規プロジェクトの環境構築・アーキテクチャ・開発規約を整備し、既存基盤の考慮漏れも点検する。言語やフレームワークを固定せず、先行決定と機械検査と再現性を結び付ける。通常の機能追加や局所的な不具合修正だけでは適用しない。"
+  },
+  {
+   "kind": "standard",
+   "name": "research-to-implementation",
+   "source": "skills/research-to-implementation/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 130,
+   "descriptionUtf8Bytes": 390,
+   "claudeEntry": ".claude/skills/research-to-implementation/SKILL.md",
+   "codexEntry": ".agents/skills/research-to-implementation/SKILL.md",
+   "body": ".agent-skill-chain/skills/research-to-implementation/SKILL.md",
+   "references": [
+    "decisions.md"
+   ],
+   "description": "ライブラリ・サービス・方式などの技術を調べて比較・実証し、採用案を実装計画（変更箇所・受入条件・未決事項）へつなぐときに使う。調査の根拠を設計判断・実装箇所・受入条件へ接続し、調査から実装へ進む条件と未解決事項を整理する。一般的な検索・要約だけには適用しない。"
+  },
+  {
+   "kind": "standard",
+   "name": "review-and-remediation",
+   "source": "skills/review-and-remediation/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 85,
+   "descriptionUtf8Bytes": 255,
+   "claudeEntry": ".claude/skills/review-and-remediation/SKILL.md",
+   "codexEntry": ".agents/skills/review-and-remediation/SKILL.md",
+   "body": ".agent-skill-chain/skills/review-and-remediation/SKILL.md",
+   "references": [
+    "review-method.md"
+   ],
+   "description": "変更を要求・実体・検証に照合してレビューする、指摘を是正して再検証・再レビュー範囲を判断するときに使う。レビューのみの依頼では変更せず、自己確認を独立レビューと呼ばない。"
+  },
+  {
+   "kind": "standard",
+   "name": "security-evidence",
+   "source": "skills/security-evidence/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 92,
+   "descriptionUtf8Bytes": 254,
+   "claudeEntry": ".claude/skills/security-evidence/SKILL.md",
+   "codexEntry": ".agents/skills/security-evidence/SKILL.md",
+   "body": ".agent-skill-chain/skills/security-evidence/SKILL.md",
+   "references": [
+    "findings-and-summary.md"
+   ],
+   "description": "依存・コンテナの脆弱性監査、SBOM、監査Summary、非該当判定や監査証拠を整備・再点検するときに使う。検査対象の実体と原始結果を結び付ける。通常の機能変更だけで監査を強制しない。"
+  },
+  {
+   "kind": "standard",
+   "name": "subagent-model-selection",
+   "source": "skills/subagent-model-selection/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 85,
+   "descriptionUtf8Bytes": 247,
+   "claudeEntry": ".claude/skills/subagent-model-selection/SKILL.md",
+   "codexEntry": ".agents/skills/subagent-model-selection/SKILL.md",
+   "body": ".agent-skill-chain/skills/subagent-model-selection/SKILL.md",
+   "references": [],
+   "description": "サブエージェントへ委譲する仕事に対して、モデル・推論設定・費用と切替え条件を選ぶときに使う。委譲の許可や別Host利用の許可は与えず、通常の単独作業では起動を要求しない。"
+  },
+  {
+   "kind": "standard",
+   "name": "tracker-issue-writing",
+   "source": "skills/tracker-issue-writing/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 129,
+   "descriptionUtf8Bytes": 349,
+   "claudeEntry": ".claude/skills/tracker-issue-writing/SKILL.md",
+   "codexEntry": ".agents/skills/tracker-issue-writing/SKILL.md",
+   "body": ".agent-skill-chain/skills/tracker-issue-writing/SKILL.md",
+   "references": [],
+   "description": "trackerへの起票・課題分割・本文更新を依頼されたとき、依頼者の言葉と目的を決まった形式で残し、重複・依存・完了の基準と適用fieldを照合し、新しいcontextでの読み手確認を経て下書きまたは許可された作成を行う。実装だけの依頼から起票を追加しない。"
+  },
+  {
+   "kind": "standard",
+   "name": "user-journey-acceptance",
+   "source": "skills/user-journey-acceptance/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 108,
+   "descriptionUtf8Bytes": 318,
+   "claudeEntry": ".claude/skills/user-journey-acceptance/SKILL.md",
+   "codexEntry": ".agents/skills/user-journey-acceptance/SKILL.md",
+   "body": ".agent-skill-chain/skills/user-journey-acceptance/SKILL.md",
+   "references": [
+    "journeys.md"
+   ],
+   "description": "Web画面から本当に使えるか、ブラウザーでユースケースを実操作確認する、利用者に画面デモを見せるときに使う。実接続で正常・拒否・失敗・回復と保存後の状態を確認する。見た目だけの調整や単体テスト実行だけには適用しない。"
+  },
+  {
+   "kind": "standard",
+   "name": "verification-optimization",
+   "source": "skills/verification-optimization/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 170,
+   "descriptionUtf8Bytes": 448,
+   "claudeEntry": ".claude/skills/verification-optimization/SKILL.md",
+   "codexEntry": ".agents/skills/verification-optimization/SKILL.md",
+   "body": ".agent-skill-chain/skills/verification-optimization/SKILL.md",
+   "references": [
+    "equivalence-and-reuse.md",
+    "github-actions-cost.md",
+    "github-actions-runners.md"
+   ],
+   "description": "CIやローカル検証が遅い、CIの費用（GitHub Actionsの課金額等）が増える、runnerの種類を選ぶ、同じ検査を繰り返す、並列化や結果再利用、CIのテスト構成（仕事量の削減・影響範囲での絞り込み・shard・後段への移設）を設計したいときに使う。検出能力を維持して律速と費用を計測・改善する。通常のテスト実行だけでは適用しない。"
+  },
+  {
+   "kind": "standard",
+   "name": "work-coordination",
+   "source": "skills/work-coordination/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 108,
+   "descriptionUtf8Bytes": 300,
+   "claudeEntry": ".claude/skills/work-coordination/SKILL.md",
+   "codexEntry": ".agents/skills/work-coordination/SKILL.md",
+   "body": ".agent-skill-chain/skills/work-coordination/SKILL.md",
+   "references": [],
+   "description": "複数作業の担当・依存・書込み先を調整する、Context交代や別セッションへ未完了作業を引き継ぐ、確認事項の回答と反映状況を整理するときに使う。Agent起動や並列化は必須にせず、単独の小変更へ調整工程を追加しない。"
+  },
+  {
+   "kind": "optional",
+   "name": "model-deliberation",
+   "source": "v05/optional-skills/model-deliberation/SKILL.md",
+   "inRuntimeFiles": true,
+   "descriptionChars": 80,
+   "descriptionUtf8Bytes": 240,
+   "claudeEntry": "explicit opt-in only",
+   "codexEntry": "explicit opt-in only",
+   "body": ".agent-skill-chain/v05/optional-skills/model-deliberation/SKILL.md",
+   "references": [],
+   "description": "利用者が複数モデルの協議を明示的に依頼した場合だけ、独立した判断案・反例・不一致を比較し進行役の推奨へまとめる。通常の設計判断や独立レビューの必須工程ではない。"
+  }
+ ]
+}

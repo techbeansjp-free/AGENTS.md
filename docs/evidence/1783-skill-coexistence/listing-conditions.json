@@ -1,0 +1,17 @@
+[
+ {"name":"A-asc-only","note":"ASC 16 project entries and bundled Skills only"},
+ {"name":"B-coexist-within","note":"40 personal Skills x 400 chars, default budget","userSkills":{"count":40,"chars":400}},
+ {"name":"C-coexist-over","note":"70 personal Skills x 400 chars, default budget","userSkills":{"count":70,"chars":400}},
+ {"name":"C-plugin-over","note":"70 plugin Skills x 400 chars instead of personal","pluginSkills":{"count":70,"chars":400}},
+ {"name":"C-usage-asc","note":"C with ASC Skills used 20 times each, personal unused","userSkills":{"count":70,"chars":400},"usage":{"asc":20,"review-and-remediation":20,"tracker-issue-writing":20,"research-to-implementation":20,"security-evidence":20,"migration-assurance":20}},
+ {"name":"C-usage-personal","note":"C with every personal Skill used 5 times, ASC unused","userSkills":{"count":70,"chars":400},"usagePatterns":{"personal":5}},
+ {"name":"D-shorten-asc","note":"C with every ASC description cut to 60 chars","userSkills":{"count":70,"chars":400},"shortenAsc":60},
+ {"name":"E-fraction-002","note":"C with skillListingBudgetFraction 0.02","userSkills":{"count":70,"chars":400},"settings":{"skillListingBudgetFraction":0.02}},
+ {"name":"E-env-budget","note":"C with SLASH_COMMAND_TOOL_CHAR_BUDGET=60000","userSkills":{"count":70,"chars":400},"env":{"SLASH_COMMAND_TOOL_CHAR_BUDGET":"60000"}},
+ {"name":"E-maxdesc-200","note":"C with skillListingMaxDescChars 200","userSkills":{"count":70,"chars":400},"settings":{"skillListingMaxDescChars":200}},
+ {"name":"E-overrides-nameonly","note":"C with 40 personal Skills set to name-only by skillOverrides","userSkills":{"count":70,"chars":400},"settingsNameOnlyPersonal":40},
+ {"name":"N-overrides-asc","note":"A with ASC Skills set to name-only by skillOverrides (format check)","settings":{"skillOverrides":{"asc":"name-only","review-and-remediation":"name-only","tracker-issue-writing":"name-only","research-to-implementation":"name-only","security-evidence":"name-only","migration-assurance":"name-only","work-coordination":"name-only","decision-ownership":"name-only","engineering-judgment":"name-only","estimate-and-scope":"name-only","execution-recovery":"name-only","project-foundation":"name-only","subagent-model-selection":"name-only","user-journey-acceptance":"name-only","verification-optimization":"name-only"}}},
+ {"name":"X-collision","note":"A plus a personal Skill named review-and-remediation","userOverrideSkills":{"review-and-remediation":"Personal synthetic review helper with a different description."}},
+ {"name":"F-invoke-nameonly","note":"C; the stand-in model calls Skill asc, to observe loading from a name-only entry and usage recording","userSkills":{"count":70,"chars":400},"skillCall":"asc","prompts":{"hello":"Issue #12 の開発を始めたい"}},
+ {"name":"G-diagnostics","note":"C; run /skill-doctor and /context offline","userSkills":{"count":70,"chars":400},"prompts":{"hello":"hello","context":"/context","skilldoctor":"/skill-doctor"}}
+]
