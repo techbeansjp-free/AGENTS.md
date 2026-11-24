@@ -1,6 +1,6 @@
 // Aggregates the listing observations into results/listing-observations.json (read only on inputs).
 // Usage: node build-listing-results.mjs <observations-dir> <out.json>
-// For each condition: analyze-listing summary, the debug-log budget warning, the /context Skills row
+// For each condition: analyze-listing summary (with the names of name-only entries other than synthetic Skills), the debug-log budget warning, the /context Skills row
 // and the `asc` row, and skillUsage recorded in the isolated ~/.claude.json after the runs.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,6 +17,7 @@ for (const d of fs.readdirSync(dir).sort()) {
   const after = JSON.parse(fs.readFileSync(path.join(p, 'claude.json.after'), 'utf8'));
   rows.push({condition: d, entries: j.entries, withDescription: j.withDescription, listingChars: j.listingChars,
     ascWithDescription: Object.values(j.asc).filter((v) => v.startsWith('desc')).length, asc: j.asc, othersNameOnly: j.others.nameOnly.length,
+    nonSyntheticNameOnly: j.others.nameOnly.filter((n) => !/^(personal-|plugin-|tool-|toolbox:|synthetic-tools:)/.test(n)),
     debugWarning: (debug.match(/Skill listing over budget: [^—]*/) ?? [null])[0]?.trim() ?? null,
     contextSkillsRow: (ctx.match(/\| Skills \| [^\n]*/) ?? [null])[0], contextAscRow: (ctx.match(/\| (project:)?asc \| [^\n]*/) ?? [null])[0],
     skillUsageAfter: after.skillUsage});

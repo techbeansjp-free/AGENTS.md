@@ -24,6 +24,9 @@
    "work-coordination": "name-only"
   },
   "othersNameOnly": 1,
+  "nonSyntheticNameOnly": [
+   "security-review"
+  ],
   "debugWarning": "Skill listing over budget: 29 skills, 10305 chars > 8000 budget",
   "contextSkillsRow": "| Skills | 2k | 1.0% |",
   "contextAscRow": "| asc | Project | ~50 |",
@@ -54,6 +57,7 @@
    "work-coordination": "desc:108"
   },
   "othersNameOnly": 0,
+  "nonSyntheticNameOnly": [],
   "debugWarning": null,
   "contextSkillsRow": "| Skills | 2.1k | 1.1% |",
   "contextAscRow": "| asc | Project | ~50 |",
@@ -84,6 +88,9 @@
    "work-coordination": "name-only"
   },
   "othersNameOnly": 1,
+  "nonSyntheticNameOnly": [
+   "security-review"
+  ],
   "debugWarning": "Skill listing over budget: 29 skills, 8381 chars > 8000 budget",
   "contextSkillsRow": "| Skills | 1.9k | 0.9% |",
   "contextAscRow": "| asc | Project | < 20 |",
@@ -114,6 +121,9 @@
    "work-coordination": "name-only"
   },
   "othersNameOnly": 1,
+  "nonSyntheticNameOnly": [
+   "security-review"
+  ],
   "debugWarning": "Skill listing over budget: 29 skills, 10305 chars > 8000 budget",
   "contextSkillsRow": "| Skills | 2k | 1.0% |",
   "contextAscRow": "| asc | Project | ~50 |",
@@ -169,6 +179,9 @@
    "work-coordination": "name-only"
   },
   "othersNameOnly": 1,
+  "nonSyntheticNameOnly": [
+   "security-review"
+  ],
   "debugWarning": "Skill listing over budget: 29 skills, 10305 chars > 8000 budget",
   "contextSkillsRow": "| Skills | 2k | 1.0% |",
   "contextAscRow": "| asc | Project | ~50 |",

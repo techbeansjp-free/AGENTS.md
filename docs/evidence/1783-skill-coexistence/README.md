@@ -4,13 +4,13 @@
 
 ## 結論
 
-**判定は「不採用」とする（事前に固定した[採否基準](decision-criteria.md)の4）。ASC固有の仕組み・Skillのdescription・配布処理は変更しない。基準4が許すHost設定の案内だけを、`v05/USAGE.md`の既存の節へ1段落追記する。**
+**判定は「不採用」とする（事前に固定した[採否基準](decision-criteria.md)の4。判定の対象は、モデル実行を行った1M Context（`claude-opus-5-5`）の条件である。200k Contextは一覧の観測だけで、採否は判定していない）。ASC固有の仕組み・Skillのdescription・配布処理は変更しない。基準4が許すHost設定の案内だけを、`v05/USAGE.md`の既存の節へ1段落追記する。**
 
 - 問題は実在する。Claude Code 2.1.323・1M Context（`claude-opus-5-5`）では一覧の予算が30,000文字で、ASC単体では起きず、他のSkillとの共存時だけに起きる。使用回数0の個人用Skillが70件（各400文字以下）あると、projectに登録したASC 16件のうち15件の説明文が省かれ、名前だけになった（隔離環境での要求本文の観測）。
 - Context容量200kのモデル（`claude-haiku-4-5`・`claude-sonnet-4-5`で観測）では予算が8,000文字で、**ASC単体でも同梱Skillと合わせて超過し、ASC 16件のうち11件の説明文が省かれた**（`asc`は残った）。この観測はモデル実行の後、再レビューの指摘を受けて追加したもので、採否基準の対象外である。全descriptionを60文字に短縮すると13/16が残った。選択精度への影響は測っていない（「Context容量の小さいモデル」）。
-- この状態（C）では、正例の到達が21試行中14試行に下がった（説明文が残るBは14/14）。`asc`の再開依頼は0/3（Bは2/2）で、`execution-recovery`へ流れた。レビュー依頼は0/3で、説明文が残る同梱の`code-review`へ流れた。名前から用途が読める`tracker-issue-writing`・`security-evidence`・`migration-assurance`・`research-to-implementation`は、名前だけでも3/3到達した。
-- 既存の直接参照経路（`v05/USAGE.md`の任意の文例。F）を加えると、到達は21/21へ戻った。ただし固定した手順適用の判定（本文・reference・回答の目印）はF 14/21、B 11/14で、基準3の「Bとの差2試行以内」を満たさなかった。外れた7試行はすべて本文とreferenceを読んでおり、回答の目印だけが無かった（下記）。基準を見た後で緩めないため、基準3（利用手順の限定改善）は不成立とした。
-- 基準4で探した製品側の変更は、劣化したSkillの可視性を安定して回復しなかった。全descriptionを60文字に短縮すると、説明文が残ったのは16件中2件（`asc`と`contract-enforcement`）だった。`asc`が残ったのは、ASCより前に並ぶ個人用Skillが使い残した予算に収まったためで、前に並ぶSkillが1件増えれば失われうる。レビュー依頼で劣化した`review-and-remediation`は名前だけのままだった。可視性を回復したのは、Host設定（`skillListingBudgetFraction`、`SLASH_COMMAND_TOOL_CHAR_BUDGET`、`skillListingMaxDescChars`、`skillOverrides`）だけだった。これらは利用者の設定であり、ASCの配布物からは変えない（ADR 0005、#1642の契約）。
+- この状態（C）では、正例の到達が21試行中14試行に下がった（説明文が残るBは14/14）。`asc`の再開依頼は0/3（Bは2/2）で、3回中2回が`execution-recovery`へ流れ、1回はどのSkillも選ばなかった。レビュー依頼は0/3で、説明文が残る同梱の`code-review`へ流れた。名前から用途が読める`tracker-issue-writing`・`security-evidence`・`migration-assurance`・`research-to-implementation`は、名前だけでも3/3到達した。
+- 既存の直接参照経路（`v05/USAGE.md`の任意の文例。F）を加えると、到達は21/21へ戻った。ただし固定した手順適用の判定（本文・reference・回答の目印）はF 14/21、B 11/14で、基準3の「Bとの差2試行以内」は反復回数の違う比べ方で結果が分かれる（失敗数の差4・Bを21試行へ換算した差2.5は不成立、Fを14試行へ換算した差1.67と成功数そのままの比較は成立）。結果を見て有利な読み方を選ばないよう、表の読み方すべてで成立する場合だけ成立とする扱いにより、基準3（利用手順の限定改善）を不成立とした。この扱いは事後の決定である（「採否」）。外れた7試行はすべて本文とreferenceを読んでおり、回答の目印だけが無かった。
+- 1M Contextで基準4により探した製品側の変更は、劣化したSkillの可視性を安定して回復しなかった。全descriptionを60文字に短縮すると、説明文が残ったのは16件中2件（`asc`と`contract-enforcement`）だった。`asc`が残ったのは、ASCより前に並ぶ個人用Skillが使い残した予算に収まったためで、前に並ぶSkillが1件増えれば失われうる。レビュー依頼で劣化した`review-and-remediation`は名前だけのままだった。可視性を回復したのは、Host設定（`skillListingBudgetFraction`、`SLASH_COMMAND_TOOL_CHAR_BUDGET`、`skillListingMaxDescChars`、`skillOverrides`）だけだった。これらは利用者の設定であり、ASCの配布物からは変えない（ADR 0005、#1642の契約）。
 - Codexは別の仕様（既定でContextの2%、repo scopeを個人用より先に残す、使用頻度を使わない）で、同じ劣化は同じ形では起きないと読める。実機では測っていない。
 
 後続の提案：200k Contextのモデルを使う利用者では、ASC単体でも専門Skillの説明文が省かれる。description短縮（または入口の数の削減）が選択・適用の精度を保つかを、#1652と同じ依頼集合で測る別Issueを提案する。測るまでは配布物を変えない。
@@ -22,7 +22,7 @@
 | 項目 | 値 |
 | --- | --- |
 | 調査基点 | main `c45a8abcb1441a034f3d0b53db22644b77a9fc7f`（ASC `package.json` 0.5.0） |
-| oracleと採否基準の固定 | モデル実行の前にcommit `2e09cf3e000c2fd6353523fcdfc2176c9e3d9c75`で固定した。採点script [harness/score.mjs](harness/score.mjs)はこのcommitの後、条件Aの実行中に`cases.json`の`scoring`の定義どおりに書き、Aの採点前に完成した。以後、`cases.json`・採否基準・採点に使うharnessは変えていない。モデル実行の後、レビューの是正で`run-suite.sh`の終了code・欠落の記録、`analyze-listing.mjs`の行の解析（1M Contextの結果は不変を確認）、`build-listing-results.mjs`と200k Contextの条件を追加した（[cases.json](cases.json) sha256 `846c724a04510e820f9c97b79ffe75ee285452c747bfb0648f531c21d04f2c15`、[decision-criteria.md](decision-criteria.md) sha256 `59331ccdd388f1f4a404588a59470c67fc19d97887f9fac0bb4f74310cbae10b`） |
+| oracleと採否基準の固定 | モデル実行の前にcommit `2e09cf3e000c2fd6353523fcdfc2176c9e3d9c75`で固定した。採点script [harness/score.mjs](harness/score.mjs)はこのcommitの後、条件Aの実行中に`cases.json`の`scoring`の定義どおりに書き、Aの採点前に完成した。以後、`cases.json`・採否基準・採点に使うharnessは変えていない。モデル実行の後、レビューの是正で`run-suite`の終了code・欠落の記録、`analyze-listing.mjs`の行の解析（1M Contextの結果は不変を確認）、`build-listing-results.mjs`と200k Contextの条件を追加した。実行時の`run-observe`・`run-suite`は同じ処理のshell scriptで、CIの言語規約（TypeScript/JavaScript以外のsourceを拒否）に合わせてNode版へ置き換え、Node版でも条件Aの一覧観測と隔離確認の3件が同じ結果になることを確かめた（[cases.json](cases.json) sha256 `846c724a04510e820f9c97b79ffe75ee285452c747bfb0648f531c21d04f2c15`、[decision-criteria.md](decision-criteria.md) sha256 `59331ccdd388f1f4a404588a59470c67fc19d97887f9fac0bb4f74310cbae10b`） |
 | Host | Claude Code 2.1.323（macOS上の実Hostと、同版のLinux build） |
 | モデル | `claude-opus-5-5`、Context容量1,000,000 tokens（`/context`の表示） |
 | 隔離環境1（一覧の観測） | Docker 29.8.0、`node:22-alpine`にClaude Code 2.1.323を導入した使い捨てcontainer。`--network none`、read-only root、HOMEはtmpfs、秘密・HOMEのmountなし、メモリ1GB・CPU 2・pids 256、label `asc.worktree`。モデルの代わりに同じcontainer内のcapture server（[harness/capture-server.mjs](harness/capture-server.mjs)）へ接続する |
@@ -140,7 +140,7 @@ Claude Codeの設定はCodexに適用されない。Codexの一覧は[公式資�
 | haiku＋全descriptionを60文字に短縮 | 200k | 29 | 25 | 13/16 | 29件、8,381文字＞8,000 |
 | haiku＋`skillListingBudgetFraction: 0.02` | 200k | 29 | 29 | 16/16 | なし |
 
-- 予算は8,000文字（`SLASH_COMMAND_TOOL_CHAR_BUDGET`の説明にあるfallbackと同じ値）。1M Contextの30,000文字と比例していない。
+- 予算は8,000文字で、1%×200k×4文字/tokenと一致する（`skillListingBudgetFraction: 0.02`で警告が消えたので、Context容量に応じて計算されている）。1M Contextの30,000文字は同じ計算（40,000文字）より小さく、上限がある可能性がある（未確認）。
 - ASCの16件と同梱の13件だけで超過する。説明文が残ったのは`asc`から`estimate-and-scope`まで（名前順の先頭5件）で、`review-and-remediation`・`security-evidence`・`migration-assurance`・`tracker-issue-writing`・`research-to-implementation`等の11件は名前だけになった。同梱Skillは`security-review`以外の説明文が残った。
 - 1M Contextと違い、ここではdescriptionの短縮が効く（13/16）。ただし短縮後の文面で選択・適用の精度が保たれるかは測っていない。#1652・#1654はdescriptionの用途と境界の書き方で到達が変わることを示しており、短縮はその改善を失う恐れがある。
 - 200k Contextでのモデル実行は行っていない。名前だけになった`review-and-remediation`がレビュー依頼で同梱の`code-review`へ流れるかは、1M Contextの条件Cから類推できるだけである。
@@ -228,7 +228,7 @@ Cの誤選択の行き先：asc-1は`work-coordination`（1回）。asc-2は`exe
 | --- | --- | --- |
 | 1 劣化の有無 | rr-1とasc-2がBで2/2、Cで0/3（「Bで2/2のときCで1/3以下」に該当）。正例の到達もB 14/14に対しC 14/21 | 劣化あり |
 | 2 現行方式で十分 | 1で劣化あり | 不成立 |
-| 3 既存経路で回復 | 到達はF 21/21で回復。手順適用はF 14/21（失敗7）、B 11/14（失敗3）で、失敗数の差は4。Bを21試行へ換算すると16.5対14で差2.5 | 不成立 |
+| 3 既存経路で回復 | 到達はF 21/21で回復。手順適用はF 14/21、B 11/14で、下の表のとおり読み方により成立・不成立が分かれる。表の読み方すべてで成立する場合だけ成立とする扱い（事後の決定）により | 不成立 |
 | 4 製品の最小変更 | descriptionの短縮（D）は2/16で、`asc`の回復は残り予算に依存し、`review-and-remediation`は回復しない。短縮がA・Bでの選択を悪化させないかは測っていない。Skillの名前・配布処理・referenceの変更では一覧の順序（個人用→project）と使用回数の優先を変えられない。可視性を回復したのはHost設定だけ | 製品変更を確認できず「不採用」。Host設定の案内に限る |
 
 基準1・3は反復回数の違う条件（B 2回、C・F 3回）を比べるが、比べ方を事前に決めていなかった。基準3の手順適用（B 11/14、F 14/21）は、読み方で結果が分かれる。
@@ -238,8 +238,9 @@ Cの誤選択の行き先：asc-1は`work-coordination`（1回）。asc-2は`exe
 | 失敗の試行数 | 3 | 7 | 4 | 不成立 |
 | Bを21試行へ換算した成功数 | 16.5 | 14 | 2.5 | 不成立 |
 | Fを14試行へ換算した成功数 | 11 | 9.33 | 1.67 | 成立 |
+| 成功数そのまま | 11 | 14 | Fが上回る | 成立 |
 
-読み方は結果を見た後に選ぶことになるため、本記録は「すべての読み方で成立した場合だけ基準3を成立とする」とした（結果を見て有利な読み方を選ばない＝基準を緩めない側）。この扱い自体も事後の決定であり、ownerが別の読み方を指定すれば基準3が成立しうる。その場合の結論は「利用手順の限定改善」（既存の任意文例と予算設定の案内）で、本PRの追記との差は既存文例を推奨に含めるかどうかである。基準1は、到達（B 14/14、C 14/21）と「Bで2/2のときCで1/3以下」（rr-1・asc-2）のどちらでも成立する。
+読み方は結果を見た後に選ぶことになるため、本記録は「表の読み方すべてで成立した場合だけ基準3を成立とする」とした（結果を見て有利な読み方を選ばない＝基準を緩めない側）。この扱い自体も事後の決定であり、ownerが別の読み方を指定すれば基準3が成立しうる。その場合の結論は「利用手順の限定改善」（既存の任意文例と予算設定の案内）で、本PRの追記との差は既存文例を推奨に含めるかどうかである。基準1は「Bで2/2のときCで1/3以下」（rr-1・asc-2）で成立する。「Bより3試行以上少ない」の部分は、失敗数で読めば到達（B失敗0、C失敗7）で成立し、成功数そのまま（14対14）で読めば成立しないが、後者の条件だけで判定は変わらない。
 
 採否の扱い：
 
@@ -252,7 +253,7 @@ Cの誤選択の行き先：asc-1は`work-coordination`（1回）。asc-2は`exe
 
 ## 欠測・限界
 
-- モデルは1種類、fixtureは1つ、各ケース2〜3回。統計的な発火率ではない。Context容量200kのモデルでは一覧の観測だけで、モデル実行をしていない。
+- モデルは1種類、fixtureは1つ、各ケース2〜3回。統計的な発火率ではない。Context容量200kのモデルでは一覧の観測だけで、モデル実行をしていない。200kの観測はnetwork無しのcontainer（feature flagを取得せず、同梱Skillが実Hostより1件少ない）で、`claude-haiku-4-5`と`claude-sonnet-4-5`の2つだけである。実Hostの`/context`では確かめていない。`skillOverrides`の効果は1M Contextでだけ観測した。
 - モデル実行では、ASCの入口をproject登録ではなくplugin（`project:<name>`）として読み込んだ。名前に`project:`が付き、本文へのリンクを作業ディレクトリ基準に書き換えた。CLAUDE.mdの代わりに`append_system_prompt`で文例を与えた（F）。実際のproject登録・CLAUDE.mdとは経路が異なる。
 - モデル実行の一覧は直接観測していない。同じplugin構成を隔離環境1で観測し、実Hostの`/context`のSkills行・名前だけの件数と照合した。隔離環境1はnetwork無しで、feature flagを取得しない。同梱Skillの数が実Hostと1件異なる（`schedule`）。
 - 隔離環境1と2のどちらも使用回数0から始めた。使用履歴の効果は一覧の観測（C-usage-asc、C-usage-personal）だけで、モデル実行では測っていない。
@@ -269,5 +270,5 @@ Cの誤選択の行き先：asc-1は`work-coordination`（1回）。asc-2は`exe
 ## 再現手順
 
 1. fixture：小さなTypeScript/Expressの合成repo（ユーザー管理API、CI、Dockerfile、要件メモ。lockfileなし）に、調査基点のCLIで`project-assets <fixture> --register-claude-skill --apply`を実行する。fixture本体はrepositoryに含めない（作り方は本READMEのとおり）。
-2. 一覧の観測：`docker build -t asc-1783-host:2.1.323 -f harness/host.Dockerfile harness`のあと、条件ごとに`harness/run-observe.sh <label> <fixture> listing-conditions.json <condition> <out>`、`node harness/analyze-listing.mjs <out>`。
-3. モデル実行：`node harness/make-eval-suites.mjs <fixture> <suites> <outside-marker-file>`、`harness/run-suite.sh <suites> <A|B|C|F|diag|iso> <out> <max-cost-usd>`、`node harness/score.mjs cases.json <out>/traces A B C F --runs-json results/runs.json`。一覧の集計は`node harness/build-listing-results.mjs <observations-dir> results/listing-observations.json`。`run-suite.sh`は`claude plugin eval`の一時directoryからtraceを複写したあと、その一時directoryを削除する。引数は絶対pathで渡す。suite全体が結果JSONを出さずに失敗した場合は`traces/<suite>.missing-json`を作るので、失敗として別に数える（今回は0件）。終了codeの反映は、モデル実行の後に独立レビューの指摘で追加した（結果には影響しない）。削除の対象はmacOSで観測した`/private/tmp/e-*`の形だけで、他のOSでは手で確認する。`claude plugin eval`の終了codeは`<suite>.exit`に残し、script自体もその値で終了する。
+2. 一覧の観測：`docker build -t asc-1783-host:2.1.323 -f harness/host.Dockerfile harness`のあと、条件ごとに`node harness/run-observe.mjs <label> <fixture> listing-conditions.json <condition> <out>`、`node harness/analyze-listing.mjs <out>`。
+3. モデル実行：`node harness/make-eval-suites.mjs <fixture> <suites> <outside-marker-file>`、`node harness/run-suite.mjs <suites> <A|B|C|F|diag|iso> <out> <max-cost-usd>`、`node harness/score.mjs cases.json <out>/traces A B C F --runs-json results/runs.json`。一覧の集計は`node harness/build-listing-results.mjs <observations-dir> results/listing-observations.json`。`run-suite.mjs`は`claude plugin eval`の一時directoryからtraceを複写したあと、その一時directoryを削除する。引数は絶対pathで渡す。suite全体が結果JSONを出さずに失敗した場合は`traces/<suite>.missing-json`を作るので、失敗として別に数える（今回は0件）。終了codeの反映は、モデル実行の後に独立レビューの指摘で追加した（結果には影響しない）。削除の対象はmacOSで観測した`/private/tmp/e-*`の形だけで、他のOSでは手で確認する。`claude plugin eval`の終了codeは`<suite>.exit`に残し、script自体もその値で終了する。
