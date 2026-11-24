@@ -264,17 +264,17 @@
 | Bash で `cat <目印>`、`node -e` | 拒否（dontAsk） |
 | test wrapper 内の test code から目印を読む・`/w` へ書く・`1.1.1.1:443` へ接続 | `ENOENT`（mount していない）・`EROFS`・`ENETUNREACH` |
 
-測定の途中で、wrapper 以外の Bash（`ls`・`cat`・`head`・`find`・`grep` 等）が実行されていることに気づいた。Claude Code は dontAsk でも、作業 directory 内の読取り専用の command を自動で許可する。そこで2つ目の反例 probe（`PROBE2`）で、fixture 外の目印への `cat`（相対 path を含む）・`head`・`ls`・`grep -r`・`find`・`cd && wc`、fixture 外への `touch`・リダイレクト書込み、`curl`・`git ls-remote`（127.0.0.1 宛て）、`python3`、fixture 内へのリダイレクト書込みを試した。すべて拒否され、許可されたのは `node --version` だけだった。子 Agent も同じだった。48件の全 session log を [harness/bash-audit.mjs](harness/bash-audit.mjs) で監査した。wrapper 以外で実行された Bash は41件（うち1件は終了コードが0以外）で、すべて読取り専用（`cat`・`ls`・`head`・`find`・`grep`・`sed`・`wc`・`echo` の組合せ）だった。fixture 外の path を指すものは0件、Host が権限で拒否したものは15件。監査は、Host が権限の拒否と返した結果だけを拒否に数える。引用符を外し shell の演算子で分けた語を path として、`cd` を追って解決する。変数展開や command 置換の中の path は検出できない（限界）。隔離の主な根拠は2つの反例 probe である。隔離の合格条件（fixture 外を読めない・書けない、外部 network なし）は満たしたと判断し、結果を使う。全条件に同じ Host の振る舞いが適用されるため、条件間の比較の公平性も保たれる。計画の「Bash は wrapper 1つだけ」は、読取り専用 command の自動許可の分だけ実際より狭く書いていた（記録の訂正）。
+測定の途中で、wrapper 以外の Bash（`ls`・`cat`・`head`・`find`・`grep` 等）が実行されていることに気づいた。Claude Code は dontAsk でも、作業 directory 内の読取り専用の command を自動で許可する。そこで2つ目の反例 probe（`PROBE2`）で、fixture 外の目印への `cat`（相対 path を含む）・`head`・`ls`・`grep -r`・`find`・`cd && wc`、fixture 外への `touch`・リダイレクト書込み、`curl`・`git ls-remote`（127.0.0.1 宛て）、`python3`、fixture 内へのリダイレクト書込みを試した。すべて拒否され、許可されたのは `node --version` だけだった。子 Agent も同じだった。48件の全 session log を [harness/bash-audit.mjs](harness/bash-audit.mjs) で監査した（出力は [bash-audit-result.json](bash-audit-result.json)）。wrapper 以外で実行された Bash は50件（うち1件は終了コードが0以外）で、すべて読取り専用（`cat`・`ls`・`head`・`find`・`grep`・`sed`・`wc`・`echo` の組合せ）だった。fixture 外の path を指すものは0件、Host が権限で拒否したものは18件（fixture 内へのリダイレクト書込みの試み1件を含む）。監査は、Host が権限の拒否と返した結果だけを拒否に数える。引用符を外し shell の演算子で分けた語を path として、`cd` を追って解決する。変数展開や command 置換の中の path は検出できない（限界）。隔離の主な根拠は2つの反例 probe である。隔離の合格条件（fixture 外を読めない・書けない、外部 network なし）は満たしたと判断し、結果を使う。全条件に同じ Host の振る舞いが適用されるため、条件間の比較の公平性も保たれる。計画の「Bash は wrapper 1つだけ」は、読取り専用 command の自動許可の分だけ実際より狭く書いていた（記録の訂正）。
 
 ## harness の不具合と再実行（記録）
 
 - pilot（P1-D、判定に使わない）で、session log の1つの tool 呼出しが streaming で複数行に記録され、Agent 起動数を二重に数える不具合を見つけ、tool の id で重複を除いた（commit `4817a13`）。
 - 測定の6件目（P2-A-1）の採点で、P2 に存在しない `duration` の file を読んで harness が落ち、Host の出力（費用・時間）を保存できなかった。採点の前に Host の生出力を保存するよう直し（commit `bc8c679`）、P2-A-1 を再実行した。同時に実行中だった P2-B-1 は停止して再実行した。落ちた P2-A-1 と停止した P2-B-1 の費用は欠測（36件の集計に含めない）。試行の失敗ではなく harness の失敗なので、計画の「失敗は再実行しない」には当たらないと判断した。
 - 2つ目の隔離 probe の追加（commit `586ebb1`）は probe の分岐だけを変え、測定条件は変えていない（差分で確認）。PROBE2 は36件の一括実行の途中（P1 の2回目の頃）に並行して1回実行した（約40秒、sonnet）。
-- 独立レビューの指摘で、採点（隠し test の結果行がない単位を不合格にする、`DONE` の単位名を照合する）・集計（P3 の比較の表記と品質の基準）・Bash 監査（拒否の判定と path の検出）を直した。既存の42件は隠し oracle を再実行し、判定が変わらないことを確かめた。
+- 独立レビューの指摘で、採点（隠し test の結果行がない単位を不合格にする、`DONE` の単位名を照合する、P1・P2 で隠し test の終了コードを見る）・集計（P3 の比較の表記と品質の基準）・Bash 監査（拒否の判定、path の検出、A3 を対象に含める）を直した。集計の品質の基準は、計画では「A の同じ課題の High」だが、`aggregate.mjs` は全比較で比較の基準側（X）の High を使う。対 A の比較では計画と同じで、High が全件0のため、どの判定も変わらない。既存の42件は隠し oracle を再実行し、判定が変わらないことを確かめた。
 - 計画では各件の後に独立レビューを行うとしていたが、実際は全試行の後にまとめて行った（試行どうしの資源競合を避けるため）。レビューは条件を知らせず、判定への影響はない。
 - 採否の規則と36件の判定は変えていない。追補（A2）と追補2（A3）は、文面の受入確認を足すもので、条件を厳しくする方向の追加である。
-- 最初の4つの commit が、端末の既定の識別子（ユーザー名と hostname）で作られていた。公開 repository の規約に従い、author の日時を保ったまま識別子だけを書き換え、branch を更新した。commit の SHA は書き換え後の値で記す。書き換え前の commit は GitHub に一時的に残る可能性がある。
+- 最初の4つの commit が、端末の既定の識別子（ユーザー名と hostname）で作られていた。公開 repository の規約に従い、author の日時を保ったまま識別子だけを書き換え、branch を更新した。commit の SHA は書き換え後の値で記す。force-push は許可されなかったため、書き換えた履歴は別の branch に置き、元の PR（#1798）は閉じた。元の branch は remote に残っており、書き換え前の commit はそこで公開されたままである。branch の削除は owner の判断を待つ（branch を消しても、GitHub の PR の ref には残る）。書き換えで committer の日時は書き換えの時刻になったため、測定前に固定したことの証拠は author の日時（計画の commit は 08:22:51Z、最初の試行は約 08:28Z）と、試行の log の時刻である。
 - 採否の規則と課題・条件・oracle は、測定の開始後に変えていない。
 
 ## 限界
@@ -323,14 +323,16 @@ node harness/bash-audit.mjs <outRoot>
 
 ### harness
 
+測定に使った `run.mjs` の版：P1 の1回目の5件は `92a67c77…`（commit `4817a13`）、残りの31件は `4382fe72…`（`bc8c679`。途中から probe の分岐だけを足した `da92d076…`、`586ebb1`）、A2 は `5d9be61c…`（`758d5b6`）、A3 は `35e9a8e1…`（`d6bc1ab`）。下の表は最新版で、レビューの指摘で採点の厳格化（隠し test の終了コード）を足したもの。既存の試行の判定は、隠し oracle の再実行で変わらないことを確かめた。
+
 | ファイル | 役割 | sha256 |
 | --- | --- | --- |
 | [`harness/make-fixture.mjs`](harness/make-fixture.mjs) | fixture の生成 | `0fc9f12a7649b03e97fb02370e00a2740b0cff6ffd111a4f491087a7372ff461` |
-| [`harness/run.mjs`](harness/run.mjs) | 1件の実行・採点・記録 | `35e9a8e1133345310caca357b46caf251d2c070a147356b5b423405726fa51be` |
+| [`harness/run.mjs`](harness/run.mjs) | 1件の実行・採点・記録 | `5ca1f4c83a1a99faa92421f20871910b23e450a5dfd49000dc1a4708657537c9` |
 | [`harness/review.mjs`](harness/review.mjs) | 試行の独立レビュー | `c8e212e94186090d6a47438f80c06c726124fbc1ec8a99ab32759f48ff3bb912` |
 | [`harness/batch.mjs`](harness/batch.mjs) | 36件の一括実行 | `bfc1342b4ef4c6955da15af31305e279bdbb708c6869f2429621a6f9b30394ee` |
 | [`harness/aggregate.mjs`](harness/aggregate.mjs) | 集計と判定 | `a598635a4ad8f7cfc37e89b496f490c4845f87bc6b05168af4b211621e7773be` |
-| [`harness/bash-audit.mjs`](harness/bash-audit.mjs) | Bash の監査 | `5ce7292eb85c686098541c2755323176a008327f890b9d453e06886e0626f972` |
+| [`harness/bash-audit.mjs`](harness/bash-audit.mjs) | Bash の監査 | `3decd3226052d75013e4a64357d1418fc6dd6d8960fc98104aca38e71672a6ac` |
 | [`harness/asc-guidance.txt`](harness/asc-guidance.txt) | A〜E の system prompt 抜粋 | `9e6f823817430b297156fdd15ec84039e8c22162249ba1283eb1500415b7a87c` |
 | [`harness/asc-guidance-a2.txt`](harness/asc-guidance-a2.txt) | A2 の抜粋（最初の文面） | `7c3642805378ad7922923731016b9c2de0b20d8c8f107064584ac037fd6ae371` |
 | [`harness/asc-guidance-a3.txt`](harness/asc-guidance-a3.txt) | A3 の抜粋（改訂後の文面） | `d5124f0c9d8c446c025588fcaf187a951a770b2fb03c3db325534cdbcc08ae1b` |

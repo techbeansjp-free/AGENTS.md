@@ -140,7 +140,7 @@ if (task === 'P3') {
 } else if (task.startsWith('PROBE')) {
   pass = null; detail = { result: resultText };
 } else {
-  const all = Object.values(unitPass).every(Boolean) && Object.values(testsAdded).every(Boolean);
+  const all = hidden.status === 0 && Object.values(unitPass).every(Boolean) && Object.values(testsAdded).every(Boolean);
   pass = all && suiteOk && sampleUnchanged && !!done && [...done].sort().join() === [...UNITS[task]].sort().join();
   detail = {};
 }

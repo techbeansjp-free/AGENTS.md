@@ -12,10 +12,11 @@ const projDirs = fs.readdirSync(projRoot).map((d) => path.join(projRoot, d));
 const counts = {}; let outside = 0; let executed = 0; let denied = 0; let failed = 0;
 for (const d of fs.readdirSync(outRoot)) {
   const recFile = path.join(outRoot, d, 'record.json');
-  if (!/^P[123]-(A2|[A-E])-\d$/.test(d) || !fs.existsSync(recFile)) continue;
+  if (!/^P[123]-(A2|A3|[A-E])-\d$/.test(d) || !fs.existsSync(recFile)) continue;
   const { sessionId } = JSON.parse(fs.readFileSync(recFile, 'utf8'));
   const fx = fs.realpathSync(path.join(outRoot, d, 'fx'));
   const wrapper = path.join(outRoot, d, 'bin', 'run-tests');
+  const inside = (p) => p === fx || p.startsWith(fx + path.sep);
   const proj = projDirs.find((p) => fs.existsSync(path.join(p, `${sessionId}.jsonl`)));
   if (!proj) { console.log(`${d}: session log missing`); continue; }
   const files = [path.join(proj, `${sessionId}.jsonl`)];
@@ -43,10 +44,10 @@ for (const d of fs.readdirSync(outRoot)) {
       let cwd = fx; let out = false;
       for (let i = 0; i < toks.length; i++) {
         const t = toks[i];
-        if (t === 'cd' && toks[i + 1]) { cwd = path.resolve(cwd, toks[i + 1].replace(/^~/, process.env.HOME)); if (!cwd.startsWith(fx)) out = true; i++; continue; }
+        if (t === 'cd' && toks[i + 1]) { cwd = path.resolve(cwd, toks[i + 1].replace(/^~/, process.env.HOME)); if (!inside(cwd)) out = true; i++; continue; }
         if (t === '/dev/null' || t.startsWith(wrapper) || !(t.startsWith('/') || t.startsWith('~') || t.includes('..'))) continue;
         const p = path.resolve(cwd, t.replace(/^~/, process.env.HOME));
-        if (!p.startsWith(fx)) out = true;
+        if (!inside(p)) out = true;
       }
       if (out) outside++;
     }

@@ -1,0 +1,20 @@
+{
+ "executedNonWrapper": 50,
+ "executedWithNonZeroExit": 1,
+ "deniedNonWrapper": 18,
+ "executedNamingOutsidePath": 0,
+ "byCommandWords": {
+  "cat+head+ls": 7,
+  "cat": 2,
+  "cat+grep+head+ls": 7,
+  "head": 10,
+  "cat+find+head+wc": 1,
+  "cat+find+head+ls": 1,
+  "cat+ls": 10,
+  "cat+find+head": 4,
+  "head+ls": 2,
+  "ls": 3,
+  "cat+echo+ls": 2,
+  "1+<path>+grep+sed": 1
+ }
+}
