@@ -137,7 +137,7 @@
 
 採否の扱い：
 
-- 配布Skill 16件の`SKILL.md`の`description`の行を、[candidates.json](candidates.json)の候補Bの文面へ置き換えた。本文・reference・Skill名・配布処理・登録処理は変えていない。変更後の調査基点から作り直したfixtureで、`project-assets`が配置するClaude Codeの入口（`.claude/skills`）・本文（`.agent-skill-chain/skills`）・同梱本体（`.agent-skill-chain/managed-runtime/skills`）が、評価に使った候補Bのfixtureとbyte単位で一致することを`diff -r`で確かめた。
+- 配布Skill 16件の`SKILL.md`の`description`の行を、[candidates.json](candidates.json)の候補Bの文面へ置き換えた。本文・reference・Skill名・配布処理・登録処理は変えていない。mainをmergeする前の変更後のtree（commit `780756461cc76618cff6c4104132687bd24c91d5`の内容）から作り直したfixtureで、`project-assets`が配置するClaude Codeの入口（`.claude/skills`）・本文（`.agent-skill-chain/skills`）・同梱本体（`.agent-skill-chain/managed-runtime/skills`）が、評価に使った候補Bのfixtureとbyte単位で一致することを`diff -r`で確かめた。
 - 落とした文：各descriptionの後半にあった境界・否定の文（例：`asc`の「変更のレビューや指摘の是正、調査・見積などは目的別Skillが扱う」、`decision-ownership`の担当外のSkillの列挙、各Skillの「〜だけには適用しない」）。これらはSkillを選ぶ前の一覧の文であり、適用の規則は各Skillの本文に残る。境界を問う依頼（#1654の`research-to-implementation`と`engineering-judgment`の取り違え等）は、この依頼集合では測っていない（「欠測・限界」）。
 - Host設定（`skillListingBudgetFraction`等）は変えない。#1783で`v05/USAGE.md`へ追記したHost設定の案内のうち、「200k ContextではASCの入口と同梱Skillだけで予算を超え、11件が名前だけになった」の1文だけを、短縮前の観測であることと、短縮後は収まるが余裕が約400文字であることへ直した。設定の選択肢・代償・Codexの記述は変えていない。
 
@@ -156,6 +156,7 @@
 - モデル実行ではASCの入口をplugin（`project:<name>`）として読み込んだ。実際のproject登録とは名前と読込み順が異なる。一覧の観測では、どちらの形でも候補Bは16/16、候補Aは5/16だった。
 - 実Hostの要求本文は観測していない。containerには同梱Skillの`schedule`が無く、余裕の評価は個人用Skillで模した推定である。実Hostの`/context`の個別行では候補Bの可視性を判定できなかった。
 - 手順適用の判定は、本文・referenceの`Read`と回答の固定した語の有無である。回答の質は採点していない。
+- 評価の後にmainをmergeし、#1781で`subagent-model-selection`の本文（`description`以外）が変わった。評価で使った本文とは異なるが、このSkillは依頼集合の対象外で、`description`は候補Bのままである。
 - 使用回数はすべて0から始めた。使用履歴による一覧の優先は測っていない。
 - 費用はlist価格の推定で、課金額とは限らない。親sessionの調整・採点・レビューの消費は含まない。suite Bは固定したsuiteごとの上限を0.41 USD超えた（「費用・効率」）。
 
