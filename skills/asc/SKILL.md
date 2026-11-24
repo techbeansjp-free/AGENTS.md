@@ -1,6 +1,6 @@
 ---
 name: asc
-description: Issueやタスクの開発を始める・途中から再開する、専用worktreeで実装してPRを提出する、許可されたmergeと後片付けを行うときに使う。作業場所・プロジェクト規約・独立レビュー・提出をASCの配布済みCLIで結び付ける。変更のレビューや指摘の是正、調査・見積などは目的別Skillが扱う。通常の開発にASCの導入や固定工程を強制しない。
+description: Issue・タスクの開発の開始・再開、worktreeでの実装、PR提出、許可されたmergeで使う。
 ---
 
 # ASCの実行入口

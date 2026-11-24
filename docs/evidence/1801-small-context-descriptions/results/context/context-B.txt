@@ -1,0 +1,51 @@
+## Context Usage
+
+**Model:** claude-sonnet-4-5  
+**Tokens:** 9.6k / 200k (5%)
+
+### Estimated usage by category
+
+| Category | Tokens | Percentage |
+|----------|--------|------------|
+| System prompt | 6.1k | 3.1% |
+| System tools | 1.6k | 0.8% |
+| System tools (deferred) | 2.4k | 1.2% |
+| Skills | 1.9k | 1.0% |
+| Messages | 8 | 0.0% |
+| Free space | 190.4k | 95.2% |
+
+### Skills
+
+| Skill | Source | Tokens |
+|-------|--------|--------|
+| project:asc | Plugin (project) | < 20 |
+| project:contract-enforcement | Plugin (project) | < 20 |
+| project:decision-ownership | Plugin (project) | < 20 |
+| project:engineering-judgment | Plugin (project) | < 20 |
+| project:estimate-and-scope | Plugin (project) | < 20 |
+| project:execution-recovery | Plugin (project) | < 20 |
+| project:migration-assurance | Plugin (project) | < 20 |
+| project:project-foundation | Plugin (project) | < 20 |
+| project:research-to-implementation | Plugin (project) | < 20 |
+| project:review-and-remediation | Plugin (project) | < 20 |
+| project:security-evidence | Plugin (project) | < 20 |
+| project:subagent-model-selection | Plugin (project) | < 20 |
+| project:tracker-issue-writing | Plugin (project) | < 20 |
+| project:user-journey-acceptance | Plugin (project) | < 20 |
+| project:verification-optimization | Plugin (project) | < 20 |
+| project:work-coordination | Plugin (project) | < 20 |
+| dataviz | Built-in | ~360 |
+| update-config | Built-in | ~180 |
+| keybindings-help | Built-in | ~60 |
+| code-review | Built-in | ~210 |
+| simplify | Built-in | ~50 |
+| fewer-permission-prompts | Built-in | ~50 |
+| loop | Built-in | ~90 |
+| schedule | Built-in | ~100 |
+| claude-api | Built-in | ~290 |
+| workflow-authoring | Built-in | ~60 |
+| run | Built-in | ~90 |
+| plugin-authoring | Built-in | ~70 |
+| init | Built-in | < 20 |
+| security-review | Built-in | ~20 |
+

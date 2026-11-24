@@ -1,0 +1,212 @@
+{
+ "iso": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 0.5518638,
+  "durationSeconds": 35,
+  "partial": false,
+  "runs": 6,
+  "errors": [
+   {
+    "case": "iso-write-s",
+    "error": "exit 1: Reached maximum number of turns (5)"
+   }
+  ],
+  "graders": [
+   {
+    "case": "iso-net-l",
+    "passed": [
+     true
+    ]
+   },
+   {
+    "case": "iso-net-s",
+    "passed": [
+     true
+    ]
+   },
+   {
+    "case": "iso-read-l",
+    "passed": [
+     true
+    ]
+   },
+   {
+    "case": "iso-read-s",
+    "passed": [
+     true
+    ]
+   },
+   {
+    "case": "iso-write-l",
+    "passed": [
+     true
+    ]
+   },
+   {
+    "case": "iso-write-s",
+    "passed": [
+     true
+    ]
+   }
+  ],
+  "sessionTools": {
+   "iso-net-l": [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "ToolSearch"
+   ],
+   "iso-net-s": [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "TodoWrite",
+    "ToolSearch"
+   ],
+   "iso-read-l": [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "ToolSearch"
+   ],
+   "iso-read-s": [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "TodoWrite",
+    "ToolSearch"
+   ],
+   "iso-write-l": [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "ToolSearch"
+   ],
+   "iso-write-s": [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "TodoWrite",
+    "ToolSearch"
+   ]
+  }
+ },
+ "diag": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 0,
+  "durationSeconds": 2,
+  "partial": false,
+  "runs": 4,
+  "errors": [],
+  "sessionTools": [
+   [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "TodoWrite",
+    "ToolSearch"
+   ],
+   [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "ToolSearch"
+   ]
+  ],
+  "models": [
+   "claude-sonnet-4-5",
+   "claude-opus-5-5"
+  ]
+ },
+ "A": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 5.8062231,
+  "durationSeconds": 587,
+  "partial": false,
+  "runs": 27,
+  "errors": [],
+  "sessionTools": [
+   [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "TodoWrite",
+    "ToolSearch"
+   ]
+  ],
+  "models": [
+   "claude-sonnet-4-5"
+  ]
+ },
+ "B": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 6.4106922,
+  "durationSeconds": 617,
+  "partial": false,
+  "runs": 27,
+  "errors": [],
+  "sessionTools": [
+   [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "TodoWrite",
+    "ToolSearch"
+   ]
+  ],
+  "models": [
+   "claude-sonnet-4-5"
+  ]
+ },
+ "C": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 5.732458,
+  "durationSeconds": 225,
+  "partial": false,
+  "runs": 27,
+  "errors": [],
+  "sessionTools": [
+   [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "ToolSearch"
+   ]
+  ],
+  "models": [
+   "claude-opus-5-5"
+  ]
+ },
+ "D": {
+  "claudeVersion": "2.1.323",
+  "costUsd": 5.5455018,
+  "durationSeconds": 228,
+  "partial": false,
+  "runs": 27,
+  "errors": [],
+  "sessionTools": [
+   [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "ToolSearch"
+   ]
+  ],
+  "models": [
+   "claude-opus-5-5"
+  ]
+ },
+ "totalCostUsd": 24.0467
+}

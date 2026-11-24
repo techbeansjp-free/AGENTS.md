@@ -1,0 +1,3059 @@
+[
+ {
+  "condition": "A",
+  "case": "asc-1",
+  "run": 1,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 20,
+  "usage": {
+   "input": 152,
+   "output": 6070,
+   "cacheRead": 469874,
+   "cacheWrite": 29034
+  },
+  "costUsd": 0.40667219999999993,
+  "turns": 22,
+  "durationMs": 127044,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": false,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "asc-1",
+  "run": 2,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 18,
+  "usage": {
+   "input": 126,
+   "output": 4634,
+   "cacheRead": 353077,
+   "cacheWrite": 25823
+  },
+  "costUsd": 0.3307491,
+  "turns": 20,
+  "durationMs": 96029,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": false,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "asc-1",
+  "run": 3,
+  "expect": "asc",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 14,
+  "usage": {
+   "input": 50,
+   "output": 2656,
+   "cacheRead": 166792,
+   "cacheWrite": 40205
+  },
+  "costUsd": 0.3312576,
+  "turns": 15,
+  "durationMs": 51371,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "asc-2",
+  "run": 1,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 118,
+   "output": 5155,
+   "cacheRead": 318983,
+   "cacheWrite": 29952
+  },
+  "costUsd": 0.3530859,
+  "turns": 15,
+  "durationMs": 103601,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "asc-2",
+  "run": 2,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 116,
+   "output": 4075,
+   "cacheRead": 312758,
+   "cacheWrite": 32295
+  },
+  "costUsd": 0.34907039999999995,
+  "turns": 15,
+  "durationMs": 81937,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "asc-2",
+  "run": 3,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 17,
+  "usage": {
+   "input": 126,
+   "output": 5424,
+   "cacheRead": 363774,
+   "cacheWrite": 33267
+  },
+  "costUsd": 0.39047220000000005,
+  "turns": 19,
+  "durationMs": 99463,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "ma-1",
+  "run": 1,
+  "expect": "migration-assurance",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 8,
+  "usage": {
+   "input": 52,
+   "output": 3004,
+   "cacheRead": 84923,
+   "cacheWrite": 15259
+  },
+  "costUsd": 0.1622469,
+  "turns": 9,
+  "durationMs": 55831,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "ma-1",
+  "run": 2,
+  "expect": "migration-assurance",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 4,
+  "usage": {
+   "input": 26,
+   "output": 2189,
+   "cacheRead": 31069,
+   "cacheWrite": 8282
+  },
+  "costUsd": 0.0919257,
+  "turns": 5,
+  "durationMs": 42598,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "ma-1",
+  "run": 3,
+  "expect": "migration-assurance",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 6,
+  "usage": {
+   "input": 26,
+   "output": 2012,
+   "cacheRead": 30949,
+   "cacheWrite": 8410
+  },
+  "costUsd": 0.09000269999999999,
+  "turns": 7,
+  "durationMs": 37598,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "neg-1",
+  "run": 1,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 204,
+   "cacheRead": 5470,
+   "cacheWrite": 7023
+  },
+  "costUsd": 0.046868999999999994,
+  "turns": 1,
+  "durationMs": 5524,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "A",
+  "case": "neg-1",
+  "run": 2,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 187,
+   "cacheRead": 5470,
+   "cacheWrite": 7023
+  },
+  "costUsd": 0.046613999999999996,
+  "turns": 1,
+  "durationMs": 4575,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "A",
+  "case": "neg-1",
+  "run": 3,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 148,
+   "cacheRead": 5470,
+   "cacheWrite": 7139
+  },
+  "costUsd": 0.046725,
+  "turns": 1,
+  "durationMs": 4343,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "A",
+  "case": "neg-2",
+  "run": 1,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 454,
+   "cacheRead": 5470,
+   "cacheWrite": 7126
+  },
+  "costUsd": 0.051237000000000005,
+  "turns": 1,
+  "durationMs": 10618,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "A",
+  "case": "neg-2",
+  "run": 2,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 405,
+   "cacheRead": 5470,
+   "cacheWrite": 7129
+  },
+  "costUsd": 0.050519999999999995,
+  "turns": 1,
+  "durationMs": 9045,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "A",
+  "case": "neg-2",
+  "run": 3,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 492,
+   "cacheRead": 5470,
+   "cacheWrite": 7007
+  },
+  "costUsd": 0.051093,
+  "turns": 1,
+  "durationMs": 9095,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "A",
+  "case": "ri-1",
+  "run": 1,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 15,
+  "usage": {
+   "input": 110,
+   "output": 11519,
+   "cacheRead": 237300,
+   "cacheWrite": 25515
+  },
+  "costUsd": 0.39739500000000005,
+  "turns": 17,
+  "durationMs": 165726,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "ri-1",
+  "run": 2,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 21,
+  "usage": {
+   "input": 142,
+   "output": 24759,
+   "cacheRead": 550686,
+   "cacheWrite": 52815
+  },
+  "costUsd": 0.8539068,
+  "turns": 23,
+  "durationMs": 381679,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "ri-1",
+  "run": 3,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 8,
+  "usage": {
+   "input": 52,
+   "output": 4092,
+   "cacheRead": 88509,
+   "cacheWrite": 15078
+  },
+  "costUsd": 0.17855669999999998,
+  "turns": 10,
+  "durationMs": 76928,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "rr-1",
+  "run": 1,
+  "expect": "review-and-remediation",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 1,
+  "usage": {
+   "input": 18,
+   "output": 1075,
+   "cacheRead": 18072,
+   "cacheWrite": 7708
+  },
+  "costUsd": 0.0678486,
+  "turns": 2,
+  "durationMs": 20472,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "rr-1",
+  "run": 2,
+  "expect": "review-and-remediation",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 1,
+  "usage": {
+   "input": 18,
+   "output": 1032,
+   "cacheRead": 17956,
+   "cacheWrite": 7604
+  },
+  "costUsd": 0.06654479999999999,
+  "turns": 2,
+  "durationMs": 19548,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "rr-1",
+  "run": 3,
+  "expect": "review-and-remediation",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 1,
+  "usage": {
+   "input": 18,
+   "output": 1043,
+   "cacheRead": 17956,
+   "cacheWrite": 7608
+  },
+  "costUsd": 0.0667338,
+  "turns": 2,
+  "durationMs": 18500,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "se-1",
+  "run": 1,
+  "expect": "security-evidence",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 19,
+  "usage": {
+   "input": 112,
+   "output": 6605,
+   "cacheRead": 249314,
+   "cacheWrite": 25913
+  },
+  "costUsd": 0.3296832,
+  "turns": 20,
+  "durationMs": 111083,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "se-1",
+  "run": 2,
+  "expect": "security-evidence",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 17,
+  "usage": {
+   "input": 80,
+   "output": 2960,
+   "cacheRead": 139297,
+   "cacheWrite": 20622
+  },
+  "costUsd": 0.2101611,
+  "turns": 18,
+  "durationMs": 55380,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "se-1",
+  "run": 3,
+  "expect": "security-evidence",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 15,
+  "usage": {
+   "input": 60,
+   "output": 2862,
+   "cacheRead": 123120,
+   "cacheWrite": 18727
+  },
+  "costUsd": 0.192408,
+  "turns": 16,
+  "durationMs": 51454,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "tw-1",
+  "run": 1,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 8,
+  "usage": {
+   "input": 76,
+   "output": 3913,
+   "cacheRead": 138949,
+   "cacheWrite": 18804
+  },
+  "costUsd": 0.21343169999999997,
+  "turns": 10,
+  "durationMs": 72685,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "tw-1",
+  "run": 2,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 10,
+  "usage": {
+   "input": 60,
+   "output": 4544,
+   "cacheRead": 108071,
+   "cacheWrite": 19695
+  },
+  "costUsd": 0.21893129999999997,
+  "turns": 12,
+  "durationMs": 88335,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "A",
+  "case": "tw-1",
+  "run": 3,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 9,
+  "usage": {
+   "input": 60,
+   "output": 3855,
+   "cacheRead": 111668,
+   "cacheWrite": 20096
+  },
+  "costUsd": 0.2120814,
+  "turns": 11,
+  "durationMs": 74290,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "asc-1",
+  "run": 1,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 18,
+  "usage": {
+   "input": 102,
+   "output": 4061,
+   "cacheRead": 259952,
+   "cacheWrite": 25499
+  },
+  "costUsd": 0.29220060000000003,
+  "turns": 20,
+  "durationMs": 79030,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "asc-1",
+  "run": 2,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 21,
+  "usage": {
+   "input": 118,
+   "output": 4489,
+   "cacheRead": 327991,
+   "cacheWrite": 29407
+  },
+  "costUsd": 0.3425283,
+  "turns": 23,
+  "durationMs": 85930,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "asc-1",
+  "run": 3,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 19,
+  "usage": {
+   "input": 104,
+   "output": 4361,
+   "cacheRead": 281284,
+   "cacheWrite": 33303
+  },
+  "costUsd": 0.3499302000000001,
+  "turns": 21,
+  "durationMs": 84802,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": false,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "asc-2",
+  "run": 1,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 16,
+  "usage": {
+   "input": 86,
+   "output": 3405,
+   "cacheRead": 201814,
+   "cacheWrite": 23893
+  },
+  "costUsd": 0.2552352,
+  "turns": 18,
+  "durationMs": 66807,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": false,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "asc-2",
+  "run": 2,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 23,
+  "usage": {
+   "input": 116,
+   "output": 4812,
+   "cacheRead": 335215,
+   "cacheWrite": 26697
+  },
+  "costUsd": 0.3332745,
+  "turns": 25,
+  "durationMs": 91259,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": false,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "asc-2",
+  "run": 3,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": true,
+  "toolUses": 26,
+  "usage": {
+   "input": 132,
+   "output": 6307,
+   "cacheRead": 408907,
+   "cacheWrite": 33531
+  },
+  "costUsd": 0.4188591,
+  "turns": 28,
+  "durationMs": 116730,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "ma-1",
+  "run": 1,
+  "expect": "migration-assurance",
+  "skills": [
+   "project:migration-assurance"
+  ],
+  "ascBodies": [
+   "migration-assurance"
+  ],
+  "readmeRead": false,
+  "toolUses": 8,
+  "usage": {
+   "input": 52,
+   "output": 3187,
+   "cacheRead": 75690,
+   "cacheWrite": 11621
+  },
+  "costUsd": 0.140394,
+  "turns": 10,
+  "durationMs": 60651,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "ma-1",
+  "run": 2,
+  "expect": "migration-assurance",
+  "skills": [
+   "project:migration-assurance"
+  ],
+  "ascBodies": [
+   "migration-assurance"
+  ],
+  "readmeRead": false,
+  "toolUses": 21,
+  "usage": {
+   "input": 136,
+   "output": 9505,
+   "cacheRead": 325190,
+   "cacheWrite": 25274
+  },
+  "costUsd": 0.39218400000000003,
+  "turns": 23,
+  "durationMs": 149502,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "ma-1",
+  "run": 3,
+  "expect": "migration-assurance",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 6,
+  "usage": {
+   "input": 36,
+   "output": 1884,
+   "cacheRead": 45457,
+   "cacheWrite": 11504
+  },
+  "costUsd": 0.1110291,
+  "turns": 7,
+  "durationMs": 33519,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "neg-1",
+  "run": 1,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 196,
+   "cacheRead": 5470,
+   "cacheWrite": 7166
+  },
+  "costUsd": 0.047607,
+  "turns": 1,
+  "durationMs": 5379,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "B",
+  "case": "neg-1",
+  "run": 2,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 215,
+   "cacheRead": 5470,
+   "cacheWrite": 7160
+  },
+  "costUsd": 0.047855999999999996,
+  "turns": 1,
+  "durationMs": 5617,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "B",
+  "case": "neg-1",
+  "run": 3,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 206,
+   "cacheRead": 5470,
+   "cacheWrite": 7166
+  },
+  "costUsd": 0.047757,
+  "turns": 1,
+  "durationMs": 5481,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "B",
+  "case": "neg-2",
+  "run": 1,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 453,
+   "cacheRead": 5470,
+   "cacheWrite": 7040
+  },
+  "costUsd": 0.050706,
+  "turns": 1,
+  "durationMs": 9258,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "B",
+  "case": "neg-2",
+  "run": 2,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 396,
+   "cacheRead": 5470,
+   "cacheWrite": 7159
+  },
+  "costUsd": 0.050565000000000006,
+  "turns": 1,
+  "durationMs": 8506,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "B",
+  "case": "neg-2",
+  "run": 3,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 10,
+   "output": 349,
+   "cacheRead": 5470,
+   "cacheWrite": 7156
+  },
+  "costUsd": 0.049842000000000004,
+  "turns": 1,
+  "durationMs": 8948,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "B",
+  "case": "ri-1",
+  "run": 1,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 15,
+  "usage": {
+   "input": 110,
+   "output": 15679,
+   "cacheRead": 241552,
+   "cacheWrite": 28388
+  },
+  "costUsd": 0.4783085999999999,
+  "turns": 17,
+  "durationMs": 223866,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "ri-1",
+  "run": 2,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 9,
+  "usage": {
+   "input": 60,
+   "output": 3773,
+   "cacheRead": 92801,
+   "cacheWrite": 12270
+  },
+  "costUsd": 0.1582353,
+  "turns": 11,
+  "durationMs": 69311,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "ri-1",
+  "run": 3,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 14,
+  "usage": {
+   "input": 126,
+   "output": 13256,
+   "cacheRead": 332026,
+   "cacheWrite": 34755
+  },
+  "costUsd": 0.5073558,
+  "turns": 16,
+  "durationMs": 210807,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "rr-1",
+  "run": 1,
+  "expect": "review-and-remediation",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 1,
+  "usage": {
+   "input": 18,
+   "output": 799,
+   "cacheRead": 18096,
+   "cacheWrite": 7702
+  },
+  "costUsd": 0.06367980000000001,
+  "turns": 2,
+  "durationMs": 16718,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "rr-1",
+  "run": 2,
+  "expect": "review-and-remediation",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 1,
+  "usage": {
+   "input": 18,
+   "output": 851,
+   "cacheRead": 18096,
+   "cacheWrite": 7724
+  },
+  "costUsd": 0.0645918,
+  "turns": 2,
+  "durationMs": 16473,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "rr-1",
+  "run": 3,
+  "expect": "review-and-remediation",
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 1,
+  "usage": {
+   "input": 18,
+   "output": 978,
+   "cacheRead": 17986,
+   "cacheWrite": 7590
+  },
+  "costUsd": 0.06565979999999999,
+  "turns": 2,
+  "durationMs": 19323,
+  "reach": false,
+  "bodyRead": false,
+  "referenceRead": false,
+  "markers": true,
+  "applied": false,
+  "misselect": false,
+  "unselected": true,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "se-1",
+  "run": 1,
+  "expect": "security-evidence",
+  "skills": [
+   "project:security-evidence"
+  ],
+  "ascBodies": [
+   "security-evidence"
+  ],
+  "readmeRead": false,
+  "toolUses": 28,
+  "usage": {
+   "input": 169,
+   "output": 9128,
+   "cacheRead": 484205,
+   "cacheWrite": 35493
+  },
+  "costUsd": 0.4956465,
+  "turns": 30,
+  "durationMs": 157400,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "se-1",
+  "run": 2,
+  "expect": "security-evidence",
+  "skills": [
+   "project:security-evidence"
+  ],
+  "ascBodies": [
+   "security-evidence"
+  ],
+  "readmeRead": false,
+  "toolUses": 41,
+  "usage": {
+   "input": 201,
+   "output": 11811,
+   "cacheRead": 609330,
+   "cacheWrite": 37645
+  },
+  "costUsd": 0.5864370000000001,
+  "turns": 43,
+  "durationMs": 200734,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "se-1",
+  "run": 3,
+  "expect": "security-evidence",
+  "skills": [
+   "project:security-evidence"
+  ],
+  "ascBodies": [
+   "security-evidence"
+  ],
+  "readmeRead": false,
+  "toolUses": 18,
+  "usage": {
+   "input": 142,
+   "output": 11132,
+   "cacheRead": 327373,
+   "cacheWrite": 27685
+  },
+  "costUsd": 0.4317279,
+  "turns": 20,
+  "durationMs": 177397,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "tw-1",
+  "run": 1,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 8,
+  "usage": {
+   "input": 68,
+   "output": 3003,
+   "cacheRead": 125354,
+   "cacheWrite": 18655
+  },
+  "costUsd": 0.1947852,
+  "turns": 10,
+  "durationMs": 63367,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "tw-1",
+  "run": 2,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 8,
+  "usage": {
+   "input": 60,
+   "output": 4034,
+   "cacheRead": 97919,
+   "cacheWrite": 16552
+  },
+  "costUsd": 0.1893777,
+  "turns": 10,
+  "durationMs": 76248,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "B",
+  "case": "tw-1",
+  "run": 3,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 10,
+  "usage": {
+   "input": 68,
+   "output": 4449,
+   "cacheRead": 132746,
+   "cacheWrite": 23026
+  },
+  "costUsd": 0.2449188,
+  "turns": 12,
+  "durationMs": 85411,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "asc-1",
+  "run": 1,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 16,
+   "output": 3549,
+   "cacheRead": 129110,
+   "cacheWrite": 28997
+  },
+  "costUsd": 0.328842,
+  "turns": 15,
+  "durationMs": 36027,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "asc-1",
+  "run": 2,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 14,
+   "output": 2828,
+   "cacheRead": 91300,
+   "cacheWrite": 25028
+  },
+  "costUsd": 0.2751,
+  "turns": 15,
+  "durationMs": 29305,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "asc-1",
+  "run": 3,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 18,
+   "output": 3208,
+   "cacheRead": 144228,
+   "cacheWrite": 24974
+  },
+  "costUsd": 0.29286960000000006,
+  "turns": 15,
+  "durationMs": 33922,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "asc-2",
+  "run": 1,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 11,
+  "usage": {
+   "input": 16,
+   "output": 1884,
+   "cacheRead": 109389,
+   "cacheWrite": 26150
+  },
+  "costUsd": 0.2688218,
+  "turns": 13,
+  "durationMs": 21122,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "asc-2",
+  "run": 2,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 10,
+  "usage": {
+   "input": 14,
+   "output": 1903,
+   "cacheRead": 92967,
+   "cacheWrite": 24719
+  },
+  "costUsd": 0.2544614,
+  "turns": 12,
+  "durationMs": 19434,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "asc-2",
+  "run": 3,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 16,
+   "output": 2489,
+   "cacheRead": 121191,
+   "cacheWrite": 25211
+  },
+  "costUsd": 0.27577019999999997,
+  "turns": 15,
+  "durationMs": 24735,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "ma-1",
+  "run": 1,
+  "expect": "migration-assurance",
+  "skills": [
+   "project:migration-assurance"
+  ],
+  "ascBodies": [
+   "migration-assurance"
+  ],
+  "readmeRead": false,
+  "toolUses": 15,
+  "usage": {
+   "input": 14,
+   "output": 6422,
+   "cacheRead": 90715,
+   "cacheWrite": 23577
+  },
+  "costUsd": 0.33525499999999997,
+  "turns": 17,
+  "durationMs": 64442,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "ma-1",
+  "run": 2,
+  "expect": "migration-assurance",
+  "skills": [
+   "project:migration-assurance"
+  ],
+  "ascBodies": [
+   "migration-assurance"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 12,
+   "output": 4831,
+   "cacheRead": 57773,
+   "cacheWrite": 15603
+  },
+  "costUsd": 0.2330466,
+  "turns": 15,
+  "durationMs": 49470,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "ma-1",
+  "run": 3,
+  "expect": "migration-assurance",
+  "skills": [
+   "project:migration-assurance"
+  ],
+  "ascBodies": [
+   "migration-assurance"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 12,
+   "output": 5918,
+   "cacheRead": 57085,
+   "cacheWrite": 15391
+  },
+  "costUsd": 0.252953,
+  "turns": 15,
+  "durationMs": 61653,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "neg-1",
+  "run": 1,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 13,
+   "cacheRead": 3529,
+   "cacheWrite": 6493
+  },
+  "costUsd": 0.052917799999999994,
+  "turns": 1,
+  "durationMs": 1283,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "C",
+  "case": "neg-1",
+  "run": 2,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 51,
+   "cacheRead": 3529,
+   "cacheWrite": 6493
+  },
+  "costUsd": 0.0536778,
+  "turns": 1,
+  "durationMs": 1466,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "C",
+  "case": "neg-1",
+  "run": 3,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 80,
+   "cacheRead": 3529,
+   "cacheWrite": 6493
+  },
+  "costUsd": 0.054257799999999995,
+  "turns": 1,
+  "durationMs": 1796,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "C",
+  "case": "neg-2",
+  "run": 1,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 570,
+   "cacheRead": 3529,
+   "cacheWrite": 6486
+  },
+  "costUsd": 0.0640018,
+  "turns": 1,
+  "durationMs": 6496,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "C",
+  "case": "neg-2",
+  "run": 2,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 583,
+   "cacheRead": 3529,
+   "cacheWrite": 6486
+  },
+  "costUsd": 0.0642618,
+  "turns": 1,
+  "durationMs": 6264,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "C",
+  "case": "neg-2",
+  "run": 3,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 554,
+   "cacheRead": 3529,
+   "cacheWrite": 6486
+  },
+  "costUsd": 0.0636818,
+  "turns": 1,
+  "durationMs": 6275,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "C",
+  "case": "ri-1",
+  "run": 1,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 14,
+   "output": 5977,
+   "cacheRead": 69836,
+   "cacheWrite": 15463
+  },
+  "costUsd": 0.2572672,
+  "turns": 15,
+  "durationMs": 60479,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "ri-1",
+  "run": 2,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 14,
+   "output": 5120,
+   "cacheRead": 69978,
+   "cacheWrite": 15500
+  },
+  "costUsd": 0.2404516,
+  "turns": 15,
+  "durationMs": 51334,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "ri-1",
+  "run": 3,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 14,
+  "usage": {
+   "input": 16,
+   "output": 5435,
+   "cacheRead": 95829,
+   "cacheWrite": 19536
+  },
+  "costUsd": 0.28421779999999996,
+  "turns": 16,
+  "durationMs": 56094,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "rr-1",
+  "run": 1,
+  "expect": "review-and-remediation",
+  "skills": [
+   "project:review-and-remediation"
+  ],
+  "ascBodies": [
+   "review-and-remediation"
+  ],
+  "readmeRead": false,
+  "toolUses": 11,
+  "usage": {
+   "input": 14,
+   "output": 2857,
+   "cacheRead": 77016,
+   "cacheWrite": 17967
+  },
+  "costUsd": 0.2163352,
+  "turns": 13,
+  "durationMs": 28658,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "rr-1",
+  "run": 2,
+  "expect": "review-and-remediation",
+  "skills": [
+   "project:review-and-remediation"
+  ],
+  "ascBodies": [
+   "review-and-remediation"
+  ],
+  "readmeRead": false,
+  "toolUses": 9,
+  "usage": {
+   "input": 12,
+   "output": 2764,
+   "cacheRead": 59498,
+   "cacheWrite": 17144
+  },
+  "costUsd": 0.2043796,
+  "turns": 11,
+  "durationMs": 30517,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "rr-1",
+  "run": 3,
+  "expect": "review-and-remediation",
+  "skills": [
+   "project:review-and-remediation"
+  ],
+  "ascBodies": [
+   "review-and-remediation"
+  ],
+  "readmeRead": false,
+  "toolUses": 10,
+  "usage": {
+   "input": 12,
+   "output": 2913,
+   "cacheRead": 59621,
+   "cacheWrite": 17348
+  },
+  "costUsd": 0.2090162,
+  "turns": 12,
+  "durationMs": 29883,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "se-1",
+  "run": 1,
+  "expect": "security-evidence",
+  "skills": [
+   "project:security-evidence"
+  ],
+  "ascBodies": [
+   "security-evidence"
+  ],
+  "readmeRead": false,
+  "toolUses": 15,
+  "usage": {
+   "input": 16,
+   "output": 3245,
+   "cacheRead": 107758,
+   "cacheWrite": 27084
+  },
+  "costUsd": 0.30318760000000006,
+  "turns": 17,
+  "durationMs": 32223,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "se-1",
+  "run": 2,
+  "expect": "security-evidence",
+  "skills": [
+   "project:security-evidence"
+  ],
+  "ascBodies": [
+   "security-evidence"
+  ],
+  "readmeRead": false,
+  "toolUses": 11,
+  "usage": {
+   "input": 14,
+   "output": 2642,
+   "cacheRead": 69826,
+   "cacheWrite": 18607
+  },
+  "costUsd": 0.2157172,
+  "turns": 13,
+  "durationMs": 26411,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "se-1",
+  "run": 3,
+  "expect": "security-evidence",
+  "skills": [
+   "project:security-evidence"
+  ],
+  "ascBodies": [
+   "security-evidence"
+  ],
+  "readmeRead": false,
+  "toolUses": 12,
+  "usage": {
+   "input": 18,
+   "output": 3001,
+   "cacheRead": 113848,
+   "cacheWrite": 18781
+  },
+  "costUsd": 0.2331096,
+  "turns": 14,
+  "durationMs": 30082,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "tw-1",
+  "run": 1,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "decision-ownership",
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 12,
+  "usage": {
+   "input": 16,
+   "output": 3626,
+   "cacheRead": 96010,
+   "cacheWrite": 19677
+  },
+  "costUsd": 0.249202,
+  "turns": 14,
+  "durationMs": 35955,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "tw-1",
+  "run": 2,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "decision-ownership",
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 12,
+  "usage": {
+   "input": 14,
+   "output": 3442,
+   "cacheRead": 80187,
+   "cacheWrite": 19916
+  },
+  "costUsd": 0.2442614,
+  "turns": 14,
+  "durationMs": 34187,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "C",
+  "case": "tw-1",
+  "run": 3,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 10,
+  "usage": {
+   "input": 14,
+   "output": 2910,
+   "cacheRead": 76211,
+   "cacheWrite": 16487
+  },
+  "costUsd": 0.2053942,
+  "turns": 12,
+  "durationMs": 29786,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "asc-1",
+  "run": 1,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 12,
+  "usage": {
+   "input": 14,
+   "output": 3343,
+   "cacheRead": 89294,
+   "cacheWrite": 23642
+  },
+  "costUsd": 0.2739108,
+  "turns": 14,
+  "durationMs": 35469,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "asc-1",
+  "run": 2,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 16,
+   "output": 2973,
+   "cacheRead": 118881,
+   "cacheWrite": 27723
+  },
+  "costUsd": 0.30508419999999997,
+  "turns": 15,
+  "durationMs": 30427,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "asc-1",
+  "run": 3,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 14,
+  "usage": {
+   "input": 16,
+   "output": 3409,
+   "cacheRead": 108893,
+   "cacheWrite": 23613
+  },
+  "costUsd": 0.27892659999999997,
+  "turns": 16,
+  "durationMs": 36599,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "asc-2",
+  "run": 1,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 12,
+  "usage": {
+   "input": 16,
+   "output": 2280,
+   "cacheRead": 113830,
+   "cacheWrite": 23878
+  },
+  "costUsd": 0.259454,
+  "turns": 14,
+  "durationMs": 23319,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "asc-2",
+  "run": 2,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 15,
+  "usage": {
+   "input": 16,
+   "output": 2613,
+   "cacheRead": 113208,
+   "cacheWrite": 23964
+  },
+  "costUsd": 0.2666776,
+  "turns": 17,
+  "durationMs": 25415,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "asc-2",
+  "run": 3,
+  "expect": "asc",
+  "skills": [
+   "project:asc"
+  ],
+  "ascBodies": [
+   "asc"
+  ],
+  "readmeRead": false,
+  "toolUses": 15,
+  "usage": {
+   "input": 18,
+   "output": 2420,
+   "cacheRead": 147455,
+   "cacheWrite": 27975
+  },
+  "costUsd": 0.301763,
+  "turns": 17,
+  "durationMs": 26074,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "ma-1",
+  "run": 1,
+  "expect": "migration-assurance",
+  "skills": [
+   "project:migration-assurance"
+  ],
+  "ascBodies": [
+   "migration-assurance"
+  ],
+  "readmeRead": false,
+  "toolUses": 13,
+  "usage": {
+   "input": 14,
+   "output": 5895,
+   "cacheRead": 63824,
+   "cacheWrite": 14176
+  },
+  "costUsd": 0.24412879999999998,
+  "turns": 15,
+  "durationMs": 62193,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "ma-1",
+  "run": 2,
+  "expect": "migration-assurance",
+  "skills": [
+   "project:migration-assurance"
+  ],
+  "ascBodies": [
+   "migration-assurance"
+  ],
+  "readmeRead": false,
+  "toolUses": 15,
+  "usage": {
+   "input": 14,
+   "output": 5063,
+   "cacheRead": 76919,
+   "cacheWrite": 18417
+  },
+  "costUsd": 0.2640358,
+  "turns": 17,
+  "durationMs": 50847,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "ma-1",
+  "run": 3,
+  "expect": "migration-assurance",
+  "skills": [
+   "project:migration-assurance"
+  ],
+  "ascBodies": [
+   "migration-assurance"
+  ],
+  "readmeRead": false,
+  "toolUses": 14,
+  "usage": {
+   "input": 12,
+   "output": 5952,
+   "cacheRead": 50986,
+   "cacheWrite": 14119
+  },
+  "costUsd": 0.24223719999999999,
+  "turns": 16,
+  "durationMs": 60225,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "neg-1",
+  "run": 1,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 120,
+   "cacheRead": 3529,
+   "cacheWrite": 5167
+  },
+  "costUsd": 0.0444498,
+  "turns": 1,
+  "durationMs": 2511,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "D",
+  "case": "neg-1",
+  "run": 2,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 55,
+   "cacheRead": 3529,
+   "cacheWrite": 5167
+  },
+  "costUsd": 0.043149799999999995,
+  "turns": 1,
+  "durationMs": 1595,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "D",
+  "case": "neg-1",
+  "run": 3,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 98,
+   "cacheRead": 3529,
+   "cacheWrite": 5170
+  },
+  "costUsd": 0.0440338,
+  "turns": 1,
+  "durationMs": 2132,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "D",
+  "case": "neg-2",
+  "run": 1,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 548,
+   "cacheRead": 3529,
+   "cacheWrite": 5157
+  },
+  "costUsd": 0.0529298,
+  "turns": 1,
+  "durationMs": 5880,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "D",
+  "case": "neg-2",
+  "run": 2,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 649,
+   "cacheRead": 3529,
+   "cacheWrite": 5160
+  },
+  "costUsd": 0.054973799999999996,
+  "turns": 1,
+  "durationMs": 7306,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "D",
+  "case": "neg-2",
+  "run": 3,
+  "expect": null,
+  "skills": [],
+  "ascBodies": [],
+  "readmeRead": false,
+  "toolUses": 0,
+  "usage": {
+   "input": 2,
+   "output": 475,
+   "cacheRead": 3529,
+   "cacheWrite": 5160
+  },
+  "costUsd": 0.05149379999999999,
+  "turns": 1,
+  "durationMs": 5451,
+  "overapplication": false,
+  "markers": true
+ },
+ {
+  "condition": "D",
+  "case": "ri-1",
+  "run": 1,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 14,
+  "usage": {
+   "input": 16,
+   "output": 5524,
+   "cacheRead": 86856,
+   "cacheWrite": 17954
+  },
+  "costUsd": 0.2715472,
+  "turns": 16,
+  "durationMs": 59278,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "ri-1",
+  "run": 2,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 15,
+  "usage": {
+   "input": 16,
+   "output": 4844,
+   "cacheRead": 96038,
+   "cacheWrite": 22598
+  },
+  "costUsd": 0.29693559999999997,
+  "turns": 17,
+  "durationMs": 48202,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": false,
+  "applied": false,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "ri-1",
+  "run": 3,
+  "expect": "research-to-implementation",
+  "skills": [
+   "project:research-to-implementation"
+  ],
+  "ascBodies": [
+   "research-to-implementation"
+  ],
+  "readmeRead": false,
+  "toolUses": 10,
+  "usage": {
+   "input": 14,
+   "output": 5728,
+   "cacheRead": 67612,
+   "cacheWrite": 17385
+  },
+  "costUsd": 0.26721839999999997,
+  "turns": 12,
+  "durationMs": 56728,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "rr-1",
+  "run": 1,
+  "expect": "review-and-remediation",
+  "skills": [
+   "project:review-and-remediation"
+  ],
+  "ascBodies": [
+   "review-and-remediation"
+  ],
+  "readmeRead": false,
+  "toolUses": 11,
+  "usage": {
+   "input": 14,
+   "output": 2800,
+   "cacheRead": 70030,
+   "cacheWrite": 16564
+  },
+  "costUsd": 0.202574,
+  "turns": 13,
+  "durationMs": 29323,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "rr-1",
+  "run": 2,
+  "expect": "review-and-remediation",
+  "skills": [
+   "project:review-and-remediation"
+  ],
+  "ascBodies": [
+   "review-and-remediation"
+  ],
+  "readmeRead": false,
+  "toolUses": 11,
+  "usage": {
+   "input": 14,
+   "output": 3046,
+   "cacheRead": 69892,
+   "cacheWrite": 16561
+  },
+  "costUsd": 0.2074424,
+  "turns": 13,
+  "durationMs": 32181,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "rr-1",
+  "run": 3,
+  "expect": "review-and-remediation",
+  "skills": [
+   "project:review-and-remediation"
+  ],
+  "ascBodies": [
+   "review-and-remediation"
+  ],
+  "readmeRead": false,
+  "toolUses": 12,
+  "usage": {
+   "input": 16,
+   "output": 3060,
+   "cacheRead": 97591,
+   "cacheWrite": 20667
+  },
+  "costUsd": 0.24611819999999998,
+  "turns": 14,
+  "durationMs": 31191,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "se-1",
+  "run": 1,
+  "expect": "security-evidence",
+  "skills": [
+   "project:security-evidence"
+  ],
+  "ascBodies": [
+   "security-evidence"
+  ],
+  "readmeRead": false,
+  "toolUses": 12,
+  "usage": {
+   "input": 16,
+   "output": 2796,
+   "cacheRead": 87815,
+   "cacheWrite": 21485
+  },
+  "costUsd": 0.24542700000000003,
+  "turns": 14,
+  "durationMs": 28026,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "se-1",
+  "run": 2,
+  "expect": "security-evidence",
+  "skills": [
+   "project:security-evidence"
+  ],
+  "ascBodies": [
+   "security-evidence"
+  ],
+  "readmeRead": false,
+  "toolUses": 11,
+  "usage": {
+   "input": 16,
+   "output": 2625,
+   "cacheRead": 83573,
+   "cacheWrite": 17145
+  },
+  "costUsd": 0.2064386,
+  "turns": 13,
+  "durationMs": 27685,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "se-1",
+  "run": 3,
+  "expect": "security-evidence",
+  "skills": [
+   "project:security-evidence"
+  ],
+  "ascBodies": [
+   "security-evidence"
+  ],
+  "readmeRead": false,
+  "toolUses": 11,
+  "usage": {
+   "input": 14,
+   "output": 2437,
+   "cacheRead": 63089,
+   "cacheWrite": 17194
+  },
+  "costUsd": 0.19896580000000003,
+  "turns": 13,
+  "durationMs": 24711,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "tw-1",
+  "run": 1,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "decision-ownership",
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 11,
+  "usage": {
+   "input": 14,
+   "output": 3873,
+   "cacheRead": 75186,
+   "cacheWrite": 17911
+  },
+  "costUsd": 0.2358412,
+  "turns": 13,
+  "durationMs": 39379,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "tw-1",
+  "run": 2,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "decision-ownership",
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 10,
+  "usage": {
+   "input": 14,
+   "output": 3184,
+   "cacheRead": 74559,
+   "cacheWrite": 17444
+  },
+  "costUsd": 0.2181998,
+  "turns": 12,
+  "durationMs": 31447,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ },
+ {
+  "condition": "D",
+  "case": "tw-1",
+  "run": 3,
+  "expect": "tracker-issue-writing",
+  "skills": [
+   "project:tracker-issue-writing"
+  ],
+  "ascBodies": [
+   "decision-ownership",
+   "tracker-issue-writing"
+  ],
+  "readmeRead": false,
+  "toolUses": 10,
+  "usage": {
+   "input": 14,
+   "output": 3250,
+   "cacheRead": 74964,
+   "cacheWrite": 17687
+  },
+  "costUsd": 0.2215448,
+  "turns": 12,
+  "durationMs": 32859,
+  "reach": true,
+  "bodyRead": true,
+  "referenceRead": true,
+  "markers": true,
+  "applied": true,
+  "misselect": false,
+  "unselected": false,
+  "extraSkills": []
+ }
+]
