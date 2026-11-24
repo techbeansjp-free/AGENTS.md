@@ -1,0 +1,86 @@
+# 統括と並列実行の対照評価の計画（#1781、測定の前に固定）
+
+この計画は測定の前に commit して固定する。結果を見た後に採否基準・条件・判定方法を変えない。harness の不具合を直す場合は、変更内容と理由を README に記録し、採否基準は変えない。
+
+## 前提と許可
+
+- owner の許可（2026-11-24、進行役経由）：採否判断のための隔離環境の用意。費用上限は過去評価（#1768）と同じ規模（代表ケース数件 × 条件 × 3回程度）。超える場合は止めて報告する。
+- 外部送信は行わず、Host（Claude Code）自身のモデルだけを使う。Fable は使わない（ASC Skill の契約。owner の明示指定がない）。講演の「Fable 統括・Opus 実装」の構成は評価しない。
+- #1768 で証明済みの事項（小規模な単一子への委譲、sonnet 親・haiku 子、検索・小変更・単一の複数ファイル変更）は再実験しない。
+
+## 固定する条件
+
+- Host：Claude Code 2.1.323、`claude -p --output-format json`。親モデルは全条件で `opus`（別名。実際の版は `modelUsage` で記録）。
+- 権限：`--restricted`（file tool を作業 directory に限定、user/project/local 設定を読まない）、`--tools Read,Glob,Grep,Edit,Write,Agent,Bash`、`--allowedTools` は file tool・Agent と、固定の test wrapper 1つだけの `Bash(<wrapper>)`、`--permission-mode dontAsk`、`--strict-mcp-config`、hook 無効、`--max-budget-usd 4.00`。
+- 検証環境：wrapper は fixture 外に置いた読取り専用の script で、引数を無視し、fixture を読取り専用で mount した使い捨て container（`node:22-alpine`、network none、read-only root、tmpfs、memory 512MB、CPU 1、pids 128、cap-drop ALL、label `asc.worktree`）で `node --test` を実行する。隔離の合格条件（fixture 外の目印を読めない、fixture 外へ書けない、外部 network に接続できない、子 Agent も同じ制限）は、測定の前に反例 probe で確かめる。不合格なら測定しない。
+- 全条件の system prompt に同じ ASC の抜粋（[harness/asc-guidance.txt](harness/asc-guidance.txt)：ASC 原則1・3、モデル選択の表と段落）を追加する。
+- fixture：[harness/make-fixture.mjs](harness/make-fixture.mjs) が決定論的に生成する、秘密・実コードを含まない合成 repo。
+
+### 課題（#1768 で不足する条件）
+
+| 課題 | 内容 | 依存 |
+| --- | --- | --- |
+| P1 独立作業を複数含む Goal | `csv`・`duration`・`semver` の3単位を仕様書から実装し、単位ごとに test を追加 | 単位間の依存なし |
+| P2 依存を含む複雑 Goal | 共有契約 `money` と、それを import する `invoice`・`split`・`report` | 3単位が `money` に依存 |
+| P3 失敗時の継続 | P1 と同じ。ただし `duration` の file と directory を書込み不可にする（環境要因の失敗の注入） | P1 と同じ |
+
+### 条件（手段の案 A〜E）
+
+| 条件 | 親 | 子 | 実行 |
+| --- | --- | --- | --- |
+| A 現行 ASC の通常実行 | opus | 親が ASC の抜粋に従って選ぶ（委譲しないことも含む） | 親が選ぶ |
+| B 同一モデルの逐次委譲 | opus | opus | 1単位1子、1つずつ |
+| C 役割別モデルの逐次委譲 | opus | sonnet | 1単位1子、1つずつ |
+| D 同一モデルの並列 | opus | opus | 依存しない単位を1メッセージで同時起動 |
+| E 役割別モデルの並列 | opus | sonnet | 同上 |
+
+B〜E では親は実装せず、子の結果の後に自分で test を実行し、失敗した単位は1回だけ新しい子へ差し戻す。P2 の B〜E は `money` の完了後に依存単位を始める。
+
+効果の分離：モデル分離は C 対 B、E 対 D。並列化は D 対 B、E 対 C。現行との比較は B〜E 対 A。
+
+### 試行数・順序・上限
+
+- P1・P2 は A〜E 各3回（30件）、P3 は D・E 各3回（6件）。計36件。各件の後に独立レビュー1件（36件）。harness 確認の pilot は3件以内で、判定に使わない。
+- 順序は反復ごとに P1 の A〜E、P2 の A〜E、P3 の D・E を回す。試行は直列に実行し、試行どうしを同時に動かさない（同時実行の資源競合を条件の差に混ぜないため）。
+- 停止条件：Host 報告の累計費用（試行＋レビュー＋pilot）が 80 USD を超える見込みになった時点で止めて報告する。1件の失敗（timeout・budget 超過・起動失敗）は欠測ではなく失敗として記録し、再実行しない。
+
+## 品質の判定（固定 oracle）
+
+- 隠し oracle（[harness/oracle/](harness/oracle/)、測定中の session からは読めない）を、終了後の fixture の写しに対して使い捨て container で実行する。参照実装で全件合格を確認してから測る。
+- P1・P2 の合格：全単位の隠し test が合格、単位ごとの test file を追加、session 自身の test 一式が合格、既存 test を変更していない、最終行 `DONE` に全単位がある。
+- P3 の合格：`csv`・`semver` の隠し test が合格し test を追加、`duration` の file が不変、`BLOCKED` に `duration` があり `DONE` にない、既存 test が不変。
+- 独立レビュー：各件の差分を、実装者の会話を持たない新しい Context（`host-session`、`--tools Read,Glob,Grep`、モデル `sonnet`、条件を知らせない）で、仕様書と照合する。指摘を High／Medium／Low で数える。
+
+## 採否の基準（評価前に固定。評価後に緩めない）
+
+品質の必要条件：その課題・条件の3回すべてが oracle に合格し、独立レビューの High の合計が A の同じ課題の合計を超えない。満たさない条件は、費用・時間が小さくても採用しない。
+
+範囲の比較（#1768 と同じ規則。基準側を X、比較側を Y とする）。費用は Host 報告の `total_cost_usd`（推定値。請求額ではない）、時間は wall-clock。時間と費用は合算しない。
+
+- 「改善あり」：Y が品質の必要条件を満たし、費用と時間のどちらかで、3回の範囲（最小〜最大）が X と重ならずに小さく、もう一方の最大が X の最大を超えない。
+- 「損」：費用または時間で、Y の最小が X の最大を上回る。
+- それ以外は「差が不明」。
+
+採否（三択。保留で終えない）：
+
+1. **既存 Skill の限定改善**：B〜E のいずれかが、P1 または P2 で A に対し「改善あり」で、もう一方の課題で「損」でなく、並列条件なら P3 で3回とも合格し、かつ A がその構成（親が実装せず子へ委譲する・並列に起動する・子のモデルを分ける）を3回中2回以上自発的に選んでいない場合。課題種別に限った短い規則を、既存の `subagent-model-selection`・`work-coordination`・ASC Skill のいずれかへ最小差分で加える。新しい runtime・router・scheduler は作らない。
+2. **不採用**：限定改善の条件を満たさず、B〜E のすべてが P1・P2 の少なくとも一方で A に対し「損」の場合。役割別モデル・並列化を ASC の標準や新しい規則にしない。
+3. **現状維持**：上のどちらにも当たらない場合（「差が不明」が残る、または A が同じ構成をすでに自発的に選んでいる）。現行の Skill の規則（並行を検討する、準備・待機が上回る小変更は単独、モデルを明示する）で足りると判断し、変更しない。
+
+モデル分離（C 対 B、E 対 D）と並列化（D 対 B、E 対 C）の比較結果は、採否の根拠の説明と反証条件に使い、上の三択の規則は変えない。
+
+## 計測項目と欠測の扱い
+
+- 元要求の達成（単位ごとの隠し test）、必須 test（session の test 一式）の合格。
+- 残存欠陥（隠し test の失敗数）、独立レビューの指摘数、差し戻し・再修正（親の子への再委譲、親が子の file を編集した数）、検証漏れ（session が test を実行しなかった件）。
+- wall-clock、Host の `duration_ms`・`duration_api_ms`。
+- token：`modelUsage`（全体、子を含む）と session log から親・子を分けた input／output／cache read／cache write。
+- 親・子の起動数、1メッセージ内の Agent 起動数（並列の意図）、子の実際の最大同時数と稼働の合計時間、Read 回数（再読込みの代理）、tool error 数、test 実行回数と失敗回数。
+- 費用：Host 報告の `total_cost_usd`。CI は使わない（GitHub Actions の費用・時間は対象外。ローカル container の test 実行時間を別に記録）。
+- CPU・メモリ：`/usr/bin/time -l` の user・sys・最大 RSS（Claude Code の process）。container の同時数。
+- 統合競合（同じ file を書いた子の数）、失敗時の扱い（P3）、人間の介入（headless のため0。権限拒否の数を別に記録）。
+- 取得できなかった値は欠測とし、ゼロにしない。準備・待機は、親だけが動いた時間（wall-clock − 子の稼働の和集合）で代理し、厳密な内訳は欠測とする。
+
+## 外挿しないこと
+
+3課題・各3回・1つの親モデル・2つの子モデル・小さな合成 repo・1時点の値である。cache 状態と provider の負荷は制御できず、ばらつきとして報告する。他のモデル組（Fable を含む）、大きな実 repo、長時間作業、Claude Code Projects（Web・desktop の機能で CLI では使えず、cloud session を要するため本評価の外部送信禁止の範囲外）、数十 Agent の並列へ外挿しない。
