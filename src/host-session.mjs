@@ -6,6 +6,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {setTimeout,clearTimeout} from 'node:timers';
 import {sessionRpc} from './session-rpc.mjs';
 import {GIT_NULL_DEVICE,gitPathOutput} from './source-limits.mjs';
+import {codexRuntimeRoots,sandboxFilesystemBase} from './codex-runtime.mjs';
 
 export function sessionOptions(args){
  const options={ephemeral:false,timeout:900000},seen=new Set();
@@ -70,38 +71,47 @@ export function claudeReviewArguments({model,sessionId,instruction,cwd,targetDir
 }
 
 /**
- * Codex review permissions. `sandbox: read-only` limits writes only, so the app-server gets a named profile
- * that reads only the platform minimum, the review target and the given paths (the Host executable, the shared
- * Git metadata, the active developer tools). Temporary roots are denied; nothing is writable.
+ * Codex review permissions. `sandbox: read-only` limits writes only, so the app-server gets a named profile built on
+ * the shared Codex sandbox base (`:root` denied, `:minimal` read, macOS shared temporaries denied under both spellings,
+ * the Codex runtime and Node read). It adds read-only grants for the given paths (shared Git metadata, developer
+ * tools) and the review target; nothing is writable and the network is disabled.
  * The session cwd stays at the primary checkout for listing, so the profile names the target explicitly.
  * Project instructions are not auto-loaded: Codex reads them from that cwd, which the profile cannot read
  * (thread start fails) and which holds another revision; the Reviewer reads the target's rules itself.
  * Keys are TOML basic strings (JSON escaping is valid TOML for these paths).
  */
 export const CODEX_REVIEW_PROFILE='asc_review';
-export function codexReviewProfileArguments(targetDirectory,readablePaths=[]){
- for(const item of [targetDirectory,...readablePaths])if(typeof item!=='string'||!path.isAbsolute(item))throw Error('Codex review paths must be absolute');
- const entries=[[':minimal','read'],['/tmp','deny'],['/private/tmp','deny'],['/private/var/tmp','deny'],...readablePaths.map(item=>[item,'read']),[targetDirectory,'read']];
- const table=`{${entries.map(([key,access])=>`${JSON.stringify(key)}=${JSON.stringify(access)}`).join(',')}}`;
- return ['-c','project_doc_max_bytes=0','-c',`default_permissions=${JSON.stringify(CODEX_REVIEW_PROFILE)}`,'-c',`permissions.${CODEX_REVIEW_PROFILE}.filesystem=${table}`];
+export function codexReviewProfileArguments({targetDirectory,providerRoots,node,readablePaths=[],platform=process.platform}){
+ for(const item of [targetDirectory,node,...providerRoots,...readablePaths])if(typeof item!=='string'||!path.isAbsolute(item))throw Error('Codex review paths must be absolute');
+ if(!providerRoots.length)throw Error('Codex runtime roots are required');
+ const filesystem={...sandboxFilesystemBase({providerRoots,node,platform}),...Object.fromEntries(readablePaths.map(item=>[item,'read'])),[targetDirectory]:'read'};
+ const table=`{${Object.entries(filesystem).map(([key,access])=>`${JSON.stringify(key)}=${JSON.stringify(access)}`).join(',')}}`;
+ return ['-c','project_doc_max_bytes=0','-c',`default_permissions=${JSON.stringify(CODEX_REVIEW_PROFILE)}`,'-c',`permissions.${CODEX_REVIEW_PROFILE}.filesystem=${table}`,'-c',`permissions.${CODEX_REVIEW_PROFILE}.network.enabled=false`];
 }
 
-/** Resolve the Host executable to its real file: the sandboxed helper re-executes it, so it must be readable. */
-export function resolveExecutable(executable,searchPath=process.env.PATH??''){
- const candidates=executable.includes('/')?[path.resolve(executable)]:searchPath.split(path.delimiter).filter(Boolean).map(dir=>path.join(dir,executable));
- for(const candidate of candidates){
-  try{fs.accessSync(candidate,fs.constants.X_OK);const real=fs.realpathSync(candidate);if(fs.statSync(real).isFile())return real;}catch{/* try the next PATH entry */}
+/**
+ * Resolve the Host executable to its real file: the sandboxed helper re-executes Codex, so its runtime must be readable.
+ * Windows names are tried with PATHEXT; command-shell wrappers are rejected because their target is unknown.
+ */
+export function resolveExecutable(executable,searchPath=process.env.PATH??'',platform=process.platform,pathExt=process.env.PATHEXT??'.EXE;.CMD;.BAT'){
+ const extensions=platform==='win32'&&!path.extname(executable)?['',...pathExt.split(';').filter(Boolean)]:[''];
+ const bases=executable.includes('/')||(platform==='win32'&&executable.includes('\\'))?[path.resolve(executable)]:searchPath.split(path.delimiter).filter(Boolean).map(dir=>path.join(dir,executable));
+ for(const base of bases)for(const extension of extensions){
+  try{
+   const candidate=base+extension;fs.accessSync(candidate,fs.constants.X_OK);const real=fs.realpathSync(candidate);
+   if(fs.statSync(real).isFile()){if(/\.(cmd|bat)$/i.test(real))throw Error('Use the native Codex executable or the npm package bin/codex.js, not a command shell wrapper');return real;}
+  }catch(error){if(/command shell wrapper/.test(error.message))throw error;/* try the next candidate */}
  }
  throw Error('Host executable not found');
 }
 
 /**
- * Paths besides the target that the Codex Reviewer needs: the real Host executable (re-executed by the sandboxed
- * helper), the shared Git metadata (history only, not other checkouts' files) and, on macOS, the active developer
- * tools that /usr/bin/git runs.
+ * Paths besides the target and the Codex runtime that the Reviewer needs: the shared Git metadata (history, refs,
+ * config, other worktrees' index, staged objects and stash; not any checkout's working files) and, on macOS, the
+ * active developer tools that /usr/bin/git runs.
  */
-export function codexReviewReadablePaths({executable,gitCommonDir}){
- const paths=[executable];if(gitCommonDir)paths.push(gitCommonDir);
+export function codexReviewReadablePaths({gitCommonDir}){
+ const paths=gitCommonDir?[gitCommonDir]:[];
  if(process.platform==='darwin'){
   const result=spawnSync('xcode-select',['-p'],{encoding:'utf8',timeout:10000});
   const dir=result.status===0?result.stdout.trim():'';
@@ -161,9 +171,11 @@ export async function runHostSession(options){
     state.rename=renamed;state.naming=!renamed.error&&renamed.code===0?'completed':'failed';
    }
   }else{
-   const codex=resolveExecutable(executable);
+   // The npm launcher (bin/codex.js) runs under this Node; its package and native runtime become readable.
+   const codex=resolveExecutable(executable),node=fs.realpathSync(process.execPath),script=/\.m?js$/i.test(codex);
+   const profile=codexReviewProfileArguments({targetDirectory,providerRoots:codexRuntimeRoots(codex),node,readablePaths:codexReviewReadablePaths({gitCommonDir})});
    state.permissionProfile=CODEX_REVIEW_PROFILE;
-   rpc=sessionRpc(codex,cwd,{args:codexReviewProfileArguments(targetDirectory,codexReviewReadablePaths({executable:codex,gitCommonDir})),env:hostEnvironment(),timeout,record:line=>{
+   rpc=sessionRpc(script?node:codex,cwd,{prefix:script?[codex]:[],args:profile,env:hostEnvironment(),timeout,record:line=>{
     write('events.jsonl',line);
     const message=JSON.parse(line),item=message.params?.item;
     if(message.method==='item/completed'&&message.params?.threadId===state.sessionId&&item?.type==='agentMessage'&&typeof item.text==='string')write('result.txt',item.text+'\n');
@@ -172,7 +184,9 @@ export async function runHostSession(options){
    await rpc.initialize({experimentalApi:true});
    const response=await rpc.call('thread/start',{cwd,model,ephemeral,approvalPolicy:'never',permissions:CODEX_REVIEW_PROFILE,developerInstructions:targetInstruction});
    state.sessionId=response.thread?.id;if(typeof state.sessionId!=='string'||!state.sessionId)throw Error('Missing Codex thread ID');save();
-   if(response.activePermissionProfile?.id!==CODEX_REVIEW_PROFILE)throw Error('Codex did not apply the review permission profile');
+   // A same-named profile extended elsewhere could widen reads, so only the unextended profile is accepted.
+   const active=response.activePermissionProfile;
+   if(active?.id!==CODEX_REVIEW_PROFILE||active.extends!=null)throw Error('Codex did not apply the review permission profile');
    if(!ephemeral){await rpc.call('thread/name/set',{threadId:state.sessionId,name:state.name});state.naming='started';save();}
    const started=await rpc.call('turn/start',{threadId:state.sessionId,input:[{type:'text',text:prompt}],approvalPolicy:'never',permissions:CODEX_REVIEW_PROFILE});
    const completed=await rpc.wait(message=>message.method==='turn/completed'&&message.params?.threadId===state.sessionId&&message.params?.turn?.id===started.turn.id);

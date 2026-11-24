@@ -7,7 +7,9 @@
     "-c",
     "default_permissions=\"asc_review\"",
     "-c",
-    "permissions.asc_review.filesystem={\":minimal\"=\"read\",\"/tmp\"=\"deny\",\"/private/tmp\"=\"deny\",\"/private/var/tmp\"=\"deny\",\"<codex>\"=\"read\",\"<fixture>/repo/.git\"=\"read\",\"/Library/Developer/CommandLineTools\"=\"read\",\"<fixture>/repo/.worktrees/target\"=\"read\"}"
+    "permissions.asc_review.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\"/tmp\"=\"deny\",\"/private/tmp\"=\"deny\",\"/var/tmp\"=\"deny\",\"/private/var/tmp\"=\"deny\",\"/System/Library/OpenSSL\"=\"read\",\"<codex>\"=\"read\",\"<home>/.anyenv/envs/nodenv/versions/20.12.2/bin/node\"=\"read\",\"<fixture>/repo/.git\"=\"read\",\"/Library/Developer/CommandLineTools\"=\"read\",\"<fixture>/repo/.worktrees/target\"=\"read\"}",
+    "-c",
+    "permissions.asc_review.network.enabled=false"
   ],
   "checks": {
     "target": {
@@ -60,7 +62,24 @@
       "stderr": "cat: <checkout>/AGENTS.md: Operation not permitted\n"
     },
     "userTmpdirListing": {
-      "exitCode": 1
+      "exitCode": 1,
+      "listedEntries": false
+    },
+    "tmpListing": {
+      "exitCode": 1,
+      "listedEntries": false
+    },
+    "privateTmpListing": {
+      "exitCode": 1,
+      "listedEntries": false
+    },
+    "varTmpListing": {
+      "exitCode": 1,
+      "listedEntries": false
+    },
+    "privateVarTmpListing": {
+      "exitCode": 1,
+      "listedEntries": false
     },
     "writeTarget": {
       "exitCode": 1,
@@ -70,7 +89,7 @@
     "localNetwork": {
       "exitCode": 7,
       "reached": false,
-      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53140 after 0 ms: Couldn't connect to server\n"
+      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53290 after 0 ms: Couldn't connect to server\n"
     },
     "gitLog": {
       "exitCode": 0,

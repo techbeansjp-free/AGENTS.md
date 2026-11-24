@@ -12,6 +12,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import {CODEX_REVIEW_PROFILE,codexReviewProfileArguments,codexReviewReadablePaths,resolveExecutable} from '../../../src/host-session.mjs';
+import {codexRuntimeRoots} from '../../../src/codex-runtime.mjs';
 
 const [fixture, condition, out] = process.argv.slice(2);
 if (!process.env.CODEX_HOME) throw Error('Set CODEX_HOME to a disposable directory');
@@ -31,8 +32,8 @@ const files = {
   symlinkToPrimary: path.join(target, 'link-root.txt'),
 };
 const codex = resolveExecutable('codex');
-const readable = codexReviewReadablePaths({executable: codex, gitCommonDir: fs.realpathSync(path.join(repo, '.git'))});
-const extra = condition === 'profile' ? codexReviewProfileArguments(target, readable) : [];
+// Same construction as host-session (native executable; the npm launcher form is not exercised here).
+const extra = condition === 'profile' ? codexReviewProfileArguments({targetDirectory: target, providerRoots: codexRuntimeRoots(codex), node: fs.realpathSync(process.execPath), readablePaths: codexReviewReadablePaths({gitCommonDir: fs.realpathSync(path.join(repo, '.git'))})}) : [];
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
 const server = http.createServer((q, s) => s.end('LOCAL-LISTENER')); await new Promise(r => server.listen(0, '127.0.0.1', r));
 const child = spawn(codex, ['app-server', ...extra], {cwd: repo, env, stdio: ['pipe', 'pipe', 'pipe']});
@@ -62,9 +63,12 @@ try {
   }
   const nonTmpRead = await exec(['/bin/cat', nonTmp]);
   result.checks.nonTemporaryPath = {exitCode: nonTmpRead.exitCode, stderr: hide(nonTmpRead.stderr).slice(0, 160)};
-  // The per-user temporary directory (macOS $TMPDIR under /private/var/folders): listing exit code only, no content.
-  const tmpdirList = await exec(['/bin/ls', fs.realpathSync(os.tmpdir())]);
-  result.checks.userTmpdirListing = {exitCode: tmpdirList.exitCode};
+  // Temporary directories (shared ones under both spellings, and the per-user $TMPDIR): exit code and whether any
+  // entry was listed. Entry names are not recorded.
+  for (const [name, dir] of Object.entries({userTmpdirListing: fs.realpathSync(os.tmpdir()), tmpListing: '/tmp', privateTmpListing: '/private/tmp', varTmpListing: '/var/tmp', privateVarTmpListing: '/private/var/tmp'})) {
+    const r = await exec(['/bin/ls', '-A', dir]);
+    result.checks[name] = {exitCode: r.exitCode, listedEntries: Boolean((r.stdout ?? '').trim())};
+  }
   const write = await exec(['/usr/bin/touch', path.join(target, 'write-probe.txt')]);
   result.checks.writeTarget = {exitCode: write.exitCode, created: fs.existsSync(path.join(target, 'write-probe.txt')), stderr: hide(write.stderr).slice(0, 160)};
   fs.rmSync(path.join(target, 'write-probe.txt'), {force: true});
@@ -77,4 +81,4 @@ try {
 } catch (error) { result.error = hide(error.message); result.stderr = hide(stderr).slice(-800); }
 child.stdin.end(); child.kill(); server.close();
 fs.writeFileSync(out, JSON.stringify(result, null, 2) + '\n');
-console.log(JSON.stringify({condition, error: result.error, thread: result.thread, checks: Object.fromEntries(Object.entries(result.checks).map(([k, v]) => [k, v.markerRead ?? v.reached ?? v.created ?? v.exitCode]))}));
+console.log(JSON.stringify({condition, error: result.error, thread: result.thread, checks: Object.fromEntries(Object.entries(result.checks).map(([k, v]) => [k, v.markerRead ?? v.reached ?? v.created ?? v.listedEntries ?? v.exitCode]))}));

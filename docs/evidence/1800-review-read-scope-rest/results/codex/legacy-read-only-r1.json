@@ -53,7 +53,24 @@
       "stderr": ""
     },
     "userTmpdirListing": {
-      "exitCode": 0
+      "exitCode": 0,
+      "listedEntries": true
+    },
+    "tmpListing": {
+      "exitCode": 0,
+      "listedEntries": true
+    },
+    "privateTmpListing": {
+      "exitCode": 0,
+      "listedEntries": true
+    },
+    "varTmpListing": {
+      "exitCode": 0,
+      "listedEntries": true
+    },
+    "privateVarTmpListing": {
+      "exitCode": 0,
+      "listedEntries": true
     },
     "writeTarget": {
       "exitCode": 1,
@@ -63,7 +80,7 @@
     "localNetwork": {
       "exitCode": 7,
       "reached": false,
-      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53112 after 0 ms: Couldn't connect to server\n"
+      "stderr": "curl: (7) Failed to connect to 127.0.0.1 port 53266 after 0 ms: Couldn't connect to server\n"
     },
     "gitLog": {
       "exitCode": 0,
