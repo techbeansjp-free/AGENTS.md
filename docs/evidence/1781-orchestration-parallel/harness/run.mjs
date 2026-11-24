@@ -15,7 +15,8 @@ const fx = path.join(base, 'fx');
 const orig = path.join(base, 'orig');
 const LABEL = ['--label', 'asc.worktree=20261124_171010-1781-orchestration-parallel', '--label', 'asc.issue=1781'];
 const DOCKER = ['run', '--rm', '--network', 'none', '--read-only', '--tmpfs', '/tmp:size=16m', '--memory', '512m', '--cpus', '1', '--pids-limit', '128', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', '1000:1000', ...LABEL];
-const IMAGE = 'node:22-alpine';
+// The measurement ran with the tag node:22-alpine; this is the digest it resolved to on the measuring machine.
+const IMAGE = 'node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a';
 
 if (fs.existsSync(base)) spawnSync('chmod', ['-R', 'u+w', base]);
 fs.rmSync(base, { recursive: true, force: true });

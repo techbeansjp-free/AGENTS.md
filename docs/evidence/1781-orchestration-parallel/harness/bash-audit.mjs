@@ -34,7 +34,8 @@ for (const d of fs.readdirSync(outRoot)) {
     for (const [id, cmd] of cmds) {
       const r = res.get(id) ?? { err: false, denied: false };
       const rest = cmd.split(wrapper).join('').replace(/'[^']*'|"[^"]*"/g, '').trim();
-      if (cmd.includes(wrapper) && /^(2>&1)?\s*(\|\s*(tail|head|grep)\b[^|;&]*)*$/.test(rest)) continue;
+      const restNamesFile = rest.split(/[\s|]+/).some((w) => w.startsWith('/') || w.startsWith('~') || w.includes('..'));
+      if (cmd.includes(wrapper) && !restNamesFile && /^(2>&1)?\s*(\|\s*(tail|head|grep)\b[^|;&]*)*$/.test(rest)) continue;
       if (r.denied) { denied++; continue; }
       executed++; if (r.err) failed++;
       const words = cmd.replace(/'[^']*'|"[^"]*"/g, '').split(/[|;&]+/).map((s) => s.trim().split(/\s+/)[0]).filter(Boolean).filter((w) => w !== 'cd');

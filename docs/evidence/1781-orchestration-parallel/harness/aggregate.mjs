@@ -17,10 +17,11 @@ const cell = (t, c) => recs.filter((r) => r.task === t && r.cond === c).sort((a,
 const rng = (xs) => (xs.some((x) => x == null) || !xs.length ? null : [Math.min(...xs), Math.max(...xs)]);
 const fmt = (x, d = 2) => (x == null ? '欠測' : `${x[0].toFixed(d)}〜${x[1].toFixed(d)}`);
 const sum = (o, k) => Object.values(o ?? {}).reduce((s, v) => s + (v[k] ?? 0), 0);
-const sumU = (rs, who, k) => rs.map((r) => (who === 'parent' ? sum(r.parent?.usage, k) : r.children.reduce((s, c) => s + sum(c.usage, k), 0)));
+const sumU = (rs, who, k) => rs.map((r) => (who === 'parent' ? (r.parent ? sum(r.parent.usage, k) : null) : r.parent ? r.children.reduce((s, c) => s + sum(c.usage, k), 0) : null));
 const reviewH = (rs) => (rs.some((r) => r.review?.high == null) ? null : rs.reduce((s, r) => s + r.review.high, 0));
 function quality(t, c, base) {
-  const rs = cell(t, c); const a = reviewH(cell(t, base)); const h = reviewH(rs);
+  // EVAL_PLAN: the High baseline is A of the same task; P3 has no A, so its comparison uses the base side.
+  const rs = cell(t, c); const a = reviewH(cell(t, t === 'P3' ? base : 'A')); const h = reviewH(rs);
   return rs.length === 3 && rs.every((r) => r.pass === true) && h != null && a != null && h <= a;
 }
 function judge(t, x, y) {
@@ -51,9 +52,9 @@ for (const t of ['P1', 'P2', 'P3']) {
   lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
   for (const c of ['A', 'B', 'C', 'D', 'E', 'A2', 'A3']) {
     const rs = cell(t, c); if (!rs.length) continue;
-    const k = (who) => ['input', 'output', 'cache_read', 'cache_write'].map((x) => fmt(rng(sumU(rs, who, x).map((v) => v / 1000)), 1)).join(' / ');
+    const k = (who) => ['input', 'output', 'cache_read', 'cache_write'].map((x) => fmt(rng(sumU(rs, who, x).map((v) => (v == null ? null : v / 1000))), 1)).join(' / ');
     const models = [...new Set(rs.flatMap((r) => r.children.flatMap((ch) => Object.keys(ch.usage))))].join(',') || 'なし';
-    lines.push(`| ${c} | ${k('parent')} | ${k('child')} | ${models} | ${fmt(rng(rs.map((r) => (r.rusage.userSec ?? NaN) + (r.rusage.sysSec ?? NaN))), 1)} | ${fmt(rng(rs.map((r) => r.rusage.maxRssBytes / 1048576)), 0)} | ${fmt(rng(rs.map((r) => r.childUnionMs / 1000)), 1)} | ${fmt(rng(rs.map((r) => (r.wallMs - r.childUnionMs) / 1000)), 1)} | ${rs.map((r) => r.parent?.reads ?? '欠測').join(',')} | ${rs.map((r) => r.children.reduce((s, ch) => s + ch.reads, 0)).join(',')} | ${rs.map((r) => `${r.parent?.toolErrors ?? '欠測'}/${r.children.reduce((s, ch) => s + ch.toolErrors, 0)}`).join(',')} | ${rs.map((r) => r.sharedWriteFiles.length).join(',')} | ${rs.map((r) => r.permissionDenials ?? '欠測').join(',')} |`);
+    lines.push(`| ${c} | ${k('parent')} | ${k('child')} | ${models} | ${fmt(rng(rs.map((r) => (r.rusage.userSec == null || r.rusage.sysSec == null ? null : r.rusage.userSec + r.rusage.sysSec))), 1)} | ${fmt(rng(rs.map((r) => (r.rusage.maxRssBytes == null ? null : r.rusage.maxRssBytes / 1048576))), 0)} | ${fmt(rng(rs.map((r) => r.childUnionMs / 1000)), 1)} | ${fmt(rng(rs.map((r) => (r.wallMs - r.childUnionMs) / 1000)), 1)} | ${rs.map((r) => r.parent?.reads ?? '欠測').join(',')} | ${rs.map((r) => r.children.reduce((s, ch) => s + ch.reads, 0)).join(',')} | ${rs.map((r) => `${r.parent?.toolErrors ?? '欠測'}/${r.children.reduce((s, ch) => s + ch.toolErrors, 0)}`).join(',')} | ${rs.map((r) => r.sharedWriteFiles.length).join(',')} | ${rs.map((r) => r.permissionDenials ?? '欠測').join(',')} |`);
   }
 }
 lines.push('\n### 判定（範囲の比較）\n');
@@ -69,6 +70,7 @@ for (const c of ['A', 'A2', 'A3']) for (const t of ['P1', 'P2']) lines.push(`- $
 lines.push('\n### P3 の失敗時の扱い\n');
 for (const r of cell('P3', 'D').concat(cell('P3', 'E'))) lines.push(`- P3-${r.cond}-${r.rep}：合格 ${r.pass}、csv ${r.unitPass.csv}、semver ${r.unitPass.semver}、duration 不変 ${r.detail.durUnchanged}、報告 DONE=${(r.done ?? []).join('+')} BLOCKED=${(r.blocked ?? []).join('+')}`);
 const total = recs.reduce((s, r) => s + (r.costUsd ?? 0), 0); const rtotal = recs.reduce((s, r) => s + (r.review?.costUsd ?? 0), 0);
-lines.push(`\n費用の合計：試行 ${total.toFixed(2)} USD（${recs.length}件）、独立レビュー ${rtotal.toFixed(2)} USD（${recs.filter((r) => r.review).length}件）。`);
+const missing = { trial: recs.filter((r) => r.costUsd == null).length, review: recs.filter((r) => r.review?.costUsd == null).length };
+lines.push(`\n費用の合計：試行 ${total.toFixed(2)} USD（${recs.length}件、費用の欠測 ${missing.trial}件は合計に含めない）、独立レビュー ${rtotal.toFixed(2)} USD（${recs.filter((r) => r.review).length}件、欠測 ${missing.review}件）。`);
 lines.push(`失敗の内訳：subtype が success 以外 ${recs.filter((r) => r.subtype !== 'success').length}件、exit が0以外 ${recs.filter((r) => r.exit !== 0).length}件、最大の test 同時数 ${Math.max(0, ...recs.map((r) => r.testMaxConcurrency))}。`);
 console.log(lines.join('\n'));

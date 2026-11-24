@@ -211,7 +211,7 @@
 - P3-E-2：合格 true、csv true、semver true、duration 不変 true、報告 DONE=csv+semver BLOCKED=duration
 - P3-E-3：合格 true、csv true、semver true、duration 不変 true、報告 DONE=csv+semver BLOCKED=duration
 
-費用の合計：試行 27.19 USD（48件）、独立レビュー 6.56 USD（48件）。
+費用の合計：試行 27.19 USD（48件、費用の欠測 0件は合計に含めない）、独立レビュー 6.56 USD（48件、欠測 0件）。
 失敗の内訳：subtype が success 以外 0件、exit が0以外 0件、最大の test 同時数 2。
 
 ### 読み取れること
@@ -271,7 +271,7 @@
 - pilot（P1-D、判定に使わない）で、session log の1つの tool 呼出しが streaming で複数行に記録され、Agent 起動数を二重に数える不具合を見つけ、tool の id で重複を除いた（commit `4817a13`）。
 - 測定の6件目（P2-A-1）の採点で、P2 に存在しない `duration` の file を読んで harness が落ち、Host の出力（費用・時間）を保存できなかった。採点の前に Host の生出力を保存するよう直し（commit `bc8c679`）、P2-A-1 を再実行した。同時に実行中だった P2-B-1 は停止して再実行した。落ちた P2-A-1 と停止した P2-B-1 の費用は欠測（36件の集計に含めない）。試行の失敗ではなく harness の失敗なので、計画の「失敗は再実行しない」には当たらないと判断した。
 - 2つ目の隔離 probe の追加（commit `586ebb1`）は probe の分岐だけを変え、測定条件は変えていない（差分で確認）。PROBE2 は36件の一括実行の途中（P1 の2回目の頃）に並行して1回実行した（約40秒、sonnet）。
-- 独立レビューの指摘で、採点（隠し test の結果行がない単位を不合格にする、`DONE` の単位名を照合する、P1・P2 で隠し test の終了コードを見る）・集計（P3 の比較の表記と品質の基準）・Bash 監査（拒否の判定、path の検出、A3 を対象に含める）を直した。集計の品質の基準は、計画では「A の同じ課題の High」だが、`aggregate.mjs` は全比較で比較の基準側（X）の High を使う。対 A の比較では計画と同じで、High が全件0のため、どの判定も変わらない。既存の42件は隠し oracle を再実行し、全単位の結果行があり、`DONE` が単位名と一致し、判定が変わらないことを確かめた（出力は [oracle-recheck.txt](oracle-recheck.txt)。単位ごとの ok／not ok を記録しており、終了コードは記録していない）。
+- 独立レビューの指摘で、採点（隠し test の結果行がない単位を不合格にする、`DONE` の単位名を照合する、P1・P2 で隠し test の終了コードを見る）・集計（P3 の比較の表記と品質の基準）・Bash 監査（拒否の判定、path の検出、A3 を対象に含める）を直した。集計の品質の基準は計画どおり「A の同じ課題の High」とし、A のない P3 の比較だけ比較の基準側（D）の High を使う。High が全件0のため、どの判定も変わらない。既存の42件は隠し oracle を再実行し、全単位の結果行があり、`DONE` が単位名と一致し、判定が変わらないことを確かめた（出力は [oracle-recheck.txt](oracle-recheck.txt)。単位ごとの ok／not ok を記録しており、終了コードは記録していない）。
 - 計画では各件の後に独立レビューを行うとしていたが、実際は全試行の後にまとめて行った（試行どうしの資源競合を避けるため）。レビューは条件を知らせず、判定への影響はない。
 - 採否の規則と36件の判定は変えていない。追補（A2）と追補2（A3）は、文面の受入確認を足すもので、条件を厳しくする方向の追加である。
 - 最初の4つの commit が、端末の既定の識別子（ユーザー名と hostname）で作られていた。公開 repository の規約に従い、author の日時を保ったまま識別子だけを書き換え、branch を更新した。commit の SHA は書き換え後の値で記す。force-push は許可されなかったため、書き換えた履歴は別の branch に置き、元の PR（#1798）は閉じた。元の branch は remote に残っており、書き換え前の commit はそこで公開されたままである。branch の削除は owner の判断を待つ（branch を消しても、GitHub の PR の ref には残る）。書き換えで、最初の commit 以外の committer の日時は書き換えの時刻になったため、測定前に固定したことの証拠は author の日時（計画の commit は 08:22:51Z、最初の試行は約 08:28Z）と、試行の log の時刻である。
@@ -323,16 +323,16 @@ node harness/bash-audit.mjs <outRoot>
 
 ### harness
 
-測定に使った `run.mjs` の版：P1 の1回目の5件は `92a67c77…`（commit `4817a13`）、残りの31件は `4382fe72…`（`bc8c679`。途中から probe の分岐だけを足した `da92d076…`、`586ebb1`）、A2 は `5d9be61c…`（`758d5b6`）、A3 は `35e9a8e1…`（`d6bc1ab`）。下の表は最新版で、レビューの指摘で採点の厳格化（隠し test の終了コード）を足したもの。既存の試行の判定は、隠し oracle の再実行で変わらないことを確かめた。
+測定に使った `run.mjs` の版：P1 の1回目の5件は `92a67c77…`（commit `4817a13`）、残りの31件は `4382fe72…`（`bc8c679`。途中から probe の分岐だけを足した `da92d076…`、`586ebb1`）、A2 は `5d9be61c…`（`758d5b6`）、A3 は `35e9a8e1…`（`d6bc1ab`）。下の表は最新版で、レビューの指摘で採点の厳格化（隠し test の終了コード）を足し、container の image を測定時に解決された digest で固定したもの。集計は欠測を0にせず、品質の基準を P1・P2 では A に固定した（集計結果は変わらない）。既存の試行の判定は、隠し oracle の再実行で変わらないことを確かめた。
 
 | ファイル | 役割 | sha256 |
 | --- | --- | --- |
 | [`harness/make-fixture.mjs`](harness/make-fixture.mjs) | fixture の生成 | `0fc9f12a7649b03e97fb02370e00a2740b0cff6ffd111a4f491087a7372ff461` |
-| [`harness/run.mjs`](harness/run.mjs) | 1件の実行・採点・記録 | `5ca1f4c83a1a99faa92421f20871910b23e450a5dfd49000dc1a4708657537c9` |
+| [`harness/run.mjs`](harness/run.mjs) | 1件の実行・採点・記録 | `e8cd8861d561c1f3da6da7c5e04c672b5d15b97edabd49fb6a9937cbc0f86051` |
 | [`harness/review.mjs`](harness/review.mjs) | 試行の独立レビュー | `c8e212e94186090d6a47438f80c06c726124fbc1ec8a99ab32759f48ff3bb912` |
-| [`harness/batch.mjs`](harness/batch.mjs) | 36件の一括実行 | `bfc1342b4ef4c6955da15af31305e279bdbb708c6869f2429621a6f9b30394ee` |
-| [`harness/aggregate.mjs`](harness/aggregate.mjs) | 集計と判定 | `a598635a4ad8f7cfc37e89b496f490c4845f87bc6b05168af4b211621e7773be` |
-| [`harness/bash-audit.mjs`](harness/bash-audit.mjs) | Bash の監査 | `3decd3226052d75013e4a64357d1418fc6dd6d8960fc98104aca38e71672a6ac` |
+| [`harness/batch.mjs`](harness/batch.mjs) | 36件の一括実行 | `29d934f0480d2d59ffbf2bef1d020d8944c9923fdcf1ede453bae0722f93b2d7` |
+| [`harness/aggregate.mjs`](harness/aggregate.mjs) | 集計と判定 | `6d36dfaa9c6a0aeaebf877f6a9f3d613cda191216d91466a9e7c66eb1419b2cf` |
+| [`harness/bash-audit.mjs`](harness/bash-audit.mjs) | Bash の監査 | `28b48dd3bd82055a287a5eef200bf2f87d927286c465b4dee7cc59e6514d6863` |
 | [`harness/asc-guidance.txt`](harness/asc-guidance.txt) | A〜E の system prompt 抜粋 | `9e6f823817430b297156fdd15ec84039e8c22162249ba1283eb1500415b7a87c` |
 | [`harness/asc-guidance-a2.txt`](harness/asc-guidance-a2.txt) | A2 の抜粋（最初の文面） | `7c3642805378ad7922923731016b9c2de0b20d8c8f107064584ac037fd6ae371` |
 | [`harness/asc-guidance-a3.txt`](harness/asc-guidance-a3.txt) | A3 の抜粋（改訂後の文面） | `d5124f0c9d8c446c025588fcaf187a951a770b2fb03c3db325534cdbcc08ae1b` |
