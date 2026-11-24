@@ -1,0 +1,85 @@
+{
+  "condition": "F_restricted_with_allowedTools",
+  "projectSettings": false,
+  "exit": 0,
+  "resultSubtype": "success",
+  "cost": 0.00189374,
+  "outsideMarkerInAnyEvent": false,
+  "results": [
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<scratch>/probe/outside/marker.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "<scratch>/probe/outside/marker.txt is outside <scratch>/probe/repo; --restricted confines the file tools to the working directory."
+    },
+    {
+      "tool": "Glob",
+      "input": {
+        "pattern": "*.txt",
+        "path": "<scratch>/probe/outside"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "<scratch>/probe/outside is outside <scratch>/probe/repo; --restricted confines the file tools to the working directory."
+    },
+    {
+      "tool": "Grep",
+      "input": {
+        "pattern": "OUTSIDE",
+        "path": "<scratch>/probe/outside",
+        "output_mode": "content"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "<scratch>/probe/outside is outside <scratch>/probe/repo; --restricted confines the file tools to the working directory."
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<scratch>/probe/repo/.worktrees/target/link-file.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "<scratch>/probe/repo/.worktre… [+23 chars] resolves through a symlink to <scratch>/probe/outside/marke… [+5 chars], which is outside <scratch>/probe/repo; --restricted confines the file tools to the w"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<scratch>/probe/repo/.worktrees/target/link-dir/marker.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "<scratch>/probe/repo/.worktre… [+29 chars] resolves through a symlink to <scratch>/probe/outside/marke… [+5 chars], which is outside <scratch>/probe/repo; --restricted confines the file tools to the w"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<scratch>/probe/repo/.worktrees/target/inside.txt"
+      },
+      "isError": false,
+      "markers": [
+        "inside"
+      ],
+      "listedOutside": false
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<scratch>/probe/repo/root-only.txt"
+      },
+      "isError": false,
+      "markers": [
+        "root"
+      ],
+      "listedOutside": false
+    }
+  ]
+}

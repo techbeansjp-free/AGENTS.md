@@ -1,0 +1,84 @@
+{
+  "condition": "H_setting_sources_project",
+  "projectSettings": true,
+  "exit": 0,
+  "resultSubtype": "success",
+  "cost": 0.00184847,
+  "outsideMarkerInAnyEvent": false,
+  "results": [
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<scratch>/probe/outside/marker.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "Permission to use Read has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomp"
+    },
+    {
+      "tool": "Glob",
+      "input": {
+        "pattern": "*.txt",
+        "path": "<scratch>/probe/outside"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "Permission to use Glob has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomp"
+    },
+    {
+      "tool": "Grep",
+      "input": {
+        "pattern": "OUTSIDE",
+        "path": "<scratch>/probe/outside",
+        "output_mode": "content"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "Permission to use Grep has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomp"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<scratch>/probe/repo/.worktrees/target/link-file.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "Permission to use Read has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomp"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<scratch>/probe/repo/.worktrees/target/link-dir/marker.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "Permission to use Read has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomp"
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<scratch>/probe/repo/.worktrees/target/inside.txt"
+      },
+      "isError": false,
+      "markers": [
+        "inside"
+      ],
+      "listedOutside": false
+    },
+    {
+      "tool": "Read",
+      "input": {
+        "file_path": "<scratch>/probe/repo/root-only.txt"
+      },
+      "isError": true,
+      "markers": [],
+      "listedOutside": false,
+      "message": "<tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>"
+    }
+  ]
+}
