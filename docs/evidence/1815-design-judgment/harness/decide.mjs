@@ -187,7 +187,7 @@ export function spearman(a, b) {
 // review M-4: U counts only the pairs of valid trials; the thresholds scale with the number of pairs:
 // improved when U >= ceil(8/9 x pairs), worse when U <= pairs - ceil(8/9 x pairs) (9 pairs: 8 and 1, as #1807).
 // review L-c: harm is the symmetric counterpart: S below B in >= ceil(8/9 x P) pairs, i.e. U <= P - ceil(8/9 x P)
-// (P = 9: U <= 1, as before). ※ The proportional scaling awaits the owner's confirmation.
+// (P = 9: U <= 1, as before). The proportional scaling was approved by the owner (2026-11-26).
 export const thresholds = (pairs) => { const k = Math.ceil(RULES.improvedFraction * pairs - 1e-9); return {improved: k, worse: pairs - k}; };
 export const direction = (u, pairs = 9) => { const t = thresholds(pairs); return u >= t.improved ? '改善' : u <= t.worse ? '劣化' : '差なし'; };
 

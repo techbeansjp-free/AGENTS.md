@@ -609,7 +609,7 @@ test('decide (M-c, L-d): ranking costs do not count toward the cap exception; ge
   assert.equal(completeness({missing: ['x'], genSpentUsd: f.genSpentUsd, budget: b}).capReached, false);
 });
 
-test('decide (L-c): harm is the symmetric counterpart of improvement (※ owner confirmation pending)', () => {
+test('decide (L-c): harm is the symmetric counterpart of improvement (owner-approved 2026-11-26)', () => {
   assert.deepEqual(thresholds(9), {improved: 8, worse: 1});
   assert.deepEqual(thresholds(6), {improved: 6, worse: 0});
   assert.deepEqual(thresholds(5), {improved: 5, worse: 0});

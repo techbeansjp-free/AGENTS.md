@@ -4,7 +4,7 @@
 // plus a debug log. The model is asked what its context holds and to Read two marker files; the judgement uses only what
 // can be cross-checked (init event, debug log, exact texts it cannot know otherwise, tool results).
 //
-// Gate (owner decision pending): the markers are temporary files in the real HOME and in this repository's git-ignored
+// Gate (owner confirmation, recorded in results/probe-approval.json on 2026-11-26): the markers are temporary files in the real HOME and in this repository's git-ignored
 // .agent-skill-chain/local/. They are created, and a probe runs, only when results/probe-approval.json is committed with
 // {"ownerConfirmed": true, "at": "...", "reference": "..."} recorded by the coordinator.
 //
