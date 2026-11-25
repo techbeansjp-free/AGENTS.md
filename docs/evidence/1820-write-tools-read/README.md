@@ -129,12 +129,12 @@ node $EV/harness/analyze.mjs $EV/results/traces --runs-root <scratch>/run1820m/r
 
 ## モデルを呼ばない確認
 
-HEAD `88ff9af5`（clean tree。固定したfileは最初の記録`c7478b7d`と同じで、`fixation.mjs check`は差なし）で行った。
+HEAD `0653927f`（clean tree。固定したfileは最初の記録`41e78e92`と同じで、`fixation.mjs check`は差なし）で行った。
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| harnessの試験（合成の記録） | 29件すべて合格（Low-1の反例を試験12に、Low-2の改ざんの拒否を試験19・20に加えた）。#1817から写した4つのfileは#1817の試験68件で合格。`test/test_source_quality.mjs` 2件合格、`npx eslint src bin test v05`は指摘なし | [results/harness-tests.txt](results/harness-tests.txt) |
-| dry run（本物のtarball、`--allow-unreleased`なし、記録した台帳。fixtureは新しい`<scratch>/run1820c/`） | 全11項目が合格（下の箇条）。出力は前回（`run1820b`）の記録とbyteで同じ | [results/dry-run.json](results/dry-run.json) |
+| harnessの試験（合成の記録） | 29件すべて合格（Low-1の反例とLow-Aのshellの構文の正例・負例を試験12に、Low-2の改ざんの拒否を試験19・20に、Low-Bの偽のsha256での漏れの拒否を試験20に加えた。試験18は、承認の記録がcommit済みになったため、placeholderの拒否を作業用のrepositoryで確かめる形にした）。#1817から写した4つのfileは#1817の試験68件で合格。`test/test_source_quality.mjs` 2件合格、`npx eslint src bin test v05`は指摘なし | [results/harness-tests.txt](results/harness-tests.txt) |
+| dry run（本物のtarball、`--allow-unreleased`なし、記録した台帳。fixtureは新しい`<scratch>/run1820d/`） | 全11項目が合格（下の箇条）。出力は前回（`run1820c`）の記録とbyteで同じ | [results/dry-run.json](results/dry-run.json) |
 
 dry runの内容：
 
@@ -145,7 +145,7 @@ dry runの内容：
 - probeの操作の数はR 4、W 6、X 19で、`conditions.json`の`probeSteps`と一致し、`probeMaxTurns`に収まる（`probeStepsCounted`）。
 - 隔離の`--settings`の例は、fixture Aの試行とfixture Dの試行（`RGD-brief-1`）の両方を記録した。DのfixtureはDの試行で読込み・書込みの禁止に入る（`fixtureDDenied`）。
 - Xを外した場合の計画：8セル、44試行（`brief` 32、該当しない依頼12）、probeセルRSA・WSA、順序の検査に指摘なし（`dropXPlan`）。
-- `run-trial.mjs`を`--run`なしで実行すると、計画だけを出した。`--run`は、許可の環境変数が無いと拒否した。probeセル以外のprobe、`--ledger`の無いprobe、承認の記録の無い`markers.mjs create`も拒否した。`fixation.mjs drop-level X`は、`XSA-probe-2`の精算と`probe-compare.json`が無いため拒否した。台帳は1行（台帳idだけ）のまま。
+- `run-trial.mjs`を`--run`なしで実行すると、計画だけを出した。`--run`は、許可の環境変数が無いと拒否した。probeセル以外のprobe、`--ledger`の無いprobe、承認の記録の無い`markers.mjs create`も拒否した。`fixation.mjs drop-level X`は、`XSA-probe-2`の精算と`probe-compare.json`が無いため拒否した。台帳は1行（台帳idだけ）のまま。（この箇条の拒否の確認は`run1820c`の時点のもので、今回（`run1820d`）はやり直していない。承認はその後に記録された。）
 
 ## #1817のharnessからの変更
 
