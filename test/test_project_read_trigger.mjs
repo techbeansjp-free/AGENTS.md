@@ -34,7 +34,11 @@ const approve=(o)=>`${o.id}@${o.beforeSha256}:${o.blockSha256}`;
 const opts=(f)=>({packageRoot:f.pkg,registerClaudeSkill:true});
 
 test('the shipped USAGE holds the read trigger text (a heading change is caught here, not by users)',()=>{
- assert(text().startsWith('このプロジェクトでASCを使う'));
+ assert(text().startsWith('このプロジェクトでASCを使う。'));
+ // #1820: the trigger names change-bearing requests (incl. briefs held in a file) and the timing (before searching/reading files).
+ assert(text().includes('変更を伴う依頼（依頼の中身がBRIEF.md等のfileにある場合を含む）'));
+ assert(text().includes('fileを探す・読む前に.agent-skill-chain/skills/asc/SKILL.mdを読み'));
+ assert(text().includes('通常の質問・翻訳等には開発工程を追加しない。'));
 });
 
 test('the plan proposes the CLAUDE.md pointer with a diff and both hashes, and writes nothing without approval',t=>{
