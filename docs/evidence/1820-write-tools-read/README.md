@@ -98,7 +98,7 @@ node $EV/harness/analyze.mjs $EV/results/traces --runs-root <scratch>/run1820m/r
 
 ## 測定の前の固定
 
-- 最初の記録のcommit：FIXATION_COMMIT_PLACEHOLDER
+- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`b698bfefdda0c3314952cb2881592085f8eaa092`である。`run-trial.mjs`と`analyze.mjs`はこの記載を照合する。`fixation.mjs check`は合格（差なし）。
 - 固定したfile：`analysis-plan.md`・`cases.json`・`conditions.json`・`release.json`・`run-order.json`と、`harness/`の15件（`dry-run.mjs`と試験を除く）。
 - 台帳：repositoryの外の`<scratch>/rel1820/ledger/ledger-1820.jsonl`（予約0件）。台帳idは`results/fixation.json`にあり、`run-trial.mjs`と`analyze.mjs`はこの台帳だけを使う。
 - `results/probe-approval.json`は固定の対象に含めない（承認の記録で計画は変わらない）。

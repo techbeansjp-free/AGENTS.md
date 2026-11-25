@@ -1,0 +1,34 @@
+{
+ "schema": "asc-1820-fixation/v1",
+ "note": "Append-only. run-trial.mjs --run checks the last record. See fixation.mjs for refix.",
+ "records": [
+  {
+   "stage": "stage 1",
+   "fixedAtCommit": "b698bfefdda0c3314952cb2881592085f8eaa092",
+   "at": "2026-11-25T18:47:59.067Z",
+   "files": {
+    "analysis-plan.md": "f99790e9f2aecb51a8fff5b33fa736074124e7ba4383dcaa5231fb94bc80b6e2",
+    "cases.json": "592cecd5918a8e2628a38a0af59809a5182f651363f74e85a334e70d110fea2c",
+    "conditions.json": "cee1cc9f3632d92e7f5d66975eb5959166b88dc01bc17085f3601f492f01ae52",
+    "release.json": "e03bc422c072fa5efcf213010b075782655b8c48d690ab31af56b86d7a621a71",
+    "run-order.json": "a4af71f7733d9278be2c45e902bb08a20fbcffdaf1fc7662381129e89c41c8f3",
+    "harness/analyze.mjs": "208dca19776b8719e54976a61cc09380bd05f223eb4499fa4e285dab674e10a5",
+    "harness/apply-condition.mjs": "dd1cc2252b290d5780ee5d15baf8277a37ad1b8ef24843268e8eb79b22c52815",
+    "harness/collect.mjs": "49bf0157af1e65bbd82a669e641d05c29b0ae3703027a4967bd9be60d0688c48",
+    "harness/condition-i.mjs": "8ff3f606a6c84a29917f6e511da44959638f7f6a47ac190bb774f95abbc16c1d",
+    "harness/fixation.mjs": "98fed08f3305852134fa08df0bdc6934518656c4325d6ba94dc20db017e5dfd2",
+    "harness/guard.mjs": "eb533b6e6ce6da772491b8c793939b4fbfd5a77185586ad77866d3e9279a42a6",
+    "harness/install-asc.mjs": "529384b4ad6eb4cff479293b571ea9f37337460eb70e8c1be4c832358ece838b",
+    "harness/ledger.mjs": "6ce2d8a4c78765e5e2cff73c08cf69229e90a691d2f7f2bf37950fcfb2bb127d",
+    "harness/make-fixture.mjs": "da24ddd3a87614e6cdbc88dada611f2060d90b299a610fac2607fb177611e0f2",
+    "harness/markers.mjs": "d5e32aad16eabb081209d03e9461e2705a0bfaa777da34d30b5e3f8c0a5eefff",
+    "harness/order.mjs": "3b8aa451f61d1314e07903d34f71acd8b738219eda8b80c56e0c7717a71dbc72",
+    "harness/probe-check.mjs": "16bcfb418785b98ce711b0ecae40954c645c00d3070c1511d4d7d58edcd23679",
+    "harness/run-all.mjs": "13862beef50f7fe365d1e1e2adfa05c0991725c1a44eb7f6762391dce00f4b31",
+    "harness/run-trial.mjs": "2fcc8aefa49f2700e1e9d1294ee827333136e895cbc9ada8ee5fe0f4ad8eb8f3",
+    "harness/score.mjs": "3ac6e8f3c60d7c29517c6c83ef1e5995cc3493100cff6cc4b3471585b074b4a9"
+   },
+   "ledgerId": "1ceebdc5-63a4-458e-bead-d033651577d4"
+  }
+ ]
+}
