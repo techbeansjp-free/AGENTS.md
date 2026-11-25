@@ -1,0 +1,765 @@
+{
+ "label": "dry run (no model call)",
+ "allowUnreleased": false,
+ "checks": {
+  "pinnedRelease": {
+   "pass": true,
+   "detail": {
+    "tag": "v0.5.111"
+   }
+  },
+  "fixturesInstalled": {
+   "pass": true,
+   "detail": {
+    "A": true,
+    "D": true
+   }
+  },
+  "neutralCommitInCopies": {
+   "pass": true,
+   "detail": null
+  },
+  "sameCommitSubjects": {
+   "pass": true,
+   "detail": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ]
+  },
+  "sameInstalledSkills": {
+   "pass": true,
+   "detail": null
+  },
+  "runOrder": {
+   "pass": true,
+   "detail": []
+  },
+  "everyCellLaunched": {
+   "pass": true,
+   "detail": null
+  },
+  "levelFlags": {
+   "pass": true,
+   "detail": null
+  }
+ },
+ "fixtures": {
+  "A": {
+   "fixture": "A",
+   "kind": "app",
+   "source": "release",
+   "pinned": true,
+   "tarballSha256": "e7df164a8c132d4d77db270cd8c3fe7ed196906484b0f51d52b4de57125d3be0",
+   "packageVersion": "0.5.111",
+   "runtimeVersion": "0.5.111",
+   "sources": [
+    ".github/workflows/ci.yml",
+    "CLAUDE.md",
+    "Dockerfile",
+    "README.md",
+    "docs/BRIEF.md",
+    "docs/requirements.md",
+    "package.json",
+    "public/users.html",
+    "public/users.js",
+    "src/app.ts",
+    "src/store.ts",
+    "src/users.ts",
+    "src/validate.ts",
+    "tsconfig.json"
+   ],
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": "claude-md",
+   "adoptedAction": "append",
+   "claudeMdSha256": "2c5f97a5787cb2a99d4f194cc337b169611df27c6e79d17bd0e260c1241bb24b",
+   "claudeMdProblems": [],
+   "scorerSkillsMatchRelease": true,
+   "ascBodyPresent": true,
+   "readmePresent": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "ok": true
+  },
+  "D": {
+   "fixture": "D",
+   "kind": "design",
+   "source": "release",
+   "pinned": true,
+   "tarballSha256": "e7df164a8c132d4d77db270cd8c3fe7ed196906484b0f51d52b4de57125d3be0",
+   "packageVersion": "0.5.111",
+   "runtimeVersion": "0.5.111",
+   "sources": [
+    "BRIEF.md",
+    "FONTS.md",
+    "data.json"
+   ],
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": "claude-md",
+   "adoptedAction": "create",
+   "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+   "claudeMdProblems": [],
+   "scorerSkillsMatchRelease": true,
+   "ascBodyPresent": true,
+   "readmePresent": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "ok": true
+  }
+ },
+ "copies": {
+  "A": {
+   "applied": {
+    "claudeMdSha256": "2c5f97a5787cb2a99d4f194cc337b169611df27c6e79d17bd0e260c1241bb24b",
+    "changedFiles": []
+   },
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "ok": true
+  },
+  "D": {
+   "applied": {
+    "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "changedFiles": []
+   },
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "ok": true
+  }
+ },
+ "launch": [
+  {
+   "trial": "RSA-probe-1",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "<probe prompt of the tools level>",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 12 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
+  },
+  {
+   "trial": "WSA-probe-1",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "<probe prompt of the tools level>",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 12 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
+  },
+  {
+   "trial": "XSA-probe-1",
+   "cell": "XSA",
+   "tools": "X",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "<probe prompt of the tools level>",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 12 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
+  },
+  {
+   "trial": "RSA-brief-1",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSA-brief-1",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XSA-brief-1",
+   "cell": "XSA",
+   "tools": "X",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSA-neg-1-1",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RGD-brief-1",
+   "cell": "RGD",
+   "tools": "R",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSA-neg-1-1",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WGD-brief-1",
+   "cell": "WGD",
+   "tools": "W",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XGD-brief-1",
+   "cell": "XGD",
+   "tools": "X",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSA-neg-2-1",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSD-brief-1",
+   "cell": "RSD",
+   "tools": "R",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSA-neg-2-1",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSD-brief-1",
+   "cell": "WSD",
+   "tools": "W",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XSD-brief-1",
+   "cell": "XSD",
+   "tools": "X",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSA-neg-3-1",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RGA-brief-1",
+   "cell": "RGA",
+   "tools": "R",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSA-neg-3-1",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WGA-brief-1",
+   "cell": "WGA",
+   "tools": "W",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XGA-brief-1",
+   "cell": "XGA",
+   "tools": "X",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSA-brief-2",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSA-brief-2",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XSA-brief-2",
+   "cell": "XSA",
+   "tools": "X",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSA-neg-1-2",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RGD-brief-2",
+   "cell": "RGD",
+   "tools": "R",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSA-neg-1-2",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WGD-brief-2",
+   "cell": "WGD",
+   "tools": "W",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XGD-brief-2",
+   "cell": "XGD",
+   "tools": "X",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSA-neg-2-2",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSD-brief-2",
+   "cell": "RSD",
+   "tools": "R",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSA-neg-2-2",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSD-brief-2",
+   "cell": "WSD",
+   "tools": "W",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XSD-brief-2",
+   "cell": "XSD",
+   "tools": "X",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSA-neg-3-2",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RGA-brief-2",
+   "cell": "RGA",
+   "tools": "R",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSA-neg-3-2",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": null,
+   "fixture": "A",
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WGA-brief-2",
+   "cell": "WGA",
+   "tools": "W",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XGA-brief-2",
+   "cell": "XGA",
+   "tools": "X",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSA-brief-3",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSA-brief-3",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XSA-brief-3",
+   "cell": "XSA",
+   "tools": "X",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RGD-brief-3",
+   "cell": "RGD",
+   "tools": "R",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WGD-brief-3",
+   "cell": "WGD",
+   "tools": "W",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XGD-brief-3",
+   "cell": "XGD",
+   "tools": "X",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSD-brief-3",
+   "cell": "RSD",
+   "tools": "R",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSD-brief-3",
+   "cell": "WSD",
+   "tools": "W",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XSD-brief-3",
+   "cell": "XSD",
+   "tools": "X",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RGA-brief-3",
+   "cell": "RGA",
+   "tools": "R",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WGA-brief-3",
+   "cell": "WGA",
+   "tools": "W",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XGA-brief-3",
+   "cell": "XGA",
+   "tools": "X",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSA-brief-4",
+   "cell": "RSA",
+   "tools": "R",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSA-brief-4",
+   "cell": "WSA",
+   "tools": "W",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XSA-brief-4",
+   "cell": "XSA",
+   "tools": "X",
+   "prompt": "S",
+   "fixture": "A",
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RGD-brief-4",
+   "cell": "RGD",
+   "tools": "R",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WGD-brief-4",
+   "cell": "WGD",
+   "tools": "W",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XGD-brief-4",
+   "cell": "XGD",
+   "tools": "X",
+   "prompt": "G",
+   "fixture": "D",
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RSD-brief-4",
+   "cell": "RSD",
+   "tools": "R",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WSD-brief-4",
+   "cell": "WSD",
+   "tools": "W",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XSD-brief-4",
+   "cell": "XSD",
+   "tools": "X",
+   "prompt": "S",
+   "fixture": "D",
+   "promptText": "BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "RGA-brief-4",
+   "cell": "RGA",
+   "tools": "R",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "WGA-brief-4",
+   "cell": "WGA",
+   "tools": "W",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "XGA-brief-4",
+   "cell": "XGA",
+   "tools": "X",
+   "prompt": "G",
+   "fixture": "A",
+   "promptText": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 2 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events"
+  }
+ ],
+ "settingsExample": {
+  "permissions": {
+   "blockReadsOutsideWorkingDirectories": true
+  },
+  "sandbox": {
+   "enabled": true,
+   "failIfUnavailable": true,
+   "autoAllowBashIfSandboxed": true,
+   "allowUnsandboxedCommands": false,
+   "network": {
+    "allowedDomains": []
+   },
+   "filesystem": {
+    "denyRead": [
+     "/Users",
+     "<scratch>/runs",
+     "<scratch>/fixture-A",
+     "<ledger-dir>"
+    ],
+    "allowRead": [
+     "<scratch>/runs/RSA-brief-1/work"
+    ],
+    "denyWrite": [
+     "<scratch>/fixture-A",
+     "<ledger-dir>"
+    ]
+   }
+  }
+ },
+ "plan": {
+  "probes": [
+   "RSA-probe-1",
+   "WSA-probe-1",
+   "XSA-probe-1"
+  ],
+  "byCell": {
+   "RSA": 10,
+   "RSD": 4,
+   "RGA": 4,
+   "RGD": 4,
+   "WSA": 10,
+   "WSD": 4,
+   "WGA": 4,
+   "WGD": 4,
+   "XSA": 4,
+   "XSD": 4,
+   "XGA": 4,
+   "XGD": 4
+  },
+  "plannedTrials": 60,
+  "positives": 48,
+  "negatives": 12,
+  "planningUsd": 5.25,
+  "stopLineUsd": 6,
+  "ownerCapUsd": 25,
+  "breakEvenPerTrialUsd": 0.089
+ },
+ "pass": true
+}

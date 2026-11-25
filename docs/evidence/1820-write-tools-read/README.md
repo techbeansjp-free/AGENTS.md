@@ -105,7 +105,20 @@ node $EV/harness/analyze.mjs $EV/results/traces --runs-root <scratch>/run1820m/r
 
 ## モデルを呼ばない確認
 
-DRYRUN_PLACEHOLDER
+HEAD `ae7085e1`（clean tree）で行った。
+
+| 項目 | 結果 | 記録 |
+| --- | --- | --- |
+| harnessの試験（合成の記録） | 25件すべて合格。#1817から写した4つのfileは#1817の試験68件で合格。`test/test_source_quality.mjs` 2件合格、`npx eslint src bin test v05`は指摘なし | [results/harness-tests.txt](results/harness-tests.txt) |
+| dry run（本物のtarball、`--allow-unreleased`なし。fixtureは`<scratch>/run1820/`） | 全8項目が合格（下の箇条） | [results/dry-run.json](results/dry-run.json) |
+
+dry runの内容：
+
+- A・Dとも、出所`release`（`e7df164a…`、v0.5.111）。16件の入口が記録とpackageに一致し、`claude-md`を採用した。Aは基の`CLAUDE.md`への追記（`append`）、Dは案内文だけの`CLAUDE.md`の作成（`create`。blockSha256 `444b31b5…`は#1814の条件Iと同じ）。
+- 試行の写しに中立のcommitを1件入れた後、commitの件名はA・Dで同じ（`Update project files`・`Install ASC`・`initial`）。
+- 計画：probe 3回と60試行（`brief` 48、該当しない依頼12）。計画の単価で5.25 USD、停止線6 USD。
+- 全63件の起動のcommand（引数と依頼文）を出した。どの試行も`--max-turns 2`で、toolの水準ごとの`--tools`・`--disallowedTools`・`--permission-mode`が条件どおりだった。隔離の`--settings`の例も記録にある。
+- `run-trial.mjs`を`--run`なしで実行すると、計画だけを出した。`--run`は、許可の環境変数が無いと拒否した。probeセル以外のprobe、承認の記録の無い`markers.mjs create`も拒否した。
 
 ## #1817のharnessからの変更
 
