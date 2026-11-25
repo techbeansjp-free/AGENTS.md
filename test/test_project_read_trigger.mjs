@@ -195,3 +195,12 @@ test('CLI: --adopt-read-trigger needs --apply and one value',t=>{
  assert.equal(run('--register-claude-skill','--apply','--adopt-read-trigger',approve(o)).status,0);
  assert.equal(fs.readFileSync(f.claude,'utf8'),block());
 });
+
+test('the registered Claude Code asc entry carries the shipped asc description (#1820: change-bearing requests are named)',t=>{
+ const f=fixture(t);
+ assert.equal(projectAssets(f.work,{...opts(f),apply:true}).applied,true);
+ const description=s=>s.match(/^description: .+$/m)[0];
+ const entry=fs.readFileSync(path.join(f.work,'.claude/skills/asc/SKILL.md'),'utf8');
+ assert.equal(description(entry),description(fs.readFileSync(path.join(f.pkg,'skills/asc/SKILL.md'),'utf8')));
+ assert.match(description(entry),/変更を伴う依頼/);
+});
