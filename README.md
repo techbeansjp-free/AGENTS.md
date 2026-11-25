@@ -1,6 +1,6 @@
 # agent-skill-chain v0.5
 
-配布Skillには`asc`と、開発基盤・規約を整備・点検する[project-foundation](skills/project-foundation/SKILL.md)があります。`project-foundation`はASCの工程から独立して使え、Codex用は`project-assets --register-skill --apply`、Claude Code用は`project-assets --register-claude-skill --apply`で全配布SkillのHost入口を配置できます。検証高速化・移行・実操作受入・監査・技術調査・実行復旧・規約検査・サブエージェントのモデル選択・作業調整・レビュー是正のSkillも選べます（[目的別一覧](skills/README.md)）。
+配布Skillには`asc`と、開発基盤・規約を整備・点検する[project-foundation](skills/project-foundation/SKILL.md)があります。`project-foundation`はASCの工程から独立して使え、Codex用は`project-assets --register-skill --apply`、Claude Code用は`project-assets --register-claude-skill --apply`で全配布SkillのHost入口を配置できます。Claude Codeでは、差分表示がCLAUDE.mdの末尾へASCを読む契機の文例を追記する案も示し、表示された値で承認（`--adopt-read-trigger <id>@<beforeSha256>:<blockSha256>`）した場合だけ追記します（[v0.5利用手順](v05/USAGE.md)）。検証高速化・移行・実操作受入・監査・技術調査・実行復旧・規約検査・サブエージェントのモデル選択・作業調整・レビュー是正のSkillも選べます（[目的別一覧](skills/README.md)）。
 
 ASCは、Goal・要求・リスク・プロジェクト契約・検証Evidenceから必要な開発作業を選ぶAI開発ハーネスです。固定Step 0〜11を実行する旧runtimeは、新版の標準CLIと配布物には含めません。
 

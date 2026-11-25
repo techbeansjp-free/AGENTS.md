@@ -1,0 +1,47 @@
+{
+ "note": "Stage-0 probe records (not committed: they hold local paths). sha256 of each raw file, and per-cause counts of the debug-log lines behind the first-run failures of debugPathsInsideTrial / noRealHomeOrRepoInDebug. No path strings.",
+ "probes": {
+  "R": {
+   "sha256": {
+    "trace": "048163f029e4aea613a0e6c32ecae4e2d329cb673664fca04e1cc01c7fdf9377",
+    "debug": "a2fb93a1e6b0c5881eccf696b03572e4af6da44ce673e8eefa5fbbf550e402f3",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "debugLines": 253,
+   "markerPermissionSuggestionLines": 2,
+   "linesWithRealHomeOrRepo": 2,
+   "linesWithRealHomeOrRepoOutsideSuggestions": 0,
+   "suggestionLinesMatchingKeywordFilter": 1,
+   "managedMissingFileLines": 6,
+   "hookContextLinesWithRelativeSkillPath": 0
+  },
+  "P": {
+   "sha256": {
+    "trace": "62a8fb60a4d33512ae3a63b7ae0de17acb638b0b779416b0a6920d27051b4d17",
+    "debug": "d8419489343f59bb74d14eed9773631d085458c03a6c411de0572bc4d62eaff8",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "debugLines": 253,
+   "markerPermissionSuggestionLines": 2,
+   "linesWithRealHomeOrRepo": 2,
+   "linesWithRealHomeOrRepoOutsideSuggestions": 0,
+   "suggestionLinesMatchingKeywordFilter": 1,
+   "managedMissingFileLines": 6,
+   "hookContextLinesWithRelativeSkillPath": 0
+  },
+  "H": {
+   "sha256": {
+    "trace": "0c6f48f073b97120fa1bd1ad21512da71b39da83d2f64fb0b7322fb49df5dd14",
+    "debug": "a191fb7ff604529ab1cd53dcc07760caac0e9e7ffef4642ae19ce2aaabfdab30",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "debugLines": 259,
+   "markerPermissionSuggestionLines": 2,
+   "linesWithRealHomeOrRepo": 2,
+   "linesWithRealHomeOrRepoOutsideSuggestions": 0,
+   "suggestionLinesMatchingKeywordFilter": 1,
+   "managedMissingFileLines": 6,
+   "hookContextLinesWithRelativeSkillPath": 3
+  }
+ }
+}

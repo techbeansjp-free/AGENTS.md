@@ -1,0 +1,27 @@
+{
+ "schema": "asc-1814-conditions/v1",
+ "note": "Fixed before any model run. Every condition starts from the same fixture (harness/make-fixture.mjs: synthetic repo + project-assets --register-claude-skill --apply) and the same base CLAUDE.md (project overview, no ASC mention). Conditions differ only in the listed additions. The pointer text is not copied here: harness/apply-condition.mjs extracts it from v05/USAGE.md section 'ASCを読む契機を利用先へ採用する（任意）' at build time and records its sha256, so the measured text is the published one.",
+ "model": "sonnet",
+ "modelNote": "Fixed by the coordinator (2026-11-25) before any run: the `sonnet` alias, as used by the #1807 generator where 0/69 body reads were observed. The resolved model id (init event) is recorded per trial. Not changed after results are seen (decision-criteria.md).",
+ "runs": 2,
+ "budget": {"capUsd": 30, "safetyMarginUsd": 1, "perTrialUsd": 0.6, "note": "Owner cap 30 USD (Host-computed). run-trial.mjs takes these values only (no --stop-usd/--budget arguments) and refuses a trial when the ledger total plus perTrialUsd exceeds capUsd - safetyMarginUsd. perTrialUsd is the --max-budget-usd of every trial, the same in all conditions."},
+ "runsNote": "Planned repetitions per condition and case. score.mjs scores rep numbers 1..runs; a later rep number counts only as the one-time replacement of a failed trial of the same condition and case (decision-criteria.md rule 5), anything else is reported separately.",
+ "conditionISchema": "Added at stage 3 only (fixation.mjs stage3 allows nothing else): {\"label\": \"...\", \"pointer\": false, \"hook\": null|\"product\", \"pointerDelivered\": true, \"adopt\": \"<read-trigger option id>\", \"core\": true}. The sample project is built with make-fixture.mjs --adopt <id> from the phase3 release; apply-condition.mjs then adds only the neutral commit. hook \"product\": the hook is the product's command, so firing is taken from SessionStart hook events in the trace instead of the fixture hook log.",
+ "baseClaudeMd": "# ユーザー管理API\n\nTypeScript/Expressのユーザー管理API。`src/`にAPI、`public/`に管理画面、`docs/`に要件メモがある。\n",
+ "hook": {
+  "settingsPath": ".claude/settings.json",
+  "scriptPath": ".claude/hooks/asc-read-trigger.mjs",
+  "textPath": ".claude/hooks/asc-read-trigger.txt",
+  "matcher": "startup|resume|clear|compact",
+  "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/asc-read-trigger.mjs\"",
+  "timeout": 30
+ },
+ "conditions": {
+  "R": {"label": "登録だけ", "pointer": false, "hook": null, "core": true},
+  "P": {"label": "CLAUDE.mdに文例", "pointer": true, "hook": null, "core": true},
+  "H": {"label": "SessionStart hookで文例を注入", "pointer": false, "hook": "usage", "core": true},
+  "PH": {"label": "文例とhookの両方", "pointer": true, "hook": "usage", "core": false, "runWhen": "P・Hのどちらも合格水準に届かない場合だけ（EVAL_PLAN.md「条件」）"},
+  "S": {"label": "hookで強い指示を注入（任意の追加）", "pointer": false, "hook": "strong", "core": false, "runWhen": "ownerが追加を選んだ場合だけ"}
+ },
+ "strongHookText": "このプロジェクトではASC（.agent-skill-chain/）を使う。開発の開始・再開・実装・PR提出・許可されたmergeと後片付けの依頼では、作業の前に.agent-skill-chain/skills/asc/SKILL.mdを読み、依頼に必要なreferenceを読んでから進める。レビュー・調査・見積・画面の実操作確認・未決事項の整理などの依頼では、.agent-skill-chain/skills/README.mdの目的別一覧から該当するSkillの本文を読んで適用する。翻訳や通常の質問には開発工程を追加しない。Skillの読取りから外部操作の許可を推定しない。"
+}

@@ -1,0 +1,66 @@
+# Refusal checks of the run path (no model call; nothing reaches `claude -p`).
+# HEAD: 5e588f26b68610da12004412003eb7439ea6b153 (clean tree; results/fixation.json committed, first record d1ba482e5c4d315f6d4506a2372601104cb4c235, ledger id recorded); node: v20.12.2
+# <ledger> is the ledger created by 'fixation.mjs init --ledger' (outside the repository).
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/fixation.mjs check <repo>/docs/evidence/1814-skill-invocation/results/fixation.json
+{"ok":true,"stage":"stages 0-2","records":1,"firstFixedAtCommit":"d1ba482e5c4d315f6d4506a2372601104cb4c235","fixedAtCommit":"d1ba482e5c4d315f6d4506a2372601104cb4c235","differs":[]} 
+# exit: 0
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs5 R asc-1 1 --fixture <scratch>/dry5/sample --run
+refused: ASC1814_ALLOW_PAID is not 1 (measurement not authorised) 
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs5 R asc-1 1 --fixture <scratch>/dry5/sample --run
+refused: --ledger is required for a run (one ledger for every stage) 
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs5 R asc-1 1 --fixture <scratch>/dry5/sample --model 5
+refused: --model is fixed in conditions.json and is not accepted 
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs5 R asc-1 1 --fixture <scratch>/dry5/sample --budget 5
+refused: --budget is fixed in conditions.json and is not accepted 
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs5 R asc-1 1 --fixture <scratch>/dry5/sample --stop-usd 5
+refused: --stop-usd is fixed in conditions.json and is not accepted 
+# exit: 3
+# copy of the evidence directory (outside Git) with one byte appended to cases.json:
+$ node <scratch>/evcopy/a/b/c/ev/harness/run-trial.mjs <scratch>/runs5 R asc-1 1 --fixture <scratch>/dry5/sample --ledger <ledger> --run
+refused: fixed files differ from results/fixation.json: cases.json 
+# exit: 3
+# same copy with cases.json restored (fixation.json not committed in that copy):
+$ node <scratch>/evcopy/a/b/c/ev/harness/run-trial.mjs <scratch>/runs5 R asc-1 1 --fixture <scratch>/dry5/sample --ledger <ledger> --run
+refused: results/fixation.json is not committed or has local changes 
+# exit: 3
+# a ledger that does not exist, and another ledger with its own id (a reset of the total):
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs5 R asc-1 1 --fixture <scratch>/dry5/sample --ledger <scratch>/no-such-ledger.jsonl --run
+refused: the ledger file does not exist (create it with fixation.mjs init --ledger) 
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs5 R asc-1 1 --fixture <scratch>/dry5/sample --ledger <scratch>/other-ledger.jsonl --run
+refused: the ledger is not the one recorded in results/fixation.json 
+# exit: 3
+# sample project built from the dry-run stand-in, with the recorded ledger; a placeholder credential value only lets the check run, the trial is refused before any launch:
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs5 R asc-1 1 --fixture <scratch>/dry5/sample --ledger <ledger> --run
+refused: sample project was not installed from a release (dry-run stand-in); tarball digest is not in release.json 
+# exit: 3
+recorded ledger lines (header only expected): 1; lock present: no; trial dir present: no
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <repo>/.worktrees-x R asc-1 1 --fixture <scratch>/dry5/sample
+refused: refused placement: under the real HOME; under the ASC repository; ancestor CLAUDE.md at <repo>; ancestor AGENTS.md at <repo>; ancestor .git at <repo-parent>
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/make-fixture.mjs <scratch>/pack/agent-skill-chain-0.5.0.tgz 8a01707f01511f4693bf2736e8bb5701fff89a76efb6a0ff9f247f722e6d7833 <scratch>/nc1 <scratch>/tmp
+file://<repo>/docs/evidence/1814-skill-invocation/harness/make-fixture.mjs:62   if (!allowUnreleased && !releaseDigests().includes(clean)) throw new Error('refused: digest is not a release digest in release.json (use --allow-unreleased only for a dry run)');                                          
+# exit: 1
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/make-fixture.mjs <scratch>/pack/agent-skill-chain-0.5.0.tgz 0000000000000000000000000000000000000000000000000000000000000000 <scratch>/nc2 <scratch>/tmp --allow-unreleased
+file://<repo>/docs/evidence/1814-skill-invocation/harness/install-asc.mjs:57   if (digest !== expected.replace(/^sha256:/, '')) throw new Error(`tarball sha256 ${digest} != expected ${expected}`);                                                          ^  Error: tarball sha256 8a01707f01511f4693bf2
+# exit: 1
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/fixation.mjs init <repo>/docs/evidence/1814-skill-invocation/results/fixation.json --ledger <ledger>
+refused: <repo>/docs/evidence/1814-skill-invocation/results/fixation.json exists; records are append-only 
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/fixation.mjs stage3 <repo>/docs/evidence/1814-skill-invocation/results/fixation.json
+refused: conditions.I is not defined; release.json phase3 is not filled 
+# exit: 3
+# refix: a ledger that does not exist / the recorded ledger without a probe reservation / another ledger:
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/fixation.mjs refix <repo>/docs/evidence/1814-skill-invocation/results/fixation.json --ledger <scratch>/no-such-ledger.jsonl --reason test --review test
+refused: the ledger file does not exist; refix is only a pre-measurement correction of probe-check.mjs 
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/fixation.mjs refix <repo>/docs/evidence/1814-skill-invocation/results/fixation.json --ledger <ledger> --reason test --review test
+refused: the ledger has no probe reservation; refix is only a pre-measurement correction of probe-check.mjs 
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/fixation.mjs refix <repo>/docs/evidence/1814-skill-invocation/results/fixation.json --ledger <scratch>/other-ledger.jsonl --reason test --review test
+refused: the ledger is not the one recorded at init; the ledger has no probe reservation; refix is only a pre-measurement correction of probe-check.mjs 
+# exit: 3

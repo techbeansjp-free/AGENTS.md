@@ -1,0 +1,39 @@
+{
+ "schema": "asc-1814-cases/v1",
+ "note": "Fixed before any model run; do not change after results are seen. Paths are relative to the run's working directory (the fixture). Cases marked origin 1783 keep the prompt, expect, references and answer markers of docs/evidence/1783-skill-coexistence/cases.json unchanged. The fixture (harness/make-fixture.mjs) contains every file a prompt names.",
+ "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches.",
+ "entryPattern": "^\\.claude/skills/<skill>/SKILL\\.md$",
+ "bodyPattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
+ "referencePattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/references/<ref>$",
+ "cases": [
+  {"id": "asc-1", "origin": "1783", "kind": "asc", "expect": "asc", "prompt": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。", "references": ["workspace.md"], "answerAll": ["worktree"], "answerAny": ["worktree-create", "\\.worktrees"]},
+  {"id": "asc-2", "origin": "1783", "kind": "asc", "expect": "asc", "prompt": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？", "references": ["workspace.md", "coordination.md"], "answerAll": ["worktree"], "answerAny": ["start", "未commit", "未保存"]},
+  {"id": "asc-3", "origin": "new", "kind": "asc", "expect": "asc", "secondary": ["user-journey-acceptance"], "prompt": "docs/BRIEF.md の依頼に対応して。", "references": ["implementation.md", "workspace.md"], "answerAll": [], "answerAny": [], "answerGroups": ["worktree|作業場所"], "why": "#1807と同じ形の間接的な依頼（依頼の中身がfileにある）。BRIEFは画面を含む機能の実装で、ascの開始手順（専用の作業場所）とUI変更時のimplementation.mdが該当する。user-journey-acceptanceの本文読込みは記録するが合否に使わない"},
+  {"id": "rr-1", "origin": "1783", "kind": "purpose", "expect": "review-and-remediation", "prompt": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。", "references": ["review-method.md"], "answerAll": [], "answerAny": ["認可", "権限", "authoriz"]},
+  {"id": "tw-1", "origin": "1783", "kind": "purpose", "expect": "tracker-issue-writing", "prompt": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。", "references": [], "answerAll": ["## 目的", "## 完了の基準", "## してはいけないことと対象外", "## 依存と未決"], "answerAny": []},
+  {"id": "ri-1", "origin": "1783", "kind": "purpose", "expect": "research-to-implementation", "prompt": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。", "references": ["decisions.md"], "answerAll": ["受入条件", "未決"], "answerAny": []},
+  {"id": "se-1", "origin": "1783", "kind": "purpose", "expect": "security-evidence", "prompt": "依存パッケージの脆弱性監査をして、結果をまとめて。", "references": ["findings-and-summary.md"], "answerAll": [], "answerAny": ["lock", "ロック"]},
+  {"id": "ma-1", "origin": "1783", "kind": "purpose", "expect": "migration-assurance", "prompt": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。", "references": ["acceptance-and-cutover.md"], "answerAll": [], "answerAny": ["受入", "切戻し", "ロールバック", "rollback"]},
+  {"id": "ui-1", "origin": "new", "kind": "purpose", "expect": "user-journey-acceptance", "prompt": "ユーザー一覧画面（public/users.html）に名前で絞り込む検索欄を付けた。画面から本当に使えるか確かめたいので、確認の進め方を示して。", "references": ["journeys.md"], "answerAll": [], "answerAny": [], "answerGroups": ["0件|空の?状態|empty|該当なし", "失敗|エラー|error|通信", "再読込|リロード|reload|再表示"], "why": "画面を含む機能の受入確認。user-journey-acceptanceの本文が求める、空の状態・失敗・再読込みの確認が回答に現れるかを見る"},
+  {"id": "es-1", "origin": "new", "kind": "purpose", "expect": "estimate-and-scope", "prompt": "docs/requirements.md の「ユーザー削除時に監査ログを残す」を追加すると、何人日くらいかかる？見積もって。", "references": [], "answerAll": [], "answerAny": [], "answerGroups": ["前提|仮定", "調査", "未決|未確認|確認が必要"], "why": "見積。estimate-and-scopeの本文が求める、前提・調査部分・未決の区別が回答に現れるかを見る"},
+  {"id": "do-1", "origin": "new", "kind": "purpose", "expect": "decision-ownership", "prompt": "docs/requirements.md の依頼メモについて、このまま進めてよいか、抜けている点を整理して。", "references": [], "answerAll": [], "answerAny": [], "answerGroups": ["判断者|誰が決め|決める人|決定者", "仮置き|暫定"], "why": "未決事項と判断者の整理。decision-ownershipの本文が求める、判断者と仮置き案が回答に現れるかを見る"},
+  {"id": "neg-1", "origin": "1783", "kind": "negative", "expect": null, "prompt": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。", "references": [], "answerAll": [], "answerAny": ["search"]},
+  {"id": "neg-2", "origin": "1783", "kind": "negative", "expect": null, "prompt": "HTTPのPUTとPATCHの違いを簡単に教えて。", "references": [], "answerAll": ["PATCH"], "answerAny": []},
+  {"id": "neg-3", "origin": "new", "kind": "negative", "expect": null, "prompt": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。", "references": [], "answerAll": ["@"], "answerAny": [], "why": "コードに関する質問だが変更を伴わない。開発工程を追加しないことを見る"}
+ ],
+ "scoring": {
+  "readCounts": "a Read counts only when its tool_result exists and is not is_error (stricter than #1783, which counted the call)",
+  "entryHop": "first hop: the expected Skill called via the Skill tool (name equals the Skill or ends with :<skill>) or its thin entry .claude/skills/<skill>/SKILL.md Read",
+  "bodyRead": "second hop: the expected body .agent-skill-chain/skills/<skill>/SKILL.md Read (the entry only links to it)",
+  "reach": "entryHop or bodyRead",
+  "referenceRead": "any listed reference of the expected Skill Read (true when none listed)",
+  "markers": "all answerAll substrings (case-insensitive), at least one answerAny regex when listed, and every answerGroups regex (case-insensitive), on the final result text",
+  "applied": "bodyRead and referenceRead and markers",
+  "misselect": "expected not reached and another Skill was called or another ASC entry or body was Read",
+  "unselected": "no Skill call and no ASC entry or body Read",
+  "secondaryRead": "for each secondary Skill, whether its body was Read (recorded, not used for pass/fail)",
+  "overapplication": "negative case with any ASC Skill call or any ASC entry or body Read (bundled Host Skills are recorded separately)",
+  "stopped": "a per-trial budget stop is scored on what was read before it and flagged; the answer markers use the last assistant text",
+  "failure": "process error, API error or missing trace; counted separately, never as unselected or passed"
+ }
+}
