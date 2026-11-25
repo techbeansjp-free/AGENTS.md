@@ -174,3 +174,11 @@ High・Mediumなし、Low 2件。固定したfileは変えず（変えてよい�
 | [harness/dry-run.mjs](harness/dry-run.mjs) | モデルを呼ばない全体の確認 |
 | [harness/score.test.mjs](harness/score.test.mjs)・[harness/probe.test.mjs](harness/probe.test.mjs) | 合成の記録による試験 |
 | [results/](results/) | dry run・試験・拒否の反例の結果、測定の前の固定（`fixation.json`） |
+
+## 段階1（現状R）の結果（2026-11-25）
+
+- 28試行（14依頼×2回）、失敗0、費用2.27 USD（Hostの計算値）、model `claude-sonnet-5-5`。記録：[results/traces/](results/traces/)（localのpathを置き換えたもの）、採点：[results/stage1-R-score.json](results/stage1-R-score.json)。
+- **採点の手順の変更（逸脱）**：`collect.mjs`がpathを`<trial>`等へ置き換えた記録を`score.mjs`にかけると、`projectRelative`が置き換えた文字列を相対pathとして解決し、本文・referenceのReadを一致させられない（本文の読込みが全件0になる）。固定したcodeは変えず、置き換える前の記録（scratchの`runs/<trial>/trace.jsonl`）を同じ名前の並びにし、`collect.mjs`が作った`trials.json`と一緒に`score.mjs`へ渡して採点した。全条件に同じ手順を使う。公開する記録は置き換えたものだけである。
+- 結果：該当する依頼22試行で、入口（Skill tool）20、**本文の読込み20/22（91%）**、手順の適用（本文・reference・回答の目印）15/22（68%）、誤選択1、未選択1。該当しない依頼6試行で過剰な読込み0。
+- 規則1により「不足なし」（本文の読込みが80%以上）。ただし手順の適用は68%で、規則1の但し書きによりownerへ報告する。
+- 依頼ごと：本文を読まなかった2試行は、どちらも`asc-3`（「docs/BRIEF.md の依頼に対応して。」という、#1807と同じ形の依頼）だった。1回は何も選ばず（未選択）、1回は`user-journey-acceptance`の入口だけを読んだ（誤選択）。開発の依頼であることが明示された依頼（`asc-1`・`asc-2`）では、`asc`の本文が4/4で読まれた。
