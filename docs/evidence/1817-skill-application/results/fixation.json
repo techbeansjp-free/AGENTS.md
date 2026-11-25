@@ -4,11 +4,11 @@
  "records": [
   {
    "stage": "stages 0-2",
-   "fixedAtCommit": "992c98b69c82e2d834ea54abcf59c2613b845190",
-   "at": "2026-11-25T11:23:06.358Z",
+   "fixedAtCommit": "6131acb1d9675f31439044617e79b12b4741a676",
+   "at": "2026-11-25T11:24:34.896Z",
    "files": {
     "cases.json": "6b54aa87b41ca0afc0853b3d6cab9160e889d2009c5f5f420211730468e285af",
-    "conditions.json": "59ae75dd1b8596fa024dc742fa506ecb1bd5e26936b269dfdd805335922e5ba4",
+    "conditions.json": "cb932753500d8b44da36b6bcc000e163702968521ec6bb723789fa1337757ad3",
     "decision-criteria.md": "275ac13d177905a72966144bd62bded4e5c33c462e12c87b7936572109c74f45",
     "release.json": "f47536592f07f17354153645bafa7e933766e67fb1fc07f7753c5adea43cba08",
     "run-order.json": "d9b161e9b175ae144bf990cb8946459bf40198d11dcf595e47ae6e9aceaad1fb",
@@ -28,7 +28,7 @@
     "harness/score.mjs": "6382dbb3b7b275c333399888d1e502102a6dd60b36a077b3d93d65b76ac01ed6"
    },
    "invariants": {
-    "conditionsWithoutI": "3dff3be3e255c652296658e16d504c4e3e08c3e841cafe80dcb00b3f14fb1ab1",
+    "conditionsWithoutI": "e9973869733373021b7ad7b5736d0de1491b4c146cbad6a3b9edfb81ebb8d1dc",
     "releaseWithoutPhase3": "b99d369d8b23aa84d92a2abf83b6ef8b107ea079f5675952238b1832f8413199"
    },
    "ledgerId": "69997fe4-4f0f-4c84-823e-1e895722af24",

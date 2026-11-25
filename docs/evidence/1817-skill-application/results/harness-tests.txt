@@ -1,5 +1,5 @@
 # command: node --test docs/evidence/1817-skill-application/harness/score.test.mjs docs/evidence/1817-skill-application/harness/probe.test.mjs
-# HEAD: 992c98b69c82e2d834ea54abcf59c2613b845190 (clean tree)
+# HEAD: 6131acb1d9675f31439044617e79b12b4741a676 (clean tree)
 # node: v20.12.2
 ok 1 - clean R probe passes; heading mark omitted in the answer is accepted (L3)
 ok 2 - each leak or mismatch fails the probe

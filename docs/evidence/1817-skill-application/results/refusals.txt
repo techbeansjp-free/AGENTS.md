@@ -1,4 +1,4 @@
-# HEAD: 992c98b69c82e2d834ea54abcf59c2613b845190; node v20.12.2; no model call. <scratch> = the scratch directory
+# HEAD: 6131acb1d9675f31439044617e79b12b4741a676; node v20.12.2; no model call. <scratch> = the scratch directory
 ## run-trial installProblems on the dry-run fixtures (real tarballs) and their crossed pairings
 # command: node <scratch>/cross.mjs (scratch script: copies each sample project and calls run-trial.mjs installProblems with the given condition) docs/evidence/1817-skill-application <scratch>/run1817b
 fixture B for condition B: accepted
