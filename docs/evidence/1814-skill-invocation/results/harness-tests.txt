@@ -1,0 +1,25 @@
+ok 1 - clean R probe passes
+ok 2 - each leak or mismatch fails the probe
+ok 3 - the Claude Code installation under the real HOME is not a leak, user configuration is
+ok 4 - hook condition passes with pointer delivered and the hook log
+ok 5 - description() reads the single-line frontmatter description
+ok 6 - guard refuses ancestors with instruction files or git, and the real HOME
+ok 7 - asc case: body + reference + markers => applied
+ok 8 - Skill tool alone is the first hop only
+ok 9 - two hops: thin entry Read, then body by a relative path resolved against the project root
+ok 10 - paths outside the project root never match; /private/tmp equals /tmp
+ok 11 - a refused or unanswered Read does not count as read
+ok 12 - the registered entry (.claude/skills) is not the body
+ok 13 - managed-runtime body path counts
+ok 14 - misselect: another ASC body read instead of the expected one
+ok 15 - answerGroups require every group (ui-1)
+ok 16 - secondary Skill is recorded but not required (asc-3)
+ok 17 - negative: an ASC body read or Skill call is overapplication
+ok 18 - budget stop is scored with the last text; API error is a failure
+ok 19 - scoreDir: names, multi-letter conditions, hook log, missing trace
+ok 20 - judge: owner pass level
+ok 21 - redact removes local paths and user-specific names
+ok 22 - pointer text is extracted from v05/USAGE.md and the hook emits it as SessionStart context
+# tests 22
+# pass 22
+# fail 0

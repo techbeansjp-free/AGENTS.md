@@ -1,0 +1,391 @@
+{
+ "label": "local npm pack of the worktree HEAD (stand-in, not the release)",
+ "install": {
+  "tarball": "agent-skill-chain-0.5.0.tgz",
+  "tarballSha256": "8a01707f01511f4693bf2736e8bb5701fff89a76efb6a0ff9f247f722e6d7833",
+  "packageVersion": "0.5.0",
+  "runtimeVersion": "0.5.0",
+  "planChanges": 281,
+  "appliedChanges": 281,
+  "registeredHosts": [
+   ".claude"
+  ],
+  "nodeVersion": "v20.12.2",
+  "npmVersion": "10.5.0",
+  "distributed": [
+   "asc",
+   "contract-enforcement",
+   "decision-ownership",
+   "engineering-judgment",
+   "estimate-and-scope",
+   "execution-recovery",
+   "migration-assurance",
+   "project-foundation",
+   "research-to-implementation",
+   "review-and-remediation",
+   "security-evidence",
+   "subagent-model-selection",
+   "tracker-issue-writing",
+   "user-journey-acceptance",
+   "verification-optimization",
+   "work-coordination"
+  ],
+  "entries": [
+   {
+    "name": "asc",
+    "entrySha256": "bcf76ad61edbbb144a3c5cb12e7c6be857db26868c10151966e77c3ef568e1cc",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": null
+   },
+   {
+    "name": "contract-enforcement",
+    "entrySha256": "fffc6a82f99746318b9299e3dcbacc8ff0bdeb19433316e1a9eba2bbb398f50f",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "decision-ownership",
+    "entrySha256": "6ef8d2bcc0857f0a684bf874f285c9c07da39f36101a9dc9dd5ddb13c2b21b71",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "engineering-judgment",
+    "entrySha256": "3af0906d2876c844cd61087b7b2cbbc2f9320155f7442186c6c5ecd587c70f4f",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "estimate-and-scope",
+    "entrySha256": "a13d0318f28511913e52f9a94c0a1f52bf15e8e3acad6a15198790694d29b465",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "execution-recovery",
+    "entrySha256": "3af9f328a85f904bdb0cce32295aa806844616840cf40c5afe43cea1ab32b281",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "migration-assurance",
+    "entrySha256": "008b599e4e210b8cd055da826f93b72f667fe793945287561c00ec289dcd253e",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "project-foundation",
+    "entrySha256": "092a9b0f31ae8b1e1d5ea59695ec4fb227329c3585549e1db0cbd0c9327052de",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "research-to-implementation",
+    "entrySha256": "9a2b5dbdb31fb02dda6924cc554108e7a8a2edff13b62955904006494a085d13",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "review-and-remediation",
+    "entrySha256": "90db26e6b40b3ffd9bad93dcf4f3ea95fb5615882e8733188271be48915dd7b7",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "security-evidence",
+    "entrySha256": "6a2925e20ecaaf7825c2aa35d9c582a1c0fd2177f82ad82119683aa8a15841e6",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "subagent-model-selection",
+    "entrySha256": "b2cff8bac60bc03abfe2b1ade3f2c7bc49a8fae407981ec34ff7df5bb62f1720",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "tracker-issue-writing",
+    "entrySha256": "e1b2b7f3c85a8bea9ff17776ddd71bc3348e458ede6c600c47f7958279ec4fe8",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "user-journey-acceptance",
+    "entrySha256": "bc10cb29fa8375747c022538823d5c437f302dce82525d26d2ca1100ba465494",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "verification-optimization",
+    "entrySha256": "e6d46f989b2f5f2a015677f5551d0bec4d485f12a68e76aa2d17d474a3554db0",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   },
+   {
+    "name": "work-coordination",
+    "entrySha256": "9b17e4c0d88c023ff6b1e3369acec75c7d200ee1445e28f0f55bd25304da125a",
+    "entryMatchesRecord": true,
+    "entryIsThin": true,
+    "bodyMatchesRecord": true,
+    "bodyEqualsPackage": true
+   }
+  ],
+  "distributionSha256": "89f8e43d6e3a71e2ee5bd6ef5e34ee845f9fb3bc52a3e5f6ac437d9bc41cb557",
+  "problems": []
+ },
+ "sourceFiles": 13,
+ "checks": {
+  "goldPathsExistInRelease": {
+   "pass": true,
+   "detail": []
+  },
+  "promptFilesExist": {
+   "pass": true,
+   "detail": [
+    "src/users.ts",
+    "src/validate.ts",
+    "public/users.html",
+    "docs/requirements.md",
+    "docs/BRIEF.md"
+   ]
+  },
+  "fixturePlacement": {
+   "pass": true,
+   "detail": []
+  },
+  "conditionsApplied": {
+   "pass": true,
+   "detail": null
+  }
+ },
+ "conditions": {
+  "R": {
+   "applied": {
+    "condition": "R",
+    "claudeMdSha256": "cabbf71a0d719dcd4315e2b4e628295fea8a771b133e9c1d014e80f5f654b0d7",
+    "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+    "pointer": false,
+    "hook": null,
+    "committed": false
+   },
+   "claudeMdHasPointer": false,
+   "settings": false,
+   "ok": true,
+   "placement": []
+  },
+  "P": {
+   "applied": {
+    "condition": "P",
+    "claudeMdSha256": "02bce35cc5d3da987c8ecdcf0a534a5701dcde594b420660df34e49bd2bae207",
+    "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+    "pointer": true,
+    "hook": null,
+    "committed": true
+   },
+   "claudeMdHasPointer": true,
+   "settings": false,
+   "ok": true,
+   "placement": []
+  },
+  "H": {
+   "applied": {
+    "condition": "H",
+    "claudeMdSha256": "cabbf71a0d719dcd4315e2b4e628295fea8a771b133e9c1d014e80f5f654b0d7",
+    "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+    "pointer": false,
+    "hook": "usage",
+    "hookTextSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+    "settingsSha256": "7c1fcea4348a7bdec9dc819ca8963206174f7db2ab7c17420560967692e43dbc",
+    "committed": true
+   },
+   "claudeMdHasPointer": false,
+   "settings": true,
+   "hook": {
+    "exit": 0,
+    "context": true,
+    "event": "SessionStart",
+    "logged": true,
+    "matcher": "startup|resume|clear|compact"
+   },
+   "ok": true,
+   "placement": []
+  },
+  "PH": {
+   "applied": {
+    "condition": "PH",
+    "claudeMdSha256": "02bce35cc5d3da987c8ecdcf0a534a5701dcde594b420660df34e49bd2bae207",
+    "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+    "pointer": true,
+    "hook": "usage",
+    "hookTextSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+    "settingsSha256": "7c1fcea4348a7bdec9dc819ca8963206174f7db2ab7c17420560967692e43dbc",
+    "committed": true
+   },
+   "claudeMdHasPointer": true,
+   "settings": true,
+   "hook": {
+    "exit": 0,
+    "context": true,
+    "event": "SessionStart",
+    "logged": true,
+    "matcher": "startup|resume|clear|compact"
+   },
+   "ok": true,
+   "placement": []
+  },
+  "S": {
+   "applied": {
+    "condition": "S",
+    "claudeMdSha256": "cabbf71a0d719dcd4315e2b4e628295fea8a771b133e9c1d014e80f5f654b0d7",
+    "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+    "pointer": false,
+    "hook": "strong",
+    "hookTextSha256": "74cc677c8a09c75aeac0588f08e063dbaac658e28e40eb904d0633b8c26a528e",
+    "settingsSha256": "7c1fcea4348a7bdec9dc819ca8963206174f7db2ab7c17420560967692e43dbc",
+    "committed": true
+   },
+   "claudeMdHasPointer": false,
+   "settings": true,
+   "hook": {
+    "exit": 0,
+    "context": true,
+    "event": "SessionStart",
+    "logged": true,
+    "matcher": "startup|resume|clear|compact"
+   },
+   "ok": true,
+   "placement": []
+  }
+ },
+ "plan": {
+  "phases": [
+   {
+    "phase": "0 isolation probe",
+    "conditions": [
+     "R",
+     "P",
+     "H"
+    ],
+    "cases": [
+     "probe"
+    ],
+    "runs": 1,
+    "trials": 3,
+    "planningUsd": 0.3
+   },
+   {
+    "phase": "1 current state",
+    "conditions": [
+     "R"
+    ],
+    "cases": [
+     "asc-1",
+     "asc-2",
+     "asc-3",
+     "rr-1",
+     "tw-1",
+     "ri-1",
+     "se-1",
+     "ma-1",
+     "ui-1",
+     "es-1",
+     "do-1",
+     "neg-1",
+     "neg-2",
+     "neg-3"
+    ],
+    "runs": 2,
+    "trials": 28,
+    "planningUsd": 6.16
+   },
+   {
+    "phase": "2 candidates",
+    "conditions": [
+     "P",
+     "H"
+    ],
+    "cases": [
+     "asc-1",
+     "asc-2",
+     "asc-3",
+     "rr-1",
+     "tw-1",
+     "ri-1",
+     "se-1",
+     "ma-1",
+     "ui-1",
+     "es-1",
+     "do-1",
+     "neg-1",
+     "neg-2",
+     "neg-3"
+    ],
+    "runs": 2,
+    "trials": 56,
+    "planningUsd": 12.32
+   },
+   {
+    "phase": "3 after improvement (probe + same cases)",
+    "conditions": [
+     "I"
+    ],
+    "cases": [
+     "probe",
+     "asc-1",
+     "asc-2",
+     "asc-3",
+     "rr-1",
+     "tw-1",
+     "ri-1",
+     "se-1",
+     "ma-1",
+     "ui-1",
+     "es-1",
+     "do-1",
+     "neg-1",
+     "neg-2",
+     "neg-3"
+    ],
+    "runs": 2,
+    "note": "I = files generated by the adopted project-assets proposal; defined after the owner adopts a mechanism",
+    "trials": 29,
+    "planningUsd": 6.26
+   }
+  ],
+  "totalTrials": 116,
+  "totalPlanningUsd": 25.04,
+  "capUsd": 30
+ },
+ "command": "claude -p <prompt> --model <model> --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events",
+ "pass": true
+}

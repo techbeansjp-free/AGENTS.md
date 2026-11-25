@@ -1,0 +1,12 @@
+{
+ "schema": "asc-1814-release/v1",
+ "note": "ASC release installed into the sample project for phases 0-2 (current state and candidates). Read from the GitHub Release metadata on 2026-11-25 (no download yet). Before the run, download the tarball and SHA256SUMS of this tag, check both digests, and pass the tarball and assetSha256 to make-fixture.mjs. Phase 3 (after improvement) uses the release that contains the adopted change; record it here before that phase.",
+ "phases0to2": {
+  "tag": "v0.5.106",
+  "targetCommit": "51c3e02224a73c3128ec37878890f9983c0308d8",
+  "asset": "agent-skill-chain-0.5.106.tgz",
+  "assetSha256": "a53be6ee21b8bc527be74ae9246664ea06eb3b0adcf0917fca6d8d41b0b75bdf",
+  "sha256sumsAssetSha256": "12fbed260d6cf7b854513bbf2bec440042f6f1c14f9eb63f460d07289c4d38d3"
+ },
+ "phase3": null
+}
