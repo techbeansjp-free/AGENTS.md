@@ -13,11 +13,11 @@
  "S": {
   "kind": "candidate",
   "asset": "agent-skill-chain-0.5.109.tgz",
-  "assetSha256": "f8c3eae78b36951746a4e615a173cc3c91777131fb06c4cdaae53b32aa512b1e",
-  "packedFromCommit": "4c95f8d48d72c22e9810537b4cc4299cb7c338d9",
-  "packCommand": "node scripts/pack-candidate.mjs <scratch>/rel1817/candidate --version=0.5.109",
+  "assetSha256": "3a01647368b12966d52f617b6739520971791d4a75f2e37ec1c515d8c9ff14d2",
+  "packedFromCommit": "ee77daa0648b0cab2235280045457f76271fa3a3",
+  "packCommand": "node scripts/pack-candidate.mjs <scratch>/rel1817/candidate2 --version=0.5.109",
   "baseRelease": "B",
   "differsFromReleaseOnly": ["package/release-identity.json", "package/skills/asc/SKILL.md", "package/skills/estimate-and-scope/SKILL.md"],
-  "note": "Packed at commit 4c95f8d4 (= v0.5.109 target commit af2ab12e plus the two Skill text edits). Unpacked and compared with the B tarball on 2026-11-25: only the three listed files differ; release-identity.json differs only in the sha256 of the two Skill bodies, and both Skill bodies equal the files at 4c95f8d4 (release: at af2ab12e). Kept under <scratch>/rel1817/candidate/. Not published; used only in this measurement."
+  "note": "Packed at commit ee77daa0 (= v0.5.109 target commit af2ab12e plus the two Skill text edits of 4c95f8d4, with the asc sentence narrowed to requests that involve changes in ee77daa0; review L3). Replaces the first candidate packed at 4c95f8d4 (sha256 f8c3eae7..., never measured). Unpacked and compared with the B tarball on 2026-11-25: only the three listed files differ; release-identity.json differs only in the sha256 of the two Skill bodies, and both Skill bodies equal the files at ee77daa0 (release: at af2ab12e). Kept under <scratch>/rel1817/candidate2/. Not published; used only in this measurement."
  }
 }

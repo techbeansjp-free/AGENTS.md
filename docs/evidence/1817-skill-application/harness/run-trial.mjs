@@ -1,6 +1,8 @@
 // #1817: copied from docs/evidence/1814-skill-invocation/harness/run-trial.mjs. Changes: the gate variable is
 // ASC1817_ALLOW_PAID; installProblems requires the condition/tarball pairing of release.json (B: the release, S: the
-// candidate, each by its pinned sha256) instead of "a digest in release.json"; conditions are B and S only.
+// candidate, each by its pinned sha256) instead of "a digest in release.json"; conditions are B and S only; a planned
+// trial runs only as the next unreserved one of run-order.json and a replacement only after every planned trial (order.mjs,
+// review M1).
 // One #1814 trial: a fresh copy of the sample project (make-fixture.mjs: ASC installed from the release tarball), one
 // condition, one prompt, `claude -p` with the project as cwd. Case id `probe` runs the isolation probe (probe-check.mjs).
 // Default is a dry run that prepares nothing and prints the plan. A model call happens only with --run AND env
@@ -34,6 +36,7 @@ import {assertPlacement} from './guard.mjs';
 import * as ledgerOps from './ledger.mjs';
 import {differences, lastRecord, refixAfterMeasurement} from './fixation.mjs';
 import {pinnedFor, gitEnv} from './make-fixture.mjs';
+import {orderRefusal} from './order.mjs';
 import crypto from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -133,6 +136,7 @@ function main() {
   const fail = (m) => { console.error(`refused: ${m}`); process.exit(3); };
   for (const k of ['--model', '--budget', '--stop-usd']) if (args.includes(k)) fail(`${k} is fixed in conditions.json and is not accepted`);
   if (!runsRootArg || !cond || !caseId || !rep || !fixtureArg) fail('usage: <runs-root> <cond> <case|probe> <rep> --fixture <dir> [--ledger f] [--run]');
+  if (!/^[1-9][0-9]*$/.test(rep)) fail(`rep must be a positive integer, not ${rep}`);
   const conds = loadConditions();
   if (!conds.conditions[cond]) fail(`unknown condition ${cond}`);
   const model = conds.model;
@@ -176,6 +180,8 @@ function main() {
     const spent = ledgerOps.spent(ledger);
     if (spent + budget > Number(stopUsd) - SAFETY_MARGIN_USD) { unlock(); fail(`cumulative spend ${spent.toFixed(2)} + this trial's budget ${budget} would exceed ${stopUsd} minus the safety margin ${SAFETY_MARGIN_USD}`); }
     if (ledgerOps.reservedNames(ledger).has(name)) { unlock(); fail(`trial ${name} is already in the ledger; a rerun needs a new rep number`); }
+    const outOfOrder = orderRefusal({condition: cond, caseId, rep, reserved: ledgerOps.reservedNames(ledger)});
+    if (outOfOrder) { unlock(); fail(outOfOrder); }
     const installFile = `${fixture}.install.json`;
     const install = fs.existsSync(installFile) ? JSON.parse(fs.readFileSync(installFile, 'utf8')) : null;
     fs.cpSync(fixture, work, {recursive: true});

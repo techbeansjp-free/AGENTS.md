@@ -2,6 +2,9 @@
 // path already redacted by collect.mjs (cwd "<trial>/work", paths "<trial>/work/..."), so the committed public traces
 // can be scored directly (#1814 had to score the unredacted scratch copies); real absolute paths are scored as before.
 // (2) judge1817 is the #1817 decision rule (decision-criteria.md); --judge B S uses it and reports the targeted cases.
+// (3) review L1: replacements are mandatory and exact: the k-th failed planned trial (rep order) is replaced by rep
+// runs+k only; a failed replacement stays a failure; a missing replacement is reported and makes the condition not judged.
+// (4) review M1: judge1817 is not-judged when a condition has no valid negative trial or a planned case has no valid trial.
 // Scores #1814 runs against the fixed gold (cases.json) from the tool-call record only (stream-json of `claude -p`).
 // Adapted from docs/evidence/1783-skill-coexistence/harness/score.mjs. Differences: two hops are counted separately (the
 // thin entry .claude/skills/<s>/SKILL.md or the Skill tool, then the body .agent-skill-chain/skills/<s>/SKILL.md);
@@ -110,20 +113,21 @@ export function conditionHooks() {
   return Object.fromEntries(Object.entries(conditionsFile().conditions).map(([k, v]) => [k, v.hook ?? false]));
 }
 
-// review L-3: only rep numbers 1..runs are scored. A later rep counts only as the one-time replacement of a failed planned
-// trial of the same condition and case (in rep order); every other run is marked counted:false and reported separately.
+// review L-3 / #1817 L1: only rep numbers 1..runs are scored. The k-th failed planned trial of a condition and case (in
+// rep order) is replaced by rep runs+k and by nothing else; a failed replacement counts as a failure and is not replaced
+// again; a failed planned trial whose replacement is absent is kept as a failure and flagged replacementMissing. Every
+// other run (a rep above runs+failures, or a rep above runs without a failure to replace) is counted:false.
 export function selectCounted(runs, planned) {
   const groups = new Map();
   for (const r of runs) { const k = `${r.condition}|${r.case}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
   for (const rs of groups.values()) {
     const plan = rs.filter((r) => r.run <= planned).sort((a, b) => a.run - b.run);
-    const extra = rs.filter((r) => r.run > planned).sort((a, b) => a.run - b.run);
     for (const r of rs) r.counted = r.run <= planned;
-    for (const failed of plan.filter((r) => r.failure)) {
-      const sub = extra.shift();
-      if (!sub) break;
+    plan.filter((r) => r.failure).forEach((failed, k) => {
+      const sub = rs.find((r) => r.run === planned + k + 1);
+      if (!sub) { failed.replacementMissing = true; return; }
       failed.counted = false; failed.replacedBy = sub.run; sub.counted = true; sub.replaces = failed.run;
-    }
+    });
   }
   return runs;
 }
@@ -158,6 +162,7 @@ export function summarize(spec, runs, condition) {
     applied: n(pos, (r) => r.applied), misselect: n(pos, (r) => r.misselect), unselected: n(pos, (r) => r.unselected),
     negatives: neg.length, overapplication: n(neg, (r) => r.overapplication), negMarkers: n(neg, (r) => r.markers),
     hookFired: n(ok, (r) => r.hookFired === true), hookMissing: n(ok, (r) => r.hookFired === false),
+    replacementsMissing: n(rs, (r) => r.replacementMissing), casesWithoutValidTrial: spec.cases.map((k) => k.id).filter((id) => !ok.some((r) => r.case === id)),
     perCase: Object.fromEntries(spec.cases.map((k) => [k.id, ok.filter((r) => r.case === k.id).map((r) => (k.expect ? (r.applied ? 'A' : r.bodyRead ? 'B' : r.entryHop ? 'E' : r.misselect ? 'M' : 'U') : (r.overapplication ? 'O' : '-'))).join('')])),
     costUsd: Number(sum(all, (r) => r.costUsd).toFixed(4)), turns: sum(ok, (r) => r.turns), durationSec: Math.round(sum(ok, (r) => r.durationMs) / 1000)};
 }
@@ -185,9 +190,18 @@ export function judge(baseline, candidate, {minBodyRate = 0.8, negSlack = 1, max
 // conditions have the same number, 44 each without failures); (b) tolerates one trial of B's denominator. (c) is a count.
 // A condition with failures above maxFailureRate after replacement is not judged.
 export function judge1817(baseline, candidate, {negSlack = 1, bodySlack = 1, maxFailureRate = 0.1, targeted = ['asc-3', 'es-1']} = {}) {
-  const unjudgeable = [baseline, candidate].filter((s) => s.runs === 0 || s.failures / s.runs > maxFailureRate || s.positives === 0).map((s) => s.condition);
   const perCase = Object.fromEntries(targeted.map((id) => [id, {[baseline.condition]: baseline.perCase?.[id] ?? '', [candidate.condition]: candidate.perCase?.[id] ?? ''}]));
-  if (unjudgeable.length) return {verdict: 'not-judged', reason: `failures above ${maxFailureRate * 100}% or no runs: ${unjudgeable.join(',')}`, targeted: perCase};
+  const reasons = [];
+  for (const s of [baseline, candidate]) {
+    if (s.runs === 0 || s.positives === 0) reasons.push(`${s.condition}: no valid positive trial`);
+    else if (s.failures / s.runs > maxFailureRate) reasons.push(`${s.condition}: failures above ${maxFailureRate * 100}%`);
+    // review M1: rule (c) must not pass vacuously, and a cap stop must not leave a planned case unmeasured.
+    if (!s.negatives) reasons.push(`${s.condition}: no valid negative trial`);
+    if ((s.casesWithoutValidTrial ?? []).length) reasons.push(`${s.condition}: no valid trial for ${s.casesWithoutValidTrial.join(',')}`);
+    // review L1: replacements are mandatory.
+    if (s.replacementsMissing) reasons.push(`${s.condition}: ${s.replacementsMissing} failed trial(s) without the mandatory replacement`);
+  }
+  if (reasons.length) return {verdict: 'not-judged', reason: reasons.join('; '), targeted: perCase};
   const rate = (s, k) => s[k] / s.positives;
   const checks = {
     appliedAboveBaseline: {value: `${candidate.applied}/${candidate.positives} vs ${baseline.applied}/${baseline.positives}`, pass: rate(candidate, 'applied') > rate(baseline, 'applied')},

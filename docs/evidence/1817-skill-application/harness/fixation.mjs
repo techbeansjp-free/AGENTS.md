@@ -1,4 +1,4 @@
-// #1817: copied from docs/evidence/1814-skill-invocation/harness/fixation.mjs. Changes: the schema name, and the stage3
+// #1817: copied from docs/evidence/1814-skill-invocation/harness/fixation.mjs. Changes: the schema name, FIXED, and the stage3
 // action is refused (#1817 has no stage 3; the stage3Violations function and its tests are kept unchanged and unused).
 // Append-only fixation of the plan before model runs (reviews N2, M-1, L-c, L-d). results/fixation.json = {records: [...]}.
 //   init     first record (refused when the file exists). Takes --ledger: creates the ledger when absent (or accepts an
@@ -26,8 +26,9 @@ import {fileURLToPath} from 'node:url';
 import * as ledgerOps from './ledger.mjs';
 
 const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const FIXED = ['cases.json', 'conditions.json', 'decision-criteria.md', 'release.json',
-  ...['apply-condition', 'collect', 'condition-i', 'fixation', 'guard', 'install-asc', 'ledger', 'make-fixture', 'markers', 'probe-check', 'run-trial', 'score'].map((n) => `harness/${n}.mjs`)];
+// #1817: run-order.json, order.mjs and run-all.mjs are fixed too (review M1).
+export const FIXED = ['cases.json', 'conditions.json', 'decision-criteria.md', 'release.json', 'run-order.json',
+  ...['apply-condition', 'collect', 'condition-i', 'fixation', 'guard', 'install-asc', 'ledger', 'make-fixture', 'markers', 'order', 'probe-check', 'run-all', 'run-trial', 'score'].map((n) => `harness/${n}.mjs`)];
 // Files stage 3 may change, each with a reason and an independent review (condition-I specific only).
 export const STAGE3_ALLOWED = ['harness/condition-i.mjs'];
 // The only fixed file a stage-0 correction may change (review N-1 (c)).

@@ -8,7 +8,10 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseTrace, scoreRun, scoreDir, summarize, judge, judge1817, shortfall, markersOk, projectRelative, selectCounted} from './score.mjs';
 import {redact, scrubSensitive, collect} from './collect.mjs';
-import {pointerText, hookScript} from './apply-condition.mjs';
+import {pointerText, hookScript, loadConditions} from './apply-condition.mjs';
+import {plannedTrials, orderProblems, orderRefusal, replacementPlan, loadOrder} from './order.mjs';
+import {trialsToStart} from './run-all.mjs';
+import * as ledgerOps from './ledger.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const spec = JSON.parse(fs.readFileSync(path.join(here, '../cases.json'), 'utf8'));
@@ -263,4 +266,86 @@ test('#1817 judge: applied above B, bodyRead not lower than B - 1, overapplicati
   assert.equal(judge1817(b, S2({condition: 'S', applied: 40, failures: 6})).verdict, 'not-judged'); // 6/56 > 10%
   // rates when the valid positives differ (one failure not replaced): 30/43 > 30/44
   assert.equal(judge1817(b, S2({condition: 'S', positives: 43, applied: 30, bodyRead: 39})).verdict, 'adoption-candidate');
+});
+
+test('#1817 M1: the fixed order is reps outermost, negatives interleaved, B then S; counterexamples fail', () => {
+  const order = loadOrder();
+  assert.deepEqual(orderProblems(order, spec, loadConditions()), []);
+  const p = plannedTrials();
+  assert.equal(p.length, 112);
+  assert.deepEqual(p.slice(0, 6).map((t) => t.name), ['B-asc-1-1', 'S-asc-1-1', 'B-rr-1-1', 'S-rr-1-1', 'B-neg-1-1', 'S-neg-1-1']);
+  assert.equal(p[27].name, 'S-do-1-1'); assert.equal(p[28].name, 'B-asc-1-2'); assert.equal(p.at(-1).name, 'S-do-1-4');
+  const withCases = (caseOrder) => orderProblems({...order, caseOrder}, spec, loadConditions());
+  const pos = order.caseOrder.filter((id) => !id.startsWith('neg-')), neg = order.caseOrder.filter((id) => id.startsWith('neg-'));
+  assert.match(withCases([...pos, ...neg]).join(), /ends with a negative case/);
+  assert.match(withCases([neg[0], neg[1], ...pos, neg[2]]).join(), /adjacent/);
+  assert.match(withCases(order.caseOrder.slice(1)).join(), /not a permutation/);
+  assert.match(orderProblems({...order, conditionOrder: ['S', 'B']}, spec, loadConditions()).join(), /conditionOrder/);
+});
+
+test('#1817 M1: run-trial accepts only the next planned trial, replacements only after all planned; probes are free', () => {
+  const names = plannedTrials().map((t) => t.name);
+  const r = (condition, caseId, rep, reserved) => orderRefusal({condition, caseId, rep: String(rep), reserved: new Set(reserved)});
+  assert.equal(r('B', 'asc-1', 1, []), null);
+  assert.match(r('S', 'asc-1', 1, []), /next planned trial is B-asc-1-1/);
+  assert.match(r('B', 'rr-1', 1, ['B-asc-1-1']), /next planned trial is S-asc-1-1/);
+  assert.equal(r('S', 'asc-1', 1, ['B-asc-1-1']), null);
+  assert.match(r('B', 'asc-1', 2, ['B-asc-1-1']), /out of order/); // rep 2 before rep 1 of the other cases
+  assert.equal(r('B', 'probe', 1, []), null);
+  assert.match(r('B', 'asc-1', 5, names.slice(0, -1)), /before every planned trial is reserved/);
+  assert.equal(r('B', 'asc-1', 5, names), null);
+  assert.match(r('B', 'asc-1', 4, names), /all planned trials are reserved/); // a planned name cannot be rerun
+});
+
+test('#1817 L1: replacements are one per failed planned trial (rep 5, 6, ...), and a failed replacement is not replaced', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-repl-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const mk = (name, text, ok = true) => {
+    fs.mkdirSync(path.join(root, name), {recursive: true});
+    if (text !== null) fs.writeFileSync(path.join(root, name, 'trace.jsonl'), ok ? trace([], {text}) : trace([], {subtype: 'error_during_execution', is_error: true, text: 'API Error: 529'}));
+    if (text !== null) fs.writeFileSync(path.join(root, name, 'meta.json'), '{}');
+  };
+  mk('B-asc-1-1', null); mk('B-asc-1-2', 'x'); mk('B-asc-1-3', 'x', false); mk('B-asc-1-4', 'x'); mk('S-asc-1-1', 'x');
+  const exists = (n) => fs.existsSync(path.join(root, n));
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, exists}).map((x) => x.name), ['B-asc-1-5', 'B-asc-1-6']);
+  mk('B-asc-1-5', 'x', false); // the replacement failed: it is not replaced again
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, exists}).map((x) => x.name), ['B-asc-1-6']);
+  mk('B-asc-1-6', 'x');
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, exists}), []);
+  // scoring matches: 1 -> 5 (a failure), 3 -> 6; a rep 7 is not counted
+  const row = (run, failure) => ({condition: 'B', case: 'asc-1', run, ...(failure ? {failure: 'x'} : {})});
+  const rows = selectCounted([row(1, true), row(2), row(3, true), row(4), row(5, true), row(6), row(7)], 4);
+  assert.deepEqual(rows.map((x) => [x.run, x.counted]), [[1, false], [2, true], [3, false], [4, true], [5, true], [6, true], [7, false]]);
+  assert.deepEqual([rows[0].replacedBy, rows[2].replacedBy, rows[4].replaces], [5, 6, 1]);
+  // a rep 6 without a second failure does not count; a missing replacement is flagged
+  const gap = selectCounted([row(1, true), row(2), row(3), row(4), row(6)], 4);
+  assert.deepEqual(gap.map((x) => x.counted), [true, true, true, true, false]);
+  assert.equal(gap[0].replacementMissing, true);
+  assert.equal(summarize(spec, gap, 'B').replacementsMissing, 1);
+});
+
+test('#1817 run-all: planned trials skip the reserved ones; replacements wait for every planned trial', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-runall-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const lf = path.join(d, 'l.jsonl'); ledgerOps.create(lf);
+  ledgerOps.reserve(lf, 'B-probe-1', 0.6); ledgerOps.reserve(lf, 'B-asc-1-1', 0.6);
+  const todo = trialsToStart('planned', {runsRoot: path.join(d, 'runs'), ledger: lf, spec});
+  assert.equal(todo.length, 111); assert.equal(todo[0].name, 'S-asc-1-1');
+  assert.throws(() => trialsToStart('replacements', {runsRoot: path.join(d, 'runs'), ledger: lf, spec}), /after every planned trial/);
+});
+
+test('#1817 M1: judge1817 is not-judged without valid negative trials, with an unmeasured case, or a missing replacement', () => {
+  const S3 = (o) => ({condition: 'X', runs: 56, failures: 0, positives: 44, negatives: 12, bodyRead: 40, applied: 30, overapplication: 0, casesWithoutValidTrial: [], replacementsMissing: 0, perCase: {}, ...o});
+  const b = S3({condition: 'B'});
+  assert.equal(judge1817(b, S3({condition: 'S', applied: 31})).verdict, 'adoption-candidate');
+  const noNeg = judge1817(b, S3({condition: 'S', applied: 31, negatives: 0}));
+  assert.equal(noNeg.verdict, 'not-judged'); assert.match(noNeg.reason, /S: no valid negative trial/);
+  assert.match(judge1817(S3({condition: 'B', negatives: 0}), S3({condition: 'S', applied: 31})).reason, /B: no valid negative trial/);
+  assert.match(judge1817(b, S3({condition: 'S', applied: 31, casesWithoutValidTrial: ['do-1']})).reason, /no valid trial for do-1/);
+  assert.match(judge1817(b, S3({condition: 'S', applied: 31, replacementsMissing: 1})).reason, /without the mandatory replacement/);
+  // summarize reports the cases without a valid trial (a cap stop before a case, or only failures)
+  const rows = selectCounted([{condition: 'S', case: 'asc-1', run: 1, kind: 'asc', expect: 'asc', bodyRead: true, applied: true}, {condition: 'S', case: 'neg-1', run: 1, kind: 'negative', expect: null, failure: 'x'}], 4);
+  const s = summarize(spec, rows, 'S');
+  assert.ok(s.casesWithoutValidTrial.includes('neg-1') && s.casesWithoutValidTrial.includes('do-1') && !s.casesWithoutValidTrial.includes('asc-1'));
+  assert.equal(judge1817(b, s).verdict, 'not-judged');
 });

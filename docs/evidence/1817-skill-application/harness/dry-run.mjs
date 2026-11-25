@@ -5,7 +5,7 @@
 // holds the adopted block with the USAGE pointer text after the unchanged base, that every gold Skill body and reference
 // exists, placement, applies the condition to a copy (one neutral commit), and compares the two fixtures: the installed
 // .agent-skill-chain/skills trees may differ only in skills/asc/SKILL.md and skills/estimate-and-scope/SKILL.md, and the
-// S bodies must carry the two edits of commit 4c95f8d4 (B bodies must not). Lists the planned trials with the planning
+// S bodies must carry the two edits (4c95f8d4, ee77daa0) (B bodies must not). Lists the planned trials with the planning
 // cost. Output has no absolute paths (public repository).
 // Usage: node dry-run.mjs <new-scratch-root> --B <tarball> --S <tarball> [--allow-unreleased] [--label <text>] [--out <json>]
 import fs from 'node:fs';
@@ -26,8 +26,8 @@ const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 // Planning cost per trial (Host total_cost_usd): #1814 stage 3 (condition I, same tools and model) 2.32 USD / 28 trials
 // = 0.083; planned at 0.1 with 0.1 per isolation probe.
 export const PLAN = {perTrialUsd: 0.1, probeUsd: 0.1, runs: loadConditions().runs, capUsd: BUDGET.capUsd, safetyMarginUsd: SAFETY_MARGIN_USD};
-// The two edits of commit 4c95f8d4 (one distinctive phrase each).
-export const EDITS = {'asc/SKILL.md': '実装・修正・対応を求める依頼', 'estimate-and-scope/SKILL.md': '何を調べれば見積が確定するか'};
+// The two edits (4c95f8d4, asc narrowed in ee77daa0), one distinctive phrase each.
+export const EDITS = {'asc/SKILL.md': '変更を伴う依頼（実装・修正。', 'estimate-and-scope/SKILL.md': '何を調べれば見積が確定するか'};
 export const EXPECTED_SKILL_DIFF = Object.keys(EDITS).sort();
 export const OPEN = '<!-- asc:read-trigger v1 -->', CLOSE = '<!-- /asc:read-trigger -->';
 
