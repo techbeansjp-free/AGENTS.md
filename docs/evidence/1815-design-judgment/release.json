@@ -14,17 +14,18 @@
  },
  "S": {
   "kind": "candidate",
-  "packedFromCommit": "c997f274f7879513224a5552f0476c9924ea982e",
+  "packedFromCommit": "bb1d188638344da0cc0def2e37fbf77aa785a344",
   "packCommand": "node scripts/pack-candidate.mjs <absolute new dir> --version=0.5.109",
   "asset": "agent-skill-chain-0.5.109.tgz",
-  "assetSha256": "12c6e2c96b313805419ec27cfd6ec80283530d6bebcecdf3b489e33cb94632ba",
+  "assetSha256": "5fad22932c953c253f14db51643c33c1ef182343f1dc32a7afd279629fc709af",
   "reproduced": "A second pack from the same commit into another new directory gave the same sha256.",
   "baseCondition": "B",
   "differsOnly": [
    "package/release-identity.json",
    "package/skills/asc/references/implementation.md",
    "package/skills/user-journey-acceptance/references/journeys.md"
-  ]
+  ],
+  "history": "The first candidate (packed from c997f274, sha256 12c6e2c9…32ba) was replaced before any run: the independent review (L-1) added one sentence to implementation.md (unchosen comparison drafts are not left in the deliverable), commit bb1d1886. Packed into a new directory (candidate2)."
  },
  "installedReferences": {
   "B": {
@@ -34,8 +35,8 @@
    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md": "9e77c5d88722f2aeb96ad7c353de2d3e5805929085eca59da6943f9275e54fd0"
   },
   "S": {
-   ".agent-skill-chain/skills/asc/references/implementation.md": "4119c94c87d1a535a32388703cb9ff9d53d748053fbb8eff5d9f7138a6a744a4",
-   ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md": "4119c94c87d1a535a32388703cb9ff9d53d748053fbb8eff5d9f7138a6a744a4",
+   ".agent-skill-chain/skills/asc/references/implementation.md": "90f38be2a498feb16bbc0c8a842b0b7f90d8b4a5dc6ea376793945c9236c1479",
+   ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md": "90f38be2a498feb16bbc0c8a842b0b7f90d8b4a5dc6ea376793945c9236c1479",
    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md": "98c36ffba76613fcf4f4466376761a5f4154dcae4a7483be7a12bb274c25b3df",
    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md": "98c36ffba76613fcf4f4466376761a5f4154dcae4a7483be7a12bb274c25b3df"
   }

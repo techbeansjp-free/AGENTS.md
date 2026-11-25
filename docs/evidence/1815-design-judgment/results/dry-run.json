@@ -53,6 +53,8 @@
     true,
     true,
     true,
+    true,
+    true,
     true
    ]
   },
@@ -99,7 +101,7 @@
      "data.json",
      "FONTS.md"
     ],
-    "sampleHead": "e2eb265e55f809aa39e18b19b1229c7896a487d1",
+    "sampleHead": "d511df0c1828295e63a413c2d55c7d05ab4c1c10",
     "clean": true,
     "runtimeVersion": "0.5.109",
     "adopted": {
@@ -162,7 +164,7 @@
      "data.json",
      "FONTS.md"
     ],
-    "sampleHead": "0288aeae7f85e366f72dfbb5d651135c16f54231",
+    "sampleHead": "f6689e78b780a61ce81e3bdb28bfe8cc823f8e88",
     "clean": true,
     "runtimeVersion": "0.5.109",
     "adopted": {
@@ -225,7 +227,7 @@
      "data.json",
      "FONTS.md"
     ],
-    "sampleHead": "357c639b36795a981296a29c6239d5b45ca7dcf7",
+    "sampleHead": "817aeca79871be03874666fef1d16df5af3b3840",
     "clean": true,
     "runtimeVersion": "0.5.109",
     "adopted": {
@@ -258,7 +260,7 @@
  },
  "tarballs": {
   "B": "05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f",
-  "S": "12c6e2c96b313805419ec27cfd6ec80283530d6bebcecdf3b489e33cb94632ba"
+  "S": "5fad22932c953c253f14db51643c33c1ef182343f1dc32a7afd279629fc709af"
  },
  "refusals": [
   {
@@ -314,6 +316,85 @@
   "removed": 0
  },
  "imageChecks": {
+  "ui03-dashboard": {
+   "exit": 0,
+   "pages": {
+    "ui03-good": {
+     "gold": {
+      "coverage": 1,
+      "missing": [],
+      "narrowOverflow": false,
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "tablet"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       0,
+       0
+      ]
+     }
+    },
+    "ui03-bad": {
+     "gold": {
+      "coverage": 1,
+      "missing": [],
+      "narrowOverflow": false,
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": false,
+       "missing": [
+        "出荷遅延率",
+        "LANE-B01",
+        "LANE-C02",
+        "温度センサー"
+       ],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": false,
+       "missing": [
+        "出荷遅延率",
+        "LANE-B01",
+        "LANE-C02",
+        "温度センサー"
+       ],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "tablet"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       0,
+       0
+      ]
+     }
+    }
+   }
+  },
   "ui07-bus-mobile": {
    "exit": 0,
    "pages": {
@@ -582,6 +663,8 @@
    }
   },
   "expectations": [
+   true,
+   true,
    true,
    true,
    true,

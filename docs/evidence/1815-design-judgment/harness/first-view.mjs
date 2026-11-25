@@ -1,7 +1,8 @@
 // Deterministic initial-view indicators for one generated page (#1815). Runs in the #1807 tool container (--network none).
 // Usage: node first-view.mjs <cases.json> <case-id> <index.html> <gold.json of #1807>   -> JSON on stdout
-// For each width of cases.json (narrow, wide; viewport width x height, no scroll, page loaded + 300 ms, every non-local
-// request aborted as in #1807 gold-check.mjs):
+// For each width of cases.json (narrow, wide; viewport width x height, no scroll, clock fixed at cases.json fixedNow,
+// reduced motion and no animation/transition, load + fonts + 500 ms, every non-local request aborted as in #1807
+// gold-check.mjs):
 //   answerFound / answerMissing : firstView items whose text appears in the text of the nodes visible in the initial view
 //                                 (node rectangle intersects the viewport horizontally and vertically, height > 0, the
 //                                 parent element passes checkVisibility (display, visibility, opacity) and is not in the
@@ -21,17 +22,29 @@ const [casesPath, caseId, htmlPath, goldPath] = process.argv.slice(2);
 const spec = JSON.parse(fs.readFileSync(casesPath, 'utf8')).cases[caseId];
 const gold = JSON.parse(fs.readFileSync(goldPath, 'utf8'))[spec.goldKey];
 const norm = (s) => String(s).normalize('NFKC').replace(/\s+/g, '').replace(/[〜～]/g, '~');
-const has = (text, alts) => alts.some((a) => text.includes(norm(a)));
+// review L-5: an item made only of digits and ':'/'.' (e.g. "48", "07:48") must stand alone: it is matched in the text
+// with node and whitespace boundaries kept ("|"), and not next to another digit, ':' or '.'. Other items are matched in
+// the text without boundaries (an item may span inline nodes, e.g. <b>12</b>分).
+const normSep = (s) => String(s).normalize('NFKC').replace(/\s+/g, '|').replace(/[〜～]/g, '~');
+const NUMERIC = /^[0-9.:]+$/;
+const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, (c) => `\\${c}`);
+const hasIn = (t, alts) => alts.some((a) => (NUMERIC.test(norm(a)) ? new RegExp(`(?<![0-9.:])${esc(norm(a))}(?![0-9.:])`).test(t.sep) : t.flat.includes(norm(a))));
+const texts = (parts) => ({flat: norm(parts.join('')), sep: normSep(parts.join('|'))});
 const file = 'file://' + path.resolve(htmlPath);
 const dir = path.dirname(path.resolve(htmlPath));
 const browser = await chromium.launch({chromiumSandbox: false});
-const out = {schema: 'asc-1815-first-view/v1', case: caseId, widths: {}};
+const out = {schema: 'asc-1815-first-view/v2', case: caseId, widths: {}, fixedNow: spec.fixedNow};
+// review L-5: the page clock is fixed at the case's data time; animations and transitions are off (reduced motion and a
+// style override); the measurement waits for load, document.fonts.ready and a fixed 500 ms.
+const fixedMs = Date.parse(spec.fixedNow);
+const clock = `(() => { const F = ${fixedMs}; const D = Date; class FD extends D { constructor(...a) { super(...(a.length ? a : [F])); } static now() { return F; } } FD.parse = D.parse; FD.UTC = D.UTC; globalThis.Date = FD; })();`;
 let external = 0;
 try {
   for (const side of ['narrow', 'wide']) {
     const {width, height} = spec[side];
     const fv = spec.firstView[side];
-    const ctx = await browser.newContext({viewport: {width, height}});
+    const ctx = await browser.newContext({viewport: {width, height}, reducedMotion: 'reduce'});
+    await ctx.addInitScript({content: clock});
     await ctx.route('**/*', (r) => {
       const u = new URL(r.request().url());
       if ((u.protocol === 'file:' && decodeURIComponent(u.pathname).startsWith(dir)) || ['data:', 'blob:'].includes(u.protocol)) return r.continue();
@@ -39,7 +52,9 @@ try {
     });
     const page = await ctx.newPage();
     await page.goto(file, {waitUntil: 'load', timeout: 20000});
-    await page.waitForTimeout(300);
+    await page.evaluate(() => document.fonts.ready.then(() => true));
+    await page.addStyleTag({content: '*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}'});
+    await page.waitForTimeout(500);
     const m = await page.evaluate((selectors) => {
       const nodes = [];
       const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -60,20 +75,20 @@ try {
       });
       return {nodes, innerText: document.body.innerText, H: window.innerHeight, selectors: Object.fromEntries(selectors.map((s) => [s, inView(s)]))};
     }, fv.selectors);
-    const textUpTo = (limit) => norm(m.nodes.filter((n) => n.visible && n.top < limit && n.bottom > 0).map((n) => n.t).join(''));
+    const textUpTo = (limit) => texts(m.nodes.filter((n) => n.visible && n.top < limit && n.bottom > 0).map((n) => n.t));
     const first = textUpTo(m.H);
     const label = (alts) => alts[0];
-    const found = fv.items.filter((alts) => has(first, alts)).map(label);
-    const missing = fv.items.filter((alts) => !has(first, alts)).map(label);
+    const found = fv.items.filter((alts) => hasIn(first, alts)).map(label);
+    const missing = fv.items.filter((alts) => !hasIn(first, alts)).map(label);
     const screens = {};
     for (const alts of fv.items) {
       let k = null;
-      for (let i = 1; i <= 8 && k === null; i++) if (has(textUpTo(i * m.H), alts)) k = i;
+      for (let i = 1; i <= 8 && k === null; i++) if (hasIn(textUpTo(i * m.H), alts)) k = i;
       screens[label(alts)] = k;
     }
-    const rendered = norm(m.innerText);
-    const all = norm(m.nodes.map((n) => n.t).join(''));
-    const hiddenRequired = gold.required.filter((alts) => has(all, alts) && !has(rendered, alts)).map(label);
+    const rendered = {flat: norm(m.innerText), sep: normSep(m.innerText)};
+    const all = texts(m.nodes.map((n) => n.t));
+    const hiddenRequired = gold.required.filter((alts) => hasIn(all, alts) && !hasIn(rendered, alts)).map(label);
     out.widths[side] = {width, height, answerFound: found, answerMissing: missing, selectorsInView: m.selectors,
       answerAll: missing.length === 0 && Object.values(m.selectors).every(Boolean), screensToAnswer: screens, hiddenRequired};
     await ctx.close();

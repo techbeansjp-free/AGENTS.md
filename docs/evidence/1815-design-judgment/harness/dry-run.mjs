@@ -97,9 +97,9 @@ function main() {
   // run-indicators.mjs = #1807 run-render.mjs (render.mjs + gold-check.mjs) and first-view.mjs in the pinned image,
   // --network none. The synthetic pages are placed in the runs layout as <case>/<B|S>-r<n>/fixture/out/index.html.
   if (!opt('--skip-image')) {
-    const synth = {'ui07-bus-mobile': {'B-r1': 'ui07-good', 'S-r1': 'ui07-bad', 'S-r2': 'ui07-hidden'}, 'ui04-parts-search': {'B-r1': 'ui04-good', 'S-r1': 'ui04-bad'}};
+    const synth = {'ui03-dashboard': {'B-r1': 'ui03-good', 'S-r1': 'ui03-bad'}, 'ui07-bus-mobile': {'B-r1': 'ui07-good', 'S-r1': 'ui07-bad', 'S-r2': 'ui07-hidden'}, 'ui04-parts-search': {'B-r1': 'ui04-good', 'S-r1': 'ui04-bad'}};
     const sr = path.join(root, 'synthetic-runs'), rr = path.join(root, 'synthetic-render');
-    const src = (n) => (n === 'ui07-hidden' ? path.join(here, 'dryrun', `${n}.html`) : path.join(ev, '..', '1807-design-eval-browser', 'harness', 'dryrun', `${n}.html`));
+    const src = (n) => (['ui07-hidden', 'ui03-good', 'ui03-bad'].includes(n) ? path.join(here, 'dryrun', `${n}.html`) : path.join(ev, '..', '1807-design-eval-browser', 'harness', 'dryrun', `${n}.html`));
     report.imageChecks = {};
     for (const [caseId, trials] of Object.entries(synth)) {
       for (const [t, n] of Object.entries(trials)) { const d = path.join(sr, caseId, t, 'fixture', 'out'); fs.mkdirSync(d, {recursive: true}); fs.copyFileSync(src(n), path.join(d, 'index.html')); }
@@ -121,6 +121,8 @@ function main() {
       pg('ui07-bus-mobile', 'ui07-hidden')?.firstView?.narrow.missing?.includes('中央通り') && pg('ui07-bus-mobile', 'ui07-hidden')?.firstView?.narrow.hiddenRequired?.includes('200円'),
       pg('ui04-parts-search', 'ui04-good')?.firstView?.wide.answerAll === true && pg('ui04-parts-search', 'ui04-bad')?.firstView?.wide.answerAll === false,
       ['ui07-good', 'ui04-good'].every((n) => (pg(n.startsWith('ui07') ? 'ui07-bus-mobile' : 'ui04-parts-search', n)?.gold?.coverage ?? 0) > 0.9),
+      pg('ui03-dashboard', 'ui03-good')?.firstView?.narrow.answerAll === true && pg('ui03-dashboard', 'ui03-good')?.firstView?.wide.answerAll === true && (pg('ui03-dashboard', 'ui03-good')?.gold?.coverage ?? 0) === 1,
+      pg('ui03-dashboard', 'ui03-bad')?.firstView?.narrow.answerAll === false && pg('ui03-dashboard', 'ui03-bad')?.firstView?.wide.answerAll === false,
       Object.values(report.imageChecks).every((c) => c.exit === 0 && Object.values(c.pages).every((x) => x.render && x.render.renderErrors === 0 && x.gold && !x.gold.error && x.firstView && !x.firstView.error)),
     ];
     report.imageChecks.expectations = exp;

@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -10,12 +11,15 @@ import {fileURLToPath} from 'node:url';
 import {tarballProblems, installedProblems, packageDiff, loadJson, sha256, READ_TRIGGER_MARK, ev} from './pairing.mjs';
 import {readRecord} from './reads.mjs';
 import {claudeArgs, dockerPlan, childEnv, initProblems, scrub, EXPECTED_INIT_TOOLS, LABEL, imageProblems} from './run-trial.mjs';
-import {positions, meanPositions, pairsSAboveB, spearman, direction, evaluatorCase, indicatorCase, caseDecision, overall, selectCounted, completeness, fixationProblemsForScoring, ledgerFacts, nameSetProblems, runConsistency, decide} from './decide.mjs';
+import {positions, meanPositions, pairsSAboveB, spearman, direction, evaluatorCase, indicatorCase, caseDecision, overall, selectCounted, completeness, fixationProblemsForScoring, ledgerFacts, nameSetProblems, runConsistency, decide, thresholds} from './decide.mjs';
 import {plannedTrials, orderRefusal, replacementPlan, countedTrials, generationFailure, orderProblems, loadOrder} from './order.mjs';
 import {checkProbe, compareProbes, probeProblems, approvalProblems, probePrompt, probeRefusal} from './probe.mjs';
 import {refixViolations} from './fixation.mjs';
 import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
-import {blindIds, makeRound} from './make-blind.mjs';
+import {blindIds, makeRound, referencedAssets, copyDeliverable, blindPlacementProblems} from './make-blind.mjs';
+import {guardProblems} from './rank-guard.mjs';
+import {nextRankName, rankEntries, rankRounds, extractRanking} from './budget.mjs';
+import {publishTrial, toolCalls} from './collect.mjs';
 import {canReserve} from './budget.mjs';
 import {FIXED, differences, digests} from './fixation.mjs';
 import {clean} from './collect.mjs';
@@ -441,4 +445,129 @@ test('decide/make-blind: a reserved trial whose directory was removed is refused
   assert.ok(runConsistency(root, l).problems.includes('ui04-parts-search/B-r9 is only in directories and classified'));
   assert.match(runConsistency(root, null).problems[0], /ledger is required/);
   assert.deepEqual(nameSetProblems({ledgerNames: ['a'], dirNames: ['a'], classifiedNames: []}), ['a is only in ledger and directories']);
+});
+
+// ---- independent review fixes ------------------------------------------------------------------------------------------
+test('make-blind (M-1): only index.html and the assets it references are copied, never alternatives or notes', () => {
+  const src = path.join(tmp(), 'out'), dst = path.join(tmp(), 'live', 'abcd');
+  const w = (r, t) => { fs.mkdirSync(path.dirname(path.join(src, r)), {recursive: true}); fs.writeFileSync(path.join(src, r), t); };
+  w('index.html', '<html><head><link rel="stylesheet" href="style.css"></head><body><img src="img/logo.png" srcset="img/logo@2x.png 2x"><a href="a/index.html">案A</a><a href="https://example.com/x.png">x</a></body></html>');
+  w('style.css', 'body{background:url("img/bg.png")}');
+  for (const r of ['img/logo.png', 'img/logo@2x.png', 'img/bg.png', 'unused.png', 'a/index.html', 'a/a.png', 'alt-b.html', 'DESIGN-NOTES.md', 'notes.md', 'compare.md']) w(r, 'x');
+  assert.deepEqual(referencedAssets(src), ['img/bg.png', 'img/logo.png', 'img/logo@2x.png', 'style.css']);
+  copyDeliverable(src, dst);
+  const copied = []; const walk = (d, p = '') => { for (const e of fs.readdirSync(d, {withFileTypes: true})) { if (e.isDirectory()) walk(path.join(d, e.name), `${p}${e.name}/`); else copied.push(`${p}${e.name}`); } };
+  walk(dst);
+  assert.deepEqual(copied.sort(), ['img/bg.png', 'img/logo.png', 'img/logo@2x.png', 'index.html', 'style.css']);
+  assert.match(fs.readFileSync(path.join(dst, 'index.html'), 'utf8'), /Content-Security-Policy/);
+});
+
+test('rank-guard (M-2): a round starts only with the runs and keys roots at mode 000 and the round directory separate', () => {
+  const base = tmp(), runs = path.join(base, 'runs'), keys = path.join(base, 'keys'), round = path.join(base, 'blind', 'round1');
+  for (const d of [runs, keys, path.join(round, 'ui03-dashboard')]) fs.mkdirSync(d, {recursive: true});
+  fs.writeFileSync(path.join(round, 'ui03-dashboard', 'ORDER.txt'), 'x\n');
+  assert.equal(guardProblems({runsRoot: runs, keysRoot: keys, roundDir: round}).length, 2);
+  fs.chmodSync(runs, 0); fs.chmodSync(keys, 0);
+  try {
+    assert.deepEqual(guardProblems({runsRoot: runs, keysRoot: keys, roundDir: round}), []);
+    assert.ok(guardProblems({runsRoot: runs, keysRoot: base, roundDir: round}).some((p) => /separate trees/.test(p)));
+  } finally { fs.chmodSync(runs, 0o700); fs.chmodSync(keys, 0o700); }
+  assert.deepEqual(blindPlacementProblems(path.join(runs, 'blind'), runs, keys), ['blind root is inside the runs root']);
+  assert.deepEqual(blindPlacementProblems(path.join(base, 'blind'), runs, keys), []);
+});
+
+const rankLedger = () => { const d = tmp(), l = path.join(d, 'l.jsonl'); ledgerOps.create(l); return {d, l}; };
+const addRank = (l, name, settle) => {
+  const id = crypto.randomUUID();
+  fs.appendFileSync(l, JSON.stringify({id, seq: ledgerOps.reservations(l).length, trial: name, reservedUsd: name.includes('fable') ? 4 : 0}) + '\n');
+  if (settle) fs.appendFileSync(l, JSON.stringify({id, trial: name, costUsd: name.includes('fable') ? 2 : null, ...settle}) + '\n');
+};
+const rawOut = (n) => `理由…\n\`\`\`json\n{"ui03-dashboard":["a${n}","b"],"ui07-bus-mobile":[],"ui04-parts-search":[]}\n\`\`\`\n`;
+
+test('budget (M-3): one round per evaluator and round number, one retry only after a failed launch', () => {
+  const {l} = rankLedger();
+  assert.deepEqual(nextRankName(rankEntries(l), 'fable', 1), {name: 'rank-fable-1'});
+  addRank(l, 'rank-fable-1', null);
+  assert.match(nextRankName(rankEntries(l), 'fable', 1).error, /not settled/);
+  const {l: l2} = rankLedger();
+  addRank(l2, 'rank-fable-1', {outputSha256: 'x', launchFailed: false});
+  assert.match(nextRankName(rankEntries(l2), 'fable', 1).error, /already ran/);
+  const {l: l3} = rankLedger();
+  addRank(l3, 'rank-codex-2', {launchFailed: true});
+  assert.deepEqual(nextRankName(rankEntries(l3), 'codex', 2), {name: 'rank-codex-2-retry'});
+  addRank(l3, 'rank-codex-2-retry', {launchFailed: true});
+  assert.match(nextRankName(rankEntries(l3), 'codex', 2).error, /one retry only/);
+  assert.match(nextRankName(rankEntries(l3), 'other', 1).error, /evaluator/);
+  assert.deepEqual(extractRanking(rawOut(1))['ui03-dashboard'], ['a1', 'b']);
+});
+
+test('budget/decide (M-3): ranks must match the ledger hashes; missing, extra or unsettled rounds are refused', () => {
+  const {d, l} = rankLedger(); const ranks = path.join(d, 'ranks'); fs.mkdirSync(ranks);
+  let n = 0;
+  for (const e of ['fable', 'codex']) for (const r of [1, 2]) {
+    const text = rawOut(++n); fs.writeFileSync(path.join(ranks, `${e}-${r}.txt`), text);
+    if (e === 'codex' && r === 1) addRank(l, 'rank-codex-1', {launchFailed: true});
+    addRank(l, e === 'codex' && r === 1 ? 'rank-codex-1-retry' : `rank-${e}-${r}`, {outputSha256: sha256(text), sessionId: 's', launchFailed: false});
+  }
+  const ok = rankRounds(l, ranks);
+  assert.deepEqual(ok.problems, []);
+  assert.deepEqual(ok.rankings.codex[1]['ui03-dashboard'], ['a3', 'b']);
+  fs.appendFileSync(path.join(ranks, 'fable-2.txt'), 'edited');
+  assert.ok(rankRounds(l, ranks).problems.some((p) => /fable round 2: raw output differs/.test(p)));
+  fs.writeFileSync(path.join(ranks, 'fable-2.txt'), rawOut(2));
+  fs.writeFileSync(path.join(ranks, 'fable-3.txt'), 'x');
+  assert.ok(rankRounds(l, ranks).problems.some((p) => /unexpected file/.test(p)));
+  fs.rmSync(path.join(ranks, 'fable-3.txt'));
+  addRank(l, 'rank-fable-1-retry', null);
+  assert.ok(rankRounds(l, ranks).problems.some((p) => /rank-fable-1-retry is reserved but not settled/.test(p)));
+  const {d: d2, l: l2} = rankLedger(); fs.mkdirSync(path.join(d2, 'ranks'));
+  assert.ok(rankRounds(l2, path.join(d2, 'ranks')).problems.some((p) => /fable round 1: 0 completed/.test(p)));
+});
+
+test('decide (M-4): failed trials are not ranked; U over valid pairs with scaled thresholds; < 2 valid is 未判定', () => {
+  assert.deepEqual(thresholds(9), {improved: 8, worse: 1});
+  assert.deepEqual(thresholds(6), {improved: 6, worse: 0});
+  assert.deepEqual(thresholds(4), {improved: 4, worse: 0});
+  const key = {a: 'S-r1', b: 'S-r2', d: 'B-r1', e: 'B-r2', f: 'B-r3'};
+  const r = evaluatorCase([{order: ['a', 'b', 'd', 'e', 'f'], key}, {order: ['b', 'a', 'd', 'f', 'e'], key}], ['S-r1', 'S-r2'], ['B-r1', 'B-r2', 'B-r3']);
+  assert.equal(r.of, 6); assert.equal(r.u, 6); assert.equal(r.effective, '改善');
+  assert.equal(evaluatorCase([], ['S-r1'], ['B-r1', 'B-r2']).effective, '未判定');
+  assert.throws(() => evaluatorCase([{order: ['a', 'b', 'd', 'e', 'f'], key}], ['S-r1', 'S-r2', 'S-r3'], ['B-r1', 'B-r2', 'B-r3']), /exactly the valid trials/);
+});
+
+test('decide (L-2, L-6): 保留 and an excluded evaluator make the case not judgeable; < 2 judgeable cases is 未判定', () => {
+  const rows = [row(), row(), row()];
+  const shaky = caseDecision({S: rows, B: rows, ranking: {fable: {effective: '採点の揺れ'}, codex: improved}});
+  assert.match(shaky.status, /^未判定/); assert.equal(shaky.judgeable, false);
+  const few = caseDecision({S: rows, B: rows, ranking: {fable: {effective: '未判定'}, codex: improved}});
+  assert.match(few.status, /^未判定/);
+  const deferred = caseDecision({S: [row({failed: true}), row({failed: true}), row()], B: rows, ranking: {fable: improved, codex: improved}});
+  assert.match(deferred.status, /^保留/); assert.equal(deferred.judgeable, false);
+  const eff = caseDecision({S: rows, B: rows, ranking: {fable: improved, codex: improved}});
+  assert.match(overall({a: eff, b: deferred, c: shaky}, 1).decision, /^未判定/);
+});
+
+test('collect (M-5): page text, images, input bodies and session ids never reach the published records', () => {
+  const root = tmp(), src = path.join(root, 'ui07-bus-mobile', 'S-r1'); fs.mkdirSync(src, {recursive: true});
+  const sid = '3439c3d2-d2d6-4317-b3c5-950e957b546c', b64 = 'iVBORw0KGgo' + 'A'.repeat(400);
+  const ev3 = [
+    {type: 'system', subtype: 'init', session_id: sid, cwd: path.join(src, 'fixture')},
+    {type: 'assistant', session_id: sid, message: {content: [
+      {type: 'tool_use', id: '1', name: 'mcp__browser__fetch_page', input: {url: 'https://example.org/work'}},
+      {type: 'tool_use', id: '2', name: 'mcp__browser__screenshot', input: {path: 'out/index.html', width: 390}},
+      {type: 'tool_use', id: '3', name: 'Write', input: {file_path: path.join(src, 'fixture', 'out', 'index.html'), content: 'GENERATED PAGE BODY'}}]}},
+    {type: 'user', message: {content: [
+      {type: 'tool_result', tool_use_id: '1', content: 'THIRD-PARTY PAGE TEXT'},
+      {type: 'tool_result', tool_use_id: '2', content: [{type: 'image', source: {type: 'base64', data: b64}}]},
+      {type: 'tool_result', tool_use_id: '3', content: 'ok'}]}}];
+  fs.writeFileSync(path.join(src, 'trace.jsonl'), ev3.map((e) => JSON.stringify(e)).join('\n'));
+  fs.writeFileSync(path.join(src, 'meta.json'), JSON.stringify({trial: 'ui07-bus-mobile/S-r1', costUsd: 0.3, exit: 0, resultSubtype: 'success', initSkills: ['x'], finalText: 'FINAL', sessionId: sid}));
+  fs.writeFileSync(path.join(src, 'reads.json'), JSON.stringify({cwd: path.join(src, 'fixture'), ascBodyRead: true}));
+  const p = publishTrial({src, renderDir: path.join(root, 'none'), renderRow: {id: 'S-r1', file: '/x', viewports: {mobile: {textSample: 'PAGE TEXT SAMPLE', overflowX: false}}}, runsRoot: root});
+  const all = Object.values(p.files).join('\n');
+  for (const bad of ['THIRD-PARTY PAGE TEXT', b64.slice(0, 40), 'GENERATED PAGE BODY', 'FINAL', sid, root, 'PAGE TEXT SAMPLE']) assert.ok(!all.includes(bad), bad);
+  assert.deepEqual(Object.keys(p.files).sort(), ['indicators.json', 'meta.json', 'reads.json', 'tool-calls.json']);
+  assert.deepEqual(JSON.parse(p.files['tool-calls.json']).map((t) => [t.name, t.target]), [['mcp__browser__fetch_page', 'https://example.org/work'], ['mcp__browser__screenshot', 'out/index.html @390'], ['Write', 'out/index.html']]);
+  assert.ok(!('trace.jsonl' in p.files) && !('tools.jsonl' in p.files));
+  assert.equal(toolCalls('', null).length, 0);
 });

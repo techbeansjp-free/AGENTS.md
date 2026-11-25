@@ -1,13 +1,15 @@
 // Applies decision-criteria.md mechanically (#1815). Pure functions + a CLI. No model call.
-// Usage: node decide.mjs <runs-root> <render-root> <ranks-dir|-> <out.json> --ledger <file>
+// Usage: node decide.mjs <runs-root> <render-root> <ranks-dir|-> <out.json> --ledger <file> --keys <keys-root>
+//   ranks-dir holds the raw evaluator outputs <fable|codex>-<1|2>.txt (budget.mjs rankRounds checks them against the
+//   ledger); keys-root is make-blind's <keys-root> (<round>/<case>.json).
 // Refuses (exit 3) without the ledger, when the measurement reservations, the trial directories and the counted or
 // classified trials are not the same names, when the fixed files differ from the last fixation record or a counted trial ran under another record.
 // Not judged when the run stopped before every planned trial and required replacement existed (unless the ledger shows
 // the cap was reached), or when a condition/case has no valid trial.
 //   runs-root/<case>/<B|S>-r<n>/{meta.json,reads.json,core-steps.json}
 //   render-root/<case>/{render.json,<trial>/{gold.json,first-view.json}}       (run-indicators.mjs)
-//   ranks-dir/keys/<round>/<case>.json  {"<blind id>": "<B|S>-r<n>"}           (make-blind.mjs; opened after ranking)
-//   ranks-dir/<evaluator>-<round>.json  {"<case>": ["<best id>", ..., "<worst id>"]}  (evaluator: fable|codex, round: 1|2)
+//   keys-root/<round>/<case>.json  {"<blind id>": "<B|S>-r<n>"}                 (make-blind.mjs; opened after ranking)
+//   ranks-dir/<evaluator>-<round>.txt  raw output ending with {"<case>": ["<best id>", ..., "<worst id>"]}
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -15,11 +17,12 @@ import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
 import {loadJson, ev} from './pairing.mjs';
 import {countedTrials} from './order.mjs';
 import {isMeasurementName} from './probe.mjs';
+import {rankRounds} from './budget.mjs';
 import {differences, lastRecord} from './fixation.mjs';
 
 export const EVALUATORS = ['fable', 'codex'];
 export const ROUNDS = [1, 2];
-export const RULES = {improvedAtLeast: 8, worseAtMost: 1, pairs: 9, reproducibleAtLeast: 0.5, readMajority: 2, minEffectCases: 2, maxCostRatio: 3, maxFailedPerCondition: 1};
+export const RULES = {improvedFraction: 8 / 9, worseFraction: 1 / 9, minValidPerCondition: 2, reproducibleAtLeast: 0.5, readMajority: 2, minEffectCases: 2, maxCostRatio: 3, maxFailedPerCondition: 1};
 const read = (p) => (fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null);
 
 // ---- trials ----------------------------------------------------------------------------------------------------------
@@ -156,17 +159,24 @@ export function spearman(a, b) {
   const d2 = ts.reduce((acc, t) => acc + (ra[t] - rb[t]) ** 2, 0);
   return Number((1 - (6 * d2) / (n * (n * n - 1))).toFixed(3));
 }
-export const direction = (u) => (u >= RULES.improvedAtLeast ? '改善' : u <= RULES.worseAtMost ? '劣化' : '差なし');
+// review M-4: U counts only the pairs of valid trials; the thresholds scale with the number of pairs:
+// improved when U >= ceil(8/9 x pairs), worse when U <= floor(1/9 x pairs) (9 pairs: 8 and 1, as #1807).
+export const thresholds = (pairs) => ({improved: Math.ceil(RULES.improvedFraction * pairs - 1e-9), worse: Math.floor(RULES.worseFraction * pairs + 1e-9)});
+export const direction = (u, pairs = 9) => { const t = thresholds(pairs); return u >= t.improved ? '改善' : u <= t.worse ? '劣化' : '差なし'; };
 
-// rounds: [{order, key}, {order, key}] of one evaluator for one case; S/B: selected trial names.
+// rounds: [{order, key}, {order, key}] of one evaluator for one case; S/B: the valid (ranked) trial names. Fewer than
+// 2 valid trials in either condition: the ranking of the case is 未判定 (review M-4).
 export function evaluatorCase(rounds, S, B) {
+  if (S.length < RULES.minValidPerCondition || B.length < RULES.minValidPerCondition) return {effective: '未判定', reason: `valid trials S ${S.length}, B ${B.length} (< ${RULES.minValidPerCondition})`};
+  for (const r of rounds) if ([...Object.values(r.key)].sort().join() !== [...S, ...B].sort().join()) throw new Error('the blind keys do not list exactly the valid trials');
   const pos = rounds.map((r) => positions(r.order, r.key));
   const mean = meanPositions(pos);
   const u = pairsSAboveB(mean, S, B);
   const perRound = pos.map((p) => pairsSAboveB(p, S, B));
   const reproducibility = pos.length === 2 ? spearman(pos[0], pos[1]) : null;
   const usable = reproducibility !== null && reproducibility >= RULES.reproducibleAtLeast;
-  return {perRound, u, of: S.length * B.length, direction: direction(u), reproducibility, usable, effective: usable ? direction(u) : '採点の揺れ'};
+  const pairs = S.length * B.length;
+  return {perRound, u, of: pairs, thresholds: thresholds(pairs), direction: direction(u, pairs), reproducibility, usable, effective: usable ? direction(u, pairs) : '採点の揺れ'};
 }
 
 // ---- indicators per case ---------------------------------------------------------------------------------------------
@@ -193,7 +203,7 @@ export function indicatorCase(Sx, Bx) {
 // ---- case and overall decision ---------------------------------------------------------------------------------------
 export function caseDecision({S, B, ranking}) {
   const readS = S.filter((x) => !x.failed && x.reads.ascBodyRead && x.reads.relevantReferenceRead).length;
-  const judgeable = readS >= RULES.readMajority;
+  const readOk = readS >= RULES.readMajority;
   const failures = {S: S.filter((x) => x.failed).length, B: B.filter((x) => x.failed).length};
   const defer = failures.S > RULES.maxFailedPerCondition || failures.B > RULES.maxFailedPerCondition;
   const ind = indicatorCase(S, B);
@@ -201,12 +211,17 @@ export function caseDecision({S, B, ranking}) {
   const bothImproved = EVALUATORS.every((e) => rk[e]?.effective === '改善');
   const bothWorse = EVALUATORS.every((e) => rk[e]?.effective === '劣化');
   const indicatorOk = ind.direction !== 'worse' && !ind.nonDegradationFailed;
+  // review L-6: an evaluator excluded for low reproducibility, or a ranking without enough valid trials, makes the case
+  // 未判定 (not 効果なし). review L-2: 保留 and 未判定 cases are not judgeable.
+  const rankingUnusable = EVALUATORS.some((e) => rk[e] && ['採点の揺れ', '未判定'].includes(rk[e].effective));
   let status;
   if (EVALUATORS.some((e) => !rk[e])) status = '順位待ち';
   else if (defer) status = '保留（失敗が多い）';
-  else if (!judgeable) status = '未判定（候補の文が読まれていない）';
+  else if (!readOk) status = '未判定（候補の文が読まれていない）';
+  else if (rankingUnusable) status = '未判定（順位を判定に使えない）';
   else if (bothImproved && indicatorOk) status = '効果あり';
   else status = '効果なし';
+  const judgeable = ['効果あり', '効果なし'].includes(status);
   const harm = !defer && (bothWorse || ind.direction === 'worse' || ind.nonDegradationFailed);
   return {status, harm, judgeable, readS: `${readS}/${S.length}`, failures, indicators: ind, ranking: rk};
 }
@@ -228,7 +243,7 @@ export function overall(cases, costRatio, run = {complete: true, capReached: fal
 
 const median = (a) => { const s = a.filter((x) => typeof x === 'number').sort((x, y) => x - y); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; };
 
-export function decide(runsRoot, renderRoot, ranksDir, {ledger = null} = {}) {
+export function decide(runsRoot, renderRoot, ranksDir, {ledger = null, keysRoot = null} = {}) {
   const cases = loadJson('cases.json').cases;
   const conds = loadJson('conditions.json');
   const runs = conds.runs;
@@ -238,6 +253,13 @@ export function decide(runsRoot, renderRoot, ranksDir, {ledger = null} = {}) {
   const prepared = [];
   const rc = runConsistency(runsRoot, ledger, runs);
   if (rc.problems.length) throw new Error(`refused: ${rc.problems.join('; ')}`);
+  let rankings = null;
+  if (ranksDir) {
+    if (!keysRoot) throw new Error('refused: --keys <keys-root> is required with ranks');
+    const rr = rankRounds(ledger, ranksDir);
+    if (rr.problems.length) throw new Error(`refused: ${rr.problems.join('; ')}`);
+    rankings = rr.rankings;
+  }
   for (const caseId of Object.keys(cases)) {
     const {sel} = rc.perCase[caseId];
     missing.push(...sel.missing.map((n) => `${caseId}/${n}`));
@@ -253,9 +275,9 @@ export function decide(runsRoot, renderRoot, ranksDir, {ledger = null} = {}) {
     for (const c of ['B', 'S']) if (!(c === 'B' ? B : S).some((x) => !x.failed)) emptyCells.push(`${caseId}/${c}`);
     for (const x of [...S, ...B]) costs[x.trial[0]].push(x.costUsd);
     let ranking = null;
-    const files = Object.fromEntries(EVALUATORS.flatMap((e) => ROUNDS.map((r) => [`${e}-${r}`, read(path.join(ranksDir ?? '', `${e}-${r}.json`))])));
-    if (ranksDir && Object.values(files).every(Boolean)) {
-      ranking = Object.fromEntries(EVALUATORS.map((e) => [e, evaluatorCase(ROUNDS.map((r) => ({order: files[`${e}-${r}`][caseId], key: read(path.join(ranksDir, 'keys', String(r), `${caseId}.json`))})), sel.S, sel.B)]));
+    if (rankings) {
+      const valid = (xs) => xs.filter((x) => !x.failed).map((x) => x.trial);
+      ranking = Object.fromEntries(EVALUATORS.map((e) => [e, evaluatorCase(ROUNDS.map((r) => ({order: rankings[e][r][caseId], key: read(path.join(keysRoot, String(r), `${caseId}.json`))})), valid(S), valid(B))]));
     }
     out.trials[caseId] = {counted: {B: sel.B, S: sel.S}, missing: sel.missing, notUsed: sel.notUsed, rows: [...B, ...S]};
     out.cases[caseId] = caseDecision({S, B, ranking});
@@ -269,11 +291,11 @@ export function decide(runsRoot, renderRoot, ranksDir, {ledger = null} = {}) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
-  const i = args.indexOf('--ledger');
-  const ledger = i >= 0 ? path.resolve(args[i + 1]) : null;
-  const [runsRoot, renderRoot, ranksDir, outPath] = i >= 0 ? args.filter((_, j) => j !== i && j !== i + 1) : args;
+  const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? path.resolve(args[i + 1]) : null; };
+  const pos = args.filter((a, j) => !a.startsWith('--') && !['--ledger', '--keys'].includes(args[j - 1]));
+  const [runsRoot, renderRoot, ranksDir, outPath] = pos;
   let out;
-  try { out = decide(path.resolve(runsRoot), path.resolve(renderRoot), ranksDir && ranksDir !== '-' ? path.resolve(ranksDir) : null, {ledger}); } catch (e) { console.error(e.message); process.exit(3); }
+  try { out = decide(path.resolve(runsRoot), path.resolve(renderRoot), ranksDir && ranksDir !== '-' ? path.resolve(ranksDir) : null, {ledger: opt('--ledger'), keysRoot: opt('--keys')}); } catch (e) { console.error(e.message); process.exit(3); }
   fs.writeFileSync(outPath, JSON.stringify(out, null, 1));
   console.log(JSON.stringify({overall: out.overall, cases: Object.fromEntries(Object.entries(out.cases).map(([k, v]) => [k, v.status]))}));
 }
