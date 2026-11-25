@@ -9,12 +9,15 @@
 //            finishedAt before the settle. A completed run records the sha256 of result.txt and of status.json and the
 //            session id; Fable's cost is taken from events.jsonl (total_cost_usd) when present. A launch failure is
 //            accepted only when status.json is absent or not "completed".
-//   reserve and settle refuse unless the fixation checks pass and rank-guard.mjs guardProblems is empty (runs, keys,
+//   settle also records the length and sha256 of the rank-guard record, and seals the output directory (mode 000).
+//   reserve refuses while another ranking round is reserved and not settled (one evaluator at a time).
+//   reserve and settle refuse unless the fixation checks pass and rank-guard.mjs guardProblems is empty (including the
+//   already-settled outputs at mode 000) (runs, keys,
 //   render and the other round's blind directory at mode 000; the round directory a separate tree), so the round runs
 //   and is settled before any key can be opened.
 // decide.mjs (rankRounds) then refuses ranks whose files differ from the recorded hashes, and missing or extra rounds.
 // Usage: node budget.mjs reserve <ledger> <fable|codex> <round> <guard options>
-//        node budget.mjs settle  <ledger> <name> --host-output <dir> [--launch-failed] <guard options>
+//        node budget.mjs settle  <ledger> <name> --host-output <dir> --guard-record <rank-guard.jsonl> [--launch-failed] <guard options>
 //        node budget.mjs total   <ledger>
 // guard options: --runs-root <r> --keys-root <k> --render-root <x> --blind-root <b> --ranks-root <o> --round <1|2>
 import fs from 'node:fs';
@@ -53,6 +56,13 @@ export function nextRankName(entries, evaluator, round) {
   return {name: retry};
 }
 
+// One evaluator at a time: no reservation while another ranking round is reserved and not settled.
+export function reserveName(entries, evaluator, round) {
+  const open = Object.entries(entries).filter(([, x]) => x.reservation && !x.settle).map(([n]) => n);
+  if (open.length) return {error: `settle ${open.join(', ')} before the next round starts`};
+  return nextRankName(entries, evaluator, round);
+}
+
 export function extractRanking(text) {
   const fenced = [...String(text).matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]);
   for (const c of fenced.reverse()) { try { return JSON.parse(c); } catch { /* next */ } }
@@ -84,6 +94,38 @@ export function hostOutputProblems({dir, evaluator, roundDir, reservedAt, settle
 
 export function fableCost(dir) {
   try { const j = JSON.parse(fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8')); return typeof j.total_cost_usd === 'number' ? j.total_cost_usd : null; } catch { return null; }
+}
+
+// decide.mjs, before it reads any output (review M-1 of the third review): every round settled exactly once, nothing
+// reserved and unsettled; then the settled output directories are unsealed (mode 700) and the unseal is appended to the
+// rank-guard record.
+export function unsealOutputs({ledger, ranksRoot, guardRecord}) {
+  const entries = rankEntries(ledger);
+  const p = [];
+  for (const [n, x] of Object.entries(entries)) if (x.reservation && !x.settle) p.push(`${n} is reserved but not settled`);
+  for (const e of EVALUATORS) for (const r of ROUNDS) {
+    const done = [`rank-${e}-${r}`, `rank-${e}-${r}-retry`].filter((n) => entries[n]?.settle && !entries[n].settle.launchFailed);
+    if (done.length !== 1) p.push(`${e} round ${r}: ${done.length} completed round(s) in the ledger, expected 1`);
+  }
+  if (p.length) return p;
+  const dirs = Object.keys(entries).map((n) => path.join(ranksRoot, outputDirName(n))).filter((d) => fs.existsSync(d));
+  for (const d of dirs) fs.chmodSync(d, 0o700);
+  fs.appendFileSync(guardRecord, JSON.stringify({action: 'unseal', at: new Date().toISOString(), dirs: dirs.map((d) => path.basename(d)).sort()}) + '\n');
+  return [];
+}
+
+// review L-2 (third review): each settle recorded the length and sha256 of the rank-guard record at that moment; the
+// record is append-only, so each recorded prefix must still be the same.
+export function guardChainProblems(ledger, guardRecord) {
+  const rec = fs.existsSync(guardRecord) ? fs.readFileSync(guardRecord) : Buffer.alloc(0);
+  const p = [];
+  for (const [n, x] of Object.entries(rankEntries(ledger))) {
+    const s = x.settle;
+    if (!s) continue;
+    if (typeof s.guardRecordBytes !== 'number' || !s.guardRecordSha256) { p.push(`${n}: no rank-guard record hash in the settle`); continue; }
+    if (rec.length < s.guardRecordBytes || sha(rec.subarray(0, s.guardRecordBytes)) !== s.guardRecordSha256) p.push(`${n}: the rank-guard record changed after the settle`);
+  }
+  return p;
 }
 
 // decide.mjs: exactly one completed round per evaluator and round number, nothing unsettled, no unexpected name or
@@ -127,6 +169,7 @@ function main() {
   const abs = (k) => (opt(k) ? path.resolve(opt(k)) : null);
   const guard = {runsRoot: abs('--runs-root'), keysRoot: abs('--keys-root'), renderRoot: abs('--render-root'), blindRoot: abs('--blind-root'), round: Number(opt('--round')), ranksRoot: abs('--ranks-root')};
   if (!guard.ranksRoot) fail('--ranks-root is required');
+  guard.sealedDirs = Object.entries(rankEntries(ledger)).filter(([, x]) => x.settle).map(([n]) => path.join(guard.ranksRoot, outputDirName(n)));
   const gp = guardProblems(guard);
   if (gp.length) fail(gp.join('; '));
   const roundDir = path.join(guard.blindRoot, `round${guard.round}`);
@@ -137,7 +180,7 @@ function main() {
     const entries = rankEntries(ledger);
     if (action === 'reserve') {
       if (Number(a4) !== guard.round) fail('--round must equal the reserved round');
-      const n = nextRankName(entries, a3, a4);
+      const n = reserveName(entries, a3, a4);
       if (n.error) fail(n.error);
       const amount = a3 === 'fable' ? budget.rankingReserveUsd : 0;
       const spent = ledgerOps.spent(ledger);
@@ -160,9 +203,15 @@ function main() {
       const f = (n) => (fs.existsSync(path.join(dir, n)) ? sha(fs.readFileSync(path.join(dir, n))) : null);
       const status = fs.existsSync(path.join(dir, 'status.json')) ? JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8')) : null;
       const costUsd = !launchFailed && m[1] === 'fable' ? fableCost(dir) : null;
+      const record = abs('--guard-record');
+      if (!record || !fs.existsSync(record)) fail('--guard-record <rank-guard.jsonl> is required');
+      const rec = fs.readFileSync(record);
       fs.appendFileSync(ledger, JSON.stringify({id: x.reservation.id, trial: name, costUsd, resultSha256: launchFailed ? null : f('result.txt'), statusSha256: f('status.json'),
+        guardRecordBytes: rec.length, guardRecordSha256: sha(rec),
         sessionId: status?.sessionId ?? null, launchFailed, unreported: m[1] === 'codex' || (m[1] === 'fable' && costUsd === null && !launchFailed), at}) + '\n');
-      console.log(JSON.stringify({settled: name, launchFailed, costUsd}));
+      // review M-1 (third review): the settled output is sealed at once, before any later round can be reserved.
+      if (fs.existsSync(dir)) fs.chmodSync(dir, 0);
+      console.log(JSON.stringify({settled: name, launchFailed, costUsd, sealed: fs.existsSync(dir)}));
     } else fail('usage: reserve|settle|total');
   } finally { unlock(); }
 }

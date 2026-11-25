@@ -3,10 +3,12 @@
 // Refuses when decide.mjs runConsistency fails, when a counted trial's fixation record differs, or when the blind root
 // and the runs/keys roots are not separate trees. For every case: the valid trials (decide.mjs counts them and they are
 // not failed; failed trials are not ranked, review M-4), new random ids and a new viewing order from a seed
-// generated at random for this run and kept only in <keys-root>/<round>/seed.txt. Output: <blind-root>/round<round>/<case>/{BRIEF.md, ORDER.txt, shots/<ID>-{narrow,wide}.png,
-// live/<ID>/index.html + only the assets it references (referencedAssets; review M-1)} with a Content-Security-Policy
-// that blocks every network request, and <keys-root>/<round>/<case>.json ({ID: "<B|S>-r<n>"}). The ranking itself runs
-// in a copy of <blind-root>/round<round> while rank-guard.mjs keeps the runs and keys roots unreadable (review M-2).
+// generated at random for this run and kept only in <keys-root>/<round>/seed.txt. Output:
+// <blind-root>/round<round>/<case>/{BRIEF.md, ORDER.txt, shots/<ID>-{narrow,wide}.png, live/<ID>/index.html + only the
+// assets it references (referencedAssets)}, with cues removed (stripCues, stripCss, stripSvg) and a Content-Security-Policy
+// that blocks every network request, and <keys-root>/<round>/<case>.json ({ID: "<B|S>-r<n>"}) + seed.txt. The keys and
+// blind tree sha256 are recorded in the ledger. The evaluators rank in <blind-root>/round<round> itself (host-session
+// target), while rank-guard.mjs keeps the runs, keys, render, other-round and settled-output trees at mode 000.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -75,9 +77,12 @@ export function stripCues(html, id) {
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (_, a, css, c) => a + stripCss(css) + c)
     .replace(/<meta\b[^>]*>/gi, (tag) => (/\bcharset\s*=|name\s*=\s*["']?viewport|http-equiv\s*=\s*["']?content-type/i.test(tag) ? tag : ''))
+    .replace(/<svg\b[\s\S]*?<\/svg>/gi, (svg) => stripSvg(svg))
     .replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title>画面 ${id}</title>`);
 }
 export const stripCss = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+// review L-1 (third review): SVG comments, <title>, <desc> and <metadata> (in copied .svg files and inline <svg>).
+export const stripSvg = (svg) => svg.replace(/<!--[\s\S]*?-->/g, '').replace(/<(title|desc|metadata)\b[^>]*>[\s\S]*?<\/\1>/gi, '').replace(/<(title|desc|metadata)\b[^>]*\/>/gi, '');
 
 // out/index.html (with the CSP) and the assets it references, nothing else.
 export function copyDeliverable(src, dst, id = '') {
@@ -85,6 +90,7 @@ export function copyDeliverable(src, dst, id = '') {
   for (const rel of referencedAssets(src)) {
     fs.mkdirSync(path.dirname(path.join(dst, rel)), {recursive: true});
     if (/\.css$/i.test(rel)) fs.writeFileSync(path.join(dst, rel), stripCss(fs.readFileSync(path.join(src, rel), 'utf8')));
+    else if (/\.svg$/i.test(rel)) fs.writeFileSync(path.join(dst, rel), stripSvg(fs.readFileSync(path.join(src, rel), 'utf8')));
     else fs.copyFileSync(path.join(src, rel), path.join(dst, rel));
   }
   const html = stripCues(fs.readFileSync(path.join(src, 'index.html'), 'utf8'), id);

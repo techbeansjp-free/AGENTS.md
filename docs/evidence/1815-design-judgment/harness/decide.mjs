@@ -19,7 +19,7 @@ import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
 import {loadJson, ev} from './pairing.mjs';
 import {countedTrials} from './order.mjs';
 import {isMeasurementName} from './probe.mjs';
-import {rankRounds} from './budget.mjs';
+import {rankRounds, unsealOutputs, guardChainProblems} from './budget.mjs';
 import {lockHeldProblems} from './rank-guard.mjs';
 import {treeSha256, ledgerBlindRecords} from './make-blind.mjs';
 import {differences, lastRecord} from './fixation.mjs';
@@ -283,8 +283,10 @@ export function decide(runsRoot, renderRoot, ranksDir, {ledger = null, keysRoot 
   let rankings = null;
   if (ranksDir) {
     if (!keysRoot || !blindRoot || !guardRecord) throw new Error('refused: --keys, --blind and --guard-record are required with ranks');
+    const sealed = unsealOutputs({ledger, ranksRoot: ranksDir, guardRecord});
+    if (sealed.length) throw new Error(`refused: ${sealed.join('; ')}`);
     const rr = rankRounds(ledger, ranksDir);
-    const p = [...rr.problems, ...blindRecordProblems(ledger, keysRoot, blindRoot)];
+    const p = [...rr.problems, ...blindRecordProblems(ledger, keysRoot, blindRoot), ...guardChainProblems(ledger, guardRecord)];
     if (!rr.problems.length) p.push(...lockHeldProblems(fs.existsSync(guardRecord) ? fs.readFileSync(guardRecord, 'utf8') : '', rr.settles));
     if (p.length) throw new Error(`refused: ${p.join('; ')}`);
     rankings = rr.rankings;

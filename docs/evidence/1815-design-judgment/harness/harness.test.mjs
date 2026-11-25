@@ -16,11 +16,11 @@ import {plannedTrials, orderRefusal, replacementPlan, countedTrials, generationF
 import {checkProbe, compareProbes, probeProblems, approvalProblems, probePrompt, probeRefusal} from './probe.mjs';
 import {refixViolations} from './fixation.mjs';
 import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
-import {blindIds, makeRound, referencedAssets, copyDeliverable, blindPlacementProblems, stripCues, treeSha256} from './make-blind.mjs';
+import {blindIds, makeRound, referencedAssets, copyDeliverable, blindPlacementProblems, stripCues, treeSha256, stripSvg} from './make-blind.mjs';
 import {guardProblems, setModes, lockHeldProblems} from './rank-guard.mjs';
 import {clockScript} from './clock.mjs';
 import vm from 'node:vm';
-import {nextRankName, rankEntries, rankRounds, extractRanking, hostOutputProblems} from './budget.mjs';
+import {nextRankName, rankEntries, rankRounds, extractRanking, hostOutputProblems, reserveName, unsealOutputs, guardChainProblems} from './budget.mjs';
 import {publishTrial, toolCalls} from './collect.mjs';
 import {canReserve} from './budget.mjs';
 import {FIXED, differences, digests} from './fixation.mjs';
@@ -688,4 +688,57 @@ test('collect (M-5): page text, images, input bodies and session ids never reach
   assert.deepEqual(JSON.parse(p.files['tool-calls.json']).map((t) => [t.name, t.target]), [['mcp__browser__fetch_page', 'https://example.org/work'], ['mcp__browser__screenshot', 'out/index.html @390'], ['Write', 'out/index.html']]);
   assert.ok(!('trace.jsonl' in p.files) && !('tools.jsonl' in p.files));
   assert.equal(toolCalls('', null).length, 0);
+});
+
+// ---- third review ------------------------------------------------------------------------------------------------------
+test('ranks (M-1, third review): one evaluator at a time; settled outputs stay sealed until decide unseals them after every round', () => {
+  const {d, l} = rankLedger(); const ranks = path.join(d, 'ranks');
+  addRank(l, 'rank-fable-1', null);
+  assert.match(reserveName(rankEntries(l), 'codex', 1).error, /settle rank-fable-1 before/);
+  const base = tmp(), o = {runsRoot: path.join(base, 'runs'), keysRoot: path.join(base, 'keys'), renderRoot: path.join(base, 'render'), blindRoot: path.join(base, 'blind'), round: 1};
+  for (const x of [o.runsRoot, o.keysRoot, o.renderRoot, path.join(o.blindRoot, 'round1', 'ui03-dashboard'), path.join(o.blindRoot, 'round2'), path.join(ranks, 'fable-1')]) fs.mkdirSync(x, {recursive: true});
+  fs.writeFileSync(path.join(o.blindRoot, 'round1', 'ui03-dashboard', 'ORDER.txt'), 'x\n');
+  const rec = path.join(base, 'guard.jsonl');
+  setModes(o, 0, rec);
+  try {
+    const sealedDirs = [path.join(ranks, 'fable-1')];
+    assert.match(guardProblems({...o, sealedDirs}).join(), /^settled output fable-1 is mode [0-7]+, not 000$/);
+    fs.chmodSync(sealedDirs[0], 0);
+    assert.deepEqual(guardProblems({...o, sealedDirs}), []);
+  } finally { setModes(o, 0o700, rec); fs.chmodSync(path.join(ranks, 'fable-1'), 0o700); }
+  // decide's unseal: refused while a round is open or missing; then every output becomes readable and is recorded
+  assert.ok(unsealOutputs({ledger: l, ranksRoot: ranks, guardRecord: rec}).some((p) => /rank-fable-1 is reserved but not settled/.test(p)));
+  const {d: d2, l: l2} = rankLedger(); const ranks2 = path.join(d2, 'ranks'); const rec2 = path.join(d2, 'guard.jsonl'); fs.writeFileSync(rec2, '');
+  for (const n of ['fable-1', 'codex-1', 'fable-2', 'codex-2']) { fs.mkdirSync(path.join(ranks2, n), {recursive: true}); fs.writeFileSync(path.join(ranks2, n, 'result.txt'), 'x'); fs.chmodSync(path.join(ranks2, n), 0); addRank(l2, `rank-${n}`, {launchFailed: false, resultSha256: 'x'}); }
+  try {
+    assert.deepEqual(unsealOutputs({ledger: l2, ranksRoot: ranks2, guardRecord: rec2}), []);
+    assert.ok(['fable-1', 'codex-2'].every((n) => (fs.statSync(path.join(ranks2, n)).mode & 0o777) === 0o700));
+    const last = JSON.parse(fs.readFileSync(rec2, 'utf8').trim().split('\n').at(-1));
+    assert.equal(last.action, 'unseal'); assert.deepEqual(last.dirs, ['codex-1', 'codex-2', 'fable-1', 'fable-2']);
+  } finally { for (const n of ['fable-1', 'codex-1', 'fable-2', 'codex-2']) fs.chmodSync(path.join(ranks2, n), 0o700); }
+});
+
+test('ranks (L-2, third review): the rank-guard record must keep every prefix recorded at a settle', () => {
+  const {d, l} = rankLedger(); const rec = path.join(d, 'guard.jsonl');
+  fs.writeFileSync(rec, '{"action":"lock","round":1}\n');
+  const b = fs.readFileSync(rec);
+  addRank(l, 'rank-fable-1', {launchFailed: false, guardRecordBytes: b.length, guardRecordSha256: sha256(b)});
+  fs.appendFileSync(rec, '{"action":"unlock","round":1}\n');
+  assert.deepEqual(guardChainProblems(l, rec), []);
+  fs.writeFileSync(rec, '{"action":"lock","round":2}\n{"action":"unlock","round":1}\n');
+  assert.deepEqual(guardChainProblems(l, rec), ['rank-fable-1: the rank-guard record changed after the settle']);
+  addRank(l, 'rank-codex-1', {launchFailed: false});
+  assert.ok(guardChainProblems(l, rec).includes('rank-codex-1: no rank-guard record hash in the settle'));
+});
+
+test('make-blind (L-1, third review): SVG comments, title, desc and metadata are removed', () => {
+  const src = path.join(tmp(), 'out'), dst = path.join(tmp(), 'live');
+  fs.mkdirSync(src, {recursive: true});
+  fs.writeFileSync(path.join(src, 'index.html'), '<html><head><title>t</title></head><body><img src="icon.svg"><svg><title>案Bの図</title><desc>2案比較</desc><!-- 案A --><circle r="1"/></svg></body></html>');
+  fs.writeFileSync(path.join(src, 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><metadata>案B</metadata><title>案A</title><desc>比較</desc><!-- 案B --><rect width="1"/></svg>');
+  copyDeliverable(src, dst, 'id1');
+  const html = fs.readFileSync(path.join(dst, 'index.html'), 'utf8'), svg = fs.readFileSync(path.join(dst, 'icon.svg'), 'utf8');
+  for (const cue of ['案A', '案B', '2案比較', '比較']) { assert.ok(!html.includes(cue), cue); assert.ok(!svg.includes(cue), cue); }
+  assert.match(html, /<title>画面 id1<\/title>/); assert.match(html, /<circle r="1"\/>/); assert.match(svg, /<rect width="1"\/>/);
+  assert.equal(stripSvg('<svg><title/></svg>'), '<svg></svg>');
 });

@@ -17,7 +17,7 @@
 
 ## 試行の扱い
 
-- **生成の停止線**：生成の試行とprobeは、台帳の累計と次の予算の和が30 USD（上限40−余裕2−Fableの順位2回分の予約8）を超えるなら起動しない。順位の予算を残すため（再レビューL-d）。
+- **生成の停止線**：生成の試行とprobeは、台帳の累計と次の予算の和が30 USD（上限40−余裕2−Fableの順位2回分の予約8）を超えるなら起動しない。順位の予算を残すため（再レビューL-d）。Fableの順位の再試行の分（4 USD）は確保しない（26 USDにすると計画の最悪28 USDが収まらない）。最悪の場合に再試行の予約が上限で拒否されたら、その回が欠けるので判定は拒否され、結果は未判定（取り込まない）とする（第3のレビューL-3）。
 - **実行の順**：[run-order.json](run-order.json)で固定した。各条件1回の隔離の確認（probe）の後、反復を外側に、ケースはUI-03・UI-07・UI-04の順、条件は奇数回B→S・偶数回S→Bの順に18試行を1つずつ行う。[harness/run-all.mjs](harness/run-all.mjs)はこの順だけを実行し、`run-trial.mjs`は、台帳で次に予約されていない計画の試行以外を拒否する。上限で止まっても、2条件の差は1試行以内である。
 - **生成の失敗**（置換えの判断。`order.mjs`の`generationFailure`。試行のdirectoryだけで決まり、実行器と採点で同じ）：`meta.json`が無い、終了が0でない、結果が`success`でない（予算上限による停止を含む）、init eventの組込みtoolが`Read,Write,Edit,Glob,Grep,Skill`とMCPの3つでないか`browser`のMCP serverが`connected`でない、`out/index.html`が無い。
 - **置換え（必須）**：条件・ケースごとに、計画の試行（1〜3回目）のうちk番目の生成の失敗を、番号3+kの試行で置き換える。置換えは全ての計画の試行の後に、同じ順で、`run-all.mjs replacements`だけが実行する。置換えの試行は、結果にかかわらず再び置き換えない。採点（`decide.mjs`・`make-blind.mjs`）は同じ規則（`order.mjs`の`countedTrials`）で数える試行を決める。それ以外の追加の試行は採点に含めず、別に報告する。
@@ -46,8 +46,8 @@
 
 1. 全ケースの描画の後、[harness/make-blind.mjs](harness/make-blind.mjs)で、回ごとに、ケースごとに数える試行のうち**失敗でない試行だけ**の画面（最大6画面）を写す（独立レビューM-4）。各画面は`out/index.html`と、それが参照するfileだけ（M-1）。写すときに、HTMLとCSSのcomment、charset・viewport・Content-Type以外の`<meta>`を消し、`<title>`を「画面 <ID>」に置き換える（再レビューM-b）。IDと見る順は、実行ごとに乱数で作る種から決め、種はkeysの木にだけ置く。作成時に、その回のkeysの木とblindの木のsha256を台帳に記録する（再レビューM-d 2・3）。
 2. 評価者の閉込め（再レビューM-a）：FableとCodexの両方を`asc host-session`で、対象＝起動先を回のblindのdirectoryにして起動する（Fableは`--restricted`のRead・Glob・Grep、Codexは対象だけを読めるpermissions profile）。加えて、回の間はruns・keys・render・他の回のblindのdirectoryをmode 000にする（[harness/rank-guard.mjs](harness/rank-guard.mjs)の`lock`、終わったら`unlock`。記録fileに追記）。依頼文は[harness/rank-prompt.txt](harness/rank-prompt.txt)（#1807の再採点と同じ。画面の数は`ORDER.txt`の行数）。相互の結果を見ない。
-3. 台帳（M-3、再レビューM-d 1、[harness/budget.mjs](harness/budget.mjs)）：各回は開始前に予約する（Fableは4 USD、Codexは0で「費用の報告なし」）。評価者×回の番号ごとに1回だけ。起動自体が失敗した場合（host-sessionの`status.json`が無いか完了でない）に限り、再試行を1回。終わったら、keyを開く前に（lockのまま）、host-sessionの出力を確かめて精算する：Hostとmodel、起動先と対象が回のdirectory、session id、開始が予約の後・終了が精算の前、完了。`result.txt`と`status.json`のsha256とsession idを台帳に記録する。Fableの費用は`events.jsonl`の`total_cost_usd`から取る。予約・精算は、lockが掛かっていなければ拒否する。
-4. `decide.mjs`は、評価者×回の完了した回が1つでない、出力が記録のsha256と違う、精算していない予約・想定外の名前・想定外の出力directoryがある、keysかblindの木が作成時の記録と違う、予約から精算までlockが続いていない、のどれかで拒否する。
+3. 台帳（M-3、再レビューM-d 1、[harness/budget.mjs](harness/budget.mjs)）：各回は開始前に予約する（Fableは4 USD、Codexは0で「費用の報告なし」）。評価者×回の番号ごとに1回だけ。起動自体が失敗した場合（host-sessionの`status.json`が無いか完了でない）に限り、再試行を1回。終わったら、keyを開く前に（lockのまま）、host-sessionの出力を確かめて精算する：Hostとmodel、起動先と対象が回のdirectory、session id、開始が予約の後・終了が精算の前、完了。`result.txt`と`status.json`のsha256とsession idを台帳に記録する。Fableの費用は`events.jsonl`の`total_cost_usd`から取る。予約・精算は、lockが掛かっていなければ拒否する。評価者は1人ずつ（未精算の回がある間は次を予約しない）で、精算は出力のdirectoryを直ちにmode 000にする。予約・精算は、精算済みの出力が1つでもmode 000でなければ拒否する。全ての回の精算の後に`decide.mjs`だけが封を解き、記録する。精算は、その時点のrank-guardの記録の長さとsha256も台帳に残す（第3のレビューM-1・L-2）。
+4. `decide.mjs`は、評価者×回の完了した回が1つでない、出力が記録のsha256と違う、精算していない予約・想定外の名前・想定外の出力directoryがある、keysかblindの木が作成時の記録と違う、予約から精算までlockが続いていない、rank-guardの記録が精算の時点の内容を先頭に保っていない、のどれかで拒否する。
 
 ## 隔離の確認（probe）
 
