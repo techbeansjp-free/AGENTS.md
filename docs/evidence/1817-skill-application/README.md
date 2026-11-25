@@ -246,6 +246,10 @@ CIのsource検査（`test/test_source_quality.mjs`、`scripts/check_source_quali
 - Sで新しく不適用になった依頼が2件ある。`rr-1`の1件は、referenceを読まなかった。`ma-1`の1件は、回答の目印が欠けた。修正した2つの本文とは関係しない依頼である。
 - 6回目のレビューのLow-Aの確かめ：`trials.json`で「`missing: "not settled"`なのに`rawMetaSha256`がnullでない」行は**0件**だった。
 
+### ownerの判断
+
+2026-11-26に、ownerがSを採用すると決めた（[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1817#issuecomment-7168582633)）。採用したのは、このbranchの`skills/asc/SKILL.md`と`skills/estimate-and-scope/SKILL.md`の変更（commit `6d6e1223`・`4c95f8d4`）である。配布は、mergeの後の通常のreleaseで行う。
+
 ### 公開した記録の置換え
 
 - 取り出した記録には、一時directoryの名前（Claude Codeの設定のproject名に含まれる、利用者番号付きの名前）が112件残っていた。
