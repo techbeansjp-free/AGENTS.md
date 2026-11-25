@@ -4,27 +4,27 @@
 
 ## 結論
 
-**外部のデザインSkill（Art Direction・Product Design）は、そのままの形では採用しない。** ownerの判断（2026-11-25、Issue #1807のコメント）による。ownerは外部Skillをそのまま使うことを想定しておらず、必要な部分をASCに合った形で取り込む方針である。取込みと、その前提になる「ASCのSkillが確実に読まれること」は、別のIssueで扱う。
+**外部のデザインSkill（Art Direction・Product Design）は、そのままの形では採用しない。** ownerの判断（2026-11-25、[Issue #1807のコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1807#issuecomment-7152321825)）による。ownerは外部Skillをそのまま使うことを想定しておらず、必要な部分をASCに合った形で取り込む方針である。取込みと、その前提になる「ASCのSkillが確実に読まれること」は、別のIssueで扱う。
 
 | 条件 | 事前に固定した規則による分類 | ownerの採否 | 根拠 |
 | --- | --- | --- | --- |
-| D（Art Directionを置いた） | 未判定 | 採用しない（使われない） | 1回目・2回目の計18試行で、中心の手順（見本の閲覧と2案の実描画比較）は0件。候補のSkillは毎回、起動時の一覧に載っていたが選ばれず、2回目は本文も一度も読まれなかった |
+| D（Art Directionを置いた） | 未判定 | 採用しない（使われない） | 1回目・2回目の計18試行で、中心の手順（見本の閲覧と2案の実描画比較）は0件。候補のSkillは毎回、起動時の一覧に載っていたが、Skill toolでは一度も呼ばれなかった。1回目はDの4試行が本文を読んだが手順は動かず、2回目は本文も読まれなかった |
 | E（Art Direction＋Product Designを置いた） | 未判定 | 採用しない（使われない） | Dと同じ |
 | AP（依頼文で手順を指示） | reject（判定可能なケースが2件以上で改善なし） | 採用しない | 全9試行で手順が動いた。審美（2モデルの統合順位）は全ケース「差なし」、UXは上限近くでAと差なし、非劣化の失敗なし。費用は生成1回あたりAの約2.3倍 |
 
-- **比較の基準（A）は、ASCが働いた状態ではなかった（前提の訂正）**：生成用のfixtureには、ASCのSkillの登録（`.claude/skills/`）はあったが、ASCへ案内する`CLAUDE.md`・`AGENTS.md`は無かった。1回目・2回目の計69試行で、ASCのSkill（`asc`・`user-journey-acceptance`等）の本文を読んだ試行は0件、Skill toolの呼出しも0回だった（[results/run/trials.json](results/run/trials.json)・[results/run2/trials.json](results/run2/trials.json)の`skillFileReads`・`skillCalls`。読まれたのは1回目のArt Directionの4回だけ）。したがって、A・D・E・APの比較は「ASCに外部Skillを足した効果」ではなく、「ASCの指示が働かない素のモデルに、外部Skillを置いた・手順を指示した効果」である。#1804の比較も同じfixtureの作り方である。
-- **審美の判定は人の評価ではない**：ownerの判断（4回目）で、審美の順位付けをFableとCodexの2モデルが行った。人の評価は一度も行っていない。この置き換えは、Issueの完了の基準「審美的品質の採否は、条件名を伏せた人の評価で判定」と、Issueの禁止「モデルの採点だけで審美的品質の採否を決めること」（#1804の基準「AIによる評価を唯一の正解としない」）の両方に関わる。ownerは、この状態でIssueを閉じることを判断した。
-- **採点の揺れと生成のばらつき（再採点、[results/run2/model-ranks-retest/retest.json](results/run2/model-ranks-retest/retest.json)）**：同じ2モデルに、表示順とIDを変えてもう一度順位を付けさせた（ownerの5回目の判断、分析規則は結果の前に固定）。同じモデルの1回目と2回目の相関は、UI-04でFable 0.89・Codex 0.94、UI-07でCodex 0.96と高く、これらのケースでは同じ条件の3画面の順位の幅（4〜10）が生成のばらつきを示す。UI-03とUI-07のFableは0.38で、採点の揺れが大きい。
+- **比較の基準（A）は、ASCが働いた状態ではなかった（前提の訂正、[コメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1807#issuecomment-7152321825)）**：1回目・2回目の計69試行で、ASCのSkill（`asc`・`user-journey-acceptance`等）の本文と`AGENTS.md`を読んだ試行は0件、Skill toolの呼出しも0回だった（[results/run/trials.json](results/run/trials.json)・[results/run2/trials.json](results/run2/trials.json)の`skillFileReads`・`skillCalls`。読まれたのは1回目のArt Directionの4回だけ。`skillFileReads`は絶対pathのReadを数える。Read回数と依頼のfile数の照合で、説明のつかないReadは2回目のUI-07 AP-r2の1回だけ）。fixture自体にはASCへの案内の文は無かったが、生成はrepositoryのworktreeの配下で行ったため、生成Agentのcontextには祖先directoryの`CLAUDE.md`（「まずAGENTS.mdを読む」）と、ownerの自動memoryの索引（「every session follows ASC」を含む）が読み込まれていた（同じ起動設定のhaiku 1回で確認、0.01 USD未満）。つまり、ASCへの案内が文脈にあっても、依頼への対応でASCは読まれなかった。したがって、A・D・E・APの比較は「ASCに外部Skillを足した効果」ではなく、「ASCの手順が働かない状態で、外部Skillを置いた・手順を指示した効果」である。#1804はfixtureをrepositoryの外に置いたので、祖先の`CLAUDE.md`は無かった。ownerの自動memoryが生成Agentのcontextに入ったことは、計画に無かった逸脱である（記録した成果物・ログにmemoryの内容は含まれていない）。
+- **審美の判定は人の評価ではない**：ownerの判断（4回目）で、審美の順位付けをFableとCodexの2モデルが行った。人の評価は一度も行っていない。この置き換えは、Issueの完了の基準「審美的品質の採否は、条件名を伏せた人の評価で判定」と、Issueの禁止「モデルの採点だけで審美的品質の採否を決めること」（#1804の基準「AIによる評価を唯一の正解としない」）の両方に関わる。ownerは、この状態でIssueを閉じることを判断した（[4回目の判断](https://github.com/techbeansjp-free/AGENTS.md/issues/1807#issuecomment-7149149589)、[採否](https://github.com/techbeansjp-free/AGENTS.md/issues/1807#issuecomment-7152321825)）。
+- **採点の揺れと生成のばらつき（再採点、[results/run2/model-ranks-retest/retest.json](results/run2/model-ranks-retest/retest.json)）**：同じ2モデルに、表示順とIDを変えてもう一度順位を付けさせた（[ownerの5回目の判断](https://github.com/techbeansjp-free/AGENTS.md/issues/1807#issuecomment-7151125570)。分析規則（再現性0.7以上で生成のばらつき、0.5未満で採点の揺れ、その間は保留）は結果の前に固定）。同じモデルの1回目と2回目の相関は、UI-04でFable 0.89・Codex 0.94、UI-07でCodex 0.96と高く、これらのケースでは同じ条件の3画面の順位の幅（各画面の2回平均の最大−最小、4〜10）が生成のばらつきを示す。UI-03とUI-07のFableは0.38で採点の揺れが大きく、UI-03のCodexは0.59で保留域。再採点の対応表（新しいID→元のID）・表示順・実行状態も同じdirectoryに置いた。
 - **業務dashboard（UI-03）の傾向**：APの平均順位は、2モデル×2回のどれでもAより上だった（2回の平均でFable 4.2対7.7、Codex 4.3対7.3）。ただし組の規則では1回目6/9（差なし）、2回目9/9（改善）で分類が安定しない。確定した分類は変えず、ASCへの取込みを評価するときの観点として残す。
-- D・Eの「手順が動いた場合の価値」は判定していない。ただし、手順を依頼文で強制したAPでも、UI-03以外では改善の傾向が見えなかった。
+- D・Eの「手順が動いた場合の価値」は判定していない。手順を依頼文で強制したAPがAより上だったのは、2モデル×2回のすべてではUI-03だけ。UI-04はFableだけが上（2回平均4.5対7.7、Codexは6.0対5.7で差なし）、UI-07はどちらも差なし。
 
 ## 状態
 
-本番2回目と、2モデルによる審美の順位付けまで終えた。
+本番2回目、2モデルによる審美の順位付け、同じ2モデルによる再採点まで終えた。
 
 | 区分 | 内容 |
 | --- | --- |
-| 費用（Hostの計算値） | 合計 **19.95 USD** と、Codexの費用（取得できず欠測）。内訳：1回目7.87、2回目9.22、Fableの順位付け2.86。上限40・停止規則36の内。Codexの費用が欠測のため、上限の内に収まったことは、Codex分を除いて確かめた範囲である |
+| 費用（Hostの計算値） | 合計 **22.92 USD** と、Codexの費用（順位付け・再採点の2回分とも取得できず欠測）、memoryの確認のhaiku 1回（0.01 USD未満）。内訳：1回目7.87、2回目9.22、Fableの順位付け2.86、Fableの再採点2.97。上限40・停止規則36の内。Codexの費用が欠測のため、上限の内に収まったことは、Codex分を除いて確かめた範囲である |
 | 未実施・skip | 人の審美評価（ownerの判断で2モデルの順位に置換）。2回目の誤発火の確認（1回目で実施済み、計画どおり）。1回目の比較画面の順位付け（2回目に置き換えた） |
 
 ## 本番2回目の結果
