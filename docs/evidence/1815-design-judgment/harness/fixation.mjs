@@ -20,7 +20,7 @@ import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
 
 const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OWN = ['cases.json', 'conditions.json', 'release.json', 'run-order.json', 'decision-criteria.md', 'harness/rank-prompt.txt',
-  ...['budget', 'collect', 'decide', 'first-view', 'fixation', 'make-blind', 'make-sample', 'order', 'pairing', 'probe', 'rank-guard', 'reads', 'run-all', 'run-indicators', 'run-trial'].map((n) => `harness/${n}.mjs`)];
+  ...['budget', 'clock', 'collect', 'decide', 'first-view', 'fixation', 'make-blind', 'make-sample', 'order', 'pairing', 'probe', 'rank-guard', 'reads', 'run-all', 'run-indicators', 'run-trial'].map((n) => `harness/${n}.mjs`)];
 const E1807 = ['harness/core-steps.mjs', 'harness/gold-check.mjs', 'harness/render.mjs', 'harness/run-render.mjs', 'gold.json',
   'env/gen-prompt.txt', 'env/mcp-server.mjs', 'env/proxy.mjs', 'env/allowlist.json', 'env/allowlist-catalog.json', 'env/Dockerfile',
   'cases/FONTS.md', 'cases/ui04-parts-search/BRIEF.md', 'cases/ui04-parts-search/data.json', 'cases/ui07-bus-mobile/BRIEF.md', 'cases/ui07-bus-mobile/data.json'].map((f) => `../1807-design-eval-browser/${f}`);

@@ -2,14 +2,15 @@
 // Usage: node make-blind.mjs <runs-root> <render-root> <round 1|2> <blind-root> <keys-root> <ledger>
 // Refuses when decide.mjs runConsistency fails, when a counted trial's fixation record differs, or when the blind root
 // and the runs/keys roots are not separate trees. For every case: the valid trials (decide.mjs counts them and they are
-// not failed; failed trials are not ranked, review M-4), new random ids and a new viewing order from the seed
-// "asc1815-round<round>". Output: <blind-root>/round<round>/<case>/{BRIEF.md, ORDER.txt, shots/<ID>-{narrow,wide}.png,
+// not failed; failed trials are not ranked, review M-4), new random ids and a new viewing order from a seed
+// generated at random for this run and kept only in <keys-root>/<round>/seed.txt. Output: <blind-root>/round<round>/<case>/{BRIEF.md, ORDER.txt, shots/<ID>-{narrow,wide}.png,
 // live/<ID>/index.html + only the assets it references (referencedAssets; review M-1)} with a Content-Security-Policy
 // that blocks every network request, and <keys-root>/<round>/<case>.json ({ID: "<B|S>-r<n>"}). The ranking itself runs
 // in a copy of <blind-root>/round<round> while rank-guard.mjs keeps the runs and keys roots unreadable (review M-2).
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
 import {evidenceRoot, loadJson} from './pairing.mjs';
 import {trialRecord, fixationProblemsForScoring, runConsistency, failed} from './decide.mjs';
 
@@ -56,11 +57,37 @@ export function referencedAssets(outDir) {
   return [...found].sort();
 }
 
+// sha256 over the sorted (relative path, file sha256) list of a tree.
+export function treeSha256(dir) {
+  const rows = [];
+  const walk = (d, p = '') => { for (const e of fs.readdirSync(d, {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name))) { if (e.isDirectory()) walk(path.join(d, e.name), `${p}${e.name}/`); else rows.push(`${p}${e.name}\t${crypto.createHash('sha256').update(fs.readFileSync(path.join(d, e.name))).digest('hex')}`); } };
+  walk(dir);
+  return crypto.createHash('sha256').update(rows.join('\n')).digest('hex');
+}
+export const ledgerBlindRecords = (ledger) => fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((e) => typeof e.blind === 'number');
+
+// review M-b: what the evaluators read must not carry the generator's notes. Removed when copying: HTML comments, CSS
+// comments (in <style> and in copied .css files), every <meta> except charset, viewport and Content-Type, and the
+// <title> text (replaced by "画面 <ID>"; a title may name a draft such as 案B). Not removed: JavaScript comments inside
+// <script> (removing them safely needs a parser; recorded as a limit in the README).
+export function stripCues(html, id) {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (_, a, css, c) => a + stripCss(css) + c)
+    .replace(/<meta\b[^>]*>/gi, (tag) => (/\bcharset\s*=|name\s*=\s*["']?viewport|http-equiv\s*=\s*["']?content-type/i.test(tag) ? tag : ''))
+    .replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title>画面 ${id}</title>`);
+}
+export const stripCss = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+
 // out/index.html (with the CSP) and the assets it references, nothing else.
-export function copyDeliverable(src, dst) {
+export function copyDeliverable(src, dst, id = '') {
   fs.mkdirSync(dst, {recursive: true});
-  for (const rel of referencedAssets(src)) { fs.mkdirSync(path.dirname(path.join(dst, rel)), {recursive: true}); fs.copyFileSync(path.join(src, rel), path.join(dst, rel)); }
-  const html = fs.readFileSync(path.join(src, 'index.html'), 'utf8');
+  for (const rel of referencedAssets(src)) {
+    fs.mkdirSync(path.dirname(path.join(dst, rel)), {recursive: true});
+    if (/\.css$/i.test(rel)) fs.writeFileSync(path.join(dst, rel), stripCss(fs.readFileSync(path.join(src, rel), 'utf8')));
+    else fs.copyFileSync(path.join(src, rel), path.join(dst, rel));
+  }
+  const html = stripCues(fs.readFileSync(path.join(src, 'index.html'), 'utf8'), id);
   fs.writeFileSync(path.join(dst, 'index.html'), /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (x) => `${x}${CSP}`) : CSP + html);
 }
 
@@ -83,7 +110,10 @@ export function makeRound(runsRoot, renderRoot, round, blindRoot, keysRoot, ledg
   if (rc.problems.length) throw new Error(`refused: ${rc.problems.join('; ')}`);
   const bp = blindPlacementProblems(blindRoot, runsRoot, keysRoot);
   if (bp.length) throw new Error(`refused: ${bp.join('; ')}`);
-  const seed = `asc1815-round${round}`;
+  // review M-d item 2 / L-a: a random seed per run, kept only in the keys tree.
+  const seed = crypto.randomBytes(16).toString('hex');
+  const blindLedger = ledgerBlindRecords(ledger);
+  if (blindLedger.some((x) => x.blind === round)) throw new Error(`refused: blind round ${round} is already recorded in the ledger`);
   const summary = {};
   for (const [caseId, k] of Object.entries(cases)) {
     const {sel} = rc.perCase[caseId];
@@ -91,7 +121,9 @@ export function makeRound(runsRoot, renderRoot, round, blindRoot, keysRoot, ledg
     const fp = fixationProblemsForScoring(Object.values(recs).map((r) => r.meta));
     if (fp.length) throw new Error(`refused: ${fp.join('; ')}`);
     const valid = [...sel.B, ...sel.S].filter((n) => !failed(recs[n]));
-    const cards = blindIds(valid, seed);
+    let cards = null;
+    for (let a = 0; a < 10 && !cards; a += 1) { try { cards = blindIds(valid, `${seed}:${caseId}:${a}`); } catch { /* id collision: next attempt */ } }
+    if (!cards) throw new Error('blind ids collide');
     const out = path.join(blindRoot, `round${round}`, caseId);
     if (fs.existsSync(out)) throw new Error(`exists: ${out}`);
     fs.mkdirSync(path.join(out, 'shots'), {recursive: true});
@@ -103,14 +135,20 @@ export function makeRound(runsRoot, renderRoot, round, blindRoot, keysRoot, ledg
       for (const [side, file] of [['narrow', `${k.narrow.renderName}.png`], ['wide', `${k.wide.renderName}.png`]]) {
         if (fs.existsSync(path.join(r, file))) fs.copyFileSync(path.join(r, file), path.join(out, 'shots', `${id}-${side}.png`));
       }
-      copyDeliverable(path.join(runsRoot, caseId, trial, 'fixture', 'out'), path.join(out, 'live', id));
+      copyDeliverable(path.join(runsRoot, caseId, trial, 'fixture', 'out'), path.join(out, 'live', id), id);
     }
     fs.writeFileSync(path.join(out, 'ORDER.txt'), cards.map((c) => c.id).join('\n') + '\n');
     fs.mkdirSync(path.join(keysRoot, String(round)), {recursive: true});
     fs.writeFileSync(path.join(keysRoot, String(round), `${caseId}.json`), JSON.stringify(key, null, 1));
+    fs.writeFileSync(path.join(keysRoot, String(round), 'seed.txt'), seed + '\n');
     summary[caseId] = {screens: cards.length, excludedFailed: [...sel.B, ...sel.S].filter((n) => !valid.includes(n)).length};
   }
-  return summary;
+  // review M-d items 2 and 3: the keys and the blind tree of this round are recorded in the ledger now; decide.mjs
+  // checks both before it uses a ranking.
+  const rec = {blind: round, keysSha256: treeSha256(path.join(keysRoot, String(round))), blindTreeSha256: treeSha256(path.join(blindRoot, `round${round}`)), at: new Date().toISOString()};
+  const unlock = ledgerOps.lock(ledger);
+  try { fs.appendFileSync(ledger, JSON.stringify(rec) + '\n'); } finally { unlock(); }
+  return {...summary, recorded: rec};
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

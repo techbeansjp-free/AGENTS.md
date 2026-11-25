@@ -1,7 +1,8 @@
 // Writes the per-trial records that go into the public repository (#1815, review M-5). Only derived records are
 // published; the raw trace.jsonl, tools.jsonl, proxy.jsonl, screenshots, page text and the sample project stay in the
 // scratch runs root. Published per trial:
-//   meta.json      selected fields (no init Skill list, no final text, no session id)
+//   meta.json      selected fields (no init Skill list, no final text, no session id; permission denials as tool name
+//                  and target only)
 //   reads.json     which ASC files were read (reads.mjs)
 //   core-steps.json and indicators.json (gold summary, first-view, render summary without page text)
 //   tool-calls.json  for every tool call in the trace: its name, its target (file path relative to the sample project,
@@ -32,21 +33,22 @@ export function clean(text, runsRoot) {
 }
 
 // Tool calls without bodies: name, target, success.
+export function targetOf(u, cwd) {
+  const i = u.input ?? {};
+  if (i.file_path) return projectRelative(String(i.file_path), cwd) ?? '<outside the project>';
+  if (u.name === 'mcp__browser__screenshot') return `${i.path} @${i.width}`;
+  if (i.url) return `${i.url}${i.width ? ` @${i.width}` : ''}`;
+  if (u.name === 'Skill') return String(i.skill ?? i.command ?? '');
+  if (u.name === 'Glob' || u.name === 'Grep') return `${i.pattern ?? ''}${i.path ? ` in ${projectRelative(String(i.path), cwd) ?? '<outside the project>'}` : ''}`;
+  return null;
+}
+
 export function toolCalls(traceText, cwd) {
   const {events} = parseStream(traceText);
   const results = new Map();
   for (const e of events) if (e.type === 'user' && Array.isArray(e.message?.content)) for (const c of e.message.content) if (c?.type === 'tool_result') results.set(c.tool_use_id, c);
   const uses = events.filter((e) => e.type === 'assistant').flatMap((e) => (e.message?.content ?? []).filter((c) => c?.type === 'tool_use'));
-  const target = (u) => {
-    const i = u.input ?? {};
-    if (i.file_path) return projectRelative(String(i.file_path), cwd) ?? '<outside the project>';
-    if (u.name === 'mcp__browser__screenshot') return `${i.path} @${i.width}`;
-    if (i.url) return `${i.url}${i.width ? ` @${i.width}` : ''}`;
-    if (u.name === 'Skill') return String(i.skill ?? i.command ?? '');
-    if (u.name === 'Glob' || u.name === 'Grep') return `${i.pattern ?? ''}${i.path ? ` in ${projectRelative(String(i.path), cwd) ?? '<outside the project>'}` : ''}`;
-    return null;
-  };
-  return uses.map((u) => { const r = results.get(u.id); return {name: u.name, target: target(u), ok: Boolean(r) && r.is_error !== true}; });
+  return uses.map((u) => { const r = results.get(u.id); return {name: u.name, target: targetOf(u, cwd), ok: Boolean(r) && r.is_error !== true}; });
 }
 
 export function publishTrial({src, renderDir, renderRow, runsRoot}) {
@@ -54,8 +56,11 @@ export function publishTrial({src, renderDir, renderRow, runsRoot}) {
   const meta = JSON.parse(read(path.join(src, 'meta.json')));
   const keep = ['schema', 'trial', 'case', 'condition', 'rep', 'model', 'budget', 'claudeVersion', 'resolvedModel', 'initProblems', 'tarballSha256', 'release', 'sampleHead',
     'ascRuntimeVersion', 'adopted', 'images', 'ledgerId', 'ledgerSeq', 'fixedAtCommit', 'fixationSha256', 'exit', 'signal', 'wallMs', 'resultSubtype', 'isError', 'costUsd',
-    'numTurns', 'usage', 'permissionDenials', 'toolCounts', 'reads', 'coreSteps', 'credentialInChildFiles'];
-  const files = {'meta.json': JSON.stringify(Object.fromEntries(keep.filter((k) => k in meta).map((k) => [k, meta[k]])), null, 1)};
+    'numTurns', 'usage', 'toolCounts', 'reads', 'coreSteps', 'credentialInChildFiles'];
+  const published = Object.fromEntries(keep.filter((k) => k in meta).map((k) => [k, meta[k]]));
+  // review L-b: permission denials as tool name and target only, never the input body.
+  if (Array.isArray(meta.permissionDenials)) published.permissionDenials = meta.permissionDenials.map((d) => ({name: d.tool_name ?? d.name ?? null, target: targetOf({name: d.tool_name ?? d.name, input: d.tool_input ?? d.input}, JSON.parse(read(path.join(src, 'reads.json')) ?? '{}').cwd ?? null)}));
+  const files = {'meta.json': JSON.stringify(published, null, 1)};
   const reads = read(path.join(src, 'reads.json'));
   if (reads) files['reads.json'] = reads;
   const core = read(path.join(src, 'core-steps.json'));

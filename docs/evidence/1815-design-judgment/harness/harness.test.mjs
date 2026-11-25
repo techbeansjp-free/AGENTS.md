@@ -11,14 +11,16 @@ import {fileURLToPath} from 'node:url';
 import {tarballProblems, installedProblems, packageDiff, loadJson, sha256, READ_TRIGGER_MARK, ev} from './pairing.mjs';
 import {readRecord} from './reads.mjs';
 import {claudeArgs, dockerPlan, childEnv, initProblems, scrub, EXPECTED_INIT_TOOLS, LABEL, imageProblems} from './run-trial.mjs';
-import {positions, meanPositions, pairsSAboveB, spearman, direction, evaluatorCase, indicatorCase, caseDecision, overall, selectCounted, completeness, fixationProblemsForScoring, ledgerFacts, nameSetProblems, runConsistency, decide, thresholds} from './decide.mjs';
+import {positions, meanPositions, pairsSAboveB, spearman, direction, evaluatorCase, indicatorCase, caseDecision, overall, selectCounted, completeness, fixationProblemsForScoring, ledgerFacts, nameSetProblems, runConsistency, decide, thresholds, generationStopUsd, blindRecordProblems} from './decide.mjs';
 import {plannedTrials, orderRefusal, replacementPlan, countedTrials, generationFailure, orderProblems, loadOrder} from './order.mjs';
 import {checkProbe, compareProbes, probeProblems, approvalProblems, probePrompt, probeRefusal} from './probe.mjs';
 import {refixViolations} from './fixation.mjs';
 import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
-import {blindIds, makeRound, referencedAssets, copyDeliverable, blindPlacementProblems} from './make-blind.mjs';
-import {guardProblems} from './rank-guard.mjs';
-import {nextRankName, rankEntries, rankRounds, extractRanking} from './budget.mjs';
+import {blindIds, makeRound, referencedAssets, copyDeliverable, blindPlacementProblems, stripCues, treeSha256} from './make-blind.mjs';
+import {guardProblems, setModes, lockHeldProblems} from './rank-guard.mjs';
+import {clockScript} from './clock.mjs';
+import vm from 'node:vm';
+import {nextRankName, rankEntries, rankRounds, extractRanking, hostOutputProblems} from './budget.mjs';
 import {publishTrial, toolCalls} from './collect.mjs';
 import {canReserve} from './budget.mjs';
 import {FIXED, differences, digests} from './fixation.mjs';
@@ -314,8 +316,8 @@ test('order: the scorer counts exactly what the runner replaced (k-th failure ->
 
 test('decide: not judged when the run stopped early (unless the cap was reached) or a cell has no valid trial', () => {
   const b = conds.budget;
-  assert.equal(completeness({missing: ['x'], spentUsd: 10, budget: b}).capReached, false);
-  assert.equal(completeness({missing: ['x'], spentUsd: b.capUsd - b.safetyMarginUsd - 1, budget: b}).capReached, true);
+  assert.equal(completeness({missing: ['x'], genSpentUsd: 10, budget: b}).capReached, false);
+  assert.equal(completeness({missing: ['x'], genSpentUsd: generationStopUsd(b) - 1, budget: b}).capReached, true);
   const eff = {status: '効果あり', harm: false, judgeable: true};
   const cs = {a: eff, b: eff, c: eff};
   assert.match(overall(cs, 1, {complete: false, capReached: false, emptyCells: []}).decision, /途中で止まった/);
@@ -423,9 +425,9 @@ test('decide: a probe reserved after the first measurement reservation voids the
   assert.deepEqual(f.lateProbes, ['probe/S-r2']);
   assert.deepEqual(f.names, ['ui03-dashboard/B-r1']);
   const b = conds.budget;
-  const high = b.capUsd - b.safetyMarginUsd;
-  assert.equal(completeness({missing: ['x'], spentUsd: high, budget: b}).capReached, true);
-  assert.equal(completeness({missing: ['x'], spentUsd: high, budget: b, lateProbes: f.lateProbes}).capReached, false);
+  const high = generationStopUsd(b);
+  assert.equal(completeness({missing: ['x'], genSpentUsd: high, budget: b}).capReached, true);
+  assert.equal(completeness({missing: ['x'], genSpentUsd: high, budget: b, lateProbes: f.lateProbes}).capReached, false);
 });
 
 test('decide/make-blind: a reserved trial whose directory was removed is refused', () => {
@@ -462,18 +464,22 @@ test('make-blind (M-1): only index.html and the assets it references are copied,
   assert.match(fs.readFileSync(path.join(dst, 'index.html'), 'utf8'), /Content-Security-Policy/);
 });
 
-test('rank-guard (M-2): a round starts only with the runs and keys roots at mode 000 and the round directory separate', () => {
-  const base = tmp(), runs = path.join(base, 'runs'), keys = path.join(base, 'keys'), round = path.join(base, 'blind', 'round1');
-  for (const d of [runs, keys, path.join(round, 'ui03-dashboard')]) fs.mkdirSync(d, {recursive: true});
-  fs.writeFileSync(path.join(round, 'ui03-dashboard', 'ORDER.txt'), 'x\n');
-  assert.equal(guardProblems({runsRoot: runs, keysRoot: keys, roundDir: round}).length, 2);
-  fs.chmodSync(runs, 0); fs.chmodSync(keys, 0);
+test('rank-guard (M-2, M-a): a round starts only with runs, keys, render and the other round at mode 000', () => {
+  const base = tmp(), o = {runsRoot: path.join(base, 'runs'), keysRoot: path.join(base, 'keys'), renderRoot: path.join(base, 'render'), blindRoot: path.join(base, 'blind'), round: 1};
+  for (const d of [o.runsRoot, o.keysRoot, o.renderRoot, path.join(o.blindRoot, 'round1', 'ui03-dashboard'), path.join(o.blindRoot, 'round2')]) fs.mkdirSync(d, {recursive: true});
+  fs.writeFileSync(path.join(o.blindRoot, 'round1', 'ui03-dashboard', 'ORDER.txt'), 'x\n');
+  const rec = path.join(base, 'guard.jsonl');
+  assert.equal(guardProblems(o).length, 4);
+  setModes(o, 0, rec);
   try {
-    assert.deepEqual(guardProblems({runsRoot: runs, keysRoot: keys, roundDir: round}), []);
-    assert.ok(guardProblems({runsRoot: runs, keysRoot: base, roundDir: round}).some((p) => /separate trees/.test(p)));
-  } finally { fs.chmodSync(runs, 0o700); fs.chmodSync(keys, 0o700); }
-  assert.deepEqual(blindPlacementProblems(path.join(runs, 'blind'), runs, keys), ['blind root is inside the runs root']);
-  assert.deepEqual(blindPlacementProblems(path.join(base, 'blind'), runs, keys), []);
+    assert.deepEqual(guardProblems(o), []);
+    assert.ok(guardProblems({...o, ranksRoot: path.join(o.blindRoot, 'round1', 'out')}).some((p) => /ranks root/.test(p)));
+    assert.ok(guardProblems({...o, keysRoot: o.blindRoot}).some((p) => /separate trees/.test(p)));
+  } finally { setModes(o, 0o700, rec); }
+  const lines = fs.readFileSync(rec, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(lines.map((l) => l.action), ['lock', 'unlock']);
+  assert.ok(Object.values(lines[0].modes).every((m) => m === '0'));
+  assert.deepEqual(blindPlacementProblems(path.join(o.runsRoot, 'blind'), o.runsRoot, o.keysRoot), ['blind root is inside the runs root']);
 });
 
 const rankLedger = () => { const d = tmp(), l = path.join(d, 'l.jsonl'); ledgerOps.create(l); return {d, l}; };
@@ -501,27 +507,139 @@ test('budget (M-3): one round per evaluator and round number, one retry only aft
   assert.deepEqual(extractRanking(rawOut(1))['ui03-dashboard'], ['a1', 'b']);
 });
 
-test('budget/decide (M-3): ranks must match the ledger hashes; missing, extra or unsettled rounds are refused', () => {
-  const {d, l} = rankLedger(); const ranks = path.join(d, 'ranks'); fs.mkdirSync(ranks);
+const hostOut = (dir, {host, model, cwd, startedAt = '2026-11-26T01:00:00Z', finishedAt = '2026-11-26T01:10:00Z', status = 'completed', text}) => {
+  fs.mkdirSync(dir, {recursive: true});
+  fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({host, model, cwd, targetDirectory: cwd, sessionId: 'sid', status, startedAt, finishedAt}));
+  if (text) fs.writeFileSync(path.join(dir, 'result.txt'), text);
+};
+
+test('budget/decide (M-3, M-d 1): ranks must match the recorded host-session outputs; missing, extra or unsettled rounds are refused', () => {
+  const {d, l} = rankLedger(); const ranks = path.join(d, 'ranks'), round = path.join(d, 'round1');
   let n = 0;
   for (const e of ['fable', 'codex']) for (const r of [1, 2]) {
-    const text = rawOut(++n); fs.writeFileSync(path.join(ranks, `${e}-${r}.txt`), text);
-    if (e === 'codex' && r === 1) addRank(l, 'rank-codex-1', {launchFailed: true});
-    addRank(l, e === 'codex' && r === 1 ? 'rank-codex-1-retry' : `rank-${e}-${r}`, {outputSha256: sha256(text), sessionId: 's', launchFailed: false});
+    const name = e === 'codex' && r === 1 ? 'rank-codex-1-retry' : `rank-${e}-${r}`;
+    if (name.endsWith('-retry')) addRank(l, 'rank-codex-1', {launchFailed: true});
+    const dir = path.join(ranks, name.replace(/^rank-/, ''));
+    hostOut(dir, {host: e === 'fable' ? 'claude' : 'codex', model: e, cwd: round, text: rawOut(++n)});
+    addRank(l, name, {resultSha256: sha256(fs.readFileSync(path.join(dir, 'result.txt'))), statusSha256: sha256(fs.readFileSync(path.join(dir, 'status.json'))), launchFailed: false});
   }
   const ok = rankRounds(l, ranks);
   assert.deepEqual(ok.problems, []);
   assert.deepEqual(ok.rankings.codex[1]['ui03-dashboard'], ['a3', 'b']);
-  fs.appendFileSync(path.join(ranks, 'fable-2.txt'), 'edited');
-  assert.ok(rankRounds(l, ranks).problems.some((p) => /fable round 2: raw output differs/.test(p)));
-  fs.writeFileSync(path.join(ranks, 'fable-2.txt'), rawOut(2));
-  fs.writeFileSync(path.join(ranks, 'fable-3.txt'), 'x');
-  assert.ok(rankRounds(l, ranks).problems.some((p) => /unexpected file/.test(p)));
-  fs.rmSync(path.join(ranks, 'fable-3.txt'));
+  fs.appendFileSync(path.join(ranks, 'fable-2', 'result.txt'), 'edited');
+  assert.ok(rankRounds(l, ranks).problems.some((p) => /fable round 2: result.txt differs/.test(p)));
+  fs.writeFileSync(path.join(ranks, 'fable-2', 'result.txt'), rawOut(2));
+  fs.mkdirSync(path.join(ranks, 'fable-3'));
+  assert.ok(rankRounds(l, ranks).problems.some((p) => /unexpected entry in the ranks root: fable-3/.test(p)));
+  fs.rmSync(path.join(ranks, 'fable-3'), {recursive: true});
   addRank(l, 'rank-fable-1-retry', null);
   assert.ok(rankRounds(l, ranks).problems.some((p) => /rank-fable-1-retry is reserved but not settled/.test(p)));
   const {d: d2, l: l2} = rankLedger(); fs.mkdirSync(path.join(d2, 'ranks'));
   assert.ok(rankRounds(l2, path.join(d2, 'ranks')).problems.some((p) => /fable round 1: 0 completed/.test(p)));
+});
+
+test('budget (M-d 1): settle checks host, model, cwd, times and status of the host-session output', () => {
+  const d = tmp(), round = path.join(d, 'round1'); fs.mkdirSync(round);
+  const good = path.join(d, 'fable-1');
+  hostOut(good, {host: 'claude', model: 'fable', cwd: round, text: 'x'});
+  const base = {dir: good, evaluator: 'fable', roundDir: round, reservedAt: '2026-11-26T00:59:00Z', settleAt: '2026-11-26T01:11:00Z'};
+  assert.deepEqual(hostOutputProblems(base), []);
+  assert.ok(hostOutputProblems({...base, evaluator: 'codex'}).some((p) => /host claude is not codex/.test(p)));
+  assert.ok(hostOutputProblems({...base, roundDir: d}).some((p) => /round directory/.test(p)));
+  assert.ok(hostOutputProblems({...base, reservedAt: '2026-11-26T01:05:00Z'}).some((p) => /before the reservation/.test(p)));
+  assert.ok(hostOutputProblems({...base, settleAt: '2026-11-26T01:05:00Z'}).some((p) => /before the settle/.test(p)));
+  assert.deepEqual(hostOutputProblems({...base, launchFailed: true}), ['status.json says completed; not a launch failure']);
+  const failedRun = path.join(d, 'fable-1-retry'); hostOut(failedRun, {host: 'claude', model: 'fable', cwd: round, status: 'failed'});
+  assert.deepEqual(hostOutputProblems({...base, dir: failedRun, launchFailed: true}), []);
+  assert.deepEqual(hostOutputProblems({...base, dir: path.join(d, 'none'), launchFailed: true}), []);
+});
+
+test('decide (M-d 2, 3): the keys and the blind tree must equal the make-blind records in the ledger', () => {
+  const {d, l} = rankLedger(); const keys = path.join(d, 'keys'), blind = path.join(d, 'blind');
+  for (const r of [1, 2]) {
+    fs.mkdirSync(path.join(keys, String(r)), {recursive: true}); fs.writeFileSync(path.join(keys, String(r), 'ui03-dashboard.json'), `{"a${r}":"S-r1"}`); fs.writeFileSync(path.join(keys, String(r), 'seed.txt'), `seed${r}\n`);
+    fs.mkdirSync(path.join(blind, `round${r}`, 'ui03-dashboard'), {recursive: true}); fs.writeFileSync(path.join(blind, `round${r}`, 'ui03-dashboard', 'ORDER.txt'), `a${r}\n`);
+    fs.appendFileSync(l, JSON.stringify({blind: r, keysSha256: treeSha256(path.join(keys, String(r))), blindTreeSha256: treeSha256(path.join(blind, `round${r}`))}) + '\n');
+  }
+  assert.deepEqual(blindRecordProblems(l, keys, blind), []);
+  fs.writeFileSync(path.join(keys, '2', 'ui03-dashboard.json'), '{"a2":"B-r1"}');
+  assert.deepEqual(blindRecordProblems(l, keys, blind), ['round 2: keys differ from the ledger record']);
+  fs.writeFileSync(path.join(keys, '2', 'ui03-dashboard.json'), '{"a2":"S-r1"}');
+  fs.writeFileSync(path.join(blind, 'round1', 'ui03-dashboard', 'extra.html'), 'x');
+  assert.deepEqual(blindRecordProblems(l, keys, blind), ['round 1: blind tree differs from the ledger record']);
+  fs.appendFileSync(l, JSON.stringify({blind: 1, keysSha256: 'x', blindTreeSha256: 'y'}) + '\n');
+  assert.ok(blindRecordProblems(l, keys, blind).includes('round 1: 2 make-blind record(s) in the ledger, expected 1'));
+});
+
+test('decide (M-d 4): the lock must be held from each round reservation to its settle', () => {
+  const settles = {fable: {1: {reservedAt: '2026-11-26T01:00:00Z', settledAt: '2026-11-26T01:30:00Z'}}};
+  const lock = (at, round = 1) => JSON.stringify({action: 'lock', round, at, modes: {a: '0', b: '0'}});
+  const unlock = (at, round = 1) => JSON.stringify({action: 'unlock', round, at, modes: {a: '700'}});
+  assert.deepEqual(lockHeldProblems([lock('2026-11-26T00:59:00Z'), unlock('2026-11-26T01:31:00Z')].join('\n'), settles), []);
+  assert.match(lockHeldProblems([lock('2026-11-26T00:59:00Z'), unlock('2026-11-26T01:10:00Z')].join('\n'), settles)[0], /unlocked between/);
+  assert.match(lockHeldProblems([lock('2026-11-26T01:05:00Z')].join('\n'), settles)[0], /no lock before/);
+  assert.match(lockHeldProblems([lock('2026-11-26T00:59:00Z', 2)].join('\n'), settles)[0], /no lock before/);
+});
+
+test('make-blind (M-b): comments, meta and title cues are removed from what the evaluators read', () => {
+  const src = path.join(tmp(), 'out'), dst = path.join(tmp(), 'live');
+  fs.mkdirSync(src, {recursive: true});
+  fs.writeFileSync(path.join(src, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="description" content="案Bを採用した版"><title>出荷監視（案B）</title><link rel="stylesheet" href="s.css"><style>/* 2案比較 */ body{color:red}</style></head><body><!-- 案Bを採用 --><p>本文</p></body></html>');
+  fs.writeFileSync(path.join(src, 's.css'), '/* 案Aより密度を上げた */ p{margin:0}');
+  copyDeliverable(src, dst, 'k7mx');
+  const html = fs.readFileSync(path.join(dst, 'index.html'), 'utf8'), css = fs.readFileSync(path.join(dst, 's.css'), 'utf8');
+  for (const cue of ['案B', '2案比較', '案A']) assert.ok(!html.includes(cue) && !css.includes(cue), cue);
+  assert.match(html, /<meta charset="utf-8">/); assert.match(html, /name="viewport"/); assert.match(html, /<title>画面 k7mx<\/title>/);
+  assert.match(html, /<p>本文<\/p>/); assert.match(css, /p\{margin:0\}/);
+  assert.deepEqual(stripCues('<p>a</p>', 'x'), '<p>a</p>');
+});
+
+test('decide (M-c, L-d): ranking costs do not count toward the cap exception; generation stops before the ranking reserve', () => {
+  const b = conds.budget;
+  assert.equal(generationStopUsd(b), b.capUsd - b.safetyMarginUsd - 2 * b.rankingReserveUsd);
+  assert.ok(3 * 2 * 3 * b.perTrialUsd + 2 * b.probeUsd <= generationStopUsd(b));
+  const {l} = rankLedger();
+  const res = (name, usd, cost) => { const r = ledgerOps.reserve(l, name, usd); ledgerOps.settle(l, r.id, name, cost); };
+  res('probe/B-r1', 0.5, 0.2);
+  for (let i = 0; i < 18; i++) res(`ui03-dashboard/B-r${i + 1}`, 1.5, 1.4);
+  res('rank-fable-1', 4, 3.9); res('rank-fable-2', 4, 3.9);
+  const f = ledgerFacts(l);
+  assert.ok(Math.abs(f.genSpentUsd - (0.2 + 18 * 1.4)) < 1e-9);
+  assert.ok(f.spentUsd + b.perTrialUsd > generationStopUsd(b));
+  assert.equal(completeness({missing: ['x'], genSpentUsd: f.genSpentUsd, budget: b}).capReached, false);
+});
+
+test('decide (L-c): harm is the symmetric counterpart of improvement (※ owner confirmation pending)', () => {
+  assert.deepEqual(thresholds(9), {improved: 8, worse: 1});
+  assert.deepEqual(thresholds(6), {improved: 6, worse: 0});
+  assert.deepEqual(thresholds(5), {improved: 5, worse: 0});
+  assert.deepEqual(thresholds(4), {improved: 4, worse: 0});
+  assert.equal(direction(1, 9), '劣化'); assert.equal(direction(2, 9), '差なし');
+});
+
+test('first-view clock (L-e): fixed instant, callable without new, real instances', () => {
+  const F = Date.parse('2027-05-12T07:41:00+09:00');
+  const ctx = {}; vm.createContext(ctx);
+  vm.runInContext(clockScript(F), ctx);
+  assert.equal(vm.runInContext('Date.now()', ctx), F);
+  assert.equal(vm.runInContext('new Date().getTime()', ctx), F);
+  assert.equal(vm.runInContext('typeof Date()', ctx), 'string');
+  assert.equal(vm.runInContext('Date() === new Date().toString()', ctx), true);
+  assert.equal(vm.runInContext('new Date(0).getTime()', ctx), 0);
+  assert.equal(vm.runInContext('new Date(2027, 0, 1) instanceof Date', ctx), true);
+  assert.equal(vm.runInContext('Date.UTC(2027, 0, 1)', ctx), Date.UTC(2027, 0, 1));
+  assert.throws(() => clockScript(NaN));
+});
+
+test('collect (L-b): permission denials keep the tool name and target only', () => {
+  const root = tmp(), src = path.join(root, 'ui03-dashboard', 'B-r1'); fs.mkdirSync(src, {recursive: true});
+  fs.writeFileSync(path.join(src, 'trace.jsonl'), '');
+  fs.writeFileSync(path.join(src, 'reads.json'), JSON.stringify({cwd: path.join(src, 'fixture')}));
+  fs.writeFileSync(path.join(src, 'meta.json'), JSON.stringify({trial: 'ui03-dashboard/B-r1', permissionDenials: [{tool_name: 'Write', tool_use_id: 't1', tool_input: {file_path: '/etc/x', content: 'DENIED BODY TEXT'}}]}));
+  const p = publishTrial({src, renderDir: path.join(root, 'none'), renderRow: null, runsRoot: root});
+  const meta = JSON.parse(p.files['meta.json']);
+  assert.deepEqual(meta.permissionDenials, [{name: 'Write', target: '<outside the project>'}]);
+  assert.ok(!p.files['meta.json'].includes('DENIED BODY TEXT'));
 });
 
 test('decide (M-4): failed trials are not ranked; U over valid pairs with scaled thresholds; < 2 valid is 未判定', () => {

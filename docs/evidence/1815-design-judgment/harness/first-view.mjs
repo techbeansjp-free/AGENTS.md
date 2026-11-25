@@ -1,6 +1,7 @@
 // Deterministic initial-view indicators for one generated page (#1815). Runs in the #1807 tool container (--network none).
 // Usage: node first-view.mjs <cases.json> <case-id> <index.html> <gold.json of #1807>   -> JSON on stdout
-// For each width of cases.json (narrow, wide; viewport width x height, no scroll, clock fixed at cases.json fixedNow,
+// For each width of cases.json (narrow, wide; viewport width x height, no scroll, clock fixed at cases.json fixedNow
+// (clock.mjs), time zone Asia/Tokyo, locale ja-JP,
 // reduced motion and no animation/transition, load + fonts + 500 ms, every non-local request aborted as in #1807
 // gold-check.mjs):
 //   answerFound / answerMissing : firstView items whose text appears in the text of the nodes visible in the initial view
@@ -17,6 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {chromium} from 'playwright-core';
+import {clockScript} from './clock.mjs';
 
 const [casesPath, caseId, htmlPath, goldPath] = process.argv.slice(2);
 const spec = JSON.parse(fs.readFileSync(casesPath, 'utf8')).cases[caseId];
@@ -37,13 +39,13 @@ const out = {schema: 'asc-1815-first-view/v2', case: caseId, widths: {}, fixedNo
 // review L-5: the page clock is fixed at the case's data time; animations and transitions are off (reduced motion and a
 // style override); the measurement waits for load, document.fonts.ready and a fixed 500 ms.
 const fixedMs = Date.parse(spec.fixedNow);
-const clock = `(() => { const F = ${fixedMs}; const D = Date; class FD extends D { constructor(...a) { super(...(a.length ? a : [F])); } static now() { return F; } } FD.parse = D.parse; FD.UTC = D.UTC; globalThis.Date = FD; })();`;
+const clock = clockScript(fixedMs);
 let external = 0;
 try {
   for (const side of ['narrow', 'wide']) {
     const {width, height} = spec[side];
     const fv = spec.firstView[side];
-    const ctx = await browser.newContext({viewport: {width, height}, reducedMotion: 'reduce'});
+    const ctx = await browser.newContext({viewport: {width, height}, reducedMotion: 'reduce', timezoneId: 'Asia/Tokyo', locale: 'ja-JP'});
     await ctx.addInitScript({content: clock});
     await ctx.route('**/*', (r) => {
       const u = new URL(r.request().url());

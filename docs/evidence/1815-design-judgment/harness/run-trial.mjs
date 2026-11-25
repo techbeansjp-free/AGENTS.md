@@ -229,7 +229,9 @@ function main() {
       if (o) fail(o);
     }
     const spent = ledgerOps.spent(ledger);
-    if (spent + p.budget > B.capUsd - B.safetyMarginUsd) fail(`ledger total ${spent.toFixed(2)} + ${p.budget} would exceed ${B.capUsd} - ${B.safetyMarginUsd}`);
+    // review L-d: generation and probes stop below the cap minus the margin minus the two Fable ranking reservations.
+    const stop = B.capUsd - B.safetyMarginUsd - 2 * B.rankingReserveUsd;
+    if (spent + p.budget > stop) fail(`ledger total ${spent.toFixed(2)} + ${p.budget} would exceed the generation stop line ${stop} (cap ${B.capUsd} - margin ${B.safetyMarginUsd} - 2 ranking reserves of ${B.rankingReserveUsd})`);
     if (reserved.has(p.name)) fail(`trial ${p.name} is already in the ledger`);
     fs.mkdirSync(path.join(p.logDir, 'shots'), {recursive: true});
     const tmp = path.join(p.dir, 'tmp'); fs.mkdirSync(tmp);

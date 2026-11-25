@@ -59,7 +59,7 @@
 [decision-criteria.md](decision-criteria.md)に固定した。要点：
 
 - **指標**：I1＝狭幅・広幅の初期表示（scroll無し）に依頼の問いへの答えがすべて見える幅の数（[harness/first-view.mjs](harness/first-view.mjs)、#1807の描画image）。I2＝操作しないと見えない必須情報の数。非劣化は#1807と同じ。生成Agentが両幅を描画したか・2案を描画したか（#1807 `core-steps.mjs`）と、本文・`implementation.md`・`journeys.md`を読んだか（[harness/reads.mjs](harness/reads.mjs)）は試行ごとに記録する。
-- **順位**：ケースごとに、失敗でない試行の画面だけを盲検にし（IDと見る順は回ごとに変える。最大6画面）、Fable・Codexが独立に2回ずつ順位を付ける。2回の平均で、SがBより上の組の数Uを有効な組の数で数え、U≥ceil(8/9×組の数)なら「改善」（9組なら8）、U≤floor(1/9×組の数)なら「劣化」。どちらかの条件で有効な試行が2未満、または2回の相関が0.5未満の評価者がいれば、そのケースは「未判定」。
+- **順位**：ケースごとに、失敗でない試行の画面だけを盲検にし（IDと見る順は回ごとに変える。最大6画面）、Fable・Codexが独立に2回ずつ順位を付ける。2回の平均で、SがBより上の組の数Uを有効な組の数で数え、U≥ceil(8/9×組の数)なら「改善」（9組なら8）、U≤組の数−ceil(8/9×組の数)なら「劣化」（改善と対称。9組なら1。組の数に比例させることは※ownerの確認待ち）。どちらかの条件で有効な試行が2未満、または2回の相関が0.5未満の評価者がいれば、そのケースは「未判定」。
 - **判定**：ケースごとに、候補の文がSの2試行以上で読まれ、両評価者が「改善」、指標が悪くなく、非劣化の失敗が無ければ「効果あり」。2ケース以上で効果があり、害が無く、費用の比が3以下なら取り込む。読まれた試行が足りない・順位を使えないケースは「未判定」、失敗が多いケースは「保留」とし、どちらも判定できるケースに数えない。判定できるケースが2未満なら全体を「未判定」とする。
 - **実行の順と置換え**：[run-order.json](run-order.json)で固定（反復が外側、UI-03→UI-07→UI-04、奇数回B→S・偶数回S→B）。[harness/run-all.mjs](harness/run-all.mjs)だけがこの順で実行し、`run-trial.mjs`は順に合わない試行を拒否する。k番目の生成の失敗は番号3+kの試行で必ず置き換え、置換えは再び置き換えない。実行器と採点は同じ関数（[harness/order.mjs](harness/order.mjs)）で数える。
 - **probeの回数**：各条件1回。1回目が判定済みで不合格の場合だけ再試行を1回。測定の予約が台帳にある後のprobeは拒否する。
@@ -74,10 +74,21 @@
 
 ## 順位（盲検と評価者の閉込め）
 
-- [harness/make-blind.mjs](harness/make-blind.mjs)は、回ごとに`<blind>/round<回>/`を作る。各画面は`out/index.html`と、そのHTMLとCSSが参照するfileだけを写す（比較のために作った別の案のHTML・folder・notes・参照されないfileは写さない）。blindのdirectoryは、runsとkeysとは別の木でなければ拒否する。
-- 評価者は依頼文だけで閉じ込めない。順位の回の間は[harness/rank-guard.mjs](harness/rank-guard.mjs)の`lock`でrunsとkeysのdirectoryをmode 000にし、終わったら`unlock`で戻す（時刻と結果のmodeを記録fileに追記）。Fableは`asc host-session`（Read・Glob・Grepだけ、cwd＝`<blind>/round<回>`）、Codexは読取り専用のsandboxでcwd＝同じdirectoryで起動する。
-- 台帳：各回の開始前に`budget.mjs reserve`で予約する（Fableは4 USD、Codexは0で「費用の報告なし」）。評価者×回の番号ごとに1回だけ。起動自体が失敗した場合（`settle --launch-failed`）に限り、再試行を1回だけ予約できる。終わったら、keysを開く前に（runsとkeysがmode 000の間に）`budget.mjs settle`で、評価者の出力のfileのsha256とsession idを台帳に記録する。`reserve`と`settle`は、runsとkeysがmode 000でなければ拒否する。
-- `decide.mjs`は、`<ranks>/<評価者>-<回>.txt`（評価者の出力そのもの）のsha256が台帳の記録と同じこと、評価者×回ごとに完了した回がちょうど1つであること、予約して精算していない回・想定外の名前・想定外のfileが無いことを確かめ、違えば拒否する。順位は出力の最後のJSONから取り出す。
+- [harness/make-blind.mjs](harness/make-blind.mjs)は、回ごとに`<blind>/round<回>/`を作る。各画面は`out/index.html`と、そのHTMLとCSSが参照するfileだけを写す（比較のために作った別の案のHTML・folder・notes・参照されないfileは写さない）。写すときに、HTMLのcomment、CSSのcomment（`<style>`と写したCSS file）、charset・viewport・Content-Type以外の`<meta>`を消し、`<title>`を「画面 <ID>」に置き換える（titleが「案B」等を名指しし得るため）。JavaScriptのcommentは消さない（下の「限界」）。IDと見る順は、実行ごとに乱数で作る種から決め、種はkeysの木（`<keys>/<回>/seed.txt`）にだけ置く。作った時点で、その回のkeysの木とblindの木のsha256を台帳に記録する。blindのdirectoryは、runs・keysとは別の木でなければ拒否する。
+- **評価者の閉込め（選んだ方式）**：FableとCodexの両方を`asc host-session`で起動し、対象（＝起動先）を`<blind>/round<回>`にする。このdirectoryはGitの管理外なので、起動先と読める範囲の両方がこのdirectoryだけになる。Fable（host `claude`）は`--restricted`でfile toolがRead・Glob・Grepだけ・起動先の中だけ、Codex（host `codex`）は実行ごとに作るpermissions profileで対象だけを読める（[host-session](../../../skills/asc/references/host-session.md)）。描画・順位の出力・他の回・keys・runs・このrepositoryは、その外にある。Codexの読取りの限定は、modelを呼ぶturnでは未実測（host-sessionの記載）なので、二重目として次の`lock`を併用する。
+- 二重目：回の間は[harness/rank-guard.mjs](harness/rank-guard.mjs)の`lock`で、runs・keys・render・他の回のblindのdirectoryをmode 000にし、終わったら`unlock`で戻す（時刻・回・modeを記録fileに追記）。順位の出力の木（`<ranks>`、host-sessionの`--output-dir`の親）は、host-sessionが書くのでmode 000にできない。その代わり、回のdirectoryと別の木であることを`guardProblems`が確かめ、評価者は上の限定で読めない。このworktreeのevidenceのdirectoryはmode 000にしない（Gitの作業treeを壊すため）。限定の範囲の外なので、評価者は読めない。
+- 台帳：各回の開始前に`budget.mjs reserve`で予約する（Fableは4 USD、Codexは0で「費用の報告なし」）。評価者×回の番号ごとに1回だけ。起動自体が失敗した場合に限り、再試行を1回だけ予約できる。終わったら、keysを開く前に（lockのまま）`budget.mjs settle`で、host-sessionの出力（`status.json`・`result.txt`）そのものを確かめて記録する：Hostとmodel、起動先と対象が回のdirectory、session id、開始が予約の後・終了が精算の前、完了したこと。`result.txt`と`status.json`のsha256・session idを台帳に書く。Fableの費用は`events.jsonl`の`total_cost_usd`から取る。起動の失敗としての精算は、`status.json`が無いか完了でない場合だけ受け付ける。`reserve`と`settle`は、lockが掛かっていなければ拒否する。
+- `decide.mjs`は、台帳の記録と照らして次を確かめ、違えば拒否する：評価者×回ごとに完了した回がちょうど1つ、`result.txt`・`status.json`が記録のsha256と同じ、精算していない予約・想定外の名前・想定外の出力directoryが無い、keysとblindの木が作成時の記録と同じ、各回の予約から精算までlockが続いていた（rank-guardの記録）。順位は`result.txt`の最後のJSONから取り出す。
+
+## 運用の前提と、改変の検出の範囲
+
+再レビューの分類に従う。
+
+| 分類 | 内容 |
+| --- | --- |
+| harnessが検出する | 固定したfileの変更（fixation）、測定の試行の順・置換えの不正、予約した試行のdirectoryの削除・予約の無い試行（名前の一致）、測定の開始後のprobe、条件とtarballの組合せの誤り、imageのidの違い、試行の`meta.json`の固定の記録の違い、順位の回の過不足・未精算・出力の書換え（sha256）、keysとblindの木の書換え、lockを外した状態での順位の回、host-sessionの出力のHost・model・起動先・時刻の不一致、起動が完了したのに「起動の失敗」とした精算 |
+| 今回harnessへ移した（再レビューの1〜4） | 精算でhost-sessionの`status.json`・`result.txt`を確かめてid・時刻・sha256を記録（1）、keysの種を実行ごとの乱数にしてkeysの木にだけ置き、keysのsha256を作成時に台帳へ記録してdecideが照合（2）、blindの木のsha256を作成時に台帳へ記録してdecideが照合（3）、予約から精算までlockが続いたことをdecideがrank-guardの記録で確認（4） |
+| 運用の前提でしか守れない | 台帳fileを手で書き換えない（行の削除・改変はharnessからは区別できない）、起動が失敗していないのに`--launch-failed`で精算しない（`status.json`も消して偽る場合は検出できない）、費用を偽らない（Fableは`events.jsonl`から取るが、そのfile自体の改変は検出できない）、評価者の出力を作らない・書き換えない（host-sessionの実行の後、精算までの間の`result.txt`の差し替えは検出できない） |
 
 ## 実行の手順
 
@@ -102,23 +113,27 @@ ASC1815_ALLOW_PAID=1 CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" node harnes
 ASC1815_ALLOW_PAID=1 CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" node harness/run-all.mjs replacements <scratch>/runs --tarball-B <B.tgz> --tarball-S <S.tgz> --ledger $L --run
 # 2. 描画と指標（caseごと、--network none、固定したimage idだけ）
 node harness/run-indicators.mjs <scratch>/runs ui03-dashboard <scratch>/render
-# 3. 盲検（2回分を先に作る。blind・keys・runsは別の木）
+# 3. 盲検（2回分を先に作る。blind・keys・runs・render・ranksは別の木）
 node harness/make-blind.mjs <scratch>/runs <scratch>/render 1 <scratch>/blind <scratch>/keys $L
 node harness/make-blind.mjs <scratch>/runs <scratch>/render 2 <scratch>/blind <scratch>/keys $L
+mkdir <scratch>/ranks
 # 4. 順位（回ごと。R=1、次にR=2）
-G="<scratch>/runs <scratch>/keys <scratch>/blind/round$R"
+G="--round $R --runs-root <scratch>/runs --keys-root <scratch>/keys --render-root <scratch>/render --blind-root <scratch>/blind"
 node harness/rank-guard.mjs lock $G --record <scratch>/rank-guard.jsonl
-node harness/budget.mjs reserve $L fable $R --runs-root <scratch>/runs --keys-root <scratch>/keys --round-dir <scratch>/blind/round$R
-node harness/budget.mjs reserve $L codex $R --runs-root <scratch>/runs --keys-root <scratch>/keys --round-dir <scratch>/blind/round$R
-#   Fable：asc host-session（Read・Glob・Grep、cwd=<scratch>/blind/round$R）に harness/rank-prompt.txt を渡す
-#   Codex：読取り専用のsandbox、cwd=<scratch>/blind/round$R に同じ依頼文を渡す
-#   出力そのものを <scratch>/ranks/fable-$R.txt・codex-$R.txt に保存
-node harness/budget.mjs settle $L rank-fable-$R --output <scratch>/ranks/fable-$R.txt --session <id> --cost <usd> --runs-root <scratch>/runs --keys-root <scratch>/keys --round-dir <scratch>/blind/round$R
-node harness/budget.mjs settle $L rank-codex-$R --output <scratch>/ranks/codex-$R.txt --session <id> --cost unreported --runs-root <scratch>/runs --keys-root <scratch>/keys --round-dir <scratch>/blind/round$R
-#   起動が失敗した回：settle <name> --launch-failed（…同じguardの引数）の後に、同じ reserve で -retry が1回だけ取れる
+node harness/budget.mjs reserve $L fable $R $G --ranks-root <scratch>/ranks
+node harness/budget.mjs reserve $L codex $R $G --ranks-root <scratch>/ranks
+node <W>/bin/asc-v05.mjs host-session claude <scratch>/blind/round$R --name "1815 順位 Fable $R" --model fable --ephemeral \
+  --prompt-file <W>/docs/evidence/1815-design-judgment/harness/rank-prompt.txt --output-dir <scratch>/ranks/fable-$R
+node <W>/bin/asc-v05.mjs host-session codex <scratch>/blind/round$R --name "1815 順位 Codex $R" --model '<許可されたCodexモデル>' --ephemeral \
+  --prompt-file <W>/docs/evidence/1815-design-judgment/harness/rank-prompt.txt --output-dir <scratch>/ranks/codex-$R
+node harness/budget.mjs settle $L rank-fable-$R --host-output <scratch>/ranks/fable-$R $G --ranks-root <scratch>/ranks
+node harness/budget.mjs settle $L rank-codex-$R --host-output <scratch>/ranks/codex-$R $G --ranks-root <scratch>/ranks
+#   起動が失敗した回：settle <name> --host-output <dir> --launch-failed（同じ引数）の後に、同じ reserve で -retry が1回だけ取れ、
+#   出力先は <scratch>/ranks/<評価者>-$R-retry
 node harness/rank-guard.mjs unlock $G --record <scratch>/rank-guard.jsonl
 # 5. 判定と公開する記録
-node harness/decide.mjs <scratch>/runs <scratch>/render <scratch>/ranks <scratch>/decision.json --ledger $L --keys <scratch>/keys
+node harness/decide.mjs <scratch>/runs <scratch>/render <scratch>/ranks <scratch>/decision.json --ledger $L --keys <scratch>/keys \
+  --blind <scratch>/blind --guard-record <scratch>/rank-guard.jsonl
 node harness/collect.mjs <scratch>/runs <scratch>/render results/run
 ```
 
@@ -148,14 +163,14 @@ tokenは親processの環境変数`CLAUDE_CODE_OAUTH_TOKEN`からだけ受け取�
 
 | 確認 | 結果 |
 | --- | --- |
-| harnessの試験（[results/harness-tests.txt](results/harness-tests.txt)） | 41件すべて合格 |
+| harnessの試験（[results/harness-tests.txt](results/harness-tests.txt)） | 49件すべて合格 |
 | dry run（[results/dry-run.json](results/dry-run.json)） | すべて合格：組合せの受理と拒否、tarballの差が3fileだけ、3ケース×2条件のsample projectの導入と差、imageのidが固定と一致、空のHOMEでのdocker CLI、networkの作成と削除、imageでの判定（下）、`run-all.mjs`が固定の順の18試行だけを出す、`run-order.json`の妥当性 |
 | imageでの判定（dry runの`imageChecks`） | 固定のimageで、#1807の`run-render.mjs`（描画・axe・gold）と`first-view.mjs`を合成の画面に実行。UI-03（800×1280・1440×900、合成の良い例・悪い例：[harness/dryrun/](harness/dryrun/)）・UI-07・UI-04の良い例は両幅でI1を満たし網羅率1.0、悪い例は満たさない。閉じた`details`・非表示・画面外の要素を含む合成の画面（[harness/dryrun/ui07-hidden.html](harness/dryrun/ui07-hidden.html)）では、閉じた`details`の中のお知らせを初期表示に無いと判定し、I2に数えた。描画の失敗0件 |
 | 初期表示の判定器のhostでの確認（[results/first-view-dryrun.txt](results/first-view-dryrun.txt)） | 上と同じ判定（hostのplaywright-core 1.60.0。imageが無かった時点の記録） |
 
 注：#1807の`gold-check.mjs`の`firstViewportMissing`は、閉じた`details`の中の文字も見えるものとして数える（ui07-hiddenで欠けを検出しない）。#1815の判定はfirst-view.mjsのI1を使い、#1807のその項目は使わない。
 
-試行あたりの費用の見込みは0.25〜0.6 USD（#1807の手順の指示なし0.15〜0.20、2案と両幅の描画を指示した条件0.28〜0.50、ASCの本文とreferenceの読込みで増える）。18試行で約4.5〜11 USD、probe 2回で約0.3〜0.6 USD、Fableの順位2回で約4〜6 USD、合計で約8.8〜17.4 USD。置換えの無い最悪（全試行が予算1.5 USD、probeが0.5 USD、Fableが予約額4 USD）は36 USDで、停止線38 USD（上限40−余裕2）の内。置換えが要る場合は、停止線で止まり、上限に達したことが台帳で示せれば、その時点の試行で判定する。Codexの費用はHostで計算されず欠測になる（#1807と同じ）。
+試行あたりの費用の見込みは0.25〜0.6 USD（#1807の手順の指示なし0.15〜0.20、2案と両幅の描画を指示した条件0.28〜0.50、ASCの本文とreferenceの読込みで増える）。18試行で約4.5〜11 USD、probe 2回で約0.3〜0.6 USD、Fableの順位2回で約4〜6 USD、合計で約8.8〜17.4 USD。生成とprobeの停止線は30 USD（上限40−余裕2−Fableの順位2回分の予約8）で、順位の予算を残す（再レビューL-d）。置換えの無い最悪（全試行が予算1.5 USD、probeが0.5 USD）は28 USDで、この停止線の内。Fableの順位2回の予約8を足して36 USDで、停止線38 USD（上限40−余裕2）の内。置換えで停止線に達した場合は、台帳の生成とprobeの費用（順位の費用は数えない。再レビューM-c）で上限に達したことが示せれば、その時点の試行で判定する。Codexの費用はHostで計算されず欠測になる（#1807と同じ）。
 
 ## #1807・#1814からの違い（意図したもの）
 
@@ -178,10 +193,14 @@ tokenは親processの環境変数`CLAUDE_CODE_OAUTH_TOKEN`からだけ受け取�
 - **候補の文とケースの適合**：Sの追記（両幅の初期表示の確認、判断の一文から優先順位と密度、方向が未定のときの2案）と、3ケースの選び方（2幅の要求があり、design systemが無い）と、指標（両幅の初期表示の答え）は、同じ考え方から作った。効果が出ても、この種の依頼に限った結果であり、選んだケースと指標が候補に合わせてあることを割り引いて読む。適用しない場面（既存のdesign systemの上、1幅だけの画面）での害は測っていない。
 - **偶然**：各条件3回で、1ケース6画面である。差が無くても、1評価者あたり約0.1の確率でU≥8になる。2評価者・指標・2ケース以上を同時に求めて偶然の採用を減らしたが、除き切れない。逆に小さな効果は検出できない。
 - モデルの順位であって人の評価でないこと、3案を一括で入れたのでどれが効いたかは分からないこと。
+- **採らない案を残さない**：Sの追記（「比べるために作った採らない案は、成果物に残さない。」）は、測定の環境では完全には守れない。生成Agentには削除のtool（Bash等）が無いので、作った別の案のfileを消せない。盲検では`out/index.html`とその参照だけを写すので、評価者には別の案は見えない。
+- 盲検の写しでは、HTMLとCSSのcommentを消すが、JavaScriptのcomment・変数名・画面の文言に残った手掛かり（例：「案B」と表示する文字）は消さない。
 
 ## 固定
 
-[results/fixation.json](results/fixation.json)は追記だけの記録で、測定には最後の記録を使う。最初の記録：`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`（計画の初版）。2件目（refix）：`ff3dba9eabdc03a3ae0477d1a2be730d2ee57dd0`。3件目（refix）：`79cdf7d6ad2c1c7190bef0c1276c9dcc60a7772e`。4件目（refix、独立レビューの指摘の是正）：`b5bad141fb9c8c924c6fbeb688cbfc763649916d`。測定はこの記録で行う。どの記録の時点でも台帳に予約は無い。
+[results/fixation.json](results/fixation.json)は追記だけの記録で、測定には最後の記録を使う。最初の記録：`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`（計画の初版）。2件目（refix）：`ff3dba9eabdc03a3ae0477d1a2be730d2ee57dd0`。3件目（refix）：`79cdf7d6ad2c1c7190bef0c1276c9dcc60a7772e`。4件目（refix、独立レビューの指摘の是正）：`b5bad141fb9c8c924c6fbeb688cbfc763649916d`。5件目（refix、再レビューの指摘の是正）：FIXCOMMIT。測定はこの最後の記録で行う。どの記録の時点でも台帳に予約は無い。
+
+注：4件目のrefixの理由の文は「Medium 5・Low 6」と書いたが、是正したLowはL-1〜L-7の7件だった（記録は追記だけなので直さず、5件目の理由で訂正した）。
 
 注：2件目のrefixの`changed`に#1814のfile（`probe-check.mjs`・`score.mjs`）が載っているのは、固定の対象にそれらを新しく加えた（1件目の記録には無かった）ためで、#1814のfileを変えたのではない。#1814・#1807のfileは、このIssueでは一度も変えていない。
 

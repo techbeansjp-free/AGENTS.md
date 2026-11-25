@@ -1,7 +1,9 @@
 // Applies decision-criteria.md mechanically (#1815). Pure functions + a CLI. No model call.
-// Usage: node decide.mjs <runs-root> <render-root> <ranks-dir|-> <out.json> --ledger <file> --keys <keys-root>
-//   ranks-dir holds the raw evaluator outputs <fable|codex>-<1|2>.txt (budget.mjs rankRounds checks them against the
-//   ledger); keys-root is make-blind's <keys-root> (<round>/<case>.json).
+// Usage: node decide.mjs <runs-root> <render-root> <ranks-root|-> <out.json> --ledger <file> --keys <keys-root>
+//          --blind <blind-root> --guard-record <rank-guard.jsonl>
+//   ranks-root holds the host-session output directories <fable|codex>-<round>[-retry]/ (budget.mjs rankRounds checks
+//   result.txt and status.json against the ledger); keys-root and blind-root are make-blind's (checked against the
+//   ledger's make-blind records); the guard record must show the lock held from each round's reservation to its settle.
 // Refuses (exit 3) without the ledger, when the measurement reservations, the trial directories and the counted or
 // classified trials are not the same names, when the fixed files differ from the last fixation record or a counted trial ran under another record.
 // Not judged when the run stopped before every planned trial and required replacement existed (unless the ledger shows
@@ -9,7 +11,7 @@
 //   runs-root/<case>/<B|S>-r<n>/{meta.json,reads.json,core-steps.json}
 //   render-root/<case>/{render.json,<trial>/{gold.json,first-view.json}}       (run-indicators.mjs)
 //   keys-root/<round>/<case>.json  {"<blind id>": "<B|S>-r<n>"}                 (make-blind.mjs; opened after ranking)
-//   ranks-dir/<evaluator>-<round>.txt  raw output ending with {"<case>": ["<best id>", ..., "<worst id>"]}
+//   ranks-root/<evaluator>-<round>/result.txt  the evaluator's answer ending with {"<case>": ["<best id>", ..., "<worst id>"]}
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -18,11 +20,13 @@ import {loadJson, ev} from './pairing.mjs';
 import {countedTrials} from './order.mjs';
 import {isMeasurementName} from './probe.mjs';
 import {rankRounds} from './budget.mjs';
+import {lockHeldProblems} from './rank-guard.mjs';
+import {treeSha256, ledgerBlindRecords} from './make-blind.mjs';
 import {differences, lastRecord} from './fixation.mjs';
 
 export const EVALUATORS = ['fable', 'codex'];
 export const ROUNDS = [1, 2];
-export const RULES = {improvedFraction: 8 / 9, worseFraction: 1 / 9, minValidPerCondition: 2, reproducibleAtLeast: 0.5, readMajority: 2, minEffectCases: 2, maxCostRatio: 3, maxFailedPerCondition: 1};
+export const RULES = {improvedFraction: 8 / 9, minValidPerCondition: 2, reproducibleAtLeast: 0.5, readMajority: 2, minEffectCases: 2, maxCostRatio: 3, maxFailedPerCondition: 1};
 const read = (p) => (fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null);
 
 // ---- trials ----------------------------------------------------------------------------------------------------------
@@ -73,8 +77,11 @@ export function fixationProblemsForScoring(metas, root = ev) {
 // cannot take one more generation trial.
 // The cap exception does not hold when a probe was reserved after the first measurement reservation (the ledger was
 // inflated after the measurement started; run-trial refuses that, this is the scorer's own check).
-export function completeness({missing, spentUsd, budget, lateProbes = []}) {
-  const capReached = lateProbes.length === 0 && typeof spentUsd === 'number' && spentUsd + budget.perTrialUsd > budget.capUsd - budget.safetyMarginUsd;
+// review M-c / L-d: only generation and probe spending counts (ranking rounds are excluded), and the generation stop line
+// is capUsd - safetyMarginUsd - 2 x rankingReserveUsd (the two Fable rounds stay reserved).
+export const generationStopUsd = (budget) => budget.capUsd - budget.safetyMarginUsd - 2 * budget.rankingReserveUsd;
+export function completeness({missing, genSpentUsd, budget, lateProbes = []}) {
+  const capReached = lateProbes.length === 0 && typeof genSpentUsd === 'number' && genSpentUsd + budget.perTrialUsd > generationStopUsd(budget);
   return {missing, capReached, complete: missing.length === 0, lateProbes};
 }
 
@@ -83,7 +90,11 @@ export function ledgerFacts(ledger) {
   const res = ledgerOps.reservations(ledger);
   const meas = res.filter((e) => isMeasurementName(e.trial));
   const first = meas.length ? Math.min(...meas.map((e) => e.seq)) : null;
-  return {names: meas.map((e) => e.trial).sort(), lateProbes: first === null ? [] : res.filter((e) => String(e.trial).startsWith('probe/') && e.seq > first).map((e) => e.trial), spentUsd: ledgerOps.spent(ledger)};
+  // generation + probe spending: each reservation at its settled cost, or at its reservation when never settled.
+  const all = fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const gen = res.filter((e) => !String(e.trial).startsWith('rank-'));
+  const genSpentUsd = gen.reduce((a, r) => { const st = all.filter((x) => x.id === r.id && 'costUsd' in x && typeof x.reservedUsd !== 'number').at(-1); return a + (typeof st?.costUsd === 'number' ? st.costUsd : r.reservedUsd); }, 0);
+  return {names: meas.map((e) => e.trial).sort(), lateProbes: first === null ? [] : res.filter((e) => String(e.trial).startsWith('probe/') && e.seq > first).map((e) => e.trial), spentUsd: ledgerOps.spent(ledger), genSpentUsd};
 }
 
 // The three name sets must be equal: measurement reservations in the ledger, trial directories present under the runs
@@ -96,6 +107,20 @@ export function nameSetProblems({ledgerNames, dirNames, classifiedNames}) {
   for (const n of all) {
     const where = Object.entries(sets).filter(([, x]) => x.has(n)).map(([k]) => k);
     if (where.length !== 3) p.push(`${n} is only in ${where.join(' and ')}`);
+  }
+  return p;
+}
+
+// review M-d items 2 and 3: one make-blind record per round in the ledger, and the keys and the blind tree unchanged.
+export function blindRecordProblems(ledger, keysRoot, blindRoot) {
+  const recs = ledgerBlindRecords(ledger);
+  const p = [];
+  for (const r of ROUNDS) {
+    const mine = recs.filter((x) => x.blind === r);
+    if (mine.length !== 1) { p.push(`round ${r}: ${mine.length} make-blind record(s) in the ledger, expected 1`); continue; }
+    const k = path.join(keysRoot, String(r)), b = path.join(blindRoot, `round${r}`);
+    if (!fs.existsSync(k) || treeSha256(k) !== mine[0].keysSha256) p.push(`round ${r}: keys differ from the ledger record`);
+    if (!fs.existsSync(b) || treeSha256(b) !== mine[0].blindTreeSha256) p.push(`round ${r}: blind tree differs from the ledger record`);
   }
   return p;
 }
@@ -160,8 +185,10 @@ export function spearman(a, b) {
   return Number((1 - (6 * d2) / (n * (n * n - 1))).toFixed(3));
 }
 // review M-4: U counts only the pairs of valid trials; the thresholds scale with the number of pairs:
-// improved when U >= ceil(8/9 x pairs), worse when U <= floor(1/9 x pairs) (9 pairs: 8 and 1, as #1807).
-export const thresholds = (pairs) => ({improved: Math.ceil(RULES.improvedFraction * pairs - 1e-9), worse: Math.floor(RULES.worseFraction * pairs + 1e-9)});
+// improved when U >= ceil(8/9 x pairs), worse when U <= pairs - ceil(8/9 x pairs) (9 pairs: 8 and 1, as #1807).
+// review L-c: harm is the symmetric counterpart: S below B in >= ceil(8/9 x P) pairs, i.e. U <= P - ceil(8/9 x P)
+// (P = 9: U <= 1, as before). ※ The proportional scaling awaits the owner's confirmation.
+export const thresholds = (pairs) => { const k = Math.ceil(RULES.improvedFraction * pairs - 1e-9); return {improved: k, worse: pairs - k}; };
 export const direction = (u, pairs = 9) => { const t = thresholds(pairs); return u >= t.improved ? '改善' : u <= t.worse ? '劣化' : '差なし'; };
 
 // rounds: [{order, key}, {order, key}] of one evaluator for one case; S/B: the valid (ranked) trial names. Fewer than
@@ -243,7 +270,7 @@ export function overall(cases, costRatio, run = {complete: true, capReached: fal
 
 const median = (a) => { const s = a.filter((x) => typeof x === 'number').sort((x, y) => x - y); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; };
 
-export function decide(runsRoot, renderRoot, ranksDir, {ledger = null, keysRoot = null} = {}) {
+export function decide(runsRoot, renderRoot, ranksDir, {ledger = null, keysRoot = null, blindRoot = null, guardRecord = null} = {}) {
   const cases = loadJson('cases.json').cases;
   const conds = loadJson('conditions.json');
   const runs = conds.runs;
@@ -255,9 +282,11 @@ export function decide(runsRoot, renderRoot, ranksDir, {ledger = null, keysRoot 
   if (rc.problems.length) throw new Error(`refused: ${rc.problems.join('; ')}`);
   let rankings = null;
   if (ranksDir) {
-    if (!keysRoot) throw new Error('refused: --keys <keys-root> is required with ranks');
+    if (!keysRoot || !blindRoot || !guardRecord) throw new Error('refused: --keys, --blind and --guard-record are required with ranks');
     const rr = rankRounds(ledger, ranksDir);
-    if (rr.problems.length) throw new Error(`refused: ${rr.problems.join('; ')}`);
+    const p = [...rr.problems, ...blindRecordProblems(ledger, keysRoot, blindRoot)];
+    if (!rr.problems.length) p.push(...lockHeldProblems(fs.existsSync(guardRecord) ? fs.readFileSync(guardRecord, 'utf8') : '', rr.settles));
+    if (p.length) throw new Error(`refused: ${p.join('; ')}`);
     rankings = rr.rankings;
   }
   for (const caseId of Object.keys(cases)) {
@@ -282,7 +311,7 @@ export function decide(runsRoot, renderRoot, ranksDir, {ledger = null, keysRoot 
     out.trials[caseId] = {counted: {B: sel.B, S: sel.S}, missing: sel.missing, notUsed: sel.notUsed, rows: [...B, ...S]};
     out.cases[caseId] = caseDecision({S, B, ranking});
   }
-  const run = {...completeness({missing, spentUsd: rc.facts.spentUsd, budget: conds.budget, lateProbes: rc.facts.lateProbes}), emptyCells};
+  const run = {...completeness({missing, genSpentUsd: rc.facts.genSpentUsd, budget: conds.budget, lateProbes: rc.facts.lateProbes}), emptyCells};
   const mB = median(costs.B), mS = median(costs.S);
   out.overall = overall(out.cases, mB ? mS / mB : null, run);
   out.cost = {medianB: mB, medianS: mS};
@@ -292,10 +321,10 @@ export function decide(runsRoot, renderRoot, ranksDir, {ledger = null, keysRoot 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
   const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? path.resolve(args[i + 1]) : null; };
-  const pos = args.filter((a, j) => !a.startsWith('--') && !['--ledger', '--keys'].includes(args[j - 1]));
+  const pos = args.filter((a, j) => !a.startsWith('--') && !['--ledger', '--keys', '--blind', '--guard-record'].includes(args[j - 1]));
   const [runsRoot, renderRoot, ranksDir, outPath] = pos;
   let out;
-  try { out = decide(path.resolve(runsRoot), path.resolve(renderRoot), ranksDir && ranksDir !== '-' ? path.resolve(ranksDir) : null, {ledger: opt('--ledger'), keysRoot: opt('--keys')}); } catch (e) { console.error(e.message); process.exit(3); }
+  try { out = decide(path.resolve(runsRoot), path.resolve(renderRoot), ranksDir && ranksDir !== '-' ? path.resolve(ranksDir) : null, {ledger: opt('--ledger'), keysRoot: opt('--keys'), blindRoot: opt('--blind'), guardRecord: opt('--guard-record')}); } catch (e) { console.error(e.message); process.exit(3); }
   fs.writeFileSync(outPath, JSON.stringify(out, null, 1));
   console.log(JSON.stringify({overall: out.overall, cases: Object.fromEntries(Object.entries(out.cases).map(([k, v]) => [k, v.status]))}));
 }
