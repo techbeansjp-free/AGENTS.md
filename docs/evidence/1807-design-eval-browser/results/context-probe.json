@@ -1,0 +1,8 @@
+{
+ "purpose": "生成と同じ位置（worktree配下の.agent-skill-chain/local/1807/.../fixture）・同じ起動設定の主要部（-p、--setting-sources project、hook無効、--no-session-persistence）で、生成Agentのcontextに入る指示fileを確かめた",
+ "when": "2026-11-25、本番2回目と再採点の後（生成の時点ではない）",
+ "model": "haiku（1回、--max-budget-usd 0.05。Hostの計算値は記録していないが0.01 USD未満の見込み）",
+ "tools": "無し（--tools \"\"）",
+ "result": {"ancestorClaudeMd": "入っていた（worktree rootのCLAUDE.md。見出しの1行目で確認）", "ownerAutoMemoryIndex": "入っていた（内容はこの記録に含めない）", "agentsMdBody": "入っていなかった（CLAUDE.mdから参照されるだけ）"},
+ "limits": "生成の時点のmemoryの内容は確かめていない。祖先のCLAUDE.mdはgit管理下で、生成の時点も同じ内容である。probeの作業directoryは確認後に削除した"
+}
