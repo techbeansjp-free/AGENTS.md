@@ -37,9 +37,17 @@ export function collect(runsRoot, out) {
       const log = path.join(dir, 'hook.jsonl');
       fs.writeFileSync(path.join(out, `${name}.hook.jsonl`), fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '');
     }
+    // review L-6: a trace without meta.json (killed after the trace was written) is a failure row, not a crash.
+    if (!fs.existsSync(path.join(dir, 'meta.json'))) {
+      fs.rmSync(path.join(out, `${name}.jsonl`), {force: true});
+      fs.writeFileSync(path.join(out, `${name}.jsonl.missing`), 'no meta.json\n');
+      rows.push({trial: name, missing: 'meta.json'});
+      continue;
+    }
     const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
     rows.push({trial: name, model: meta.model, resolvedModel: meta.resolvedModel, claudeVersion: meta.claudeVersion, ascRuntimeVersion: meta.ascRuntimeVersion,
-      tarballSha256: meta.tarballSha256, released: meta.released, sampleHead: meta.sampleHead, applied: meta.applied, expectHook: meta.expectHook,
+      tarballSha256: meta.tarballSha256, released: meta.released, adopted: meta.adopted, sampleHead: meta.sampleHead, applied: meta.applied, expectHook: meta.expectHook,
+      fixationSha256: meta.fixationSha256, fixedAtCommit: meta.fixedAtCommit, fixationStage: meta.fixationStage,
       exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: clean.hits});
   }
   fs.writeFileSync(path.join(out, 'trials.json'), JSON.stringify(rows, null, 1));

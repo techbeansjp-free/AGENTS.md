@@ -26,13 +26,36 @@ import {fileURLToPath} from 'node:url';
 import {applyCondition, loadConditions} from './apply-condition.mjs';
 import {assertPlacement} from './guard.mjs';
 import * as ledgerOps from './ledger.mjs';
-import {differences} from './fixation.mjs';
+import {differences, lastRecord} from './fixation.mjs';
+import {releaseDigests} from './make-fixture.mjs';
+import crypto from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ev = path.resolve(here, '..');
 const repoRoot = path.resolve(ev, '../../..');
 export const TOOLS = 'Read,Glob,Grep,Skill';
 export const DISALLOWED = 'Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task';
+// review L-5: the last trial's actual cost can exceed its --max-budget-usd; stop this much below the cap.
+export const SAFETY_MARGIN_USD = 1;
+const fileSha = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+
+// review L-2: a paid trial runs only on a sample project installed from a release in release.json, and its copy must
+// still carry exactly the entries and distribution record the install verified; for condition I, the adopted option.
+export function installProblems(install, work, cond) {
+  if (!install) return ['no install record (<fixture>.install.json)'];
+  const p = [];
+  if (install.released !== true) p.push('sample project was not installed from a release (dry-run stand-in)');
+  if (!releaseDigests().includes(install.install?.tarballSha256)) p.push('tarball digest is not in release.json');
+  for (const e of install.install?.entries ?? []) {
+    const f = path.join(work, '.claude/skills', e.name, 'SKILL.md');
+    if (!fs.existsSync(f) || fileSha(f) !== e.entrySha256) p.push(`entry ${e.name} differs from the install record`);
+  }
+  const rec = path.join(work, '.agent-skill-chain/distribution.json');
+  if (!fs.existsSync(rec) || fileSha(rec) !== install.install?.distributionSha256) p.push('distribution.json differs from the install record');
+  const adopted = install.install?.adopted?.id ?? null;
+  if ((cond.adopt ?? null) !== adopted) p.push(`adopted read trigger ${adopted} does not match the condition (${cond.adopt ?? 'none'})`);
+  return p;
+}
 
 export function flags({model, budget, debugFile = null}) {
   return ['--model', model, '--tools', TOOLS, '--disallowedTools', DISALLOWED, '--strict-mcp-config', '--no-session-persistence',
@@ -44,7 +67,7 @@ export function flags({model, budget, debugFile = null}) {
 // judges it from the tool records, the init event, the debug log and the known texts, not from the model's claims alone.
 export function probePrompt(homeMarker, repoMarker) {
   return ['これは評価環境の確認です。作業はしないでください。toolは下の4と5だけを使い、次の順に答えてください。',
-    '1. このsessionのContextに含まれている指示ファイル・memory（CLAUDE.md、AGENTS.md、memoryの索引、SessionStart等で追加された文脈を含む）をすべて挙げ、それぞれの出所と最初の1行を原文のまま書いてください。無ければ「なし」と書いてください。',
+    '1. このsessionのContextに含まれている指示ファイル・memory（CLAUDE.md、AGENTS.md、memoryの索引、SessionStart等で追加された文脈を含む）をすべて挙げ、それぞれの出所と、最初の1行と最後の1行（空行を除く）を原文のまま書いてください。無ければ「なし」と書いてください。',
     '2. 使えるSkillの一覧を、名前とdescriptionの原文のまま、すべて書いてください（fileを読まずに、Contextにある一覧から）。',
     '3. 2のうち、名前が asc と user-journey-acceptance のSkillのdescriptionを、それぞれ「DESC asc: <原文>」「DESC user-journey-acceptance: <原文>」の形で1行ずつ書いてください。',
     `4. Readで ${homeMarker} を読む。`, `5. Readで ${repoMarker} を読む。`,
@@ -86,7 +109,8 @@ function main() {
   try { assertPlacement(ledger, {repoRoot}); } catch (e) { fail(`ledger: ${e.message}`); }
   const fixationFile = path.join(ev, 'results/fixation.json');
   if (!fs.existsSync(fixationFile)) fail('results/fixation.json is missing (fix the plan before running)');
-  const diff = differences(JSON.parse(fs.readFileSync(fixationFile, 'utf8')));
+  const fixation = lastRecord(JSON.parse(fs.readFileSync(fixationFile, 'utf8')));
+  const diff = differences(fixation);
   if (diff.length) fail(`fixed files differ from results/fixation.json: ${diff.join(', ')}`);
   const credential = process.env.CLAUDE_CODE_OAUTH_TOKEN ? 'CLAUDE_CODE_OAUTH_TOKEN' : process.env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY' : null;
   if (!credential) fail('no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in the environment');
@@ -95,14 +119,17 @@ function main() {
   try { unlock = ledgerOps.lock(ledger); } catch (e) { fail(e.message); }
   try {
     const spent = ledgerOps.spent(ledger);
-    if (spent + budget > Number(stopUsd)) { unlock(); fail(`cumulative spend ${spent.toFixed(2)} + this trial's budget ${budget} would exceed ${stopUsd}`); }
-    ledgerOps.reserve(ledger, name, budget);
-    fs.mkdirSync(home, {recursive: true}); fs.mkdirSync(config, {recursive: true});
-    fs.cpSync(fixture, work, {recursive: true});
-    const applied = applyCondition(work, cond);
-    const sampleHead = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, encoding: 'utf8'}).stdout.trim();
+    if (spent + budget > Number(stopUsd) - SAFETY_MARGIN_USD) { unlock(); fail(`cumulative spend ${spent.toFixed(2)} + this trial's budget ${budget} would exceed ${stopUsd} minus the safety margin ${SAFETY_MARGIN_USD}`); }
+    if (ledgerOps.reservedNames(ledger).has(name)) { unlock(); fail(`trial ${name} is already in the ledger; a rerun needs a new rep number`); }
     const installFile = `${fixture}.install.json`;
     const install = fs.existsSync(installFile) ? JSON.parse(fs.readFileSync(installFile, 'utf8')) : null;
+    fs.cpSync(fixture, work, {recursive: true});
+    const problems = installProblems(install, work, conds.conditions[cond]);
+    if (problems.length) { fs.rmSync(dir, {recursive: true, force: true}); unlock(); fail(problems.join('; ')); }
+    const reservation = ledgerOps.reserve(ledger, name, budget);
+    fs.mkdirSync(home, {recursive: true}); fs.mkdirSync(config, {recursive: true});
+    const applied = applyCondition(work, cond);
+    const sampleHead = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, encoding: 'utf8'}).stdout.trim();
     // Onboarding done and the sample project trusted, in the disposable config only.
     const global = JSON.stringify({hasCompletedOnboarding: true, numStartups: 5, projects: {[fs.realpathSync(work)]: {hasTrustDialogAccepted: true}}});
     fs.writeFileSync(path.join(config, '.claude.json'), global); fs.writeFileSync(path.join(home, '.claude.json'), global);
@@ -123,10 +150,11 @@ function main() {
     const last = [...events].reverse().find((e) => e?.type === 'result') ?? null;
     const init = events.find((e) => e?.type === 'system' && e.subtype === 'init') ?? null;
     const meta = {...plan, claudeVersion: version, resolvedModel: init?.model ?? null, sampleHead, ascRuntimeVersion: install?.install?.runtimeVersion ?? null,
-      tarballSha256: install?.install?.tarballSha256 ?? null, released: install?.released ?? null, applied, expectHook: Boolean(conds.conditions[cond].hook),
+      tarballSha256: install?.install?.tarballSha256 ?? null, released: install?.released ?? null, adopted: install?.install?.adopted ?? null, applied, expectHook: conds.conditions[cond].hook ?? null,
+      fixationSha256: fileSha(fixationFile), fixedAtCommit: fixation.fixedAtCommit, fixationStage: fixation.stage,
       credentialKind: credential, exit: r.status, signal: r.signal, error: r.error ? String(r.error) : null, wallMs: Date.now() - t0, costUsd: last?.total_cost_usd ?? null, budget};
     fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 1));
-    ledgerOps.settle(ledger, name, meta.costUsd);
+    ledgerOps.settle(ledger, reservation, name, meta.costUsd);
     console.log(JSON.stringify({trial: name, exit: r.status, costUsd: meta.costUsd, resolvedModel: meta.resolvedModel}));
   } finally {
     fs.rmSync(home, {recursive: true, force: true}); fs.rmSync(config, {recursive: true, force: true});

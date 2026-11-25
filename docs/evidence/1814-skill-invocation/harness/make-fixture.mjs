@@ -3,7 +3,8 @@
 // The repo is a small TypeScript/Express user-management API with a list screen, a requirement memo with open points,
 // a brief for an indirect request (as in #1807) and CI/Docker files, so that every path a prompt in cases.json names exists.
 // ASC is installed from a release tarball by install-asc.mjs (the documented user steps), never copied from this repo.
-// Usage: node make-fixture.mjs <release-tarball> <expected-sha256> <new-fixture-dir> <temp-parent> [--allow-unreleased]
+// Usage: node make-fixture.mjs <release-tarball> <expected-sha256> <new-fixture-dir> <temp-parent> [--allow-unreleased] [--adopt <option-id>]
+// --adopt (stage 3, condition I only) accepts the adopted read-trigger option at install time (install-asc.mjs).
 // The digest must equal release.json phases0to2.assetSha256 (review L7); only a dry run passes --allow-unreleased to use a
 // locally packed stand-in. The install record (versions, digests, entry hashes, sample HEAD) is written next to the
 // project as <new-fixture-dir>.install.json, outside the project so the model cannot see it; run-trial copies it into
@@ -55,7 +56,7 @@ export function releaseDigests() {
   return [r.phases0to2?.assetSha256, r.phase3?.assetSha256].filter(Boolean);
 }
 
-export function makeFixture(tarball, digest, dir, tempParent, {allowUnreleased = false} = {}) {
+export function makeFixture(tarball, digest, dir, tempParent, {allowUnreleased = false, adopt = null} = {}) {
   if (fs.existsSync(dir)) throw new Error(`refused: exists ${dir}`);
   const clean = digest.replace(/^sha256:/, '');
   if (!allowUnreleased && !releaseDigests().includes(clean)) throw new Error('refused: digest is not a release digest in release.json (use --allow-unreleased only for a dry run)');
@@ -71,7 +72,7 @@ export function makeFixture(tarball, digest, dir, tempParent, {allowUnreleased =
   // them to main (here a fast-forward merge), as a user sharing ASC through Git would.
   const wt = path.join(dir, '.worktrees', '20261101_000000-1-install-asc');
   git(['worktree', 'add', '-q', '-b', 'chore/1-install-asc', wt, 'main'], dir);
-  const install = installAsc(tarball, digest, wt, tempParent);
+  const install = installAsc(tarball, digest, wt, tempParent, {adopt});
   git(['add', '-A'], wt);
   git(['commit', '-q', '-m', 'Install ASC'], wt);
   git(['merge', '-q', '--ff-only', 'chore/1-install-asc'], dir);
@@ -87,5 +88,6 @@ export function makeFixture(tarball, digest, dir, tempParent, {allowUnreleased =
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [tarball, digest, dir, tempParent] = process.argv.slice(2);
   const allowUnreleased = process.argv.includes('--allow-unreleased');
-  console.log(JSON.stringify(makeFixture(path.resolve(tarball), digest, path.resolve(dir), path.resolve(tempParent), {allowUnreleased}), null, 1));
+  const i = process.argv.indexOf('--adopt');
+  console.log(JSON.stringify(makeFixture(path.resolve(tarball), digest, path.resolve(dir), path.resolve(tempParent), {allowUnreleased, adopt: i >= 0 ? process.argv[i + 1] : null}), null, 1));
 }

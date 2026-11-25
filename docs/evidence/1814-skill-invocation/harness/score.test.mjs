@@ -6,8 +6,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {parseTrace, scoreRun, scoreDir, summarize, judge, shortfall, markersOk, projectRelative} from './score.mjs';
-import {redact, scrubSensitive} from './collect.mjs';
+import {parseTrace, scoreRun, scoreDir, summarize, judge, shortfall, markersOk, projectRelative, selectCounted} from './score.mjs';
+import {redact, scrubSensitive, collect} from './collect.mjs';
 import {pointerText, hookScript} from './apply-condition.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -147,6 +147,34 @@ test('missing init event and an unfired hook in a hook condition are failures (L
   assert.equal(scoreRun(spec, kase('asc-1'), t, null, {expectHook: true}).failure, 'hook did not fire');
   assert.equal(scoreRun(spec, kase('asc-1'), t, ['{"source":"startup"}'], {expectHook: true}).failure, undefined);
   assert.equal(scoreRun(spec, kase('asc-1'), t, null, {expectHook: false}).failure, undefined);
+});
+
+test('only planned reps count; a later rep only replaces a failed planned trial once (L-3)', () => {
+  const r = (run, failure) => ({condition: 'R', case: 'asc-1', run, ...(failure ? {failure: 'x'} : {})});
+  const rows = selectCounted([r(1), r(2, true), r(3), r(4)], 2);
+  assert.deepEqual(rows.map((x) => [x.run, x.counted]), [[1, true], [2, false], [3, true], [4, false]]);
+  assert.equal(rows[2].replaces, 2);
+  const extraOnly = selectCounted([r(1), r(2), r(3)], 2);
+  assert.deepEqual(extraOnly.map((x) => x.counted), [true, true, false]);
+  const s = summarize(spec, [{...r(1), expect: 'asc', bodyRead: true, costUsd: 0.2, counted: true}, {...r(3), expect: 'asc', costUsd: 0.2, counted: false}], 'R');
+  assert.deepEqual([s.runs, s.notCounted, s.costUsd], [1, 1, 0.4]);
+});
+
+test('product hook (condition I) is fired by SessionStart hook events in the trace', () => {
+  const t = parseTrace(trace([{hook: true}, read(body('asc'))], {text: 'worktree-create worktree'}));
+  assert.equal(scoreRun(spec, kase('asc-1'), t, [], {expectHook: 'product'}).failure, undefined);
+  const none = parseTrace(trace([read(body('asc'))], {text: 'worktree-create worktree'}));
+  assert.equal(scoreRun(spec, kase('asc-1'), none, [], {expectHook: 'product'}).failure, 'hook did not fire');
+});
+
+test('collect: a trace without meta.json becomes a failure row instead of a crash (L-6)', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-collect-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  fs.mkdirSync(path.join(root, 'runs/R-asc-1-1'), {recursive: true});
+  fs.writeFileSync(path.join(root, 'runs/R-asc-1-1/trace.jsonl'), trace([], {text: 'x'}));
+  assert.equal(collect(path.join(root, 'runs'), path.join(root, 'out')), 1);
+  assert.equal(fs.existsSync(path.join(root, 'out/R-asc-1-1.jsonl.missing')), true);
+  assert.equal(fs.existsSync(path.join(root, 'out/R-asc-1-1.jsonl')), false);
 });
 
 test('scrubSensitive replaces mail addresses, keys and account fields (L9)', () => {

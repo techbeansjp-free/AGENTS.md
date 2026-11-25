@@ -7,10 +7,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {checkProbe, compareProbes, description, installDirProblems, ownerCanaries} from './probe-check.mjs';
+import crypto from 'node:crypto';
+import {checkProbe, compareProbes, description, installDirProblems, ownerCanaries, gitSubjects} from './probe-check.mjs';
 import {placementProblems} from './guard.mjs';
 import * as ledger from './ledger.mjs';
-import {differences, digests, FIXED} from './fixation.mjs';
+import {differences, digests, FIXED, stage3Violations, invariantDigests} from './fixation.mjs';
+import {fileURLToPath} from 'node:url';
+import {installProblems} from './run-trial.mjs';
 import {applyCondition, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {gitEnv} from './make-fixture.mjs';
 
@@ -29,7 +32,7 @@ function trace({skills = [...ASC, 'dataviz'], tools = ['Read', 'Glob', 'Grep', '
   lines.push({type: 'result', subtype: 'success', is_error: false, result: text, total_cost_usd: 0.05});
   return lines.map((l) => JSON.stringify(l)).join('\n');
 }
-const goodText = (extra = '') => `1. ${work}/CLAUDE.md: ユーザー管理API${extra}\nDESC asc: ascの説明。\nDESC user-journey-acceptance: user-journey-acceptanceの説明。\n4 拒否 5 拒否\nGIT: ${NEUTRAL_SUBJECT} | Install ASC | initial`;
+const goodText = (extra = '') => `1. ${work}/CLAUDE.md 最初の行: ユーザー管理API / 最後の行: TypeScript/Expressのユーザー管理API。${extra}\nDESC asc: ascの説明。\nDESC user-journey-acceptance: user-journey-acceptanceの説明。\n4 拒否 5 拒否\nGIT: ${NEUTRAL_SUBJECT} | Install ASC | initial`;
 const base = (o) => ({trace: trace({text: goodText()}), debug: `Loading ${trial}/work/CLAUDE.md\nskills from ${trial}/work/.claude/skills/asc`, stderr: '', hookLog: null, work, trialDir: trial,
   condition: 'R', ascSkills, baseFirstLine: '# ユーザー管理API', pointerHead: 'このプロジェクトでASCを使う', forbiddenTexts: ['agent-skill-chain 利用案内（Claude Code）'],
   ownerLines: ['owner memory index first line'], ownerSkills: ['my-private-skill'], markerPaths: [HOME_M, REPO_M], tokens: ['TOKEN-H', 'TOKEN-R'],
@@ -89,12 +92,36 @@ test('hook condition passes with pointer delivered, the hook log and only its ow
   assert.equal(r.pass, true, JSON.stringify(r.checks));
 });
 
-test('compare: conditions may differ only by CLAUDE.md / hook output (M1)', () => {
+test('P: the pointer is the last line of CLAUDE.md, so the first/last-line answer shows it (N3)', () => {
+  const pText = `1. ${work}/CLAUDE.md 最初の行: # ユーザー管理API / 最後の行: このプロジェクトでASCを使う開発の開始・再開・PR提出…\nDESC asc: ascの説明。\nDESC user-journey-acceptance: user-journey-acceptanceの説明。\n4 拒否 5 拒否\nGIT: ${NEUTRAL_SUBJECT} | Install ASC | initial`;
+  assert.equal(checkProbe(base({condition: 'P', trace: trace({text: pText})})).pass, true);
+  assert.equal(checkProbe(base({condition: 'P'})).checks.pointerMatchesCondition.pass, false); // last line without pointer
+});
+
+test('hook events: shapes by event name, counts against the log (L-1)', () => {
+  const ev = (o) => ({type: 'system', subtype: 'hook_response', ...o});
+  const log = '{"event":"SessionStart","source":"startup"}\n';
+  const hText = goodText('\nSessionStart: このプロジェクトでASCを使う開発の…');
+  // name-only events (no command field) are accepted for the fixture hook
+  assert.equal(checkProbe(base({condition: 'H', trace: trace({text: hText, hooks: [ev({hook_name: 'SessionStart:startup'})]}), hookLog: log})).pass, true);
+  // more SessionStart responses than the fixture hook logged: another hook ran
+  const two = checkProbe(base({condition: 'H', trace: trace({text: hText, hooks: [ev({hook_name: 'SessionStart:startup'}), ev({hook_name: 'SessionStart:startup'})]}), hookLog: log}));
+  assert.equal(two.checks.noForeignHooks.pass, false);
+  // a non-SessionStart hook event is foreign in any condition
+  assert.equal(checkProbe(base({trace: trace({text: goodText(), hooks: [ev({hook_event_name: 'UserPromptSubmit'})]})})).checks.noForeignHooks.pass, false);
+  // without a hook, any SessionStart response fails
+  assert.equal(checkProbe(base({trace: trace({text: goodText(), hooks: [ev({hook_name: 'SessionStart:startup'})]})})).pass, false);
+});
+
+test('compare: conditions may differ only by CLAUDE.md / hook output (M1); git subjects compared as a set (L-7)', () => {
   const r = checkProbe(base({}));
-  const p = checkProbe(base({condition: 'P', trace: trace({text: goodText('\nこのプロジェクトでASCを使う開発の…')})}));
+  const pText = goodText().replace('最後の行: TypeScript/Expressのユーザー管理API。', '最後の行: このプロジェクトでASCを使う開発の…').replace(`GIT: ${NEUTRAL_SUBJECT} | Install ASC | initial`, `GIT: initial |  ${NEUTRAL_SUBJECT}|Install ASC`);
+  const p = checkProbe(base({condition: 'P', trace: trace({text: pText})}));
+  assert.equal(p.pass, true, JSON.stringify(p.checks));
   assert.equal(compareProbes([r, p]).pass, true);
-  const other = checkProbe(base({condition: 'P', trace: trace({text: goodText('\nこのプロジェクトでASCを使う開発の…'), skills: [...ASC, 'dataviz', 'extra']})}));
+  const other = checkProbe(base({condition: 'P', trace: trace({text: pText, skills: [...ASC, 'dataviz', 'extra']})}));
   assert.deepEqual(compareProbes([r, other]).differ, ['nonAscSkills']);
+  assert.deepEqual(gitSubjects(' b | a|b '), ['a', 'b']);
 });
 
 test('ownerCanaries reads first lines and Skill names, never content beyond them', (t) => {
@@ -127,26 +154,69 @@ test('guard refuses ancestors with instruction files or git, and the real HOME',
   assert.match(placementProblems(path.join(root, 'a', 'b'), {home: null, repoRoot: root}).join(), /ASC repository/);
 });
 
-test('ledger: cumulative, reserved at budget until settled, strictly sequential (M4)', (t) => {
+test('ledger: cumulative by unique id, reserved at budget until settled, duplicate names refused, sequential (M4, N1)', (t) => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-ledger-'));
   t.after(() => fs.rmSync(d, {recursive: true, force: true}));
   const f = path.join(d, 'ledger.jsonl');
   assert.equal(ledger.spent(f), 0);
-  ledger.reserve(f, 'R-asc-1-1', 0.6); ledger.settle(f, 'R-asc-1-1', 0.21);
+  const a = ledger.reserve(f, 'R-asc-1-1', 0.6); ledger.settle(f, a, 'R-asc-1-1', 0.21);
   ledger.reserve(f, 'R-asc-1-2', 0.6); // parent killed: never settled
-  ledger.reserve(f, 'P-asc-1-1', 0.6); ledger.settle(f, 'P-asc-1-1', null); // no cost reported
+  const c = ledger.reserve(f, 'P-asc-1-1', 0.6); ledger.settle(f, c, 'P-asc-1-1', null); // no cost reported
   assert.equal(Number(ledger.spent(f).toFixed(2)), 1.41);
+  assert.throws(() => ledger.reserve(f, 'R-asc-1-1', 0.6), /already in the ledger/); // rerun under the same name
+  // even if a duplicate name got in (hand-edited ledger), both reservations count by id
+  fs.appendFileSync(f, JSON.stringify({id: 'x1', trial: 'R-probe-1', reservedUsd: 0.6}) + '\n' + JSON.stringify({id: 'x1', trial: 'R-probe-1', costUsd: 0.3}) + '\n');
+  fs.appendFileSync(f, JSON.stringify({id: 'x2', trial: 'R-probe-1', reservedUsd: 0.6}) + '\n');
+  assert.equal(Number(ledger.spent(f).toFixed(2)), 2.31);
   const unlock = ledger.lock(f);
   assert.throws(() => ledger.lock(f), /locked/);
   unlock();
   ledger.lock(f)();
 });
 
-test('fixation: a change to a fixed file is detected', () => {
+test('fixation: a change to a fixed file is detected; stage 3 may only add conditions.I and fill phase3 (N2)', (t) => {
   const now = digests();
   assert.deepEqual(differences({files: now}), []);
   assert.deepEqual(differences({files: {...now, 'cases.json': 'x'}}), ['cases.json']);
   assert.ok(FIXED.includes('decision-criteria.md') && FIXED.includes('harness/score.mjs'));
+  const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-fix-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  for (const f of FIXED) { fs.mkdirSync(path.dirname(path.join(root, f)), {recursive: true}); fs.copyFileSync(path.join(ev, f), path.join(root, f)); }
+  const first = {files: digests(root), invariants: invariantDigests(root)};
+  assert.deepEqual(stage3Violations(first, root).sort(), ['conditions.I is not defined', 'release.json phase3 is not filled']);
+  const cj = JSON.parse(fs.readFileSync(path.join(root, 'conditions.json'), 'utf8'));
+  cj.conditions.I = {label: 'I', pointer: false, hook: 'product', pointerDelivered: true, adopt: 'claude-hook', core: true};
+  fs.writeFileSync(path.join(root, 'conditions.json'), JSON.stringify(cj, null, 1));
+  const rj = JSON.parse(fs.readFileSync(path.join(root, 'release.json'), 'utf8'));
+  rj.phase3 = {tag: 'v0.5.200', assetSha256: 'a'.repeat(64)};
+  fs.writeFileSync(path.join(root, 'release.json'), JSON.stringify(rj, null, 1));
+  assert.deepEqual(stage3Violations(first, root), []);
+  cj.runs = 3; fs.writeFileSync(path.join(root, 'conditions.json'), JSON.stringify(cj));
+  assert.deepEqual(stage3Violations(first, root), ['conditions.json changed beyond adding conditions.I']);
+  cj.runs = 2; fs.writeFileSync(path.join(root, 'conditions.json'), JSON.stringify(cj));
+  fs.appendFileSync(path.join(root, 'harness/score.mjs'), '\n');
+  assert.deepEqual(stage3Violations(first, root), ['harness/score.mjs changed']);
+  rj.phases0to2.assetSha256 = 'b'.repeat(64); fs.writeFileSync(path.join(root, 'release.json'), JSON.stringify(rj));
+  assert.ok(stage3Violations(first, root).includes('release.json changed beyond filling phase3'));
+});
+
+test('run path requires a released install whose entries and record still match, and the adopted option (L-2)', (t) => {
+  const w = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-inst-'));
+  t.after(() => fs.rmSync(w, {recursive: true, force: true}));
+  fs.mkdirSync(path.join(w, '.claude/skills/asc'), {recursive: true}); fs.mkdirSync(path.join(w, '.agent-skill-chain'), {recursive: true});
+  fs.writeFileSync(path.join(w, '.claude/skills/asc/SKILL.md'), 'entry'); fs.writeFileSync(path.join(w, '.agent-skill-chain/distribution.json'), '{}');
+  const h = (s) => crypto.createHash('sha256').update(s).digest('hex');
+  const rel = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../release.json'), 'utf8')).phases0to2.assetSha256;
+  const good = {released: true, install: {tarballSha256: rel, entries: [{name: 'asc', entrySha256: h('entry')}], distributionSha256: h('{}'), adopted: null}};
+  assert.deepEqual(installProblems(good, w, {}), []);
+  assert.match(installProblems(null, w, {}).join(), /no install record/);
+  assert.match(installProblems({...good, released: false}, w, {}).join(), /not installed from a release/);
+  assert.match(installProblems({...good, install: {...good.install, tarballSha256: 'x'}}, w, {}).join(), /not in release.json/);
+  fs.writeFileSync(path.join(w, '.claude/skills/asc/SKILL.md'), 'edited');
+  assert.match(installProblems(good, w, {}).join(), /entry asc differs/);
+  fs.writeFileSync(path.join(w, '.claude/skills/asc/SKILL.md'), 'entry');
+  assert.match(installProblems(good, w, {adopt: 'claude-hook'}).join(), /does not match the condition/);
 });
 
 test('every condition gets one commit with the same neutral subject (M1)', (t) => {

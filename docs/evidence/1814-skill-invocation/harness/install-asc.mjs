@@ -10,7 +10,10 @@
 // are the ones recorded in .agent-skill-chain/distribution.json, that the entry links to the body
 // .agent-skill-chain/skills/<name>/SKILL.md, and that the body equals the package's skills/<name>/SKILL.md (asc: the
 // documented project rewrite, checked by recorded hash only).
-// Usage: node install-asc.mjs <tarball> <expected-sha256> <project-dir> <temp-parent>
+// Stage 3 (condition I): with `adopt`, the read-trigger option the owner adopted is accepted at install time the way
+// IMPROVEMENT_DESIGN.md proposes: the plan's readTrigger option with that id is applied with
+// --adopt-read-trigger <id>@<beforeSha256 shown in the plan>. A release whose plan has no such option is refused.
+// Usage: node install-asc.mjs <tarball> <expected-sha256> <project-dir> <temp-parent> [--adopt <option-id>]
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -47,7 +50,7 @@ export function verifyEntries(project, pkgDir) {
   return {distributed, entries: rows, distributionSha256: sha(fs.readFileSync(path.join(project, '.agent-skill-chain/distribution.json'))), problems};
 }
 
-export function installAsc(tarball, expected, project, tempParent) {
+export function installAsc(tarball, expected, project, tempParent, {adopt = null} = {}) {
   const bytes = fs.readFileSync(tarball);
   const digest = sha(bytes);
   if (digest !== expected.replace(/^sha256:/, '')) throw new Error(`tarball sha256 ${digest} != expected ${expected}`);
@@ -58,18 +61,27 @@ export function installAsc(tarball, expected, project, tempParent) {
   const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
   const cli = path.join(pkgDir, 'bin/asc-v05.mjs');
   const plan = JSON.parse(run(process.execPath, [cli, 'project-assets', project, '--register-claude-skill'], {cwd: project, env}));
-  const applied = JSON.parse(run(process.execPath, [cli, 'project-assets', project, '--register-claude-skill', '--apply'], {cwd: project, env}));
+  let adopted = null;
+  const applyArgs = [cli, 'project-assets', project, '--register-claude-skill', '--apply'];
+  if (adopt) {
+    const option = (plan.readTrigger?.options ?? []).find((o) => o.id === adopt);
+    if (!option) throw new Error(`the release's project-assets plan offers no read-trigger option ${adopt}`);
+    applyArgs.push('--adopt-read-trigger', `${option.id}@${option.beforeSha256}`);
+    adopted = {id: option.id, path: option.path, action: option.action, beforeSha256: option.beforeSha256, diffSha256: sha(String(option.diff ?? '')), default: plan.readTrigger.default ?? null};
+  }
+  const applied = JSON.parse(run(process.execPath, applyArgs, {cwd: project, env}));
   if (!applied.applied || applied.conflicts.length) throw new Error('project-assets --apply did not apply cleanly');
   const verify = verifyEntries(project, pkgDir);
   const runtime = JSON.parse(fs.readFileSync(path.join(project, '.agent-skill-chain/runtime.json'), 'utf8'));
   fs.rmSync(prefix, {recursive: true, force: true});
   if (verify.problems.length) throw new Error(`installed entries do not match the release: ${verify.problems.join('; ')}`);
   return {tarball: path.basename(tarball), tarballSha256: digest, packageVersion: pkg.version, runtimeVersion: runtime.version,
-    planChanges: plan.changes.length, appliedChanges: applied.changes.length, registeredHosts: applied.registeredHosts,
+    planChanges: plan.changes.length, appliedChanges: applied.changes.length, registeredHosts: applied.registeredHosts, adopted,
     nodeVersion: process.version, npmVersion: run('npm', ['--version'], {env}).trim(), ...verify};
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [tarball, expected, project, tempParent] = process.argv.slice(2);
-  console.log(JSON.stringify(installAsc(path.resolve(tarball), expected, path.resolve(project), path.resolve(tempParent)), null, 1));
+  const i = process.argv.indexOf('--adopt');
+  console.log(JSON.stringify(installAsc(path.resolve(tarball), expected, path.resolve(project), path.resolve(tempParent), {adopt: i >= 0 ? process.argv[i + 1] : null}), null, 1));
 }

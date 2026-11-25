@@ -16,9 +16,9 @@
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| 採点器・隔離の判定器・配置の検査・台帳・固定・中立のcommitの試験（合成の記録） | 29件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt)（command・HEAD・Nodeの版・終了code付き） |
+| 採点器・隔離の判定器・配置の検査・台帳・固定・中立のcommit・導入の照合・記録の取り出しの試験（合成の記録） | 35件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt)（command・HEAD・Nodeの版・終了code付き） |
 | 全体のdry run | 合格。採点器のSkillの一覧がreleaseの配布一覧と一致、全条件のcommitの件名が同じ（中立の1件）。導入（16件の入口がすべてあり、`distribution.json`の記録と一致し、本文へのlinkだけの薄い入口で、本文がpackageと一致）、goldのSkill本文とreferenceがreleaseにある、依頼が名指すfileがある、sample projectと条件ごとの複製の配置が合格、5条件の適用（`CLAUDE.md`の文例の有無、hookの出力が文例と一致・終了コード0・発火のlog）、試行の計画116試行・計画の費用25.04 USD | [results/dry-run.json](results/dry-run.json) |
-| 起動の経路の拒否（反例） | 許可の環境変数が無い、台帳・上限が無い、`results/fixation.json`が無い（この記録の時点）、`--model`の指定、repositoryと実HOMEの下、releaseに無いdigest、tarballとdigestの不一致を、それぞれ拒否した | [results/refusals.txt](results/refusals.txt) |
+| 起動の経路の拒否（反例） | 許可の環境変数が無い、台帳・上限が無い、`results/fixation.json`が無い、固定したfileが記録と違う、`--model`の指定、repositoryと実HOMEの下、releaseに無いdigest、tarballとdigestの不一致、dry runの代用品で作ったsample projectでの有料の試行を、それぞれ拒否した。`fixation.mjs check`の合格も記録した | [results/refusals.txt](results/refusals.txt) |
 
 dry runで使ったtarball：**releaseの本物ではない。** このworktreeのHEAD（`51c3e022`、v0.5.106の対象commitと同じ）を`npm pack`で作った代用品（版の表記は0.5.0、sha256 `8a01707f…`）である。GitHubからのdownloadを、この準備の段階では行わないため。測定では[release.json](release.json)のtarballを取得し、sha256を照合してから使う。
 
@@ -58,12 +58,31 @@ Medium 5件・Low 10件（Highなし）。すべて是正した。
 | L8 meta・trials.jsonに版・HEADが無い | sample projectのHEAD・ASCの版・tarballのsha256・Claude Codeの版・解決後のmodelを記録。`collect`の存在しない欄の参照を削除 |
 | L9 試行のHOME・設定に認証の情報が残る | 試行の後に消す。公開する記録のメールアドレス・key・アカウントの欄を置き換え、件数を記録 |
 | L10 試験・拒否の記録にcommand等が無い | command・HEAD・Nodeの版・終了code付きで記録 |
-| 注記：固定 | `results/fixation.json`（測定の前のHEADとfileのsha256）を別のcommitで記録。`run-trial.mjs`は一致しなければ起動しない |
+| 注記：固定 | `results/fixation.json`（測定の前のHEADとfileのsha256）を別のcommitで記録。`run-trial.mjs`は一致しなければ起動しない。2回目のレビューの是正で形式を追記型に変えたため、測定の前に作り直した（下の表のN2） |
 | 注記：Skillの名前の直書き | dry runで配布一覧と一致することを確認 |
+
+## 再レビュー（2回目、HEAD `2c38a7a5`）への対応
+
+Medium 3件・Low 7件（Highなし）。すべて是正した。
+
+| 指摘 | 是正 |
+| --- | --- |
+| N1 台帳を試行名で数えるので、同じ名前の再実行で少なく数える | 予約ごとに一意なidを付けてidで数える。同じ試行名の2回目の予約は拒否する（再実行は新しい反復の番号）。台帳を手で書き換えて同じ名前が入っても、両方の予約を数えることを試験した |
+| N2 段階3では固定し直すしかなく、手順も制約も無い | `fixation.json`を追記だけの記録に変えた（`init`は既存のfileを上書きしない）。段階3の記録は、最初の記録と比べて`conditions.I`の追加と`release.json`の`phase3`の記入だけを許し、それ以外の固定fileはbytesで同じことを`fixation.mjs stage3`が確かめる。各試行の`meta.json`・`trials.json`に`fixation.json`のsha256・記録のcommit・段階を残す。条件Iは、導入のときに採用した選択肢を承認する形（`make-fixture.mjs --adopt`）で作れるように、今のうちに実装した（段階3でscriptを変えずに済むようにするため） |
+| N3 条件Pの隔離の確認が構造的に不合格になる | probeの質問を「最初の1行と最後の1行」に変えた。Pの合成の記録を、実際の質問への回答の形（最後の行が文例）で書き直し、最後の行に文例が無ければ不合格になる反例も加えた |
+| L-1 hook eventの照合が合成の`command`欄に頼る | event名で分け、SessionStart以外のevent、条件以外のcommand、fixtureのhookのlogの件数を超えるSessionStartの応答を不合格にする。名前だけのeventの形でも合格・不合格になることを試験した。実際の形は段階0で確かめ、合わなければ報告する |
+| L-2 起動の経路でreleaseからの導入を強制していない | 有料の試行は、導入の記録が`released: true`、tarballのsha256が`release.json`にある、複製の入口と`distribution.json`が記録と同じ、採用の選択肢が条件と同じ、の場合だけ起動する |
+| L-3 「各条件2回」がコードで固定されていない | `conditions.json`の`runs`で固定。採点は反復の番号1〜2だけ。失敗した試行に限り、次の番号の試行1回で置き換えられる。それ以外は採点に含めず別に報告する（規則5に追記） |
+| L-4 試験の記録がcommitの前の状態のもの | 是正をcommitした後のHEADで、試験・dry run・`fixation.mjs check`・拒否の反例（固定したfileが違う場合を含む）を実行して記録した |
+| L-5 最後の試行の超過で30 USDを超え得る | 上限から余裕1 USDを引いた29 USDで止める |
+| L-6 `meta.json`の無い試行で`collect`が止まる | 失敗の行として記録して続ける |
+| L-7 `compare`がgitの行を文字列のまま比べる | commitの件名の集合として比べる |
+| 注記：Skillの名前の直書き | 測定の手順2で、本物のreleaseでもdry run（`--allow-unreleased`なし）を行い、配布一覧との一致を確かめる |
+| 注記：toolの制限 | ownerの了承待ちのまま。測定の前に了承の記録が必要 |
 
 ## 費用の見込み
 
-計画の単価（#1783・#1801の実績から1試行0.22 USD、隔離の確認1回0.1 USD）で、段階0〜3の合計116試行・25.04 USD（上限30 USD）。各条件2回の反復にしたのは、3回では段階3（改善の後）が上限を超えるため。段階ごとに実績の単価で残りを見積もり、上限を超える見込みなら次の段階へ進まずに報告する。
+計画の単価（#1783・#1801の実績から1試行0.22 USD、隔離の確認1回0.1 USD）で、段階0〜3の合計116試行・25.04 USD（上限30 USD、起動を止める線は余裕を引いた29 USD）。各条件2回の反復にしたのは、3回では段階3（改善の後）が上限を超えるため。段階ごとに実績の単価で残りを見積もり、上限を超える見込みなら次の段階へ進まずに報告する。
 
 ## 行っていないこと
 
@@ -97,7 +116,7 @@ Medium 5件・Low 10件（Highなし）。すべて是正した。
 | [harness/run-trial.mjs](harness/run-trial.mjs) | 1試行の起動（既定はdry run） |
 | [harness/probe-check.mjs](harness/probe-check.mjs)・[harness/markers.mjs](harness/markers.mjs) | 隔離の確認の判定と目印file |
 | [harness/collect.mjs](harness/collect.mjs)・[harness/score.mjs](harness/score.mjs) | 記録の取り出し（local pathと認証情報の形の文字列の置換）と採点・判定 |
-| [harness/ledger.mjs](harness/ledger.mjs)・[harness/fixation.mjs](harness/fixation.mjs) | 全段階の費用の台帳と順次実行のlock、測定の前の固定と照合 |
+| [harness/ledger.mjs](harness/ledger.mjs)・[harness/fixation.mjs](harness/fixation.mjs) | 全段階の費用の台帳（一意なid、同じ名前の拒否）と順次実行のlock、追記だけの固定（段階3の制約付き）と照合 |
 | [harness/dry-run.mjs](harness/dry-run.mjs) | モデルを呼ばない全体の確認 |
 | [harness/score.test.mjs](harness/score.test.mjs)・[harness/probe.test.mjs](harness/probe.test.mjs) | 合成の記録による試験 |
 | [results/](results/) | dry run・試験・拒否の反例の結果、測定の前の固定（`fixation.json`） |

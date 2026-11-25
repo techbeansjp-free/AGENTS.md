@@ -12,13 +12,13 @@ import {makeFixture} from './make-fixture.mjs';
 import {applyCondition, loadConditions, pointerText, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {ASC_SKILLS} from './score.mjs';
 import {placementProblems} from './guard.mjs';
-import {flags} from './run-trial.mjs';
+import {flags, SAFETY_MARGIN_USD} from './run-trial.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ev = path.resolve(here, '..');
 const repoRoot = path.resolve(ev, '../../..');
 // Planning cost per trial (Host total_cost_usd): mean of #1783/#1801 runs with the same tools, 0.206-0.267 USD.
-export const PLAN = {perTrialUsd: 0.22, probeUsd: 0.1, runs: 2, capUsd: 30};
+export const PLAN = {perTrialUsd: 0.22, probeUsd: 0.1, runs: loadConditions().runs, capUsd: 30, safetyMarginUsd: SAFETY_MARGIN_USD};
 
 export function trialMatrix(spec, conds) {
   const phases = [
@@ -32,7 +32,7 @@ export function trialMatrix(spec, conds) {
     p.planningUsd = Number((p.conditions.length * p.cases.reduce((a, c) => a + (c === 'probe' ? PLAN.probeUsd : p.runs * PLAN.perTrialUsd), 0)).toFixed(2));
     for (const c of p.conditions) if (c !== 'I' && !conds.conditions[c]) throw new Error(`unknown condition ${c}`);
   }
-  return {phases, totalTrials: phases.reduce((a, p) => a + p.trials, 0), totalPlanningUsd: Number(phases.reduce((a, p) => a + p.planningUsd, 0).toFixed(2)), capUsd: PLAN.capUsd};
+  return {phases, totalTrials: phases.reduce((a, p) => a + p.trials, 0), totalPlanningUsd: Number(phases.reduce((a, p) => a + p.planningUsd, 0).toFixed(2)), capUsd: PLAN.capUsd, stopBelowUsd: PLAN.capUsd - PLAN.safetyMarginUsd};
 }
 
 function main() {

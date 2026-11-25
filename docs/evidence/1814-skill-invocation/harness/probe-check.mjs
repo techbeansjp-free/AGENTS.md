@@ -85,7 +85,9 @@ export function checkProbe(i) {
   add('descriptionsVerbatimCount', true, `${asc.filter((s) => norm(text).includes(norm(i.ascSkills[s]))).length}/${asc.length} (informational)`);
   // Instruction files: the sample project's CLAUDE.md, the pointer only when the condition adds it, nothing from elsewhere.
   add('projectClaudeMd', text.replace(/#/g, '').includes(stripHeading(i.baseFirstLine)), 'heading marks ignored (review L3)');
-  const expectPointer = Boolean(cond.pointer || cond.hook === 'usage');
+  // review N3: the probe asks for the first and the last line of each instruction source; the pointer is CLAUDE.md's last
+  // paragraph (P) or the whole hook context (H), so it appears in the answer only when the condition delivers it.
+  const expectPointer = Boolean(cond.pointerDelivered ?? (cond.pointer || cond.hook === 'usage'));
   add('pointerMatchesCondition', text.includes(i.pointerHead) === expectPointer, {expectPointer});
   const leaked = i.forbiddenTexts.filter((s) => text.includes(s));
   add('noRepoInstructions', leaked.length === 0, `${leaked.length} repository instruction line(s) found`);
@@ -120,18 +122,36 @@ export function checkProbe(i) {
   add('noRealHomeOrRepoInDebug', i.debug !== null && hostPaths.length === 0, `${hostPaths.length} found`);
   // Hooks: the fixture hook log matches the condition, and the trace shows no hook other than the condition's (review M3).
   const hookLines = (i.hookLog ?? '').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-  add('hookMatchesCondition', cond.hook ? hookLines.some((h) => h.source === 'startup') : hookLines.length === 0, hookLines.length);
-  const hookEvents = i.trace.split('\n').filter((l) => /"type":"system"/.test(l) && /"subtype":"hook_/.test(l));
-  const foreign = hookEvents.filter((l) => /"command"|"hook_name"|"name"/.test(l) && !l.includes('asc-read-trigger'));
-  add('noForeignHooks', foreign.length === 0 && (cond.hook || hookEvents.every((l) => !l.includes('asc-read-trigger'))), `${hookEvents.length} hook event(s), ${foreign.length} foreign`);
+  // review L-1: hook events are classified by their event name; only SessionStart may appear, and no more SessionStart
+  // responses than the fixture hook logged (fixture hooks), at least one for the product hook, none without a hook.
+  // The exact event shape is first seen at stage 0; an unknown shape makes this fail (safe side) and is reported.
+  const hookEvents = hookEventsOf(i.trace);
+  const nameOf = (e) => String(e.hook_event_name ?? e.hook_event ?? e.hook_name ?? '');
+  const otherEvents = hookEvents.filter((e) => nameOf(e) && !/SessionStart/.test(nameOf(e)));
+  const foreignCommand = hookEvents.filter((e) => typeof e.command === 'string' && !e.command.includes('asc-read-trigger') && cond.hook !== 'product');
+  const responses = hookEvents.filter((e) => e.subtype === 'hook_response' && (!nameOf(e) || /SessionStart/.test(nameOf(e)))).length;
+  const fixtureHook = cond.hook === 'usage' || cond.hook === 'strong';
+  add('hookMatchesCondition', fixtureHook ? hookLines.some((h) => h.source === 'startup') : cond.hook === 'product' ? hookLines.length === 0 && responses >= 1 : hookLines.length === 0 && responses === 0,
+    {logged: hookLines.length, responses});
+  add('noForeignHooks', otherEvents.length === 0 && foreignCommand.length === 0 && (!fixtureHook || responses <= hookLines.length) && (cond.hook || responses === 0),
+    `${hookEvents.length} hook event(s), ${otherEvents.length} non-SessionStart, ${foreignCommand.length} foreign command(s)`);
   return {condition: i.condition, pass: Object.values(checks).every((c) => c.pass), checks, listedSkills: listed.length, nonAscSkills: nonAsc,
     tools, gitLine: gitLine.replace(/^.*GIT:\s*/, ''), model: init.model ?? null, claudeCodeVersion: init.claude_code_version ?? null, costUsd: t.result?.total_cost_usd ?? null};
 }
 
 // Across conditions, only CLAUDE.md / hook output may differ: same tools, same Skill list, same git context (review M1).
+export function hookEventsOf(trace) {
+  return trace.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } })
+    .filter((e) => e && e.type === 'system' && /^hook_/.test(String(e.subtype ?? '')));
+}
+
+// review L-7: the git line is compared as the set of commit subjects, not as the model's exact wording.
+export const gitSubjects = (line) => [...new Set(String(line ?? '').split('|').map((x) => x.trim()).filter(Boolean))].sort();
+
 export function compareProbes(results) {
   const keys = ['tools', 'nonAscSkills', 'gitLine', 'model'];
-  const differ = keys.filter((k) => new Set(results.map((r) => JSON.stringify(k === 'nonAscSkills' || k === 'tools' ? [...r[k]].sort() : r[k]))).size > 1);
+  const norm1 = (r, k) => (k === 'gitLine' ? gitSubjects(r[k]) : k === 'nonAscSkills' || k === 'tools' ? [...r[k]].sort() : r[k]);
+  const differ = keys.filter((k) => new Set(results.map((r) => JSON.stringify(norm1(r, k)))).size > 1);
   return {pass: results.every((r) => r.pass) && differ.length === 0, conditions: results.map((r) => r.condition), differ};
 }
 

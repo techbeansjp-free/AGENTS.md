@@ -66,7 +66,9 @@ export function scoreRun(spec, k, t, hookLines = null, {expectHook = false} = {}
   if (!t.init) return {...row, failure: 'no init event'}; // review L5: cwd and model unknown, cannot be scored
   if (!t.result) return {...row, failure: 'no result event'};
   // review L6: in a hook condition, a trial whose hook did not fire did not receive the condition.
-  if (expectHook && !(hookLines && hookLines.length > 0)) return {...row, failure: 'hook did not fire'};
+  // The product hook (condition I) does not write the fixture log; its firing is taken from SessionStart hook events.
+  const fired = expectHook === 'product' ? t.hookEvents > 0 : Boolean(hookLines && hookLines.length > 0);
+  if (expectHook && !fired) return {...row, failure: 'hook did not fire'};
   const sub = String(t.result.subtype ?? '');
   // A budget stop is a completed observation of what was read; any other error is a failure.
   row.stopped = /max_budget|max_turns/.test(sub) ? sub : null;
@@ -91,12 +93,30 @@ export function scoreRun(spec, k, t, hookLines = null, {expectHook = false} = {}
 }
 
 // Which conditions carry a hook (conditions.json); a condition added later (I) is listed there before it is scored.
+const conditionsFile = () => JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../conditions.json'), 'utf8'));
 export function conditionHooks() {
-  const f = path.join(path.dirname(fileURLToPath(import.meta.url)), '../conditions.json');
-  return Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(f, 'utf8')).conditions).map(([k, v]) => [k, Boolean(v.hook)]));
+  return Object.fromEntries(Object.entries(conditionsFile().conditions).map(([k, v]) => [k, v.hook ?? false]));
 }
 
-export function scoreDir(spec, dir, conds, hooked = conditionHooks()) {
+// review L-3: only rep numbers 1..runs are scored. A later rep counts only as the one-time replacement of a failed planned
+// trial of the same condition and case (in rep order); every other run is marked counted:false and reported separately.
+export function selectCounted(runs, planned) {
+  const groups = new Map();
+  for (const r of runs) { const k = `${r.condition}|${r.case}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+  for (const rs of groups.values()) {
+    const plan = rs.filter((r) => r.run <= planned).sort((a, b) => a.run - b.run);
+    const extra = rs.filter((r) => r.run > planned).sort((a, b) => a.run - b.run);
+    for (const r of rs) r.counted = r.run <= planned;
+    for (const failed of plan.filter((r) => r.failure)) {
+      const sub = extra.shift();
+      if (!sub) break;
+      failed.counted = false; failed.replacedBy = sub.run; sub.counted = true; sub.replaces = failed.run;
+    }
+  }
+  return runs;
+}
+
+export function scoreDir(spec, dir, conds, hooked = conditionHooks(), planned = conditionsFile().runs) {
   const runs = [];
   for (const file of fs.readdirSync(dir).sort()) {
     const m = /^([A-Z]+)-(.+)-(\d+)\.jsonl(\.missing)?$/.exec(file);
@@ -110,23 +130,24 @@ export function scoreDir(spec, dir, conds, hooked = conditionHooks()) {
     const hookLines = fs.existsSync(hookFile) ? fs.readFileSync(hookFile, 'utf8').split('\n').filter(Boolean) : null;
     let t;
     try { t = parseTrace(fs.readFileSync(path.join(dir, file), 'utf8')); } catch (e) { runs.push({...base, case: id, kind: k.kind, expect: k.expect, failure: `unreadable trace: ${e.message}`}); continue; }
-    runs.push({...base, ...scoreRun(spec, k, t, hookLines, {expectHook: Boolean(hooked[condition])})});
+    runs.push({...base, ...scoreRun(spec, k, t, hookLines, {expectHook: hooked[condition] ?? false})});
   }
-  return runs;
+  return selectCounted(runs, planned);
 }
 
 export function summarize(spec, runs, condition) {
-  const rs = runs.filter((r) => r.condition === condition);
+  const all = runs.filter((r) => r.condition === condition);
+  const rs = all.filter((r) => r.counted !== false);
   const ok = rs.filter((r) => !r.failure), pos = ok.filter((r) => r.expect), neg = ok.filter((r) => !r.expect);
   const n = (xs, f) => xs.filter(f).length;
   const sum = (xs, f) => xs.reduce((a, x) => a + (f(x) ?? 0), 0);
-  return {condition, runs: rs.length, failures: n(rs, (r) => r.failure), stopped: n(ok, (r) => r.stopped),
+  return {condition, runs: rs.length, notCounted: all.length - rs.length, failures: n(rs, (r) => r.failure), stopped: n(ok, (r) => r.stopped),
     positives: pos.length, entryHop: n(pos, (r) => r.entryHop), reach: n(pos, (r) => r.reach), bodyRead: n(pos, (r) => r.bodyRead), referenceRead: n(pos, (r) => r.reach && r.referenceRead),
     applied: n(pos, (r) => r.applied), misselect: n(pos, (r) => r.misselect), unselected: n(pos, (r) => r.unselected),
     negatives: neg.length, overapplication: n(neg, (r) => r.overapplication), negMarkers: n(neg, (r) => r.markers),
     hookFired: n(ok, (r) => r.hookFired === true), hookMissing: n(ok, (r) => r.hookFired === false),
     perCase: Object.fromEntries(spec.cases.map((k) => [k.id, ok.filter((r) => r.case === k.id).map((r) => (k.expect ? (r.applied ? 'A' : r.bodyRead ? 'B' : r.entryHop ? 'E' : r.misselect ? 'M' : 'U') : (r.overapplication ? 'O' : '-'))).join('')])),
-    costUsd: Number(sum(rs, (r) => r.costUsd).toFixed(4)), turns: sum(ok, (r) => r.turns), durationSec: Math.round(sum(ok, (r) => r.durationMs) / 1000)};
+    costUsd: Number(sum(all, (r) => r.costUsd).toFixed(4)), turns: sum(ok, (r) => r.turns), durationSec: Math.round(sum(ok, (r) => r.durationMs) / 1000)};
 }
 
 // Owner pass level (Issue #1814 comment, 2026-11-25), fixed in decision-criteria.md before any run:

@@ -44,11 +44,16 @@ export function applyCondition(fixture, name) {
   const conds = loadConditions();
   const c = conds.conditions[name];
   if (!c) throw new Error(`unknown condition ${name}`);
-  const pointer = pointerText(fs.readFileSync(path.join(fixture, '.agent-skill-chain/v05/USAGE.md'), 'utf8'));
-  const claudeMd = conds.baseClaudeMd + (c.pointer ? `\n${pointer}\n` : '');
-  fs.writeFileSync(path.join(fixture, 'CLAUDE.md'), claudeMd);
-  const out = {condition: name, claudeMdSha256: sha256(claudeMd), pointerSha256: sha256(pointer), pointer: c.pointer, hook: c.hook};
-  if (c.hook) {
+  const usage = fs.readFileSync(path.join(fixture, '.agent-skill-chain/v05/USAGE.md'), 'utf8');
+  // The phase-3 release may rewrite the USAGE section; condition I does not need the text.
+  let pointer = '';
+  try { pointer = pointerText(usage); } catch (e) { if (!c.adopt) throw e; }
+  // Condition I keeps the CLAUDE.md the product's adoption produced (make-fixture --adopt); others set it here.
+  if (!c.adopt) fs.writeFileSync(path.join(fixture, 'CLAUDE.md'), conds.baseClaudeMd + (c.pointer ? `\n${pointer}\n` : ''));
+  const claudeMd = fs.readFileSync(path.join(fixture, 'CLAUDE.md'), 'utf8');
+  const out = {condition: name, claudeMdSha256: sha256(claudeMd), pointerSha256: sha256(pointer), pointer: Boolean(c.pointer), hook: c.hook ?? null, adopt: c.adopt ?? null};
+  // hook 'product' (condition I) is the product's own hook installed by make-fixture --adopt; nothing is written here.
+  if (c.hook === 'usage' || c.hook === 'strong') {
     const h = conds.hook;
     const text = c.hook === 'usage' ? pointer : conds.strongHookText;
     const settingsPath = path.join(fixture, h.settingsPath);
