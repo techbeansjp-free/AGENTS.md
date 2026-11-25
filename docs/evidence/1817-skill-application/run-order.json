@@ -1,0 +1,6 @@
+{
+ "schema": "asc-1817-run-order/v1",
+ "note": "Fixed before any model run (review M1). The planned trials run in exactly this order: reps outermost (1..conditions.json runs), within each rep the 14 cases in caseOrder (negative cases interleaved, not last), within each case the conditions in conditionOrder. A cap stop therefore leaves the two conditions at most one trial apart and every case measured in the earlier reps. harness/run-all.mjs runs only this order, and run-trial.mjs refuses a planned trial (rep <= runs) that is not the next unreserved one in this order, and a replacement before every planned trial is reserved. Replacements (decision-criteria.md rule 4) follow in the same case/condition order.",
+ "caseOrder": ["asc-1", "rr-1", "neg-1", "tw-1", "asc-2", "ri-1", "neg-2", "se-1", "asc-3", "ma-1", "neg-3", "ui-1", "es-1", "do-1"],
+ "conditionOrder": ["B", "S"]
+}

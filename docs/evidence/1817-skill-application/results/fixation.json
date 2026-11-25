@@ -1,0 +1,51 @@
+{
+ "schema": "asc-1817-fixation/v1",
+ "note": "Append-only. run-trial.mjs --run checks the last record. See fixation.mjs for refix and stage3.",
+ "records": [
+  {
+   "stage": "stages 0-2",
+   "fixedAtCommit": "8ae7b145c18801a188583286256e2a3651b443c6",
+   "at": "2026-11-25T15:33:24.174Z",
+   "files": {
+    "cases.json": "6b54aa87b41ca0afc0853b3d6cab9160e889d2009c5f5f420211730468e285af",
+    "conditions.json": "9f5f5b264dac594ab024afef790ad21c506012db84d5da10d0bd9c8bf1ef0610",
+    "decision-criteria.md": "6c50675ea7923cac9f45f1d1def09727d97239834c2761f272ef5d30066140d9",
+    "release.json": "24fd6891df4670268c44fd187425a51e4b6de5642d3bb580c9f1316ecac177d4",
+    "run-order.json": "d9b161e9b175ae144bf990cb8946459bf40198d11dcf595e47ae6e9aceaad1fb",
+    "harness/apply-condition.mjs": "8487e9b67e0ecae21fd1910ef659243ac8f27a0c5429fd7443cd2176f309db7f",
+    "harness/collect.mjs": "91ca63a730eb0502915d1c029e3805b7dd9c5162abd28e75d2c4fb083ff49cfe",
+    "harness/condition-i.mjs": "8ff3f606a6c84a29917f6e511da44959638f7f6a47ac190bb774f95abbc16c1d",
+    "harness/fixation.mjs": "e63d9bbdede2bdce92aaf095a2151d5006a7342d0e101e30b772017f7a80d5a3",
+    "harness/guard.mjs": "eb533b6e6ce6da772491b8c793939b4fbfd5a77185586ad77866d3e9279a42a6",
+    "harness/install-asc.mjs": "529384b4ad6eb4cff479293b571ea9f37337460eb70e8c1be4c832358ece838b",
+    "harness/judge.mjs": "b3621c4d6ceed18857924bffbd6d95dacf49fdca5c1ebf26710e5ca09592c5f5",
+    "harness/ledger.mjs": "6ce2d8a4c78765e5e2cff73c08cf69229e90a691d2f7f2bf37950fcfb2bb127d",
+    "harness/make-fixture.mjs": "8de76720b191dbb0d004e4cfe1a003e2a392aa083e5be55ed0c0d841c83d23e1",
+    "harness/markers.mjs": "5e462ae674f65de264f71796690b8d59fd7e564acdfcdee10ae806ac2518683c",
+    "harness/order.mjs": "2a791c3fb9f16649544091ed880e3a65c7058205ac7d770cf69a03957e24f86a",
+    "harness/probe-check.mjs": "2fe949ff3e27a73dc7323857ecb0f9c75c09f7fe14fbad409a9fd11a762bc343",
+    "harness/run-all.mjs": "6016dbd10037aec06a98d1d515a1ae38ff3416f9e0b5f18e7561564d049d4a4b",
+    "harness/run-trial.mjs": "523d80d4da87a3a066b20010e9224427a7196c5deb21c0b847fcb29e99f33168",
+    "harness/score.mjs": "a25453f4734af681df72ff80c2951b3d4fa64442b4be397b62e3ffc83ed2039e"
+   },
+   "invariants": {
+    "conditionsWithoutI": "d1043e310d631fcf32ad3f8abc5392abbfa4887a0d0893bb5ed20c01658ae1a4",
+    "releaseWithoutPhase3": "d21308e7053a73c243a2bcdd08a03ec212126c203511c1613bc94190ced67619"
+   },
+   "ledgerId": "69997fe4-4f0f-4c84-823e-1e895722af24",
+   "conditionIShape": {
+    "exports": [
+     "adoptFromPlan",
+     "pointerExpectedI",
+     "pointerHeadI",
+     "productHookFiredInProbe",
+     "productHookFiredInTrial"
+    ],
+    "imports": [
+     "import crypto from 'node:crypto';"
+    ],
+    "sideEffects": []
+   }
+  }
+ ]
+}
