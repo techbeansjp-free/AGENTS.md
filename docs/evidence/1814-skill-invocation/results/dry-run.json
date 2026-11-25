@@ -1,5 +1,5 @@
 {
- "label": "dry run at HEAD 6c212a2afd1ac8f2541dcb48db5b140a6d4ad2ae; tarball: npm pack at 51c3e022 (stand-in, same distributed content as the v0.5.106 target commit)",
+ "label": "dry run at HEAD 5e588f26b68610da12004412003eb7439ea6b153; tarball: npm pack at 51c3e022 (stand-in, same distributed content as the v0.5.106 target commit)",
  "released": false,
  "install": {
   "tarball": "agent-skill-chain-0.5.0.tgz",

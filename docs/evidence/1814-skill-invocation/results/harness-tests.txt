@@ -1,5 +1,5 @@
 # command: node --test docs/evidence/1814-skill-invocation/harness/score.test.mjs docs/evidence/1814-skill-invocation/harness/probe.test.mjs
-# HEAD: 6c212a2afd1ac8f2541dcb48db5b140a6d4ad2ae (clean tree)
+# HEAD: 5e588f26b68610da12004412003eb7439ea6b153 (clean tree)
 # node: v20.12.2
 ok 1 - clean R probe passes; heading mark omitted in the answer is accepted (L3)
 ok 2 - each leak or mismatch fails the probe
@@ -14,35 +14,39 @@ ok 10 - guard refuses ancestors with instruction files or git, and the real HOME
 ok 11 - ledger: cumulative by unique id, reserved at budget until settled, duplicate names refused, sequential (M4, N1)
 ok 12 - fixation: a change to a fixed file is detected; stage 3 may only add conditions.I and fill phase3 (N2)
 ok 13 - stage 3: only condition-i.mjs may change, with a reason and a review; the conditionISchema is enforced (M-1, L-d)
-ok 14 - refix is a pre-measurement correction: allowed while the ledger holds only probe trials
-ok 15 - fixation file must be committed, its commits in history, and the first commit named in README (L-c)
-ok 16 - the token value is found in child files by count only
-ok 17 - run path requires a released, clean install at the recorded HEAD whose entries match, and the adopted option (L-2, L-b)
-ok 18 - condition I: the pointer may appear anywhere in the answer, not only as the last line (M-1)
-ok 19 - every condition gets one commit with the same neutral subject (M1)
-ok 20 - asc case: body + reference + markers => applied
-ok 21 - Skill tool alone is the first hop only
-ok 22 - two hops: thin entry Read, then body by a relative path resolved against the project root
-ok 23 - paths outside the project root never match; /private/tmp equals /tmp
-ok 24 - a refused or unanswered Read does not count as read
-ok 25 - the registered entry (.claude/skills) is not the body
-ok 26 - managed-runtime body path counts
-ok 27 - misselect: another ASC body read instead of the expected one
-ok 28 - answerGroups require every group (ui-1)
-ok 29 - secondary Skill is recorded but not required (asc-3)
-ok 30 - negative: an ASC body read or Skill call is overapplication
-ok 31 - budget stop is scored with the last text; API error is a failure
-ok 32 - scoreDir: names, multi-letter conditions, hook log, missing trace
-ok 33 - judge: owner pass level
-ok 34 - missing init event and an unfired hook in a hook condition are failures (L5, L6)
-ok 35 - only planned reps count; a later rep only replaces a failed planned trial once (L-3)
-ok 36 - product hook (condition I) is fired by SessionStart hook events in the trace
-ok 37 - collect: a trace without meta.json becomes a failure row instead of a crash (L-6)
-ok 38 - collect extends trials.json across stages and refuses a trial already collected (L-e)
-ok 39 - scrubSensitive replaces mail addresses, keys and account fields (L9)
-ok 40 - redact removes local paths and user-specific names
-ok 41 - pointer text is extracted from v05/USAGE.md and the hook emits it as SessionStart context
-# tests 41
-# pass 41
+ok 14 - ledger id and seq: one ledger, each seq once; a copied earlier state is detected (N-1 (d))
+ok 15 - refix: recorded ledger, probe reservations only, only probe-check.mjs may change (N-1 (b)(c))
+ok 16 - a refix record later than the first stage-1/2 reservation is refused at run time (N-1 (a))
+ok 17 - condition-i.mjs shape: exports, imports and no top-level statements are checked at stage 3 (L-1)
+ok 18 - fixation file must be committed, its commits in history, and the first commit named in README (L-c)
+ok 19 - the token value is found in child files by count only
+ok 20 - run path requires a released, clean install at the recorded HEAD whose entries match, and the adopted option (L-2, L-b)
+ok 21 - condition I: the pointer may appear anywhere in the answer, not only as the last line (M-1)
+ok 22 - every condition gets one commit with the same neutral subject (M1)
+ok 23 - asc case: body + reference + markers => applied
+ok 24 - Skill tool alone is the first hop only
+ok 25 - two hops: thin entry Read, then body by a relative path resolved against the project root
+ok 26 - paths outside the project root never match; /private/tmp equals /tmp
+ok 27 - a refused or unanswered Read does not count as read
+ok 28 - the registered entry (.claude/skills) is not the body
+ok 29 - managed-runtime body path counts
+ok 30 - misselect: another ASC body read instead of the expected one
+ok 31 - answerGroups require every group (ui-1)
+ok 32 - secondary Skill is recorded but not required (asc-3)
+ok 33 - negative: an ASC body read or Skill call is overapplication
+ok 34 - budget stop is scored with the last text; API error is a failure
+ok 35 - scoreDir: names, multi-letter conditions, hook log, missing trace
+ok 36 - judge: owner pass level
+ok 37 - missing init event and an unfired hook in a hook condition are failures (L5, L6)
+ok 38 - only planned reps count; a later rep only replaces a failed planned trial once (L-3)
+ok 39 - product hook (condition I) is fired by SessionStart hook events in the trace
+ok 40 - collect: a trace without meta.json becomes a failure row instead of a crash (L-6)
+ok 41 - collect extends trials.json across stages and refuses a trial already collected (L-e)
+ok 42 - product hook: hookFired reflects the trace evidence in the summary (L-3)
+ok 43 - scrubSensitive replaces mail addresses, keys and account fields (L9)
+ok 44 - redact removes local paths and user-specific names
+ok 45 - pointer text is extracted from v05/USAGE.md and the hook emits it as SessionStart context
+# tests 45
+# pass 45
 # fail 0
 # exit: 0
