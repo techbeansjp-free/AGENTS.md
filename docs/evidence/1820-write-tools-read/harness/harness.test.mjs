@@ -9,12 +9,12 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {parseTrace, scoreRun, selectCounted, mainEffects, summarizeCell, initProblems, bashArgs, bashTarget} from './score.mjs';
+import {parseTrace, scoreRun, selectCounted, mainEffects, summarizeCell, initProblems, bashArgs, bashTarget, bashReadArgs, BASH_READERS} from './score.mjs';
 import {plannedTrials, orderProblems, orderRefusal, probeRefusal, completionStatus, replacementPlan, loadOrder, probeCompareProblems} from './order.mjs';
 import {flags, isolationSettings, promptFor, cellOf, probePrompt, probeGateProblems, installProblems, sentinelPaths, probeSteps, probeContext, INSIDE_FILE, NETWORK_URL} from './run-trial.mjs';
 import {approvalProblems} from './markers.mjs';
 import {writeSources, pinned} from './make-fixture.mjs';
-import {checkProbe, compareProbes, probeStepChecks, refusalEvidence, isProbeStepLine, stepPathsOf} from './probe-check.mjs';
+import {checkProbe, compareProbes, probeStepChecks, refusalEvidence, isProbeStepLine, stepPathsOf, fileInputs, recheckProbe, redact, HOST_CHECKS} from './probe-check.mjs';
 import {FIXED, dropViolations, refixAfterMeasurement, digests} from './fixation.mjs';
 import {applyDrop, loadConditions} from './apply-condition.mjs';
 import {cellRuleReasons} from './analyze.mjs';
@@ -24,6 +24,7 @@ import * as ledger from './ledger.mjs';
 const H = path.dirname(fileURLToPath(import.meta.url));
 const EV = path.resolve(H, '..');
 const EVROOT = path.resolve(EV, '..');
+const REPO = path.resolve(EV, '../../..');
 const read = (f) => fs.readFileSync(path.join(EV, f), 'utf8');
 const CONDS = JSON.parse(read('conditions.json'));
 const SPEC = JSON.parse(read('cases.json'));
@@ -186,7 +187,7 @@ test('score: a refused Read does not count; a Read without result (stopped) coun
   assert.equal(red.bodyRead1, true, 'redacted public traces are scored like the raw ones');
 });
 
-test('score (review M1): a Bash read of the body counts in bodyRead2 and in bodyReadBash2; a failed Bash does not; first tools keep the Bash path', () => {
+test('score (review M1, Low-1): a Bash content read of the body counts in bodyRead2 and in bodyReadBash2; an existence check or a failed Bash does not; first tools keep the Bash path', () => {
   const X = CONDS.toolLevels.X;
   const xt = (msgs) => trace({messages: msgs, tools: X.tools.split(','), mode: 'acceptEdits'});
   const a = scoreRun(SPEC, brief, xt([[['Read', {file_path: 'docs/BRIEF.md'}], ['Bash', {command: `cat ${BODY}`}]]]), {level: X});
@@ -203,6 +204,26 @@ test('score (review M1): a Bash read of the body counts in bodyRead2 and in body
   assert.equal(other.bodyRead2, false);
   assert.deepEqual(other.firstTools.map((x) => x.target), ['ls .agent-skill-chain/skills/asc', 'cat <outside>']);
   assert.deepEqual(bashArgs(`cat "${BODY}" | head -n 3; echo ok`), ['cat', BODY, 'head', '3', 'echo', 'ok']);
+  // Review Low-1: only a content reader (BASH_READERS) counts; existence checks and other commands that name the body do not.
+  for (const cmd of [`ls -l ${BODY}`, `test -f ${BODY}`, `[ -f ${BODY} ]`, `stat ${BODY}`, `wc -l ${BODY}`, `wc -l < ${BODY}`, `file ${BODY}`, `find ${BODY}`,
+    `ls ${BODY} && cat docs/BRIEF.md`, `test -f ${BODY} || echo missing`, `echo ${BODY} | xargs ls`, `cp ${BODY} /tmp/x`]) {
+    const r = scoreRun(SPEC, brief, xt([[['Bash', {command: cmd}]]]), {level: X});
+    assert.deepEqual([r.bodyRead2, r.bodyReadBash2, r.reach2], [false, false, false], cmd);
+  }
+  for (const cmd of [`test -f ${BODY} && cat ${BODY}`, `FOO=1 sudo -u root /bin/cat ${BODY}`, `nl ${BODY} | head`, `(cd . && tail -n 20 ${BODY})`, `grep -n asc ${BODY}`, `awk 'NR<9' ${BODY}`,
+    `env LANG=C less ${BODY}`, `rg step ${BODY}`, `bat ${BODY}`, `more ${BODY}`, `view ${BODY}`, `strings ${BODY}`]) {
+    assert.equal(scoreRun(SPEC, brief, xt([[['Bash', {command: cmd}]]]), {level: X}).bodyReadBash2, true, cmd);
+  }
+  assert.deepEqual(bashReadArgs(`ls ${BODY}; head -3 docs/BRIEF.md`), ['head', 'docs/BRIEF.md']);
+  assert.deepEqual(BASH_READERS, ['cat', 'head', 'tail', 'sed', 'awk', 'less', 'more', 'grep', 'rg', 'nl', 'bat', 'view', 'strings']);
+  // The entry, the README and the overapplication use the same rule.
+  const entry = scoreRun(SPEC, brief, xt([[['Bash', {command: 'ls .claude/skills/asc/SKILL.md'}], ['Bash', {command: 'wc -l .agent-skill-chain/skills/README.md'}]]]), {level: X});
+  assert.deepEqual([entry.entryRead1, entry.readmeRead1], [false, false]);
+  const entryCat = scoreRun(SPEC, brief, xt([[['Bash', {command: 'cat .claude/skills/asc/SKILL.md'}], ['Bash', {command: 'head .agent-skill-chain/skills/README.md'}]]]), {level: X});
+  assert.deepEqual([entryCat.entryRead1, entryCat.readmeRead1], [true, true]);
+  const neg = SPEC.cases.find((c) => c.id === 'neg-1');
+  assert.equal(scoreRun(SPEC, neg, xt([[['Bash', {command: `stat ${BODY} && ls .claude/skills/asc/SKILL.md`}]]]), {level: X}).overapplication, false);
+  assert.equal(scoreRun(SPEC, neg, xt([[['Bash', {command: `cat ${BODY}`}]]]), {level: X}).overapplication, true);
   assert.equal(bashTarget('curl https://example.com/x', '/tmp/w'), 'curl https://example.com/x');
   const s = summarizeCell([{condition: 'XSA', case: 'brief', run: 1, expect: 'asc', ...a, counted: true}, {condition: 'XSA', case: 'brief', run: 2, expect: 'asc', ...viaRead, counted: true}], 'XSA');
   assert.deepEqual([s.bodyRead2, s.bodyReadBash2], [2, 1]);
@@ -275,47 +296,102 @@ test('probe approval: the committed placeholder refuses; a filled but uncommitte
   assert.deepEqual(approvalProblems(d), []);
 });
 
-// A ledger with settled probes whose trace/meta files are in the runs root (as run-trial writes them).
-function probeLedger(t, names) {
-  const d = tmp(t);
+// A ledger with settled probes whose files are in the runs root as run-trial writes them (trace.jsonl, meta.json with the
+// probe context, work/ with the Skills, CLAUDE.md and, for X, the inside file), and the result probe-check.mjs gives at
+// the probe (host checks passing, the plain marker tokens). calls[name] replaces the probe's tool calls.
+const TOKENS = [`ASC1820-MARKER-${'a1'.repeat(12)}`, `ASC1820-MARKER-${'b2'.repeat(12)}`];
+function probeLedger(t, names, {calls = {}} = {}) {
+  const d = fs.realpathSync(tmp(t));
   const l = path.join(d, 'ledger.jsonl');
   ledger.create(l);
-  const probes = {};
+  const probes = {}, results = {};
   for (const name of names) {
-    fs.mkdirSync(path.join(d, name));
-    fs.writeFileSync(path.join(d, name, 'trace.jsonl'), `{"trial":"${name}"}\n`);
-    fs.writeFileSync(path.join(d, name, 'meta.json'), JSON.stringify({costUsd: 0.1}));
+    const cell = name.split('-')[0], dir = path.join(d, name), work = path.join(dir, 'work');
+    for (const s of ASC) { fs.mkdirSync(path.join(work, '.claude/skills', s), {recursive: true}); fs.writeFileSync(path.join(work, '.claude/skills', s, 'SKILL.md'), `---\nname: ${s}\ndescription: ${s}の説明。\n---\n`); }
+    fs.writeFileSync(path.join(work, 'CLAUDE.md'), CONDS.fixtures.A.baseClaudeMd);
+    if (cellLevel[cell] === 'X') fs.writeFileSync(path.join(work, INSIDE_FILE), 'probe\n');
+    fs.writeFileSync(path.join(dir, 'trace.jsonl'), ptrace(cell, calls[name] ?? stepsFor(cellLevel[cell]), {cwd: work}));
+    fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({costUsd: 0.1, probeContext: PCTX, probeSentinels: PCTX.sentinels, probeInsideFile: INSIDE_FILE}));
     const r = ledger.reserve(l, name, 0.6);
-    const sh = (f) => ledger.fileSha256(path.join(d, name, f));
+    const sh = (f) => ledger.fileSha256(path.join(dir, f));
     ledger.settle(l, r.id, name, 0.1, {exit: 0, traceSha256: sh('trace.jsonl'), metaSha256: sh('meta.json')});
     probes[name] = {trial: name, traceSha256: sh('trace.jsonl'), metaSha256: sh('meta.json')};
+    const {inputs} = fileInputs(dir, cell, REPO);
+    results[name] = checkProbe({...inputs, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/nonexistent-home', hostInstallDir: '/opt/claude', installProblems: [], debug: `Loading ${inputs.work}/CLAUDE.md`});
   }
-  return {d, l, probes};
+  return {d, l, probes, results};
 }
 
-test('probe gate (review L2): the comparison must pass, cover every probe cell and be bound to the latest settled probes in the ledger', (t) => {
-  const {d, l, probes} = probeLedger(t, ['RSA-probe-1', 'WSA-probe-1', 'XSA-probe-1']);
+test('probe gate (review L2, Low-2): the comparison must pass, cover every probe cell, be bound to the latest settled probes and agree with the probes recomputed from the runs root', (t) => {
+  const {d, l, results} = probeLedger(t, ['RSA-probe-1', 'WSA-probe-1', 'XSA-probe-1']);
   assert.match(probeGateProblems(d, CONDS, l).join(), /missing/);
   const write = (o) => fs.writeFileSync(path.join(d, 'probe-compare.json'), JSON.stringify(o));
-  const entry = (cell, o = {}) => ({condition: cell, pass: true, ...probes[`${cell}-probe-1`], ...o});
-  write({pass: true, dropped: null, probes: [entry('RSA'), entry('WSA'), entry('XSA')]});
+  const good = compareProbes(['RSA', 'WSA', 'XSA'].map((c) => results[`${c}-probe-1`]));
+  assert.equal(good.pass, true, JSON.stringify(Object.values(results).map((r) => failing(r))));
+  const edit = (f) => { const o = JSON.parse(JSON.stringify(good)); f(o); return o; };
+  write(good);
   assert.deepEqual(probeGateProblems(d, CONDS, l), []);
   // A hand-written comparison without the ledger binding, or with another sha256, is refused.
   write({pass: true, conditions: ['RSA', 'WSA', 'XSA']});
   assert.match(probeGateProblems(d, CONDS, l).join(), /covers nothing/);
-  write({pass: true, dropped: null, probes: [entry('RSA'), entry('WSA'), entry('XSA', {traceSha256: '0'.repeat(64)})]});
+  write(edit((o) => { o.probes[2].traceSha256 = '0'.repeat(64); }));
   assert.match(probeGateProblems(d, CONDS, l).join(), /XSA-probe-1: the compared result is not bound/);
-  write({pass: true, dropped: null, probes: [entry('RSA'), entry('WSA')]});
+  write(edit((o) => { o.probes.pop(); }));
   assert.match(probeGateProblems(d, CONDS, l).join(), /covers RSA,WSA, not RSA,WSA,XSA/);
-  write({pass: false, dropped: null, probes: [entry('RSA'), entry('WSA'), entry('XSA', {pass: false})]});
+  write(edit((o) => { o.pass = false; o.probes[2].pass = false; }));
   assert.match(probeGateProblems(d, CONDS, l).join(), /did not pass.*XSA probe did not pass/);
+  // Review Low-2: a comparison without the check values (the earlier format) is refused.
+  write(edit((o) => { for (const x of o.probes) delete x.checks; }));
+  assert.match(probeGateProblems(d, CONDS, l).join(), /RSA-probe-1: the recorded checks differ from those recomputed/);
+  write(edit((o) => { o.probes[1].gitLine = 'other'; }));
+  assert.match(probeGateProblems(d, CONDS, l).join(), /WSA-probe-1: the recorded session facts differ .*gitLine/);
   // A trace changed after the settlement is refused.
-  write({pass: true, dropped: null, probes: [entry('RSA'), entry('WSA'), entry('XSA')]});
+  write(good);
   fs.appendFileSync(path.join(d, 'XSA-probe-1', 'trace.jsonl'), 'x');
   assert.match(probeGateProblems(d, CONDS, l).join(), /settled trial XSA-probe-1: trace\.jsonl .*differs/);
   // An older probe of a cell is refused once a re-run exists.
   const two = probeLedger(t, ['RSA-probe-1', 'WSA-probe-1', 'XSA-probe-1', 'XSA-probe-2']);
-  assert.match(probeCompareProblems({pass: true, dropped: null, probes: ['RSA', 'WSA', 'XSA'].map((c) => ({condition: c, pass: true, ...two.probes[`${c}-probe-1`]}))}, {ledgerFile: two.l, runsRoot: two.d, conds: CONDS}).join(), /XSA-probe-1 is not the latest probe/);
+  const cmp2 = compareProbes(['RSA', 'WSA', 'XSA'].map((c) => two.results[`${c}-probe-1`]));
+  assert.match(probeCompareProblems(cmp2, {ledgerFile: two.l, runsRoot: two.d, conds: CONDS}).join(), /XSA-probe-1 is not the latest probe/);
+});
+
+test('probe gate (review Low-2): a tampered pass true with a failing trace is refused; tokens are rechecked by their sha256; host checks are taken as recorded', (t) => {
+  const at = (id) => probeSteps('X', PCTX).findIndex((st) => st.id === id);
+  const lsAllowed = replaced(stepsFor('X'), at('lsRunsRoot'), false, 'RSA-probe-1');
+  const {d, l, results} = probeLedger(t, ['RSA-probe-1', 'WSA-probe-1', 'XSA-probe-1'], {calls: {'XSA-probe-1': lsAllowed}});
+  assert.equal(results['XSA-probe-1'].pass, false);
+  const honest = compareProbes(['RSA', 'WSA', 'XSA'].map((c) => results[`${c}-probe-1`]));
+  assert.equal(honest.pass, false);
+  const write = (o) => fs.writeFileSync(path.join(d, 'probe-compare.json'), JSON.stringify(o));
+  const forge = (f) => { const o = JSON.parse(JSON.stringify(honest)); o.pass = true; o.probes[2].pass = true; f(o); return o; };
+  // Every check set to true and pass true: the recomputed probe still fails.
+  write(forge((o) => { for (const k of Object.keys(o.probes[2].checks)) o.probes[2].checks[k] = true; }));
+  const p1 = probeGateProblems(d, CONDS, l).join('\n');
+  assert.match(p1, /XSA-probe-1: the recorded checks differ from those recomputed from its trace and meta \(probeStepsRefused\)/);
+  assert.match(p1, /XSA-probe-1: the recorded pass true differs from the recomputed false/);
+  // Only the pass values flipped.
+  write(forge(() => {}));
+  assert.match(probeGateProblems(d, CONDS, l).join(), /XSA-probe-1: the recorded pass true differs from the recomputed false/);
+  // A host check recorded as failed stays failed at the gate (it is not recomputed).
+  assert.deepEqual(HOST_CHECKS.filter((k) => !(k in results['RSA-probe-1'].checks)), []);
+  const rsaDir = path.join(d, 'RSA-probe-1');
+  assert.equal(recheckProbe(rsaDir, 'RSA', results['RSA-probe-1'], {repoRoot: REPO}).pass, true);
+  const hostFailed = {...results['RSA-probe-1'], checks: {...results['RSA-probe-1'].checks, programDirectory: {pass: false}}};
+  assert.equal(recheckProbe(rsaDir, 'RSA', hostFailed, {repoRoot: REPO}).pass, false);
+  // The marker tokens: recorded only as sha256, and a token in a record is found from the sha256 alone.
+  const json = JSON.stringify([results, honest]);
+  assert.ok(TOKENS.every((tok) => !json.includes(tok)), 'no plain marker token in a probe result or the comparison');
+  assert.equal(results['RSA-probe-1'].markerTokenSha256.length, 2);
+  const leak = probeLedger(t, ['XSA-probe-1'], {calls: {'XSA-probe-1': [...stepsFor('X'), ['Bash', {command: 'echo x'}, false, TOKENS[1]]]}});
+  assert.equal(leak.results['XSA-probe-1'].checks.markerTokensAbsent.pass, false);
+  const re = recheckProbe(path.join(leak.d, 'XSA-probe-1'), 'XSA', leak.results['XSA-probe-1'], {repoRoot: REPO});
+  assert.equal(re.checks.markerTokensAbsent.pass, false, 'found by sha256 without the plain token');
+  assert.equal(recheckProbe(path.join(leak.d, 'XSA-probe-1'), 'XSA', {...leak.results['XSA-probe-1'], markerTokenSha256: []}, {repoRoot: REPO}).checks.markerTokensAbsent.pass, false, 'both sha256 are required');
+  // publish: the markers, the roots and the home directory are redacted; a remaining token is refused.
+  const text = JSON.stringify({a: `${PCTX.homeMarker} ${PCTX.repoMarker} ${d}/XSA-probe-1 ${REPO}/x ${os.homedir()}/y ${TOKENS[0]}`});
+  const out = redact(text, {tokens: [TOKENS[0]], homeMarker: PCTX.homeMarker, repoMarker: PCTX.repoMarker, runsRoot: d, repoRoot: REPO});
+  assert.equal(JSON.parse(out).a, '<home-marker> <repo-marker> <runs-root>/XSA-probe-1 <repo-root>/x <home>/y <marker-token>');
+  assert.throws(() => redact(TOKENS[1], {tokens: [TOKENS[0]], homeMarker: PCTX.homeMarker, repoMarker: PCTX.repoMarker, runsRoot: d, repoRoot: REPO}), /marker token remains/);
 });
 
 test('drop of X (review L1): pre-written 8-cell plan, only after XSA-probe-2 failed, bound comparison, before any planned trial', (t) => {
@@ -336,11 +412,12 @@ test('drop of X (review L1): pre-written 8-cell plan, only after XSA-probe-2 fai
   assert.deepEqual(Object.keys(m.effects), ['tools W-R', 'prompt G-S', 'fixture D-A']);
   assert.equal(m.effects['tools W-R'], -0.5); assert.equal(m.droppedLevel, 'X');
   assert.deepEqual(Object.keys(m.twoWay['tools x prompt']), ['R', 'W']);
-  // The comparison for the drop: X failed, R and W passed, bound to the ledger.
-  const {d, l, probes} = probeLedger(t, ['RSA-probe-1', 'WSA-probe-1', 'XSA-probe-1', 'XSA-probe-2']);
-  const res = (cell, rep, pass) => ({condition: cell, pass, ...probes[`${cell}-probe-${rep}`], nonAscSkills: [], builtinPlugins: [], gitLine: 'a', model: 'm'});
-  const cmp = compareProbes([res('RSA', 1, true), res('WSA', 1, true), res('XSA', 2, false)], {drop: 'X', conds: CONDS});
+  // The comparison for the drop: X failed, R and W passed, bound to the ledger (and recomputed from the runs root).
+  const xFails = replaced(stepsFor('X'), probeSteps('X', PCTX).findIndex((st) => st.id === 'network'), false, '200');
+  const {d, l, results} = probeLedger(t, ['RSA-probe-1', 'WSA-probe-1', 'XSA-probe-1', 'XSA-probe-2'], {calls: {'XSA-probe-1': xFails, 'XSA-probe-2': xFails}});
+  const cmp = compareProbes([results['RSA-probe-1'], results['WSA-probe-1'], results['XSA-probe-2']], {drop: 'X', conds: CONDS});
   assert.equal(cmp.pass, true); assert.equal(cmp.dropped, 'X');
+  const res = (cell, rep, pass) => ({condition: cell, pass, trial: `${cell}-probe-${rep}`, nonAscSkills: [], builtinPlugins: [], gitLine: 'a', model: 'm'});
   assert.equal(compareProbes([res('RSA', 1, true), res('WSA', 1, true), res('XSA', 2, true)], {drop: 'X', conds: CONDS}).pass, false, 'a passing X is not dropped');
   assert.equal(compareProbes([res('RSA', 1, true), res('WSA', 1, false), res('XSA', 2, false)], {drop: 'X', conds: CONDS}).pass, false, 'a failing W stops the measurement');
   assert.throws(() => compareProbes([], {drop: 'R', conds: CONDS}), /may not be dropped/);
@@ -354,8 +431,8 @@ test('drop of X (review L1): pre-written 8-cell plan, only after XSA-probe-2 fai
   assert.match(dropViolations({...fxHere, records: [...fxHere.records, {dropLevel: 'X'}]}, l, 'X', {runsRoot: d}).join(), /already dropped/);
   const changed = {...fxHere, records: [{...fxHere.records[0], files: {...fxHere.records[0].files, 'cases.json': '0'}}]};
   assert.match(dropViolations(changed, l, 'X', {runsRoot: d}).join(), /fixed files changed \(cases\.json\)/);
-  const one = probeLedger(t, ['RSA-probe-1', 'WSA-probe-1', 'XSA-probe-1']);
-  fs.writeFileSync(path.join(one.d, 'probe-compare.json'), JSON.stringify(compareProbes([res('RSA', 1, true), res('WSA', 1, true), {...res('XSA', 1, false), ...one.probes['XSA-probe-1']}].map((r) => ({...r, ...(one.probes[r.trial] ?? {})})), {drop: 'X', conds: CONDS})));
+  const one = probeLedger(t, ['RSA-probe-1', 'WSA-probe-1', 'XSA-probe-1'], {calls: {'XSA-probe-1': xFails}});
+  fs.writeFileSync(path.join(one.d, 'probe-compare.json'), JSON.stringify(compareProbes(['RSA', 'WSA', 'XSA'].map((c) => one.results[`${c}-probe-1`]), {drop: 'X', conds: CONDS})));
   assert.match(dropViolations({...fxHere, records: [{...fxHere.records[0], ledgerId: ledger.ledgerId(one.l)}]}, one.l, 'X', {runsRoot: one.d}).join(), /XSA-probe-2 is not settled/);
   ledger.reserve(l, 'RSA-brief-1', 0.3);
   assert.match(dropViolations(fxHere, l, 'X', {runsRoot: d}).join(), /measurement trials exist/);
@@ -399,8 +476,8 @@ const stepCall = (st) => (st.tool === 'Bash' ? {command: st.command} : st.tool =
 const goodResult = (st) => (st.id === 'insideCatClaudeMd' ? [false, '# ユーザー管理API\n\nTypeScript'] : st.id === 'insideGitStatus' ? [false, '## master'] : st.id === 'network' ? [true, 'Exit code 56\n000']
   : st.expect === 'ok' ? [false, ''] : st.tool === 'Bash' ? [true, `Exit code 1\n${st.command.split(' ')[0]}: Operation not permitted`] : [true, 'Claude requested permissions to read, but you have not granted it yet.']);
 const stepsFor = (lv) => probeSteps(lv, PCTX).map((st) => [st.tool, stepCall(st), ...goodResult(st)]);
-function probeTrace({tools, mode, calls}) {
-  const lines = [{type: 'system', subtype: 'init', cwd: '/t/X/work', tools, permissionMode: mode, mcp_servers: [], plugins: [], skills: [...ASC, 'dataviz'], model: 'm'}];
+function probeTrace({tools, mode, calls, cwd = '/t/X/work'}) {
+  const lines = [{type: 'system', subtype: 'init', cwd, tools, permissionMode: mode, mcp_servers: [], plugins: [], skills: [...ASC, 'dataviz'], model: 'm'}];
   for (const [name, input, err, content] of calls) {
     const id = `p${++n}`;
     lines.push({type: 'assistant', message: {id: `m${id}`, content: [{type: 'tool_use', id, name, input}]}});
@@ -487,7 +564,10 @@ test('probe compare: tools may differ between the levels, every other session fa
   const r = (condition, o = {}) => ({condition, trial: `${condition}-probe-1`, traceSha256: 't', metaSha256: 'm', pass: true, nonAscSkills: ['dataviz'], builtinPlugins: [], gitLine: 'Update project files | Install ASC | initial', model: 'm', tools: [condition], ...o});
   const c = compareProbes([r('RSA'), r('WSA'), r('XSA')]);
   assert.deepEqual([c.pass, c.conditions, c.differ, c.dropped], [true, ['RSA', 'WSA', 'XSA'], [], null]);
-  assert.deepEqual(c.probes[2], {condition: 'XSA', trial: 'XSA-probe-1', pass: true, traceSha256: 't', metaSha256: 'm'});
+  assert.deepEqual(c.probes[2], {condition: 'XSA', trial: 'XSA-probe-1', pass: true, traceSha256: 't', metaSha256: 'm', checks: {}, markerTokenSha256: [],
+    nonAscSkills: ['dataviz'], builtinPlugins: [], gitLine: 'Update project files | Install ASC | initial', model: 'm'});
+  const withChecks = compareProbes([r('RSA', {checks: {b: {pass: true}, a: {pass: false, detail: 'x'}}, markerTokenSha256: ['h1', 'h2']}), r('WSA'), r('XSA')]);
+  assert.deepEqual([withChecks.probes[0].checks, withChecks.probes[0].markerTokenSha256], [{a: false, b: true}, ['h1', 'h2']]);
   assert.deepEqual(compareProbes([r('RSA'), r('WSA', {nonAscSkills: []}), r('XSA')]).differ, ['nonAscSkills']);
   assert.equal(compareProbes([r('RSA'), r('WSA'), r('XSA', {pass: false})]).pass, false);
 });

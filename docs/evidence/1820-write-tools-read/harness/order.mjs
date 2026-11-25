@@ -7,14 +7,19 @@
 // run-order.json whose cell belongs to the dropped level are left out of every plan (the order of the others is kept).
 // Review L2: probeCompareProblems binds probe-compare.json to the ledger: each compared probe is the latest probe of its
 // cell, settled, and its trace/meta sha256 are those of the settlement and of the files in the runs root.
+// Review Low-2: the gate does not trust the recorded `pass`: each compared probe is recomputed from its trace.jsonl and
+// meta.json in the runs root (probe-check.mjs recheckProbe); its check values, pass and session facts must equal the
+// recorded ones, and the comparison recomputed from them (compareProbes) must equal the recorded one and pass.
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseTrace, scoreRun} from './score.mjs';
 import {settledFilesProblem, reservations as ledgerReservations, settlements as ledgerSettlements} from './ledger.mjs';
-import {loadConditions} from './apply-condition.mjs';
+import {loadConditions, loadRawConditions} from './apply-condition.mjs';
+import {recheckProbe, compareProbes, checkValues, FACT_KEYS} from './probe-check.mjs';
 
 const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(ev, '../../..');
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(ev, f), 'utf8'));
 export const loadOrder = () => readJson('run-order.json');
 const loadConds = () => loadConditions();
@@ -156,6 +161,7 @@ export function probeCompareProblems(c, {ledgerFile, runsRoot, conds = loadConds
   if (JSON.stringify(probes.map((x) => x.condition).sort()) !== JSON.stringify(all)) p.push(`the probe comparison covers ${probes.map((x) => x.condition).join(',') || 'nothing'}, not ${all.join(',')}`);
   if (!ledgerFile || !fs.existsSync(ledgerFile)) return [...p, 'the ledger is needed to check the probe comparison'];
   const res = ledgerReservations(ledgerFile), settled = ledgerSettlements(ledgerFile);
+  const recomputed = [];
   for (const x of probes) {
     const m = new RegExp(`^${x.condition}-probe-(\\d+)$`).exec(String(x.trial ?? ''));
     if (!m) { p.push(`${x.condition}: compared trial ${x.trial} is not a probe of the cell`); continue; }
@@ -164,9 +170,35 @@ export function probeCompareProblems(c, {ledgerFile, runsRoot, conds = loadConds
     const s = settled.get(x.trial);
     if (!s) p.push(`${x.trial} is not settled in the ledger`);
     else if (s.traceSha256 !== x.traceSha256 || s.metaSha256 !== x.metaSha256) p.push(`${x.trial}: the compared result is not bound to the ledger settlement (trace/meta sha256)`);
-    else if (runsRoot) { const f = settledFilesProblem(path.join(runsRoot, x.trial), s); if (f) p.push(f); }
+    else if (runsRoot) {
+      const f = settledFilesProblem(path.join(runsRoot, x.trial), s);
+      if (f) p.push(f);
+      else p.push(...recheckProblems(x, runsRoot, recomputed));
+    }
     if (droppedCells.includes(x.condition)) { if (x.pass !== false) p.push(`${x.condition} is dropped but its probe is not recorded as failed`); }
     else if (x.pass !== true) p.push(`${x.condition} probe did not pass`);
   }
+  if (!runsRoot) p.push('the runs root is needed to recompute the probe results');
+  else if (recomputed.length === probes.length && probes.length) {
+    let again;
+    try { again = compareProbes(recomputed, {drop: c.dropped ?? null, conds: loadRawConditions()}); } catch (e) { return [...p, `the probe comparison cannot be recomputed: ${e.message}`]; }
+    if (again.pass !== true) p.push('the probe comparison recomputed from the probe records does not pass');
+    if (again.pass !== c.pass || JSON.stringify(again.differ) !== JSON.stringify(c.differ ?? [])) p.push('the recorded probe comparison differs from the one recomputed from the probe records');
+  }
+  return p;
+}
+
+// Review Low-2: one compared probe against its result recomputed from the runs root (pushed to `into` when it agrees).
+function recheckProblems(x, runsRoot, into) {
+  let r;
+  try { r = recheckProbe(path.join(runsRoot, x.trial), x.condition, x, {repoRoot}); } catch (e) { return [`${x.trial}: the probe result cannot be recomputed from the runs root (${e.message})`]; }
+  const p = [];
+  const got = checkValues(r.checks), had = x.checks && typeof x.checks === 'object' ? checkValues(Object.fromEntries(Object.entries(x.checks).map(([k, v]) => [k, {pass: v}]))) : {};
+  const keys = [...new Set([...Object.keys(got), ...Object.keys(had)])].filter((k) => got[k] !== had[k]).sort();
+  if (keys.length) p.push(`${x.trial}: the recorded checks differ from those recomputed from its trace and meta (${keys.join(', ')})`);
+  if (r.pass !== x.pass) p.push(`${x.trial}: the recorded pass ${x.pass} differs from the recomputed ${r.pass}`);
+  const facts = FACT_KEYS.filter((k) => JSON.stringify(x[k] ?? null) !== JSON.stringify(r[k] ?? null));
+  if (facts.length) p.push(`${x.trial}: the recorded session facts differ from the recomputed ones (${facts.join(', ')})`);
+  if (!p.length) into.push(r);
   return p;
 }

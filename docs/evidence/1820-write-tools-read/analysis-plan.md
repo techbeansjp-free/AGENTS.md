@@ -13,10 +13,11 @@
 
 ## 指標
 
-- 主な指標：`bodyRead2`＝最初の2つのmessageで、ASCの本文`.agent-skill-chain/skills/asc/SKILL.md`を読んだか。読込みは、Readと、水準XのBash（引数に本文のpathがあるcommand。`cat`・`head`・`sed -n`等）の両方を数える。拒否されたRead・失敗したBash（`is_error`、0以外の終了）は数えない。打切りで結果の無い呼出しは数え、別に記録する。
-  - Bashの引数の判定：commandを空白とshellの区切り（`; | & ( ) < >`）で分け、引用符を外し、`-`で始まる語を除く。残った語をsessionの作業directoryを基準にpathとして解き、本文のpathに一致すれば本文の読込みとする。`cd`で移動してから相対pathで読む形は数えない（限界）。
+- 主な指標：`bodyRead2`＝最初の2つのmessageで、ASCの本文`.agent-skill-chain/skills/asc/SKILL.md`を読んだか。読込みは、Readと、水準XのBash（中身を読むcommandの引数に本文のpathがあるもの）の両方を数える。拒否されたRead・失敗したBash（`is_error`、0以外の終了）は数えない。打切りで結果の無い呼出しは数え、別に記録する。
+  - Bashのcommandの判定：commandを`&&`・`||`・`;`・`|`・`&`・改行で区切りに分ける。各区切りのcommandは、環境変数の代入（`X=1`）と前置き（`sudo`・`env`・`command`・`exec`・`nice`・`nohup`・`time`・`builtin`とその選択肢）を除いた最初の語のbasename（`/bin/cat`は`cat`）とする。commandが次の中身を読むcommandの区切りだけを数える：`cat`・`head`・`tail`・`sed`・`awk`・`less`・`more`・`grep`・`rg`・`nl`・`bat`・`view`・`strings`。存在の確認（`ls`・`test`・`[`・`stat`・`wc`・`file`・`find`）と他のcommandは、本文のpathがあっても数えない。一覧に無い読むcommandも数えない（限界）。
+  - Bashの引数の判定：数える区切りを空白とshellの区切り（`; | & ( ) < >`）で分け、引用符を外し、`-`で始まる語を除く。残った語をsessionの作業directoryを基準にpathとして解き、本文のpathに一致すれば本文の読込みとする。`cd`で移動してから相対pathで読む形は数えない（限界）。
 - Bashによる本文の読込みは、`bodyRead2`に含めたうえで、別の項目（`bodyReadBash2`、最初のmessageは`bodyReadBash1`）としてもセルごとに示す。
-- 併せて記録する（分析の主な値には使わない）：最初のmessageでの本文の読込み（`bodyRead1`）、`Skill(asc)`の呼出し（`skillAsc1`）、入口`.claude/skills/asc/SKILL.md`の読込み（`entryRead1`）、目的別一覧`skills/README.md`の読込み（`readmeRead1`）、最初のmessageのtool呼出し（名前と対象。Bashはcommandの各pathを作業directoryからの相対pathにしたもの、外は`<outside>`、200文字まで）。入口・目的別一覧も、Bashの引数での読込みを数える。
+- 併せて記録する（分析の主な値には使わない）：最初のmessageでの本文の読込み（`bodyRead1`）、`Skill(asc)`の呼出し（`skillAsc1`）、入口`.claude/skills/asc/SKILL.md`の読込み（`entryRead1`）、目的別一覧`skills/README.md`の読込み（`readmeRead1`）、最初のmessageのtool呼出し（名前と対象。Bashはcommandの各pathを作業directoryからの相対pathにしたもの、外は`<outside>`、200文字まで）。入口・目的別一覧も、同じ規則（中身を読むcommandの引数）でBashでの読込みを数える。
 - 該当しない依頼：最初の2つのmessageでの、ASCのSkill tool・入口・本文の読込み（Bashを含む）（`overapplication`）の件数。
 - 定義の詳細は[cases.json](cases.json)の`scoring`。
 
@@ -57,7 +58,7 @@
   - W・X：試行のdirectory（`work/`の外）とrepositoryへのWrite。拒否され、fileが残らないこと。
   - X（Bash）：`work/`への書込みと`cat CLAUDE.md`が成功し、出力の最初の行が`work/CLAUDE.md`の最初の行と一致すること（sandboxが`work/`の読込みを戻している証拠）。目印の`cat`、runs root・試行の`settings.json`・fixture・fixtureの`CLAUDE.md`・台帳のdirectoryの`ls`/`cat`、試行のdirectoryとrepositoryへの`touch`、`curl`が拒否されること。`work/`での`git status`は記録するが判定しない（sandboxの中でgitが動かなくても、Xは測る。判断は最初のmessageで起き、そこまでに見えるのはtoolの定義だけである）。
 - どの操作も、呼出しのすべてにtool_resultが必要である（結果の無い呼出しは不合格）。拒否は積極的な証拠で判定する：`is_error`、0以外の終了、`Operation not permitted`等の拒否の文言。`curl`は0以外の終了か`000`。結果が無い・成功した場合は不合格。
-- `compare`の出力（`probe-compare.json`）は、各probeの試行名とtrace・metaのsha256を持つ。`run-trial.mjs`は、それが各probeセルの最新のprobeで、台帳の精算のsha256とruns rootのfileに一致し、残る水準のprobeが合格した場合だけ、計画した試行を起動する。
+- `compare`の出力（`probe-compare.json`）は、各probeの試行名とtrace・metaのsha256を持つ。`run-trial.mjs`は、それが各probeセルの最新のprobeで、台帳の精算のsha256とruns rootのfileに一致し、残る水準のprobeが合格した場合だけ、計画した試行を起動する。記録された`pass`は信用しない：各probeの項目の合否・`pass`・sessionの事実（Skill・plugin・git・model）を、runs rootのそのprobeの`trace.jsonl`と`meta.json`から計算し直し（`recheckProbe`）、記録と違うか、計算し直した比較が合格しなければ拒否する。目印のtokenは測定の前に消すので、probeの結果には各tokenのsha256だけを記録し、記録の中のtokenはsha256で探す。probeの時点のhostの状態による項目（`programDirectory`・`noOwnerSkills`・`noOwnerInstructionsOrMemory`・`debugPathsInsideTrial`・`noRealHomeOrRepoInDebug`）は記録の値を使う。
 - probeが失敗・不合格だったセルに限り、1回だけ再実行できる（回2）。
 - 回2も不合格の場合（事前に決めた手順）：
   - 水準Xだけは、測らずに8セルへ縮める。手順は、`probe-check.mjs compare <R> <W> <X回2> --drop X --out <runs-root>/probe-compare.json`（R・Wが合格し、Xが不合格であること）、`fixation.mjs drop-level results/fixation.json X --ledger … --runs-root … --reason … --review …`、その記録のcommitである。`drop-level`は、計画した試行が台帳に1件も無く、`XSA-probe-2`が精算済みで、固定したfileが変わっておらず、比較が台帳に結ばれている場合だけ記録を加える。

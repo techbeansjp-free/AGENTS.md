@@ -14,7 +14,9 @@
 // - The sample project must be the fixture of the cell and installed from the one pinned release (release.json).
 // - A probe needs the owner approval of #1820 in results/probe-approval.json, committed (markers.mjs approvalProblems).
 //   A planned trial needs <runs-root>/probe-compare.json with pass true for all probe cells (probe-check.mjs compare),
-//   bound to the probe trials' ledger settlements (review L2, order.mjs probeCompareProblems).
+//   bound to the probe trials' ledger settlements (review L2, order.mjs probeCompareProblems). Review Low-2: the gate
+//   recomputes each probe from its trace.jsonl and meta.json in the runs root (probe-check.mjs recheckProbe) and refuses
+//   when the recomputed checks, pass or comparison differ from the recorded ones or do not pass.
 // - Review M2/M3/L4: the probe is a fixed list of steps per tools level (probeSteps, counted in conditions.json
 //   probeSteps): file-tool attempts outside the working directory (Read of the markers, Glob and Grep outside, Write
 //   into the trial directory and into the repository), and in level X the Bash steps (a write and a CLAUDE.md read in
@@ -162,7 +164,8 @@ export function probePrompt(levelId, ctx) {
 }
 
 // The probe comparison must have passed for every probe cell before a planned trial (#1817 rule 5, made mechanical),
-// and it must be bound to the probe trials' settlements in the ledger (review L2).
+// and it must be bound to the probe trials' settlements in the ledger (review L2). Review Low-2: the recorded `pass` is not
+// trusted; probeCompareProblems recomputes every compared probe from its records in the runs root.
 export function probeGateProblems(runsRoot, conds = loadConditions(), ledgerFile = null) {
   const f = path.join(runsRoot, 'probe-compare.json');
   if (!fs.existsSync(f)) return ['probe-compare.json is missing in the runs root (probe-check.mjs compare --out)'];

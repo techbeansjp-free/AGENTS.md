@@ -7,7 +7,8 @@
 // cell; mainEffects gives the analysis of analysis-plan.md (no adoption decision in stage 1). No model call.
 // Review M1: in level X the body can be read with Bash (cat, head, sed, ...). A Bash call whose arguments name the body
 // (resolved against the session cwd) and whose result is not an error counts as a body read (bodyRead*), and is also
-// reported on its own (bodyReadBash*). The first tools record a Bash call as its command with project-relative paths.
+// reported on its own (bodyReadBash*). Review Low-1: only in a segment whose command is a content reader (BASH_READERS);
+// the same rule applies to the entry, the README and the overapplication. The first tools record a Bash call as its command with project-relative paths.
 // Review L1: the conditions are those of apply-condition.mjs loadConditions (a dropped tools level is left out).
 // Usage: node score.mjs <traces-dir> [--runs-json <out.json>]   (descriptive only; the analysis is analyze.mjs)
 import fs from 'node:fs';
@@ -70,6 +71,29 @@ export function bashArgs(command) {
   return String(command).split(/[\s;|&()<>]+/).map((w) => w.replace(/^['"`]+|['"`]+$/g, '')).filter((w) => w && !w.startsWith('-'));
 }
 
+// Review Low-1 (#1820): only a content reader counts as a read. A command is split into segments at &&, ||, ;, |, & and
+// newlines; the command of a segment is its first word after environment assignments (X=1) and a prefix (sudo, env,
+// command, exec, nice, nohup, time, builtin, with their options), taken as a basename (/bin/cat is cat). Only a segment
+// whose command is in BASH_READERS contributes its words (bashArgs). Existence checks (ls, test, [, stat, wc, file, find)
+// and any other command do not count; an unlisted reader is not counted either (README: limits).
+export const BASH_READERS = ['cat', 'head', 'tail', 'sed', 'awk', 'less', 'more', 'grep', 'rg', 'nl', 'bat', 'view', 'strings'];
+const BASH_PREFIXES = ['sudo', 'env', 'command', 'exec', 'nice', 'nohup', 'time', 'builtin'];
+const PREFIX_VALUE_OPTIONS = ['-u', '-g', '-n', '-C'];
+export const bashSegments = (command) => String(command).split(/&&|\|\||[;|&\n]/).map((x) => x.trim()).filter(Boolean);
+export function segmentCommand(segment) {
+  const words = segment.replace(/[()]/g, ' ').split(/\s+/).map((w) => w.replace(/^['"`]+|['"`]+$/g, '')).filter(Boolean);
+  let i = 0, prefixed = false;
+  while (i < words.length) {
+    const w = words[i];
+    if (BASH_PREFIXES.includes(w)) prefixed = true;
+    else if (prefixed && PREFIX_VALUE_OPTIONS.includes(w)) i += 1; // the option's value (sudo -u root, nice -n 10)
+    else if (!/^[A-Za-z_][A-Za-z0-9_]*=/.test(w) && !(prefixed && w.startsWith('-'))) break;
+    i += 1;
+  }
+  return words[i] ? path.posix.basename(words[i]) : null;
+}
+export const bashReadArgs = (command) => bashSegments(command).filter((seg) => BASH_READERS.includes(segmentCommand(seg))).flatMap(bashArgs);
+
 // A Bash call as it is recorded in the first tools: the command with each path-like word made project-relative, or
 // <outside> when it lies outside the project root (no local absolute path in the record); at most 200 characters.
 export function bashTarget(command, root) {
@@ -86,7 +110,8 @@ export function messageFacts(spec, m, t) {
   const issued = (u) => !t.results.has(u.id) || !t.results.get(u.id).is_error; // a missing result (stopped) counts as issued
   const reads = m.uses.filter((u) => u.name === 'Read' && issued(u)).map((u) => projectRelative(String(u.input?.file_path ?? ''), t.cwd)).filter(Boolean);
   // review M1: Bash calls whose arguments name a file of the project (issued like a Read: not an error result).
-  const bashReads = m.uses.filter((u) => u.name === 'Bash' && issued(u)).flatMap((u) => bashArgs(u.input?.command ?? '').map((w) => projectRelative(w, t.cwd))).filter(Boolean);
+  // review Low-1: only the segments whose command is a content reader (bashReadArgs) count.
+  const bashReads = m.uses.filter((u) => u.name === 'Bash' && issued(u)).flatMap((u) => bashReadArgs(u.input?.command ?? '').map((w) => projectRelative(w, t.cwd))).filter(Boolean);
   const skills = m.uses.filter((u) => u.name === 'Skill').map((u) => String(u.input?.skill ?? ''));
   const named = (key, xs, s) => xs.some((r) => pat(key, s).test(r));
   const ascBodies = ASC_SKILLS.filter((s) => named('bodyPattern', reads, s) || named('bodyPattern', bashReads, s));

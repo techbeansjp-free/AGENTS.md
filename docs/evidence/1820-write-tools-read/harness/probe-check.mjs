@@ -18,8 +18,17 @@
 // where it can be cross-checked against text it cannot know without the context (exact descriptions, CLAUDE.md first
 // line, pointer text, the owner's own instruction/memory first lines) and only when the trace shows it did not Read,
 // Grep or Glob those files. `compare` then checks that the conditions differ only by CLAUDE.md / hook output (review M1).
+// Review Low-2 (#1820): a result records the sha256 of each marker token (markerTokenSha256; never the token), and
+// `compare` carries each probe's check values (pass per check), its token sha256 and its session facts, so run-trial
+// (order.mjs probeCompareProblems) recomputes them from the probe's trace.jsonl and meta.json in the runs root
+// (recheckProbe) instead of trusting `pass`. The marker-token check is recomputed from the sha256 (every
+// ASC1820-MARKER-<hex> string in the records is hashed); the checks that rest on the host at probe time (HOST_CHECKS:
+// the program directory, the owner's Skills and instruction/memory files, the debug-log paths against the program
+// directory) are taken as recorded. `publish` copies probe results and the comparison with the markers, the local roots
+// and the home directory redacted (results/probes/).
 // Usage: node probe-check.mjs <probe-trial-dir> <condition> <home-marker> <repo-marker> <repo-root>
 //        node probe-check.mjs compare <probe-result.json>... [--drop X] --out <runs-root>/probe-compare.json
+//        node probe-check.mjs publish <out-dir> <probe-*.json | probe-compare.json>... --home-marker <f> --repo-marker <f> --repo-root <r> --runs-root <d>
 // The output names no foreign text: the owner's instruction/memory lines are used for matching only and reported as counts.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -32,6 +41,12 @@ import {pointerHeadI} from './condition-i.mjs';
 import {INSIDE_FILE, probeSteps} from './run-trial.mjs';
 
 const TOLERATED_TOOLS = ['ToolSearch'];
+// Review Low-2: checks that depend on the host at probe time; the gate takes them as recorded (README: residual limits).
+export const HOST_CHECKS = ['programDirectory', 'noOwnerSkills', 'noOwnerInstructionsOrMemory', 'debugPathsInsideTrial', 'noRealHomeOrRepoInDebug'];
+export const MARKER_TOKEN_RE = /ASC1820-MARKER-[0-9a-f]{24}/g;
+export const sha256 = (x) => crypto.createHash('sha256').update(x).digest('hex');
+// Review Low-2: the number of marker tokens in the text, found by their sha256 only (the plain tokens are not needed).
+export const tokenHits = (text, shas) => [...new Set(String(text).match(MARKER_TOKEN_RE) ?? [])].filter((tok) => shas.includes(sha256(tok))).length;
 const MANAGED = ['/Library/Application Support/ClaudeCode/', '/etc/claude-code/'];
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
 const stripHeading = (s) => s.replace(/^\s*#+\s*/, '').trim();
@@ -154,7 +169,11 @@ export function checkProbe(i) {
   const okMarkerReads = t.reads.filter((p) => i.markerPaths.some((m) => path.resolve(p) === path.resolve(m)));
   add('markersRefused', okMarkerReads.length === 0, okMarkerReads.length);
   const all = [i.trace, i.debug ?? '', i.stderr ?? ''].join('\n');
-  add('markerTokensAbsent', i.tokens.length === 2 && i.tokens.every((tok) => tok && !all.includes(tok)), `${i.tokens.length} token(s) checked (review L2: both required)`);
+  // Review Low-2: with the plain tokens (at the probe) or only with their sha256 (the gate, after the markers are removed).
+  const tokens = i.tokens ?? [];
+  const tokenShas = tokens.length ? tokens.map((tok) => sha256(tok)) : (i.tokenSha256 ?? []);
+  add('markerTokensAbsent', tokenShas.length === 2 && new Set(tokenShas).size === 2 && tokens.every((tok) => tok && !all.includes(tok)) && tokenHits(all, tokenShas) === 0,
+    `${tokenShas.length} token(s) checked (review L2: both required)`);
   // Debug log: instruction/memory/settings paths must be inside the trial, the program directory or the managed location.
   const outside = [];
   // A line that names a marker is excluded only when no other absolute path is on it (review L3).
@@ -201,7 +220,7 @@ export function checkProbe(i) {
   const stepped = probeStepChecks(i, t, levelId);
   Object.assign(checks, stepped.checks);
   return {condition: i.condition, trial: i.trialName ?? path.basename(i.trialDir), traceSha256: i.traceSha256 ?? null, metaSha256: i.metaSha256 ?? null,
-    pass: Object.values(checks).every((c) => c.pass), checks, info: stepped.info, steps: (i.steps ?? []).length, listedSkills: listed.length, nonAscSkills: nonAsc,
+    markerTokenSha256: tokenShas, pass: Object.values(checks).every((c) => c.pass), checks, info: stepped.info, steps: (i.steps ?? []).length, listedSkills: listed.length, nonAscSkills: nonAsc,
     builtinPlugins: plugins.filter(builtin).map((pl) => pl.name).sort(), managedPolicyPresent: i.managedPolicyPresent ?? null,
     tools, gitLine: gitLine.replace(/^.*GIT:\s*/, ''), model: init.model ?? null, claudeCodeVersion: init.claude_code_version ?? null, costUsd: t.result?.total_cost_usd ?? null};
 }
@@ -294,7 +313,64 @@ export function compareProbes(results, {drop = null, conds = loadRawConditions()
   const differ = keys.filter((k) => new Set(kept.map((r) => JSON.stringify(norm1(r, k)))).size > 1);
   const droppedOk = results.filter(isDropped).every((r) => r.pass === false) && (!drop || results.some(isDropped));
   return {pass: kept.length > 0 && kept.every((r) => r.pass) && differ.length === 0 && droppedOk, conditions: results.map((r) => r.condition), differ, dropped: drop ?? null,
-    probes: results.map((r) => ({condition: r.condition, trial: r.trial ?? null, pass: r.pass, traceSha256: r.traceSha256 ?? null, metaSha256: r.metaSha256 ?? null}))};
+    probes: results.map((r) => ({condition: r.condition, trial: r.trial ?? null, pass: r.pass, traceSha256: r.traceSha256 ?? null, metaSha256: r.metaSha256 ?? null,
+      checks: checkValues(r.checks), markerTokenSha256: r.markerTokenSha256 ?? [], ...Object.fromEntries(FACT_KEYS.map((k) => [k, r[k] ?? null]))}))};
+}
+
+// Review Low-2: what `compare` carries per probe and the gate recomputes.
+export const FACT_KEYS = ['nonAscSkills', 'builtinPlugins', 'gitLine', 'model'];
+export const checkValues = (checks) => Object.fromEntries(Object.entries(checks ?? {}).map(([k, c]) => [k, c?.pass === true]).sort(([a], [b]) => a.localeCompare(b)));
+
+// The inputs of checkProbe that come from the probe's own directory (trace, debug, meta.json probe context, work/), the
+// conditions and the repository. main adds the host's facts and the plain marker tokens; recheckProbe adds neither.
+export function fileInputs(dirArg, condition, repoRoot, conds = loadRawConditions()) {
+  const dir = path.resolve(dirArg), work = fs.realpathSync(path.join(dir, 'work'));
+  const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
+  const ascSkills = Object.fromEntries(fs.readdirSync(path.join(work, '.claude/skills')).map((s) => [s, description(read(path.join(work, '.claude/skills', s, 'SKILL.md')) ?? '')]));
+  const base = conds.fixtures[conds.cells[condition]?.fixture ?? 'A'].baseClaudeMd ?? '';
+  const meta = JSON.parse(read(path.join(dir, 'meta.json')) ?? '{}');
+  const sentinels = meta.probeSentinels ?? {};
+  const ctx = meta.probeContext ?? null;
+  const levelId = conds.cells[condition]?.tools ?? null;
+  const fileSha = (f) => (fs.existsSync(f) ? sha256(fs.readFileSync(f)) : null);
+  const repoFirst = (f) => stripHeading((read(path.join(repoRoot, f)) ?? '').split('\n')[0]);
+  return {meta, ctx, inputs: {trace: read(path.join(dir, 'trace.jsonl')) ?? '', debug: read(path.join(dir, 'debug.log')), stderr: read(path.join(dir, 'stderr.txt')),
+    hookLog: read(path.join(dir, 'hook.jsonl')), work, trialDir: dir, condition, ascSkills, baseFirstLine: base.split('\n')[0],
+    pointerHead: 'このプロジェクトでASCを使う', forbiddenTexts: [repoFirst('CLAUDE.md'), repoFirst('AGENTS.md')].filter(Boolean),
+    markerPaths: ctx ? [ctx.homeMarker, ctx.repoMarker] : [], repoRoot: path.resolve(repoRoot),
+    sentinels, sentinelExists: {trial: Boolean(sentinels.trial && fs.existsSync(sentinels.trial)), repo: Boolean(sentinels.repo && fs.existsSync(sentinels.repo))},
+    insideExists: fs.existsSync(path.join(work, meta.probeInsideFile ?? INSIDE_FILE)),
+    steps: levelId && ctx ? probeSteps(levelId, ctx) : [], expectedSteps: levelId ? conds.probeSteps?.[levelId] ?? null : null,
+    workClaudeMdFirstLine: firstLine(read(path.join(work, 'CLAUDE.md'))),
+    trialName: path.basename(dir), traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))}};
+}
+
+// Review Low-2: the probe result recomputed from the probe's files in the runs root (no plain marker token, no host
+// state): the marker-token check from the recorded sha256, the HOST_CHECKS as recorded (a missing value fails).
+export function recheckProbe(dir, condition, recorded, {repoRoot, conds = loadRawConditions()}) {
+  const {ctx, inputs} = fileInputs(dir, condition, repoRoot, conds);
+  if (!ctx) throw new Error('meta.json has no probe context');
+  const r = checkProbe({...inputs, conditionsOverride: conds, ownerLines: [], ownerSkills: [], tokens: [], tokenSha256: recorded?.markerTokenSha256 ?? [],
+    realHome: null, hostInstallDir: null, installProblems: [], managedPolicyPresent: null});
+  const recordedPass = (k) => { const v = recorded?.checks?.[k]; return v === true || v?.pass === true; }; // compare's value or a probe result's check
+  for (const k of HOST_CHECKS) r.checks[k] = {pass: recordedPass(k), detail: 'recorded at the probe (host state), not recomputed'};
+  r.pass = Object.values(r.checks).every((c) => c.pass);
+  return r;
+}
+
+// Review Low-2: a probe result or comparison for results/probes/, with the marker tokens, the marker paths, the runs
+// root, the repository root and the home directory replaced. Throws when a marker token or the home directory remains.
+export function redact(text, {tokens = [], homeMarker, repoMarker, runsRoot, repoRoot, home = os.homedir()}) {
+  const real = (p) => { try { return fs.realpathSync(p); } catch { return null; } };
+  const pairs = [...tokens.map((tok) => [tok, '<marker-token>']), [homeMarker, '<home-marker>'], [repoMarker, '<repo-marker>'], [runsRoot, '<runs-root>'], [repoRoot, '<repo-root>'], [home, '<home>']]
+    .flatMap(([p, r]) => (p ? [[p, r], [path.resolve(p), r], [real(p), r]] : [])).filter(([p]) => p && p.length > 1)
+    .sort((a, b) => b[0].length - a[0].length);
+  let out = String(text);
+  for (const [p, r] of pairs) out = out.split(p).join(r);
+  if (MARKER_TOKEN_RE.test(out)) { MARKER_TOKEN_RE.lastIndex = 0; throw new Error('a marker token remains after redaction'); }
+  MARKER_TOKEN_RE.lastIndex = 0;
+  if (home && out.includes(home)) throw new Error('the home directory remains after redaction');
+  return out;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -307,37 +383,37 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(JSON.stringify(out));
     process.exit(out.pass ? 0 : 1);
   }
+  if (argv[0] === 'publish') {
+    const opt = (k) => { const k2 = argv.indexOf(k); return k2 >= 0 ? argv[k2 + 1] : null; };
+    const flagsWithValue = ['--home-marker', '--repo-marker', '--repo-root', '--runs-root'];
+    const [outDir, ...files] = argv.slice(1).filter((a, k, xs) => !flagsWithValue.includes(a) && !flagsWithValue.includes(xs[k - 1]));
+    const homeMarker = opt('--home-marker'), repoMarker = opt('--repo-marker');
+    if (!outDir || !files.length || !homeMarker || !repoMarker || !opt('--repo-root') || !opt('--runs-root')) { console.error('usage: publish <out-dir> <file>... --home-marker f --repo-marker f --repo-root r --runs-root d'); process.exit(2); }
+    const tokens = [homeMarker, repoMarker].map((m) => (fs.existsSync(m) ? fs.readFileSync(m, 'utf8').trim() : null)).filter(Boolean);
+    fs.mkdirSync(outDir, {recursive: true});
+    for (const f of files) {
+      let out;
+      try { out = redact(fs.readFileSync(f, 'utf8'), {tokens, homeMarker, repoMarker, runsRoot: opt('--runs-root'), repoRoot: opt('--repo-root')}); } catch (e) { console.error(`refused: ${f}: ${e.message}`); process.exit(3); }
+      fs.writeFileSync(path.join(outDir, path.basename(f)), out);
+    }
+    console.log(JSON.stringify({published: files.map((f) => path.basename(f)), markerTokensKnown: tokens.length}));
+    process.exit(0);
+  }
   const [dirArg, condition, homeMarker, repoMarker, repoRoot] = argv;
-  const dir = path.resolve(dirArg), work = fs.realpathSync(path.join(dir, 'work'));
-  const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
-  const ascSkills = Object.fromEntries(fs.readdirSync(path.join(work, '.claude/skills')).map((s) => [s, description(read(path.join(work, '.claude/skills', s, 'SKILL.md')))]));
-  const conds = loadRawConditions();
-  const base = conds.fixtures[conds.cells[condition]?.fixture ?? 'A'].baseClaudeMd ?? '';
-  const meta = JSON.parse(read(path.join(dir, 'meta.json')) ?? '{}');
-  const sentinels = meta.probeSentinels ?? {};
-  const ctx = meta.probeContext ?? null;
-  const levelId = conds.cells[condition]?.tools ?? null;
+  const {ctx, inputs} = fileInputs(dirArg, condition, repoRoot);
   if (!ctx || path.resolve(ctx.homeMarker) !== path.resolve(homeMarker) || path.resolve(ctx.repoMarker) !== path.resolve(repoMarker)) {
     console.error('refused: meta.json has no probe context, or its markers are not the ones given'); process.exit(3);
   }
-  const fileSha = (f) => (fs.existsSync(f) ? crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex') : null);
-  const repoFirst = (f) => stripHeading((read(path.join(repoRoot, f)) ?? '').split('\n')[0]);
+  const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
   const realHome = os.homedir();
   const userConfigDirs = [...new Set([path.join(realHome, '.claude'), process.env.CLAUDE_CONFIG_DIR].filter(Boolean).map((p) => path.resolve(p)))];
   const owner = ownerCanaries(userConfigDirs);
   const hostInstallDir = claudeInstallDir();
-  const out = checkProbe({trace: read(path.join(dir, 'trace.jsonl')) ?? '', debug: read(path.join(dir, 'debug.log')), stderr: read(path.join(dir, 'stderr.txt')),
-    hookLog: read(path.join(dir, 'hook.jsonl')), work, trialDir: dir, condition, ascSkills, baseFirstLine: base.split('\n')[0],
-    pointerHead: 'このプロジェクトでASCを使う', forbiddenTexts: [repoFirst('CLAUDE.md'), repoFirst('AGENTS.md')].filter(Boolean),
-    ownerLines: owner.lines, ownerSkills: owner.skills, markerPaths: [homeMarker, repoMarker],
-    tokens: [homeMarker, repoMarker].map((m) => read(m)?.trim()).filter(Boolean), realHome, repoRoot: path.resolve(repoRoot),
+  const out = checkProbe({...inputs, markerPaths: [homeMarker, repoMarker],
+    ownerLines: owner.lines, ownerSkills: owner.skills,
+    tokens: [homeMarker, repoMarker].map((m) => read(m)?.trim()).filter(Boolean), realHome,
     hostInstallDir, installProblems: installDirProblems(hostInstallDir, {realHome, userConfigDirs, repoRoot: path.resolve(repoRoot)}),
-    managedPolicyPresent: managedPolicyFiles().map((f) => path.basename(f)),
-    sentinels, sentinelExists: {trial: Boolean(sentinels.trial && fs.existsSync(sentinels.trial)), repo: Boolean(sentinels.repo && fs.existsSync(sentinels.repo))},
-    insideExists: fs.existsSync(path.join(work, meta.probeInsideFile ?? INSIDE_FILE)),
-    steps: levelId ? probeSteps(levelId, ctx) : [], expectedSteps: levelId ? conds.probeSteps?.[levelId] ?? null : null,
-    workClaudeMdFirstLine: firstLine(read(path.join(work, 'CLAUDE.md'))),
-    trialName: path.basename(dir), traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))});
+    managedPolicyPresent: managedPolicyFiles().map((f) => path.basename(f))});
   console.log(JSON.stringify(out, null, 1));
   process.exit(out.pass ? 0 : 1);
 }
