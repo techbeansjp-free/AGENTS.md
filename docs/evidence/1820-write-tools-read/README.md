@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。記載のcommit・版に対する記録で、現行仕様の正本ではない。通常のASC実行時に読み込ませない。
 
-**結果：未測定**（この文書は測定の前の準備の記録である）。
+**結果（2026-11-26）：ASCの本文が読まれるかを分けたのはフォルダ（fixture）で、toolと依頼文ではなかった**。下の「結果」を参照。「結果」より前の節は、測定の前の準備の記録である。
 
 ## 目的
 
@@ -172,3 +172,43 @@ dry runの内容：
 - 該当しない依頼は、RとWのアプリのrepoで各2回だけ。Xとフォルダ`D`での過剰な読込みは測らない。
 - Bashでの本文の読込みは、中身を読むcommand（`cat`・`head`・`tail`・`sed`・`awk`・`less`・`more`・`grep`・`rg`・`nl`・`bat`・`view`・`strings`）の引数に本文のpathがある場合だけ数える。一覧に無い読むcommand（`od`・`xxd`・`python`での読込み等）は数えない。`cd`で移動してから相対pathで読む形や、変数・glob・commandの置換の出力で指す形も数えない（置換の中で読む形、`then`・`do`・`{`等の後で読む形は数える）。`case`の枝の中で読む形は数えない。
 - 計画した試行の前の照合は、probeの時点のhostの状態による項目（Claude Codeのprogram directory、ownerのSkill・指示file・memory、debug logのpathとprogram directoryの関係）を計算し直さず、記録の値を使う。目印のtokenの照合は、tokenの形の文字列を探す（tokenそのものは目印fileと一緒に消える）。形を変えて書き写された（区切りや大文字小文字を変えた）tokenは見つからない。
+
+## 結果（2026-11-26）
+
+### 実行
+- 隔離の確認（probe）：
+  - R（読取りだけ）とW（書込みあり）は合格した。
+  - X（書込み＋Bash）は回1・回2とも不合格だった。
+    - sandboxの`denyRead`（runs root）が`allowRead`（`work/`）より優先された。このため、Bashで`work/CLAUDE.md`を読めず、gitも動かなかった（`insideCatClaudeMd`・`allowReadWork`）。
+    - 試行directoryに、0 byteのsentinelが作られた（`sentinelsAbsent`）。`touch`は「Operation not permitted」を返していた。
+    - HOME・repository・他の試行・fixture・台帳の読込みと、外部への通信は拒否された。
+  - 事前に固定した手順（ownerの判断「sandboxが効かなければコマンド実行の条件を測らない」）に従い、Xを外した。`fixation.mjs drop-level`の記録2件目と、[results/probes/](results/probes/)を参照。
+- 測定：8セル×4回の計画どおり44試行が完了した（該当しない依頼12試行を含む）。失敗は0件、置き換えは0件。各試行は最初の2ターンで止めた（`error_max_turns`）。
+- 費用：台帳の累計は2.03 USD（probe 5回を含む）で、段階1の線6 USD、全体の上限25 USDの内。
+- 記録：[results/analysis.json](results/analysis.json)、[results/runs.json](results/runs.json)、[results/ledger.jsonl](results/ledger.jsonl)、[results/traces/](results/traces/)。
+
+### 最初の2ターンでASCの本文を読んだ試行（`bodyRead2`）
+
+| セル | A（アプリのrepo） | D（画面の依頼のフォルダ） |
+| --- | --- | --- |
+| R・S（読取りだけ・短い依頼文） | 4/4 | 0/4 |
+| R・G（読取りだけ・#1815の依頼文） | 4/4 | 0/4 |
+| W・S（書込みあり・短い依頼文） | 4/4 | 0/4 |
+| W・G（書込みあり・#1815の依頼文） | 3/4 | 0/4 |
+
+- 主効果（セルの率の平均の差）：
+  - tool W−R：−0.06
+  - 依頼文 G−S：−0.06
+  - フォルダ D−A：**−0.94**（A 15/16、D 0/16）
+- 該当しない依頼（RSA・WSA、各6回）：過剰な読込みは0/12。
+
+### 分かったこと
+- #1815でASCがほとんど読まれなかったことは、書込みのtoolでも依頼文でもなく、フォルダの違いで説明できる。
+  - Aのフォルダ：アプリのrepo。`CLAUDE.md`にはプロジェクトの説明と案内文がある。
+  - Dのフォルダ：画面の依頼のフォルダ。`CLAUDE.md`は案内文だけで、依頼は新しい画面を作るもの。
+- Dでは、最初のmessageでBRIEFとフォルダの一覧を読み、ASCに触れずに進んでいる（[Issueの原因の調査](https://github.com/techbeansjp-free/AGENTS.md/issues/1820#issuecomment-7170524363)と同じ形）。Dのどの要素（案内文だけの`CLAUDE.md`、コードの無いフォルダ、新規作成の依頼）が効いているかは、この段階では分けていない。
+- 各セル4回なので、1〜2試行の差は偶然の範囲である。ただし、AとDの差（15/16と0/16）は偶然の範囲を大きく超える。
+
+### 公開した記録の置換え
+- 取り出した記録に、一時directoryの名前（利用者番号付き）が44件残っていた。分析の後に、これを`<tmp-user>`に置き換えた（#1817と同じ）。
+- `results/traces`のsha256（全fileをpath順に連結したもの）は、置換えの前が`132e63d59944ac4978f1ed3397f2a4b2c38fa430d738c528fda905df30fc7ebd`、後が`604e5eddc3061c44a3ba63f80ff1aa4f8eb02d0a337acc852087fc789e4051ec`である。

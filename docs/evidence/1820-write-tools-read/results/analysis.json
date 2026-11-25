@@ -1,0 +1,326 @@
+{
+ "cells": {
+  "RSA": {
+   "cell": "RSA",
+   "runs": 4,
+   "failures": 0,
+   "valid": 4,
+   "bodyRead2": 4,
+   "bodyReadBash2": 0,
+   "bodyRead1": 0,
+   "skillAsc1": 0,
+   "entryRead1": 0,
+   "readmeRead1": 0,
+   "reach2": 4,
+   "stopped": 4,
+   "replacementsMissing": 0,
+   "perRun": "2222",
+   "negatives": {
+    "runs": 6,
+    "failures": 0,
+    "valid": 6,
+    "overapplication": 0
+   },
+   "costUsd": 0.2965
+  },
+  "RSD": {
+   "cell": "RSD",
+   "runs": 4,
+   "failures": 0,
+   "valid": 4,
+   "bodyRead2": 0,
+   "bodyReadBash2": 0,
+   "bodyRead1": 0,
+   "skillAsc1": 0,
+   "entryRead1": 0,
+   "readmeRead1": 0,
+   "reach2": 0,
+   "stopped": 4,
+   "replacementsMissing": 0,
+   "perRun": "----",
+   "negatives": {
+    "runs": 0,
+    "failures": 0,
+    "valid": 0,
+    "overapplication": 0
+   },
+   "costUsd": 0.1303
+  },
+  "RGA": {
+   "cell": "RGA",
+   "runs": 4,
+   "failures": 0,
+   "valid": 4,
+   "bodyRead2": 4,
+   "bodyReadBash2": 0,
+   "bodyRead1": 0,
+   "skillAsc1": 0,
+   "entryRead1": 0,
+   "readmeRead1": 0,
+   "reach2": 4,
+   "stopped": 4,
+   "replacementsMissing": 0,
+   "perRun": "2222",
+   "negatives": {
+    "runs": 0,
+    "failures": 0,
+    "valid": 0,
+    "overapplication": 0
+   },
+   "costUsd": 0.126
+  },
+  "RGD": {
+   "cell": "RGD",
+   "runs": 4,
+   "failures": 0,
+   "valid": 4,
+   "bodyRead2": 0,
+   "bodyReadBash2": 0,
+   "bodyRead1": 0,
+   "skillAsc1": 0,
+   "entryRead1": 0,
+   "readmeRead1": 0,
+   "reach2": 0,
+   "stopped": 4,
+   "replacementsMissing": 0,
+   "perRun": "----",
+   "negatives": {
+    "runs": 0,
+    "failures": 0,
+    "valid": 0,
+    "overapplication": 0
+   },
+   "costUsd": 0.1311
+  },
+  "WSA": {
+   "cell": "WSA",
+   "runs": 4,
+   "failures": 0,
+   "valid": 4,
+   "bodyRead2": 4,
+   "bodyReadBash2": 0,
+   "bodyRead1": 1,
+   "skillAsc1": 0,
+   "entryRead1": 0,
+   "readmeRead1": 0,
+   "reach2": 4,
+   "stopped": 4,
+   "replacementsMissing": 0,
+   "perRun": "2221",
+   "negatives": {
+    "runs": 6,
+    "failures": 0,
+    "valid": 6,
+    "overapplication": 0
+   },
+   "costUsd": 0.3474
+  },
+  "WSD": {
+   "cell": "WSD",
+   "runs": 4,
+   "failures": 0,
+   "valid": 4,
+   "bodyRead2": 0,
+   "bodyReadBash2": 0,
+   "bodyRead1": 0,
+   "skillAsc1": 0,
+   "entryRead1": 0,
+   "readmeRead1": 0,
+   "reach2": 0,
+   "stopped": 4,
+   "replacementsMissing": 0,
+   "perRun": "----",
+   "negatives": {
+    "runs": 0,
+    "failures": 0,
+    "valid": 0,
+    "overapplication": 0
+   },
+   "costUsd": 0.1308
+  },
+  "WGA": {
+   "cell": "WGA",
+   "runs": 4,
+   "failures": 0,
+   "valid": 4,
+   "bodyRead2": 3,
+   "bodyReadBash2": 0,
+   "bodyRead1": 0,
+   "skillAsc1": 0,
+   "entryRead1": 0,
+   "readmeRead1": 0,
+   "reach2": 3,
+   "stopped": 4,
+   "replacementsMissing": 0,
+   "perRun": "-222",
+   "negatives": {
+    "runs": 0,
+    "failures": 0,
+    "valid": 0,
+    "overapplication": 0
+   },
+   "costUsd": 0.1254
+  },
+  "WGD": {
+   "cell": "WGD",
+   "runs": 4,
+   "failures": 0,
+   "valid": 4,
+   "bodyRead2": 0,
+   "bodyReadBash2": 0,
+   "bodyRead1": 0,
+   "skillAsc1": 0,
+   "entryRead1": 0,
+   "readmeRead1": 0,
+   "reach2": 0,
+   "stopped": 4,
+   "replacementsMissing": 0,
+   "perRun": "----",
+   "negatives": {
+    "runs": 0,
+    "failures": 0,
+    "valid": 0,
+    "overapplication": 0
+   },
+   "costUsd": 0.1316
+  }
+ },
+ "negatives": {
+  "RSA": {
+   "runs": 6,
+   "failures": 0,
+   "valid": 6,
+   "overapplication": 0
+  },
+  "WSA": {
+   "runs": 6,
+   "failures": 0,
+   "valid": 6,
+   "overapplication": 0
+  }
+ },
+ "completion": {
+  "basis": "complete",
+  "complete": true,
+  "capReached": false,
+  "lateProbes": [],
+  "missingPlanned": 0,
+  "firstMissingPlanned": null,
+  "missingReplacements": [],
+  "spentUsd": 2.0281,
+  "stopLineUsd": 6,
+  "perTrialUsd": 0.3
+ },
+ "basis": "complete",
+ "analysis": {
+  "analysed": true,
+  "metric": "bodyRead2",
+  "droppedLevel": "X",
+  "levels": {
+   "tools": {
+    "R": {
+     "meanOfCellRates": 0.5,
+     "pooled": "8/16",
+     "cells": [
+      "RSA",
+      "RSD",
+      "RGA",
+      "RGD"
+     ]
+    },
+    "W": {
+     "meanOfCellRates": 0.4375,
+     "pooled": "7/16",
+     "cells": [
+      "WSA",
+      "WSD",
+      "WGA",
+      "WGD"
+     ]
+    }
+   },
+   "prompt": {
+    "S": {
+     "meanOfCellRates": 0.5,
+     "pooled": "8/16",
+     "cells": [
+      "RSA",
+      "RSD",
+      "WSA",
+      "WSD"
+     ]
+    },
+    "G": {
+     "meanOfCellRates": 0.4375,
+     "pooled": "7/16",
+     "cells": [
+      "RGA",
+      "RGD",
+      "WGA",
+      "WGD"
+     ]
+    }
+   },
+   "fixture": {
+    "A": {
+     "meanOfCellRates": 0.9375,
+     "pooled": "15/16",
+     "cells": [
+      "RSA",
+      "RGA",
+      "WSA",
+      "WGA"
+     ]
+    },
+    "D": {
+     "meanOfCellRates": 0,
+     "pooled": "0/16",
+     "cells": [
+      "RSD",
+      "RGD",
+      "WSD",
+      "WGD"
+     ]
+    }
+   }
+  },
+  "effects": {
+   "tools W-R": -0.0625,
+   "prompt G-S": -0.0625,
+   "fixture D-A": -0.9375
+  },
+  "twoWay": {
+   "tools x prompt": {
+    "R": {
+     "S": 0.5,
+     "G": 0.5
+    },
+    "W": {
+     "S": 0.5,
+     "G": 0.375
+    }
+   },
+   "tools x fixture": {
+    "R": {
+     "A": 1,
+     "D": 0
+    },
+    "W": {
+     "A": 0.875,
+     "D": 0
+    }
+   },
+   "prompt x fixture": {
+    "S": {
+     "A": 1,
+     "D": 0
+    },
+    "G": {
+     "A": 0.875,
+     "D": 0
+    }
+   }
+  },
+  "note": "Stage 1 is diagnostic: 4 trials per cell, no adoption decision; a difference of one or two trials per cell is within chance."
+ }
+}

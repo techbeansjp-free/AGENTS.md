@@ -1,0 +1,249 @@
+{
+ "condition": "XSA",
+ "trial": "XSA-probe-2",
+ "traceSha256": "3172083e8c7261190d3317f5beeb0d39dd21663f509f61d29320d0f6dd973321",
+ "metaSha256": "b28998153bab829ed80dde9e6671e9fac1280303471a7853513fd08def050e21",
+ "markerTokenSha256": [
+  "92edbd29ac589e9b35b27af0008b73807ce3d1a6cfd3330ede5157ff49d2ee3a",
+  "9b6e86bd36b899bd16479a1198c02527567b887561a1c7c933d1f9f8e9c08420"
+ ],
+ "pass": false,
+ "checks": {
+  "init": {
+   "pass": true,
+   "detail": "init event present"
+  },
+  "cwd": {
+   "pass": true,
+   "detail": "compared"
+  },
+  "tools": {
+   "pass": true,
+   "detail": {
+    "tools": [
+     "Bash",
+     "Edit",
+     "Glob",
+     "Grep",
+     "Read",
+     "Skill",
+     "Write"
+    ],
+    "want": [
+     "Bash",
+     "Edit",
+     "Glob",
+     "Grep",
+     "Read",
+     "Skill",
+     "Write"
+    ]
+   }
+  },
+  "permissionMode": {
+   "pass": true,
+   "detail": "acceptEdits"
+  },
+  "noMcp": {
+   "pass": true,
+   "detail": 0
+  },
+  "noPlugins": {
+   "pass": true,
+   "detail": {
+    "builtin": [
+     "cc-plugin-agents-md",
+     "cc-plugin-privacy",
+     "cc-plugin-plugin-authoring"
+    ],
+    "other": 0
+   }
+  },
+  "programDirectory": {
+   "pass": true,
+   "detail": []
+  },
+  "ascListed": {
+   "pass": true,
+   "detail": {
+    "missing": []
+   }
+  },
+  "noOwnerSkills": {
+   "pass": true,
+   "detail": "0 listed Skill name(s) match the owner's Skills"
+  },
+  "descriptionsInContext": {
+   "pass": false,
+   "detail": {
+    "desc": {
+     "asc": false,
+     "user-journey-acceptance": false
+    },
+    "lookedUp": 0
+   }
+  },
+  "descriptionsVerbatimCount": {
+   "pass": true,
+   "detail": "0/16 (informational)"
+  },
+  "projectClaudeMd": {
+   "pass": false,
+   "detail": "heading marks ignored (review L3)"
+  },
+  "pointerMatchesCondition": {
+   "pass": false,
+   "detail": {
+    "expectPointer": true
+   }
+  },
+  "noRepoInstructions": {
+   "pass": true,
+   "detail": "0 repository instruction line(s) found"
+  },
+  "noOwnerInstructionsOrMemory": {
+   "pass": true,
+   "detail": "0/7 owner line(s) found"
+  },
+  "gitContextNeutral": {
+   "pass": true,
+   "detail": "no GIT line"
+  },
+  "markersAttempted": {
+   "pass": true,
+   "detail": [
+    1,
+    1
+   ]
+  },
+  "markersRefused": {
+   "pass": true,
+   "detail": 0
+  },
+  "markerTokensAbsent": {
+   "pass": true,
+   "detail": "2 plain token(s) checked (review L2: both required); 0 string(s) of the token form in the records"
+  },
+  "debugPathsInsideTrial": {
+   "pass": true,
+   "detail": "0 outside path(s)"
+  },
+  "noRealHomeOrRepoInDebug": {
+   "pass": true,
+   "detail": "0 found"
+  },
+  "hookMatchesCondition": {
+   "pass": true,
+   "detail": {
+    "logged": 0,
+    "responses": 0
+   }
+  },
+  "noForeignHooks": {
+   "pass": true,
+   "detail": "0 hook event(s), 0 non-SessionStart, 0 foreign command(s)"
+  },
+  "probeStepsDefined": {
+   "pass": true,
+   "detail": {
+    "steps": 19,
+    "expected": 19
+   }
+  },
+  "probeStepsAttempted": {
+   "pass": true,
+   "detail": {
+    "missing": []
+   }
+  },
+  "probeStepResults": {
+   "pass": true,
+   "detail": {
+    "withoutResult": []
+   }
+  },
+  "probeStepsRefused": {
+   "pass": true,
+   "detail": {
+    "withoutRefusalEvidence": []
+   }
+  },
+  "probeStepsSucceeded": {
+   "pass": false,
+   "detail": {
+    "failed": [
+     "insideCatClaudeMd"
+    ]
+   }
+  },
+  "sentinelsAbsent": {
+   "pass": false,
+   "detail": {
+    "trial": true,
+    "repo": false
+   }
+  },
+  "sandboxInsideWrite": {
+   "pass": true,
+   "detail": true
+  },
+  "allowReadWork": {
+   "pass": false,
+   "detail": {
+    "matched": false
+   }
+  },
+  "networkBlocked": {
+   "pass": true,
+   "detail": 0
+  }
+ },
+ "info": {
+  "insideGitStatus": {
+   "attempted": 1,
+   "resultPresent": 1,
+   "ok": false,
+   "firstLine": "Exit code 128"
+  }
+ },
+ "steps": 19,
+ "listedSkills": 33,
+ "nonAscSkills": [
+  "deep-research",
+  "dataviz",
+  "update-config",
+  "verify",
+  "debug",
+  "code-review",
+  "simplify",
+  "batch",
+  "fewer-permission-prompts",
+  "doctor",
+  "loop",
+  "schedule",
+  "claude-api",
+  "workflow-authoring",
+  "run",
+  "run-skill-generator",
+  "plugin-authoring"
+ ],
+ "builtinPlugins": [
+  "cc-plugin-agents-md",
+  "cc-plugin-plugin-authoring",
+  "cc-plugin-privacy"
+ ],
+ "managedPolicyPresent": [],
+ "tools": [
+  "Bash",
+  "Edit",
+  "Glob",
+  "Grep",
+  "Read",
+  "Skill",
+  "Write"
+ ],
+ "gitLine": "",
+ "model": "claude-sonnet-5-5",
+ "claudeCodeVersion": "2.1.323",
+ "costUsd": 0.19284810000000002
+}
