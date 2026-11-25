@@ -59,7 +59,7 @@
 
 ## 実行の手順
 
-`<W>`はこのworktree、`<scratch>`はrepositoryとHOMEの外のdirectory。固定の記録：[results/fixation.json](results/fixation.json)（最初の記録のcommit：未記録。固定の後にここへ書く）。台帳：`<scratch>/rel1815/ledger/ledger.jsonl`。
+`<W>`はこのworktree、`<scratch>`はrepositoryとHOMEの外のdirectory。固定の記録：[results/fixation.json](results/fixation.json)（最初の記録のcommit：`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`。41fileのsha256と台帳のid。測定の前の是正は、台帳に予約が無い間だけ`fixation.mjs refix`で独立レビューの参照と理由を付けて追記できる）。台帳：`<scratch>/rel1815/ledger/ledger.jsonl`。
 
 ```sh
 cd <W>/docs/evidence/1815-design-judgment
