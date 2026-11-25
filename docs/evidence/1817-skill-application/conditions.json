@@ -1,6 +1,6 @@
 {
  "schema": "asc-1817-conditions/v1",
- "note": "Fixed before any model run. Copied from docs/evidence/1814-skill-invocation/conditions.json (condition I) and reduced to the two conditions of the owner decision (Issue #1817, 2026-11-25). Both conditions start from the same synthetic sample project and the same base CLAUDE.md, install ASC with the documented user steps (project-assets --register-claude-skill --apply) and adopt the read trigger the project-assets plan proposes (--adopt-read-trigger, option claude-md). They differ only in the tarball installed (release.json): B = released v0.5.109, S = the candidate packed at commit 4c95f8d4 whose only content difference is the two Skill bodies.",
+ "note": "Fixed before any model run. Copied from docs/evidence/1814-skill-invocation/conditions.json (condition I) and reduced to the two conditions of the owner decision (Issue #1817, 2026-11-25). Both conditions start from the same synthetic sample project and the same base CLAUDE.md, install ASC with the documented user steps (project-assets --register-claude-skill --apply) and adopt the read trigger the project-assets plan proposes (--adopt-read-trigger, option claude-md). They differ only in the tarball installed (release.json): B = released v0.5.109, S = the candidate packed at commit ee77daa0 (the edits of 4c95f8d4, asc narrowed in ee77daa0) whose only content difference is the two Skill bodies.",
  "model": "sonnet",
  "modelNote": "Same as #1814 (the `sonnet` alias). The resolved model id (init event) is recorded per trial. Not changed after results are seen (decision-criteria.md).",
  "runs": 4,
@@ -9,6 +9,6 @@
  "baseClaudeMd": "# ユーザー管理API\n\nTypeScript/Expressのユーザー管理API。`src/`にAPI、`public/`に管理画面、`docs/`に要件メモがある。\n",
  "conditions": {
   "B": {"label": "現状（v0.5.109のreleaseを導入し、project-assetsの提案からCLAUDE.mdへ読む契機を採用）", "pointer": false, "hook": null, "pointerDelivered": true, "adopt": "claude-md", "core": true},
-  "S": {"label": "改善案（Bと同じ手順で、commit 4c95f8d4から作った候補のtarballを導入）", "pointer": false, "hook": null, "pointerDelivered": true, "adopt": "claude-md", "core": true}
+  "S": {"label": "改善案（Bと同じ手順で、commit ee77daa0から作った候補のtarballを導入）", "pointer": false, "hook": null, "pointerDelivered": true, "adopt": "claude-md", "core": true}
  }
 }
