@@ -154,8 +154,8 @@ Hostの`total_cost_usd`の合計 **7.87 USD**（上限40、停止規則36に届�
 | [gold.json](gold.json) | 決定論の採点の正解（UI-03は#1804のまま、UI-04・UI-07を追加） |
 | [rubric.md](rubric.md) | 補助の採点（モデル）の基準。#1804の基準にUI-04・UI-07を加えた |
 | [cases/](cases/) | UI-04（部品の検索・一覧・詳細）、UI-07（バス停の発車案内、スマートフォン向け）、書体の案内。UI-03は#1804の`cases/ui03-dashboard`を使う |
-| [env/](env/) | 生成環境：`proxy.mjs`（allowlistのproxy）、`mcp-server.mjs`（生成Agentのtool）、`Dockerfile`、`gen-prompt.txt`、`allowlist.json`（承認された80 host）、`allowlist.proposed.json`（案と出典・理由）と、案を作る`allowlist-extract.py`・`allowlist-propose.py` |
-| [isolation/](isolation/) | 隔離の反例：`run.sh`、container内で確かめる`probe.mjs`、dummy site、試験用のallowlist。実際のCLIでの再確認`cli-recheck.mjs` |
+| [env/](env/) | 生成環境：`proxy.mjs`（allowlistのproxy）、`mcp-server.mjs`（生成Agentのtool）、`Dockerfile`、`gen-prompt.txt`、`allowlist.json`（承認された80 host）、`allowlist.proposed.json`（案と出典・理由）と、案を作る`allowlist-extract.mjs`・`allowlist-propose.mjs` |
+| [isolation/](isolation/) | 隔離の反例：`run.mjs`、container内で確かめる`probe.mjs`、dummy site、試験用のallowlist。実際のCLIでの再確認`cli-recheck.mjs` |
 | [harness/](harness/) | `core-steps.mjs`（中心の手順の集計）と試験、`gold-check.mjs`（goldの判定器）と合成の画面（`dryrun/`）、`run-gen.mjs`（生成の起動器）、`render.mjs`・`run-render.mjs`（描画と採点）、`misfire.mjs`（誤発火）、`make-blind.mjs`（盲検の比較画面）、`aggregate.mjs`（判定の規則）、`collect.mjs`（記録の取り出し） |
 | [results/](results/) | 隔離の反例の原始結果（準備：`isolation/`、本番のimage：`isolation-tools/`）、集計器の試験結果、goldの判定器の結果、本番の記録（`run/`：試行ごとのmeta・中心の手順・proxyとtoolの記録・描画の指標・gold、判定、誤発火、補助の採点、再確認）、本番2回目の記録（`run2/`：同じ形の試行の記録、判定、keys、2モデルの順位`model-ranks/`）、候補Skillの一覧掲載（`skill-listing.json`） |
 
@@ -178,14 +178,14 @@ Hostの`total_cost_usd`の合計 **7.87 USD**（上限40、停止規則36に届�
 
 ### 隔離の反例
 
-[isolation/run.sh](isolation/run.sh)で実行した。内部専用のDocker network 2つ（生成側・上流側）、上流側にdummy site（`allowed.test`・`blocked.test`等の別名）を置いた。internetとモデルは使っていない。生成側のcontainerは、本番の生成imageからClaude Code CLIと書体を除いた`browser`段階のimage（`docker build --network none`で作成）である。
+[isolation/run.mjs](isolation/run.mjs)（当時は同じ手順のshell版`run.sh`。下の「JavaScriptへの移植」）で実行した。内部専用のDocker network 2つ（生成側・上流側）、上流側にdummy site（`allowed.test`・`blocked.test`等の別名）を置いた。internetとモデルは使っていない。生成側のcontainerは、本番の生成imageからClaude Code CLIと書体を除いた`browser`段階のimage（`docker build --network none`で作成）である。
 
 実行したcommand（`<W>`はworktree、`<S>`はrepositoryの外の新しいdirectory）：
 
 ```sh
 npm pack playwright-core@1.49.1 --ignore-scripts      # <S>/pkg に置く。sha512をregistryの値と照合
 docker pull mcr.microsoft.com/playwright:v1.49.1-noble   # digest sha256:70e367e0…09d2
-sh docs/evidence/1807-design-eval-browser/isolation/run.sh <W> <S> <S>/iso-out
+node docs/evidence/1807-design-eval-browser/isolation/run.mjs <W> <S> <S>/iso-out   # 本番のimageでは --image asc-1807-tools:1 --skip-build
 ```
 
 結果（[results/isolation/probe.json](results/isolation/probe.json)、2回目。全21項目合格）：
@@ -253,8 +253,8 @@ node --test docs/evidence/1807-design-eval-browser/harness/core-steps.test.mjs
 docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp --shm-size 512m --user pwuser -e HOME=/tmp \
   -v <W>/docs/evidence/1807-design-eval-browser:/opt/e:ro asc-1807-browser:1 \
   node /opt/e/harness/gold-check.mjs /opt/e/gold.json ui04-parts-search /opt/e/harness/dryrun/ui04-good.html
-python3 -I env/allowlist-extract.py <Art Directionのcheckout>/references/design-works.md <S>/ad-hosts.json
-python3 -I env/allowlist-propose.py <S>/ad-hosts.json <Art Directionのcheckout>/references/design-works.md env/allowlist.proposed.json
+node env/allowlist-extract.mjs <Art Directionのcheckout>/references/design-works.md <S>/ad-hosts.json
+node env/allowlist-propose.mjs <S>/ad-hosts.json <Art Directionのcheckout>/references/design-works.md env/allowlist.proposed.json
 ```
 
 作成したcontainer・network・imageには`asc.worktree=<W>`のlabelを付け、作業の終わりに削除した。
@@ -267,3 +267,11 @@ python3 -I env/allowlist-propose.py <S>/ad-hosts.json <Art Directionのcheckout>
 - 2回目のUI-03の補助の採点は、2案のfileを含まない画像だけのfolderで行ったので、この修正の影響を受けない。
 - 審美の判定を、計画（ownerによる順位）から、FableとCodexの2モデルの順位に置き換えた。ownerの判断（4回目）による。統合の規則は、順位を得る前にIssueのコメントで固定された。
 - `fetch_page`がallowlist外として拒否した要求は、toolの段階で止まるので、proxyの記録には現れない。toolの記録（`tools.jsonl`）に全て残っている。
+
+## JavaScriptへの移植（PRのCI対応）
+
+このrepositoryの検査（`scripts/check_source_quality.ts`）は、TypeScript・JavaScript以外のsourceを認めない。そこで、Pythonの`env/allowlist-extract.py`・`env/allowlist-propose.py`とshellの`isolation/run.sh`を、同じ手順のNode（標準機能だけ）の`env/allowlist-extract.mjs`・`env/allowlist-propose.mjs`・`isolation/run.mjs`へ移植し、元のfileを削除した。あわせて、`env/mcp-server.mjs`の注釈の言い回しを、検査の禁止表現に当たらない形へ直した（動作は変わらない）。
+
+- 同じ入力（Art Directionの固定commitの`references/design-works.md`、sha256は`env/allowlist.proposed.json`の`basis.fileSha256`）から、移植版が`env/allowlist.proposed.json`をbyte単位で同じに再現することを確かめた。
+- 移植版の`isolation/run.mjs`で、本番のimage（`asc-1807-tools:1`、image IDは本番と同じ）を使い、隔離の反例をやり直した。モデル・internetなし、内部専用networkだけ。22項目すべて合格した（[results/isolation-port/](results/isolation-port/)）。以前の結果（`results/isolation/`・`results/isolation-tools/`・`results/isolation-run2/`）は、shell版で得たものとしてそのまま残した。
+

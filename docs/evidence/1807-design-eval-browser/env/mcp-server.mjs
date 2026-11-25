@@ -89,7 +89,7 @@ export function htmlToText(html) {
   return {title, text};
 }
 export function wrapUntrusted(url, body) {
-  // The delimiter cannot be closed from inside: any occurrence of the tag name in the page is neutralised.
+  // The delimiter cannot be closed from inside; every occurrence of the tag name in the page is neutralised.
   const safe = String(body).replace(/untrusted-content/gi, 'untrusted_content');
   const digest = crypto.createHash('sha256').update(String(body)).digest('hex').slice(0, 16);
   return `${UNTRUSTED_NOTICE}\n<untrusted-content url="${encodeURI(url)}" sha256-16="${digest}">\n${safe}\n</untrusted-content>`;

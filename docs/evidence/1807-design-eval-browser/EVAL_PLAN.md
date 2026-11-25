@@ -69,7 +69,7 @@
 ## 手順
 
 1. ownerがallowlistの案を確認し、`env/allowlist.json`へ写してcommitする。この計画・gold・規則も同じcommitで固定する。
-2. toolのimage（`env/Dockerfile`の`tools`段階）を作り、モデルを呼ばない反例（`isolation/run.sh`）をそのimageでやり直す。次に、haikuの1回で、生成と同じ起動設定のまま、fixture外のRead・Write（目印file、`/etc/hosts`、親directory）が拒否されること、組込みtoolにBash・Web系が無いこと、`browser`のtoolが使えることを確かめる。不合格なら生成しない。
+2. toolのimage（`env/Dockerfile`の`tools`段階）を作り、モデルを呼ばない反例（`isolation/run.mjs`。当時は同じ手順のshell版`isolation/run.sh`）をそのimageでやり直す。次に、haikuの1回で、生成と同じ起動設定のまま、fixture外のRead・Write（目印file、`/etc/hosts`、親directory）が拒否されること、組込みtoolにBash・Web系が無いこと、`browser`のtoolが使えることを確かめる。不合格なら生成しない。
 3. 生成（[harness/run-gen.mjs](harness/run-gen.mjs)）：順序を固定する。1巡目（3ケース×A・D・Eの1回目）、2巡目、3巡目。各試行は新しいfixture・新しいnetwork・新しいproxyで行う。再実行はしない。
 4. 中心の手順の集計（[harness/core-steps.mjs](harness/core-steps.mjs)）：各試行のstream-json（tool呼出しの記録）とproxyの記録から数える。notesの自己申告は使わない。
 5. 描画・決定論の採点：[harness/gold-check.mjs](harness/gold-check.mjs)（必須情報の網羅率、狭幅の横scroll、外部への要求、UI-04の検索操作、UI-07の初期表示範囲と押せる要素の大きさ）と、#1804の描画器をUI-04・UI-07へ合わせた[harness/render.mjs](harness/render.mjs)（axe-core、keyboardのfocus、reduced-motion、横scroll、外部への要求、白黒の画面）。
