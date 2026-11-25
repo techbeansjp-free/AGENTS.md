@@ -4,7 +4,7 @@
 
 ## 現在の状態
 
-**モデルを呼ばない準備だけを終えた段階である。モデルの実行（隔離の確認を含む）はまだ1回も行っていない。測定の結果は無い。**
+**段階0〜3の測定を終えた（2026-11-25）。結論は末尾の「[段階3（条件I）の結果と最終の結論](#段階3条件iの結果と最終の結論2026-11-25)」。この節の下の箇条と「実施したこと」「行っていないこと」は、モデルを呼ぶ前の準備の段階の記録として残している。**
 
 - 測定の計画：[EVAL_PLAN.md](EVAL_PLAN.md)。条件はR（登録だけ）・P（`CLAUDE.md`に文例）・H（SessionStartのhookで文例を注入）。PH（両方）・S（強い文面のhook）は費用の上限の外に置いた。
 - 合格の水準と判定の規則：[decision-criteria.md](decision-criteria.md)。ownerの決定（費用の上限30 USD、Claude Codeだけ、本文の読込み80%以上かつ手順の適用が現状より多い、該当しない依頼での過剰な読込みは現状＋1試行まで）を反映した。
@@ -50,7 +50,7 @@ dry runで使ったtarball：**releaseの本物ではない。** この作業の
   - `debugPathsInsideTrial`・`noRealHomeOrRepoInDebug`：原因は3つだった。(1) 目印のReadが拒否されたときにClaude Codeが書く`Permission suggestions for Read`の行（各probe 2行。ruleContentは2つの目印のfileの親directory）。実HOMEとrepositoryのpathが現れたのは、各probeでこの2行だけだった。repository側の行が`debugPathsInsideTrial`でも数えられたのは、repositoryのdirectory名に`AGENTS.md`が含まれ、keywordの絞り込みに当たったため（各probe 1行）。(2) 機械の管理用policyのpath（`/Library/Application Support/ClaudeCode/managed-settings.json`）が空白を含むため、「missing file」の行（各probe 6行）で途中から切れた断片が外のpathと数えられた。(3) Hではhookの出力の行（3行）にある文例の相対path`.agent-skill-chain/skills/asc/SKILL.md`の断片が外のpathと数えられた。加工していないdebug logはlocalのpathを含むのでrepositoryに入れない。代わりに、各probeのtrace・debug.log・stderrのsha256と、原因ごとの行数（pathの文字列は含まない）を[results/stage0/sources.json](results/stage0/sources.json)に記録した。
 - 是正（段階0の後の是正。`harness/probe-check.mjs`だけを変更）：(1) は、行のすべてのruleContentが2つの目印のfileかその親directoryで、他の絶対pathを含まない場合だけ除外する。目印のpathを含む他の行も、他の絶対pathが無い場合だけ除外する。(2) は「missing file・broken symlink」の行に限り、管理用policyのpathを全体として除いてから断片を取る（存在して読み込まれた管理用のfileは外のpathとして残り、存在する管理用のfileの名前を`managedPolicyPresent`に記録する。今回は無し）。(3) は`.agent-skill-chain/`・`.claude/`で始まる相対path（直前がpathの文字でないもの）を全体として除く。`/x/.claude/…`・`~/.claude/…`は検査に残る。反例（同梱でないplugin、名前の違う同梱plugin、条件で違う同梱pluginの一覧、提案の行の外の実HOMEのpath、別のdirectoryを含む提案、目印と同じ行の別の絶対path、読み込まれた管理用のfile、相対pathと同じ行の実HOMEのpath等）が不合格になることを試験した。
 - 判定し直した結果：3条件とも、`markerTokensAbsent`を除くすべての項目が合格。条件の間の比較は差が無い（`differ: []`）。`markerTokensAbsent`は、目印のfileを確認の後に消したため照合する文字列が無く、判定し直しでは不合格になる（実行時の判定では3条件とも合格。この項目のcodeと入力は是正で変わっていない）。どの1回の実行でも全項目が合格した記録はまだ無いので、規則6を満たすため、refixの後に目印を新しく作り、R・P・Hのprobeを`probe 2`として再実行する（統括が行う）。
-- 未了：この是正の独立レビューと、統括による`fixation.mjs refix`の実行。
+- 完了：この是正は独立レビューを通し、統括が`fixation.mjs refix`で固定の記録に追記した。その後、目印を新しく作り、R・P・Hのprobeを`probe 2`として再実行した。比較（`compare`）でcommitの件名の前の短いidの有無だけが違ったため、`probe-check.mjs`の`gitSubjects`をもう一度だけ直し（独立レビューを通して2回目のrefix）、**R・P・Hとも全22項目が合格、比較も合格（差なし）**を確かめた。費用はR 0.067・P 0.068・H 0.070 USD。記録：[results/stage0/probe2/](results/stage0/probe2/)（localのpathを置き換えたもの）。順序（UTC）：1回目のrefixの記録 05:14:16 → 台帳の予約 seq 3〜5（R-probe-2 05:14:37、P-probe-2 05:15:05、H-probe-2 05:15:33。精算は05:15:59まで）→ 比較の是正の独立レビュー → 2回目のrefixの記録 05:17:45（`results/fixation.json`）。probe 2の各probeの合否は2回目のrefix（`gitSubjects`、比較だけに使う）の影響を受けない。
 
 ## 独立レビュー（1回目、HEAD `e2477706`）への対応
 
@@ -173,7 +173,7 @@ High・Mediumなし、Low 2件。固定したfileは変えず（変えてよい�
 | [harness/ledger.mjs](harness/ledger.mjs)・[harness/fixation.mjs](harness/fixation.mjs) | 全段階の費用の台帳（台帳id、予約ごとのidと番号、同じ名前の拒否）と順次実行のlock、追記だけの固定（refixと段階3の制約付き）と照合 |
 | [harness/dry-run.mjs](harness/dry-run.mjs) | モデルを呼ばない全体の確認 |
 | [harness/score.test.mjs](harness/score.test.mjs)・[harness/probe.test.mjs](harness/probe.test.mjs) | 合成の記録による試験 |
-| [results/](results/) | dry run・試験・拒否の反例の結果、測定の前の固定（`fixation.json`） |
+| [results/](results/) | dry run・試験・拒否の反例の結果、測定の前の固定（`fixation.json`）、段階1〜3の記録と判定（`traces/`・`stage1-R-score.json`・`stage2-judge.json`・`stage3-judge.json`） |
 
 ## 段階1（現状R）の結果（2026-11-25）
 
@@ -184,6 +184,8 @@ High・Mediumなし、Low 2件。固定したfileは変えず（変えてよい�
 - 依頼ごと：本文を読まなかった2試行は、どちらも`asc-3`（「docs/BRIEF.md の依頼に対応して。」という、#1807と同じ形の依頼）だった。1回は何も選ばず（未選択）、1回は`user-journey-acceptance`の入口だけを読んだ（誤選択）。開発の依頼であることが明示された依頼（`asc-1`・`asc-2`）では、`asc`の本文が4/4で読まれた。
 
 ## 改善の実装（ownerの判断：条件Pを標準、hookは採用しない）
+
+ownerの判断の経緯：規則1では現状Rは「不足なし」（本文の読込み91%）だったが、但し書きにより手順の適用68%と、#1807と同じ形の依頼での未選択・誤選択を報告した。ownerは段階2（条件P・H）も測ると決め（[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1814#issuecomment-7153864082)）、段階2の後に条件Pを標準にし、hookは採用しないと決めた（[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1814#issuecomment-7154406019)）。
 
 `project-assets`が、Claude Codeを登録した利用先で、USAGEの文例をCLAUDE.mdの末尾へ区切り付きで追記する案を差分付きで示し、`--adopt-read-trigger claude-md@<beforeSha256|absent>`で承認した場合だけ追記するようにした（[IMPROVEMENT_DESIGN.md](IMPROVEMENT_DESIGN.md)の先頭の注記）。承認の値は、製品のレビューを受けて`claude-md@<beforeSha256>:<blockSha256>`にした。そのため`harness/condition-i.mjs`を変えており、段階3の固定で理由とレビューの参照を付けて記録する。段階3（条件I）は、この変更を含むreleaseが出た後に行う。
 
@@ -201,3 +203,51 @@ High・Mediumなし、Low 2件。固定したfileは変えず（変えてよい�
 
 - #1807と同じ形の依頼（`asc-3`）は、Rでは未選択・誤選択だったが、Pでは2回とも本文・reference・回答の目印まで満たした（`AA`）。Hでは2回とも本文を読んだが、手順の適用までは至らなかった（`BB`）。
 - どの仕組みを標準にするかはownerが決める（規則2）。
+
+## 段階3（条件I）の結果と最終の結論（2026-11-25）
+
+### 固定と導入
+
+- 条件I：`conditions.json`の`conditions.I`（`adopt: "claude-md"`、`hook: null`、`pointerDelivered: true`）。`release.json`の`phase3`にv0.5.108（PR #1816を含む、target commit `14801e9e`）を記入した。releaseはdraft・prereleaseではなく、tarballのsha256 `3f470278…`がSHA256SUMSとreleaseのassetのdigestの両方と一致した。
+- 固定：`fixation.mjs stage3`で4件目の記録（段階`stage 3`）を足した。変えたfileは`harness/condition-i.mjs`だけで、理由は「承認の値に`:<blockSha256>`が加わった（PR #1816のレビューのMedium-1）。記録にblockSha256を加えた」、レビューの参照は「PR #1816の製品の変更の独立な再レビュー（host-session、opus、HEAD `a1b0e940`）で、condition-iの変更は条件Iの意味を変えないと判断」。それ以外の固定したfileはbytesで同じ（`stage3`の検査が合格、`fixation.mjs check`も合格）。
+- sample project：v0.5.108のtarballから`make-fixture.mjs … --adopt claude-md`で新しく作った。`project-assets`の計画が示した`readTrigger`の選択肢`claude-md`（default `claude-md`、action `append`、beforeSha256 `cabbf71a…`＝条件R・Pと同じ基の`CLAUDE.md`、blockSha256 `444b31b5…`）を`--adopt-read-trigger`で承認して適用した。導入の記録は`released: true`、16件の入口が記録・packageと一致。
+
+### 段階3の最初の隔離の確認（規則6）
+
+- 新しい目印fileを実HOMEとこのrepositoryに作り、`I-probe-1`を1回実行した（0.08 USD、`claude-sonnet-5-5`、Claude Code 2.1.323）。`probe-check.mjs`の**全22項目が合格**（文例の頭が回答にある、hookの発火・応答が0、目印の読取りは拒否され文字列はどこにも無い、debug logに外のpathが0、ownerの指示・memory・個人用Skillが無い等）。段階0の実行時の判定（R・P・Hの`probe 2`）と`compare`して、tool・ASC以外のSkill・同梱plugin・gitの件名・modelに差が無い（`differ: []`、合格）。目印fileは確認の後に削除した。記録：[results/stage0/stage3/](results/stage0/stage3/)。
+
+### 測定と採点
+
+- 28試行（14依頼×2回）、失敗0、費用2.32 USD（Hostの計算値）。記録：[results/traces/](results/traces/)の`I-*`（localのpathを置き換えたもの、`trials.json`に追記）。試行はR/P/Hとは別のruns-rootで実行し、台帳は同じfileを使った。
+- 採点は段階1・2と同じ手順（置き換える前の記録を同じ名前の並びにし、`collect.mjs`が作った`trials.json`と一緒に`score.mjs`へ渡す）で、`--judge R I`。判定：[results/stage3-judge.json](results/stage3-judge.json)。
+
+| 条件 | 本文の読込み | 手順の適用 | 過剰な読込み | 誤選択・未選択 | 判定 |
+| --- | --- | --- | --- | --- | --- |
+| R（現状、登録だけ。段階1） | 20/22 | 15/22 | 0/6 | 1・1 | （基準） |
+| P（`CLAUDE.md`に手で文例。段階2、参考） | 22/22 | 19/22 | 0/6 | 0・0 | 水準を満たす |
+| **I（v0.5.108の`project-assets`の提案を承認して採用）** | **22/22** | **16/22** | **0/6** | 0・0 | **水準を満たす**（規則3） |
+
+- 依頼ごと（I）：`asc-1`・`asc-2`・`rr-1`・`tw-1`・`se-1`・`ma-1`・`ui-1`・`do-1`は2回とも`AA`。`asc-3`・`ri-1`・`es-1`は2回とも`BB`（本文は読んだが、referenceの読込みか回答の目印が欠けた）。
+- #1807と同じ形の依頼（`asc-3`）は、Rでは未選択・誤選択だったが、Iでは2回とも`asc`の本文を読んだ。ただしreferenceを読まず、手順の適用まで至らなかった（Pでは2回とも`AA`）。
+- 手順の適用は、Rより1試行多いだけで、Pの19/22より少ない。Iの文例の本文はPと1字も違わず、違いは`project-assets`の採用で前後に区切りの注記（`<!-- asc:read-trigger v1 -->`・`<!-- /asc:read-trigger -->`）が付くこととASCの版（v0.5.106→v0.5.108）だけである。この差が手順の適用の差の原因かは、各条件2回の測定では区別できない（「限界」のとおり、境界付近の判定は粗い）。
+
+### 最終の結論（規則3）
+
+- 改善の後の条件I（ownerが採用した条件Pを、v0.5.108の`project-assets`の提案から承認して適用したもの）は、規則3の3つ（本文の読込み22/22＝100%≧80%、手順の適用16/22＞Rの15/22、過剰な読込み0≦Rの0＋1）をすべて満たし、**水準を満たす**。
+- 留意点（ownerへの報告）：手順の適用の上積みは1試行で、水準の境界にある。本文まで読ませる効果（R 20/22→I 22/22、誤選択・未選択0）は明確だが、referenceまで読ませる効果は段階2のPより小さかった。
+
+### 費用と台帳
+
+- 段階3の費用：隔離の確認0.08 USD＋測定2.32 USD＝約2.40 USD。全段階の累計は約9.95 USD（台帳の精算額。未精算0件、予約119件）。上限30 USDの内。
+- 段階3の前に、台帳が段階2の後の記録（181行、sha256 `3495ef6e0b7c53c6a05e6d3e47b25c92c30ea2a8244193e8c8b9ec725a4f8b58`）と一致することを確かめた。段階3の後も、先頭の181行のsha256は同じだった。
+- 段階3の後の台帳：**239行、sha256 `f929c9f4aa06332ff7f11b58c85ab9f9908a0f0f71a672858a75859ba7cad882`**。
+
+## 公開した記録の置換（2026-11-25）
+
+- `results/traces/`等の公開した記録では、取り出しのときに試行のdirectoryを`<trial>`、利用者名を`<local>`に置き換えた（`collect.mjs`）。ただしPR #1816でmainに入った段階1・2の記録（P・Hのtraceの一部）には、一時directoryの名前と、測定を統括したsessionのidが残っていた。段階3のPRのcommitで、次のとおり置き換えた：一時directory以下のscratchのpath→`<scratch>/`、Claude Codeの設定のproject名→`<tmp-project>`、統括のsessionのid→`<session>`、残りの一時directory名→`<tmp>`・`<tmp-user>`。置換前の値はgitの履歴（PR #1816のmerge）に残る。
+- P・Hのtraceのpathが`<scratch>/run1814b/runs/…/work/…`、R・Iが`<trial>/work/…`と書き方が違うのは、P・Hを別のruns root（symlink）から取り出したためで、数え方には影響しない（採点は置き換える前の記録で行った）。
+- 各試行の`session_id`・message/requestのid・rate limitのevent・socketのpathは、隔離したHOMEで動かした使い捨ての`claude -p`のもので秘密ではないため、置き換えずに残す。
+
+## この文書の古い記述について
+
+「準備の段階の記録」の節と、ファイル一覧のうち`IMPROVEMENT_DESIGN.md`を「未実装」とする記述、「行っていないこと」「未解決の懸念」は、測定の前の時点の記録として残している。現在の状態は、段階1〜3の節と、上の「改善の実装」の節が正である。

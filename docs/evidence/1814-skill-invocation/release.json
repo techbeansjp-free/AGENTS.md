@@ -8,5 +8,12 @@
   "assetSha256": "a53be6ee21b8bc527be74ae9246664ea06eb3b0adcf0917fca6d8d41b0b75bdf",
   "sha256sumsAssetSha256": "12fbed260d6cf7b854513bbf2bec440042f6f1c14f9eb63f460d07289c4d38d3"
  },
- "phase3": null
+ "phase3": {
+  "tag": "v0.5.108",
+  "targetCommit": "14801e9e213de9d1e238ebd9bd2c9d2bfa50f57c",
+  "asset": "agent-skill-chain-0.5.108.tgz",
+  "assetSha256": "3f4702783ad1702453ed4ed298a9179a7cf8c043ad8dc71591763140bd93cdfc",
+  "sha256sumsAssetSha256": "0543e6663aa7d652fc6e45d98f617622cd58481bdde7342f61c962c0823d4f1f",
+  "note": "Contains PR #1816 (project-assets proposes the CLAUDE.md read trigger and appends it only with --adopt-read-trigger). Not a draft, not a prerelease; source-commit.txt is the target commit; the tarball sha256 matched SHA256SUMS and the release asset digest (2026-11-25)."
+ }
 }
