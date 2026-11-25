@@ -27,15 +27,16 @@ const worktree = opt('--worktree', null);
 const ext = opt('--ext', null);
 const model = opt('--model', 'sonnet');
 const budget = opt('--budget', '1.5');
-const promptFile = opt('--prompt', path.join(ev, 'env', 'gen-prompt.txt'));
+const promptOpt = opt('--prompt', null);
 const STOP_USD = 36; // EVAL_PLAN.md: no new run once the executed total exceeds this (cap 40)
 const IMAGE = 'asc-1807-tools:1';
 const PROXY_IMAGE = 'node:22-alpine';
 
 const conds = JSON.parse(fs.readFileSync(path.join(ev, 'conditions.json'), 'utf8'));
 const c = conds.conditions[cond]; const k = conds.cases[caseId];
+const promptFile = promptOpt ?? path.join(ev, c?.prompt ?? 'env/gen-prompt.txt');
 const fail = (m) => { console.error(`refused: ${m}`); process.exit(3); };
-if (!c || !k || !rep || !worktree || !ext) fail('usage: <runs-root> <case> <A|D|E> <rep> --worktree <abs> --ext <dir>');
+if (!c || !k || !rep || !worktree || !ext) fail('usage: <runs-root> <case> <A|AP|D|E> <rep> --worktree <abs> --ext <dir>');
 const allowPath = path.join(ev, 'env', 'allowlist.json');
 const allow = JSON.parse(fs.readFileSync(allowPath, 'utf8'));
 if (!(allow.browse?.hosts?.length > 0)) fail('env/allowlist.json browse.hosts is empty');
@@ -72,8 +73,8 @@ const setup = [
 ];
 const mcpArgs = ['run', '-i', '--rm', '--name', `${p}-mcp`, ...hard, '--pids-limit', '512', '--memory', '3g', '--cpus', '2', '--shm-size', '1g',
   '--tmpfs', '/tmp:rw,size=512m', '--user', 'pwuser', '--network', `${p}-gen`,
-  '-v', `${fixture}:/work:ro`, '-v', `${path.join(ev, 'env')}:/opt/env:ro`, '-v', `${allowPath}:/config/allowlist.json:ro`, '-v', `${logDir}:/log`,
-  '-e', 'HOME=/tmp', '-e', 'BROWSE_PROXY=http://proxy:3129', '-e', 'ALLOWLIST=/config/allowlist.json', '-e', 'WORK_DIR=/work',
+  '-v', `${fixture}:/work:ro`, '-v', `${path.join(ev, 'env')}:/opt/env:ro`, '-v', `${allowPath}:/config/allowlist.json:ro`, '-v', `${path.join(ev, 'env', 'allowlist-catalog.json')}:/config/allowlist-catalog.json:ro`, '-v', `${logDir}:/log`,
+  '-e', 'HOME=/tmp', '-e', 'BROWSE_PROXY=http://proxy:3129', '-e', 'ALLOWLIST=/config/allowlist.json', '-e', 'ALLOWLIST_CATALOG=/config/allowlist-catalog.json', '-e', 'WORK_DIR=/work',
   '-e', 'TOOL_LOG=/log/tools.jsonl', '-e', 'SHOT_DIR=/log/shots', IMAGE, 'node', '/opt/env/mcp-server.mjs'];
 const mcpConfig = {mcpServers: {browser: {type: 'stdio', command: 'docker', args: mcpArgs}}};
 const cleanup = [['rm', '-f', '-v', `${p}-mcp`, `${p}-proxy`], ['network', 'rm', `${p}-gen`, `${p}-egress`]];
@@ -128,7 +129,7 @@ const toolUses = events.filter((e) => e.type === 'assistant').flatMap((e) => (e.
 const count = {}; for (const t of toolUses) count[t.name] = (count[t.name] ?? 0) + 1;
 const core = analyseTrial(stream, {narrow: k.narrow ?? 390, wide: k.wide ?? 1440, proxyLog: fs.readFileSync(path.join(dir, 'proxy.jsonl'), 'utf8')});
 fs.writeFileSync(path.join(dir, 'core-steps.json'), JSON.stringify({case: caseId, condition: cond, rep: Number(rep), ...core}, null, 1));
-const meta = {schema: 'asc-1807-gen/v1', case: caseId, condition: cond, rep: Number(rep), model, budget: Number(budget), exit: r?.status ?? null,
+const meta = {schema: 'asc-1807-gen/v1', case: caseId, condition: cond, rep: Number(rep), prompt: path.relative(ev, promptFile), model, budget: Number(budget), exit: r?.status ?? null,
   signal: r?.signal ?? null, spawnError: r?.error?.message ?? setupError, wallMs: Date.now() - t0,
   initModel: init.model ?? null, initTools: init.tools ?? null, mcpServers: init.mcp_servers ?? null, initSkills: init.skills ?? null,
   resultSubtype: result.subtype ?? null, isError: result.is_error ?? null, costUsd: result.total_cost_usd ?? null, durationMs: result.duration_ms ?? null,

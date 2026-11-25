@@ -37,6 +37,21 @@ try {
   const text = norm(await wide.evaluate(() => document.body.innerText));
   out.missing = g.required.filter((alts) => !has(text, alts)).map((a) => a[0]);
   out.coverage = Number(((g.required.length - out.missing.length) / g.required.length).toFixed(3));
+  const firstText = async (page) => norm(await page.evaluate(() => {
+    const parts = []; const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const r = document.createRange(); r.selectNodeContents(n);
+      const b = r.getBoundingClientRect();
+      if (b.height > 0 && b.top < window.innerHeight && b.bottom > 0 && getComputedStyle(n.parentElement).visibility !== 'hidden') parts.push(n.textContent);
+    }
+    return parts.join('');
+  }));
+  const wm = await wide.evaluate(() => ({sw: document.documentElement.scrollWidth, iw: window.innerWidth}));
+  out.wideOverflow = wm.sw > wm.iw;
+  if (g.firstViewportWide) {
+    const firstW = await firstText(wide);
+    out.firstViewportWideMissing = g.firstViewportWide.filter((alts) => !has(firstW, alts)).map((a) => a[0]);
+  }
   if (g.interactions) {
     out.interactions = [];
     for (const it of g.interactions) {

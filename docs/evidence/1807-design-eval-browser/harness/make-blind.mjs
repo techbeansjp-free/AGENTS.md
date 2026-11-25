@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 
 const [runsRoot, renderRoot, caseId, blindRoot, keysDir, seed] = process.argv.slice(2);
 const NARROW = {'ui03-dashboard': ['tablet', 800], 'ui04-parts-search': ['mobile', 390], 'ui07-bus-mobile': ['mobile', 390]}[caseId];
-const trials = fs.readdirSync(path.join(runsRoot, caseId)).filter((t) => /^[ADE]-r\d+$/.test(t)).sort();
+const trials = fs.readdirSync(path.join(runsRoot, caseId)).filter((t) => /^(A|AP|D|E)-r\d+$/.test(t)).sort();
 // deterministic shuffle from the seed (recorded), ids from the same stream
 const h = (s) => crypto.createHash('sha256').update(`${seed}:${s}`).digest('hex');
 const order = [...trials].sort((a, b) => h(a).localeCompare(h(b)));
@@ -65,7 +65,7 @@ figure{margin:0}figcaption{color:var(--muted);font-size:13px}.na{color:var(--mut
 #out{width:100%;min-height:6em;font-family:monospace}.err{color:var(--warn)}
 @media (max-width:700px){.shots{grid-template-columns:1fr}}
 </style></head><body><main>
-<h1>${title}：9画面の順位付け</h1>
+<h1>${title}：${cards.length}画面の順位付け</h1>
 <p>依頼文：<a href="${brief}">BRIEF.md</a>（repositoryの中のfile）。生成した条件・方法は伏せてある。各画面の画像（狭幅・広幅）を見て、必要なら「実画面を開く」で操作して、依頼の利用者・目的に合っている順に、1（最も良い）〜${cards.length}の順位を付けてください。同順位は付けられない。実画面は外部への通信を止めた状態で開く。</p>
 <p>全画面に順位を付けると、下に結果のJSONが出る。それを、このfolderの<code>ranks.json</code>として保存するか、会話に貼ってください。条件との対応（key）は、順位を付けた後に開く。</p>
 ${cards.map(card).join('\n')}

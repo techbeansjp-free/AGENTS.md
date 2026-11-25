@@ -1,10 +1,15 @@
 {
  "schema": "asc-1807-conditions/v1",
- "note": "#1804のconditions.jsonのA・D・Eと同じ構成。全条件で、fixtureの.claude/skills/にASCの配布Skill（base時点のskills/*）を置き、同じ生成環境・同じtool（env/mcp.json）・同じ依頼（env/gen-prompt.txt）で比べる。fromは#1804のext-commits.jsonの固定commitのcheckoutからの相対path。",
+ "note": "#1804のconditions.jsonのA・D・Eと同じ構成。全条件で、fixtureの.claude/skills/にASCの配布Skill（base時点のskills/*）を置き、同じ生成環境・同じtool（env/mcp.json）・同じ依頼（env/gen-prompt.txt）で比べる。fromは#1804のext-commits.jsonの固定commitのcheckoutからの相対path。 本番2回目（ownerの3回目の判断）で、条件AP（Aと同じSkillに、依頼文で手順を指示）を加えた。promptを持たない条件はenv/gen-prompt.txtを使う。",
  "conditions": {
   "A": {
    "label": "現行ASCのみ",
    "skills": []
+  },
+  "AP": {
+   "label": "現行ASCのみ＋手順の指示（見本の閲覧と2案の描画比較）",
+   "skills": [],
+   "prompt": "env/gen-prompt-procedure.txt"
   },
   "D": {
    "label": "ASC + Anything Frontend Art Direction",

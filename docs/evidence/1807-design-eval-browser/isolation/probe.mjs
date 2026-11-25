@@ -154,11 +154,12 @@ rec('vi-screenshot-offline', a390.png?.w === 390 && a1440.png?.w === 1440 && /"b
 const f1 = await m.call('tools/call', {name: 'fetch_page', arguments: {url: 'http://allowed.test/redirect-ok'}});
 rec('i-tool-fetch-allowed-with-same-host-redirect', !f1.result?.isError && textOf(f1).includes('MARKER-PAGE-FROM-allowed.test') && textOf(f1).includes('redirects: 1'), textOf(f1).slice(0, 400));
 const f2 = await m.call('tools/call', {name: 'fetch_page', arguments: {url: 'http://blocked.test/ok'}});
-rec('ii-tool-fetch-blocked', f2.result?.isError === true, textOf(f2));
+const listOk = (t) => t.includes('閲覧できるのは、次の許可されたサイト（1件）だけです。') && t.includes('- allowed.test（試験用のdummy site。媒体：Web・デジタル）') && !/\n- blocked\.test/.test(t);
+rec('ii-tool-fetch-blocked', f2.result?.isError === true && listOk(textOf(f2)), textOf(f2));
 const f3 = await m.call('tools/call', {name: 'fetch_page', arguments: {url: 'http://allowed.test/redirect-blocked'}});
-rec('iii-tool-fetch-redirect-blocked', f3.result?.isError === true && /redirect blocked/.test(textOf(f3)), textOf(f3));
+rec('iii-tool-fetch-redirect-blocked', f3.result?.isError === true && /redirect blocked/.test(textOf(f3)) && listOk(textOf(f3)), textOf(f3));
 const f4 = await m.call('tools/call', {name: 'fetch_page', arguments: {url: 'file:///etc/passwd'}});
-rec('ii-tool-fetch-file-scheme-refused', f4.result?.isError === true, textOf(f4));
+rec('ii-tool-fetch-file-scheme-refused', f4.result?.isError === true && !textOf(f4).includes('閲覧できるのは'), textOf(f4));
 const f5 = await m.call('tools/call', {name: 'fetch_page', arguments: {url: 'http://allowed.test/inject'}});
 const t5 = textOf(f5);
 const closes = (t5.match(/<\/untrusted-content>/g) ?? []).length;
@@ -168,7 +169,9 @@ const v1 = await m.call('tools/call', {name: 'view_page', arguments: {url: 'http
 const v1img = v1.result?.content?.find((c) => c.type === 'image');
 rec('i-tool-view-page-allowed-subresource-blocked', !v1.result?.isError && pngSize(v1img?.data ?? '')?.w === 390 && /"blockedRequests":1/.test(textOf(v1)), textOf(v1).slice(-400));
 const v2 = await m.call('tools/call', {name: 'view_page', arguments: {url: 'http://allowed.test/redirect-blocked', width: 1440}});
-rec('iii-tool-view-page-redirect-not-rendered', v2.result?.isError === true && /redirect blocked/.test(textOf(v2)) && !(v2.result?.content ?? []).some((c) => c.type === 'image'), textOf(v2).slice(-400));
+rec('iii-tool-view-page-redirect-not-rendered', v2.result?.isError === true && /redirect blocked/.test(textOf(v2)) && listOk(textOf(v2)) && !(v2.result?.content ?? []).some((c) => c.type === 'image'), textOf(v2).slice(-400));
+const v3 = await m.call('tools/call', {name: 'view_page', arguments: {url: 'http://blocked.test/ok', width: 390}});
+rec('ii-tool-view-page-blocked-returns-allowlist', v3.result?.isError === true && listOk(textOf(v3)) && !(v3.result?.content ?? []).some((c) => c.type === 'image'), textOf(v3));
 m.close();
 
 console.log(JSON.stringify({schema: 'asc-1807-isolation-probe/v1', uid: process.getuid(), node: process.version, pass: results.every((r) => r.pass), results}, null, 1));

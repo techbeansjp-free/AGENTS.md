@@ -39,7 +39,7 @@ docker run --name asc1807-probe --read-only --cap-drop ALL --security-opt no-new
   --shm-size 512m --tmpfs /tmp:rw,size=256m --user pwuser --label "$L" --network asc1807-gen \
   -v "$S/work:/work" -v "$E/env:/opt/env:ro" -v "$E/isolation:/opt/iso:ro" -v "$E/isolation:/config:ro" -v "$S/log:/log" \
   -e HOME=/tmp -e PROXY_HOST=proxy -e PROXY2_HOST=proxy2 -e SITE_IP="$SITE_IP" -e MARKER_NAME="$MARK" \
-  -e BROWSE_PROXY=http://proxy:3129 -e ALLOWLIST=/config/allowlist.test.json -e WORK_DIR=/work -e TOOL_LOG=/log/tools.jsonl \
+  -e BROWSE_PROXY=http://proxy:3129 -e ALLOWLIST=/config/allowlist.test.json -e ALLOWLIST_CATALOG=/config/allowlist-catalog.test.json -e WORK_DIR=/work -e TOOL_LOG=/log/tools.jsonl \
   "$IMG" node /opt/iso/probe.mjs > "$OUT/probe.json" 2> "$S/probe.stderr"
 echo "probe exit=$?"
 set -e

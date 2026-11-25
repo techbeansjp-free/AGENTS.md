@@ -33,6 +33,14 @@ export function hostAllowed(host) {
   if (!/^[a-z0-9.-]+$/.test(h) || /^[0-9.]+$/.test(h)) return false;
   return browseHosts.some((e) => (e.startsWith('.') ? h.endsWith(e) && h.length > e.length : h === e));
 }
+// Owner decision (#1807, 3rd): when a page request is denied, return the allowed sites with each entry's category only.
+const catalogPath = process.env.ALLOWLIST_CATALOG ?? null;
+const catalog = catalogPath && fs.existsSync(catalogPath) ? JSON.parse(fs.readFileSync(catalogPath, 'utf8')).entries ?? [] : [];
+export function allowedSitesText() {
+  const byHost = new Map(catalog.map((e) => [String(e.host).toLowerCase(), e]));
+  const lines = browseHosts.map((h) => { const e = byHost.get(h); return e ? `- ${h}（${e.category}。媒体：${e.medium}）` : `- ${h}`; });
+  return `閲覧できるのは、次の許可されたサイト（${browseHosts.length}件）だけです。\n${lines.join('\n')}`;
+}
 function checkUrl(raw) {
   let u;
   try { u = new URL(raw); } catch { throw new Error('invalid URL'); }
@@ -218,8 +226,9 @@ async function callTool(name, input) {
     }
     throw new Error(`unknown tool: ${name}`);
   } catch (e) {
-    logTool({tool: name, ok: false, input, error: e.message, ms: Date.now() - t0});
-    return {isError: true, content: [{type: 'text', text: `error: ${e.message}`}]};
+    const denied = ['fetch_page', 'view_page'].includes(name) && /host not in allowlist|redirect blocked/.test(e.message);
+    logTool({tool: name, ok: false, input, error: e.message, allowlistReturned: denied, ms: Date.now() - t0});
+    return {isError: true, content: [{type: 'text', text: `error: ${e.message}${denied ? `\n\n${allowedSitesText()}` : ''}`}]};
   }
 }
 

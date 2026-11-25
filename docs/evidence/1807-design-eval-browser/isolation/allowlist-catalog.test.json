@@ -1,0 +1,1 @@
+{"schema": "asc-1807-allowlist-catalog/v1", "note": "隔離の反例専用。", "entries": [{"host": "allowed.test", "category": "試験用のdummy site", "medium": "Web・デジタル"}]}

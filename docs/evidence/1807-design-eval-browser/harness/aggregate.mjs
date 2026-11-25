@@ -40,6 +40,8 @@ function trialMetrics(caseId, trial) {
   if (caseId === 'ui07-bus-mobile') {
     m.firstViewportPassed = (gold.ui07.firstViewportMobile.length) - (g.firstViewportMissing?.length ?? gold.ui07.firstViewportMobile.length);
     m.minTapTargetPx = g.minTapTargetPx ?? null;
+    m.wideOverflow = Boolean(g.wideOverflow);
+    m.firstViewportWidePassed = gold.ui07.firstViewportWide ? gold.ui07.firstViewportWide.length - (g.firstViewportWideMissing?.length ?? gold.ui07.firstViewportWide.length) : null;
   }
   m.lowQuality = failed || (m.coverage ?? 0) < 0.9 || m.narrowOverflow;
   return m;
@@ -64,6 +66,8 @@ function compare(caseId, X, A, ranks, keys) {
   if (caseId === 'ui07-bus-mobile') {
     const xm = min(vals(X, 'minTapTargetPx', 'X', 0, 999)); const am = min(vals(A, 'minTapTargetPx', 'A', 0, 999));
     nd.minTapTarget = xm >= am || xm >= 44;
+    nd.wideOverflow = count(X, 'wideOverflow', 'X') <= count(A, 'wideOverflow', 'A');
+    nd.firstViewportWide = min(vals(X, 'firstViewportWidePassed', 'X', 0, 2)) >= min(vals(A, 'firstViewportWidePassed', 'A', 0, 2));
     r.ux = {improved: min(vals(X, 'firstViewportPassed', 'X', 0, 2)) > max(vals(A, 'firstViewportPassed', 'A', 0, 2))};
   }
   if (caseId === 'ui03-dashboard') {
@@ -89,7 +93,7 @@ const ranks = opt('--ranks') ? read(opt('--ranks')) : null;
 const evalsDir = opt('--evals');
 for (const caseId of CASES) {
   if (!fs.existsSync(path.join(runsRoot, caseId))) continue;
-  const trials = fs.readdirSync(path.join(runsRoot, caseId)).filter((t) => /^[ADE]-r\d+$/.test(t)).sort();
+  const trials = fs.readdirSync(path.join(runsRoot, caseId)).filter((t) => /^(A|AP|D|E)-r\d+$/.test(t)).sort();
   const ms = trials.map((t) => trialMetrics(caseId, t));
   if (caseId === 'ui03-dashboard' && evalsDir) {
     // auxiliary: grayscale recall from the model evaluator(s), averaged
@@ -108,7 +112,8 @@ for (const caseId of CASES) {
   const by = (c) => ms.filter((m) => m.trial.startsWith(`${c}-`));
   const A = by('A');
   const caseOut = {trials: ms, candidates: {}};
-  for (const X of ['D', 'E']) {
+  const AP = by('AP');
+  for (const X of ['AP', 'D', 'E']) {
     const xs = by(X);
     const coreN = xs.filter((t) => t.coreSteps).length;
     const judgeable = coreN * 2 > xs.length;
@@ -117,20 +122,28 @@ for (const caseId of CASES) {
     caseOut.candidates[X] = {trials: xs.length, coreSteps: coreN, status: judgeable ? '判定可能' : '未判定',
       notExecuted: xs.filter((t) => !t.coreSteps).map((t) => ({trial: t.trial, exemplarViewed: t.exemplarViewed, alternativesCompared: t.alternativesCompared, genFailed: t.genFailed})),
       defer: xs.length < 3 || A.length < 3 || xs.filter((t) => t.failed).length >= 2 || A.filter((t) => t.failed).length >= 2, failures, ...cmp};
+    if (X !== 'AP' && AP.length) {
+      // Skill effect beyond the procedure instruction: the same pair rule against AP (aesthetic only)
+      const apCore = AP.filter((t) => t.coreSteps).length;
+      caseOut.candidates[X].vsAP = {apStatus: apCore * 2 > AP.length ? '判定可能' : '未判定', aesthetic: compare(caseId, xs, AP, ranks?.[caseId] ?? null, keys).aesthetic};
+    }
   }
-  caseOut.coreStepsByCondition = Object.fromEntries(['A', 'D', 'E'].map((c) => [c, {trials: by(c).length, coreSteps: by(c).filter((t) => t.coreSteps).length,
+  caseOut.coreStepsByCondition = Object.fromEntries(['A', 'AP', 'D', 'E'].map((c) => [c, {trials: by(c).length, coreSteps: by(c).filter((t) => t.coreSteps).length,
     exemplarViewed: by(c).filter((t) => t.exemplarViewed).length, alternativesCompared: by(c).filter((t) => t.alternativesCompared).length,
     narrowChecked: by(c).filter((t) => t.narrowChecked).length, wideChecked: by(c).filter((t) => t.wideChecked).length}]));
   out.cases[caseId] = caseOut;
 }
 const med = (a) => { const s = a.filter((v) => v != null).sort((x, y) => x - y); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; };
-for (const X of ['D', 'E']) {
+for (const X of ['AP', 'D', 'E']) {
   const per = Object.entries(out.cases).map(([c, v]) => ({c, ...v.candidates[X]}));
   const judge = per.filter((p) => p.status === '判定可能');
   const costA = med(Object.values(out.cases).flatMap((v) => v.trials.filter((t) => t.trial.startsWith('A-')).map((t) => t.costUsd)));
   const costX = med(Object.values(out.cases).flatMap((v) => v.trials.filter((t) => t.trial.startsWith(`${X}-`)).map((t) => t.costUsd)));
   const ratio = costA ? costX / costA : null;
-  const improved = judge.filter((p) => p.aesthetic?.status === '改善' || p.ux?.improved).map((p) => p.c);
+  const improvedVsA = judge.filter((p) => p.aesthetic?.status === '改善' || p.ux?.improved).map((p) => p.c);
+  // D/E: an improvement counts only if it also exceeds AP, or AP could not be judged in that case (then flagged as not separated)
+  const improved = X === 'AP' ? improvedVsA : improvedVsA.filter((c) => { const p = per.find((q) => q.c === c); return p.vsAP?.apStatus === '未判定' || p.vsAP?.aesthetic?.status === '改善' || p.ux?.improved; });
+  const notSeparated = X === 'AP' ? [] : improved.filter((c) => per.find((q) => q.c === c).vsAP?.apStatus === '未判定');
   const ndFail = judge.some((p) => p.nonDegradationFailed);
   const awaitingRanks = judge.some((p) => p.aesthetic?.status === 'owner順位待ち' || p.aesthetic?.status === '欠測');
   let cls;
@@ -141,7 +154,7 @@ for (const X of ['D', 'E']) {
   else if (improved.length === 1 && !ndFail && ratio <= 3) cls = 'adopt-partial';
   else if (improved.length >= 1) cls = 'optional';
   else cls = 'reject';
-  out.candidates[X] = {judgeableCases: judge.map((p) => p.c), improvedCases: improved, nonDegradationFailed: ndFail, costMedianA: costA, costMedianX: costX, costRatio: ratio, classification: cls};
+  out.candidates[X] = {judgeableCases: judge.map((p) => p.c), improvedVsA, improvedCases: improved, procedureNotSeparated: notSeparated, nonDegradationFailed: ndFail, costMedianA: costA, costMedianX: costX, costRatio: ratio, classification: cls};
 }
 fs.writeFileSync(outPath, JSON.stringify(out, null, 1));
 console.log(JSON.stringify(out.candidates));

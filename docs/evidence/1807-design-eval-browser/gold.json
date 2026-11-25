@@ -296,6 +296,15 @@
    ]
   ],
   "minTapTargetPx": 44,
-  "note": "firstViewportMobileは、幅390・高さ844の最初の表示範囲にある文字に含まれること。minTapTargetPxは補助の指標（a・button・input・[role=button]の幅と高さの小さい方の最小値）で、非劣化の判定に使う"
+  "note": "firstViewportMobileは、幅390・高さ844の最初の表示範囲にある文字に含まれること。minTapTargetPxは補助の指標（a・button・input・[role=button]の幅と高さの小さい方の最小値）で、非劣化の判定に使う",
+  "firstViewportWide": [
+   [
+    "中央通り"
+   ],
+   [
+    "汐見台三丁目"
+   ]
+  ],
+  "wideNote": "本番2回目で追加（ownerの3回目の判断「UI-07の確認に広幅を含める」）。firstViewportWideは幅1440・高さ900の最初の表示範囲に含まれること。広幅の横scrollも記録する"
  }
 }
