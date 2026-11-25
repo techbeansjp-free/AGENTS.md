@@ -76,8 +76,8 @@
 ## 順位（盲検と評価者の閉込め）
 
 - [harness/make-blind.mjs](harness/make-blind.mjs)は、回ごとに`<blind>/round<回>/`を作る。各画面は`out/index.html`と、そのHTMLとCSSが参照するfileだけを写す（比較のために作った別の案のHTML・folder・notes・参照されないfileは写さない）。写すときに、HTMLのcomment、CSSのcomment（`<style>`と写したCSS file）、SVGのcomment・`<title>`・`<desc>`・`<metadata>`（写したSVG fileとHTMLの中の`<svg>`）、charset・viewport・Content-Type以外の`<meta>`を消し、`<title>`を「画面 <ID>」に置き換える（titleが「案B」等を名指しし得るため）。JavaScriptのcommentは消さない（下の「限界」）。IDと見る順は、実行ごとに乱数で作る種から決め、種はkeysの木（`<keys>/<回>/seed.txt`）にだけ置く。作った時点で、その回のkeysの木とblindの木のsha256を台帳に記録する。blindのdirectoryは、runs・keysとは別の木でなければ拒否する。
-- **評価者の閉込め（選んだ方式）**：FableとCodexの両方を`asc host-session`で起動し、対象（＝起動先）を`<blind>/round<回>`にする。このdirectoryはGitの管理外なので、起動先と読める範囲の両方がこのdirectoryだけになる。Fable（host `claude`）は`--restricted`でfile toolがRead・Glob・Grepだけ・起動先の中だけ、Codex（host `codex`）は実行ごとに作るpermissions profileで対象だけを読める（[host-session](../../../skills/asc/references/host-session.md)）。描画・順位の出力・他の回・keys・runs・このrepositoryは、その外にある。Codexの読取りの限定は、modelを呼ぶturnでは未実測（host-sessionの記載）なので、二重目として次の`lock`を併用する。
-- 二重目：回の間は[harness/rank-guard.mjs](harness/rank-guard.mjs)の`lock`で、runs・keys・render・他の回のblindのdirectoryをmode 000にし、終わったら`unlock`で戻す（時刻・回・modeを記録fileに追記）。順位の出力の木（`<ranks>`、host-sessionの`--output-dir`の親）は、host-sessionが書くのでmode 000にできない。その代わり、回のdirectoryと別の木であることを`guardProblems`が確かめ、評価者は上の限定で読めない。このworktreeのevidenceのdirectoryはmode 000にしない（Gitの作業treeを壊すため）。限定の範囲の外なので、評価者は読めない。
+- **評価者の閉込め（選んだ方式）**：FableとCodexの両方を`asc host-session`で起動し、対象（＝起動先）を`<blind>/round<回>`にする。このdirectoryはGitの管理外なので、起動先と、読取りを許す対象の両方がこのdirectoryになる。Fable（host `claude`）は`--restricted`で、file toolがRead・Glob・Grepだけで起動先の中に閉じる（host-sessionの記載では実測済み。ただし祖先directoryの`CLAUDE.md`の自動読込みが無いことは確定していない）。Codex（host `codex`）は、実行ごとに作るpermissions profileで対象だけの読取りを許すが、modelを呼ぶturnでの読取りの限定は未実測である（[host-session](../../../skills/asc/references/host-session.md)）。したがって、描画・順位の出力・他の回・keys・runs・このrepositoryが評価者から読めないことは、この起動の設定だけでは保証されない。二重目として次の`lock`と、精算した出力の封を併用する。
+- 二重目：回の間は[harness/rank-guard.mjs](harness/rank-guard.mjs)の`lock`で、runs・keys・render・他の回のblindのdirectoryをmode 000にし、終わったら`unlock`で戻す（時刻・回・modeを記録fileに追記）。順位の出力の木（`<ranks>`、host-sessionの`--output-dir`の親）は、host-sessionが書くのでmode 000にできない。その代わり、回のdirectoryと別の木であることを`guardProblems`が確かめ、精算した出力のdirectoryは封（mode 000）をする（下）。実行中の評価者自身の出力先は、上の起動の設定の外にあるだけで、modeでは守っていない。このworktreeのevidenceのdirectoryはmode 000にしない（Gitの作業treeを壊すため）。上の起動の設定の範囲の外にあるが、Codexについては実測していない。
 - **評価者は1人ずつ**：予約済みで未精算の回がある間は、次の回を予約できない。回Rでは、Fableを予約・実行・精算してからCodexを予約する。精算は、その出力のdirectoryを直ちにmode 000にする（封をする）。`reserve`と`settle`は、精算済みの出力のdirectoryが1つでもmode 000でなければ拒否する。このため、Codexが動く間はFableの出力が、2回目の間は1回目の全ての出力が読めない（第3のレビューM-1）。全ての回の精算の後に、`decide.mjs`だけが封を解き（mode 700）、そのことをrank-guardの記録に追記する。
 - 台帳：各回の開始前に`budget.mjs reserve`で予約する（Fableは4 USD、Codexは0で「費用の報告なし」）。評価者×回の番号ごとに1回だけ。起動自体が失敗した場合に限り、再試行を1回だけ予約できる。終わったら、keysを開く前に（lockのまま）`budget.mjs settle`で、host-sessionの出力（`status.json`・`result.txt`）そのものを確かめて記録する：Hostとmodel、起動先と対象が回のdirectory、session id、開始が予約の後・終了が精算の前、完了したこと。`result.txt`と`status.json`のsha256・session idと、その時点のrank-guardの記録の長さとsha256を台帳に書く。Fableの費用は`events.jsonl`の`total_cost_usd`から取る。起動の失敗としての精算は、`status.json`が無いか完了でない場合だけ受け付ける。`reserve`と`settle`は、lockが掛かっていなければ拒否する。
 - `decide.mjs`は、台帳の記録と照らして次を確かめ、違えば拒否する：評価者×回ごとに完了した回がちょうど1つ、`result.txt`・`status.json`が記録のsha256と同じ、精算していない予約・想定外の名前・想定外の出力directoryが無い、keysとblindの木が作成時の記録と同じ、各回の予約から精算までlockが続いていた（rank-guardの記録）、rank-guardの記録が各精算の時点の内容を先頭に保っている（追記だけ）。順位は`result.txt`の最後のJSONから取り出す。
@@ -166,7 +166,7 @@ tokenは親processの環境変数`CLAUDE_CODE_OAUTH_TOKEN`からだけ受け取�
 
 | 確認 | 結果 |
 | --- | --- |
-| harnessの試験（[results/harness-tests.txt](results/harness-tests.txt)） | 52件すべて合格 |
+| harnessの試験（[results/harness-tests.txt](results/harness-tests.txt)） | 53件すべて合格 |
 | dry run（[results/dry-run.json](results/dry-run.json)） | すべて合格：組合せの受理と拒否、tarballの差が3fileだけ、3ケース×2条件のsample projectの導入と差、imageのidが固定と一致、空のHOMEでのdocker CLI、networkの作成と削除、imageでの判定（下）、`run-all.mjs`が固定の順の18試行だけを出す、`run-order.json`の妥当性 |
 | imageでの判定（dry runの`imageChecks`） | 固定のimageで、#1807の`run-render.mjs`（描画・axe・gold）と`first-view.mjs`を合成の画面に実行。UI-03（800×1280・1440×900、合成の良い例・悪い例：[harness/dryrun/](harness/dryrun/)）・UI-07・UI-04の良い例は両幅でI1を満たし網羅率1.0、悪い例は満たさない。閉じた`details`・非表示・画面外の要素を含む合成の画面（[harness/dryrun/ui07-hidden.html](harness/dryrun/ui07-hidden.html)）では、閉じた`details`の中のお知らせを初期表示に無いと判定し、I2に数えた。描画の失敗0件 |
 | 初期表示の判定器のhostでの確認（[results/first-view-dryrun.txt](results/first-view-dryrun.txt)） | 上と同じ判定（hostのplaywright-core 1.60.0。imageが無かった時点の記録） |
@@ -197,7 +197,7 @@ tokenは親processの環境変数`CLAUDE_CODE_OAUTH_TOKEN`からだけ受け取�
 - **偶然**：各条件3回で、1ケース6画面である。差が無くても、1評価者あたり約0.1の確率でU≥8になる。2評価者・指標・2ケース以上を同時に求めて偶然の採用を減らしたが、除き切れない。逆に小さな効果は検出できない。
 - モデルの順位であって人の評価でないこと、3案を一括で入れたのでどれが効いたかは分からないこと。
 - **採らない案を残さない**：Sの追記（「比べるために作った採らない案は、成果物に残さない。」）は、測定の環境では完全には守れない。生成Agentには削除のtool（Bash等）が無いので、作った別の案のfileを消せない。盲検では`out/index.html`とその参照だけを写すので、評価者には別の案は見えない。
-- 盲検の写しでは、HTML・CSS・SVGのcommentとSVGのtitle・desc・metadataを消すが、JavaScriptのcomment・変数名、classとidの名前、`data-*`の名前と値、画面の文言に残った手掛かり（例：`class="plan-b"`、「案B」と表示する文字）は消さない。
+- 盲検の写しでは、HTML・CSS・SVGのcommentとSVGのtitle・desc・metadataを消すが、JavaScriptのcomment・変数名、classとidの名前、`data-*`の名前と値、画面の文言に残った手掛かり（例：`class="plan-b"`、「案B」と表示する文字）は消さない。写したSVG fileの中の`<style>`・`<script>`の中のcomment（CSS・JavaScriptのcomment）と、`data:image/svg+xml`として埋め込まれたSVG（HTMLやCSSの中のdata URL）の中身も消さない。
 
 ## 固定
 
@@ -209,4 +209,4 @@ tokenは親processの環境変数`CLAUDE_CODE_OAUTH_TOKEN`からだけ受け取�
 
 ## 未決
 
-- 測定の開始（有料）は、ownerの許可を得てから。
+なし。有料の測定は、ownerが上限40 USDで承認した（2026-11-25、[Issue #1815のコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1815#issuecomment-7159922599)）。

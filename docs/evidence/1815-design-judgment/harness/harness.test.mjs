@@ -742,3 +742,42 @@ test('make-blind (L-1, third review): SVG comments, title, desc and metadata are
   assert.match(html, /<title>画面 id1<\/title>/); assert.match(html, /<circle r="1"\/>/); assert.match(svg, /<rect width="1"\/>/);
   assert.equal(stripSvg('<svg><title/></svg>'), '<svg></svg>');
 });
+
+// ---- fourth review (Low-1): the budget.mjs CLI seals a settled output, and a reserve is refused once it is unsealed ----
+test('budget CLI: reserve fable -> settle seals the output (mode 000) -> a manual chmod 700 makes the next reserve fail', () => {
+  const fx = JSON.parse(fs.readFileSync(path.join(ev, 'results/fixation.json'), 'utf8'));
+  const base = fs.realpathSync(tmp());
+  const ledger = path.join(base, 'ledger.jsonl');
+  // A temporary ledger carrying the recorded ledger id (the CLI accepts only that ledger); never the real one.
+  fs.writeFileSync(ledger, JSON.stringify({ledgerId: fx.records[0].ledgerId, createdAt: new Date().toISOString()}) + '\n');
+  const o = {runs: path.join(base, 'runs'), keys: path.join(base, 'keys'), render: path.join(base, 'render'), blind: path.join(base, 'blind'), ranks: path.join(base, 'ranks')};
+  for (const d of [o.runs, o.keys, o.render, path.join(o.blind, 'round1', 'ui03-dashboard'), path.join(o.blind, 'round2'), o.ranks]) fs.mkdirSync(d, {recursive: true});
+  fs.writeFileSync(path.join(o.blind, 'round1', 'ui03-dashboard', 'ORDER.txt'), 'x\n');
+  const record = path.join(base, 'rank-guard.jsonl');
+  const guard = ['--round', '1', '--runs-root', o.runs, '--keys-root', o.keys, '--render-root', o.render, '--blind-root', o.blind, '--ranks-root', o.ranks];
+  const cli = (...a) => spawnSync(process.execPath, [path.join(here, 'budget.mjs'), ...a], {encoding: 'utf8'});
+  const locked = [o.runs, o.keys, o.render, path.join(o.blind, 'round2')];
+  const out = path.join(o.ranks, 'fable-1');
+  try {
+    for (const d of locked) fs.chmodSync(d, 0);
+    fs.appendFileSync(record, JSON.stringify({action: 'lock', round: 1, at: new Date().toISOString(), modes: {}}) + '\n');
+    const r1 = cli('reserve', ledger, 'fable', '1', ...guard);
+    assert.equal(r1.status, 0, r1.stderr);
+    fs.mkdirSync(out);
+    const now = new Date().toISOString();
+    fs.writeFileSync(path.join(out, 'status.json'), JSON.stringify({host: 'claude', model: 'fable', cwd: path.join(o.blind, 'round1'), targetDirectory: path.join(o.blind, 'round1'), sessionId: 'sid', status: 'completed', startedAt: now, finishedAt: now}));
+    fs.writeFileSync(path.join(out, 'result.txt'), '{"ui03-dashboard":[]}\n');
+    const s = cli('settle', ledger, 'rank-fable-1', '--host-output', out, '--guard-record', record, ...guard);
+    assert.equal(s.status, 0, s.stderr);
+    assert.equal(fs.statSync(out).mode & 0o777, 0);
+    fs.chmodSync(out, 0o700);
+    const r2 = cli('reserve', ledger, 'codex', '1', ...guard);
+    assert.equal(r2.status, 3);
+    assert.match(r2.stderr, /settled output fable-1 is mode 700, not 000/);
+    fs.chmodSync(out, 0);
+    const r3 = cli('reserve', ledger, 'codex', '1', ...guard);
+    assert.equal(r3.status, 0, r3.stderr);
+  } finally {
+    for (const d of [...locked, out]) if (fs.existsSync(d)) fs.chmodSync(d, 0o700);
+  }
+});
