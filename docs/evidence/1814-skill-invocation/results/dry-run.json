@@ -1,5 +1,5 @@
 {
- "label": "local npm pack of the worktree HEAD (stand-in, not the release)",
+ "label": "HEAD df406ff532d2d438e21bd0c18b7fbe2185e12abc; local npm pack of the worktree (stand-in, not the release)",
  "released": false,
  "install": {
   "tarball": "agent-skill-chain-0.5.0.tgz",
@@ -11,6 +11,7 @@
   "registeredHosts": [
    ".claude"
   ],
+  "adopted": null,
   "nodeVersion": "v20.12.2",
   "npmVersion": "10.5.0",
   "distributed": [
@@ -205,6 +206,7 @@
     "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "pointer": false,
     "hook": null,
+    "adopt": null,
     "changedFiles": []
    },
    "claudeMdHasPointer": false,
@@ -224,6 +226,7 @@
     "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "pointer": true,
     "hook": null,
+    "adopt": null,
     "changedFiles": [
      "CLAUDE.md"
     ]
@@ -245,6 +248,7 @@
     "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "pointer": false,
     "hook": "usage",
+    "adopt": null,
     "hookTextSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "settingsSha256": "7c1fcea4348a7bdec9dc819ca8963206174f7db2ab7c17420560967692e43dbc",
     "changedFiles": [
@@ -277,6 +281,7 @@
     "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "pointer": true,
     "hook": "usage",
+    "adopt": null,
     "hookTextSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "settingsSha256": "7c1fcea4348a7bdec9dc819ca8963206174f7db2ab7c17420560967692e43dbc",
     "changedFiles": [
@@ -310,6 +315,7 @@
     "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "pointer": false,
     "hook": "strong",
+    "adopt": null,
     "hookTextSha256": "74cc677c8a09c75aeac0588f08e063dbaac658e28e40eb904d0633b8c26a528e",
     "settingsSha256": "7c1fcea4348a7bdec9dc819ca8963206174f7db2ab7c17420560967692e43dbc",
     "changedFiles": [
@@ -433,7 +439,8 @@
   ],
   "totalTrials": 116,
   "totalPlanningUsd": 25.04,
-  "capUsd": 30
+  "capUsd": 30,
+  "stopBelowUsd": 29
  },
  "command": "claude -p <prompt> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events",
  "pass": true
