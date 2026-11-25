@@ -37,6 +37,10 @@ dry runで使ったtarball：**releaseの本物ではない。** この作業の
 | 認証の渡し方 | ownerの決定（同上）：`claude setup-token`のtokenを、測定を動かすprocessの環境変数`CLAUDE_CODE_OAUTH_TOKEN`だけで子processへ渡す。統括が`CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" node harness/run-trial.mjs …`の形で起動し、harnessはfileを読まず、値を表示・記録しない |
 | releaseの取得・実HOMEへの目印fileの作成 | 目印fileは実HOMEに一時的に置き、確認の後に削除することをownerが了承（同上）。どちらも測定の開始時に行う（[EVAL_PLAN.md](EVAL_PLAN.md#手順)） |
 
+## 測定の前の固定
+
+`results/fixation.json`の最初の記録のcommitは`282a6342892a4a485f5c0746088ec5872920342e`である（`run-trial.mjs`はこの記載を照合する）。以後の記録は追記だけで、段階0の後の是正（refix）と段階3の記録の条件は[EVAL_PLAN.md](EVAL_PLAN.md)「固定の記録と変えてよい範囲」による。
+
 ## 独立レビュー（1回目、HEAD `e2477706`）への対応
 
 Medium 5件・Low 10件（Highなし）。すべて是正した。

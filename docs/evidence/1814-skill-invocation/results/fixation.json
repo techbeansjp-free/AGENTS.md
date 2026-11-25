@@ -1,0 +1,33 @@
+{
+ "schema": "asc-1814-fixation/v3",
+ "note": "Append-only. run-trial.mjs --run checks the last record. See fixation.mjs for refix and stage3.",
+ "records": [
+  {
+   "stage": "stages 0-2",
+   "fixedAtCommit": "282a6342892a4a485f5c0746088ec5872920342e",
+   "at": "2026-11-25T04:47:23.566Z",
+   "files": {
+    "cases.json": "690499781fade60ed061fc794bd8607bd083f59a4083c3ce0c4c6eeb206c30df",
+    "conditions.json": "27997e691c236ceee569999eccb527c17f89ddf554324e877a8350cda7880084",
+    "decision-criteria.md": "0c4ef7f8ed8468836faacb4ce45871f192e08ed937d494ef945438ea4806a2b1",
+    "release.json": "6c0570566df686129b3a627370c6a7f94cbcc5875b533dcd309f9e54b6230069",
+    "harness/apply-condition.mjs": "8487e9b67e0ecae21fd1910ef659243ac8f27a0c5429fd7443cd2176f309db7f",
+    "harness/collect.mjs": "fb639cd615aa4fd5b3f1a9d9ce71b013ed8e7dfa51e90b7b34d67c23bfa408c1",
+    "harness/condition-i.mjs": "1709ee82f74d831bfd733fd8accf577d695859ad62cbcc8bba1bbbcf0dc9b1e4",
+    "harness/fixation.mjs": "7419605309e3b9bed56c9136903f79299518159f72514bb94391e93a7d5ded2a",
+    "harness/guard.mjs": "eb533b6e6ce6da772491b8c793939b4fbfd5a77185586ad77866d3e9279a42a6",
+    "harness/install-asc.mjs": "529384b4ad6eb4cff479293b571ea9f37337460eb70e8c1be4c832358ece838b",
+    "harness/ledger.mjs": "c150cd1b46482add76907b4fe7acc59eaae350e886431db78dfcba6fad4d1edb",
+    "harness/make-fixture.mjs": "23cf5d62011aabe38f310023f77515a763962bbd3161491b96e857ddc845a9a7",
+    "harness/markers.mjs": "9b5443105654d24b39d6801f20439b3392309a18a40e0cd1846f778e7d5ad066",
+    "harness/probe-check.mjs": "a147cb391f9389f3c85caa8779d3c9532fd51acc822f39e17272805659801ce9",
+    "harness/run-trial.mjs": "9d3c06bbf382422aa3333a8eeb2b13b583509c985ba6933bd0722fddb329b9d0",
+    "harness/score.mjs": "be48d12a13d3e5c9c562d761b7429c002f5010e80933c4ea208fdf9f557c7305"
+   },
+   "invariants": {
+    "conditionsWithoutI": "e1aab585dc10405f0b2f7421152a823e5906b410b2194639bc5c8d2eb728fa8a",
+    "releaseWithoutPhase3": "420fa3c02097fe89ac41cdd638c9004551faf03864272bfbc7888d8db879f3d5"
+   }
+  }
+ ]
+}
