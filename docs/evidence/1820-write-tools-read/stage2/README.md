@@ -142,19 +142,21 @@ node $EV/harness/judge.mjs $EV/results/traces --runs-root <scratch>/run1820s2m/r
 
 ## 測定の前の固定
 
-- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`bfefb93e85f9381c71622dceab2d1345d9ca7d26`である。`run-trial.mjs`と`judge.mjs`はこの記載を照合する。`fixation.mjs check`は合格（差なし）。
+- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`db3078ed89245546f73bbf9d9e597e8d379c397c`である。`run-trial.mjs`と`judge.mjs`はこの記載を照合する。`fixation.mjs check`は合格（差なし）。
+- 作り直した理由（1回目）：独立レビューの指摘（M1：Skill一覧の予算をBとSで比べていない）を是正し、固定したfile（`decision-criteria.md`・`harness/probe-check.mjs`）が変わったため、台帳に予約が無い（0件、台帳idの1行だけ）ことを確かめたうえで、記録を新しい最初の記録として作り直した（同じ台帳、段階1と同じ手順）。同じレビューのL1（段階1の試験）・L3（重複した試験）・L2・L4（限界の記録）は、固定したfileを変えていない。
+- 前の記録（`bfefb93e`）はgitの履歴に残る。
 - 固定したfile：`decision-criteria.md`・`cases.json`・`conditions.json`・`release.json`・`run-order.json`と、`harness/`の15件（`dry-run.mjs`と試験を除く）。
 - 台帳：repositoryの外の新しい台帳`<scratch>/rel1820/ledger/ledger-1820-s2.jsonl`（予約0件）。段階1の台帳とは別で、段階1の費用は`conditions.json`の`budget`で数える。台帳idは`results/fixation.json`にあり、`run-trial.mjs`と`judge.mjs`はこの台帳だけを使う。
 
 ## モデルを呼ばない確認
 
-HEAD `bfefb93e`（固定した最初の記録と同じ。`fixation.mjs check`は差なし）で行った。
+HEAD `db3078ed`（作り直した最初の記録と同じ。`fixation.mjs check`は差なし）で行った。
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| harnessの試験（合成の記録） | 18件すべて合格。写したfile（`guard`・`ledger`・`install-asc`・`condition-i`は#1817と、`probe-check`は段階1と）がbyteで同じことも試験で照合した。`npx eslint`（harness）は指摘なし | [results/harness-tests.txt](results/harness-tests.txt) |
-| 製品の変更の試験 | `test/test_project_read_trigger.mjs`・`test/test_source_quality.mjs` 17件合格、`npx eslint src bin test v05`は指摘なし。`test/test_project_assets.mjs`・`test/test_package.mjs`の7件は、候補の変更の無い基のcommit `7606d740`でも同じく失敗する（この環境のGit操作とnpmの出力による）。CIで確かめる | [results/harness-tests.txt](results/harness-tests.txt) |
-| dry run（本物の2つのtarball、`--allow-unreleased`なし、記録した台帳。fixtureは新しい`<scratch>/run1820s2/`） | 全15項目が合格（下の箇条） | [results/dry-run.json](results/dry-run.json) |
+| harnessの試験（合成の記録） | 20件すべて合格。写したfile（`guard`・`ledger`・`install-asc`・`condition-i`は#1817と）がbyteで同じこと、`probe-check`は段階1からSkill一覧の予算の追加だけが違うことも試験で照合した。予算の試験は合成のdebug log（Sだけ超過→`compare`と照合が不合格、両方が同じ状態で超過→合格、記録の書換え→照合で検出、ASCのdescriptionが1件欠ける→不合格）。`npx eslint`（harness）は指摘なし。段階1の試験（Xを外した後）29件、#1817の試験68件も合格 | [results/harness-tests.txt](results/harness-tests.txt) |
+| 製品の変更の試験 | `test/test_project_read_trigger.mjs`・`test/test_source_quality.mjs` 16件合格（重複を除いて1件減）、`npx eslint src bin test v05`は指摘なし。`test/test_project_assets.mjs`・`test/test_package.mjs`の7件は、是正の前のcommit `70e93ae0`と候補の変更の無い基のcommit `7606d740`でも同じく失敗する（この環境のGit操作とnpmの出力による）。CIで確かめる | [results/harness-tests.txt](results/harness-tests.txt) |
+| dry run（本物の2つのtarball、`--allow-unreleased`なし、記録した台帳。fixtureは新しい`<scratch>/run1820s2b/`） | 全16項目が合格（下の箇条。`probeDebugLog`を加えた） | [results/dry-run.json](results/dry-run.json) |
 
 dry runの内容：
 
@@ -167,7 +169,8 @@ dry runの内容：
 - 計画：probe 2回と136試行（fixture Aの該当する依頼88、画面の依頼24、該当しない依頼24。各条件68）。計画の単価で17.34 USD、平均の見込みで12.16 USD。段階1の費用2.0281387 USDを台帳から照合し、段階2の線21.97 USD、2段階の合計は最大23.998 USD（`stage1Spend`・`budgetBothStages`）。
 - 全138件の起動のcommand（引数と依頼文）を出した。どれも水準Wの`--tools`・`--disallowedTools`・`--permission-mode acceptEdits`・`--settings`・`--max-budget-usd 0.6`で、`--max-turns`はfixture Aの試行に無く、画面の依頼は3、probeは30（`levelFlags`・`maxTurns`）。probeの操作は6（`probeStepsCounted`）。
 - 隔離の`--settings`の例を、fixture Aの試行（`B-asc-1-1`）と画面の依頼の試行（`B-d-ui03-1`）で記録した。どちらも試行のfixtureを読込み・書込みの禁止に入れる（`fixtureDenied`）。
-- `run-trial.mjs`を`--run`なしで実行すると計画だけを出し、`--run`は許可の環境変数が無いと拒否した。`--max-turns`の指定、Bの条件へのSのtarballも拒否した。台帳は1行（台帳idだけ）のまま。
+- probe（B・S）の起動にだけ`--debug-file debug.log`がある（`probeDebugLog`、独立レビューM1）。
+- 前のdry run（`<scratch>/run1820s2/`、HEAD `bfefb93e`）では、`run-trial.mjs`を`--run`なしで実行すると計画だけを出し、`--run`は許可の環境変数が無いと拒否した。`--max-turns`の指定、Bの条件へのSのtarballも拒否した。`run-trial.mjs`はその後変わっていない（固定の記録のsha256が同じ）ため、今回のdry runでは繰り返していない。台帳は1行（台帳idだけ）のまま。
 
 ## 段階1のharnessからの変更
 

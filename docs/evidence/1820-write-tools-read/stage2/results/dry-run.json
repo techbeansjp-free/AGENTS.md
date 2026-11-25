@@ -124,6 +124,10 @@
    "pass": true,
    "detail": null
   },
+  "probeDebugLog": {
+   "pass": true,
+   "detail": null
+  },
   "fixtureDenied": {
    "pass": true,
    "detail": [

@@ -1,7 +1,7 @@
-# #1820 stage 2: tests without a model call (HEAD bfefb93e, fixation record bfefb93e, check: no difference)
+# #1820 stage 2: tests without a model call (HEAD db3078ed, fixation record db3078ed after the independent review fixes, check: no difference)
 
 ## node --test docs/evidence/1820-write-tools-read/stage2/harness/harness.test.mjs
-ok 1 - copied files are byte-identical; the fixed list names every plan file and harness module
+ok 1 - copied files are byte-identical (probe-check: stage 1 plus the review-M1 budget checks); the fixed list names every plan file and harness module
 ok 2 - cases: the 14 \#1817 cases unchanged on fixture A, and three design cases with the stage-1 prompt G for a design folder
 ok 3 - conditions: only level W (the stage-1 W), B and S differ only in the release, D fixtures pinned like stage 1
 ok 4 - budget: the stage-1 spend is read from its published ledger; the stage-2 cap is the remainder; both stages stay under 25 USD
@@ -18,18 +18,26 @@ ok 14 - dry-run comparison: only the first sentence of the block may differ, and
 ok 15 - probe approval and markers: the committed stage-1 approval of \#1820 is used; the marker files are the stage-1 ones
 ok 16 - collect: the per-user temporary directory name is redacted with the other local paths
 ok 17 - probe gate: one W probe per condition, each with its own asc description, bound to the ledger and recomputed
-ok 18 - fixation: a refix record later than the first measurement reservation is reported; the conditions file is the stage-2 one
-# tests 18
-# pass 18
+ok 18 - review M1 (b): all 16 ASC descriptions must be quoted from the Skill list; one missing fails the probe
+ok 19 - review M1 (a): over budget only in S fails the comparison and the gate; equal over-budget state in both passes
+ok 20 - fixation: a refix record later than the first measurement reservation is reported; the conditions file is the stage-2 one
+# tests 20
+# pass 20
 # fail 0
 
 ## npx eslint docs/evidence/1820-write-tools-read/stage2/harness
 no problems
 
-## node --test test/test_project_read_trigger.mjs test/test_source_quality.mjs
-# tests 17
-# pass 17
+## node --test docs/evidence/1820-write-tools-read/harness/harness.test.mjs (stage 1, after the committed drop of X; review L1: tests 3, 7, 8, 21 use the raw conditions)
+# tests 29
+# pass 29
 # fail 0
+
+## node --test test/test_project_read_trigger.mjs test/test_source_quality.mjs
+# tests 16
+# pass 16
+# fail 0
+(review L3: the duplicated entry-description test was removed from test_project_read_trigger.mjs; its wording assertion is in test_project_assets.mjs)
 
 ## npx eslint src bin test v05
 no problems
@@ -38,7 +46,7 @@ no problems
 # tests 60
 # pass 52
 # fail 7
-The same 7 tests fail on an export of the base commit 7606d740 without the candidate edits (test_project_assets 39, 40,
-43, 44: "Migration Git operation failed (exit status 1)"; test_package 4, 6, 12: npm pack prints the prepack banner
-"> agent-skill-chain..." on stdout where JSON is expected). They are failures of this local environment, not of the
-candidate edits; CI is the authority for them.
+The same 7 tests fail on an export of 70e93ae0 (before these fixes) in this environment, and were recorded failing on the
+base commit 7606d740 without the candidate edits (test_project_assets: "Migration Git operation failed (exit status 1)"
+and the asset patch Git children; test_package 4, 6, 12: npm pack prints the prepack banner on stdout where JSON is
+expected). They are failures of this local environment; CI is the authority for them.

@@ -4,10 +4,10 @@
  "records": [
   {
    "stage": "stage 2",
-   "fixedAtCommit": "bfefb93e85f9381c71622dceab2d1345d9ca7d26",
-   "at": "2026-11-25T20:16:24.577Z",
+   "fixedAtCommit": "db3078ed89245546f73bbf9d9e597e8d379c397c",
+   "at": "2026-11-25T20:37:00.649Z",
    "files": {
-    "decision-criteria.md": "22200dc272fa73b653f23478d91b52ee31fd1d2ba6bfc63726b467822d6a9851",
+    "decision-criteria.md": "474faf69f962324f3051d193d530bf690a1ca61d282a29db3405f15fcad84ec1",
     "cases.json": "8687afbaff14f7ff3436b4e1765e6e66c5ea5a2280a294d66a09f080bdddf5d2",
     "conditions.json": "ee563fc7699e86e135e7023bbe33ae12581a37db1fab28b7d25fe3ad60268694",
     "release.json": "b7cb3fe9441bfdc323c3e6dd64870f7031f74c898ccd786f6da1a806edad880b",
@@ -23,7 +23,7 @@
     "harness/make-fixture.mjs": "1aee86d373958b166eadd6fa17792bd31cc4ac1b6bd39dc9becbc70004529681",
     "harness/markers.mjs": "ff5106b7d1454f40cb2bdcc7b77a76681b6405880a99d49074d2f01b524df085",
     "harness/order.mjs": "d4db72bc6ebfa6244728eb388e2f7d21032361e7aaaf243c4a314070c62b6b20",
-    "harness/probe-check.mjs": "8494aa6d1c7f6ffa18dd8d4892b7a236a1ea91d3da5baa96d2cfe94836119ca4",
+    "harness/probe-check.mjs": "85fa7ceb1d001739732231a641fef6363fef651c1fba24913c57b1670664bb91",
     "harness/run-all.mjs": "e6eaf4b546098266f158c4a94bf03fbec3de169a87f33e77ed09f8b14b87710b",
     "harness/run-trial.mjs": "8e4b7cf0390c4e2fb995bf0079cf1ca37a685d859416d742894c26cf01f117cf",
     "harness/score.mjs": "4615016db31717507b3e9ae17108f558606f9d075fd7a4e9ae9b436befcb0bf2"
