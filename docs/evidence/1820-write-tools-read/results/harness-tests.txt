@@ -1,4 +1,7 @@
-# #1820 harness tests (HEAD ae7085e1, clean tree, v20.12.2)
+# #1820 harness tests (HEAD cc786927, clean tree; fixed files equal the first fixation record 85a0fe81; v20.12.2)
+
+$ node docs/evidence/1820-write-tools-read/harness/fixation.mjs check docs/evidence/1820-write-tools-read/results/fixation.json
+{"ok":true,"stage":"stage 1","records":1,"firstFixedAtCommit":"85a0fe81cd083fc7af4606eb1dc444e34a1fb1a9","fixedAtCommit":"85a0fe81cd083fc7af4606eb1dc444e34a1fb1a9","differs":[]}
 
 $ node --test docs/evidence/1820-write-tools-read/harness/harness.test.mjs
 ok 1 - files copied from \#1817 are byte-identical; the fixed list names every plan file and harness module
@@ -6,28 +9,31 @@ ok 2 - prompts: the short form is \#1817 asc-3 and the \#1815 form is the first 
 ok 3 - cells are the full 3 x 2 x 2 design; negative prompts only in the negative cells
 ok 4 - launch flags per tools level: tools, disallowed tools, permission mode, --settings and --max-turns
 ok 5 - isolation settings: sandbox required, no escape, no network, reads and writes outside work/ denied
-ok 6 - probe prompts: W adds the outside Write, X adds the sandbox steps
+ok 6 - probe steps (review M2/L4): counts match conditions.json probeSteps and fit probeMaxTurns; X covers every isolation boundary
 ok 7 - run order: 60 planned trials, negatives only in reps 1-2, counterexamples refused
 ok 8 - order gate: only the next planned trial; probes only in probe cells and before the measurement
 ok 9 - score: body read in message 1, or only in message 2; first tools recorded; max-turns stop is not a failure
 ok 10 - score: several stream events of one message are one message; a third message is not observed
 ok 11 - score: a refused Read does not count; a Read without result (stopped) counts and is flagged; Skill(asc), entry and README in message 1
-ok 12 - score: other tools or permission mode than the cell is a failure; an API error is a failure
-ok 13 - score: negative case overapplication counts any ASC Skill, entry or body in the first two messages
-ok 14 - replacements: planned reps per case (brief 4, negatives 2); the k-th failure is replaced by planned+k
-ok 15 - main effects are differences of unweighted means of cell rates; a cell without a valid trial is not analysed
-ok 16 - summary per cell and completion: complete only with every planned trial; cap-reached needs no late probe
-ok 17 - probe approval: the committed placeholder refuses; a filled but uncommitted record refuses
-ok 18 - probe gate: planned trials need a passing comparison of all three probe cells
-ok 19 - fixture D: source files must have the pinned sha256; the install record must be the cell's fixture
-ok 20 - probe-check R: the level's tools and permission mode pass; any other set fails
-ok 21 - probe-check W: the outside Write must be attempted and refused, and no sentinel file may exist
-ok 22 - probe-check X: every Bash step attempted, the write inside work/ done, no HTTP status, no token, no sentinel
-ok 23 - probe compare: tools may differ between the levels, every other session fact must not
-ok 24 - collect: a row records the cell, its factors and the init facts; a directory without a reservation is refused
-ok 25 - replacement plan: a failed negative trial (rep 1) is replaced by rep 3 after every planned trial
-# tests 25
-# pass 25
+ok 12 - score (review M1): a Bash read of the body counts in bodyRead2 and in bodyReadBash2; a failed Bash does not; first tools keep the Bash path
+ok 13 - score: other tools or permission mode than the cell is a failure; an API error is a failure
+ok 14 - score: negative case overapplication counts any ASC Skill, entry or body in the first two messages
+ok 15 - replacements: planned reps per case (brief 4, negatives 2); the k-th failure is replaced by planned+k
+ok 16 - main effects are differences of unweighted means of cell rates; a cell without a valid trial is not analysed
+ok 17 - summary per cell and completion: complete only with every planned trial; cap-reached needs no late probe
+ok 18 - probe approval: the committed placeholder refuses; a filled but uncommitted record refuses
+ok 19 - probe gate (review L2): the comparison must pass, cover every probe cell and be bound to the latest settled probes in the ledger
+ok 20 - drop of X (review L1): pre-written 8-cell plan, only after XSA-probe-2 failed, bound comparison, before any planned trial
+ok 21 - failure rule (review L3): one failed replacement in a cell (1/4 = 25%) is analysed, two are not; negatives do not count
+ok 22 - fixture D: source files must have the pinned sha256; the install record must be the cell's fixture
+ok 23 - probe-check R: the level's tools and permission mode pass; any other set fails; Glob and Grep outside must be refused
+ok 24 - probe-check W: the Writes into the trial directory and the repository must be attempted and refused, and no sentinel file may exist
+ok 25 - probe-check X: every step attempted with a result; refusals need positive evidence; work/ readable, git recorded
+ok 26 - probe compare: tools may differ between the levels, every other session fact must not
+ok 27 - collect: a row records the cell, its factors and the init facts; a directory without a reservation is refused
+ok 28 - replacement plan: a failed negative trial (rep 1) is replaced by rep 3 after every planned trial
+# tests 28
+# pass 28
 # fail 0
 
 $ node --test docs/evidence/1817-skill-application/harness/*.test.mjs   (files copied byte for byte are covered here)
@@ -45,5 +51,5 @@ ok 2 - source-language checker rejects a non-TypeScript source such as a Python 
 $ npx eslint src bin test v05
 (no findings)
 
-$ npx eslint docs/evidence/1820-write-tools-read   (reference: not in the lint target)
+$ npx eslint --no-ignore docs/evidence/1820-write-tools-read   (reference: not in the lint target)
 (no findings)

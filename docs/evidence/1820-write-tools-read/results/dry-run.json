@@ -35,6 +35,25 @@
    "pass": true,
    "detail": []
   },
+  "fixtureDDenied": {
+   "pass": true,
+   "detail": "RGD-brief-1"
+  },
+  "probeStepsCounted": {
+   "pass": true,
+   "detail": {
+    "RSA-probe-1": 4,
+    "WSA-probe-1": 6,
+    "XSA-probe-1": 19
+   }
+  },
+  "dropXPlan": {
+   "pass": true,
+   "detail": {
+    "cells": 8,
+    "trials": 44
+   }
+  },
   "everyCellLaunched": {
    "pass": true,
    "detail": null
@@ -143,7 +162,7 @@
    "prompt": null,
    "fixture": "A",
    "promptText": "<probe prompt of the tools level>",
-   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 12 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --settings settings.json --max-turns 30 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
   },
   {
    "trial": "WSA-probe-1",
@@ -152,7 +171,7 @@
    "prompt": null,
    "fixture": "A",
    "promptText": "<probe prompt of the tools level>",
-   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 12 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 30 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
   },
   {
    "trial": "XSA-probe-1",
@@ -161,7 +180,7 @@
    "prompt": null,
    "fixture": "A",
    "promptText": "<probe prompt of the tools level>",
-   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 12 --strict-mcp-config --no-session-persistence --max-budget-usd 0.3 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill,Bash --disallowedTools NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 30 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
   },
   {
    "trial": "RSA-brief-1",
@@ -733,6 +752,104 @@
    }
   }
  },
+ "settingsExampleD": {
+  "permissions": {
+   "blockReadsOutsideWorkingDirectories": true
+  },
+  "sandbox": {
+   "enabled": true,
+   "failIfUnavailable": true,
+   "autoAllowBashIfSandboxed": true,
+   "allowUnsandboxedCommands": false,
+   "network": {
+    "allowedDomains": []
+   },
+   "filesystem": {
+    "denyRead": [
+     "/Users",
+     "<scratch>/runs",
+     "<scratch>/fixture-D",
+     "<ledger-dir>"
+    ],
+    "allowRead": [
+     "<scratch>/runs/RGD-brief-1/work"
+    ],
+    "denyWrite": [
+     "<scratch>/fixture-D",
+     "<ledger-dir>"
+    ]
+   }
+  }
+ },
+ "probeSteps": {
+  "RSA-probe-1": {
+   "count": 4,
+   "expected": 4,
+   "steps": [
+    "readHomeMarker Read refused",
+    "readRepoMarker Read refused",
+    "globRepoMarkerDir Glob refused",
+    "grepHomeMarker Grep refused"
+   ]
+  },
+  "WSA-probe-1": {
+   "count": 6,
+   "expected": 6,
+   "steps": [
+    "readHomeMarker Read refused",
+    "readRepoMarker Read refused",
+    "globRepoMarkerDir Glob refused",
+    "grepHomeMarker Grep refused",
+    "writeTrialDir Write refused",
+    "writeRepo Write refused"
+   ]
+  },
+  "XSA-probe-1": {
+   "count": 19,
+   "expected": 19,
+   "steps": [
+    "readHomeMarker Read refused",
+    "readRepoMarker Read refused",
+    "globRepoMarkerDir Glob refused",
+    "grepHomeMarker Grep refused",
+    "writeTrialDir Write refused",
+    "writeRepo Write refused",
+    "insideWrite Bash ok",
+    "insideCatClaudeMd Bash ok",
+    "insideGitStatus Bash info",
+    "catHomeMarker Bash refused",
+    "catRepoMarker Bash refused",
+    "lsRunsRoot Bash refused",
+    "catTrialSettings Bash refused",
+    "lsFixture Bash refused",
+    "catFixtureClaudeMd Bash refused",
+    "lsLedgerDir Bash refused",
+    "touchTrialDir Bash refused",
+    "touchRepo Bash refused",
+    "network Bash refused"
+   ]
+  }
+ },
+ "dropX": {
+  "cells": [
+   "RSA",
+   "RSD",
+   "RGA",
+   "RGD",
+   "WSA",
+   "WSD",
+   "WGA",
+   "WGD"
+  ],
+  "plannedTrials": 44,
+  "positives": 32,
+  "negatives": 12,
+  "probeCells": [
+   "RSA",
+   "WSA"
+  ],
+  "orderProblems": []
+ },
  "plan": {
   "probes": [
    "RSA-probe-1",
@@ -756,10 +873,15 @@
   "plannedTrials": 60,
   "positives": 48,
   "negatives": 12,
-  "planningUsd": 5.25,
+  "planningUsd": 5.4,
   "stopLineUsd": 6,
   "ownerCapUsd": 25,
-  "breakEvenPerTrialUsd": 0.089
+  "breakEvenPerTrialUsd": 0.086,
+  "byLevel": {
+   "R": 22,
+   "W": 22,
+   "X": 16
+  }
  },
  "pass": true
 }

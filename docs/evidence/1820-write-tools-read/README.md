@@ -121,20 +121,23 @@ node $EV/harness/analyze.mjs $EV/results/traces --runs-root <scratch>/run1820m/r
 
 ## モデルを呼ばない確認
 
-HEAD `ae7085e1`（clean tree）で行った。
+HEAD `cc786927`（clean tree。固定したfileは最初の記録`85a0fe81`と同じで、`fixation.mjs check`は差なし）で行った。
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| harnessの試験（合成の記録） | 25件すべて合格。#1817から写した4つのfileは#1817の試験68件で合格。`test/test_source_quality.mjs` 2件合格、`npx eslint src bin test v05`は指摘なし | [results/harness-tests.txt](results/harness-tests.txt) |
-| dry run（本物のtarball、`--allow-unreleased`なし。fixtureは`<scratch>/run1820/`） | 全8項目が合格（下の箇条） | [results/dry-run.json](results/dry-run.json) |
+| harnessの試験（合成の記録） | 28件すべて合格。#1817から写した4つのfileは#1817の試験68件で合格。`test/test_source_quality.mjs` 2件合格、`npx eslint src bin test v05`は指摘なし | [results/harness-tests.txt](results/harness-tests.txt) |
+| dry run（本物のtarball、`--allow-unreleased`なし。fixtureは`<scratch>/run1820b/`） | 全11項目が合格（下の箇条） | [results/dry-run.json](results/dry-run.json) |
 
 dry runの内容：
 
 - A・Dとも、出所`release`（`e7df164a…`、v0.5.111）。16件の入口が記録とpackageに一致し、`claude-md`を採用した。Aは基の`CLAUDE.md`への追記（`append`）、Dは案内文だけの`CLAUDE.md`の作成（`create`。blockSha256 `444b31b5…`は#1814の条件Iと同じ）。
 - 試行の写しに中立のcommitを1件入れた後、commitの件名はA・Dで同じ（`Update project files`・`Install ASC`・`initial`）。
-- 計画：probe 3回と60試行（`brief` 48、該当しない依頼12）。計画の単価で5.25 USD、停止線6 USD。
-- 全63件の起動のcommand（引数と依頼文）を出した。どの試行も`--max-turns 2`で、toolの水準ごとの`--tools`・`--disallowedTools`・`--permission-mode`が条件どおりだった。隔離の`--settings`の例も記録にある。
-- `run-trial.mjs`を`--run`なしで実行すると、計画だけを出した。`--run`は、許可の環境変数が無いと拒否した。probeセル以外のprobe、承認の記録の無い`markers.mjs create`も拒否した。
+- 計画：probe 3回と60試行（`brief` 48、該当しない依頼12）。計画の単価（試行0.08 USD、probe 0.2 USD）で5.4 USD、停止線6 USD。
+- 全63件の起動のcommand（引数と依頼文）を出した。どの試行も`--max-turns 2`・`--max-budget-usd 0.3`、probeは`--max-turns 30`・`--max-budget-usd 0.6`で、toolの水準ごとの`--tools`・`--disallowedTools`・`--permission-mode`が条件どおりだった。
+- probeの操作の数はR 4、W 6、X 19で、`conditions.json`の`probeSteps`と一致し、`probeMaxTurns`に収まる（`probeStepsCounted`）。
+- 隔離の`--settings`の例は、fixture Aの試行とfixture Dの試行（`RGD-brief-1`）の両方を記録した。DのfixtureはDの試行で読込み・書込みの禁止に入る（`fixtureDDenied`）。
+- Xを外した場合の計画：8セル、44試行（`brief` 32、該当しない依頼12）、probeセルRSA・WSA、順序の検査に指摘なし（`dropXPlan`）。
+- `run-trial.mjs`を`--run`なしで実行すると、計画だけを出した。`--run`は、許可の環境変数が無いと拒否した。probeセル以外のprobe、`--ledger`の無いprobe、承認の記録の無い`markers.mjs create`も拒否した。`fixation.mjs drop-level X`は、`XSA-probe-2`の精算と`probe-compare.json`が無いため拒否した。台帳は1行（台帳idだけ）のまま。
 
 ## #1817のharnessからの変更
 
