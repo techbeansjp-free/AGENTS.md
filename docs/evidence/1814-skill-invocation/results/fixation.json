@@ -42,6 +42,54 @@
     ],
     "sideEffects": []
    }
+  },
+  {
+   "stage": "stages 0-2",
+   "fixedAtCommit": "ff7c8bb304c25dbf53501377787d19901a0f3cb2",
+   "at": "2026-11-25T05:14:16.002Z",
+   "files": {
+    "cases.json": "690499781fade60ed061fc794bd8607bd083f59a4083c3ce0c4c6eeb206c30df",
+    "conditions.json": "27997e691c236ceee569999eccb527c17f89ddf554324e877a8350cda7880084",
+    "decision-criteria.md": "2da6befcee37105d38e60eaee7865230fa717301f26b660880b9493a8d933d47",
+    "release.json": "6c0570566df686129b3a627370c6a7f94cbcc5875b533dcd309f9e54b6230069",
+    "harness/apply-condition.mjs": "8487e9b67e0ecae21fd1910ef659243ac8f27a0c5429fd7443cd2176f309db7f",
+    "harness/collect.mjs": "f2dcfa7adb3082ae95c3d4cbf746824e79776d40416d16fc7cc7833ced42e7a8",
+    "harness/condition-i.mjs": "e0ada4aee6812cb4304a6f39bd3763131f425c207c7c9216527ab2ba67c0ed9a",
+    "harness/fixation.mjs": "4836ca34e813436b3dbccef808e1b3caf1462d71ccdfd541cbac625ff2e50857",
+    "harness/guard.mjs": "eb533b6e6ce6da772491b8c793939b4fbfd5a77185586ad77866d3e9279a42a6",
+    "harness/install-asc.mjs": "529384b4ad6eb4cff479293b571ea9f37337460eb70e8c1be4c832358ece838b",
+    "harness/ledger.mjs": "5d5463095e1dbb2235f0f2617cd1477b45712e80a92e947f2f23b1765059eac6",
+    "harness/make-fixture.mjs": "23cf5d62011aabe38f310023f77515a763962bbd3161491b96e857ddc845a9a7",
+    "harness/markers.mjs": "9b5443105654d24b39d6801f20439b3392309a18a40e0cd1846f778e7d5ad066",
+    "harness/probe-check.mjs": "246fd02688e7ace489d43d65af32fd886cccf2fbddb8e28b01a7d6b48d7e071a",
+    "harness/run-trial.mjs": "b1689dad8617b672355f7b6dce4de390664dfef7f0969f2188290a4a10fbcc1d",
+    "harness/score.mjs": "3e53c6c3711de9e7c7b880d5fe7ad0273437949965a3cecf740aa177f0749397"
+   },
+   "invariants": {
+    "conditionsWithoutI": "e1aab585dc10405f0b2f7421152a823e5906b410b2194639bc5c8d2eb728fa8a",
+    "releaseWithoutPhase3": "420fa3c02097fe89ac41cdd638c9004551faf03864272bfbc7888d8db879f3d5"
+   },
+   "ledgerId": "f8ea32b7-8600-4944-bc8d-2fa941c50e12",
+   "conditionIShape": {
+    "exports": [
+     "adoptFromPlan",
+     "pointerExpectedI",
+     "pointerHeadI",
+     "productHookFiredInProbe",
+     "productHookFiredInTrial"
+    ],
+    "imports": [
+     "import crypto from 'node:crypto';"
+    ],
+    "sideEffects": []
+   },
+   "refix": {
+    "reason": "stage-0 probe: allow bundled builtin plugins (names compared); exclude only marker permission-suggestion lines, managed-policy missing-file lines and project-relative .agent-skill-chain/.claude paths from the debug-path checks",
+    "review": "independent review host-session (opus) of HEAD 380d531f: no High, Medium 1 (rerun probes; done as probe 2), Low 6 fixed in 2a1e246b (tightening only, re-review skipped per review.md Low rule)",
+    "changed": [
+     "harness/probe-check.mjs"
+    ]
+   }
   }
  ]
 }
