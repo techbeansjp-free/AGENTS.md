@@ -1,0 +1,8 @@
+{
+ "schema": "asc-1815-run-order/v1",
+ "note": "Fixed before any model run. The planned trials run in exactly this order: reps outermost (1..conditions.json runs), within each rep the cases in caseOrder, within each case the conditions in conditionOrderByRep (odd reps B then S, even reps S then B). A cap stop therefore leaves the two conditions at most one trial apart. harness/run-all.mjs runs only this order; run-trial.mjs refuses a planned trial that is not the next unreserved one, any replacement before every planned trial is reserved, and any replacement that is not the next one of harness/order.mjs replacementPlan. The isolation probes (one per condition, probeCase) run before the first planned trial.",
+ "caseOrder": ["ui03-dashboard", "ui07-bus-mobile", "ui04-parts-search"],
+ "conditionOrderByRep": {"odd": ["B", "S"], "even": ["S", "B"]},
+ "probeCase": "ui03-dashboard",
+ "probeConditions": ["B", "S"]
+}

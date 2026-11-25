@@ -27,16 +27,13 @@
     ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md"
    ]
   },
+  "imagesPinned": {
+   "pass": true,
+   "detail": []
+  },
   "dockerCliWithEmptyHome": {
    "pass": true,
    "detail": null
-  },
-  "imagesPresent": {
-   "pass": false,
-   "detail": {
-    "asc-1807-tools:1": null,
-    "node:22-alpine": "sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603"
-   }
   },
   "dockerNetworksCreateRemove": {
    "pass": true,
@@ -47,6 +44,25 @@
     ],
     "removed": 0
    }
+  },
+  "imageChecks": {
+   "pass": true,
+   "detail": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  "runAllFollowsOrder": {
+   "pass": true,
+   "detail": null
+  },
+  "orderValid": {
+   "pass": true,
+   "detail": []
   }
  },
  "samples": {
@@ -276,8 +292,14 @@
   "package/skills/user-journey-acceptance/references/journeys.md"
  ],
  "images": {
-  "asc-1807-tools:1": null,
-  "node:22-alpine": "sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603"
+  "asc-1807-tools:1": {
+   "local": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8",
+   "pinned": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8"
+  },
+  "node:22-alpine": {
+   "local": "sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603",
+   "pinned": "sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603"
+  }
  },
  "dockerWithEmptyHome": {
   "exit": 0,
@@ -290,6 +312,306 @@
    0
   ],
   "removed": 0
+ },
+ "imageChecks": {
+  "ui07-bus-mobile": {
+   "exit": 0,
+   "pages": {
+    "ui07-good": {
+     "gold": {
+      "coverage": 1,
+      "missing": [],
+      "narrowOverflow": false,
+      "firstViewportMissing": [],
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "mobile"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       1,
+       1
+      ]
+     }
+    },
+    "ui07-bad": {
+     "gold": {
+      "coverage": 0.846,
+      "missing": [
+       "07:41",
+       "200円",
+       "100円",
+       "0120-000-000"
+      ],
+      "narrowOverflow": true,
+      "firstViewportMissing": [
+       "中央通り"
+      ],
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": false,
+       "missing": [
+        "中央通り",
+        "07:48",
+        "07:52",
+        "12分",
+        "運休",
+        "のりば1",
+        "のりば2"
+       ],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": false,
+       "missing": [
+        "中央通り",
+        "07:48",
+        "07:52",
+        "12分",
+        "運休",
+        "のりば1",
+        "のりば2"
+       ],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "mobile"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       6,
+       6
+      ]
+     }
+    },
+    "ui07-hidden": {
+     "gold": {
+      "coverage": 0.269,
+      "missing": [
+       "循環A",
+       "循環B",
+       "急行",
+       "駅前・市役所行",
+       "市民病院・図書館行",
+       "08:08",
+       "08:15",
+       "08:22",
+       "08:00",
+       "08:14",
+       "6分",
+       "遅れ",
+       "定刻",
+       "中央通り",
+       "07:41",
+       "200円",
+       "100円",
+       "0120-000-000",
+       "低床"
+      ],
+      "narrowOverflow": false,
+      "firstViewportMissing": [],
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": false,
+       "missing": [
+        "中央通り",
+        "07:48",
+        "07:52"
+       ],
+       "hiddenRequired": [
+        "中央通り",
+        "200円",
+        "100円"
+       ]
+      },
+      "wide": {
+       "answerAll": false,
+       "missing": [
+        "中央通り",
+        "07:48",
+        "07:52"
+       ],
+       "hiddenRequired": [
+        "中央通り",
+        "200円",
+        "100円"
+       ]
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "mobile"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       1,
+       1
+      ]
+     }
+    }
+   }
+  },
+  "ui04-parts-search": {
+   "exit": 0,
+   "pages": {
+    "ui04-good": {
+     "gold": {
+      "coverage": 1,
+      "missing": [],
+      "narrowOverflow": false,
+      "interactions": [
+       true,
+       true
+      ],
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "mobile"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       1,
+       1
+      ]
+     }
+    },
+    "ui04-bad": {
+     "gold": {
+      "coverage": 0.292,
+      "missing": [
+       "BS-1605-C7-L0450-FIXEDEND",
+       "SP-CMP-0.8X6X20-SUS304",
+       "SP-EXT-1.0X8X35-SWPB-HOOK",
+       "PL-HB-M8-POM-WHITE-KNOB",
+       "SN-PRX-M12-NPN-NO-2M-CABLE",
+       "SN-PRX-M18-PNP-NC-M12CONN",
+       "12件",
+       "在庫あり",
+       "残少",
+       "取寄せ",
+       "生産終了",
+       "PL-HB-M8-PA66-GRAY-KNOB",
+       "即日出荷",
+       "2027-02-14",
+       "寸法図",
+       "取扱説明書",
+       "48"
+      ],
+      "narrowOverflow": true,
+      "interactions": [
+       false,
+       false
+      ],
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": false,
+       "missing": [
+        "12件",
+        "在庫あり"
+       ],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": false,
+       "missing": [
+        "12件",
+        "在庫あり",
+        "48",
+        "即日出荷",
+        "2027-02-14"
+       ],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "mobile"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       2,
+       2
+      ]
+     }
+    }
+   }
+  },
+  "expectations": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ "runAll": {
+  "exit": 0,
+  "trials": [
+   "ui03-dashboard/B-r1",
+   "ui03-dashboard/S-r1",
+   "ui07-bus-mobile/B-r1",
+   "ui07-bus-mobile/S-r1",
+   "ui04-parts-search/B-r1",
+   "ui04-parts-search/S-r1",
+   "ui03-dashboard/S-r2",
+   "ui03-dashboard/B-r2",
+   "ui07-bus-mobile/S-r2",
+   "ui07-bus-mobile/B-r2",
+   "ui04-parts-search/S-r2",
+   "ui04-parts-search/B-r2",
+   "ui03-dashboard/B-r3",
+   "ui03-dashboard/S-r3",
+   "ui07-bus-mobile/B-r3",
+   "ui07-bus-mobile/S-r3",
+   "ui04-parts-search/B-r3",
+   "ui04-parts-search/S-r3"
+  ]
  },
  "plan": {
   "order": [
@@ -313,11 +635,12 @@
    "ui04-parts-search/S-r3"
   ],
   "trials": 18,
+  "probes": 2,
   "perTrialBudgetUsd": 1.5,
-  "worstCaseUsd": 35,
+  "worstCaseWithoutReplacementsUsd": 36,
   "planningUsd": {
-   "low": 8.5,
-   "high": 16.8
+   "low": 8.8,
+   "high": 17.4
   },
   "capUsd": 40,
   "stopAboveUsd": 38,
@@ -328,7 +651,7 @@
   "docker": [
    "docker network create --internal --label asc.evidence=1815 asc1815-ui03-b-r1-gen",
    "docker network create --label asc.evidence=1815 asc1815-ui03-b-r1-egress",
-   "docker run -d --name asc1815-ui03-b-r1-proxy --read-only --cap-drop ALL --security-opt no-new-privileges --label asc.evidence=1815 --pull never --pids-limit 128 --memory 256m --cpus 0.5 --user node --network asc1815-ui03-b-r1-egress -v <repo>/docs/evidence/1807-design-eval-browser/env:/opt/env:ro node:22-alpine node /opt/env/proxy.mjs /opt/env/allowlist.json",
+   "docker run -d --name asc1815-ui03-b-r1-proxy --read-only --cap-drop ALL --security-opt no-new-privileges --label asc.evidence=1815 --pull never --pids-limit 128 --memory 256m --cpus 0.5 --user node --network asc1815-ui03-b-r1-egress -v <scratch>/runs/ui03-dashboard/B-r1/env:/opt/env:ro node:22-alpine node /opt/env/proxy.mjs /opt/env/allowlist.json",
    "docker network connect --alias proxy asc1815-ui03-b-r1-gen asc1815-ui03-b-r1-proxy"
   ],
   "mcpConfig": {
@@ -368,11 +691,11 @@
       "-v",
       "<scratch>/runs/ui03-dashboard/B-r1/fixture:/work:ro",
       "-v",
-      "<repo>/docs/evidence/1807-design-eval-browser/env:/opt/env:ro",
+      "<scratch>/runs/ui03-dashboard/B-r1/env:/opt/env:ro",
       "-v",
-      "<repo>/docs/evidence/1807-design-eval-browser/env/allowlist.json:/config/allowlist.json:ro",
+      "<scratch>/runs/ui03-dashboard/B-r1/env/allowlist.json:/config/allowlist.json:ro",
       "-v",
-      "<repo>/docs/evidence/1807-design-eval-browser/env/allowlist-catalog.json:/config/allowlist-catalog.json:ro",
+      "<scratch>/runs/ui03-dashboard/B-r1/env/allowlist-catalog.json:/config/allowlist-catalog.json:ro",
       "-v",
       "<scratch>/runs/ui03-dashboard/B-r1/log:/log",
       "-e",
@@ -412,7 +735,13 @@
    "DISABLE_TELEMETRY",
    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
    "DOCKER_HOST"
-  ]
+  ],
+  "probe": {
+   "trial": "probe/B-r1",
+   "sampleCase": "ui03-dashboard",
+   "claude": "claude -p <prompt> --model sonnet --permission-mode acceptEdits --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --allowedTools mcp__browser__fetch_page,mcp__browser__view_page,mcp__browser__screenshot --mcp-config <scratch>/runs/probe/B-r1/mcp.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.5 --output-format stream-json --verbose --include-hook-events --debug-file <scratch>/runs/probe/B-r1/debug.log",
+   "budgetUsd": 0.5
+  }
  },
  "pass": true
 }

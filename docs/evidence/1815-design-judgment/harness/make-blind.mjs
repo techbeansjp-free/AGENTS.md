@@ -1,6 +1,8 @@
 // Builds one blinded ranking round for the model evaluators (#1815). Adapted from #1807 harness/make-blind.mjs.
 // Usage: node make-blind.mjs <runs-root> <render-root> <round 1|2> <blind-root> <keys-root>
-// For every case: the trials decide.mjs selects (B and S reps 1..runs, failed ones replaced once), new random ids and a
+// Refuses when the fixed files or a counted trial's fixation record differ (decide.mjs fixationProblemsForScoring).
+// For every case: the trials decide.mjs counts (order.mjs countedTrials: reps 1..runs, the k-th generation failure
+// replaced by rep runs+k), new random ids and a
 // new viewing order from the seed "asc1815-round<round>" (round 2 differs from round 1 in ids and order).
 // Output: <blind-root>/round<round>/<case>/{BRIEF.md, ORDER.txt, shots/<ID>-{narrow,wide}.png, live/<ID>/index.html}
 // (the deliverable only, with a Content-Security-Policy that blocks every network request; DESIGN-NOTES.md, the other
@@ -10,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {evidenceRoot, loadJson} from './pairing.mjs';
-import {trialRecord, failed, selectTrials} from './decide.mjs';
+import {trialRecord, selectCounted, fixationProblemsForScoring} from './decide.mjs';
 
 const CSP = '<meta http-equiv="Content-Security-Policy" content="default-src \'self\' \'unsafe-inline\' data: blob:; connect-src \'none\'; form-action \'none\'">';
 
@@ -29,7 +31,9 @@ export function makeRound(runsRoot, renderRoot, round, blindRoot, keysRoot) {
   const summary = {};
   for (const [caseId, k] of Object.entries(cases)) {
     const names = fs.readdirSync(path.join(runsRoot, caseId)).filter((n) => /^(B|S)-r\d+$/.test(n));
-    const sel = selectTrials(names, (n) => failed(trialRecord(runsRoot, renderRoot, caseId, n)), runs);
+    const sel = selectCounted(names, caseId, runsRoot, runs);
+    const fp = fixationProblemsForScoring([...sel.B, ...sel.S].map((n) => trialRecord(runsRoot, renderRoot, caseId, n).meta));
+    if (fp.length) throw new Error(`refused: ${fp.join('; ')}`);
     const cards = blindIds([...sel.B, ...sel.S], seed);
     const out = path.join(blindRoot, `round${round}`, caseId);
     if (fs.existsSync(out)) throw new Error(`exists: ${out}`);

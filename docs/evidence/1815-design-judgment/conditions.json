@@ -4,13 +4,37 @@
  "model": "sonnet",
  "modelNote": "The `sonnet` alias, as #1807 (generator) and #1814. The resolved id (init event) is recorded per trial.",
  "runs": 3,
- "budget": {"capUsd": 40, "safetyMarginUsd": 2, "perTrialUsd": 1.5, "rankingReserveUsd": 4, "note": "Owner cap 40 USD (Host-computed total_cost_usd). One ledger for generation and the Fable rankings. A generation trial or a ranking session starts only when ledger total + its reservation <= capUsd - safetyMarginUsd. perTrialUsd is --max-budget-usd of every generation trial (#1807 used 1.5). A ranking session is reserved at rankingReserveUsd and settled with its Host cost; Codex reports no Host cost (recorded as missing, as #1807)."},
+ "budget": {
+  "capUsd": 40,
+  "safetyMarginUsd": 2,
+  "perTrialUsd": 1.5,
+  "rankingReserveUsd": 4,
+  "note": "Owner cap 40 USD (Host-computed total_cost_usd). One ledger for generation and the Fable rankings. A generation trial or a ranking session starts only when ledger total + its reservation <= capUsd - safetyMarginUsd. perTrialUsd is --max-budget-usd of every generation trial (#1807 used 1.5). A ranking session is reserved at rankingReserveUsd and settled with its Host cost; Codex reports no Host cost (recorded as missing, as #1807). An isolation probe is reserved and limited at probeUsd.",
+  "probeUsd": 0.5
+ },
  "adopt": "claude-md",
  "prompt": "1807-design-eval-browser/env/gen-prompt.txt",
  "promptNote": "#1807の手順を指示しない依頼文（docs/evidence/からの相対path）。両条件・全ケースで同じ。",
- "order": "Sequential, one trial at a time (ledger lock). Round r = 1..3; within a round the cases in the order ui03-dashboard, ui07-bus-mobile, ui04-parts-search; within a case B then S in odd rounds and S then B in even rounds.",
  "conditions": {
-  "B": {"label": "現行ASC（release v0.5.109、利用者の手順で導入し、CLAUDE.mdの案内文を採用）", "release": "B"},
-  "S": {"label": "候補（Bと同じ手順。違いはimplementation.mdとjourneys.mdの追記だけ）", "release": "S"}
+  "B": {
+   "label": "現行ASC（release v0.5.109、利用者の手順で導入し、CLAUDE.mdの案内文を採用）",
+   "release": "B"
+  },
+  "S": {
+   "label": "候補（Bと同じ手順。違いはimplementation.mdとjourneys.mdの追記だけ）",
+   "release": "S"
+  }
+ },
+ "orderNote": "The execution order is fixed in run-order.json.",
+ "images": {
+  "tools": {
+   "name": "asc-1807-tools:1",
+   "id": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8",
+   "note": "Built by the coordinator on 2026-11-25 with docker build --target tools from 1807-design-eval-browser/env/Dockerfile; playwright-core-1.49.1.tgz and axe-core-4.10.2.tgz matched the registry dist.integrity (sha512); cached layers, Created 2026-11-24T23:43:40Z."
+  },
+  "proxy": {
+   "name": "node:22-alpine",
+   "id": "sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603"
+  }
  }
 }

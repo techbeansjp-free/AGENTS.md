@@ -1,12 +1,19 @@
 // Applies decision-criteria.md mechanically (#1815). Pure functions + a CLI. No model call.
-// Usage: node decide.mjs <runs-root> <render-root> <ranks-dir> <out.json>
+// Usage: node decide.mjs <runs-root> <render-root> <ranks-dir|-> <out.json> --ledger <file>
+// Refuses (exit 3) when the fixed files differ from the last fixation record or a counted trial ran under another record.
+// Not judged when the run stopped before every planned trial and required replacement existed (unless the ledger shows
+// the cap was reached), or when a condition/case has no valid trial.
 //   runs-root/<case>/<B|S>-r<n>/{meta.json,reads.json,core-steps.json}
 //   render-root/<case>/{render.json,<trial>/{gold.json,first-view.json}}       (run-indicators.mjs)
 //   ranks-dir/keys/<round>/<case>.json  {"<blind id>": "<B|S>-r<n>"}           (make-blind.mjs; opened after ranking)
 //   ranks-dir/<evaluator>-<round>.json  {"<case>": ["<best id>", ..., "<worst id>"]}  (evaluator: fable|codex, round: 1|2)
 import fs from 'node:fs';
 import path from 'node:path';
-import {loadJson} from './pairing.mjs';
+import crypto from 'node:crypto';
+import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
+import {loadJson, ev} from './pairing.mjs';
+import {countedTrials} from './order.mjs';
+import {differences, lastRecord} from './fixation.mjs';
 
 export const EVALUATORS = ['fable', 'codex'];
 export const ROUNDS = [1, 2];
@@ -34,17 +41,34 @@ export function failed(t) {
     || Boolean(t.fv.error) || !t.fv.widths?.narrow || !t.fv.widths?.wide;
 }
 
-// reps 1..runs; each failed one is replaced, in order, by the next unused rep > runs of the same condition (once).
-export function selectTrials(names, isFailed, runs) {
-  const out = {};
-  for (const c of ['B', 'S']) {
-    const rep = (n) => Number(/-r(\d+)$/.exec(n)[1]);
-    const mine = names.filter((n) => n.startsWith(`${c}-r`)).sort((a, b) => rep(a) - rep(b));
-    const base = mine.filter((n) => rep(n) <= runs);
-    const extra = mine.filter((n) => rep(n) > runs);
-    out[c] = base.map((n) => (isFailed(n) && extra.length ? extra.shift() : n));
+// Which trials count (order.mjs countedTrials, the same rule as the runner): planned reps 1..runs; the k-th generation
+// failure of a condition/case is replaced by rep runs+k; a replacement is never replaced.
+export function selectCounted(names, caseId, runsRoot, runs) {
+  const B = countedTrials(names, caseId, 'B', {runsRoot, runs}), S = countedTrials(names, caseId, 'S', {runsRoot, runs});
+  return {B: B.counted, S: S.counted, missing: [...B.missing, ...S.missing], notUsed: [...B.notUsed, ...S.notUsed]};
+}
+
+// Before scoring (and before building the blind pages): the fixed files equal the last fixation record and every counted
+// trial was run under that record (meta.fixationSha256 = sha256 of the current results/fixation.json, fixedAtCommit =
+// the last record's commit).
+export function fixationProblemsForScoring(metas, root = ev) {
+  const file = path.join(root, 'results/fixation.json');
+  if (!fs.existsSync(file)) return ['results/fixation.json is missing'];
+  const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const p = differences(lastRecord(fx), root).map((f) => `fixed file differs: ${f}`);
+  const sha = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  for (const m of metas) {
+    if (m.fixationSha256 !== sha) p.push(`${m.trial ?? '?'}: run under another fixation record`);
+    if (m.fixedAtCommit !== lastRecord(fx).fixedAtCommit) p.push(`${m.trial ?? '?'}: fixedAtCommit differs`);
   }
-  return out;
+  return p;
+}
+
+// The run is complete when every planned trial and every required replacement exists, or the cap was reached: the ledger
+// cannot take one more generation trial.
+export function completeness({missing, spentUsd, budget}) {
+  const capReached = typeof spentUsd === 'number' && spentUsd + budget.perTrialUsd > budget.capUsd - budget.safetyMarginUsd;
+  return {missing, capReached, complete: missing.length === 0};
 }
 
 // ---- per-trial indicators --------------------------------------------------------------------------------------------
@@ -145,52 +169,69 @@ export function caseDecision({S, B, ranking}) {
   return {status, harm, judgeable, readS: `${readS}/${S.length}`, failures, indicators: ind, ranking: rk};
 }
 
-export function overall(cases, costRatio) {
+export function overall(cases, costRatio, run = {complete: true, capReached: false, emptyCells: []}) {
   const st = Object.values(cases).map((c) => c.status);
   const effect = Object.entries(cases).filter(([, c]) => c.status === '効果あり').map(([k]) => k);
   const harm = Object.entries(cases).filter(([, c]) => c.harm).map(([k]) => k);
   const judgeable = Object.entries(cases).filter(([, c]) => c.judgeable).map(([k]) => k);
   let decision;
-  if (st.includes('順位待ち')) decision = '順位待ち';
+  if (!run.complete && !run.capReached) decision = '未判定（実行が途中で止まった）';
+  else if ((run.emptyCells ?? []).length) decision = '未判定（有効な試行の無い条件・ケース）';
+  else if (st.includes('順位待ち')) decision = '順位待ち';
   else if (judgeable.length < RULES.minEffectCases) decision = '未判定（取り込まない）';
   else if (effect.length >= RULES.minEffectCases && harm.length === 0 && costRatio !== null && costRatio <= RULES.maxCostRatio) decision = '効果あり（取り込む）';
   else decision = '効果なし（取り込まない）';
-  return {decision, effectCases: effect, harmCases: harm, judgeableCases: judgeable, costRatio};
+  return {decision, effectCases: effect, harmCases: harm, judgeableCases: judgeable, costRatio, run};
 }
 
 const median = (a) => { const s = a.filter((x) => typeof x === 'number').sort((x, y) => x - y); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; };
 
-export function decide(runsRoot, renderRoot, ranksDir) {
+export function decide(runsRoot, renderRoot, ranksDir, {ledger = null} = {}) {
   const cases = loadJson('cases.json').cases;
-  const runs = loadJson('conditions.json').runs;
-  const out = {schema: 'asc-1815-decision/v1', rules: RULES, cases: {}, trials: {}};
+  const conds = loadJson('conditions.json');
+  const runs = conds.runs;
+  const out = {schema: 'asc-1815-decision/v2', rules: RULES, cases: {}, trials: {}};
   const costs = {B: [], S: []};
+  const missing = [], emptyCells = [], metas = [];
+  const prepared = [];
   for (const caseId of Object.keys(cases)) {
     const dir = path.join(runsRoot, caseId);
-    if (!fs.existsSync(dir)) continue;
-    const names = fs.readdirSync(dir).filter((n) => /^(B|S)-r\d+$/.test(n));
-    const recs = Object.fromEntries(names.map((n) => [n, trialRecord(runsRoot, renderRoot, caseId, n)]));
-    const sel = selectTrials(names, (n) => failed(recs[n]), runs);
+    const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => /^(B|S)-r\d+$/.test(n)) : [];
+    const sel = selectCounted(names, caseId, runsRoot, runs);
+    missing.push(...sel.missing.map((n) => `${caseId}/${n}`));
+    const recs = Object.fromEntries([...sel.B, ...sel.S].map((n) => [n, trialRecord(runsRoot, renderRoot, caseId, n)]));
+    metas.push(...Object.values(recs).map((r) => r.meta));
+    prepared.push({caseId, sel, recs});
+  }
+  const fp = fixationProblemsForScoring(metas);
+  if (fp.length) throw new Error(`refused: ${fp.join('; ')}`);
+  for (const {caseId, sel, recs} of prepared) {
     const row = (n) => ({trial: n, failed: failed(recs[n]), reads: recs[n].reads, ...indicators(recs[n])});
     const S = sel.S.map(row), B = sel.B.map(row);
+    for (const c of ['B', 'S']) if (!(c === 'B' ? B : S).some((x) => !x.failed)) emptyCells.push(`${caseId}/${c}`);
     for (const x of [...S, ...B]) costs[x.trial[0]].push(x.costUsd);
     let ranking = null;
     const files = Object.fromEntries(EVALUATORS.flatMap((e) => ROUNDS.map((r) => [`${e}-${r}`, read(path.join(ranksDir ?? '', `${e}-${r}.json`))])));
     if (ranksDir && Object.values(files).every(Boolean)) {
       ranking = Object.fromEntries(EVALUATORS.map((e) => [e, evaluatorCase(ROUNDS.map((r) => ({order: files[`${e}-${r}`][caseId], key: read(path.join(ranksDir, 'keys', String(r), `${caseId}.json`))})), sel.S, sel.B)]));
     }
-    out.trials[caseId] = {selected: sel, all: names.sort(), notUsed: names.filter((n) => !sel.B.includes(n) && !sel.S.includes(n)), rows: [...B, ...S]};
+    out.trials[caseId] = {counted: {B: sel.B, S: sel.S}, missing: sel.missing, notUsed: sel.notUsed, rows: [...B, ...S]};
     out.cases[caseId] = caseDecision({S, B, ranking});
   }
+  const run = {...completeness({missing, spentUsd: ledger ? ledgerOps.spent(ledger) : null, budget: conds.budget}), emptyCells};
   const mB = median(costs.B), mS = median(costs.S);
-  out.overall = overall(out.cases, mB ? mS / mB : null);
+  out.overall = overall(out.cases, mB ? mS / mB : null, run);
   out.cost = {medianB: mB, medianS: mS};
   return out;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [runsRoot, renderRoot, ranksDir, outPath] = process.argv.slice(2);
-  const out = decide(path.resolve(runsRoot), path.resolve(renderRoot), ranksDir && ranksDir !== '-' ? path.resolve(ranksDir) : null);
+  const args = process.argv.slice(2);
+  const i = args.indexOf('--ledger');
+  const ledger = i >= 0 ? path.resolve(args[i + 1]) : null;
+  const [runsRoot, renderRoot, ranksDir, outPath] = i >= 0 ? args.filter((_, j) => j !== i && j !== i + 1) : args;
+  let out;
+  try { out = decide(path.resolve(runsRoot), path.resolve(renderRoot), ranksDir && ranksDir !== '-' ? path.resolve(ranksDir) : null, {ledger}); } catch (e) { console.error(e.message); process.exit(3); }
   fs.writeFileSync(outPath, JSON.stringify(out, null, 1));
   console.log(JSON.stringify({overall: out.overall, cases: Object.fromEntries(Object.entries(out.cases).map(([k, v]) => [k, v.status]))}));
 }

@@ -4,8 +4,8 @@
 // mounts (cases, gold, prompt, MCP server, proxy, allowlist, render/gold check, install, guard, ledger).
 //   init   first record (refused when the file exists). Takes --ledger: creates the ledger when absent (or accepts an
 //          existing one without reservations) and records its ledgerId; run-trial and budget refuse any other ledger.
-//   refix  a correction before measurement: only while the recorded ledger holds no reservation, only with --reason and
-//          --review. Any fixed file may differ (nothing has been measured yet).
+//   refix  a correction before measurement, only with --reason and --review. Every fixed file may change while the recorded ledger
+//          holds no reservation; only harness/probe.mjs after the isolation probes; nothing after a planned trial.
 //   check  compares the current files with the last record.
 // run-trial.mjs --run and budget.mjs refuse when check fails, when results/fixation.json is not committed and clean,
 // when a record's commit is not in HEAD's history, or when README.md does not name the first record's commit.
@@ -19,13 +19,13 @@ import {fileURLToPath} from 'node:url';
 import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
 
 const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OWN = ['cases.json', 'conditions.json', 'release.json', 'decision-criteria.md', 'harness/rank-prompt.txt',
-  ...['budget', 'collect', 'decide', 'first-view', 'fixation', 'make-blind', 'make-sample', 'pairing', 'reads', 'run-indicators', 'run-trial'].map((n) => `harness/${n}.mjs`)];
+const OWN = ['cases.json', 'conditions.json', 'release.json', 'run-order.json', 'decision-criteria.md', 'harness/rank-prompt.txt',
+  ...['budget', 'collect', 'decide', 'first-view', 'fixation', 'make-blind', 'make-sample', 'order', 'pairing', 'probe', 'reads', 'run-all', 'run-indicators', 'run-trial'].map((n) => `harness/${n}.mjs`)];
 const E1807 = ['harness/core-steps.mjs', 'harness/gold-check.mjs', 'harness/render.mjs', 'harness/run-render.mjs', 'gold.json',
   'env/gen-prompt.txt', 'env/mcp-server.mjs', 'env/proxy.mjs', 'env/allowlist.json', 'env/allowlist-catalog.json', 'env/Dockerfile',
   'cases/FONTS.md', 'cases/ui04-parts-search/BRIEF.md', 'cases/ui04-parts-search/data.json', 'cases/ui07-bus-mobile/BRIEF.md', 'cases/ui07-bus-mobile/data.json'].map((f) => `../1807-design-eval-browser/${f}`);
 const E1804 = ['cases/ui03-dashboard/BRIEF.md', 'cases/ui03-dashboard/data.json'].map((f) => `../1804-design-judgment/${f}`);
-const E1814 = ['guard', 'ledger', 'install-asc', 'condition-i', 'make-fixture', 'collect', 'apply-condition'].map((n) => `../1814-skill-invocation/harness/${n}.mjs`);
+const E1814 = ['guard', 'ledger', 'install-asc', 'condition-i', 'make-fixture', 'collect', 'apply-condition', 'probe-check', 'score'].map((n) => `../1814-skill-invocation/harness/${n}.mjs`);
 export const FIXED = [...OWN, ...E1807, ...E1804, ...E1814];
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
@@ -59,11 +59,17 @@ export function paidStepProblems(ledgerFile, root = ev) {
   return p;
 }
 
-export function refixViolations(fx, ledgerFile) {
+// Before any reservation every fixed file may change. After the isolation probes (only probe reservations in the
+// ledger), only harness/probe.mjs may change (as #1814 allowed only probe-check.mjs). After a planned trial, nothing.
+export const PROBE_REFIX_ALLOWED = ['harness/probe.mjs'];
+export function refixViolations(fx, ledgerFile, root = ev) {
   if (!ledgerFile || !fs.existsSync(ledgerFile)) return ['the ledger file does not exist'];
   const v = [];
   if (ledgerOps.ledgerId(ledgerFile) !== fx.records[0].ledgerId) v.push('the ledger is not the one recorded at init');
-  if (ledgerOps.reservations(ledgerFile).length) v.push('the ledger holds reservations; refix is a pre-measurement correction only');
+  const res = ledgerOps.reservations(ledgerFile);
+  const other = res.filter((e) => !String(e.trial).startsWith('probe/'));
+  if (other.length) v.push(`the ledger holds measurement reservations (${other.slice(0, 3).map((e) => e.trial).join(', ')}); refix is a pre-measurement correction only`);
+  else if (res.length) for (const f of differences(lastRecord(fx), root)) if (!PROBE_REFIX_ALLOWED.includes(f)) v.push(`${f} changed after the probes (only ${PROBE_REFIX_ALLOWED.join(', ')} may)`);
   return v;
 }
 

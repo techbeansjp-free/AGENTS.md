@@ -1,6 +1,6 @@
 # 判定の規則（モデル実行の前に固定）
 
-対象：#1815。比べる条件・審美の判定の方法・費用の上限は、ownerの判断（2026-11-25、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1815#issuecomment-7159922599)）による。この文書は、その判断を決定論の手順にしたものである。手順は[harness/decide.mjs](harness/decide.mjs)に実装し、合成の記録で試験した（[harness/harness.test.mjs](harness/harness.test.mjs)）。結果を見た後に、この文書・[conditions.json](conditions.json)・[cases.json](cases.json)・[release.json](release.json)・採点の処理を変えない（[harness/fixation.mjs](harness/fixation.mjs)が確かめる）。
+対象：#1815。比べる条件・審美の判定の方法・費用の上限は、ownerの判断（2026-11-25、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1815#issuecomment-7159922599)）による。この文書は、その判断を決定論の手順にしたものである。下の「判定の規則」の具体の水準（両評価者のU≥8/9、再現性0.5未満の評価者の除外、効果ありが3ケース中2以上、害0、費用の中央値の比3以下、Sの3試行中2以上で本文とreferenceが読まれなければ未判定）は、**ownerが承認した（2026-11-25、会話。統括の記録）**。手順は[harness/decide.mjs](harness/decide.mjs)に実装し、合成の記録で試験した（[harness/harness.test.mjs](harness/harness.test.mjs)）。結果を見た後に、この文書・[conditions.json](conditions.json)・[cases.json](cases.json)・[release.json](release.json)・採点の処理を変えない（[harness/fixation.mjs](harness/fixation.mjs)が確かめる）。
 
 ## ownerの判断
 
@@ -11,11 +11,16 @@
 | 審美の判定 | Fable・Codexの2モデルの盲検の順位を各2回取り、採点の再現性も記録する。加えて測れる指標を併用し、両方が同じ向きのときだけ効果ありとする |
 | 費用の上限 | 40 USD |
 | 出典 | 配布するSkill本文には外部Skillへのリンクを載せない（Sの追記はリンクを含まない） |
+| 判定の規則の水準 | この文書の「判定の規則」を、そのまま承認（2026-11-25、会話） |
+| 描画用のimage | `asc-1807-tools:1`を#1807の`env/Dockerfile`（`tools`段階）から作ることを承認。統括が作り、image idを`conditions.json`の`images`に固定した（2026-11-25） |
 
 ## 試行の扱い
 
-- **失敗**：生成の終了が`success`でない（予算上限による停止を含む）、init eventの組込みtoolが`Read,Write,Edit,Glob,Grep,Skill`とMCPの3つでない、`browser`のMCP serverが`connected`でない、`out/index.html`が無い、描画・goldの判定・初期表示の判定のどれかが失敗した試行（`decide.mjs`の`failed`）。
-- **置換え**：失敗した試行に限り、同じ条件・ケースで番号4以降の試行を1回だけ実行でき、採点では失敗の代わりに数える。それ以外の追加の試行は採点に含めず、別に報告する。
+- **実行の順**：[run-order.json](run-order.json)で固定した。各条件1回の隔離の確認（probe）の後、反復を外側に、ケースはUI-03・UI-07・UI-04の順、条件は奇数回B→S・偶数回S→Bの順に18試行を1つずつ行う。[harness/run-all.mjs](harness/run-all.mjs)はこの順だけを実行し、`run-trial.mjs`は、台帳で次に予約されていない計画の試行以外を拒否する。上限で止まっても、2条件の差は1試行以内である。
+- **生成の失敗**（置換えの判断。`order.mjs`の`generationFailure`。試行のdirectoryだけで決まり、実行器と採点で同じ）：`meta.json`が無い、終了が0でない、結果が`success`でない（予算上限による停止を含む）、init eventの組込みtoolが`Read,Write,Edit,Glob,Grep,Skill`とMCPの3つでないか`browser`のMCP serverが`connected`でない、`out/index.html`が無い。
+- **置換え（必須）**：条件・ケースごとに、計画の試行（1〜3回目）のうちk番目の生成の失敗を、番号3+kの試行で置き換える。置換えは全ての計画の試行の後に、同じ順で、`run-all.mjs replacements`だけが実行する。置換えの試行は、結果にかかわらず再び置き換えない。採点（`decide.mjs`・`make-blind.mjs`）は同じ規則（`order.mjs`の`countedTrials`）で数える試行を決める。それ以外の追加の試行は採点に含めず、別に報告する。
+- **採点での失敗**：数える試行のうち、生成の失敗に加えて、描画・goldの判定・初期表示の判定のどれかが失敗した試行（`decide.mjs`の`failed`）。描画の失敗は生成物の性質なので置き換えず、指標ではSに最悪、Bに最良の値を入れる。
+- **固定の確認**：採点と盲検の作成の前に、固定したfileが`results/fixation.json`の最後の記録と同じで、数える全試行の`meta.json`の`fixationSha256`・`fixedAtCommit`がその記録と一致することを確かめ、違えば拒否する。
 - **読まれたか**：試行ごとに、ASCの本文（`.agent-skill-chain/skills/asc/SKILL.md`）、`implementation.md`、`user-journey-acceptance`の本文、`journeys.md`を、エラーなしの`Read`で読んだかを記録する（`reads.mjs`。導入された2つの写し`skills/`・`managed-runtime/skills/`のどちらでもよい。Skill toolの呼出し・Grepは読込みに数えない）。
 - **候補の文が届いた試行**：Sの試行で、本文と、`implementation.md`または`journeys.md`の少なくとも一方を読んだもの。届かなかった試行（本文を読まない、本文だけ読んでreferenceを読まない）は、条件・ケースごとに件数を分けて報告する。Bでも同じ記録を取る。
 
@@ -39,6 +44,10 @@
 2. 各回で、FableとCodexが、独立した新しいContextで、読取り専用で、[harness/rank-prompt.txt](harness/rank-prompt.txt)に従い、ケースごとに6画面へ1〜6の順位を付ける（#1807の再採点と同じ依頼文を6画面にしたもの）。相互の結果を見ない。起動はASCの`host-session`（#1807と同じ）。
 3. 費用：Fableの各回は開始前に台帳へ4 USDを予約し（[harness/budget.mjs](harness/budget.mjs)）、Hostの費用で精算する。Codexの費用はHostで計算されないので欠測として記録する（#1807と同じ）。
 
+## 隔離の確認（probe）
+
+測定の前に、各条件1回、測定と同じ起動（同じsample projectの作り方・HOME・config・tool・MCP・model）に、debugの記録を加えて、[harness/probe.mjs](harness/probe.mjs)の依頼文で行う。生成Agentの文脈に、祖先の`CLAUDE.md`・ownerのmemory・ownerの設定・ownerのSkill・repositoryの指示が無いこと、案内文のblockとASCのSkillの一覧があること、実HOMEとこのrepositoryに置いた目印fileのReadが拒否され、目印の文字列がどの記録にも無いこと、debugの記録の指示・memory・設定のpathが試行のdirectoryかprogramの場所だけであること、hookが無いこと、組込みtoolとMCPが測定と同じことを確かめる。B・Sの結果を比べ、tool・Skillの一覧・gitの件名・modelが同じことを確かめる。どれかが不合格なら測定しない。目印fileの作成はownerの確認が要るので、統括がownerの確認を`results/probe-approval.json`に記録してcommitするまで、`probe.mjs markers create`とprobeの起動は拒否される。probeの後の是正は、`harness/probe.mjs`だけを、独立レビューを通して`fixation.mjs refix`で直せる。
+
 ## 判定の規則
 
 ケースごと（`decide.mjs`の`caseDecision`）：
@@ -51,6 +60,7 @@
 
 全体（`overall`）：
 
+0. **実行の完全性**：計画の18試行と必要な置換えのどれかが無いまま終わった場合は**未判定（実行が途中で止まった）**。ただし、台帳の累計に1試行の予算を足すと停止線（上限40−余裕2）を超える、つまり上限に達したことが台帳で示せる場合は、この規則で止めない。数える試行のうち、どれかの条件・ケースで有効な（失敗でない）試行が1つも無ければ**未判定（有効な試行の無い条件・ケース）**。
 6. 「効果あり」のケースが2つ以上、害のケースが無く、生成の費用の中央値の比（S/B）が3以下（#1807の基準）なら、**効果あり（取り込む）**。
 7. 判定できるケースが2つ未満なら、**未判定（取り込まない）**。候補の文が読まれないので効果を言えない。
 8. それ以外は**効果なし（取り込まない）**。効果ありが1ケースだけの場合もここに入り、どの案が効いたかを分けて確かめるかはownerに報告する。
@@ -65,3 +75,4 @@
 - 生成モデルは`sonnet`だけ、Hostは Claude Code だけ。モデルの更新で結果が変わり得る。
 - 初期表示の項目は、依頼文から定めた文字列の有無で判定する。別の表記（例：時刻を「あと5分」とだけ示す）は見つからない扱いになる。
 - 隔離のため、組込みtoolはRead・Write・Edit・Glob・Grep・Skillだけで、Bashは無い（#1807と同じ）。利用者の環境との意図した違いである。
+- 候補の文、ケースの選び方（2幅の要求、design systemなし）、指標（両幅の初期表示の答え）は同じ考え方から作った。効果が出ても、選んだケースと指標が候補に合わせてあることを割り引く。適用しない場面での害は測っていない。

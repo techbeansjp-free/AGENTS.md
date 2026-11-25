@@ -9,12 +9,15 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {tarballProblems, installedProblems, packageDiff, loadJson, sha256, READ_TRIGGER_MARK, ev} from './pairing.mjs';
 import {readRecord} from './reads.mjs';
-import {claudeArgs, dockerPlan, childEnv, initProblems, scrub, EXPECTED_INIT_TOOLS, LABEL} from './run-trial.mjs';
-import {positions, meanPositions, pairsSAboveB, spearman, direction, evaluatorCase, indicatorCase, caseDecision, overall, selectTrials} from './decide.mjs';
+import {claudeArgs, dockerPlan, childEnv, initProblems, scrub, EXPECTED_INIT_TOOLS, LABEL, imageProblems} from './run-trial.mjs';
+import {positions, meanPositions, pairsSAboveB, spearman, direction, evaluatorCase, indicatorCase, caseDecision, overall, selectCounted, completeness, fixationProblemsForScoring} from './decide.mjs';
+import {plannedTrials, orderRefusal, replacementPlan, countedTrials, generationFailure, orderProblems, loadOrder} from './order.mjs';
+import {checkProbe, compareProbes, probeProblems, approvalProblems, probePrompt} from './probe.mjs';
+import {refixViolations} from './fixation.mjs';
+import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
 import {blindIds} from './make-blind.mjs';
 import {canReserve} from './budget.mjs';
 import {FIXED, differences, digests} from './fixation.mjs';
-import {trialOrder} from './dry-run.mjs';
 import {clean} from './collect.mjs';
 import {firstViewCommand} from './run-indicators.mjs';
 
@@ -110,7 +113,8 @@ test('run-trial: the claude command has the #1807 tools, the MCP tools only and 
 });
 
 test('run-trial: docker plan keeps #1807 isolation, adds the label and never pulls', () => {
-  const d = dockerPlan({prefix: 'p', fixture: '/f', logDir: '/l'});
+  const d = dockerPlan({prefix: 'p', fixture: '/f', logDir: '/l', envDir: '/t/env'});
+  assert.ok(d.mcpConfig.mcpServers.browser.args.includes('/t/env:/opt/env:ro'));
   assert.deepEqual(d.setup[0], ['network', 'create', '--internal', '--label', LABEL, 'p-gen']);
   const mcp = d.mcpConfig.mcpServers.browser.args;
   for (const f of ['--read-only', '--cap-drop', '--pull', '--network']) assert.ok(mcp.includes(f), f);
@@ -206,12 +210,6 @@ test('decide: overall needs effects in >= 2 cases, no harm and cost ratio <= 3',
   assert.match(overall({a: eff, b: {status: '未判定', judgeable: false}, c: {status: '未判定', judgeable: false}}, 1).decision, /^未判定/);
 });
 
-test('decide: a failed trial is replaced once by the next extra rep of the same condition', () => {
-  const names = ['B-r1', 'B-r2', 'B-r3', 'B-r4', 'S-r1', 'S-r2', 'S-r3'];
-  assert.deepEqual(selectTrials(names, (n) => n === 'B-r2', 3), {B: ['B-r1', 'B-r4', 'B-r3'], S: ['S-r1', 'S-r2', 'S-r3']});
-  assert.deepEqual(selectTrials(names, (n) => n === 'S-r1', 3).S, ['S-r1', 'S-r2', 'S-r3']);
-});
-
 test('make-blind: ids and order are fixed by the seed and differ between rounds', () => {
   const t = [...B, ...S];
   assert.deepEqual(blindIds(t, 'asc1815-round1'), blindIds(t, 'asc1815-round1'));
@@ -235,13 +233,6 @@ test('fixation: every fixed file exists and a changed digest is reported', () =>
   assert.deepEqual(differences(rec), ['decision-criteria.md']);
 });
 
-test('dry-run: trial order alternates B/S first by round and covers every case', () => {
-  const o = trialOrder(['c1', 'c2'], 3);
-  assert.equal(o.length, 12);
-  assert.deepEqual(o.slice(0, 4), ['c1/B-r1', 'c1/S-r1', 'c2/B-r1', 'c2/S-r1']);
-  assert.deepEqual(o.slice(4, 6), ['c1/S-r2', 'c1/B-r2']);
-});
-
 test('collect: the runs root and local paths are removed', () => {
   const d = tmp();
   const r = clean(`{"cwd":"${d}/ui03/B-r1/fixture","x":"/Users/someone/a","m":"a@b.example"}`, d);
@@ -263,4 +254,139 @@ test('cases: three cases incl. ui03-dashboard, two widths each, items for both w
     assert.ok(k.narrow.width < k.wide.width);
     for (const s of ['narrow', 'wide']) assert.ok(k.firstView[s].items.length > 0);
   }
+});
+
+// ---- order, replacements, completeness, fixation, images, probe (coordinator's review lessons) ----------------------
+const mkTrial = (root, caseId, name, {exit = 0, subtype = 'success', init = [], page = true} = {}) => {
+  const d = path.join(root, caseId, name);
+  fs.mkdirSync(path.join(d, 'fixture', 'out'), {recursive: true});
+  fs.writeFileSync(path.join(d, 'meta.json'), JSON.stringify({trial: `${caseId}/${name}`, exit, resultSubtype: subtype, initProblems: init}));
+  if (page) fs.writeFileSync(path.join(d, 'fixture', 'out', 'index.html'), '<p>x</p>');
+};
+
+test('order: run-order.json is valid and gives 18 planned trials, reps outermost, B/S alternating by rep', () => {
+  assert.deepEqual(orderProblems(loadOrder(), loadJson('cases.json').cases, conds), []);
+  const p = plannedTrials().map((t) => t.name);
+  assert.equal(p.length, 18);
+  assert.deepEqual(p.slice(0, 3), ['ui03-dashboard/B-r1', 'ui03-dashboard/S-r1', 'ui07-bus-mobile/B-r1']);
+  assert.deepEqual(p.slice(6, 8), ['ui03-dashboard/S-r2', 'ui03-dashboard/B-r2']);
+  assert.ok(p.slice(0, 6).every((n) => n.endsWith('-r1')));
+});
+
+test('order: run-trial accepts only the next planned trial, then only the next required replacement', () => {
+  const root = tmp();
+  const planned = plannedTrials().map((t) => t.name);
+  assert.equal(orderRefusal({caseId: 'ui03-dashboard', condition: 'B', rep: 1, reserved: new Set(), runsRoot: root}), null);
+  assert.match(orderRefusal({caseId: 'ui03-dashboard', condition: 'S', rep: 1, reserved: new Set(), runsRoot: root}), /out of order/);
+  assert.match(orderRefusal({caseId: 'ui03-dashboard', condition: 'B', rep: 4, reserved: new Set(planned.slice(0, 5)), runsRoot: root}), /before every planned trial/);
+  for (const n of planned) { const [c, t] = n.split('/'); mkTrial(root, c, t, n === 'ui07-bus-mobile/B-r2' ? {exit: 1} : n === 'ui04-parts-search/S-r3' ? {page: false} : {}); }
+  const all = new Set(planned);
+  assert.deepEqual(replacementPlan({runsRoot: root}).map((t) => t.name), ['ui07-bus-mobile/B-r4', 'ui04-parts-search/S-r4']);
+  assert.match(orderRefusal({caseId: 'ui04-parts-search', condition: 'S', rep: 4, reserved: all, runsRoot: root}), /next: ui07-bus-mobile\/B-r4/);
+  assert.equal(orderRefusal({caseId: 'ui07-bus-mobile', condition: 'B', rep: 4, reserved: all, runsRoot: root}), null);
+  assert.match(orderRefusal({caseId: 'ui03-dashboard', condition: 'B', rep: 2, reserved: all, runsRoot: root}), /out of order/);
+  // the replacement ran and failed: it is not replaced again
+  mkTrial(root, 'ui07-bus-mobile', 'B-r4', {exit: 1});
+  all.add('ui07-bus-mobile/B-r4');
+  assert.equal(orderRefusal({caseId: 'ui07-bus-mobile', condition: 'B', rep: 5, reserved: all, runsRoot: root}).includes('ui04-parts-search/S-r4'), true);
+});
+
+test('order: the scorer counts exactly what the runner replaced (k-th failure -> rep runs+k, no second replacement)', () => {
+  const root = tmp();
+  for (const t of ['B-r1', 'B-r2', 'B-r3', 'B-r4', 'B-r5', 'B-r6', 'S-r1', 'S-r2', 'S-r3']) mkTrial(root, 'ui03-dashboard', t, ['B-r1', 'B-r3', 'B-r4'].includes(t) ? {subtype: 'error_max_budget_usd'} : {});
+  const names = fs.readdirSync(path.join(root, 'ui03-dashboard'));
+  const b = countedTrials(names, 'ui03-dashboard', 'B', {runsRoot: root, runs: 3});
+  assert.deepEqual(b.counted, ['B-r4', 'B-r2', 'B-r5']);
+  assert.deepEqual(b.missing, []);
+  assert.deepEqual(b.notUsed.sort(), ['B-r1', 'B-r3', 'B-r6']);
+  assert.deepEqual(replacementPlan({runsRoot: root, order: {...loadOrder(), caseOrder: ['ui03-dashboard']}, runs: 3}).map((t) => t.name), ['ui03-dashboard/B-r4', 'ui03-dashboard/B-r5']);
+  const root2 = tmp();
+  for (const t of ['B-r1', 'B-r2', 'S-r1', 'S-r2', 'S-r3']) mkTrial(root2, 'ui03-dashboard', t, t === 'S-r2' ? {init: ['browser MCP server failed']} : {});
+  const sel = selectCounted(fs.readdirSync(path.join(root2, 'ui03-dashboard')), 'ui03-dashboard', root2, 3);
+  assert.deepEqual(sel.missing.sort(), ['B-r3', 'S-r4']);
+  assert.equal(generationFailure(path.join(root2, 'ui03-dashboard', 'S-r2')), 'init: browser MCP server failed');
+  assert.equal(generationFailure(path.join(root2, 'nope')), 'no meta.json');
+});
+
+test('decide: not judged when the run stopped early (unless the cap was reached) or a cell has no valid trial', () => {
+  const b = conds.budget;
+  assert.equal(completeness({missing: ['x'], spentUsd: 10, budget: b}).capReached, false);
+  assert.equal(completeness({missing: ['x'], spentUsd: b.capUsd - b.safetyMarginUsd - 1, budget: b}).capReached, true);
+  const eff = {status: '効果あり', harm: false, judgeable: true};
+  const cs = {a: eff, b: eff, c: eff};
+  assert.match(overall(cs, 1, {complete: false, capReached: false, emptyCells: []}).decision, /途中で止まった/);
+  assert.equal(overall(cs, 1, {complete: false, capReached: true, emptyCells: []}).decision, '効果あり（取り込む）');
+  assert.match(overall(cs, 1, {complete: true, capReached: false, emptyCells: ['ui03-dashboard/S']}).decision, /有効な試行の無い/);
+});
+
+test('decide: scoring is refused when a trial ran under another fixation record', () => {
+  const fx = JSON.parse(fs.readFileSync(path.join(ev, 'results/fixation.json'), 'utf8'));
+  const sha = sha256(fs.readFileSync(path.join(ev, 'results/fixation.json')));
+  const ok = {trial: 't', fixationSha256: sha, fixedAtCommit: fx.records.at(-1).fixedAtCommit};
+  const mine = (p) => p.filter((x) => x.startsWith('t:'));
+  assert.deepEqual(mine(fixationProblemsForScoring([ok])), []);
+  assert.match(mine(fixationProblemsForScoring([{...ok, fixationSha256: '0'}]))[0], /another fixation record/);
+  assert.match(mine(fixationProblemsForScoring([{...ok, fixedAtCommit: 'x'}]))[0], /fixedAtCommit/);
+  // a changed fixed file is reported too (here: compared with a record whose digests are all '0')
+  assert.ok(fixationProblemsForScoring([ok]).every((x) => x.startsWith('fixed file differs') || x.startsWith('t:')));
+});
+
+test('run-trial: images must have the pinned ids', () => {
+  const im = conds.images;
+  const ids = Object.fromEntries(Object.values(im).map((x) => [x.name, x.id]));
+  assert.deepEqual(imageProblems((n) => ids[n]), []);
+  assert.match(imageProblems((n) => (n === im.tools.name ? 'sha256:other' : ids[n]))[0], /pinned/);
+  assert.match(imageProblems(() => null)[0], /absent/);
+  assert.match(im.tools.id, /^sha256:[0-9a-f]{64}$/);
+});
+
+test('fixation: refix after the probes may change only probe.mjs; after a planned trial nothing', () => {
+  const d = tmp(), l = path.join(d, 'ledger.jsonl');
+  ledgerOps.create(l);
+  const fx = {records: [{ledgerId: ledgerOps.ledgerId(l), files: digests()}]};
+  assert.deepEqual(refixViolations(fx, l), []);
+  ledgerOps.reserve(l, 'probe/B-r1', 0.5);
+  assert.deepEqual(refixViolations(fx, l), []);
+  const changed = {records: [{...fx.records[0], files: {...fx.records[0].files, 'decision-criteria.md': '0', 'harness/probe.mjs': '0'}}]};
+  assert.deepEqual(refixViolations(changed, l), ['decision-criteria.md changed after the probes (only harness/probe.mjs may)']);
+  ledgerOps.reserve(l, 'ui03-dashboard/B-r1', 1.5);
+  assert.match(refixViolations(fx, l)[0], /measurement reservations/);
+});
+
+const probeTrace = ({tools = EXPECTED_INIT_TOOLS, text, reads = [], cwd}) => [
+  {type: 'system', subtype: 'init', cwd, tools, mcp_servers: [{name: 'browser', status: 'connected'}], skills: ['asc', 'user-journey-acceptance', 'dataviz'], plugins: [], model: 'm'},
+  {type: 'assistant', message: {content: reads.map((p, i) => ({type: 'tool_use', id: `r${i}`, name: 'Read', input: {file_path: p}}))}},
+  {type: 'user', message: {content: reads.map((_, i) => ({type: 'tool_result', tool_use_id: `r${i}`, is_error: true, content: 'denied'}))}},
+  {type: 'assistant', message: {content: [{type: 'text', text}]}},
+  {type: 'result', subtype: 'success', result: text, total_cost_usd: 0.1},
+].map((e) => JSON.stringify(e)).join('\n');
+
+test('probe: passes only with the condition context, refused markers and no owner or repository text', () => {
+  const d = tmp(), fixture = path.join(d, 'fixture'); fs.mkdirSync(fixture);
+  const markers = [path.join(d, 'home-marker.txt'), path.join(d, 'repo-marker.txt')];
+  const text = ['CLAUDE.md: <!-- asc:read-trigger v1 --> / このプロジェクトでASCを使う…', 'DESC asc: A desc', 'DESC user-journey-acceptance: U desc', 'GIT: Install ASC | initial'].join('\n');
+  const base = {trace: probeTrace({text, reads: markers, cwd: fixture}), debug: '', stderr: '', fixture, trialDir: d, ascSkills: {asc: 'A desc', 'user-journey-acceptance': 'U desc'},
+    forbiddenTexts: ['agent-skill-chain 利用案内（Claude Code）'], ownerLines: ['owner memory line one'], ownerSkills: ['own-skill'], markerPaths: markers, tokens: ['TOK1', 'TOK2'],
+    realHome: '/home/someone', repoRoot: '/repo', hostInstallDir: '/opt/claude', installProblems: []};
+  const ok = checkProbe(base);
+  assert.equal(ok.pass, true, JSON.stringify(Object.entries(ok.checks).filter(([, c]) => !c.pass)));
+  assert.equal(checkProbe({...base, trace: probeTrace({text: text + '\nowner memory line one', reads: markers, cwd: fixture})}).checks.noOwnerInstructionsOrMemory.pass, false);
+  assert.equal(checkProbe({...base, trace: probeTrace({text: text.replace('このプロジェクトでASCを使う', ''), reads: markers, cwd: fixture})}).checks.readTriggerInContext.pass, false);
+  assert.equal(checkProbe({...base, trace: probeTrace({text, reads: markers.slice(0, 1), cwd: fixture})}).checks.markersAttempted.pass, false);
+  assert.equal(checkProbe({...base, debug: 'loaded /repo/CLAUDE.md'}).checks.noRealHomeOrRepoInDebug.pass, false);
+  assert.equal(checkProbe({...base, debug: 'memory at /home/someone/.claude/projects/x/memory/MEMORY.md'}).checks.debugPathsInsideTrial.pass, false);
+  assert.equal(checkProbe({...base, trace: probeTrace({text: text + '\nTOK1', reads: markers, cwd: fixture})}).checks.markerTokensAbsent.pass, false);
+  assert.equal(checkProbe({...base, trace: probeTrace({tools: [...EXPECTED_INIT_TOOLS, 'Bash'], text, reads: markers, cwd: fixture})}).checks.tools.pass, false);
+  assert.match(probePrompt('/h/m', '/r/m'), /Readで \/h\/m を読む/);
+  assert.equal(compareProbes([ok, ok]).pass, true);
+  assert.deepEqual(compareProbes([ok, {...ok, tools: ['Read']}]).differ, ['tools']);
+});
+
+test('probe: measurement waits for passing probes of both conditions; the probe waits for the owner confirmation', () => {
+  const root = tmp();
+  assert.equal(probeProblems(root, ['B', 'S']).length, 3);
+  for (const c of ['B', 'S']) { fs.mkdirSync(path.join(root, 'probe', `${c}-r1`), {recursive: true}); fs.writeFileSync(path.join(root, 'probe', `${c}-r1`, 'probe-check.json'), JSON.stringify({pass: c === 'B'})); }
+  assert.deepEqual(probeProblems(root, ['B', 'S']), ['no passing isolation probe for condition S', 'no passing probe comparison (probe/compare.json)']);
+  const d = tmp(); fs.mkdirSync(path.join(d, 'results'));
+  assert.match(approvalProblems(d)[0], /missing/);
 });
