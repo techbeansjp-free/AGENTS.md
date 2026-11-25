@@ -37,10 +37,10 @@
    | 旧（B） | Issue・タスクの開発の開始・再開、worktreeでの実装、PR提出、許可されたmergeで使う。 |
    | 新（S） | Issue・タスクの開発の開始・再開、実装・修正・画面やfileの作成など変更を伴う依頼、PR提出、許可されたmergeで使う。 |
 
-   長さは51文字から64文字（＋13文字）。`v05/USAGE.md`のSkill一覧の予算（200k Contextで8,000文字）の注意に対して、ASCの16件の説明文の合計の増分は13文字である。予算の超過は測っていない（限界）。
+   長さは51文字から64文字（＋13文字）。`v05/USAGE.md`のSkill一覧の予算（200k Contextで8,000文字。同梱Skillの構成によっては既にわずかに超える）の注意に対して、ASCの16件の説明文の合計の増分は13文字である。BとSで予算の状態が違うと、比べているのが文面ではなく一覧の省略になるため、probeで確かめる（下の「隔離の確認とSkill一覧の予算」）。
 
 - 候補のtarball（`agent-skill-chain-0.5.111.tgz`、sha256 `c51f17ec…`）をv0.5.111のrelease asset（sha256 `e7df164a…`）と展開して比べ、違うfileは`package/release-identity.json`・`package/skills/asc/SKILL.md`・`package/v05/USAGE.md`の3件だけだった。`release-identity.json`の違いは、その2件のsha256だけである。案内文とdescriptionは導入時に`v05/USAGE.md`と`skills/asc/SKILL.md`から読まれるため、他のsourceやdataに文面の写しは無い。
-- 製品の変更に合わせて、`test/test_project_read_trigger.mjs`に、新しい文面（変更を伴う依頼・fileを探す前・除外の文の維持）と、登録した入口`.claude/skills/asc/SKILL.md`のdescriptionが同梱の`skills/asc/SKILL.md`と同じになることの試験を加えた。
+- 製品の変更に合わせて、`test/test_project_read_trigger.mjs`に新しい文面（変更を伴う依頼・fileを探す前・除外の文の維持）の試験を加え、`test/test_project_assets.mjs`の既存の試験（登録した入口のdescriptionが同梱の`skills/asc/SKILL.md`と同じになること）に、新しいdescriptionの文面の照合を加えた。入口のdescriptionが同梱のものと同じになることは既存の試験（`.agents`・`.claude`の両方）が見ているため、同じことを見る試験は加えていない（独立レビューL3で重複を除いた）。
 
 ## 条件
 
@@ -54,6 +54,14 @@
 - toolは段階1の水準Wだけ：Read・Write・Edit・Glob・Grep・Skill、`--permission-mode acceptEdits`、Bashなし。隔離の`--settings`は段階1と同じ（水準Wのprobeが合格した設定）。
 - model・認証・隔離（試行ごとの空のHOME・設定、repositoryと実HOMEの外）・中立のcommit・1つの台帳と順次実行は段階1・#1817と同じ。
 - 条件の違いは、導入したtarballだけである。
+
+### 隔離の確認とSkill一覧の予算（独立レビューM1）
+
+- probe（B・S各1回）は段階1と同じく`--debug-file`で実行する（dry runの`probeDebugLog`）。
+- probeの項目に次を加えた。`compare`と、測定の前の照合（`run-trial.mjs`が各probeを`trace.jsonl`・`meta.json`・`debug.log`から計算し直す）の合格の条件である。
+  - (a) `skillListingRecorded`と`compare`：debug logがあり、`Skill listing over budget`の行がBにもSにも無い、または超過の状態（超過の有無、超過ならSkillの件数と予算。文字数はdescriptionの長さで違うので比べない）と、説明文が省かれたASCのSkill（`ascOmitted`）がBとSで同じ。違えば`compare`の`differ`に`skillListing`・`ascOmitted`が入り、不合格。
+  - (b) `ascDescriptionsInContext`：ASCの16件のdescriptionがすべてContextにある。initのeventにはSkillの名前しか無く、debug logにも一覧の件数（`Sending 30 skills via attachment`）と超過の行しか無い（段階1のprobeの記録で確かめた）。このため、probeの質問2（Skillの一覧を名前とdescriptionの原文で書く。fileを読まずに）への回答に、16件のdescriptionが原文のまま含まれ、Skillのfileを読む・探す操作が無いことで確かめる。段階1の水準Wのprobeは16/16だった（[../results/probes/probe-WSA.json](../results/probes/probe-WSA.json)の`descriptionsVerbatimCount`）。
+- debug logは、説明文が省かれた同梱Skillの名前を出さない。両方が超過した場合に同梱Skillの省略が同じかは確かめられない（限界）。
 
 ## 依頼
 
@@ -163,7 +171,9 @@ dry runの内容：
 
 ## 段階1のharnessからの変更
 
-[harness/](harness/)は段階1の[harness](../harness/)の写しで、段階1・#1814・#1815・#1817のfileは変えていない。`guard`・`ledger`・`install-asc`・`condition-i`は#1817と、`probe-check`は段階1とbyteで同じ（試験で照合）。変更は各fileの先頭に注記した。主なもの：
+[harness/](harness/)は段階1の[harness](../harness/)の写しで、段階1・#1814・#1815・#1817の固定したfileは変えていない。`guard`・`ledger`・`install-asc`・`condition-i`は#1817とbyteで同じ（試験で照合）。変更は各fileの先頭に注記した。主なもの：
+
+- `probe-check.mjs`：段階1とbyteで同じだったが、独立レビューM1でSkill一覧の予算の項目（上の「隔離の確認とSkill一覧の予算」）を加えた。段階1の行は、`compare`の結果の行と`FACT_KEYS`の2行のほかは変えていない（試験で照合）。
 
 - 条件：B・Sの2つ（どちらも水準W）。セルは条件で、試行のフォルダは依頼で決まる（`cases.json`の`fixture`）。水準の削除（`drop-level`）は除いた。
 - `make-fixture.mjs`：fixtureを条件×フォルダ（A・D3・D4・D7）で作る。tarballは条件ごとに`release.json`で固定したsha256だけを受け付ける（Bはrelease、Sはcandidate）。
@@ -181,8 +191,9 @@ dry runの内容：
 - 画面の依頼は最初の3つのmessageだけを見る。4番目以降のreferenceの読込みや、画面の出来は見ない。fixture Aの依頼は全体を見る（#1817）ので、2つの種類で観測の長さが違う。全体の率はこの2つを合わせたものである。
 - 画面の依頼の「適用」は、referenceまで読んだことだけで、referenceの規則に従ったか（作業場所の決定等）は見ない。Bashが無く、`start`等のcommandは実行できない。
 - 「ASC本文の読込み」は、#1817と同じく期待するSkillの本文（目的別の依頼では目的別Skill）で数える。`asc`だけの値は依頼ごとの記号で示す。
-- descriptionを13文字長くした。Skill一覧の予算の超過（`v05/USAGE.md`の注意）は、この測定の設定（ASCの16件と同梱のSkill）では確かめていない。
-- 候補の文面は、`v05/USAGE.md`の同じ節の「#1814の測定では…この文例を置いた状態で」の記述（旧の文面での測定）を変えていない。採用する場合は記述を合わせて直す。
+- descriptionを13文字長くした。Skill一覧の予算は、probeの時点のBとSの状態が同じことだけを確かめる（上の(a)(b)）。測定の各試行のdebug logは取らない。両方が超過した場合に、省かれた同梱Skillが同じかは確かめられない。
+- 候補の文面は、`v05/USAGE.md`の同じ節の「#1814の測定では…この文例を置いた状態で」の記述（旧の文面での測定、独立レビューL2）を変えていない。Sを採用する場合はこの記述を新しい文面とこの測定に合わせて書き直し、採用しない場合は文例とdescriptionの変更（commit `2afea59c`・`bbf55465`）を元に戻す。
+- 新しいdescriptionの「修正」は、`review-and-remediation`のdescriptionの「レビュー指摘を是正・再検証する」と重なる（独立レビューL4）。「レビューの指摘を直して」の依頼は`asc`と`review-and-remediation`のどちらにも読めるが、17依頼にこの依頼は無い。画面の依頼のフォルダ（fixture D）には該当しない依頼（変更を伴わない依頼）も無く、Sの案内文が変更を伴わない依頼で余計な読込みを増やすかは、fixture Aの該当しない依頼3件だけで見る。
 - 段階1と同じく、水準Wには#1815にあったbrowser MCPとその注意書きが無い。probeはfixture Aだけで行い、画面の依頼のフォルダの隔離は同じ設定の作り方による（dry runの`fixtureDenied`）。
 
 ## 結果

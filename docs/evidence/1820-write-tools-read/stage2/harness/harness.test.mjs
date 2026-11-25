@@ -1,6 +1,7 @@
 // Synthetic tests for the #1820 stage-2 harness (the parts that differ from stage 1 and #1817). No model call, no network.
-// The files copied byte for byte (guard, ledger, install-asc, condition-i from #1817 via stage 1; probe-check from stage 1)
-// are checked for identity here and are covered by the stage-1 and #1817 tests.
+// The files copied byte for byte (guard, ledger, install-asc, condition-i from #1817 via stage 1) are checked for identity
+// here and are covered by the stage-1 and #1817 tests. probe-check.mjs was a byte copy of stage 1's; review M1 added the
+// Skill-listing budget checks (tested below), and the rest of it stays covered by the stage-1 tests.
 // Usage: node --test docs/evidence/1820-write-tools-read/stage2/harness/harness.test.mjs
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,7 +14,7 @@ import {plannedTrials, orderProblems, orderRefusal, probeRefusal, completionStat
 import {flags, isolationSettings, promptFor, cellOf, maxTurnsFor, probeGateProblems, installProblems, probeSteps, stage1Problems, STOP_LINE_USD, INSIDE_FILE} from './run-trial.mjs';
 import {approvalProblems, markerPaths} from './markers.mjs';
 import {writeSources, pinned} from './make-fixture.mjs';
-import {checkProbe, compareProbes, fileInputs} from './probe-check.mjs';
+import {checkProbe, compareProbes, fileInputs, skillListingOf, ASC_ENTRIES} from './probe-check.mjs';
 import {FIXED, refixAfterMeasurement} from './fixation.mjs';
 import {loadConditions} from './apply-condition.mjs';
 import {redact} from './collect.mjs';
@@ -34,11 +35,18 @@ const tmp = (t) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'h1820s2-')
 const W = CONDS.toolLevels.W;
 const k = (id) => SPEC.cases.find((c) => c.id === id);
 
-test('copied files are byte-identical; the fixed list names every plan file and harness module', () => {
+test('copied files are byte-identical (probe-check: stage 1 plus the review-M1 budget checks); the fixed list names every plan file and harness module', () => {
   for (const f of ['guard', 'ledger', 'install-asc', 'condition-i']) {
     assert.ok(fs.readFileSync(path.join(H, `${f}.mjs`)).equals(fs.readFileSync(path.join(EVROOT, '1817-skill-application/harness', `${f}.mjs`))), f);
   }
-  assert.ok(fs.readFileSync(path.join(H, 'probe-check.mjs')).equals(fs.readFileSync(path.join(S1, 'harness/probe-check.mjs'))), 'probe-check');
+  // Review M1: probe-check.mjs deviates from stage 1 only by the documented Skill-listing additions.
+  const pc = read('harness/probe-check.mjs'), pc1 = read('harness/probe-check.mjs', S1);
+  assert.notEqual(pc, pc1);
+  assert.match(pc, /review M1\): this file is no longer a byte copy of the stage-1 probe-check\.mjs/);
+  // Every stage-1 line is kept except the two that now include the listing state (the compare result and FACT_KEYS).
+  const lines2 = new Set(pc.split('\n'));
+  const removed = pc1.split('\n').filter((l) => !lines2.has(l)).map((l) => l.trim().slice(0, 24));
+  assert.deepEqual(removed, ['return {pass: kept.lengt', 'export const FACT_KEYS ='], 'only the compare result and FACT_KEYS lines of stage 1 are changed');
   for (const f of FIXED) assert.ok(fs.existsSync(path.join(EV, f)), f);
   const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs') && f !== 'dry-run.mjs').map((f) => `harness/${f}`);
   assert.deepEqual(modules.sort(), FIXED.filter((f) => f.startsWith('harness/')).sort());
@@ -299,18 +307,22 @@ const PCTX = {homeMarker: '/h/asc1820-home-marker.txt', repoMarker: '/r/.agent-s
 const TOKENS = [`ASC1820-MARKER-${'a1'.repeat(12)}`, `ASC1820-MARKER-${'b2'.repeat(12)}`];
 const stepCall = (st) => (st.tool === 'Glob' || st.tool === 'Grep' ? {pattern: st.pattern, path: st.path} : {file_path: st.path, ...(st.tool === 'Write' ? {content: 'probe'} : {})});
 const stepsW = () => probeSteps('W', PCTX).map((st) => [st.tool, stepCall(st), true, 'Claude requested permissions to read, but you have not granted it yet.']);
-function probeTrace(calls, cwd, desc) {
+function probeTrace(calls, cwd, desc, omit = null) {
   const lines = [{type: 'system', subtype: 'init', cwd, tools: W.tools.split(','), permissionMode: 'acceptEdits', mcp_servers: [], plugins: [], skills: [...ASC, 'dataviz'], model: 'm'}];
   for (const [name, input, err, content] of calls) {
     const id = `p${++n}`;
     lines.push({type: 'assistant', message: {id: `m${id}`, content: [{type: 'tool_use', id, name, input}]}});
     lines.push({type: 'user', message: {content: [{type: 'tool_result', tool_use_id: id, is_error: err, content}]}});
   }
-  const text = `CLAUDE.md 最初の行: ユーザー管理API\nこのプロジェクトでASCを使う…\nDESC asc: ${desc}\nDESC user-journey-acceptance: user-journey-acceptanceの説明。\nGIT: Update project files | Install ASC | initial`;
+  const list = ASC.filter((s) => s !== omit).map((s) => `- ${s}: ${s === 'asc' ? desc : `${s}の説明。`}`).join('\n');
+  const text = `CLAUDE.md 最初の行: ユーザー管理API\nこのプロジェクトでASCを使う…\n${list}\nDESC asc: ${desc}\nDESC user-journey-acceptance: user-journey-acceptanceの説明。\nGIT: Update project files | Install ASC | initial`;
   lines.push({type: 'result', subtype: 'success', is_error: false, result: text, total_cost_usd: 0.1});
   return lines.map((l) => JSON.stringify(l)).join('\n');
 }
-function probeLedger(t, names) {
+// Review M1: synthetic debug logs (the Claude Code WARN line form) with or without the over-budget line.
+const overBudget = (chars) => `2026-11-26T00:00:01.000Z [WARN] Skill listing over budget: 29 skills, ${chars} chars > 8000 budget — descriptions will be truncated. Run /skills to disable some, or raise skillListingBudgetFraction in settings.`;
+const debugOf = (work, over = null) => [`2026-11-26T00:00:00.000Z [DEBUG] Loading ${work}/CLAUDE.md`, '2026-11-26T00:00:00.500Z [DEBUG] Sending 29 skills via attachment (initial)', ...(over ? [overBudget(over)] : [])].join('\n');
+function probeLedger(t, names, debugOver = {}) {
   const d = fs.realpathSync(tmp(t));
   const l = path.join(d, 'ledger.jsonl');
   ledger.create(l);
@@ -322,11 +334,12 @@ function probeLedger(t, names) {
     fs.writeFileSync(path.join(work, 'CLAUDE.md'), CONDS.fixtures.A.baseClaudeMd);
     fs.writeFileSync(path.join(dir, 'trace.jsonl'), probeTrace(stepsW(), work, desc));
     fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({costUsd: 0.1, probeContext: PCTX, probeSentinels: PCTX.sentinels, probeInsideFile: INSIDE_FILE}));
+    fs.writeFileSync(path.join(dir, 'debug.log'), debugOf(fs.realpathSync(work), debugOver[cond] ?? null));
     const r = ledger.reserve(l, name, 0.6);
     const sh = (f) => ledger.fileSha256(path.join(dir, f));
     ledger.settle(l, r.id, name, 0.1, {exit: 0, traceSha256: sh('trace.jsonl'), metaSha256: sh('meta.json')});
     const {inputs} = fileInputs(dir, cond, REPO, CONDS);
-    results[name] = checkProbe({...inputs, conditionsOverride: CONDS, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/nonexistent-home', hostInstallDir: '/opt/claude', installProblems: [], debug: `Loading ${inputs.work}/CLAUDE.md`});
+    results[name] = checkProbe({...inputs, conditionsOverride: CONDS, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/nonexistent-home', hostInstallDir: '/opt/claude', installProblems: []});
   }
   return {d, l, results};
 }
@@ -353,6 +366,56 @@ test('probe gate: one W probe per condition, each with its own asc description, 
   fs.writeFileSync(path.join(wrong.d, 'S-probe-1', 'trace.jsonl'), probeTrace(stepsW(), path.join(wrong.d, 'S-probe-1', 'work'), CONDS.candidateText.ascDescription.B));
   const {inputs} = fileInputs(path.join(wrong.d, 'S-probe-1'), 'S', REPO, CONDS);
   assert.equal(checkProbe({...inputs, conditionsOverride: CONDS, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/x', hostInstallDir: '/opt/claude', installProblems: [], debug: ''}).checks.descriptionsInContext.pass, false);
+});
+
+test('review M1 (b): all 16 ASC descriptions must be quoted from the Skill list; one missing fails the probe', (t) => {
+  const {d} = probeLedger(t, ['S-probe-1']);
+  const dir = path.join(d, 'S-probe-1'), work = path.join(dir, 'work');
+  const run = () => { const {inputs} = fileInputs(dir, 'S', REPO, CONDS); return checkProbe({...inputs, conditionsOverride: CONDS, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/x', hostInstallDir: '/opt/claude', installProblems: []}); };
+  const ok = run();
+  assert.equal(ASC_ENTRIES, ASC.length);
+  assert.equal(ok.checks.ascDescriptionsInContext.pass, true, failing(ok));
+  assert.deepEqual(ok.ascOmitted, []);
+  fs.writeFileSync(path.join(dir, 'trace.jsonl'), probeTrace(stepsW(), work, CONDS.candidateText.ascDescription.S, 'work-coordination'));
+  const bad = run();
+  assert.equal(bad.checks.ascDescriptionsInContext.pass, false);
+  assert.deepEqual(bad.ascOmitted, ['work-coordination']);
+  fs.rmSync(path.join(dir, 'debug.log'));
+  assert.equal(run().checks.skillListingRecorded.pass, false, 'no debug log');
+});
+
+test('review M1 (a): over budget only in S fails the comparison and the gate; equal over-budget state in both passes', (t) => {
+  assert.equal(skillListingOf(null), null);
+  assert.deepEqual(skillListingOf(debugOf('/w')), {overBudget: false, lines: 0, unparsed: 0, skills: null, budget: null, chars: null});
+  assert.deepEqual(skillListingOf(debugOf('/w', 8013)), {overBudget: true, lines: 1, unparsed: 0, skills: 29, budget: 8000, chars: 8013});
+  // Neither over budget: pass (the probe gate test above). S only over budget: fail, recomputed from the records.
+  const sOnly = probeLedger(t, ['B-probe-1', 'S-probe-1'], {S: 8013});
+  for (const r of Object.values(sOnly.results)) assert.equal(r.pass, true, failing(r));
+  const c1 = compareProbes([sOnly.results['B-probe-1'], sOnly.results['S-probe-1']], {conds: CONDS});
+  assert.equal(c1.pass, false);
+  assert.deepEqual(c1.differ, ['skillListing']);
+  fs.writeFileSync(path.join(sOnly.d, 'probe-compare.json'), JSON.stringify({...c1, pass: true, differ: []}));
+  const g1 = probeGateProblems(sOnly.d, CONDS, sOnly.l).join();
+  assert.match(g1, /recomputed from the probe records does not pass/);
+  assert.match(g1, /differs from the one recomputed/);
+  // Both over budget with the same Skill count and budget (the chars differ by the description) and no ASC omitted: pass.
+  const both = probeLedger(t, ['B-probe-1', 'S-probe-1'], {B: 8000 + 1, S: 8000 + 14});
+  const c2 = compareProbes([both.results['B-probe-1'], both.results['S-probe-1']], {conds: CONDS});
+  assert.equal(c2.pass, true, JSON.stringify(c2.differ));
+  fs.writeFileSync(path.join(both.d, 'probe-compare.json'), JSON.stringify(c2));
+  assert.deepEqual(probeGateProblems(both.d, CONDS, both.l), []);
+  // A forged listing state in the recorded comparison is caught by the recomputation.
+  const forged = JSON.parse(JSON.stringify(c2)); forged.probes[1].skillListing = {overBudget: false};
+  fs.writeFileSync(path.join(both.d, 'probe-compare.json'), JSON.stringify(forged));
+  assert.match(probeGateProblems(both.d, CONDS, both.l).join(), /S-probe-1: the recorded session facts differ .*skillListing/);
+  // Both over budget but different omitted ASC Skills: fail (ascOmitted differs, and the probe with an omission fails).
+  const om = probeLedger(t, ['B-probe-1', 'S-probe-1'], {B: 9000, S: 9013});
+  fs.writeFileSync(path.join(om.d, 'S-probe-1', 'trace.jsonl'), probeTrace(stepsW(), path.join(om.d, 'S-probe-1', 'work'), CONDS.candidateText.ascDescription.S, 'work-coordination'));
+  const {inputs} = fileInputs(path.join(om.d, 'S-probe-1'), 'S', REPO, CONDS);
+  const sOm = checkProbe({...inputs, conditionsOverride: CONDS, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/x', hostInstallDir: '/opt/claude', installProblems: []});
+  const c3 = compareProbes([om.results['B-probe-1'], sOm], {conds: CONDS});
+  assert.equal(c3.pass, false);
+  assert.deepEqual(c3.differ, ['ascOmitted']);
 });
 
 test('fixation: a refix record later than the first measurement reservation is reported; the conditions file is the stage-2 one', (t) => {

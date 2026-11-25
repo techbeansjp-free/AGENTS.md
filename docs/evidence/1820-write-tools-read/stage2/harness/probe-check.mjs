@@ -13,6 +13,15 @@
 // work/ is recorded (info, not judged). Review L2: each result records the trial and the sha256 of the trace and meta it
 // read, and `compare` carries them, so run-trial.mjs can bind the comparison to the ledger settlements; `compare --drop X`
 // is the pre-written comparison when X is dropped (conditions.json dropNote). Review L1: the raw conditions are used.
+// #1820 stage 2 (review M1): this file is no longer a byte copy of the stage-1 probe-check.mjs. Added: the Skill listing
+// budget. Neither the init event (Skill names only) nor the debug log (counts only) carries the listed descriptions, so
+// (b) `ascDescriptionsInContext` requires the answer to quote all 16 ASC descriptions verbatim from the Skill list
+// (question 2 of the probe prompt) with no look-up of the Skill files; `ascOmitted` names the ASC Skills whose
+// description is not quoted. (a) `skillListing` is the debug-log state (the `Skill listing over budget` WARN lines: their
+// count, the listed Skills and the budget; the chars are information); `skillListingRecorded` needs the debug log.
+// `compare` fails when B and S differ in the over-budget state (over or not; when over, the Skill count and the budget) or
+// in `ascOmitted`. Both are carried in FACT_KEYS and recomputed from the probe records by the gate (recheckProbe). The
+// debug log does not name the Skills whose descriptions were truncated, so omitted bundled Skills are not compared.
 // Judges one isolation probe (run-trial.mjs case `probe`) before any measurement (#1814, owner requirement). No model call.
 // All checks must pass for every condition; otherwise that condition is not measured. The model's answer is used only
 // where it can be cross-checked against text it cannot know without the context (exact descriptions, CLAUDE.md first
@@ -53,6 +62,20 @@ const MANAGED = ['/Library/Application Support/ClaudeCode/', '/etc/claude-code/'
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
 const stripHeading = (s) => s.replace(/^\s*#+\s*/, '').trim();
 const inside = (child, parent) => { const r = path.relative(parent, child); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
+// Review M1 (stage 2): the number of ASC entries whose descriptions must all be in the context, and the debug-log line.
+export const ASC_ENTRIES = 16;
+const OVER_BUDGET_RE = /Skill listing over budget:\s*(\d+) skills, (\d+) chars > (\d+) budget/;
+// The Skill-listing state of one probe from its debug log (null when there is no debug log).
+export function skillListingOf(debug) {
+  if (debug === null || debug === undefined) return null;
+  const hits = String(debug).split('\n').filter((l) => l.includes('Skill listing over budget'));
+  const parsed = hits.map((l) => OVER_BUDGET_RE.exec(l)).filter(Boolean).map((m) => ({skills: Number(m[1]), chars: Number(m[2]), budget: Number(m[3])}));
+  const last = parsed.at(-1) ?? null;
+  return {overBudget: hits.length > 0, lines: hits.length, unparsed: hits.length - parsed.length, skills: last?.skills ?? null, budget: last?.budget ?? null, chars: last?.chars ?? null};
+}
+// What (a) compares between the conditions: over or not, and when over the Skill count and the budget (not the chars,
+// which differ by the length of the description by design) and whether every line was understood.
+export const listingState = (x) => (x ? (x.overBudget ? {overBudget: true, skills: x.skills, budget: x.budget, unparsed: x.unparsed} : {overBudget: false}) : null);
 export function description(skillMd) {
   const m = /^---\n[\s\S]*?^description: (.+)$[\s\S]*?\n---/m.exec(skillMd);
   return m ? m[1].trim() : null;
@@ -150,6 +173,12 @@ export function checkProbe(i) {
     return [s, norm(line).includes(norm(i.ascSkills[s] ?? '\u0000'))];
   }));
   add('descriptionsInContext', looked.length === 0 && Object.values(desc).every(Boolean), {desc, lookedUp: looked.length});
+  // Review M1 (b): every ASC description is quoted verbatim from the Skill list, with no look-up of the Skill files.
+  const ascOmitted = asc.filter((s) => !norm(text).includes(norm(i.ascSkills[s] || '\u0000'))).sort();
+  add('ascDescriptionsInContext', asc.length === ASC_ENTRIES && looked.length === 0 && ascOmitted.length === 0, {entries: asc.length, expected: ASC_ENTRIES, omitted: ascOmitted, lookedUp: looked.length});
+  // Review M1 (a): the debug log is needed for the listing state; `compare` checks the state across the conditions.
+  const skillListing = skillListingOf(i.debug);
+  add('skillListingRecorded', skillListing !== null && skillListing.unparsed === 0, skillListing ?? 'no debug log');
   add('descriptionsVerbatimCount', true, `${asc.filter((s) => norm(text).includes(norm(i.ascSkills[s]))).length}/${asc.length} (informational)`);
   // Instruction files: the sample project's CLAUDE.md, the pointer only when the condition adds it, nothing from elsewhere.
   add('projectClaudeMd', text.replace(/#/g, '').includes(stripHeading(i.baseFirstLine)), 'heading marks ignored (review L3)');
@@ -229,6 +258,7 @@ export function checkProbe(i) {
   Object.assign(checks, stepped.checks);
   return {condition: i.condition, trial: i.trialName ?? path.basename(i.trialDir), traceSha256: i.traceSha256 ?? null, metaSha256: i.metaSha256 ?? null,
     markerTokenSha256: tokenShas, pass: Object.values(checks).every((c) => c.pass), checks, info: stepped.info, steps: (i.steps ?? []).length, listedSkills: listed.length, nonAscSkills: nonAsc,
+    skillListing, ascOmitted,
     builtinPlugins: plugins.filter(builtin).map((pl) => pl.name).sort(), managedPolicyPresent: i.managedPolicyPresent ?? null,
     tools, gitLine: gitLine.replace(/^.*GIT:\s*/, ''), model: init.model ?? null, claudeCodeVersion: init.claude_code_version ?? null, costUsd: t.result?.total_cost_usd ?? null};
 }
@@ -319,14 +349,18 @@ export function compareProbes(results, {drop = null, conds = loadRawConditions()
   const keys = ['nonAscSkills', 'builtinPlugins', 'gitLine', 'model'];
   const norm1 = (r, k) => (k === 'gitLine' ? gitSubjects(r[k]) : ['nonAscSkills', 'tools', 'builtinPlugins'].includes(k) ? [...(r[k] ?? [])].sort() : r[k]);
   const differ = keys.filter((k) => new Set(kept.map((r) => JSON.stringify(norm1(r, k)))).size > 1);
+  // Review M1 (a): no over-budget line in either, or the same over-budget state and the same omitted ASC Skills.
+  if (new Set(kept.map((r) => JSON.stringify(listingState(r.skillListing ?? null)))).size > 1) differ.push('skillListing');
+  if (new Set(kept.map((r) => JSON.stringify([...(r.ascOmitted ?? [])].sort()))).size > 1) differ.push('ascOmitted');
+  const listingMissing = kept.some((r) => !r.skillListing);
   const droppedOk = results.filter(isDropped).every((r) => r.pass === false) && (!drop || results.some(isDropped));
-  return {pass: kept.length > 0 && kept.every((r) => r.pass) && differ.length === 0 && droppedOk, conditions: results.map((r) => r.condition), differ, dropped: drop ?? null,
+  return {pass: kept.length > 0 && kept.every((r) => r.pass) && differ.length === 0 && droppedOk && !listingMissing, conditions: results.map((r) => r.condition), differ, dropped: drop ?? null,
     probes: results.map((r) => ({condition: r.condition, trial: r.trial ?? null, pass: r.pass, traceSha256: r.traceSha256 ?? null, metaSha256: r.metaSha256 ?? null,
       checks: checkValues(r.checks), markerTokenSha256: r.markerTokenSha256 ?? [], ...Object.fromEntries(FACT_KEYS.map((k) => [k, r[k] ?? null]))}))};
 }
 
 // Review Low-2: what `compare` carries per probe and the gate recomputes.
-export const FACT_KEYS = ['nonAscSkills', 'builtinPlugins', 'gitLine', 'model'];
+export const FACT_KEYS = ['nonAscSkills', 'builtinPlugins', 'gitLine', 'model', 'skillListing', 'ascOmitted'];
 export const checkValues = (checks) => Object.fromEntries(Object.entries(checks ?? {}).map(([k, c]) => [k, c?.pass === true]).sort(([a], [b]) => a.localeCompare(b)));
 
 // The inputs of checkProbe that come from the probe's own directory (trace, debug, meta.json probe context, work/), the

@@ -59,10 +59,11 @@ test('cells are the full 3 x 2 x 2 design; negative prompts only in the negative
   assert.equal(new Set(ids).size, 12);
   for (const t of ['R', 'W', 'X']) for (const p of ['S', 'G']) for (const f of ['A', 'D']) assert.ok(CONDS.cells[`${t}${p}${f}`]);
   const neg = SPEC.cases.find((c) => c.id === 'neg-1');
-  assert.equal(promptFor(cellOf('WSA'), neg), neg.prompt);
-  assert.throws(() => promptFor(cellOf('XSA'), neg), /runs only in/);
-  assert.equal(promptFor(cellOf('XGD'), SPEC.cases[0]), SPEC.cases[0].prompts.GD);
-  assert.throws(() => cellOf('ZZZ'), /unknown cell/);
+  // Review L1 (stage-2 review): the full design from the raw conditions, independent of the committed drop of X.
+  assert.equal(promptFor(cellOf('WSA', CONDS), neg, CONDS), neg.prompt);
+  assert.throws(() => promptFor(cellOf('XSA', CONDS), neg, CONDS), /runs only in/);
+  assert.equal(promptFor(cellOf('XGD', CONDS), SPEC.cases[0], CONDS), SPEC.cases[0].prompts.GD);
+  assert.throws(() => cellOf('ZZZ', CONDS), /unknown cell/);
 });
 
 test('launch flags per tools level: tools, disallowed tools, permission mode, --settings and --max-turns', () => {
@@ -114,7 +115,7 @@ test('probe steps (review M2/L4): counts match conditions.json probeSteps and fi
 });
 
 test('run order: 60 planned trials, negatives only in reps 1-2, counterexamples refused', () => {
-  const planned = plannedTrials();
+  const planned = plannedTrials(ORDER, CONDS, SPEC); // the full design (review L1), independent of the committed drop
   assert.equal(planned.length, 60);
   assert.equal(planned.filter((t) => t.case === 'brief').length, 48);
   assert.equal(planned.filter((t) => t.rep > 2 && t.case !== 'brief').length, 0);
@@ -128,15 +129,16 @@ test('run order: 60 planned trials, negatives only in reps 1-2, counterexamples 
 });
 
 test('order gate: only the next planned trial; probes only in probe cells and before the measurement', () => {
-  const none = new Set();
-  assert.equal(orderRefusal({condition: 'RSA', caseId: 'brief', rep: '1', reserved: none}), null);
-  assert.match(orderRefusal({condition: 'WSA', caseId: 'brief', rep: '1', reserved: none}), /out of order/);
-  assert.equal(orderRefusal({condition: 'WSA', caseId: 'brief', rep: '1', reserved: new Set(['RSA-brief-1'])}), null);
-  assert.match(orderRefusal({condition: 'RSA', caseId: 'neg-1', rep: '3', reserved: none}), /replacement RSA-neg-1-3 before every planned trial/);
-  assert.equal(probeRefusal({condition: 'XSA', rep: '1', reserved: none}), null);
-  assert.match(probeRefusal({condition: 'XGD', rep: '1', reserved: none}), /not a probe cell/);
-  assert.match(probeRefusal({condition: 'XSA', rep: '2', reserved: none}), /needs XSA-probe-1 first/);
-  assert.match(probeRefusal({condition: 'XSA', rep: '1', reserved: new Set(['RSA-brief-1'])}), /measurement has started/);
+  // The full design (review L1): the raw conditions, independent of the committed drop of X.
+  const none = new Set(), conds = CONDS;
+  assert.equal(orderRefusal({condition: 'RSA', caseId: 'brief', rep: '1', reserved: none, conds}), null);
+  assert.match(orderRefusal({condition: 'WSA', caseId: 'brief', rep: '1', reserved: none, conds}), /out of order/);
+  assert.equal(orderRefusal({condition: 'WSA', caseId: 'brief', rep: '1', reserved: new Set(['RSA-brief-1']), conds}), null);
+  assert.match(orderRefusal({condition: 'RSA', caseId: 'neg-1', rep: '3', reserved: none, conds}), /replacement RSA-neg-1-3 before every planned trial/);
+  assert.equal(probeRefusal({condition: 'XSA', rep: '1', reserved: none, conds}), null);
+  assert.match(probeRefusal({condition: 'XGD', rep: '1', reserved: none, conds}), /not a probe cell/);
+  assert.match(probeRefusal({condition: 'XSA', rep: '2', reserved: none, conds}), /needs XSA-probe-1 first/);
+  assert.match(probeRefusal({condition: 'XSA', rep: '1', reserved: new Set(['RSA-brief-1']), conds}), /measurement has started/);
 });
 
 // --- synthetic traces ---
@@ -431,7 +433,10 @@ test('drop of X (review L1): pre-written 8-cell plan, only after XSA-probe-2 fai
   assert.deepEqual([dropped.probeCells, dropped.rawProbeCells, dropped.droppedCells.sort()], [['RSA', 'WSA'], ['RSA', 'WSA', 'XSA'], ['XGA', 'XGD', 'XSA', 'XSD']]);
   assert.throws(() => applyDrop(CONDS, 'W'), /may not be dropped/);
   assert.equal(applyDrop(CONDS, null), CONDS);
-  assert.deepEqual(loadConditions(), CONDS, 'no drop is recorded in results/fixation.json');
+  // Review L1 (stage-2 review): loadConditions() applies the drop recorded in results/fixation.json (X was dropped after
+  // the measurement plan was fixed), so it is compared with applyDrop of the recorded level, whatever that is.
+  const recordedDrop = JSON.parse(read('results/fixation.json')).records.findLast((r) => r.dropLevel)?.dropLevel ?? null;
+  assert.deepEqual(loadConditions(), applyDrop(CONDS, recordedDrop));
   const planned = plannedTrials(ORDER, dropped, SPEC);
   assert.equal(planned.length, 44); assert.equal(planned.filter((x) => x.case === 'brief').length, 32);
   assert.ok(planned.every((x) => !x.condition.startsWith('X')));

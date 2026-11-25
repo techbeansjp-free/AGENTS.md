@@ -6,7 +6,8 @@
 // - the adopted CLAUDE.md block differs only in its first sentence (conditions.json candidateText), in every fixture;
 // - the installed .claude/skills/asc/SKILL.md descriptions are the B and S texts, the rest of that entry and the other 15
 //   entries are byte-identical;
-// - the installed project files differ only in the expected set (installedDiffExpected).
+// - the installed project files differ only in the expected set (installedDiffExpected);
+// - every probe, and no trial, launches with --debug-file (probeDebugLog; review M1, the Skill-listing budget gate).
 // It checks the stage-1 spend against the stage-1 published ledger (run-trial.mjs stage1Problems) and prints the launch
 // command of every probe and planned trial with the --settings content of a fixture A and a fixture D trial. Output has
 // no absolute local paths: the root is written as <scratch>, the ledger directory as <ledger-dir>.
@@ -178,6 +179,8 @@ function main() {
   add('maxTurns', report.launch.every((l) => (l.kind === 'probe' ? l.argv.includes(`--max-turns ${conds.probeMaxTurns} `) : l.kind === 'design' ? l.argv.includes(`--max-turns ${conds.maxTurnsByKind.design} `) : !l.argv.includes('--max-turns'))),
     {probe: conds.probeMaxTurns, design: conds.maxTurnsByKind.design, app: 'none'});
   add('levelFlags', report.launch.every((l) => l.argv.includes(`--tools ${conds.toolLevels.W.tools} `) && l.argv.includes(`--disallowedTools ${conds.toolLevels.W.disallowed} `) && l.argv.includes('--permission-mode acceptEdits') && l.argv.includes('--settings settings.json')));
+  // Review M1: each probe (B and S) writes a debug log, the source of the Skill-listing budget state the gate compares.
+  add('probeDebugLog', report.launch.filter((l) => l.kind === 'probe').length === 2 && report.launch.every((l) => (l.kind === 'probe') === l.argv.includes('--debug-file debug.log')));
   const runsRoot = path.join(root, 'runs');
   const firstA = plan.planned[0], firstD = plan.planned.find((t) => spec.cases.find((k) => k.id === t.case).kind === 'design');
   const fxOf = (t) => fixtureDir(fixturesRoot, t.condition, spec.cases.find((k) => k.id === t.case).fixture);

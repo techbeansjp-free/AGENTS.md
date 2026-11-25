@@ -49,6 +49,7 @@
    - 実装：[harness/order.mjs](harness/order.mjs)の`replacementPlan`と[harness/score.mjs](harness/score.mjs)の`selectCounted`。
 5. 隔離の確認：測定の前に、B・Sそれぞれ1回のprobe（fixture A、水準W、段階1と同じ6操作）を行い、[harness/probe-check.mjs](harness/probe-check.mjs)のすべての項目が合格し、`compare`が合格した場合だけ測定する。`run-trial.mjs`は、記録された`pass`を信用せず、各probeを試行の記録から計算し直して照合する（段階1と同じ）。
    - 失敗・不合格の条件に限り、1回だけ再実行できる（回2）。それでも合格しなければ、測定せずにownerへ報告する。
+   - Skill一覧の予算（独立レビューM1、Sのdescriptionは13文字長い）：probeは`--debug-file`で実行し、次の2つもprobeの項目と`compare`の合格の条件とする（記録から計算し直す）。(a) debug logに`Skill listing over budget`の行が無い、またはBとSで超過の状態（超過の有無、超過ならSkillの件数と予算）と説明文が省かれたASCのSkillが同じ。(b) BとSのどちらでも、ASCの16件のdescriptionがすべてContextにある（probeの回答が、Skillのfileを読まずに、一覧から16件を原文のまま書いている）。
    - probeは、計画した試行が1件でも台帳に予約された後は実行しない。
 6. 実行の順序と途中の停止（#1817と同じ）：
    - 順序は[run-order.json](run-order.json)：回を外側、各回の中は固定した17依頼の順（該当しない依頼と画面の依頼は間に挟み、同じ種類を隣にせず、最後にしない）、各依頼の中はB、Sの順。`run-all.mjs`はこの順だけを実行し、`run-trial.mjs`は次に予約されるべき試行以外を拒否する。
