@@ -29,6 +29,39 @@
     "harness/score.mjs": "9baa0763b24cdafd8bff29c17034e80d9bd3d80ec36f3d2e04b8cdeefd91f8e0"
    },
    "ledgerId": "1ceebdc5-63a4-458e-bead-d033651577d4"
+  },
+  {
+   "stage": "stage 1",
+   "fixedAtCommit": "f7a5e6ebcbb4d085146703252fe239d51d441c54",
+   "at": "2026-11-25T19:37:28.622Z",
+   "files": {
+    "analysis-plan.md": "eba02b7aeade2604ef497f7aa345e394c0812644153fc8205949c8d506fcad91",
+    "cases.json": "ad300d74adb6d0c714b525574af88c7efc9d61db6e84753d60b6153eca0a18c4",
+    "conditions.json": "21543ed034917b59057ec28c3ac270e886a6ed158d958cbfaa5ed054c5d3d494",
+    "release.json": "e03bc422c072fa5efcf213010b075782655b8c48d690ab31af56b86d7a621a71",
+    "run-order.json": "a4af71f7733d9278be2c45e902bb08a20fbcffdaf1fc7662381129e89c41c8f3",
+    "harness/analyze.mjs": "c8c8cce02928988f00451dd04c3412259663d82d73af587dcd0e78702f3b259e",
+    "harness/apply-condition.mjs": "87b3c2c156635a3b74c17b2679a4a74bb9d409f71c8d6b23b0d1b70392e3ea0e",
+    "harness/collect.mjs": "49bf0157af1e65bbd82a669e641d05c29b0ae3703027a4967bd9be60d0688c48",
+    "harness/condition-i.mjs": "8ff3f606a6c84a29917f6e511da44959638f7f6a47ac190bb774f95abbc16c1d",
+    "harness/fixation.mjs": "7e346782f75f43144eeb33342a17b79c49de57ffc3d06cba27c7802f69032997",
+    "harness/guard.mjs": "eb533b6e6ce6da772491b8c793939b4fbfd5a77185586ad77866d3e9279a42a6",
+    "harness/install-asc.mjs": "529384b4ad6eb4cff479293b571ea9f37337460eb70e8c1be4c832358ece838b",
+    "harness/ledger.mjs": "6ce2d8a4c78765e5e2cff73c08cf69229e90a691d2f7f2bf37950fcfb2bb127d",
+    "harness/make-fixture.mjs": "da24ddd3a87614e6cdbc88dada611f2060d90b299a610fac2607fb177611e0f2",
+    "harness/markers.mjs": "d5e32aad16eabb081209d03e9461e2705a0bfaa777da34d30b5e3f8c0a5eefff",
+    "harness/order.mjs": "8e3323ca66439d44d1986073e1790d6437bd54c23557d23dc67abfc56900981b",
+    "harness/probe-check.mjs": "8494aa6d1c7f6ffa18dd8d4892b7a236a1ea91d3da5baa96d2cfe94836119ca4",
+    "harness/run-all.mjs": "13862beef50f7fe365d1e1e2adfa05c0991725c1a44eb7f6762391dce00f4b31",
+    "harness/run-trial.mjs": "4760d6edf9c4055bd006d651a228fdff8cd353cd592e558267fd0baec9d718cb",
+    "harness/score.mjs": "9baa0763b24cdafd8bff29c17034e80d9bd3d80ec36f3d2e04b8cdeefd91f8e0"
+   },
+   "ledgerId": "1ceebdc5-63a4-458e-bead-d033651577d4",
+   "dropLevel": "X",
+   "drop": {
+    "reason": "XSAのprobeが回1・回2とも不合格。sandboxのdenyRead（runs root）がallowRead（work/）より優先され、Bashで作業directoryのfileを読めない（insideCatClaudeMd・allowReadWork）。また試行directoryに0 byteのsentinelが作られた（sentinelsAbsent）。ownerの判断（sandboxが効かなければコマンド実行の条件を測らない、2026-11-26）に従いXを外す",
+    "review": "4回目の独立レビュー（HEAD f7a5e6eb）で測定開始可。Xの脱落の手順は事前に固定（L1）"
+   }
   }
  ]
 }
