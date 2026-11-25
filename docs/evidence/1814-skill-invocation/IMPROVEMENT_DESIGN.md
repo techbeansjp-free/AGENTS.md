@@ -1,5 +1,7 @@
 # 改善の設計案：読む契機を`project-assets`の既定の選択肢として提案する（#1814、未実装）
 
+> **実装の状態（2026-11-25）**：ownerの判断（Issueのコメント）により、条件P（CLAUDE.mdの文例）を標準にし、SessionStartのhook（条件H）は採用しなかった。`CLAUDE.md`の選択肢だけを実装した（`src/project-assets.mjs`、`bin/asc-v05.mjs`、`v05/USAGE.md`、`test/test_project_read_trigger.mjs`）。下の表の`.claude/settings.json`の選択肢・`read-trigger --hook`・`src/read-trigger.mjs`・`src/runtime-files.json`の変更は実装していない。interfaceは`harness/condition-i.mjs`の前提（`readTrigger.default`・`options[].{id,path,action,beforeSha256,diff}`・`--adopt-read-trigger <id>@<sha|absent>`）のままで、`condition-i.mjs`は変えていない。
+
 開発時の検証資料であり、配布対象に含めない。実装の前の設計の素案である。どの仕組み（`CLAUDE.md`の文例・SessionStartのhook）を既定にするかは、測定の後にownerが決める。測定で不足が無ければ実装しない（[decision-criteria.md](decision-criteria.md)の規則1）。
 
 ## 守ること

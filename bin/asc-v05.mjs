@@ -4,6 +4,17 @@ import {planDockerCleanup} from '../src/docker-cleanup-plan.mjs';
 import {resumeContext,hookDirectory,readHookInput} from '../src/resume-context.mjs';
 import {startWorktree,verifyWorktree} from '../src/worktree-execution.mjs';
 import {projectAssets,uninstallProjectAssets} from '../src/project-assets.mjs';
+// project-assets flags: each once; --adopt-read-trigger takes one value and requires --apply.
+function projectAssetsArgs(rest){
+ const flags=[];let adopt=null;
+ for(let i=0;i<rest.length;i++){
+  if(rest[i]==='--adopt-read-trigger'){if(adopt!==null||i+1>=rest.length)return null;adopt=rest[++i];continue;}
+  if(!['--apply','--register-skill','--register-claude-skill'].includes(rest[i])||flags.includes(rest[i]))return null;
+  flags.push(rest[i]);
+ }
+ if(adopt!==null&&!flags.includes('--apply'))return null;
+ return Object.assign(flags,{adopt});
+}
 import {restartGoal} from '../src/goal-restart.mjs';
 import {runIssues} from '../src/issue-run.mjs';
 /** Linux distribution candidate. Unsupported operations stop; never invoke v0.4 implicitly. */
@@ -39,7 +50,7 @@ try {
     'docker-cleanup-plan':'docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]\nmerge後の整理で、そのworktreeのDocker資源の削除候補と保持理由を読取り専用で一覧します。削除・down・停止は行わず、出力は削除許可ではありません。--project省略時はdirectory名をcomposeの規則で正規化、--label省略時はasc.worktree=<worktreeの実path>。Dockerが使えなければexit 1。',
     'resume-context':'resume-context [<directory>] | resume-context --hook\ncompaction後・新しいContextの開始時に、repositoryのworktree・branch・HEAD・未commit件数を短い文で表示します（読取りのみ・ネットワークなし）。--hookはHostのSessionStart hookの入力JSONのcwdを使い、入力の読取りを含めて全体を約10秒で打ち切り、読取りに失敗しても終了コード0で一文を返します。',
     uninstall:'uninstall <project-directory> [--apply]\n既定は撤去候補の表示のみ。--applyで正常な記録と配布時hashから所有を確認できた未編集資産・Host入口・管理記録を撤去します。競合があれば全体を停止し、利用者のfile・directory・設定・npm prefixは保持します。',
-    'project-assets':'project-assets <project-directory> [--register-skill] [--register-claude-skill] [--apply]\n既定は差分表示のみ。登録オプションはHost選択を保存します。以後の通常更新でも登録Hostの入口を追加・更新し、未編集の廃止入口だけを削除します。--applyで適用し、編集・削除済み入口や未登録の同名fileとの競合は全体を停止します。'
+    'project-assets':'project-assets <project-directory> [--register-skill] [--register-claude-skill] [--apply [--adopt-read-trigger <id>@<beforeSha256|absent>]]\n既定は差分表示のみ。登録オプションはHost選択を保存します。以後の通常更新でも登録Hostの入口を追加・更新し、未編集の廃止入口だけを削除します。--applyで適用し、編集・削除済み入口や未登録の同名fileとの競合は全体を停止します。Claude Codeを登録した利用先では、ASCを読む契機（CLAUDE.mdの末尾への区切り付きの文例）を readTrigger として差分付きで提案します。適用は、表示されたidとbeforeSha256を --adopt-read-trigger に指定した場合だけで、表示の後にCLAUDE.mdが変わっていれば全体を停止します。既存の内容は変更・並べ替えしません。'
   };
   if(Object.hasOwn(nativeHelp,command)&&args.length===1&&['--help','-h'].includes(args[0])){
     console.log(`使い方: asc-v05 ${nativeHelp[command]}\n詳細: ${fileURLToPath(new URL('../v05/USAGE.md',import.meta.url))}`);
@@ -78,7 +89,7 @@ try {
   --version                                配布版を表示
 
 導入・更新・撤去:
-  project-assets <project-directory> [--register-skill] [--register-claude-skill] [--apply]       配布資産・登録Host入口の差分表示／未編集資産だけ同期
+  project-assets <project-directory> [--register-skill] [--register-claude-skill] [--apply [--adopt-read-trigger <id>@<sha|absent>]]       配布資産・登録Host入口の差分表示／未編集資産だけ同期／承認したCLAUDE.mdの文例の追記
 
   uninstall <project-directory> [--apply]  撤去候補の表示／所有を確認できる未編集資産だけ撤去
 
@@ -114,8 +125,9 @@ v0.5の実行入口です。使用版は--versionで確認してください。�
     console.log(resumeContext(path.resolve(args[0]??process.cwd())));
   } else if(command==='probe-native'&&args.length===1){
     const result=await probeNativeSandbox(args[0]);console.log(JSON.stringify(result,null,2));if(!result.passed)process.exitCode=2;
-  } else if(command==='project-assets'&&args.length>=1&&args.length<=4&&args.slice(1).every(a=>['--apply','--register-skill','--register-claude-skill'].includes(a))&&new Set(args.slice(1)).size===args.length-1){
-    const result=projectAssets(args[0],{apply:args.includes('--apply'),registerSkill:args.includes('--register-skill'),registerClaudeSkill:args.includes('--register-claude-skill')});console.log(JSON.stringify(result,null,2));if(result.conflicts.length)process.exitCode=2;
+  } else if(command==='project-assets'&&args.length>=1&&projectAssetsArgs(args.slice(1))){
+    const flags=projectAssetsArgs(args.slice(1));
+    const result=projectAssets(args[0],{apply:flags.includes('--apply'),registerSkill:flags.includes('--register-skill'),registerClaudeSkill:flags.includes('--register-claude-skill'),adoptReadTrigger:flags.adopt});console.log(JSON.stringify(result,null,2));if(result.conflicts.length)process.exitCode=2;
   } else if(command==='uninstall'&&(args.length===1||(args.length===2&&args[1]==='--apply'))){
     const result=uninstallProjectAssets(args[0],{apply:args.includes('--apply')});console.log(JSON.stringify(result,null,2));if(result.conflicts.length)process.exitCode=2;
   } else if(command==='--version'&&args.length===0){

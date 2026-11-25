@@ -145,6 +145,54 @@ function catalog(packageRoot,hosts){
  for(const host of hosts)for(const name of skillNames)assets.set(`${host}/skills/${name}/SKILL.md`,entryBytes(name,metadata.get(name)));
  demand(assets.size<=maxAssets&&[...assets.values()].every(v=>Buffer.isBuffer(v)),'Invalid distribution assets');return assets;
 }
+// Read trigger (#1814): the owner adopted the CLAUDE.md pointer as the standard. It is proposed as a shown diff and
+// applied only with --adopt-read-trigger claude-md@<beforeSha256|absent> from that plan. The block is appended at the
+// end, existing bytes are never changed or reordered, and the text comes from the package's v05/USAGE.md (single source).
+const readTriggerPath='CLAUDE.md',readTriggerId='claude-md',readTriggerOpen='<!-- asc:read-trigger v1 -->',readTriggerClose='<!-- /asc:read-trigger -->';
+function readTriggerBlock(packageRoot){
+ const usage=read(packageRoot,'v05/USAGE.md').toString();
+ const m=/### ASCを読む契機を利用先へ採用する（任意）[\s\S]*?```text\n([\s\S]*?)\n```/.exec(usage);
+ demand(m,'Read trigger text missing from v05/USAGE.md');
+ return `${readTriggerOpen}\n${m[1].trim()}\n${readTriggerClose}\n`;
+}
+function appendDiff(before,block){
+ const old=before===null?[]:before.toString().split('\n');
+ const endsWithNewline=before===null||before.length===0||before.toString().endsWith('\n');
+ if(endsWithNewline&&old.length&&old.at(-1)==='')old.pop();
+ const added=[...(before!==null&&before.length?['']:[]),...block.replace(/\n$/,'').split('\n')];
+ const head=`--- ${before===null?GIT_NULL_DEVICE:`a/${readTriggerPath}`}\n+++ b/${readTriggerPath}\n`;
+ if(endsWithNewline)return head+`@@ -${old.length},0 +${old.length+1},${added.length} @@\n`+added.map(l=>`+${l}`).join('\n')+'\n';
+ // Without a final newline the last line gains one; the diff shows that line replaced, nothing else changes.
+ const last=old.at(-1);
+ return head+`@@ -${old.length},1 +${old.length},${added.length+1} @@\n-${last}\n\\ No newline at end of file\n+${last}\n`+added.map(l=>`+${l}`).join('\n')+'\n';
+}
+function readTriggerAfter(before,block){
+ if(before===null)return Buffer.from(block);
+ const text=before.toString();
+ return Buffer.from((text.length===0?'':text.endsWith('\n')?text+'\n':text+'\n\n')+block);
+}
+// A CLAUDE.md whose every substantive line points at AGENTS.md defers to another canonical file; ASC cannot tell which
+// file the owner treats as canonical, so it shows the text for manual adoption instead of proposing an edit.
+function onlyReferencesAgents(text){
+ const lines=text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));
+ return lines.length>0&&lines.every(l=>l.includes('AGENTS.md'));
+}
+function readTriggerPlan(repo,packageRoot,adopted){
+ const block=readTriggerBlock(packageRoot),manual={path:readTriggerPath,text:block};
+ const result={default:readTriggerId,options:[],adopted:[...adopted]};
+ if(adopted.some(a=>a.id===readTriggerId))return {result,current:null,block};
+ let current;
+ try{
+  const st=fs.lstatSync(path.join(repo,readTriggerPath),{throwIfNoEntry:false});
+  if(st)demand(st.isFile()&&!st.isSymbolicLink(),'CLAUDE.md is not a regular file');
+  current=inspect(repo,readTriggerPath);
+ }catch{return {result:{...result,manual:{...manual,reason:'CLAUDE.md is a symlink or not a regular file; adopt the text by hand in the canonical file'}},current:null,block};}
+ const before=current.bytes;
+ if(before!==null&&before.toString().includes(readTriggerOpen))return {result:{...result,present:true},current:null,block};
+ if(before!==null&&onlyReferencesAgents(before.toString()))return {result:{...result,manual:{...manual,reason:'CLAUDE.md only refers to AGENTS.md; adopt the text by hand in the canonical file'}},current:null,block};
+ result.options.push({id:readTriggerId,path:readTriggerPath,action:before===null?'create':'append',beforeSha256:before===null?'absent':hash(before),diff:appendDiff(before,block)});
+ return {result,current,block};
+}
 // Asset Git children never read stdin. With a large spawnSync input on a
 // loaded macOS, Git was seen blocked reading stdin until the timeout (#1669);
 // pass bulk data as a file in the private temp directory.
@@ -179,11 +227,18 @@ function distributionState(repo){
   const host=entry[1];
   if(provenEntry(repo,name,previous)){selected.add(host);owned.add(name);}else ownershipConflicts.push(name);
  }
- return {priorRecord,priorBytes,previous,selected,owned,ownershipConflicts};
+ // Adopted read triggers are information about the owner's file, never an ownership claim over it.
+ const adoptedTriggers=[];
+ if(parsed&&'readTrigger' in parsed){
+  const a=parsed.readTrigger?.adopted;
+  demand(Array.isArray(a)&&a.length<=8&&a.every(x=>x&&x.id===readTriggerId&&x.path===readTriggerPath&&typeof x.blockSha256==='string'&&/^[a-f0-9]{64}$/.test(x.blockSha256)),'Invalid read trigger record');
+  adoptedTriggers.push(...a.map(x=>({id:x.id,path:x.path,blockSha256:x.blockSha256})));
+ }
+ return {priorRecord,priorBytes,previous,selected,owned,ownershipConflicts,adoptedTriggers};
 }
-export function projectAssets(directory,{apply=false,registerSkill=false,registerClaudeSkill=false,packageRoot=defaultPackage}={}){
+export function projectAssets(directory,{apply=false,registerSkill=false,registerClaudeSkill=false,adoptReadTrigger=null,packageRoot=defaultPackage}={}){
  const {repo}=projectLocation(directory);packageRoot=fs.realpathSync(packageRoot);
- const {priorRecord,priorBytes,previous,selected,owned,ownershipConflicts}=distributionState(repo);
+ const {priorRecord,priorBytes,previous,selected,owned,ownershipConflicts,adoptedTriggers}=distributionState(repo);
  if(registerSkill)selected.add('.agents');if(registerClaudeSkill)selected.add('.claude');
  const hosts=hostNames.filter(host=>selected.has(host)),assets=catalog(packageRoot,hosts);
  // Retained canonical/runtime assets keep their original preimages. Only
@@ -209,18 +264,32 @@ export function projectAssets(directory,{apply=false,registerSkill=false,registe
  }
  demand(Object.keys(files).length<=maxAssets,'Invalid asset inventory');
  const retained=Object.keys(previous).filter(name=>!assets.has(name)&&Object.hasOwn(files,name));
- const nextRecord=Buffer.from(JSON.stringify({schema:'asc-project-assets/v1',registeredHosts:hosts,hostEntries:[...nextOwned].sort(),files:Object.fromEntries(Object.entries(files).sort(([a],[b])=>a<b?-1:a>b?1:0))},null,2)+'\n');
- const result={schema:'asc-project-assets-plan/v1',repo,applied:false,registeredHosts:hosts,changes,conflicts,retained,recordChanged:!priorBytes?.equals(nextRecord)};
+ // Read trigger: proposed only for the Claude Code host; adopted only with the exact option and preimage from the plan.
+ const trigger=hosts.includes('.claude')?readTriggerPlan(repo,packageRoot,adoptedTriggers):null;
+ let adoption=null;
+ if(adoptReadTrigger!==null){
+  const m=/^([a-z-]+)@([a-f0-9]{64}|absent)$/.exec(adoptReadTrigger);
+  demand(m,'Invalid --adopt-read-trigger value; use <id>@<beforeSha256|absent> from the plan');
+  const option=trigger?.result.options.find(o=>o.id===m[1]);
+  demand(option,'No such read trigger option in the current plan');
+  demand(option.beforeSha256===m[2],'Read trigger target changed after planning; review the new plan');
+  adoption={option,current:trigger.current,after:readTriggerAfter(trigger.current.bytes,trigger.block),blockSha256:hash(trigger.block)};
+ }
+ const adoptedNext=adoption?[...adoptedTriggers,{id:adoption.option.id,path:adoption.option.path,blockSha256:adoption.blockSha256}]:adoptedTriggers;
+ const nextRecord=Buffer.from(JSON.stringify({schema:'asc-project-assets/v1',registeredHosts:hosts,hostEntries:[...nextOwned].sort(),files:Object.fromEntries(Object.entries(files).sort(([a],[b])=>a<b?-1:a>b?1:0)),...(adoptedNext.length?{readTrigger:{adopted:adoptedNext}}:{})},null,2)+'\n');
+ const result={schema:'asc-project-assets-plan/v1',repo,applied:false,registeredHosts:hosts,changes,conflicts,retained,recordChanged:!priorBytes?.equals(nextRecord),...(trigger?{readTrigger:trigger.result}:{})};
  if(!apply||conflicts.length)return result;
  // No candidate hooks, network, index changes, or global/session locks.
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'asc-assets-'));
  const transaction=changes.map(change=>[change.path,before.get(change.path),assets.get(change.path)??null]);
+ if(adoption){before.set(readTriggerPath,adoption.current);transaction.push([readTriggerPath,adoption.current,adoption.after]);}
  if(result.recordChanged)transaction.push([record,priorRecord,nextRecord]);
  let applying=false;
  try{
   const old=path.join(temp,'old'),next=path.join(temp,'new');fs.mkdirSync(old);fs.mkdirSync(next);
   const write=(base,name,bytes)=>{if(bytes===null)return;const file=path.join(base,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);};
   for(const change of changes){const current=before.get(change.path);write(old,current.path,current.bytes);write(next,current.path,assets.get(change.path)??null);}
+  if(adoption){write(old,adoption.current.path,adoption.current.bytes);write(next,adoption.current.path,adoption.after);}
   if(result.recordChanged){write(old,record,priorBytes);write(next,record,nextRecord);}
   const diff=spawnSync('git',['-c',`core.attributesFile=${GIT_NULL_DEVICE}`,'diff','--no-index','--no-ext-diff','--no-textconv','--binary','--','old','new'],{cwd:temp,stdio:['ignore','pipe','pipe'],encoding:null,maxBuffer:16000000,timeout:LOCAL_GIT_TIMEOUT_MILLISECONDS,env:{PATH:process.env.PATH,HOME:temp,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:GIT_NULL_DEVICE}});
   if(diff.error||![0,1].includes(diff.status))throw Error(gitFailureMessage('Cannot prepare asset patch',diff));
@@ -238,7 +307,8 @@ export function projectAssets(directory,{apply=false,registerSkill=false,registe
   for(const [name,bytes] of assets)demand(read(repo,name)?.equals(bytes),'Applied asset verification failed');
   for(const change of changes)if(change.action==='delete')demand(read(repo,change.path)===null,'Retired Host entry verification failed');
   demand(read(repo,record)?.equals(nextRecord),'Applied distribution record verification failed');
-  return {...result,applied:true};
+  if(adoption)demand(read(repo,readTriggerPath)?.equals(adoption.after),'Applied read trigger verification failed');
+  return {...result,applied:true,...(adoption?{readTriggerAdopted:{id:adoption.option.id,path:readTriggerPath,action:adoption.option.action,beforeSha256:adoption.option.beforeSha256,afterSha256:hash(adoption.after)}}:{})};
  }catch(error){
   if(applying){const failed=restorePreimages(repo,transaction);if(failed.length)throw Error(`Asset update failed; rollback incomplete for ${failed.join(', ')}; restore the saved distribution before retry`,{cause:error});}
   throw error;
@@ -265,8 +335,9 @@ function uninstallCatalog(packageRoot){
 /** Remove only recorded, unchanged files inside the trusted distribution catalog. */
 export function uninstallProjectAssets(directory,{apply=false,packageRoot=defaultPackage}={}){
  const {repo}=projectLocation(directory);
- const {priorRecord,priorBytes,previous,selected,owned,ownershipConflicts}=distributionState(repo);
- const result={schema:'asc-project-uninstall-plan/v1',repo,applied:false,recordPresent:priorBytes!==null,registeredHosts:hostNames.filter(host=>selected.has(host)),changes:[],conflicts:[...ownershipConflicts]};
+ const {priorRecord,priorBytes,previous,selected,owned,ownershipConflicts,adoptedTriggers}=distributionState(repo);
+ // An adopted read trigger is part of the owner's CLAUDE.md: it is kept and listed, never edited or removed here.
+ const result={schema:'asc-project-uninstall-plan/v1',repo,applied:false,recordPresent:priorBytes!==null,registeredHosts:hostNames.filter(host=>selected.has(host)),changes:[],conflicts:[...ownershipConflicts],retained:adoptedTriggers.map(a=>({path:a.path,kind:'read-trigger',reason:'owner file; remove the delimited block by hand if no longer wanted'}))};
  if(priorBytes===null)return {...result,notice:'No distribution record; unrecorded files were not inspected or removed.'};
  // ASC does not distribute special permissions. Refuse them before removal,
  // rather than recreate privileged files during a partial-failure rollback.
