@@ -1,0 +1,24 @@
+{
+ "schema": "asc-host-session/v1",
+ "host": "claude",
+ "cwd": "<work：run2の比較画面からkeyを除いて写した作業directory>",
+ "targetDirectory": "<work：run2の比較画面からkeyを除いて写した作業directory>",
+ "targetHead": null,
+ "model": "fable",
+ "ephemeral": false,
+ "name": "自動: 1807 順位 Fable",
+ "sessionId": "<removed>",
+ "status": "completed",
+ "naming": "completed",
+ "outputDir": "<rank1807：作業directoryの外の記録先>/fable",
+ "startedAt": "2026-11-25T01:03:00.395Z",
+ "process": {
+  "code": 0,
+  "signal": null
+ },
+ "rename": {
+  "code": 0,
+  "signal": null
+ },
+ "finishedAt": "2026-11-25T01:05:54.811Z"
+}

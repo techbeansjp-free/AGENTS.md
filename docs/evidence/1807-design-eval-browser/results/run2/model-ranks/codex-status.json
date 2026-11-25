@@ -1,0 +1,17 @@
+{
+ "schema": "asc-host-session/v1",
+ "host": "codex",
+ "cwd": "<work：run2の比較画面からkeyを除いて写した作業directory>",
+ "targetDirectory": "<work：run2の比較画面からkeyを除いて写した作業directory>",
+ "targetHead": null,
+ "model": "gpt-5.6-sol",
+ "ephemeral": false,
+ "name": "自動: 1807 順位 Codex",
+ "sessionId": "<removed>",
+ "status": "completed",
+ "naming": "completed",
+ "outputDir": "<rank1807：作業directoryの外の記録先>/codex",
+ "startedAt": "2026-11-25T01:03:00.403Z",
+ "permissionProfile": "<removed>",
+ "finishedAt": "2026-11-25T01:06:27.977Z"
+}

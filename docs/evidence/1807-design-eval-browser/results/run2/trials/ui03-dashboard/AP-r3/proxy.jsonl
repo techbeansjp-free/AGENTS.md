@@ -1,0 +1,4 @@
+{"t":"2026-11-25T00:44:58.678Z","listener":"model","event":"listening","port":3128,"hosts":1}
+{"t":"2026-11-25T00:44:58.691Z","listener":"browse","event":"listening","port":3129,"hosts":80}
+{"t":"2026-11-25T00:45:14.178Z","listener":"browse","method":"CONNECT","target":"linear.app:443","decision":"allow"}
+{"t":"2026-11-25T00:45:16.728Z","listener":"browse","method":"CONNECT","target":"www.westjr.co.jp:443","decision":"allow"}

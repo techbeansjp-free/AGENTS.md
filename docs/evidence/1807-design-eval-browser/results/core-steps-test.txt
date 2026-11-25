@@ -1,0 +1,50 @@
+TAP version 13
+# Subtest: full run: exemplar, two alternatives, both widths
+ok 1 - full run: exemplar, two alternatives, both widths
+  ---
+  duration_ms: 4.198569
+  ...
+# Subtest: notes claim the steps but no tool calls exist
+ok 2 - notes claim the steps but no tool calls exist
+  ---
+  duration_ms: 0.244397
+  ...
+# Subtest: failed and blocked page calls do not count as viewing
+ok 3 - failed and blocked page calls do not count as viewing
+  ---
+  duration_ms: 0.418543
+  ...
+# Subtest: one file rendered repeatedly is not two alternatives; versions are reported separately
+ok 4 - one file rendered repeatedly is not two alternatives; versions are reported separately
+  ---
+  duration_ms: 0.520905
+  ...
+# Subtest: failed screenshots do not count; narrow width is configurable (UI-03 uses 800)
+ok 5 - failed screenshots do not count; narrow width is configurable (UI-03 uses 800)
+  ---
+  duration_ms: 0.275967
+  ...
+# Subtest: tools of another server name and malformed lines are not counted
+ok 6 - tools of another server name and malformed lines are not counted
+  ---
+  duration_ms: 0.192718
+  ...
+# Subtest: proxy log corroboration
+ok 7 - proxy log corroboration
+  ---
+  duration_ms: 0.344826
+  ...
+# Subtest: summarize: 未判定 unless core-step trials are a strict majority of the case trials
+ok 8 - summarize: 未判定 unless core-step trials are a strict majority of the case trials
+  ---
+  duration_ms: 8.821934
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 119.026576

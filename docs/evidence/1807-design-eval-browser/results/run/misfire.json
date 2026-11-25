@@ -1,0 +1,104 @@
+{
+ "D-r1": {
+  "exit": 0,
+  "subtype": "success",
+  "costUsd": 0.06391079999999999,
+  "designSkillUse": [],
+  "uiFiles": [],
+  "browserCalls": 0,
+  "misfire": false,
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  },
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  }
+ },
+ "D-r2": {
+  "exit": 0,
+  "subtype": "success",
+  "costUsd": 0.0629915,
+  "designSkillUse": [],
+  "uiFiles": [],
+  "browserCalls": 0,
+  "misfire": false,
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  },
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  }
+ },
+ "D-r3": {
+  "exit": 0,
+  "subtype": "success",
+  "costUsd": 0.0621654,
+  "designSkillUse": [],
+  "uiFiles": [],
+  "browserCalls": 0,
+  "misfire": false,
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  },
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  }
+ },
+ "E-r1": {
+  "exit": 0,
+  "subtype": "success",
+  "costUsd": 0.0640748,
+  "designSkillUse": [],
+  "uiFiles": [],
+  "browserCalls": 0,
+  "misfire": false,
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  },
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  }
+ },
+ "E-r2": {
+  "exit": 0,
+  "subtype": "success",
+  "costUsd": 0.0623031,
+  "designSkillUse": [],
+  "uiFiles": [],
+  "browserCalls": 0,
+  "misfire": false,
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  },
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  }
+ },
+ "E-r3": {
+  "exit": 0,
+  "subtype": "success",
+  "costUsd": 0.0639118,
+  "designSkillUse": [],
+  "uiFiles": [],
+  "browserCalls": 0,
+  "misfire": false,
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  },
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  }
+ }
+}

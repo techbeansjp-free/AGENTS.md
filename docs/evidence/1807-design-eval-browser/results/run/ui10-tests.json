@@ -1,0 +1,62 @@
+{
+ "D-r1": {
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  },
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  }
+ },
+ "D-r2": {
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  },
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  }
+ },
+ "D-r3": {
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  },
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  }
+ },
+ "E-r1": {
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  },
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  }
+ },
+ "E-r2": {
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  },
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  }
+ },
+ "E-r3": {
+  "ownTests": {
+   "pass": 3,
+   "fail": 0
+  },
+  "oracle": {
+   "pass": 3,
+   "fail": 0
+  }
+ }
+}

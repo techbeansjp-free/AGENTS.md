@@ -1,0 +1,23 @@
+{
+ "schema": "asc-1807-allowlist/v1",
+ "note": "隔離の反例専用。本番と同じdenyPrivateAddresses=trueで、内部addressへ解決される許可済みhostが拒否されることを確かめる。",
+ "ports": [
+  80,
+  443
+ ],
+ "denyPrivateAddresses": true,
+ "model": {
+  "port": 3128,
+  "hosts": [
+   "model-api.test"
+  ],
+  "maxRequests": null
+ },
+ "browse": {
+  "port": 3129,
+  "hosts": [
+   "allowed.test"
+  ],
+  "maxRequests": null
+ }
+}

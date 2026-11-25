@@ -1,0 +1,67 @@
+{
+ "case": "ui04-parts-search",
+ "condition": "AP",
+ "rep": 1,
+ "schema": "asc-1807-core-steps/v1",
+ "parseErrors": 0,
+ "events": 57,
+ "toolCalls": {
+  "fetch_page": {
+   "calls": 1,
+   "ok": 0,
+   "failed": 1,
+   "noResult": 0
+  },
+  "view_page": {
+   "calls": 3,
+   "ok": 2,
+   "failed": 1,
+   "noResult": 0
+  },
+  "screenshot": {
+   "calls": 6,
+   "ok": 6,
+   "failed": 0,
+   "noResult": 0
+  }
+ },
+ "otherBrowserTools": [],
+ "viewedUrls": [
+  "https://linear.app/",
+  "https://toyota.jp/"
+ ],
+ "viewPageWidths": [
+  390,
+  1440
+ ],
+ "renderedFiles": [
+  "out/alt-a.html",
+  "out/alt-b.html",
+  "out/index.html"
+ ],
+ "screenshotWidths": [
+  390,
+  1440
+ ],
+ "renderedVersions": {
+  "out/alt-a.html": 1,
+  "out/alt-b.html": 1,
+  "out/index.html": 1
+ },
+ "exemplarViewed": true,
+ "alternativesCompared": true,
+ "narrowChecked": true,
+ "wideChecked": true,
+ "finalBothWidths": true,
+ "widths": {
+  "narrow": 390,
+  "wide": 1440
+ },
+ "coreSteps": true,
+ "proxy": {
+  "allowed": 2,
+  "denied": 0,
+  "deniedReasons": {}
+ },
+ "proxyCorroborates": true
+}

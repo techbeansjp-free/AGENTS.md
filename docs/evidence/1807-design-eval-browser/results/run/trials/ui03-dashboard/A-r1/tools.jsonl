@@ -1,0 +1,2 @@
+{"t":"2026-11-24T23:52:06.923Z","tool":"screenshot","ok":true,"input":{"path":"out/index.html","width":800},"info":{"path":"out/index.html","width":800,"horizontalOverflow":false,"scrollHeight":1280,"capturedHeight":1280,"blockedRequests":0,"blockedSample":[]},"ms":1276}
+{"t":"2026-11-24T23:52:07.774Z","tool":"screenshot","ok":true,"input":{"path":"out/index.html","width":1440},"info":{"path":"out/index.html","width":1440,"horizontalOverflow":false,"scrollHeight":1023,"capturedHeight":1023,"blockedRequests":0,"blockedSample":[]},"ms":826}

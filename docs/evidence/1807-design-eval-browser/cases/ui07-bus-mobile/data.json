@@ -1,0 +1,73 @@
+{
+ "service": "コミュニティバス（架空の市）",
+ "updated_at": "2027-05-12T07:41:00+09:00",
+ "stop": {
+  "name": "汐見台三丁目",
+  "code": "S-117",
+  "platforms": [
+   "のりば1（駅方面）",
+   "のりば2（病院方面）"
+  ]
+ },
+ "notice": {
+  "level": "遅れ",
+  "text": "中央通りの道路工事のため、駅方面の便が最大12分遅れています（7:30から）。",
+  "since": "07:30"
+ },
+ "fare": {
+  "adult": "200円",
+  "child": "100円",
+  "ic": "交通系ICカード利用可"
+ },
+ "departures": [
+  {
+   "route": "循環A 駅前・市役所行",
+   "platform": "のりば1（駅方面）",
+   "scheduled": "07:48",
+   "status": "遅れ",
+   "delay_min": 12,
+   "expected": "08:00",
+   "low_floor": true
+  },
+  {
+   "route": "循環A 駅前・市役所行",
+   "platform": "のりば1（駅方面）",
+   "scheduled": "08:08",
+   "status": "遅れ",
+   "delay_min": 6,
+   "expected": "08:14",
+   "low_floor": true
+  },
+  {
+   "route": "急行 駅前行（市役所に止まりません）",
+   "platform": "のりば1（駅方面）",
+   "scheduled": "08:15",
+   "status": "運休",
+   "delay_min": null,
+   "expected": null,
+   "low_floor": false
+  },
+  {
+   "route": "循環B 市民病院・図書館行",
+   "platform": "のりば2（病院方面）",
+   "scheduled": "07:52",
+   "status": "定刻",
+   "delay_min": 0,
+   "expected": "07:52",
+   "low_floor": true
+  },
+  {
+   "route": "循環B 市民病院・図書館行",
+   "platform": "のりば2（病院方面）",
+   "scheduled": "08:22",
+   "status": "定刻",
+   "delay_min": 0,
+   "expected": "08:22",
+   "low_floor": false
+  }
+ ],
+ "contact": {
+  "phone": "0120-000-000",
+  "hours": "6:30〜20:00"
+ }
+}

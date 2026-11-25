@@ -1,0 +1,209 @@
+{
+ "schema": "asc-1804-eval/v1",
+ "blind": "ui07-bus-mobile",
+ "order": [
+  "gu8k",
+  "aev9",
+  "4bkf",
+  "6qzd",
+  "2rmj",
+  "j748",
+  "c872",
+  "pwjj",
+  "d3nt"
+ ],
+ "exit": 0,
+ "wallMs": 95880,
+ "subtype": "success",
+ "isError": false,
+ "costUsd": 0.8191825999999999,
+ "numTurns": 40,
+ "usage": {
+  "input_tokens": 22,
+  "cache_creation_input_tokens": 68327,
+  "cache_read_input_tokens": 355366,
+  "output_tokens": 10063,
+  "output_tokens_details": {
+   "thinking_tokens": 2285
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 68327,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 3782,
+    "cache_read_input_tokens": 65471,
+    "cache_creation_input_tokens": 6079,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 6079
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-haiku-5-5": {
+   "inputTokens": 1329,
+   "outputTokens": 25,
+   "cacheReadInputTokens": 0,
+   "cacheCreationInputTokens": 0,
+   "webSearchRequests": 0,
+   "costUSD": 0.0001454,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 0,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 0,
+   "canonicalModel": "claude-haiku-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  },
+  "claude-opus-5-5": {
+   "inputTokens": 22,
+   "outputTokens": 10063,
+   "cacheReadInputTokens": 355366,
+   "cacheCreationInputTokens": 68327,
+   "webSearchRequests": 0,
+   "costUSD": 0.8190371999999999,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 2285,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 68327,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "scores": {
+  "gu8k": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "One list in expected-time order with large times, a status badge (●定刻 / ▲N分遅れ / ×運休) and dark navy platform labels puts the next bus (07:52) at the top, the cancelled trip is struck through, grayscale still separates the statuses, and the card list itself is a generic layout that does little to show this is a bus stop; rationale is null because the notes were withheld."
+  },
+  "aev9": {
+   "subject": 2,
+   "hierarchy": 1,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "Grouping trips under black 'のりば1 駅方面 / のりば2 病院方面' labels matches the real platforms and there is a symbol legend, but the overall next bus (07:52) sits in the second group, and on desktop the notice breaks inside '（7:30か／ら）' while the start time is shown twice; rationale is null because the notes were withheld."
+  },
+  "4bkf": {
+   "subject": 2,
+   "hierarchy": 1,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "Platform heading bars group the trips and the cancelled card carries '×運休' plus 'この便は運休です', but the next bus 07:52 is buried in the second group, the delayed cards give no label saying the large time is the expected time, the desktop notice breaks inside '（7:30か／ら）', and only the phone button uses a full-colour 📞 emoji while every other icon is a single-colour symbol; rationale is null because the notes were withheld."
+  },
+  "6qzd": {
+   "subject": 1,
+   "hierarchy": 1,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "Each card stacks route, status badge and time, and the delay is shown three ways ('発見込み', struck-through scheduled time, '+12分遅れ'), but under a '時刻順' heading the list follows scheduled order, so 08:00 comes before the actual next bus 07:52; the layout is a generic card list; rationale is null because the notes were withheld."
+  },
+  "2rmj": {
+   "subject": 2,
+   "hierarchy": 1,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "A compact departure-board layout (time column on the left with '見込み' / '予定' labels, route and status on the right, grouped by platform) is specific to this request and the cancelled trip stands out with a dark '×運休' badge, but the next bus 07:52 is in the second group and the struck-through scheduled time ('予定 07:48') is too small to read easily; rationale is null because the notes were withheld."
+  },
+  "j748": {
+   "subject": 2,
+   "hierarchy": 1,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "The '見込 08:00' prefix plus a tinted background on delayed cards tie the colour to the trip's status, but each card repeats the platform chip inside its own platform group and gives the scheduled time twice (struck-through and in the delay line), which waters down the priorities; the next bus 07:52 is in the second group and on mobile the fare line breaks inside 'ICカー／ド'; rationale is null because the notes were withheld."
+  },
+  "c872": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "Ordered by earliest expected time, so 07:52 comes first, with a large red '運休です' and ◎ / ▲ / × badges that survive in grayscale, but the 'expected / scheduled 07:48' line ('見込み／予定 07:48') under each delayed time is small and does not make clear which time is which, and the card list itself is a generic layout; rationale is null because the notes were withheld."
+  },
+  "pwjj": {
+   "subject": 2,
+   "hierarchy": 1,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "Showing the change as '07:48 → 08:00' (struck-through scheduled time, arrow, large expected time) under black platform header bars is a choice specific to this request, but the next bus 07:52 is in the second group, and 'この便は低床車両ではありません' appears only on the 08:22 trip and not on the 08:15 trip, which is also not low-floor; rationale is null because the notes were withheld."
+  },
+  "d3nt": {
+   "subject": 2,
+   "hierarchy": 1,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 1,
+   "rationale": null,
+   "evidence": "Compact board-style rows (time on the left, route and status chips on the right, grouped by platform) fit the request, but the next bus 7:52 is in the second group, the fact that the large time is the expected time is explained only in a footnote, the desktop notice wraps with a lone 'す' on its second line, and the grey heading bars on the fare and contact boxes compete visually with the platform headings; rationale is null because the notes were withheld."
+  }
+ },
+ "rawResult": "I looked at all 9 screens: the mobile, desktop and grayscale image for each. All 9 notes files say the generator's notes were withheld for this run, so `rationale` is `null` for every screen, as the files instruct. `flaggedInGray` is only for UI-03, so I left it out.\n\n- **Order and the next bus:** gu8k and c872 put all trips in one list ordered by expected departure, so the next bus (07:52) is at the top. Six screens group trips by platform (aev9, 4bkf, 2rmj, j748, pwjj, d3nt), which puts the 07:52 bus lower down, under platform 2. 6qzd is labelled \"時刻順\" (time order) but lists 08:00 before 07:52.\n- **Grayscale:** On every screen, on-time, delayed and cancelled trips can still be told apart in the grayscale image, thanks to symbols (✓ ● ▲ ×), text labels and strikethrough.\n\n```json\n{\"scores\": {\n\"gu8k\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"One list in expected-time order with large times, a status badge (●定刻 / ▲N分遅れ / ×運休) and dark navy platform labels puts the next bus (07:52) at the top, the cancelled trip is struck through, grayscale still separates the statuses, and the card list itself is a generic layout that does little to show this is a bus stop; rationale is null because the notes were withheld.\"},\n\"aev9\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"Grouping trips under black 'のりば1 駅方面 / のりば2 病院方面' labels matches the real platforms and there is a symbol legend, but the overall next bus (07:52) sits in the second group, and on desktop the notice breaks inside '（7:30か／ら）' while the start time is shown twice; rationale is null because the notes were withheld.\"},\n\"4bkf\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 1, \"decoration\": 2, \"rationale\": null, \"evidence\": \"Platform heading bars group the trips and the cancelled card carries '×運休' plus 'この便は運休です', but the next bus 07:52 is buried in the second group, the delayed cards give no label saying the large time is the expected time, the desktop notice breaks inside '（7:30か／ら）', and only the phone button uses a full-colour 📞 emoji while every other icon is a single-colour symbol; rationale is null because the notes were withheld.\"},\n\"6qzd\": {\"subject\": 1, \"hierarchy\": 1, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"Each card stacks route, status badge and time, and the delay is shown three ways ('発見込み', struck-through scheduled time, '+12分遅れ'), but under a '時刻順' heading the list follows scheduled order, so 08:00 comes before the actual next bus 07:52; the layout is a generic card list; rationale is null because the notes were withheld.\"},\n\"2rmj\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"A compact departure-board layout (time column on the left with '見込み' / '予定' labels, route and status on the right, grouped by platform) is specific to this request and the cancelled trip stands out with a dark '×運休' badge, but the next bus 07:52 is in the second group and the struck-through scheduled time ('予定 07:48') is too small to read easily; rationale is null because the notes were withheld.\"},\n\"j748\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"The '見込 08:00' prefix plus a tinted background on delayed cards tie the colour to the trip's status, but each card repeats the platform chip inside its own platform group and gives the scheduled time twice (struck-through and in the delay line), which waters down the priorities; the next bus 07:52 is in the second group and on mobile the fare line breaks inside 'ICカー／ド'; rationale is null because the notes were withheld.\"},\n\"c872\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"Ordered by earliest expected time, so 07:52 comes first, with a large red '運休です' and ◎ / ▲ / × badges that survive in grayscale, but the 'expected / scheduled 07:48' line ('見込み／予定 07:48') under each delayed time is small and does not make clear which time is which, and the card list itself is a generic layout; rationale is null because the notes were withheld.\"},\n\"pwjj\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 1, \"decoration\": 2, \"rationale\": null, \"evidence\": \"Showing the change as '07:48 → 08:00' (struck-through scheduled time, arrow, large expected time) under black platform header bars is a choice specific to this request, but the next bus 07:52 is in the second group, and 'この便は低床車両ではありません' appears only on the 08:22 trip and not on the 08:15 trip, which is also not low-floor; rationale is null because the notes were withheld.\"},\n\"d3nt\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 1, \"rationale\": null, \"evidence\": \"Compact board-style rows (time on the left, route and status chips on the right, grouped by platform) fit the request, but the next bus 7:52 is in the second group, the fact that the large time is the expected time is explained only in a footnote, the desktop notice wraps with a lone 'す' on its second line, and the grey heading bars on the fare and contact boxes compete visually with the platform headings; rationale is null because the notes were withheld.\"}\n}}\n```"
+}
