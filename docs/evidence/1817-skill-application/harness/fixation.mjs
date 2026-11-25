@@ -26,9 +26,9 @@ import {fileURLToPath} from 'node:url';
 import * as ledgerOps from './ledger.mjs';
 
 const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// #1817: run-order.json, order.mjs and run-all.mjs are fixed too (review M1).
+// #1817: run-order.json, order.mjs, run-all.mjs (review M1) and judge.mjs (review L-6) are fixed too.
 export const FIXED = ['cases.json', 'conditions.json', 'decision-criteria.md', 'release.json', 'run-order.json',
-  ...['apply-condition', 'collect', 'condition-i', 'fixation', 'guard', 'install-asc', 'ledger', 'make-fixture', 'markers', 'order', 'probe-check', 'run-all', 'run-trial', 'score'].map((n) => `harness/${n}.mjs`)];
+  ...['apply-condition', 'collect', 'condition-i', 'fixation', 'guard', 'install-asc', 'judge', 'ledger', 'make-fixture', 'markers', 'order', 'probe-check', 'run-all', 'run-trial', 'score'].map((n) => `harness/${n}.mjs`)];
 // Files stage 3 may change, each with a reason and an independent review (condition-I specific only).
 export const STAGE3_ALLOWED = ['harness/condition-i.mjs'];
 // The only fixed file a stage-0 correction may change (review N-1 (c)).

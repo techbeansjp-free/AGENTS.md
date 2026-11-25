@@ -36,15 +36,21 @@ export function plannedTrials(order = loadOrder(), runs = readJson('conditions.j
 }
 
 // run-trial: may this trial start now, given the names already reserved in the ledger? Probes are not ordered.
-export function orderRefusal({condition, caseId, rep, reserved, order = loadOrder(), runs = readJson('conditions.json').runs}) {
+// A replacement (rep > runs) may start only after every planned trial is reserved, and only when it is the next trial of
+// replacementPlan for the trials in runsRoot (review L-1); without runsRoot and spec a replacement is refused.
+export function orderRefusal({condition, caseId, rep, reserved, runsRoot = null, spec = null, order = loadOrder(), runs = readJson('conditions.json').runs}) {
   if (caseId === 'probe') return null;
   const planned = plannedTrials(order, runs);
   const next = planned.find((t) => !reserved.has(t.name));
+  const name = trialName(condition, caseId, rep);
   if (Number(rep) <= runs) {
-    const name = trialName(condition, caseId, rep);
     return next && next.name === name ? null : `out of order: the next planned trial is ${next ? next.name : 'none (all planned trials are reserved)'}, not ${name}`;
   }
-  return next ? `replacement ${trialName(condition, caseId, rep)} before every planned trial is reserved (next planned: ${next.name})` : null;
+  if (next) return `replacement ${name} before every planned trial is reserved (next planned: ${next.name})`;
+  if (!runsRoot || !spec) return `replacement ${name}: the replacement plan needs the runs root and the cases`;
+  const exists = (n) => reserved.has(n) || fs.existsSync(path.join(runsRoot, n));
+  const plan = replacementPlan({runsRoot, spec, order, runs, exists});
+  return plan[0]?.name === name ? null : `${name} is not the next required replacement (next: ${plan[0]?.name ?? 'none'})`;
 }
 
 // Failure of one raw trial directory (runs root), as score.mjs would count it after collect.mjs.
@@ -74,4 +80,23 @@ export function replacementPlan({runsRoot, spec, order = loadOrder(), runs = rea
     }
   }
   return out;
+}
+
+// review M-1: a run may be judged only when it is complete (every planned trial and every required replacement is
+// reserved in the ledger) or when it stopped because the cap was reached (ledger total + perTrialUsd > cap - margin, the
+// condition under which run-trial refuses the next trial). Required replacements come from the scored runs: the k-th
+// failed planned trial of a condition/case requires rep runs+k.
+export function completionStatus({runs: scored, reserved, spentUsd, budget, order = loadOrder(), plannedReps = readJson('conditions.json').runs}) {
+  const runs = plannedReps;
+  const missingPlanned = plannedTrials(order, runs).map((t) => t.name).filter((n) => !reserved.has(n));
+  const failed = new Map();
+  for (const r of scored) if (r.run <= runs && r.failure) failed.set(`${r.condition}|${r.case}`, (failed.get(`${r.condition}|${r.case}`) ?? 0) + 1);
+  const required = [...failed].flatMap(([key, k]) => { const [c, id] = key.split('|'); return Array.from({length: k}, (_, j) => trialName(c, id, runs + j + 1)); });
+  const missingReplacements = required.filter((n) => !reserved.has(n));
+  const complete = missingPlanned.length === 0 && missingReplacements.length === 0;
+  const stopLine = budget.capUsd - budget.safetyMarginUsd;
+  const capReached = spentUsd + budget.perTrialUsd > stopLine;
+  return {basis: complete ? 'complete' : capReached ? 'cap-reached' : null, complete, capReached,
+    missingPlanned: missingPlanned.length, firstMissingPlanned: missingPlanned[0] ?? null, missingReplacements,
+    spentUsd: Number(spentUsd.toFixed(4)), stopLineUsd: stopLine, perTrialUsd: budget.perTrialUsd};
 }

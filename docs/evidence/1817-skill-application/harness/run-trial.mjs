@@ -180,7 +180,7 @@ function main() {
     const spent = ledgerOps.spent(ledger);
     if (spent + budget > Number(stopUsd) - SAFETY_MARGIN_USD) { unlock(); fail(`cumulative spend ${spent.toFixed(2)} + this trial's budget ${budget} would exceed ${stopUsd} minus the safety margin ${SAFETY_MARGIN_USD}`); }
     if (ledgerOps.reservedNames(ledger).has(name)) { unlock(); fail(`trial ${name} is already in the ledger; a rerun needs a new rep number`); }
-    const outOfOrder = orderRefusal({condition: cond, caseId, rep, reserved: ledgerOps.reservedNames(ledger)});
+    const outOfOrder = orderRefusal({condition: cond, caseId, rep, reserved: ledgerOps.reservedNames(ledger), runsRoot, spec});
     if (outOfOrder) { unlock(); fail(outOfOrder); }
     const installFile = `${fixture}.install.json`;
     const install = fs.existsSync(installFile) ? JSON.parse(fs.readFileSync(installFile, 'utf8')) : null;

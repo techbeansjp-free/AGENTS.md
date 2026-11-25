@@ -5,6 +5,8 @@
 // (3) review L1: replacements are mandatory and exact: the k-th failed planned trial (rep order) is replaced by rep
 // runs+k only; a failed replacement stays a failure; a missing replacement is reported and makes the condition not judged.
 // (4) review M1: judge1817 is not-judged when a condition has no valid negative trial or a planned case has no valid trial.
+// (5) review M-1: judge1817 is not-judged unless the run is complete or stopped at the cap (order.mjs completionStatus);
+// the judgement is made only by judge.mjs (fixation, trial fixation digests, ledger), not by this file's command line.
 // Scores #1814 runs against the fixed gold (cases.json) from the tool-call record only (stream-json of `claude -p`).
 // Adapted from docs/evidence/1783-skill-coexistence/harness/score.mjs. Differences: two hops are counted separately (the
 // thin entry .claude/skills/<s>/SKILL.md or the Skill tool, then the body .agent-skill-chain/skills/<s>/SKILL.md);
@@ -189,9 +191,11 @@ export function judge(baseline, candidate, {minBodyRate = 0.8, negSlack = 1, max
 // overapplication(B) + 1. (a) and (b) are compared as rates over the valid positive trials (equal to the counts when both
 // conditions have the same number, 44 each without failures); (b) tolerates one trial of B's denominator. (c) is a count.
 // A condition with failures above maxFailureRate after replacement is not judged.
-export function judge1817(baseline, candidate, {negSlack = 1, bodySlack = 1, maxFailureRate = 0.1, targeted = ['asc-3', 'es-1']} = {}) {
+export function judge1817(baseline, candidate, {negSlack = 1, bodySlack = 1, maxFailureRate = 0.1, targeted = ['asc-3', 'es-1'], completion = null} = {}) {
   const perCase = Object.fromEntries(targeted.map((id) => [id, {[baseline.condition]: baseline.perCase?.[id] ?? '', [candidate.condition]: candidate.perCase?.[id] ?? ''}]));
   const reasons = [];
+  // review M-1: an early stop (neither complete nor at the cap) is not judged, so stopping cannot follow the results.
+  if (!completion?.basis) reasons.push(`run neither complete nor stopped at the cap (${completion ? `${completion.missingPlanned} planned and ${completion.missingReplacements.length} required replacement(s) not reserved, spent ${completion.spentUsd} + ${completion.perTrialUsd} <= ${completion.stopLineUsd}` : 'no completion record'})`);
   for (const s of [baseline, candidate]) {
     if (s.runs === 0 || s.positives === 0) reasons.push(`${s.condition}: no valid positive trial`);
     else if (s.failures / s.runs > maxFailureRate) reasons.push(`${s.condition}: failures above ${maxFailureRate * 100}%`);
@@ -201,7 +205,7 @@ export function judge1817(baseline, candidate, {negSlack = 1, bodySlack = 1, max
     // review L1: replacements are mandatory.
     if (s.replacementsMissing) reasons.push(`${s.condition}: ${s.replacementsMissing} failed trial(s) without the mandatory replacement`);
   }
-  if (reasons.length) return {verdict: 'not-judged', reason: reasons.join('; '), targeted: perCase};
+  if (reasons.length) return {verdict: 'not-judged', reason: reasons.join('; '), completion, targeted: perCase};
   const rate = (s, k) => s[k] / s.positives;
   const checks = {
     appliedAboveBaseline: {value: `${candidate.applied}/${candidate.positives} vs ${baseline.applied}/${baseline.positives}`, pass: rate(candidate, 'applied') > rate(baseline, 'applied')},
@@ -210,7 +214,7 @@ export function judge1817(baseline, candidate, {negSlack = 1, bodySlack = 1, max
   };
   const applied = (s, id) => (s.perCase?.[id] ?? '').split('').filter((c) => c === 'A').length;
   for (const id of targeted) perCase[id].applied = {[baseline.condition]: applied(baseline, id), [candidate.condition]: applied(candidate, id)};
-  return {verdict: Object.values(checks).every((c) => c.pass) ? 'adoption-candidate' : 'not-a-candidate', checks, targeted: perCase,
+  return {verdict: Object.values(checks).every((c) => c.pass) ? 'adoption-candidate' : 'not-a-candidate', basis: completion.basis, completion, checks, targeted: perCase,
     note: 'With 4 runs per case small differences are not significant; adoption is the owner\'s decision.'};
 }
 
@@ -233,5 +237,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (out) fs.writeFileSync(out, JSON.stringify(runs, null, 1));
   const sums = Object.fromEntries(conds.map((c) => [c, summarize(spec, runs, c)]));
   for (const s of Object.values(sums)) console.log(JSON.stringify(s));
-  if (pair) console.log(JSON.stringify({judge: pair, ...judge1817(sums[pair[0]], sums[pair[1]])}));
+  if (pair) { console.error('refused: judge with judge.mjs (fixation, trial fixation digests and ledger completion are checked there)'); process.exit(3); }
 }
