@@ -1,6 +1,8 @@
 {
  "schema": "asc-1814-conditions/v1",
  "note": "Fixed before any model run. Every condition starts from the same fixture (harness/make-fixture.mjs: synthetic repo + project-assets --register-claude-skill --apply) and the same base CLAUDE.md (project overview, no ASC mention). Conditions differ only in the listed additions. The pointer text is not copied here: harness/apply-condition.mjs extracts it from v05/USAGE.md section 'ASCを読む契機を利用先へ採用する（任意）' at build time and records its sha256, so the measured text is the published one.",
+ "model": "sonnet",
+ "modelNote": "Fixed by the coordinator (2026-11-25) before any run: the `sonnet` alias, as used by the #1807 generator where 0/69 body reads were observed. The resolved model id (init event) is recorded per trial. Not changed after results are seen (decision-criteria.md).",
  "baseClaudeMd": "# ユーザー管理API\n\nTypeScript/Expressのユーザー管理API。`src/`にAPI、`public/`に管理画面、`docs/`に要件メモがある。\n",
  "hook": {
   "settingsPath": ".claude/settings.json",

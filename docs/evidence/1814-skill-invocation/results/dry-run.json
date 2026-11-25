@@ -1,5 +1,6 @@
 {
  "label": "local npm pack of the worktree HEAD (stand-in, not the release)",
+ "released": false,
  "install": {
   "tarball": "agent-skill-chain-0.5.0.tgz",
   "tarballSha256": "8a01707f01511f4693bf2736e8bb5701fff89a76efb6a0ff9f247f722e6d7833",
@@ -169,6 +170,10 @@
    "pass": true,
    "detail": []
   },
+  "scorerSkillsMatchRelease": {
+   "pass": true,
+   "detail": 16
+  },
   "promptFilesExist": {
    "pass": true,
    "detail": [
@@ -186,6 +191,10 @@
   "conditionsApplied": {
    "pass": true,
    "detail": null
+  },
+  "sameCommitSubjects": {
+   "pass": true,
+   "detail": null
   }
  },
  "conditions": {
@@ -196,10 +205,15 @@
     "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "pointer": false,
     "hook": null,
-    "committed": false
+    "changedFiles": []
    },
    "claudeMdHasPointer": false,
    "settings": false,
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
    "ok": true,
    "placement": []
   },
@@ -210,10 +224,17 @@
     "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "pointer": true,
     "hook": null,
-    "committed": true
+    "changedFiles": [
+     "CLAUDE.md"
+    ]
    },
    "claudeMdHasPointer": true,
    "settings": false,
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
    "ok": true,
    "placement": []
   },
@@ -226,10 +247,19 @@
     "hook": "usage",
     "hookTextSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "settingsSha256": "7c1fcea4348a7bdec9dc819ca8963206174f7db2ab7c17420560967692e43dbc",
-    "committed": true
+    "changedFiles": [
+     ".claude/hooks/asc-read-trigger.mjs",
+     ".claude/hooks/asc-read-trigger.txt",
+     ".claude/settings.json"
+    ]
    },
    "claudeMdHasPointer": false,
    "settings": true,
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
    "hook": {
     "exit": 0,
     "context": true,
@@ -249,10 +279,20 @@
     "hook": "usage",
     "hookTextSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
     "settingsSha256": "7c1fcea4348a7bdec9dc819ca8963206174f7db2ab7c17420560967692e43dbc",
-    "committed": true
+    "changedFiles": [
+     ".claude/hooks/asc-read-trigger.mjs",
+     ".claude/hooks/asc-read-trigger.txt",
+     ".claude/settings.json",
+     "CLAUDE.md"
+    ]
    },
    "claudeMdHasPointer": true,
    "settings": true,
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
    "hook": {
     "exit": 0,
     "context": true,
@@ -272,10 +312,19 @@
     "hook": "strong",
     "hookTextSha256": "74cc677c8a09c75aeac0588f08e063dbaac658e28e40eb904d0633b8c26a528e",
     "settingsSha256": "7c1fcea4348a7bdec9dc819ca8963206174f7db2ab7c17420560967692e43dbc",
-    "committed": true
+    "changedFiles": [
+     ".claude/hooks/asc-read-trigger.mjs",
+     ".claude/hooks/asc-read-trigger.txt",
+     ".claude/settings.json"
+    ]
    },
    "claudeMdHasPointer": false,
    "settings": true,
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
    "hook": {
     "exit": 0,
     "context": true,
@@ -386,6 +435,6 @@
   "totalPlanningUsd": 25.04,
   "capUsd": 30
  },
- "command": "claude -p <prompt> --model <model> --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events",
+ "command": "claude -p <prompt> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events",
  "pass": true
 }

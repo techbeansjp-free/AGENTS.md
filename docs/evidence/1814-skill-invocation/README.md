@@ -16,9 +16,9 @@
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| 採点器・隔離の判定器・配置の検査の試験（合成の記録） | 22件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt) |
-| 全体のdry run | 合格。導入（16件の入口がすべてあり、`distribution.json`の記録と一致し、本文へのlinkだけの薄い入口で、本文がpackageと一致）、goldのSkill本文とreferenceがreleaseにある、依頼が名指すfileがある、sample projectと条件ごとの複製の配置が合格、5条件の適用（`CLAUDE.md`の文例の有無、hookの出力が文例と一致・終了コード0・発火のlog）、試行の計画116試行・計画の費用25.04 USD | [results/dry-run.json](results/dry-run.json) |
-| `run-trial.mjs`の拒否 | 許可の環境変数が無い`--run`は起動しない。このrepositoryの下・実HOMEの下・祖先に`CLAUDE.md`等がある場所は拒否した | 下の「dry runで使ったtarball」 |
+| 採点器・隔離の判定器・配置の検査・台帳・固定・中立のcommitの試験（合成の記録） | 29件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt)（command・HEAD・Nodeの版・終了code付き） |
+| 全体のdry run | 合格。採点器のSkillの一覧がreleaseの配布一覧と一致、全条件のcommitの件名が同じ（中立の1件）。導入（16件の入口がすべてあり、`distribution.json`の記録と一致し、本文へのlinkだけの薄い入口で、本文がpackageと一致）、goldのSkill本文とreferenceがreleaseにある、依頼が名指すfileがある、sample projectと条件ごとの複製の配置が合格、5条件の適用（`CLAUDE.md`の文例の有無、hookの出力が文例と一致・終了コード0・発火のlog）、試行の計画116試行・計画の費用25.04 USD | [results/dry-run.json](results/dry-run.json) |
+| 起動の経路の拒否（反例） | 許可の環境変数が無い、台帳・上限が無い、`results/fixation.json`が無い（この記録の時点）、`--model`の指定、repositoryと実HOMEの下、releaseに無いdigest、tarballとdigestの不一致を、それぞれ拒否した | [results/refusals.txt](results/refusals.txt) |
 
 dry runで使ったtarball：**releaseの本物ではない。** このworktreeのHEAD（`51c3e022`、v0.5.106の対象commitと同じ）を`npm pack`で作った代用品（版の表記は0.5.0、sha256 `8a01707f…`）である。GitHubからのdownloadを、この準備の段階では行わないため。測定では[release.json](release.json)のtarballを取得し、sha256を照合してから使う。
 
@@ -32,9 +32,34 @@ dry runで使ったtarball：**releaseの本物ではない。** このworktree�
 | 測定するHost | 決定：Claude Codeだけ。Codexは対象外 |
 | 改善の合格の水準 | 決定：[decision-criteria.md](decision-criteria.md) |
 | 改善で標準にする仕組みの採否 | 測定の後にownerが決める |
-| 測定に使うmodel | 統括の確認事項。推奨は`claude-sonnet-4-5`（理由は[EVAL_PLAN.md](EVAL_PLAN.md#実装者が決めた技術的な事項理由付き)） |
+| 測定に使うmodel | 統括の決定：`sonnet`の別名（#1807の生成と同じ）。解決後のmodel idを試行ごとに記録。[decision-criteria.md](decision-criteria.md)で固定 |
+| toolの制限 | 統括の決定：`Read`・`Glob`・`Grep`・`Skill`だけ。利用者の環境との意図した違いとして記録（[EVAL_PLAN.md](EVAL_PLAN.md#利用者の環境との意図した違い)）。ownerの了承を求める |
 | 認証の渡し方 | 統括の確認事項。試行ごとの空のHOMEではOSの資格情報の保管場所を使わないため、`CLAUDE_CODE_OAUTH_TOKEN`または`ANTHROPIC_API_KEY`を実行するshellの環境変数で渡す |
 | releaseの取得・実HOMEへの目印fileの作成 | 測定の開始時に行う（[EVAL_PLAN.md](EVAL_PLAN.md#手順)） |
+
+## 独立レビュー（1回目、HEAD `e2477706`）への対応
+
+Medium 5件・Low 10件（Highなし）。すべて是正した。
+
+| 指摘 | 是正 |
+| --- | --- |
+| M1 P・Hだけにcommitの件名「ASC read trigger」が入る | 全条件で同じ中立の件名（`Update project files`）のcommitを1件（Rは空のcommit）。dry runで全条件の件名が同じことを確認。段階0で回答のgitの状態を照合し、`compare`で条件の間の差がCLAUDE.md・hookの出力だけであることを確かめる（system context自体は観測できない限界を明記） |
+| M2 本体の場所の除外が`~/.claude`等へ広がり得る | 実行fileのディレクトリだけを除外。そのディレクトリが実HOME・利用者の設定ディレクトリ・repositoryを含む、またはその中にある場合は不合格。反例の試験を追加 |
+| M3 ownerの指示・memory・Skill・hookの混入を照合していない | `~/.claude`と`CLAUDE_CONFIG_DIR`の`CLAUDE.md`・各memoryの索引の先頭の行を照合（出力は件数だけ）、個人用Skillの名前との重なり、trace中の条件以外のhook eventを不合格に |
+| M4 停止の規則が1つのruns-rootの中だけ | 全段階で1つの台帳、起動前に予算額を予約・終了後に精算、未精算は予算額、lockで1つずつ順に実行 |
+| M5 modelが固定されていない | `sonnet`の別名に固定（統括の決定）、`--model`を拒否、解決後のidを記録 |
+| L1 目印が同じ名前 | 名前を分け、完全なpathでそれぞれ照合 |
+| L2 目印が読めないと検査が素通り | 2つの文字列がそろうことを必須に |
+| L3 `#`の有無で不合格 | `#`を除いて照合 |
+| L4 Grep・Globでの読取りを見逃す | Read・Grep・Globの入力を照合 |
+| L5 init eventの無い記録が未選択になる | 失敗として数える |
+| L6 hookが発火しなかったHの試行 | 失敗として数える（規則5に追記） |
+| L7 digestを`release.json`と照合していない | 一致を必須に。dry runだけ`--allow-unreleased` |
+| L8 meta・trials.jsonに版・HEADが無い | sample projectのHEAD・ASCの版・tarballのsha256・Claude Codeの版・解決後のmodelを記録。`collect`の存在しない欄の参照を削除 |
+| L9 試行のHOME・設定に認証の情報が残る | 試行の後に消す。公開する記録のメールアドレス・key・アカウントの欄を置き換え、件数を記録 |
+| L10 試験・拒否の記録にcommand等が無い | command・HEAD・Nodeの版・終了code付きで記録 |
+| 注記：固定 | `results/fixation.json`（測定の前のHEADとfileのsha256）を別のcommitで記録。`run-trial.mjs`は一致しなければ起動しない |
+| 注記：Skillの名前の直書き | dry runで配布一覧と一致することを確認 |
 
 ## 費用の見込み
 
@@ -71,7 +96,8 @@ dry runで使ったtarball：**releaseの本物ではない。** このworktree�
 | [harness/guard.mjs](harness/guard.mjs) | 配置の検査 |
 | [harness/run-trial.mjs](harness/run-trial.mjs) | 1試行の起動（既定はdry run） |
 | [harness/probe-check.mjs](harness/probe-check.mjs)・[harness/markers.mjs](harness/markers.mjs) | 隔離の確認の判定と目印file |
-| [harness/collect.mjs](harness/collect.mjs)・[harness/score.mjs](harness/score.mjs) | 記録の取り出し（local pathの置換）と採点・判定 |
+| [harness/collect.mjs](harness/collect.mjs)・[harness/score.mjs](harness/score.mjs) | 記録の取り出し（local pathと認証情報の形の文字列の置換）と採点・判定 |
+| [harness/ledger.mjs](harness/ledger.mjs)・[harness/fixation.mjs](harness/fixation.mjs) | 全段階の費用の台帳と順次実行のlock、測定の前の固定と照合 |
 | [harness/dry-run.mjs](harness/dry-run.mjs) | モデルを呼ばない全体の確認 |
 | [harness/score.test.mjs](harness/score.test.mjs)・[harness/probe.test.mjs](harness/probe.test.mjs) | 合成の記録による試験 |
-| [results/](results/) | dry runと試験の結果 |
+| [results/](results/) | dry run・試験・拒否の反例の結果、測定の前の固定（`fixation.json`） |

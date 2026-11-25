@@ -20,11 +20,23 @@ ownerの要求（2026-11-25）：利用者の環境と同等で、このreposito
 | 配置の検査 | sample project・試行の作業ディレクトリの祖先（親から`/`まで）に`CLAUDE.md`・`CLAUDE.local.md`・`AGENTS.md`・`.claude`・`.agents`・`.codex`・`.git`があれば、または実HOMEやこのrepositoryの下なら、実行を拒否する | [harness/guard.mjs](harness/guard.mjs) |
 | HOME | 試行ごとに新しい空の`HOME`と`CLAUDE_CONFIG_DIR`。利用者の設定・`CLAUDE.md`・memory・Skill・plugin・hookは無く、Claude Codeの同梱Skillだけが残る。設定の読込み元は既定のまま（利用者と同じ）で、user・localは空 | [harness/run-trial.mjs](harness/run-trial.mjs) |
 | 認証 | 親の環境変数`CLAUDE_CODE_OAUTH_TOKEN`（`claude setup-token`で作るtoken）または`ANTHROPIC_API_KEY`だけを、子processの環境へ渡す。fileへ書かない。traceとstderrとdebug logに値が現れたら`<credential>`へ置き換える。記録するのは種類だけ。どちらも無ければ実行を拒否する | `run-trial.mjs` |
-| tool | 組込みtoolは`Read`・`Glob`・`Grep`・`Skill`だけ（`Bash`・`Write`・`Edit`・Web・`Agent`は無し）。MCP無し（`--strict-mcp-config`）。sessionは保存しない | `run-trial.mjs` |
+| tool | 組込みtoolは`Read`・`Glob`・`Grep`・`Skill`だけ（`Bash`・`Write`・`Edit`・Web・`Agent`は無し）。MCP無し（`--strict-mcp-config`）。sessionは保存しない。利用者の環境との意図した違い（下の節） | `run-trial.mjs` |
+| model | `sonnet`の別名（統括の決定。#1807の生成と同じ）。試行ごとにinit eventの解決後のmodel idを記録する。`--model`の指定は受け付けない | `conditions.json`の`model`、`run-trial.mjs` |
+| 試行のcommit | どの条件でも、条件の適用の後に同じ中立の件名（`Update project files`）のcommitを1件だけ入れる（Rは空のcommit）。Hostがgitの状態として最近のcommitの件名をContextへ入れる場合に、条件ごとに違う文字列が入らないようにする（レビューM1） | `apply-condition.mjs` |
+| 試行の後始末 | 試行の`HOME`と設定ディレクトリは、CLIがアカウントの情報を書き得るので、試行の後に消す（レビューL9）。公開する記録は、取り出すときにメールアドレス・key・アカウントの欄の形の文字列を置き換え、件数を記録する | `run-trial.mjs`、`collect.mjs` |
 | 記録 | `--output-format stream-json --verbose --include-hook-events`。hookは、発火のたびにsample projectの外のlogへ1行書く（モデルの申告に依らない発火の証拠） | `run-trial.mjs`、[harness/apply-condition.mjs](harness/apply-condition.mjs) |
 | 公開前の処理 | 記録を取り出すときに、試行のディレクトリ・`/Users/<名前>`等・scratchの名前を置き換える | [harness/collect.mjs](harness/collect.mjs) |
 
 `claude plugin eval`（#1783・#1801）を使わない理由：runごとに一時HOMEと認証を用意する点は合うが、#1783の記録のとおり、runではprojectの`.claude/`が読まれず、ASCをpluginに入れ直す必要があった。それでは、利用者と同じ`.claude/skills/`の登録・projectの`CLAUDE.md`・`.claude/settings.json`のhookを測れない（#1783では文例を`append_system_prompt`で代用した）。今回の3条件は、まさにこの経路の違いを測るので、`claude -p`をsample projectで起動し、HOMEと設定ディレクトリを試行ごとに作る方式にした。
+
+## 利用者の環境との意図した違い
+
+ownerの要求は「利用者と同等の環境」だが、次の点は安全と費用のために意図して変えている（統括の決定。ownerの了承を求める）。
+
+| 違い | 理由 | 観測への影響 |
+| --- | --- | --- |
+| 組込みtoolを`Read`・`Glob`・`Grep`・`Skill`に限る（`Bash`・`Write`・`Edit`・Web・`Agent`無し） | 試行がsample projectの外へ書き込む・通信する・コードを実行する経路を無くす。#1783・#1801と比べられる。費用を上限内に収める | 本文・referenceの読込み（このIssueの主な測定値）は観測できる。手順の実行（作業場所の作成、テスト、ブラウザーの操作、commit）は観測できず、回答の目印で代える。実装の依頼（asc-3）では、編集のtoolが無いことがSkillの選び方を変えうる（読込みを増やす方向にも減らす方向にも働きうる）。利用者の環境での読込み率と同じとは言えない |
+| sessionを保存しない、MCP無し | 実HOME・他の設定の影響を無くす | Skillの一覧とContextの内容には影響しない（隔離の確認で確かめる） |
 
 ## 条件
 
@@ -90,7 +102,10 @@ ownerの要求（2026-11-25）：利用者の環境と同等で、このreposito
 
 停止の規則：
 
-- `run-trial.mjs`は、実行済みの合計（`total_cost_usd`、結果が無い試行は予算額）にその試行の予算（0.6 USD）を足して`--stop-usd`を超えるなら起動しない。`--stop-usd 30`で実行する。
+- 全段階（隔離の確認、段階1〜3、再実行）で、repositoryの外の**1つの台帳file**（`--ledger`）を使う（レビューM4）。試行は起動の前に予算額（0.6 USD）を台帳へ予約し、終了後にHostの`total_cost_usd`で精算する。精算されなかった試行（親processの強制終了等）は予算額のまま数える。
+- `run-trial.mjs`は、台帳の累計にその試行の予算を足して`--stop-usd 30`を超えるなら起動しない。
+- 試行は1つずつ順に実行する。台帳のlock fileが残っていれば、人が台帳を確かめてlockを消すまで、次の試行は起動しない。
+- `results/fixation.json`（測定の前のHEADと、条件・gold・判定・起動に関わるfileのsha256）と現在のfileが違えば起動しない。
 - 段階1の後と段階2の後に、実績の平均単価で残りの段階の費用を見積もり、合計が30 USDを超える見込みなら、次の段階へ進まずに報告する。段階3の費用（約6.3 USD）を残すため、段階2を始める時点の見込みを優先する。
 - 1試行の予算上限は0.6 USD（#1783の最大の数倍）。
 
@@ -98,19 +113,23 @@ ownerの要求（2026-11-25）：利用者の環境と同等で、このreposito
 
 測定と同じ起動の設定（同じsample project・条件・HOMEの作り方・tool・model）で、[run-trial.mjs](harness/run-trial.mjs)の`probe`を実行し、[harness/probe-check.mjs](harness/probe-check.mjs)で判定する。モデルを1回呼ぶので、統括の許可の後に行う。
 
-準備：`node harness/markers.mjs create <このrepositoryのroot>`で、実HOMEとこのrepository（git管理外の`.agent-skill-chain/local/`）に、乱数の目印を書いたfileを1つずつ作る（既存fileは上書きしない）。確認の後に`remove`で消す。
+準備：`node harness/markers.mjs create <このrepositoryのroot>`で、実HOME（`asc1814-home-marker.txt`）とこのrepository（git管理外の`.agent-skill-chain/local/asc1814-repo-marker.txt`）に、乱数の目印を書いたfileを1つずつ作る（既存fileは上書きしない）。2つの名前を変え、完全なpathでそれぞれの読込みの試みを照合する（レビューL1）。確認の後に`remove`で消す。
 
 すべてが合格した条件だけを測定する。
 
 | 確認 | 合格の条件 |
 | --- | --- |
-| 起動 | init eventがあり、`cwd`が試行のsample project、toolが`Read`・`Glob`・`Grep`・`Skill`（と`ToolSearch`）だけ、MCP・pluginが無い |
+| 起動 | init eventがあり、`cwd`が試行のsample project、toolが`Read`・`Glob`・`Grep`・`Skill`（と`ToolSearch`）だけ、MCP・pluginが無い。Claude Code本体のディレクトリ（実行fileのあるディレクトリ）が、実HOME・利用者の設定ディレクトリ・このrepositoryを含まず、それらの中にも無い（レビューM2） |
 | Skillの一覧 | init eventの`skills`にASCの16件がすべてある。ASC以外は同梱Skillとして名前を記録する |
 | 説明文 | `asc`と`user-journey-acceptance`のdescriptionを、fileを読まずに原文のまま答えられる（入口のfrontmatterと照合。読んだ形跡があれば不合格）。16件の原文の一致数も記録する |
-| 指示ファイル・memory | sample projectの`CLAUDE.md`の1行目を答える。文例（「このプロジェクトでASCを使う」）は、P・H（・PH）だけで現れ、Rでは現れない。このrepositoryの`CLAUDE.md`・`AGENTS.md`の1行目が現れない |
-| 目印 | 実HOMEとこのrepositoryの目印のReadを試み、どちらも拒否される。目印の文字列がtrace・stderr・debug logのどこにも無い |
+| 指示ファイル・memory | sample projectの`CLAUDE.md`の1行目を答える（`#`の有無は問わない）。文例（「このプロジェクトでASCを使う」）は、P・H（・PH）だけで現れ、Rでは現れない。このrepositoryの`CLAUDE.md`・`AGENTS.md`の1行目が現れない。ownerの実際の指示・memory（`~/.claude`と、照合を実行するshellの`CLAUDE_CONFIG_DIR`の`CLAUDE.md`、各projectのmemoryの索引`MEMORY.md`）の先頭の行が、回答にもdebug logにも現れない。照合に使う行は出力に残さず、件数だけを残す（レビューM3） |
+| Skillの出所 | ASC以外のSkillの名前が、ownerの個人用Skill（上の設定ディレクトリの`skills/`）の名前と重ならない（レビューM3） |
+| gitの状態 | 回答に出たcommitの件名に、条件ごとの文字列（read trigger等）が無い（レビューM1） |
+| 目印 | 実HOMEとこのrepositoryの目印のReadを、完全なpathでそれぞれ試み、どちらも拒否される。2つの目印の文字列がそろって読めること（読めなければ不合格。レビューL2）と、それがtrace・stderr・debug logのどこにも無いこと |
 | debug log | `CLAUDE.md`・`AGENTS.md`・memory・settings・skillsに関わる行のpathが、試行のディレクトリ、Claude Code本体の導入先（実HOMEの下にある場合がある）、機械の管理用policyの場所の中だけ。実HOMEとこのrepositoryのpathが、目印の行とClaude Code本体のpath以外に無い |
-| hook | hookのある条件ではSessionStart（source `startup`）の発火がlogにあり、無い条件では無い |
+| hook | hookのある条件ではSessionStart（source `startup`）の発火がlogにあり、無い条件では無い。traceのhook eventに、条件のhook以外（利用者設定のhook等）が無い（レビューM3） |
+| 説明文の出所 | 説明文を答える前に、`.claude/skills`・`.agent-skill-chain`・`SKILL.md`をRead・Grep・Globしていない（レビューL4） |
+| 条件の間の比較 | `node harness/probe-check.mjs compare <各条件の結果>`で、tool・ASC以外のSkillの一覧・gitの状態・解決後のmodelが条件の間で同じこと。違ってよいのは`CLAUDE.md`とhookの出力だけ（レビューM1）。ただし、Hostが送るsystem contextそのものは観測できない（capture serverを使わないため）。モデルの回答とinit eventから確かめられる範囲に限る |
 
 ## 手順
 
@@ -123,20 +142,21 @@ node docs/evidence/1814-skill-invocation/harness/dry-run.mjs <tarball> <sha256> 
 
 測定（統括の許可の後。`ASC1814_ALLOW_PAID=1`と認証の環境変数を、実行するshellだけに設定する）：
 
+0. `node harness/fixation.mjs check results/fixation.json`が一致すること（`run-trial.mjs`も起動の前に確かめる）。
 1. `gh release download v0.5.106 --pattern 'agent-skill-chain-0.5.106.tgz' --pattern SHA256SUMS --dir <scratch>/release`。tarballのsha256が`release.json`の`assetSha256`とSHA256SUMSの両方と一致することを確かめる。
-2. `node harness/make-fixture.mjs <tarball> <sha256> <scratch>/sample <scratch>/tmp > <scratch>/install.json`（導入と入口の照合。版・digest・入口のsha256を記録する）。
-3. 段階0：`node harness/markers.mjs create <repo>`、条件R・P・Hごとに`node harness/run-trial.mjs <scratch>/runs <条件> probe 1 --fixture <scratch>/sample --model <model> --home-marker <…> --repo-marker <…> --stop-usd 30 --run`、`node harness/probe-check.mjs <scratch>/runs/<条件>-probe-1 <条件> <…> <…> <repo>`、`node harness/markers.mjs remove <repo>`。
-4. 段階1・2：`node harness/run-trial.mjs <scratch>/runs <条件> <case> <1|2> --fixture <scratch>/sample --model <model> --stop-usd 30 --run`を全ケースで。
+2. `node harness/make-fixture.mjs <tarball> <sha256> <scratch>/sample <scratch>/tmp`。sha256が`release.json`のものでなければ止まる（dry runだけが`--allow-unreleased`で外す。レビューL7）。版・digest・入口のsha256・sample projectのHEADを`<scratch>/sample.install.json`に記録し、各試行の`meta.json`へ写す（レビューL8）。
+3. 段階0：`node harness/markers.mjs create <repo>`、条件R・P・Hごとに`node harness/run-trial.mjs <scratch>/runs <条件> probe 1 --fixture <scratch>/sample --home-marker <…> --repo-marker <…> --ledger <scratch>/ledger.jsonl --stop-usd 30 --run`、`node harness/probe-check.mjs <scratch>/runs/<条件>-probe-1 <条件> <…> <…> <repo> > <scratch>/probe-<条件>.json`、`node harness/probe-check.mjs compare <scratch>/probe-*.json`、`node harness/markers.mjs remove <repo>`。
+4. 段階1・2：`node harness/run-trial.mjs <scratch>/runs <条件> <case> <1|2> --fixture <scratch>/sample --ledger <scratch>/ledger.jsonl --stop-usd 30 --run`を全ケースで、1つずつ順に。
 5. `node harness/collect.mjs <scratch>/runs results/traces`、`node harness/score.mjs cases.json results/traces R P H --runs-json results/runs.json --judge R P`（Hも同様）。
-6. 段階3は、採用した仕組みを含むreleaseで2〜5を繰り返す（条件I）。
+6. 段階3は、採用した仕組みを含むreleaseで2〜5を繰り返す（条件I）。runs-rootは分けてよいが、台帳は同じfileを使う。
 
 ## 実装者が決めた技術的な事項（理由付き）
 
 | 事項 | 決めたこと | 理由 |
 | --- | --- | --- |
-| model | `claude-sonnet-4-5`を推奨（統括の確認事項） | #1807で本文が0/69だった生成は`sonnet`で行われた。200k Contextでは一覧の予算が厳しく、#1801の短縮の後でASC 16件の説明文が残ることが観測済み（余裕はほぼ無い）なので、隔離の確認で一覧と説明文を確かめてから測る。1試行の費用は#1801でopusとほぼ同じ |
+| model | `sonnet`の別名（統括の決定、[decision-criteria.md](decision-criteria.md)で固定） | #1807で本文が0/69だった生成と同じ。別名が指す版は時期で変わりうるので、試行ごとに解決後のmodel idを記録する。結果を見た後に変えない |
 | 反復 | 各条件2回 | 上限30 USDで、現状・候補2つ・改善の後を同じ試行数（28）で比べるため。3回では段階3が上限を超える |
-| tool | 読取りとSkillだけ | #1783・#1801と同じで比較でき、費用と隔離の検査が小さい。実装まで進む依頼（asc-3）では、編集の前の読込みと回答だけを見る（限界） |
+| tool | 読取りとSkillだけ（統括の決定） | 「利用者の環境との意図した違い」の節 |
 | 文例とhookの文面 | 同じ文（USAGEの文例） | 経路の違いだけを比べるため。強い文面（S）は任意の追加 |
 | hookのcommand | projectのscript | releaseに注入用のコマンドが無い。改善ではCLIの副コマンドにする案（IMPROVEMENT_DESIGN.md） |
 | sample projectの`CLAUDE.md` | 導入前からある概要だけの`CLAUDE.md` | 多くの利用先には既存の`CLAUDE.md`がある。Pは利用者が文例を追記した状態に当たる |
@@ -146,7 +166,7 @@ node docs/evidence/1814-skill-invocation/harness/dry-run.mjs <tarball> <sha256> 
 - 認証：試行ごとの空のHOMEではOSの資格情報の保管場所を使わないので、`CLAUDE_CODE_OAUTH_TOKEN`（`claude setup-token`）または`ANTHROPIC_API_KEY`を、実行するshellの環境変数として用意する。値はrepository・記録に残らない（`run-trial.mjs`が置き換える）。
 - releaseのtarballとSHA256SUMSの取得（GitHubからのdownload）。
 - 実HOMEへの目印fileの作成と削除（ownerの要求による。`markers.mjs`が作る1 fileだけ）。
-- modelの確定（推奨は上の表）。
+- 台帳file（repositoryの外）の置き場所。
 
 ## 限界
 

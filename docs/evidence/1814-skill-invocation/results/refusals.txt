@@ -1,0 +1,29 @@
+# Refusal checks of the run path (no model call). base HEAD: e2477706765665a8bdd74dac343e915f5d8a3830; node: v20.12.2
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs R asc-1 1 --fixture <scratch>/dry2/sample --run
+refused: ASC1814_ALLOW_PAID is not 1 (measurement not authorised)
+
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs R asc-1 1 --fixture <scratch>/dry2/sample --run
+refused: --ledger and --stop-usd are required for a run (one ledger for every stage)
+
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs R asc-1 1 --fixture <scratch>/dry2/sample --ledger <scratch>/ledger.jsonl --stop-usd 30 --run
+refused: results/fixation.json is missing (fix the plan before running)
+
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <scratch>/runs R asc-1 1 --fixture <scratch>/dry2/sample --model opus
+refused: the model is fixed in conditions.json; --model is not accepted
+
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/run-trial.mjs <repo>/.worktrees-x R asc-1 1 --fixture <scratch>/dry2/sample
+refused: refused placement: under the real HOME; under the ASC repository; ancestor CLAUDE.md at <repo>; ancestor AGENTS.md at <repo-root>/.worktrees/2026
+# exit: 3
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/make-fixture.mjs <scratch>/pack/agent-skill-chain-0.5.0.tgz 8a01707f01511f4693bf2736e8bb5701fff89a76efb6a0ff9f247f722e6d7833 <scratch>/not-created <scratch>/tmp
+file://<repo>/docs/evidence/1814-skill-invocation/harness/make-fixture.mjs:61
+  if (!allowUnreleased && !releaseDigests().includes(clean)) throw new Error('refused: digest is not a release digest in r
+# exit: 1
+$ node <repo>/docs/evidence/1814-skill-invocation/harness/make-fixture.mjs <scratch>/pack/agent-skill-chain-0.5.0.tgz 0000000000000000000000000000000000000000000000000000000000000000 <scratch>/not-created2 <scratch>/tmp --allow-unreleased
+file://<repo>/docs/evidence/1814-skill-invocation/harness/install-asc.mjs:53
+  if (digest !== expected.replace(/^sha256:/, '')) throw new Error(`tarball sha256 ${digest} != expected ${expected}`);
+   
+# exit: 1

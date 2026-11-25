@@ -9,6 +9,7 @@
 // <same>.jsonl.missing when the run produced no trace.
 import fs from 'node:fs';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 export const ASC_SKILLS = ['asc', 'contract-enforcement', 'decision-ownership', 'engineering-judgment', 'estimate-and-scope', 'execution-recovery', 'migration-assurance', 'project-foundation', 'research-to-implementation', 'review-and-remediation', 'security-evidence', 'subagent-model-selection', 'tracker-issue-writing', 'user-journey-acceptance', 'verification-optimization', 'work-coordination'];
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -52,7 +53,7 @@ export function markersOk(k, text) {
     (k.answerGroups ?? []).every((g) => new RegExp(g, 'i').test(text));
 }
 
-export function scoreRun(spec, k, t, hookLines = null) {
+export function scoreRun(spec, k, t, hookLines = null, {expectHook = false} = {}) {
   const pat = (key, s, r = '') => new RegExp(spec[key].replace('<skill>', esc(s)).replace('<ref>', esc(r)));
   const rel = t.reads.map((p) => projectRelative(p, t.cwd)).filter(Boolean);
   const ascBodies = ASC_SKILLS.filter((s) => rel.some((r) => pat('bodyPattern', s).test(r)));
@@ -62,7 +63,10 @@ export function scoreRun(spec, k, t, hookLines = null) {
     hookFired: hookLines === null ? null : hookLines.length > 0, hookEvents: t.hookEvents, model: t.init?.model ?? null,
     costUsd: t.result?.total_cost_usd ?? null, turns: t.result?.num_turns ?? null, durationMs: t.result?.duration_ms ?? null,
     usage: t.result?.usage ? {input: t.result.usage.input_tokens, output: t.result.usage.output_tokens, cacheRead: t.result.usage.cache_read_input_tokens, cacheWrite: t.result.usage.cache_creation_input_tokens} : null};
+  if (!t.init) return {...row, failure: 'no init event'}; // review L5: cwd and model unknown, cannot be scored
   if (!t.result) return {...row, failure: 'no result event'};
+  // review L6: in a hook condition, a trial whose hook did not fire did not receive the condition.
+  if (expectHook && !(hookLines && hookLines.length > 0)) return {...row, failure: 'hook did not fire'};
   const sub = String(t.result.subtype ?? '');
   // A budget stop is a completed observation of what was read; any other error is a failure.
   row.stopped = /max_budget|max_turns/.test(sub) ? sub : null;
@@ -86,7 +90,13 @@ export function scoreRun(spec, k, t, hookLines = null) {
   return row;
 }
 
-export function scoreDir(spec, dir, conds) {
+// Which conditions carry a hook (conditions.json); a condition added later (I) is listed there before it is scored.
+export function conditionHooks() {
+  const f = path.join(path.dirname(fileURLToPath(import.meta.url)), '../conditions.json');
+  return Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(f, 'utf8')).conditions).map(([k, v]) => [k, Boolean(v.hook)]));
+}
+
+export function scoreDir(spec, dir, conds, hooked = conditionHooks()) {
   const runs = [];
   for (const file of fs.readdirSync(dir).sort()) {
     const m = /^([A-Z]+)-(.+)-(\d+)\.jsonl(\.missing)?$/.exec(file);
@@ -100,7 +110,7 @@ export function scoreDir(spec, dir, conds) {
     const hookLines = fs.existsSync(hookFile) ? fs.readFileSync(hookFile, 'utf8').split('\n').filter(Boolean) : null;
     let t;
     try { t = parseTrace(fs.readFileSync(path.join(dir, file), 'utf8')); } catch (e) { runs.push({...base, case: id, kind: k.kind, expect: k.expect, failure: `unreadable trace: ${e.message}`}); continue; }
-    runs.push({...base, ...scoreRun(spec, k, t, hookLines)});
+    runs.push({...base, ...scoreRun(spec, k, t, hookLines, {expectHook: Boolean(hooked[condition])})});
   }
   return runs;
 }

@@ -3,13 +3,14 @@
 // checks the CLAUDE.md/hook files and runs the hook script once with a synthetic SessionStart input, checks that every
 // gold Skill body and reference exists in the installed release, checks placement, and lists the planned trials with the
 // planning cost. Output has no absolute paths (public repository).
-// Usage: node dry-run.mjs <tarball> <sha256> <new-scratch-root> [--label <text>] [--out <json>]
+// Usage: node dry-run.mjs <tarball> <sha256> <new-scratch-root> [--allow-unreleased] [--label <text>] [--out <json>]
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {makeFixture} from './make-fixture.mjs';
-import {applyCondition, loadConditions, pointerText} from './apply-condition.mjs';
+import {applyCondition, loadConditions, pointerText, NEUTRAL_SUBJECT} from './apply-condition.mjs';
+import {ASC_SKILLS} from './score.mjs';
 import {placementProblems} from './guard.mjs';
 import {flags} from './run-trial.mjs';
 
@@ -44,8 +45,8 @@ function main() {
   const spec = JSON.parse(fs.readFileSync(path.join(ev, 'cases.json'), 'utf8'));
   const conds = loadConditions();
   const fixture = path.join(root, 'sample');
-  const built = makeFixture(path.resolve(tarball), digest, fixture, path.join(root, 'tmp'));
-  const report = {label: opt('--label', 'dry run'), install: {...built.install, tarball: built.install.tarball}, sourceFiles: built.sourceFiles, checks: {}, conditions: {}};
+  const built = makeFixture(path.resolve(tarball), digest, fixture, path.join(root, 'tmp'), {allowUnreleased: args.includes('--allow-unreleased')});
+  const report = {label: opt('--label', 'dry run'), released: built.released, install: built.install, sourceFiles: built.sourceFiles, checks: {}, conditions: {}};
   const add = (k, pass, detail = null) => { report.checks[k] = {pass: Boolean(pass), detail}; };
   // Gold: every expected/secondary Skill body and listed reference exists in the installed release.
   const missing = [];
@@ -55,6 +56,8 @@ function main() {
     if (s === k.expect) for (const r of k.references) if (!fs.existsSync(path.join(fixture, `.agent-skill-chain/skills/${s}/references/${r}`))) missing.push(`${s}/references/${r}`);
   }
   add('goldPathsExistInRelease', missing.length === 0, missing);
+  // The scorer's fixed Skill list equals what the installed release distributes (review note).
+  add('scorerSkillsMatchRelease', JSON.stringify([...ASC_SKILLS].sort()) === JSON.stringify(built.install.distributed), built.install.distributed.length);
   const named = ['src/users.ts', 'src/validate.ts', 'public/users.html', 'docs/requirements.md', 'docs/BRIEF.md'];
   add('promptFilesExist', named.every((f) => fs.existsSync(path.join(fixture, f))), named);
   add('fixturePlacement', placementProblems(fixture, {repoRoot}).length === 0, placementProblems(fixture, {repoRoot}));
@@ -64,7 +67,8 @@ function main() {
     fs.cpSync(fixture, copy, {recursive: true});
     const a = applyCondition(copy, c);
     const md = fs.readFileSync(path.join(copy, 'CLAUDE.md'), 'utf8');
-    const row = {applied: a, claudeMdHasPointer: md.includes(pointer), settings: fs.existsSync(path.join(copy, '.claude/settings.json'))};
+    const subjects = spawnSync('git', ['log', '--format=%s'], {cwd: copy, encoding: 'utf8'}).stdout.trim().split('\n');
+    const row = {applied: a, claudeMdHasPointer: md.includes(pointer), settings: fs.existsSync(path.join(copy, '.claude/settings.json')), commitSubjects: subjects};
     if (conds.conditions[c].hook) {
       const log = path.join(root, 'conditions', c, 'hook.jsonl');
       const r = spawnSync(process.execPath, [path.join(copy, conds.hook.scriptPath)], {input: '{"source":"startup","hook_event_name":"SessionStart"}', encoding: 'utf8', env: {PATH: process.env.PATH, ASC1814_HOOK_LOG: log}});
@@ -79,8 +83,10 @@ function main() {
     report.conditions[c] = row;
   }
   add('conditionsApplied', Object.values(report.conditions).every((r) => r.ok && r.placement.length === 0));
+  // review M1: every condition has the same commit subjects (one neutral commit each).
+  add('sameCommitSubjects', new Set(Object.values(report.conditions).map((r) => JSON.stringify(r.commitSubjects))).size === 1 && Object.values(report.conditions)[0].commitSubjects[0] === NEUTRAL_SUBJECT);
   report.plan = trialMatrix(spec, conds);
-  report.command = ['claude', '-p', '<prompt>', ...flags({model: '<model>', budget: 0.6})].join(' ');
+  report.command = ['claude', '-p', '<prompt>', ...flags({model: conds.model, budget: 0.6})].join(' ');
   report.pass = Object.values(report.checks).every((c) => c.pass);
   const text = JSON.stringify(report, null, 1).split(root).join('<scratch>');
   if (opt('--out', null)) fs.writeFileSync(opt('--out', null), text + '\n');

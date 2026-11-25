@@ -3,7 +3,11 @@
 // The repo is a small TypeScript/Express user-management API with a list screen, a requirement memo with open points,
 // a brief for an indirect request (as in #1807) and CI/Docker files, so that every path a prompt in cases.json names exists.
 // ASC is installed from a release tarball by install-asc.mjs (the documented user steps), never copied from this repo.
-// Usage: node make-fixture.mjs <release-tarball> <expected-sha256> <new-fixture-dir> <temp-parent>
+// Usage: node make-fixture.mjs <release-tarball> <expected-sha256> <new-fixture-dir> <temp-parent> [--allow-unreleased]
+// The digest must equal release.json phases0to2.assetSha256 (review L7); only a dry run passes --allow-unreleased to use a
+// locally packed stand-in. The install record (versions, digests, entry hashes, sample HEAD) is written next to the
+// project as <new-fixture-dir>.install.json, outside the project so the model cannot see it; run-trial copies it into
+// every trial's meta.json.
 // The fixture is not committed to the repository; this script is the record of how it is made.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,14 +44,21 @@ export function writeSources(dir) {
 }
 
 // Git without the user's global or system configuration; fixed identity and dates so the fixture is reproducible.
-const gitEnv = (home) => ({PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_AUTHOR_NAME: 'fixture', GIT_AUTHOR_EMAIL: '', GIT_COMMITTER_NAME: 'fixture', GIT_COMMITTER_EMAIL: '', GIT_AUTHOR_DATE: '2026-11-01T00:00:00Z', GIT_COMMITTER_DATE: '2026-11-01T00:00:00Z'});
+export const gitEnv = (home) => ({PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_AUTHOR_NAME: 'fixture', GIT_AUTHOR_EMAIL: '', GIT_COMMITTER_NAME: 'fixture', GIT_COMMITTER_EMAIL: '', GIT_AUTHOR_DATE: '2026-11-01T00:00:00Z', GIT_COMMITTER_DATE: '2026-11-01T00:00:00Z'});
 export function git(args, cwd) {
   const r = spawnSync('git', args, {cwd, env: gitEnv(cwd), encoding: 'utf8'});
   if (r.status !== 0) throw new Error(`git ${args[0]} failed: ${r.stderr || r.stdout}`);
 }
 
-export function makeFixture(tarball, digest, dir, tempParent) {
+export function releaseDigests() {
+  const r = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../release.json'), 'utf8'));
+  return [r.phases0to2?.assetSha256, r.phase3?.assetSha256].filter(Boolean);
+}
+
+export function makeFixture(tarball, digest, dir, tempParent, {allowUnreleased = false} = {}) {
   if (fs.existsSync(dir)) throw new Error(`refused: exists ${dir}`);
+  const clean = digest.replace(/^sha256:/, '');
+  if (!allowUnreleased && !releaseDigests().includes(clean)) throw new Error('refused: digest is not a release digest in release.json (use --allow-unreleased only for a dry run)');
   assertPlacement(dir, {repoRoot});
   fs.mkdirSync(dir, {recursive: true});
   const count = writeSources(dir);
@@ -67,10 +78,14 @@ export function makeFixture(tarball, digest, dir, tempParent) {
   git(['worktree', 'remove', wt], dir);
   git(['branch', '-q', '-d', 'chore/1-install-asc'], dir);
   fs.rmSync(path.join(dir, '.worktrees'), {recursive: true, force: true});
-  return {sourceFiles: count, install};
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: dir, env: gitEnv(dir), encoding: 'utf8'}).stdout.trim();
+  const record = {sourceFiles: count, released: !allowUnreleased, sampleHead: head, install};
+  fs.writeFileSync(`${dir}.install.json`, JSON.stringify(record, null, 1) + '\n');
+  return record;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [tarball, digest, dir, tempParent] = process.argv.slice(2);
-  console.log(JSON.stringify(makeFixture(path.resolve(tarball), digest, path.resolve(dir), path.resolve(tempParent)), null, 1));
+  const allowUnreleased = process.argv.includes('--allow-unreleased');
+  console.log(JSON.stringify(makeFixture(path.resolve(tarball), digest, path.resolve(dir), path.resolve(tempParent), {allowUnreleased}), null, 1));
 }

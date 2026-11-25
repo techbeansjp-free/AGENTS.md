@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseTrace, scoreRun, scoreDir, summarize, judge, shortfall, markersOk, projectRelative} from './score.mjs';
-import {redact} from './collect.mjs';
+import {redact, scrubSensitive} from './collect.mjs';
 import {pointerText, hookScript} from './apply-condition.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -113,14 +113,17 @@ test('scoreDir: names, multi-letter conditions, hook log, missing trace', (t) =>
   fs.writeFileSync(path.join(dir, 'PH-asc-1-1.jsonl'), trace([{hook: true}, read(body('asc')), read(ref('asc', 'workspace.md'))], {text: 'worktree-create worktree', cost: 0.3}));
   fs.writeFileSync(path.join(dir, 'PH-asc-1-1.hook.jsonl'), '{"event":"SessionStart","source":"startup"}\n');
   fs.writeFileSync(path.join(dir, 'PH-neg-1-1.jsonl'), trace([], {text: 'search', cost: 0.1}));
-  fs.writeFileSync(path.join(dir, 'PH-neg-1-1.hook.jsonl'), '');
+  fs.writeFileSync(path.join(dir, 'PH-neg-1-1.hook.jsonl'), '{"source":"startup"}\n');
   fs.writeFileSync(path.join(dir, 'PH-rr-1-1.jsonl.missing'), 'no trace\n');
   fs.writeFileSync(path.join(dir, 'R-asc-1-1.jsonl'), trace([], {text: 'plan'}));
+  fs.writeFileSync(path.join(dir, 'PH-neg-2-1.jsonl'), trace([], {text: 'PATCH', cost: 0.1}));
+  fs.writeFileSync(path.join(dir, 'PH-neg-2-1.hook.jsonl'), '');
   const runs = scoreDir(spec, dir, ['PH']);
-  assert.equal(runs.length, 3);
+  assert.equal(runs.length, 4);
   const s = summarize(spec, runs, 'PH');
-  assert.deepEqual([s.runs, s.failures, s.positives, s.applied, s.negatives, s.overapplication, s.hookFired, s.hookMissing], [3, 1, 1, 1, 1, 0, 1, 1]);
-  assert.equal(s.perCase['asc-1'], 'A'); assert.equal(s.perCase['neg-1'], '-'); assert.equal(s.costUsd, 0.4);
+  assert.deepEqual([s.runs, s.failures, s.positives, s.applied, s.negatives, s.overapplication, s.hookFired], [4, 2, 1, 1, 1, 0, 2]);
+  assert.equal(runs.find((r) => r.case === 'neg-2').failure, 'hook did not fire');
+  assert.equal(s.perCase['asc-1'], 'A'); assert.equal(s.perCase['neg-1'], '-'); assert.equal(s.costUsd, 0.5);
 });
 
 const S = (o) => ({condition: 'X', runs: 28, failures: 0, positives: 22, negatives: 6, bodyRead: 0, applied: 0, overapplication: 0, ...o});
@@ -134,6 +137,21 @@ test('judge: owner pass level', () => {
   // rates, not counts, when valid trials differ
   assert.equal(judge(S({condition: 'R', positives: 22, applied: 11}), S({positives: 20, bodyRead: 20, applied: 11})).verdict, 'pass');
   assert.equal(shortfall(base), true); assert.equal(shortfall(S({bodyRead: 18})), false);
+});
+
+test('missing init event and an unfired hook in a hook condition are failures (L5, L6)', () => {
+  const noInit = trace([read(body('asc'))], {text: 'worktree-create worktree'}).split('\n').slice(1).join('\n');
+  assert.equal(scoreRun(spec, kase('asc-1'), parseTrace(noInit)).failure, 'no init event');
+  const t = parseTrace(trace([read(body('asc'))], {text: 'worktree-create worktree'}));
+  assert.equal(scoreRun(spec, kase('asc-1'), t, [], {expectHook: true}).failure, 'hook did not fire');
+  assert.equal(scoreRun(spec, kase('asc-1'), t, null, {expectHook: true}).failure, 'hook did not fire');
+  assert.equal(scoreRun(spec, kase('asc-1'), t, ['{"source":"startup"}'], {expectHook: true}).failure, undefined);
+  assert.equal(scoreRun(spec, kase('asc-1'), t, null, {expectHook: false}).failure, undefined);
+});
+
+test('scrubSensitive replaces mail addresses, keys and account fields (L9)', () => {
+  const r = scrubSensitive('a someone@example.org b sk-ant-api03-abcdefgh123 "oauthAccount":"x" ok');
+  assert.equal(r.hits, 3); assert.equal(/@example|sk-ant|oauthAccount":"x/.test(r.text), false);
 });
 
 test('redact removes local paths and user-specific names', () => {

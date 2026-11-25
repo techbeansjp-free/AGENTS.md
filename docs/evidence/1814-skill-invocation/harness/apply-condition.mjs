@@ -4,7 +4,7 @@
 // own .agent-skill-chain/v05/USAGE.md in the fixture (what a user reads), not from this repository. The hook is registered
 // in the project .claude/settings.json in the form USAGE documents for the resume-context SessionStart hook; its command
 // is a project-local script because the release has no read-trigger command yet (IMPROVEMENT_DESIGN.md).
-// The change is committed in the trial copy, as a user adopting it would.
+// The change is committed in the trial copy, as a user adopting it would, with the same neutral subject in every condition.
 // The hook script also appends one line to $ASC1814_HOOK_LOG when that variable is set (outside the fixture), so the run
 // record shows that the hook fired without relying on the model's words.
 // Usage: node apply-condition.mjs <fixture-copy> <condition>
@@ -13,10 +13,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {git} from './make-fixture.mjs';
+import {git, gitEnv} from './make-fixture.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ev = path.resolve(here, '..');
+export const NEUTRAL_SUBJECT = 'Update project files';
 export const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 export const loadConditions = () => JSON.parse(fs.readFileSync(path.join(ev, 'conditions.json'), 'utf8'));
 
@@ -59,10 +60,11 @@ export function applyCondition(fixture, name) {
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
     Object.assign(out, {hookTextSha256: sha256(text), settingsSha256: sha256(JSON.stringify(settings, null, 2) + '\n')});
   }
+  // Every condition, R included, gets exactly one commit with the same neutral subject (review M1): the Host shows recent
+  // commit subjects in its git context, so a condition-specific subject would add text that only some conditions see.
   git(['add', '-A'], fixture);
-  const dirty = spawnSync('git', ['diff', '--cached', '--quiet'], {cwd: fixture}).status !== 0;
-  if (dirty) git(['commit', '-q', '-m', `Adopt ASC read trigger (${name})`], fixture);
-  out.committed = dirty;
+  out.changedFiles = spawnSync('git', ['diff', '--cached', '--name-only'], {cwd: fixture, env: gitEnv(fixture), encoding: 'utf8'}).stdout.split('\n').filter(Boolean);
+  git(['commit', '-q', '--allow-empty', '-m', NEUTRAL_SUBJECT], fixture);
   return out;
 }
 
