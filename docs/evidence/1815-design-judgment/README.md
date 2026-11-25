@@ -62,7 +62,9 @@
 - **順位**：ケースごとに6画面を盲検にし（IDと見る順は回ごとに変える）、Fable・Codexが独立に2回ずつ順位を付ける。2回の平均で、SがBより上の組が9組中8以上なら「改善」。2回の相関が0.5未満の評価者は、そのケースで根拠に使わない。
 - **判定**：ケースごとに、候補の文がSの2試行以上で読まれ、両評価者が「改善」、指標が悪くなく、非劣化の失敗が無ければ「効果あり」。2ケース以上で効果があり、害が無く、費用の比が3以下なら取り込む。読まれた試行が足りないケースは「未判定」とし、効果の判定から分けて数える。
 - **実行の順と置換え**：[run-order.json](run-order.json)で固定（反復が外側、UI-03→UI-07→UI-04、奇数回B→S・偶数回S→B）。[harness/run-all.mjs](harness/run-all.mjs)だけがこの順で実行し、`run-trial.mjs`は順に合わない試行を拒否する。k番目の生成の失敗は番号3+kの試行で必ず置き換え、置換えは再び置き換えない。実行器と採点は同じ関数（[harness/order.mjs](harness/order.mjs)）で数える。
-- **未判定になる場合**：計画の試行と必要な置換えが欠けたまま止まった（台帳で上限に達したと示せる場合を除く）、または有効な試行の無い条件・ケースがある。採点と盲検の作成は、固定の確認に失敗するか、試行の`meta.json`の固定の記録が今の記録と違えば拒否する。
+- **probeの回数**：各条件1回。1回目が判定済みで不合格の場合だけ再試行を1回。測定の予約が台帳にある後のprobeは拒否する。
+- **名前の一致**：採点と盲検の作成の前に、台帳の測定の予約・試行のdirectory・採点が数える（置き換えた・使わないを含む）試行の名前が一致しなければ拒否する。予約した試行のdirectoryを消すと採点できない。
+- **未判定になる場合**：計画の試行と必要な置換えが欠けたまま止まった（台帳で上限に達したと示せる場合を除く。ただし測定の開始後にprobeを予約していれば、この例外は使えない）、または有効な試行の無い条件・ケースがある。採点と盲検の作成は、固定の確認に失敗するか、試行の`meta.json`の固定の記録が今の記録と違えば拒否する。
 
 ## 隔離の確認（probe）
 
@@ -80,7 +82,7 @@ node --test harness/harness.test.mjs
 node harness/dry-run.mjs <B.tgz> <S.tgz> <scratch>/run1815-dry --out <scratch>/dry-run.json   # モデルを呼ばない
 L=<scratch>/rel1815/ledger/ledger.jsonl
 # 0. 隔離の確認（results/probe-approval.jsonのcommitの後）
-node harness/probe.mjs markers create <W>
+node harness/probe.mjs markers create <W> --ledger $L
 for c in B S; do
   ASC1815_ALLOW_PAID=1 CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" node harness/run-trial.mjs <scratch>/runs probe $c 1 \
     --tarball <$c.tgz> --home-marker <home目印> --repo-marker <repo目印> --ledger $L --run
@@ -94,12 +96,23 @@ ASC1815_ALLOW_PAID=1 CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" node harnes
 # 2. 描画と指標（caseごと、--network none、固定したimage idだけ）
 node harness/run-indicators.mjs <scratch>/runs ui03-dashboard <scratch>/render
 # 3. 盲検（2回分）。keysは評価者に渡さない
-node harness/make-blind.mjs <scratch>/runs <scratch>/render 1 <scratch>/blind <scratch>/keys
+node harness/make-blind.mjs <scratch>/runs <scratch>/render 1 <scratch>/blind <scratch>/keys $L
 node harness/budget.mjs reserve $L rank-fable-1   # Fableの前に予約、後で settle
 # 順位：host-sessionで Fable・Codex に harness/rank-prompt.txt を渡し、<scratch>/ranks/<fable|codex>-<1|2>.json に保存
 node harness/decide.mjs <scratch>/runs <scratch>/render <scratch>/ranks <scratch>/decision.json --ledger $L
 node harness/collect.mjs <scratch>/runs <scratch>/render results/run
 ```
+
+### 中断からの再開
+
+- **拒否で止まった**（上限・順・固定等）：`run-trial.mjs`は予約の前に止まるので、理由を直してから同じ`run-all.mjs`のcommandを実行する。予約済みの試行は飛ばされ、次の試行から続く。
+- **モデルの実行中にCtrl-Cやkillで止まった**：予約は台帳に残り（予算額で数える）、lock file（`$L.lock`）が残る。次の順で戻す。
+  1. 実行中の`run-all.mjs`・`run-trial.mjs`・`claude`のprocessが無いことを確かめる（`ps`で確認。lock fileの中身は止まったprocessのpid）。
+  2. その試行のcontainerとnetworkを消す：`docker rm -f -v <prefix>-mcp <prefix>-proxy`、`docker network rm <prefix>-gen <prefix>-egress`（prefixは`asc1815-<ui03|ui07|ui04>-<b|s>-r<n>`。label `asc.evidence=1815`で一覧できる）。
+  3. 試行のdirectoryの`home/`と`config/`（認証の情報を含み得る）だけを消す。**試行のdirectory自体は消さない。** `meta.json`の無い試行は生成の失敗として数えられ、計画の後に番号3+kの試行で置き換えられる。directoryを消すと、台帳の予約と合わず、採点が拒否される。
+  4. lock file `$L.lock`だけを消す。台帳の行は消さない・書き換えない。
+  5. 同じ`run-all.mjs planned`（計画の後なら`replacements`）のcommandで続ける。
+- probeの実行中に止まった場合も1〜4は同じ。そのprobeの目印をまだ消していなければ、`probe.mjs check`で判定する（traceの欠けたprobeは不合格になる）。判定済みで不合格なので、その条件の再試行を1回だけ行える。再試行も止まった・不合格なら、その条件は測定しない。
 
 tokenは親processの環境変数`CLAUDE_CODE_OAUTH_TOKEN`からだけ受け取り、harnessはfileを読まず、値を表示しない。子processの環境（HOME・config・PATH・DOCKER_HOSTとtoken等の固定の一覧）だけに渡し、trace・stderr・debug・proxyの記録では置き換え、試行の後に子のHOME・configを検索して件数だけを記録してから削除する。containerがmountする#1807の`env/`のfileは試行のdirectoryへ写して使い（byteで照合）、MCPの設定とdebugの記録にrepositoryのpathが出ないようにした。
 
@@ -116,7 +129,7 @@ tokenは親processの環境変数`CLAUDE_CODE_OAUTH_TOKEN`からだけ受け取�
 
 | 確認 | 結果 |
 | --- | --- |
-| harnessの試験（[results/harness-tests.txt](results/harness-tests.txt)） | 31件すべて合格 |
+| harnessの試験（[results/harness-tests.txt](results/harness-tests.txt)） | 34件すべて合格 |
 | dry run（[results/dry-run.json](results/dry-run.json)） | すべて合格：組合せの受理と拒否、tarballの差が3fileだけ、3ケース×2条件のsample projectの導入と差、imageのidが固定と一致、空のHOMEでのdocker CLI、networkの作成と削除、imageでの判定（下）、`run-all.mjs`が固定の順の18試行だけを出す、`run-order.json`の妥当性 |
 | imageでの判定（dry runの`imageChecks`） | 固定のimageで、#1807の`run-render.mjs`（描画・axe・gold）と`first-view.mjs`を合成の画面に実行。UI-07・UI-04の良い例は両幅でI1を満たし網羅率1.0、悪い例は満たさない。閉じた`details`・非表示・画面外の要素を含む合成の画面（[harness/dryrun/ui07-hidden.html](harness/dryrun/ui07-hidden.html)）では、閉じた`details`の中のお知らせを初期表示に無いと判定し、I2に数えた。描画の失敗0件 |
 | 初期表示の判定器のhostでの確認（[results/first-view-dryrun.txt](results/first-view-dryrun.txt)） | 上と同じ判定（hostのplaywright-core 1.60.0。imageが無かった時点の記録） |

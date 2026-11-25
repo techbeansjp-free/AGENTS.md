@@ -2,164 +2,179 @@ TAP version 13
 # Subtest: pairing: each condition accepts only its pinned tarball
 ok 1 - pairing: each condition accepts only its pinned tarball
   ---
-  duration_ms: 2.446175
+  duration_ms: 1.996722
   ...
 # Subtest: pairing: the definitions pin a candidate packed from a commit and different references
 ok 2 - pairing: the definitions pin a candidate packed from a commit and different references
   ---
-  duration_ms: 0.376544
+  duration_ms: 0.323626
   ...
 # Subtest: pairing: installed references and the CLAUDE.md block are checked
 ok 3 - pairing: installed references and the CLAUDE.md block are checked
   ---
-  duration_ms: 3.266137
+  duration_ms: 4.127355
   ...
 # Subtest: pairing: packageDiff lists added, removed and changed files and skips prefixes
 ok 4 - pairing: packageDiff lists added, removed and changed files and skips prefixes
   ---
-  duration_ms: 5.516233
+  duration_ms: 4.248888
   ...
 # Subtest: reads: successful Reads of the body and either copy of a reference count; errors, Grep and Skill do not
 ok 5 - reads: successful Reads of the body and either copy of a reference count; errors, Grep and Skill do not
   ---
-  duration_ms: 1.161948
+  duration_ms: 1.404859
   ...
 # Subtest: reads: no reads at all
 ok 6 - reads: no reads at all
   ---
-  duration_ms: 0.180538
+  duration_ms: 0.224333
   ...
 # Subtest: run-trial: the claude command has the \#1807 tools, the MCP tools only and no prompt-forced procedure
 ok 7 - run-trial: the claude command has the \#1807 tools, the MCP tools only and no prompt-forced procedure
   ---
-  duration_ms: 0.624297
+  duration_ms: 0.466722
   ...
 # Subtest: run-trial: docker plan keeps \#1807 isolation, adds the label and never pulls
 ok 8 - run-trial: docker plan keeps \#1807 isolation, adds the label and never pulls
   ---
-  duration_ms: 0.504539
+  duration_ms: 0.781703
   ...
 # Subtest: run-trial: the child environment carries only the listed variables
 ok 9 - run-trial: the child environment carries only the listed variables
   ---
-  duration_ms: 0.193401
+  duration_ms: 0.277542
   ...
 # Subtest: run-trial: init check and credential scrub
 ok 10 - run-trial: init check and credential scrub
   ---
-  duration_ms: 0.331809
+  duration_ms: 0.467596
   ...
 # Subtest: run-trial CLI: fixed values, wrong pairing, unpinned tarball and an unauthorised run are refused
 ok 11 - run-trial CLI: fixed values, wrong pairing, unpinned tarball and an unauthorised run are refused
   ---
-  duration_ms: 410.639984
+  duration_ms: 433.713404
   ...
 # Subtest: decide: positions, pairs, spearman and the direction thresholds
 ok 12 - decide: positions, pairs, spearman and the direction thresholds
   ---
-  duration_ms: 1.083614
+  duration_ms: 0.829479
   ...
 # Subtest: decide: an evaluator favours S only when the mean of two rounds gives >= 8 of 9 pairs and the rounds agree
 ok 13 - decide: an evaluator favours S only when the mean of two rounds gives >= 8 of 9 pairs and the rounds agree
   ---
-  duration_ms: 0.376107
+  duration_ms: 0.327675
   ...
 # Subtest: decide: indicators compare answer widths, then hidden items; failures are worst for S and best for B
 ok 14 - decide: indicators compare answer widths, then hidden items; failures are worst for S and best for B
   ---
-  duration_ms: 0.659684
+  duration_ms: 0.563383
   ...
 # Subtest: decide: a case shows an effect only with both evaluators, indicators not worse and the text read
 ok 15 - decide: a case shows an effect only with both evaluators, indicators not worse and the text read
   ---
-  duration_ms: 0.71942
+  duration_ms: 0.610964
   ...
 # Subtest: decide: overall needs effects in >= 2 cases, no harm and cost ratio <= 3
 ok 16 - decide: overall needs effects in >= 2 cases, no harm and cost ratio <= 3
   ---
-  duration_ms: 0.486944
+  duration_ms: 0.435924
   ...
 # Subtest: make-blind: ids and order are fixed by the seed and differ between rounds
 ok 17 - make-blind: ids and order are fixed by the seed and differ between rounds
   ---
-  duration_ms: 11.020951
+  duration_ms: 10.031645
   ...
 # Subtest: budget: a reservation must stay within cap minus margin
 ok 18 - budget: a reservation must stay within cap minus margin
   ---
-  duration_ms: 0.204999
+  duration_ms: 0.166488
   ...
 # Subtest: fixation: every fixed file exists and a changed digest is reported
 ok 19 - fixation: every fixed file exists and a changed digest is reported
   ---
-  duration_ms: 11.632148
+  duration_ms: 11.171937
   ...
 # Subtest: collect: the runs root and local paths are removed
 ok 20 - collect: the runs root and local paths are removed
   ---
-  duration_ms: 1.098472
+  duration_ms: 1.005541
   ...
 # Subtest: run-indicators: the first-view container has no network and mounts the runs read-only
 ok 21 - run-indicators: the first-view container has no network and mounts the runs read-only
   ---
-  duration_ms: 0.250179
+  duration_ms: 0.184333
   ...
 # Subtest: cases: three cases incl. ui03-dashboard, two widths each, items for both widths
 ok 22 - cases: three cases incl. ui03-dashboard, two widths each, items for both widths
   ---
-  duration_ms: 0.666333
+  duration_ms: 0.295252
   ...
 # Subtest: order: run-order.json is valid and gives 18 planned trials, reps outermost, B/S alternating by rep
 ok 23 - order: run-order.json is valid and gives 18 planned trials, reps outermost, B/S alternating by rep
   ---
-  duration_ms: 0.686341
+  duration_ms: 0.622591
   ...
 # Subtest: order: run-trial accepts only the next planned trial, then only the next required replacement
 ok 24 - order: run-trial accepts only the next planned trial, then only the next required replacement
   ---
-  duration_ms: 22.833378
+  duration_ms: 21.36255
   ...
 # Subtest: order: the scorer counts exactly what the runner replaced (k-th failure -> rep runs+k, no second replacement)
 ok 25 - order: the scorer counts exactly what the runner replaced (k-th failure -> rep runs+k, no second replacement)
   ---
-  duration_ms: 11.298268
+  duration_ms: 12.881229
   ...
 # Subtest: decide: not judged when the run stopped early (unless the cap was reached) or a cell has no valid trial
 ok 26 - decide: not judged when the run stopped early (unless the cap was reached) or a cell has no valid trial
   ---
-  duration_ms: 0.255057
+  duration_ms: 0.412067
   ...
 # Subtest: decide: scoring is refused when a trial ran under another fixation record
 ok 27 - decide: scoring is refused when a trial ran under another fixation record
   ---
-  duration_ms: 13.483284
+  duration_ms: 13.429526
   ...
 # Subtest: run-trial: images must have the pinned ids
 ok 28 - run-trial: images must have the pinned ids
   ---
-  duration_ms: 0.692042
+  duration_ms: 0.544076
   ...
 # Subtest: fixation: refix after the probes may change only probe.mjs; after a planned trial nothing
 ok 29 - fixation: refix after the probes may change only probe.mjs; after a planned trial nothing
   ---
-  duration_ms: 13.527569
+  duration_ms: 12.427956
   ...
 # Subtest: probe: passes only with the condition context, refused markers and no owner or repository text
 ok 30 - probe: passes only with the condition context, refused markers and no owner or repository text
   ---
-  duration_ms: 5.622281
+  duration_ms: 5.646081
   ...
 # Subtest: probe: measurement waits for passing probes of both conditions; the probe waits for the owner confirmation
 ok 31 - probe: measurement waits for passing probes of both conditions; the probe waits for the owner confirmation
   ---
-  duration_ms: 2.248263
+  duration_ms: 2.61928
   ...
-1..31
-# tests 31
+# Subtest: probe: one per condition, one retry only after a judged failure, none once measurement is reserved
+ok 32 - probe: one per condition, one retry only after a judged failure, none once measurement is reserved
+  ---
+  duration_ms: 1.865648
+  ...
+# Subtest: decide: a probe reserved after the first measurement reservation voids the cap exception
+ok 33 - decide: a probe reserved after the first measurement reservation voids the cap exception
+  ---
+  duration_ms: 2.612085
+  ...
+# Subtest: decide/make-blind: a reserved trial whose directory was removed is refused
+ok 34 - decide/make-blind: a reserved trial whose directory was removed is refused
+  ---
+  duration_ms: 34.84743
+  ...
+1..34
+# tests 34
 # suites 0
-# pass 31
+# pass 34
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 680.28
+# duration_ms 742.474892

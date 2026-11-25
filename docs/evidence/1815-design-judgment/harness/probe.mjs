@@ -8,7 +8,7 @@
 // .agent-skill-chain/local/. They are created, and a probe runs, only when results/probe-approval.json is committed with
 // {"ownerConfirmed": true, "at": "...", "reference": "..."} recorded by the coordinator.
 //
-// Usage: node probe.mjs markers create|remove <repo-root>
+// Usage: node probe.mjs markers create <repo-root> --ledger <ledger> | markers remove <repo-root>
 //        node probe.mjs check <probe-trial-dir> <condition> <home-marker> <repo-marker> <repo-root>  (writes probe-check.json)
 //        node probe.mjs compare <probe-check.json>... [--out <runs-root>/probe/compare.json]
 import fs from 'node:fs';
@@ -149,6 +149,24 @@ export function probeProblems(runsRoot, conditions) {
   return p;
 }
 
+// Probe admission (run-trial and `markers create`): no probe once any measurement trial (any non-probe, non-ranking
+// reservation) is in the ledger; one probe per condition (rep 1); exactly one retry (rep 2) only when probe rep 1 of that
+// condition was judged and failed (probe-check.json with pass false). Nothing else.
+export const isMeasurementName = (n) => !String(n).startsWith('probe/') && !String(n).startsWith('rank-');
+export function probeRefusal({condition, rep, reserved, runsRoot}) {
+  if ([...reserved].some(isMeasurementName)) return 'probes run only before the first measurement trial is reserved';
+  if (rep === undefined) return null;
+  const r = Number(rep);
+  if (reserved.has(`probe/${condition}-r${r}`)) return `probe/${condition}-r${r} is already reserved`;
+  if (r === 1) return null;
+  if (r !== 2) return 'at most one probe and one retry per condition';
+  if (!reserved.has(`probe/${condition}-r1`)) return 'the retry needs probe rep 1 first';
+  let first = null;
+  try { first = JSON.parse(fs.readFileSync(path.join(runsRoot, 'probe', `${condition}-r1`, 'probe-check.json'), 'utf8')); } catch { /* not judged */ }
+  if (first?.pass !== false) return 'a retry is allowed only after probe rep 1 was judged and failed';
+  return null;
+}
+
 function main() {
   const [action, ...rest] = process.argv.slice(2);
   const fail = (m) => { console.error(`refused: ${m}`); process.exit(3); };
@@ -157,12 +175,16 @@ function main() {
     const p = markerPaths(repoRoot);
     if (op === 'create') {
       const a = approvalProblems(); if (a.length) fail(a.join('; '));
+      const li = rest.indexOf('--ledger');
+      if (li < 0 || !fs.existsSync(rest[li + 1])) fail('markers create needs --ledger <the recorded ledger>');
+      const reserved = new Set(fs.readFileSync(rest[li + 1], 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((e) => typeof e.reservedUsd === 'number').map((e) => e.trial));
+      const pr = probeRefusal({reserved}); if (pr) fail(pr);
       for (const f of Object.values(p)) { fs.mkdirSync(path.dirname(f), {recursive: true}); fs.writeFileSync(f, `ASC1815-MARKER-${crypto.randomBytes(12).toString('hex')}\n`, {flag: 'wx', mode: 0o600}); }
       console.log(JSON.stringify(p));
     } else if (op === 'remove') {
       for (const f of Object.values(p)) fs.rmSync(f, {force: true});
       console.log(JSON.stringify({removed: 2}));
-    } else fail('markers create|remove <repo-root>');
+    } else fail('markers create <repo-root> --ledger <l> | markers remove <repo-root>');
   } else if (action === 'check') {
     const [dirArg, condition, homeMarker, repoMarker, repoRoot] = rest;
     const dir = path.resolve(dirArg), fixture = fs.realpathSync(path.join(dir, 'fixture'));

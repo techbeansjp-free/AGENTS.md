@@ -1,6 +1,7 @@
 // Applies decision-criteria.md mechanically (#1815). Pure functions + a CLI. No model call.
 // Usage: node decide.mjs <runs-root> <render-root> <ranks-dir|-> <out.json> --ledger <file>
-// Refuses (exit 3) when the fixed files differ from the last fixation record or a counted trial ran under another record.
+// Refuses (exit 3) without the ledger, when the measurement reservations, the trial directories and the counted or
+// classified trials are not the same names, when the fixed files differ from the last fixation record or a counted trial ran under another record.
 // Not judged when the run stopped before every planned trial and required replacement existed (unless the ledger shows
 // the cap was reached), or when a condition/case has no valid trial.
 //   runs-root/<case>/<B|S>-r<n>/{meta.json,reads.json,core-steps.json}
@@ -13,6 +14,7 @@ import crypto from 'node:crypto';
 import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
 import {loadJson, ev} from './pairing.mjs';
 import {countedTrials} from './order.mjs';
+import {isMeasurementName} from './probe.mjs';
 import {differences, lastRecord} from './fixation.mjs';
 
 export const EVALUATORS = ['fable', 'codex'];
@@ -66,9 +68,49 @@ export function fixationProblemsForScoring(metas, root = ev) {
 
 // The run is complete when every planned trial and every required replacement exists, or the cap was reached: the ledger
 // cannot take one more generation trial.
-export function completeness({missing, spentUsd, budget}) {
-  const capReached = typeof spentUsd === 'number' && spentUsd + budget.perTrialUsd > budget.capUsd - budget.safetyMarginUsd;
-  return {missing, capReached, complete: missing.length === 0};
+// The cap exception does not hold when a probe was reserved after the first measurement reservation (the ledger was
+// inflated after the measurement started; run-trial refuses that, this is the scorer's own check).
+export function completeness({missing, spentUsd, budget, lateProbes = []}) {
+  const capReached = lateProbes.length === 0 && typeof spentUsd === 'number' && spentUsd + budget.perTrialUsd > budget.capUsd - budget.safetyMarginUsd;
+  return {missing, capReached, complete: missing.length === 0, lateProbes};
+}
+
+// Ledger facts in reservation order: measurement names, probes reserved after the first measurement reservation, total.
+export function ledgerFacts(ledger) {
+  const res = ledgerOps.reservations(ledger);
+  const meas = res.filter((e) => isMeasurementName(e.trial));
+  const first = meas.length ? Math.min(...meas.map((e) => e.seq)) : null;
+  return {names: meas.map((e) => e.trial).sort(), lateProbes: first === null ? [] : res.filter((e) => String(e.trial).startsWith('probe/') && e.seq > first).map((e) => e.trial), spentUsd: ledgerOps.spent(ledger)};
+}
+
+// The three name sets must be equal: measurement reservations in the ledger, trial directories present under the runs
+// root, and trials the scorer counts or classifies (counted + replaced/unused). A reserved trial whose directory was
+// removed, or a directory that was never reserved, is refused.
+export function nameSetProblems({ledgerNames, dirNames, classifiedNames}) {
+  const sets = {ledger: new Set(ledgerNames), directories: new Set(dirNames), classified: new Set(classifiedNames)};
+  const p = [];
+  const all = [...new Set([...ledgerNames, ...dirNames, ...classifiedNames])].sort();
+  for (const n of all) {
+    const where = Object.entries(sets).filter(([, x]) => x.has(n)).map(([k]) => k);
+    if (where.length !== 3) p.push(`${n} is only in ${where.join(' and ')}`);
+  }
+  return p;
+}
+
+// Everything decide and make-blind check about the run as a whole before scoring.
+export function runConsistency(runsRoot, ledger, runs = loadJson('conditions.json').runs) {
+  if (!ledger || !fs.existsSync(ledger)) return {problems: ['the ledger is required'], facts: null, perCase: {}};
+  const facts = ledgerFacts(ledger);
+  const dirNames = [], classifiedNames = [], perCase = {};
+  for (const caseId of Object.keys(loadJson('cases.json').cases)) {
+    const dir = path.join(runsRoot, caseId);
+    const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => /^(B|S)-r\d+$/.test(n)) : [];
+    dirNames.push(...names.map((n) => `${caseId}/${n}`));
+    const sel = selectCounted(names, caseId, runsRoot, runs);
+    classifiedNames.push(...[...sel.B, ...sel.S, ...sel.notUsed].map((n) => `${caseId}/${n}`));
+    perCase[caseId] = {names, sel};
+  }
+  return {problems: nameSetProblems({ledgerNames: facts.names, dirNames, classifiedNames: [...new Set(classifiedNames)]}), facts, perCase};
 }
 
 // ---- per-trial indicators --------------------------------------------------------------------------------------------
@@ -194,10 +236,10 @@ export function decide(runsRoot, renderRoot, ranksDir, {ledger = null} = {}) {
   const costs = {B: [], S: []};
   const missing = [], emptyCells = [], metas = [];
   const prepared = [];
+  const rc = runConsistency(runsRoot, ledger, runs);
+  if (rc.problems.length) throw new Error(`refused: ${rc.problems.join('; ')}`);
   for (const caseId of Object.keys(cases)) {
-    const dir = path.join(runsRoot, caseId);
-    const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => /^(B|S)-r\d+$/.test(n)) : [];
-    const sel = selectCounted(names, caseId, runsRoot, runs);
+    const {sel} = rc.perCase[caseId];
     missing.push(...sel.missing.map((n) => `${caseId}/${n}`));
     const recs = Object.fromEntries([...sel.B, ...sel.S].map((n) => [n, trialRecord(runsRoot, renderRoot, caseId, n)]));
     metas.push(...Object.values(recs).map((r) => r.meta));
@@ -218,7 +260,7 @@ export function decide(runsRoot, renderRoot, ranksDir, {ledger = null} = {}) {
     out.trials[caseId] = {counted: {B: sel.B, S: sel.S}, missing: sel.missing, notUsed: sel.notUsed, rows: [...B, ...S]};
     out.cases[caseId] = caseDecision({S, B, ranking});
   }
-  const run = {...completeness({missing, spentUsd: ledger ? ledgerOps.spent(ledger) : null, budget: conds.budget}), emptyCells};
+  const run = {...completeness({missing, spentUsd: rc.facts.spentUsd, budget: conds.budget, lateProbes: rc.facts.lateProbes}), emptyCells};
   const mB = median(costs.B), mS = median(costs.S);
   out.overall = overall(out.cases, mB ? mS / mB : null, run);
   out.cost = {medianB: mB, medianS: mS};

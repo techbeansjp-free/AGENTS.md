@@ -10,12 +10,12 @@ import {fileURLToPath} from 'node:url';
 import {tarballProblems, installedProblems, packageDiff, loadJson, sha256, READ_TRIGGER_MARK, ev} from './pairing.mjs';
 import {readRecord} from './reads.mjs';
 import {claudeArgs, dockerPlan, childEnv, initProblems, scrub, EXPECTED_INIT_TOOLS, LABEL, imageProblems} from './run-trial.mjs';
-import {positions, meanPositions, pairsSAboveB, spearman, direction, evaluatorCase, indicatorCase, caseDecision, overall, selectCounted, completeness, fixationProblemsForScoring} from './decide.mjs';
+import {positions, meanPositions, pairsSAboveB, spearman, direction, evaluatorCase, indicatorCase, caseDecision, overall, selectCounted, completeness, fixationProblemsForScoring, ledgerFacts, nameSetProblems, runConsistency, decide} from './decide.mjs';
 import {plannedTrials, orderRefusal, replacementPlan, countedTrials, generationFailure, orderProblems, loadOrder} from './order.mjs';
-import {checkProbe, compareProbes, probeProblems, approvalProblems, probePrompt} from './probe.mjs';
+import {checkProbe, compareProbes, probeProblems, approvalProblems, probePrompt, probeRefusal} from './probe.mjs';
 import {refixViolations} from './fixation.mjs';
 import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
-import {blindIds} from './make-blind.mjs';
+import {blindIds, makeRound} from './make-blind.mjs';
 import {canReserve} from './budget.mjs';
 import {FIXED, differences, digests} from './fixation.mjs';
 import {clean} from './collect.mjs';
@@ -389,4 +389,56 @@ test('probe: measurement waits for passing probes of both conditions; the probe 
   assert.deepEqual(probeProblems(root, ['B', 'S']), ['no passing isolation probe for condition S', 'no passing probe comparison (probe/compare.json)']);
   const d = tmp(); fs.mkdirSync(path.join(d, 'results'));
   assert.match(approvalProblems(d)[0], /missing/);
+});
+
+// ---- third round of review lessons: probe limits, late probes, name sets ----------------------------------------------
+test('probe: one per condition, one retry only after a judged failure, none once measurement is reserved', () => {
+  const root = tmp();
+  assert.equal(probeRefusal({condition: 'B', rep: 1, reserved: new Set(), runsRoot: root}), null);
+  assert.match(probeRefusal({condition: 'B', rep: 1, reserved: new Set(['probe/B-r1']), runsRoot: root}), /already reserved/);
+  assert.match(probeRefusal({condition: 'B', rep: 2, reserved: new Set(), runsRoot: root}), /rep 1 first/);
+  assert.match(probeRefusal({condition: 'B', rep: 2, reserved: new Set(['probe/B-r1']), runsRoot: root}), /judged and failed/);
+  fs.mkdirSync(path.join(root, 'probe', 'B-r1'), {recursive: true});
+  fs.writeFileSync(path.join(root, 'probe', 'B-r1', 'probe-check.json'), JSON.stringify({pass: true}));
+  assert.match(probeRefusal({condition: 'B', rep: 2, reserved: new Set(['probe/B-r1']), runsRoot: root}), /judged and failed/);
+  fs.writeFileSync(path.join(root, 'probe', 'B-r1', 'probe-check.json'), JSON.stringify({pass: false}));
+  assert.equal(probeRefusal({condition: 'B', rep: 2, reserved: new Set(['probe/B-r1']), runsRoot: root}), null);
+  assert.match(probeRefusal({condition: 'B', rep: 3, reserved: new Set(['probe/B-r1', 'probe/B-r2']), runsRoot: root}), /at most one probe/);
+  assert.match(probeRefusal({condition: 'S', rep: 1, reserved: new Set(['probe/B-r1', 'ui03-dashboard/B-r1']), runsRoot: root}), /before the first measurement/);
+  assert.equal(probeRefusal({condition: 'S', rep: 1, reserved: new Set(['probe/B-r1', 'rank-fable-1']), runsRoot: root}), null);
+});
+
+test('decide: a probe reserved after the first measurement reservation voids the cap exception', () => {
+  const d = tmp(), l = path.join(d, 'l.jsonl');
+  ledgerOps.create(l);
+  ledgerOps.reserve(l, 'probe/B-r1', 0.5); ledgerOps.reserve(l, 'probe/S-r1', 0.5);
+  ledgerOps.reserve(l, 'ui03-dashboard/B-r1', 1.5);
+  assert.deepEqual(ledgerFacts(l).lateProbes, []);
+  ledgerOps.reserve(l, 'probe/S-r2', 0.5);
+  const f = ledgerFacts(l);
+  assert.deepEqual(f.lateProbes, ['probe/S-r2']);
+  assert.deepEqual(f.names, ['ui03-dashboard/B-r1']);
+  const b = conds.budget;
+  const high = b.capUsd - b.safetyMarginUsd;
+  assert.equal(completeness({missing: ['x'], spentUsd: high, budget: b}).capReached, true);
+  assert.equal(completeness({missing: ['x'], spentUsd: high, budget: b, lateProbes: f.lateProbes}).capReached, false);
+});
+
+test('decide/make-blind: a reserved trial whose directory was removed is refused', () => {
+  const root = tmp(), l = path.join(tmp(), 'l.jsonl');
+  ledgerOps.create(l);
+  const planned = plannedTrials().map((t) => t.name);
+  for (const n of planned) { const [c, t] = n.split('/'); ledgerOps.reserve(l, n, 1.5); mkTrial(root, c, t); }
+  assert.deepEqual(runConsistency(root, l).problems, []);
+  fs.rmSync(path.join(root, 'ui07-bus-mobile', 'S-r2'), {recursive: true});
+  const p = runConsistency(root, l).problems;
+  assert.deepEqual(p, ['ui07-bus-mobile/S-r2 is only in ledger']);
+  assert.throws(() => decide(root, tmp(), null, {ledger: l}), /refused: ui07-bus-mobile\/S-r2 is only in ledger/);
+  assert.throws(() => makeRound(root, tmp(), 1, tmp(), tmp(), l), /refused: ui07-bus-mobile\/S-r2 is only in ledger/);
+  // a directory that was never reserved is refused too
+  mkTrial(root, 'ui07-bus-mobile', 'S-r2');
+  mkTrial(root, 'ui04-parts-search', 'B-r9');
+  assert.ok(runConsistency(root, l).problems.includes('ui04-parts-search/B-r9 is only in directories and classified'));
+  assert.match(runConsistency(root, null).problems[0], /ledger is required/);
+  assert.deepEqual(nameSetProblems({ledgerNames: ['a'], dirNames: ['a'], classifiedNames: []}), ['a is only in ledger and directories']);
 });

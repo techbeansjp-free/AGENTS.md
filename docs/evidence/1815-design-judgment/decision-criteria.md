@@ -20,6 +20,7 @@
 - **生成の失敗**（置換えの判断。`order.mjs`の`generationFailure`。試行のdirectoryだけで決まり、実行器と採点で同じ）：`meta.json`が無い、終了が0でない、結果が`success`でない（予算上限による停止を含む）、init eventの組込みtoolが`Read,Write,Edit,Glob,Grep,Skill`とMCPの3つでないか`browser`のMCP serverが`connected`でない、`out/index.html`が無い。
 - **置換え（必須）**：条件・ケースごとに、計画の試行（1〜3回目）のうちk番目の生成の失敗を、番号3+kの試行で置き換える。置換えは全ての計画の試行の後に、同じ順で、`run-all.mjs replacements`だけが実行する。置換えの試行は、結果にかかわらず再び置き換えない。採点（`decide.mjs`・`make-blind.mjs`）は同じ規則（`order.mjs`の`countedTrials`）で数える試行を決める。それ以外の追加の試行は採点に含めず、別に報告する。
 - **採点での失敗**：数える試行のうち、生成の失敗に加えて、描画・goldの判定・初期表示の判定のどれかが失敗した試行（`decide.mjs`の`failed`）。描画の失敗は生成物の性質なので置き換えず、指標ではSに最悪、Bに最良の値を入れる。
+- **名前の一致**：採点と盲検の作成の前に、台帳の測定の予約（probe・順位以外）の名前、runsの下にある試行のdirectoryの名前、採点が数える試行と置き換えられた・使わない試行の名前の3つの集合が一致することを確かめ、違えば拒否する（`decide.mjs`の`runConsistency`）。予約した試行のdirectoryを消した場合も、予約しない試行のdirectoryがある場合も拒否される。
 - **固定の確認**：採点と盲検の作成の前に、固定したfileが`results/fixation.json`の最後の記録と同じで、数える全試行の`meta.json`の`fixationSha256`・`fixedAtCommit`がその記録と一致することを確かめ、違えば拒否する。
 - **読まれたか**：試行ごとに、ASCの本文（`.agent-skill-chain/skills/asc/SKILL.md`）、`implementation.md`、`user-journey-acceptance`の本文、`journeys.md`を、エラーなしの`Read`で読んだかを記録する（`reads.mjs`。導入された2つの写し`skills/`・`managed-runtime/skills/`のどちらでもよい。Skill toolの呼出し・Grepは読込みに数えない）。
 - **候補の文が届いた試行**：Sの試行で、本文と、`implementation.md`または`journeys.md`の少なくとも一方を読んだもの。届かなかった試行（本文を読まない、本文だけ読んでreferenceを読まない）は、条件・ケースごとに件数を分けて報告する。Bでも同じ記録を取る。
@@ -46,7 +47,7 @@
 
 ## 隔離の確認（probe）
 
-測定の前に、各条件1回、測定と同じ起動（同じsample projectの作り方・HOME・config・tool・MCP・model）に、debugの記録を加えて、[harness/probe.mjs](harness/probe.mjs)の依頼文で行う。生成Agentの文脈に、祖先の`CLAUDE.md`・ownerのmemory・ownerの設定・ownerのSkill・repositoryの指示が無いこと、案内文のblockとASCのSkillの一覧があること、実HOMEとこのrepositoryに置いた目印fileのReadが拒否され、目印の文字列がどの記録にも無いこと、debugの記録の指示・memory・設定のpathが試行のdirectoryかprogramの場所だけであること、hookが無いこと、組込みtoolとMCPが測定と同じことを確かめる。B・Sの結果を比べ、tool・Skillの一覧・gitの件名・modelが同じことを確かめる。どれかが不合格なら測定しない。目印fileの作成はownerの確認が要るので、統括がownerの確認を`results/probe-approval.json`に記録してcommitするまで、`probe.mjs markers create`とprobeの起動は拒否される。probeの後の是正は、`harness/probe.mjs`だけを、独立レビューを通して`fixation.mjs refix`で直せる。
+測定の前に、各条件1回、測定と同じ起動（同じsample projectの作り方・HOME・config・tool・MCP・model）に、debugの記録を加えて、[harness/probe.mjs](harness/probe.mjs)の依頼文で行う。生成Agentの文脈に、祖先の`CLAUDE.md`・ownerのmemory・ownerの設定・ownerのSkill・repositoryの指示が無いこと、案内文のblockとASCのSkillの一覧があること、実HOMEとこのrepositoryに置いた目印fileのReadが拒否され、目印の文字列がどの記録にも無いこと、debugの記録の指示・memory・設定のpathが試行のdirectoryかprogramの場所だけであること、hookが無いこと、組込みtoolとMCPが測定と同じことを確かめる。B・Sの結果を比べ、tool・Skillの一覧・gitの件名・modelが同じことを確かめる。どれかが不合格なら測定しない。probeは各条件1回（番号1）。その条件の1回目が判定済みで不合格の場合に限り、再試行を1回（番号2）だけ行える。それ以外のprobe、および測定の試行（probe・順位以外の予約）が台帳に1件でもある後のprobeは、`run-trial.mjs`と`probe.mjs markers create`が拒否する（`probe.mjs`の`probeRefusal`）。目印fileの作成はownerの確認が要るので、統括がownerの確認を`results/probe-approval.json`に記録してcommitするまで、`probe.mjs markers create`とprobeの起動は拒否される。probeの後の是正は、`harness/probe.mjs`だけを、独立レビューを通して`fixation.mjs refix`で直せる。
 
 ## 判定の規則
 
@@ -60,7 +61,7 @@
 
 全体（`overall`）：
 
-0. **実行の完全性**：計画の18試行と必要な置換えのどれかが無いまま終わった場合は**未判定（実行が途中で止まった）**。ただし、台帳の累計に1試行の予算を足すと停止線（上限40−余裕2）を超える、つまり上限に達したことが台帳で示せる場合は、この規則で止めない。数える試行のうち、どれかの条件・ケースで有効な（失敗でない）試行が1つも無ければ**未判定（有効な試行の無い条件・ケース）**。
+0. **実行の完全性**：計画の18試行と必要な置換えのどれかが無いまま終わった場合は**未判定（実行が途中で止まった）**。ただし、台帳の累計に1試行の予算を足すと停止線（上限40−余裕2）を超える、つまり上限に達したことが台帳で示せる場合は、この規則で止めない。この例外は、最初の測定の予約より後にprobeの予約が1件でもあれば無効とする（測定の開始後に台帳を膨らませた場合）。数える試行のうち、どれかの条件・ケースで有効な（失敗でない）試行が1つも無ければ**未判定（有効な試行の無い条件・ケース）**。
 6. 「効果あり」のケースが2つ以上、害のケースが無く、生成の費用の中央値の比（S/B）が3以下（#1807の基準）なら、**効果あり（取り込む）**。
 7. 判定できるケースが2つ未満なら、**未判定（取り込まない）**。候補の文が読まれないので効果を言えない。
 8. それ以外は**効果なし（取り込まない）**。効果ありが1ケースだけの場合もここに入り、どの案が効いたかを分けて確かめるかはownerに報告する。

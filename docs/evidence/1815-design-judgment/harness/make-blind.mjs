@@ -1,5 +1,6 @@
 // Builds one blinded ranking round for the model evaluators (#1815). Adapted from #1807 harness/make-blind.mjs.
-// Usage: node make-blind.mjs <runs-root> <render-root> <round 1|2> <blind-root> <keys-root>
+// Usage: node make-blind.mjs <runs-root> <render-root> <round 1|2> <blind-root> <keys-root> <ledger>
+// Refuses when decide.mjs runConsistency fails (ledger reservations, trial directories and counted trials differ).
 // Refuses when the fixed files or a counted trial's fixation record differ (decide.mjs fixationProblemsForScoring).
 // For every case: the trials decide.mjs counts (order.mjs countedTrials: reps 1..runs, the k-th generation failure
 // replaced by rep runs+k), new random ids and a
@@ -12,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {evidenceRoot, loadJson} from './pairing.mjs';
-import {trialRecord, selectCounted, fixationProblemsForScoring} from './decide.mjs';
+import {trialRecord, fixationProblemsForScoring, runConsistency} from './decide.mjs';
 
 const CSP = '<meta http-equiv="Content-Security-Policy" content="default-src \'self\' \'unsafe-inline\' data: blob:; connect-src \'none\'; form-action \'none\'">';
 
@@ -25,13 +26,14 @@ export function blindIds(trials, seed) {
   return order.map((t, i) => ({trial: t, id: ids[i]}));
 }
 
-export function makeRound(runsRoot, renderRoot, round, blindRoot, keysRoot) {
-  const cases = loadJson('cases.json').cases, runs = loadJson('conditions.json').runs;
+export function makeRound(runsRoot, renderRoot, round, blindRoot, keysRoot, ledger) {
+  const cases = loadJson('cases.json').cases;
+  const rc = runConsistency(runsRoot, ledger);
+  if (rc.problems.length) throw new Error(`refused: ${rc.problems.join('; ')}`);
   const seed = `asc1815-round${round}`;
   const summary = {};
   for (const [caseId, k] of Object.entries(cases)) {
-    const names = fs.readdirSync(path.join(runsRoot, caseId)).filter((n) => /^(B|S)-r\d+$/.test(n));
-    const sel = selectCounted(names, caseId, runsRoot, runs);
+    const {sel} = rc.perCase[caseId];
     const fp = fixationProblemsForScoring([...sel.B, ...sel.S].map((n) => trialRecord(runsRoot, renderRoot, caseId, n).meta));
     if (fp.length) throw new Error(`refused: ${fp.join('; ')}`);
     const cards = blindIds([...sel.B, ...sel.S], seed);
@@ -63,7 +65,8 @@ export function makeRound(runsRoot, renderRoot, round, blindRoot, keysRoot) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [runsRoot, renderRoot, round, blindRoot, keysRoot] = process.argv.slice(2);
+  const [runsRoot, renderRoot, round, blindRoot, keysRoot, ledger] = process.argv.slice(2);
+  if (!ledger) { console.error('usage: make-blind.mjs <runs> <render> <1|2> <blind-root> <keys-root> <ledger>'); process.exit(2); }
   if (!['1', '2'].includes(round)) { console.error('round must be 1 or 2'); process.exit(2); }
-  console.log(JSON.stringify(makeRound(path.resolve(runsRoot), path.resolve(renderRoot), Number(round), path.resolve(blindRoot), path.resolve(keysRoot))));
+  console.log(JSON.stringify(makeRound(path.resolve(runsRoot), path.resolve(renderRoot), Number(round), path.resolve(blindRoot), path.resolve(keysRoot), path.resolve(ledger))));
 }

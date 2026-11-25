@@ -6,7 +6,8 @@
 // (conditions.json; no --budget/--model/--stop-usd arguments) AND the order rule below.
 //
 // Order (run-order.json, order.mjs): first one isolation probe per condition (case `probe`; only after the owner's
-// confirmation is committed in results/probe-approval.json, and only while no planned trial is reserved). A planned trial
+// confirmation is committed in results/probe-approval.json, only while no measurement trial is reserved, one per
+// condition plus at most one retry after a judged failure: probe.mjs probeRefusal). A planned trial
 // runs only when every condition has a passing probe and their comparison passed, and only if it is the next unreserved
 // planned trial. After all planned trials, only the next required replacement may run.
 //
@@ -43,8 +44,8 @@ import {makeSample} from './make-sample.mjs';
 import {ev, evidenceRoot, loadJson, fileSha256, tarballProblems, installedProblems} from './pairing.mjs';
 import {readRecord} from './reads.mjs';
 import {paidStepProblems, lastRecord} from './fixation.mjs';
-import {loadOrder, trialName, probeName, isProbeName, orderRefusal} from './order.mjs';
-import {approvalProblems, probePrompt, probeProblems} from './probe.mjs';
+import {loadOrder, trialName, probeName, orderRefusal} from './order.mjs';
+import {approvalProblems, probePrompt, probeProblems, probeRefusal} from './probe.mjs';
 
 const repoRoot = path.resolve(ev, '../../..');
 const e1807env = path.join(evidenceRoot, '1807-design-eval-browser', 'env');
@@ -219,7 +220,8 @@ function main() {
   try {
     const reserved = ledgerOps.reservedNames(ledger);
     if (probe) {
-      if ([...reserved].some((n) => !isProbeName(n) && !n.startsWith('rank-'))) fail('probes run only before the first planned trial');
+      const pr = probeRefusal({condition: cond, rep: Number(rep), reserved, runsRoot: path.resolve(runsRoot)});
+      if (pr) fail(pr);
     } else {
       const pp = probeProblems(path.resolve(runsRoot), loadOrder().probeConditions);
       if (pp.length) fail(pp.join('; '));
