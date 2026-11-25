@@ -43,7 +43,7 @@
 
 ## 測定の前の固定
 
-`results/fixation.json`の最初の記録のcommitは（固定の後に記入する）である（`run-trial.mjs`はこの記載を照合する）。台帳はrepositoryの外の`<scratch>/rel1817/ledger/ledger-1817.jsonl`で、その台帳idも同じ記録にあり、`run-trial.mjs`はこの台帳だけを使う。上限・余裕・1試行の予算は[conditions.json](conditions.json)の`budget`（15・1・0.6 USD）だけから取る。
+`results/fixation.json`の最初の記録のcommitは`5bbd96f2e9bff78a326c896fae9b615f54612065`である（`run-trial.mjs`はこの記載を照合する。記録の段階名`stages 0-2`は#1814の写しのままで、#1817の測定全体を指す）。固定したのは`cases.json`・`conditions.json`・`decision-criteria.md`・`release.json`と、起動・採点に関わる`harness/`の12件。台帳はrepositoryの外の`<scratch>/rel1817/ledger/ledger-1817.jsonl`（台帳id `69997fe4-4f0f-4c84-823e-1e895722af24`、予約0件で作成）で、その台帳idも同じ記録にあり、`run-trial.mjs`はこの台帳だけを使う。上限・余裕・1試行の予算は[conditions.json](conditions.json)の`budget`（15・1・0.6 USD）だけから取る。
 
 ## 実行の手順（統括が行う。`<scratch>`は一時directory、`<repo-root>`はこのrepositoryのcheckout）
 
@@ -70,13 +70,17 @@ node $EV/harness/score.mjs $EV/cases.json $EV/results/traces B S --runs-json $EV
 
 tokenは測定を動かすprocessの環境変数`CLAUDE_CODE_OAUTH_TOKEN`だけで子processへ渡す。harnessはfileを読まず、値を表示・記録しない（#1814と同じ）。費用の見込みは、#1814の段階3の実績（1試行約0.083 USD）から計画の単価0.1 USDで、隔離の確認2回＋測定112試行＝11.4 USD。1試行の平均が約0.12 USDを超えると、14 USDの線で最後の数試行が起動しない（規則6）。目印fileを実HOMEに一時的に置くことは#1814でownerが了承した手順であり、#1817でも同じ扱いでよいかは統括が確かめる。
 
-## モデルを呼ばない確認（このcommitでの結果）
+## モデルを呼ばない確認（HEAD `5bbd96f2`、clean tree）
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| harnessの試験（合成の記録） | 下の「固定と確認の記録」に記入 | [results/harness-tests.txt](results/harness-tests.txt) |
-| dry run（本物の2つのtarball、`--allow-unreleased`なし） | 同上 | [results/dry-run.json](results/dry-run.json) |
+| harnessの試験（合成の記録） | 54件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt) |
+| dry run（本物の2つのtarball、`--allow-unreleased`なし。sample projectは`<scratch>/run1817/`） | 合格。B：出所`release`・`pinned`・16件の入口が記録とpackageに一致・`claude-md`を採用（blockSha256 `444b31b5…`、#1814の条件Iと同じ）。S：出所`candidate`・ほかは同じ。両方の`CLAUDE.md`は同じで、基の内容の後に区切り付きの塊とUSAGEの文例がある。導入済みの`.agent-skill-chain/skills`の差は`asc/SKILL.md`・`estimate-and-scope/SKILL.md`だけ。project全体の差もこの2つ（と`managed-runtime`の複製）と`distribution.json`だけで、入口（`.claude/`）は同じ。Sの本文だけが2つの変更を含む。commitの件名は両条件で同じ。計画114試行・11.4 USD | [results/dry-run.json](results/dry-run.json) |
+| 拒否の反例 | Sのsample projectをBとして、Bのsample projectをSとして使うと`run-trial`の導入の検査が拒否。`make-fixture`は他方の条件のtarballを拒否。許可の環境変数なしの`--run`を拒否 | [results/refusals.txt](results/refusals.txt) |
 | #1814のtraceの採点し直し | 上の「回答の目印の見直し」 | [results/rescore-1814.json](results/rescore-1814.json) |
+| 固定の照合 | `fixation.mjs check`が合格（差なし） | [results/fixation.json](results/fixation.json) |
+
+CIのsource検査（`scripts/check_source_quality.ts`）とESLintは、この作業場所に依存packageが無く（取得にnetworkが要る）実行していない。代わりに同じ禁止の型表現・directive・shebangの正規表現と`node --check`で、追加したfileを確かめた（該当なし）。ESLintの対象（`src`・`bin`・`test`・`v05`）に`docs/evidence`は入っていない。
 
 ## #1814のharnessからの変更
 
