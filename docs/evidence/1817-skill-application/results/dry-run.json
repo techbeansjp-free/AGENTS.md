@@ -1,5 +1,5 @@
 {
- "label": "dry run at HEAD 6c68ea5882e0c7b69bedeb52a8f425cb00d9d902 (clean tree); tarballs: B = release v0.5.109 (<scratch>/rel1817/release), S = candidate packed at 6d6e1223 (<scratch>/rel1817/candidate3); no --allow-unreleased",
+ "label": "dry run at HEAD f1cdb02bf41983c17b1a51bc5f9e5d3bf11dc35e (clean tree); tarballs: B = release v0.5.109 (<scratch>/rel1817/release), S = candidate packed at 6d6e1223 (<scratch>/rel1817/candidate3); no --allow-unreleased",
  "allowUnreleased": false,
  "checks": {
   "fixturesInstalledAsPinned": {

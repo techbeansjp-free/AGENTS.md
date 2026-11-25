@@ -1,5 +1,5 @@
 # command: node --test docs/evidence/1817-skill-application/harness/score.test.mjs docs/evidence/1817-skill-application/harness/probe.test.mjs
-# HEAD: 6c68ea5882e0c7b69bedeb52a8f425cb00d9d902 (clean tree)
+# HEAD: f1cdb02bf41983c17b1a51bc5f9e5d3bf11dc35e (clean tree)
 # node: v20.12.2
 ok 1 - clean R probe passes; heading mark omitted in the answer is accepted (L3)
 ok 2 - each leak or mismatch fails the probe
@@ -64,7 +64,9 @@ ok 60 - \#1817 L-1: after all planned trials, only the next trial of the replace
 ok 61 - \#1817 M-1: an early stop is not judged; a complete run or a stop at the cap is, and the basis is recorded
 ok 62 - \#1817 L-6: scoring is refused when the fixation check fails or a trial ran under another fixation record or ledger
 ok 63 - \#1817 Low-1: ledger reservations, trials.json and traces must be the same set of trials; seqs without gaps
-# tests 63
-# pass 63
+ok 64 - \#1817 Medium-A: a settled trial whose trace or meta was deleted or edited is refused by collect and judge and never replaced
+ok 65 - \#1817 Low-B: at the replacement stage a directory without a reservation does not count as started
+# tests 65
+# pass 65
 # fail 0
 # exit: 0
