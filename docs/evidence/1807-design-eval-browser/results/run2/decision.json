@@ -599,7 +599,9 @@
      },
      "ux": null,
      "aesthetic": {
-      "status": "owner順位待ち"
+      "pairsXAboveA": 6,
+      "of": 9,
+      "status": "差なし"
      },
      "nonDegradationFailed": false,
      "nonDegradationMissing": []
@@ -641,14 +643,18 @@
      },
      "ux": null,
      "aesthetic": {
-      "status": "owner順位待ち"
+      "pairsXAboveA": 5,
+      "of": 9,
+      "status": "差なし"
      },
      "nonDegradationFailed": true,
      "nonDegradationMissing": [],
      "vsAP": {
       "apStatus": "判定可能",
       "aesthetic": {
-       "status": "owner順位待ち"
+       "pairsXAboveA": 2,
+       "of": 9,
+       "status": "差なし"
       }
      }
     },
@@ -689,14 +695,18 @@
      },
      "ux": null,
      "aesthetic": {
-      "status": "owner順位待ち"
+      "pairsXAboveA": 5,
+      "of": 9,
+      "status": "差なし"
      },
      "nonDegradationFailed": true,
      "nonDegradationMissing": [],
      "vsAP": {
       "apStatus": "判定可能",
       "aesthetic": {
-       "status": "owner順位待ち"
+       "pairsXAboveA": 3,
+       "of": 9,
+       "status": "差なし"
       }
      }
     }
@@ -1336,7 +1346,9 @@
       "improved": false
      },
      "aesthetic": {
-      "status": "owner順位待ち"
+      "pairsXAboveA": 4,
+      "of": 9,
+      "status": "差なし"
      },
      "nonDegradationFailed": false,
      "nonDegradationMissing": []
@@ -1380,14 +1392,18 @@
       "improved": false
      },
      "aesthetic": {
-      "status": "owner順位待ち"
+      "pairsXAboveA": 4,
+      "of": 9,
+      "status": "差なし"
      },
      "nonDegradationFailed": false,
      "nonDegradationMissing": [],
      "vsAP": {
       "apStatus": "判定可能",
       "aesthetic": {
-       "status": "owner順位待ち"
+       "pairsXAboveA": 3,
+       "of": 9,
+       "status": "差なし"
       }
      }
     },
@@ -1430,14 +1446,18 @@
       "improved": false
      },
      "aesthetic": {
-      "status": "owner順位待ち"
+      "pairsXAboveA": 4,
+      "of": 9,
+      "status": "差なし"
      },
      "nonDegradationFailed": false,
      "nonDegradationMissing": [],
      "vsAP": {
       "apStatus": "判定可能",
       "aesthetic": {
-       "status": "owner順位待ち"
+       "pairsXAboveA": 4,
+       "of": 9,
+       "status": "差なし"
       }
      }
     }
@@ -2115,7 +2135,9 @@
       "improved": false
      },
      "aesthetic": {
-      "status": "owner順位待ち"
+      "pairsXAboveA": 3,
+      "of": 9,
+      "status": "差なし"
      },
      "nonDegradationFailed": false,
      "nonDegradationMissing": []
@@ -2161,14 +2183,18 @@
       "improved": false
      },
      "aesthetic": {
-      "status": "owner順位待ち"
+      "pairsXAboveA": 6,
+      "of": 9,
+      "status": "差なし"
      },
      "nonDegradationFailed": false,
      "nonDegradationMissing": [],
      "vsAP": {
       "apStatus": "判定可能",
       "aesthetic": {
-       "status": "owner順位待ち"
+       "pairsXAboveA": 7,
+       "of": 9,
+       "status": "差なし"
       }
      }
     },
@@ -2213,14 +2239,18 @@
       "improved": false
      },
      "aesthetic": {
-      "status": "owner順位待ち"
+      "pairsXAboveA": 3,
+      "of": 9,
+      "status": "差なし"
      },
      "nonDegradationFailed": false,
      "nonDegradationMissing": [],
      "vsAP": {
       "apStatus": "判定可能",
       "aesthetic": {
-       "status": "owner順位待ち"
+       "pairsXAboveA": 5,
+       "of": 9,
+       "status": "差なし"
       }
      }
     }
@@ -2275,7 +2305,7 @@
    "costMedianA": 0.1718365,
    "costMedianX": 0.3878799,
    "costRatio": 2.2572614083736573,
-   "classification": "owner順位待ち"
+   "classification": "reject"
   },
   "D": {
    "judgeableCases": [],
