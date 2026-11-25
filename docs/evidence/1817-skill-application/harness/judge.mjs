@@ -9,9 +9,14 @@
 //   collected trial's ledgerSeq differs from its reservation (a reserved trial deleted before collect, or a copied ledger);
 // - (review Medium-A) a settled trial's collected row has no raw trace/meta or their sha256 (recorded by collect.mjs)
 //   differs from the ledger settlement (deleted or edited after the run, e.g. to have it redone).
+// - (fifth review, Medium-1) the published output differs from what collect.mjs builds again from the raw runs root:
+//   every file of the traces directory and trials.json must be byte-identical to the rebuild (buildCollection, which
+//   also refuses a hand-edited ledger, a touched settled trial and a directory without a reservation);
+// - (fifth review, Low-2) the published ledger (results/ledger.jsonl) differs from the ledger read.
+// The runs root must be given with the same path as at collect time (the redaction replaces that path).
 // Then it scores B and S (score.mjs) and judges with judge1817, passing the completion status of the ledger
 // (order.mjs completionStatus): a run that is neither complete nor stopped at the cap is not judged.
-// Usage: node judge.mjs <traces-dir> --ledger <file> [--runs-json <out.json>] [--out <judge.json>]
+// Usage: node judge.mjs <traces-dir> --runs-root <dir> --ledger <file> [--published-ledger <file>] [--runs-json <out>] [--out <json>]
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -22,9 +27,28 @@ import {differences, lastRecord} from './fixation.mjs';
 import {fixationFileProblems} from './run-trial.mjs';
 import * as ledgerOps from './ledger.mjs';
 import {loadConditions} from './apply-condition.mjs';
+import {buildCollection, trialsJsonText} from './collect.mjs';
 
 const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
+
+// Medium-1 / Low-2 (fifth review): the published traces directory and ledger against a rebuild from the raw runs root.
+export function publishedProblems({runsRoot, dir, ledger, publishedLedger}) {
+  const p = [];
+  let built;
+  try { built = buildCollection(runsRoot, {ledger}); } catch (e) { return [`rebuild from the runs root refused: ${e.message}`]; }
+  const want = new Map([...built.files, ['trials.json', trialsJsonText(built.rows)]]);
+  const have = fs.readdirSync(dir).filter((f) => fs.statSync(path.join(dir, f)).isFile());
+  for (const f of have) if (!want.has(f)) p.push(`published file not produced by collect: ${f}`);
+  for (const [f, text] of want) {
+    const file = path.join(dir, f);
+    if (!fs.existsSync(file)) p.push(`published file missing: ${f}`);
+    else if (!fs.readFileSync(file).equals(Buffer.from(text))) p.push(`published file differs from the rebuild: ${f}`);
+  }
+  if (!publishedLedger || !fs.existsSync(publishedLedger)) p.push('the published ledger is missing');
+  else if (!fs.readFileSync(publishedLedger).equals(fs.readFileSync(ledger))) p.push('the published ledger differs from the ledger read');
+  return p;
+}
 
 // Problems that forbid scoring. rows: trials.json rows; fx: parsed fixation.json; fxSha: its sha256.
 export const traceNamesOf = (dir) => fs.readdirSync(dir).flatMap((f) => (/\.hook\.jsonl$/.test(f) ? [] : (/^(.+)\.jsonl(?:\.missing)?$/.exec(f)?.[1] ?? [])));
@@ -90,14 +114,16 @@ function main() {
   const args = process.argv.slice(2);
   const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
   const dir = path.resolve(args[0] ?? '');
-  const ledger = opt('--ledger');
-  if (!args[0] || !ledger) { console.error('usage: node judge.mjs <traces-dir> --ledger <file> [--runs-json <out>] [--out <json>]'); process.exit(2); }
+  const ledger = opt('--ledger'), runsRoot = opt('--runs-root');
+  if (!args[0] || !ledger || !runsRoot) { console.error('usage: node judge.mjs <traces-dir> --runs-root <dir> --ledger <file> [--published-ledger <file>] [--runs-json <out>] [--out <json>]'); process.exit(2); }
+  const publishedLedger = path.resolve(opt('--published-ledger') ?? path.join(dir, '..', 'ledger.jsonl'));
   const fxFile = path.join(ev, 'results/fixation.json');
   const fx = JSON.parse(fs.readFileSync(fxFile, 'utf8'));
   const trialsFile = path.join(dir, 'trials.json');
   if (!fs.existsSync(trialsFile)) { console.error('refused: trials.json (from collect.mjs) is missing'); process.exit(3); }
   const problems = scoringProblems({rows: JSON.parse(fs.readFileSync(trialsFile, 'utf8')), fx, fxSha: sha(fs.readFileSync(fxFile)), ledgerIdNow: ledgerOps.ledgerId(path.resolve(ledger)),
     reservations: ledgerOps.reservations(path.resolve(ledger)), traceNames: traceNamesOf(dir), settled: ledgerOps.settlements(path.resolve(ledger))});
+  problems.push(...publishedProblems({runsRoot: path.resolve(runsRoot), dir, ledger: path.resolve(ledger), publishedLedger}));
   if (problems.length) { console.error(`refused: ${problems.join('; ')}`); process.exit(3); }
   const spec = JSON.parse(fs.readFileSync(path.join(ev, 'cases.json'), 'utf8'));
   const {runs, sums, judgement} = judgeRun({spec, dir, ledger: path.resolve(ledger)});

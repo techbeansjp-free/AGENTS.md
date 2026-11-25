@@ -1,6 +1,6 @@
 # 判定の規則（モデル実行の前に固定）
 
-対象：#1817。規則はownerの判断（2026-11-25、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1817#issuecomment-7159921981)、および同日の会話での(b)(c)の承認）による。判定の手順は[harness/score.mjs](harness/score.mjs)の`judge1817`で実装し、合成の記録で試験した（[harness/score.test.mjs](harness/score.test.mjs)）。判定は[harness/judge.mjs](harness/judge.mjs)だけで行う。judge.mjsは、固定の照合、試行ごとの固定の記録と台帳の照合、台帳の予約・`trials.json`・traceが同じ試行の集まりであること（予約の番号の欠けが無いことを含む）、台帳による完了の確認をしてから採点する。評価結果を見た後に、この規則・[cases.json](cases.json)・[conditions.json](conditions.json)・[release.json](release.json)・[run-order.json](run-order.json)・採点の処理を変えない。
+対象：#1817。規則はownerの判断（2026-11-25、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1817#issuecomment-7159921981)、および同日の会話での(b)(c)の承認）による。判定の手順は[harness/score.mjs](harness/score.mjs)の`judge1817`で実装し、合成の記録で試験した（[harness/score.test.mjs](harness/score.test.mjs)）。判定は[harness/judge.mjs](harness/judge.mjs)だけで行う。judge.mjsは、公開した記録（traceと`trials.json`）が試行の元の記録から作り直したものとbyteで同じこと、公開した台帳が読んだ台帳と同じこと、台帳を手で編集していないこと、固定の照合、試行ごとの固定の記録と台帳の照合、台帳の予約・`trials.json`・traceが同じ試行の集まりであること（予約の番号の欠けが無いことを含む）、台帳による完了の確認をしてから採点する。評価結果を見た後に、この規則・[cases.json](cases.json)・[conditions.json](conditions.json)・[release.json](release.json)・[run-order.json](run-order.json)・採点の処理を変えない。
 
 ## ownerの決定
 
@@ -45,6 +45,7 @@ model（`sonnet`の別名、解決後のidを記録）、tool（`Read`・`Glob`�
    - この番号以外の追加の試行は採点に含めず、別に報告する。
    - 置き換えが欠けている条件は判定しない。置き換えた後も1条件の失敗が試行の10%を超えた場合、その条件は「判定不能」とし、ownerに報告する。
    - 1試行ごとの予算上限による停止は失敗ではない。停止までの記録で採点し、件数を報告する。
+   - 台帳に予約があり精算の行が無い試行（実行中に止まった試行）は、どのfileがあっても失敗として数える（`collect.mjs`は`not settled`として出す）。
    - 精算済みの試行（台帳に精算の行がある試行）の`trace.jsonl`・`meta.json`が無い、または精算の行に記録したsha256と違う場合は、失敗ではなく記録の改変として扱う。置き換えを計画せず（`replacementPlan`が拒否する）、`collect.mjs`と`judge.mjs`は採点を拒否する。ownerへ報告する。
    - 実装：[harness/order.mjs](harness/order.mjs)の`replacementPlan`（実行）と[harness/score.mjs](harness/score.mjs)の`selectCounted`（採点）。
 5. 隔離の確認：測定の前に、B・Sそれぞれ1回の隔離の確認（probe）を行い、[harness/probe-check.mjs](harness/probe-check.mjs)のすべての項目が合格し、`compare`で条件の間に差が無い条件だけを測定する（#1814の規則6と同じ）。

@@ -1,6 +1,9 @@
 // #1817: copied from docs/evidence/1814-skill-invocation/harness/ledger.mjs. Change (review Medium-A): the settlement
 // also records the trial's exit and the raw sha256 of trace.jsonl and meta.json, and settledFilesProblem checks that a
 // settled trial's files are still present and unchanged (collect, judge and the replacement plan rely on it).
+// Review Low-2 (fifth review): ledgerProblems refuses a hand-edited ledger (a second settlement for a reservation, a
+// settlement without its reservation or under another trial name), and settledFilesProblem also binds the settled
+// costUsd to the costUsd in the sha-bound meta.json.
 // One cumulative spending ledger for every stage of #1814 (reviews M4, N1, N-1). JSON lines in a file outside the
 // repository. The first line is {ledgerId, createdAt}; the id is recorded in results/fixation.json at init, so run-trial
 // refuses any other ledger (a new ledger cannot reset the total). Each reservation {id, seq, trial, reservedUsd, at} has
@@ -85,7 +88,29 @@ export function settledFilesProblem(trialDir, settlement) {
     if (now === null) p.push(`${file} is missing`);
     else if (now !== settlement[key]) p.push(`${file} differs from the ledger settlement`);
   }
+  if (!p.length) {
+    let meta = null;
+    try { meta = JSON.parse(fs.readFileSync(`${trialDir}/meta.json`, 'utf8')); } catch { p.push('meta.json is not JSON'); }
+    if (meta && (meta.costUsd ?? null) !== (settlement.costUsd ?? null)) p.push(`settled costUsd ${settlement.costUsd} differs from meta.json costUsd ${meta.costUsd}`);
+  }
   return p.length ? `settled trial ${settlement.trial}: ${p.join(', ')}` : null;
+}
+
+// review Low-2: the ledger as run-trial writes it: each settlement belongs to one reservation (same id and trial name),
+// and a reservation is settled at most once. Anything else is a hand edit; run-trial, collect and judge refuse it.
+export function ledgerProblems(ledger) {
+  const p = [];
+  const res = new Map(reservations(ledger).map((e) => [e.id, e]));
+  const seen = new Set();
+  for (const e of entries(ledger)) {
+    if ('reservedUsd' in e || !('costUsd' in e)) continue;
+    const r = res.get(e.id);
+    if (!r) p.push(`settlement for ${e.trial} has no reservation`);
+    else if (r.trial !== e.trial) p.push(`settlement ${e.trial} names another trial than its reservation (${r.trial})`);
+    if (seen.has(e.id)) p.push(`reservation of ${e.trial} is settled twice`);
+    seen.add(e.id);
+  }
+  return p;
 }
 
 // Records from several trials must come from one ledger, each seq once (review N-1 (d)).

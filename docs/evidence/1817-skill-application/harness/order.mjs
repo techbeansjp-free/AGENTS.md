@@ -68,7 +68,10 @@ export function orderRefusal({condition, caseId, rep, reserved, settled = new Ma
 // Failure of one raw trial directory (runs root), as score.mjs would count it after collect.mjs. review Medium-A: a
 // settled trial whose trace.jsonl or meta.json is missing or differs from its settlement is not a failure but a
 // tampered record: this throws, so no replacement can be planned for it.
+// review Low-1 (fifth review): a reserved trial without a settlement (stopped during the run) is a failure whatever files
+// exist; replacementPlan calls this only for reserved trials.
 export function trialFailure(dir, spec, caseId, settlement = null) {
+  if (!settlement) return 'not settled';
   const tampered = settledFilesProblem(dir, settlement);
   if (tampered) throw new Error(tampered);
   const trace = path.join(dir, 'trace.jsonl');

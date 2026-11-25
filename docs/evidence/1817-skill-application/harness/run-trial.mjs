@@ -169,6 +169,8 @@ function main() {
   // review N-1: only the ledger recorded at init (a new ledger would reset the cumulative total).
   if (!fs.existsSync(ledger)) fail('the ledger file does not exist (create it with fixation.mjs init --ledger)');
   if (ledgerOps.ledgerId(ledger) !== fx.records[0].ledgerId) fail('the ledger is not the one recorded in results/fixation.json');
+  const handEdited = ledgerOps.ledgerProblems(ledger); // fifth review Low-2
+  if (handEdited.length) fail(`the ledger was edited by hand: ${handEdited.join('; ')}`);
   const late = refixAfterMeasurement(fx, ledger);
   if (late.length) fail(`a refix record (${late.join(', ')}) is later than the first stage-1/2 reservation`);
   const credential = process.env.CLAUDE_CODE_OAUTH_TOKEN ? 'CLAUDE_CODE_OAUTH_TOKEN' : process.env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY' : null;

@@ -9,8 +9,8 @@ import {fileURLToPath} from 'node:url';
 import {parseTrace, scoreRun, scoreDir, summarize, judge, judge1817, shortfall, markersOk, projectRelative, selectCounted} from './score.mjs';
 import {redact, scrubSensitive, collect} from './collect.mjs';
 import {pointerText, hookScript, loadConditions} from './apply-condition.mjs';
-import {plannedTrials, orderProblems, orderRefusal, replacementPlan, loadOrder, completionStatus} from './order.mjs';
-import {scoringProblems, nameSetProblems, traceNamesOf, settlementProblems} from './judge.mjs';
+import {plannedTrials, orderProblems, orderRefusal, replacementPlan, loadOrder, completionStatus, trialFailure} from './order.mjs';
+import {scoringProblems, nameSetProblems, traceNamesOf, settlementProblems, publishedProblems} from './judge.mjs';
 import {digests, invariantDigests} from './fixation.mjs';
 import {trialsToStart} from './run-all.mjs';
 import * as ledgerOps from './ledger.mjs';
@@ -35,6 +35,17 @@ function trace(steps, result = {}, cwd = '/w') {
   }
   if (result !== null) lines.push({type: 'result', subtype: result.subtype ?? 'success', is_error: result.is_error ?? false, result: result.text ?? '', total_cost_usd: result.cost ?? 0.2, num_turns: 3, duration_ms: 1000});
   return lines.map((l) => JSON.stringify(l)).join('\n') + '\n';
+}
+// Settlements as run-trial writes them, for every trial directory that holds trace.jsonl and meta.json (a directory
+// without them stands for a trial stopped during its run: reserved, never settled).
+function settledFrom(root) {
+  const m = new Map();
+  for (const n of fs.readdirSync(root)) {
+    const t = path.join(root, n, 'trace.jsonl'), mf = path.join(root, n, 'meta.json');
+    if (!fs.existsSync(t) || !fs.existsSync(mf)) continue;
+    m.set(n, {trial: n, costUsd: JSON.parse(fs.readFileSync(mf, 'utf8')).costUsd ?? null, traceSha256: ledgerOps.fileSha256(t), metaSha256: ledgerOps.fileSha256(mf)});
+  }
+  return m;
 }
 const read = (p, error = false) => ({tool: 'Read', input: {file_path: p}, error});
 const body = (s) => `/w/.agent-skill-chain/skills/${s}/SKILL.md`;
@@ -185,20 +196,19 @@ test('collect: a trace without meta.json becomes a failure row instead of a cras
   assert.equal(fs.existsSync(path.join(root, 'out/R-asc-1-1.jsonl')), false);
 });
 
-test('collect extends trials.json across stages and refuses a trial already collected (L-e)', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-collect2-'));
+test('collect writes once into an empty directory; another ledger id or a repeated seq is refused (L-e, N-1, #1817)', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-collect2-'));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
-  const mk = (runs, name) => { fs.mkdirSync(path.join(root, runs, name), {recursive: true}); fs.writeFileSync(path.join(root, runs, name, 'trace.jsonl'), trace([], {text: 'x'})); fs.writeFileSync(path.join(root, runs, name, 'meta.json'), JSON.stringify({costUsd: 0.1, ledgerId: 'L1', ledgerSeq: seq++})); };
-  let seq = 0;
-  mk('s1', 'R-asc-1-1'); mk('s3', 'I-asc-1-1'); mk('s3b', 'R-asc-1-1');
-  collect(path.join(root, 's1'), path.join(root, 'out')); collect(path.join(root, 's3'), path.join(root, 'out'));
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'out/trials.json'), 'utf8')).map((r) => r.trial), ['R-asc-1-1', 'I-asc-1-1']);
-  assert.throws(() => collect(path.join(root, 's3b'), path.join(root, 'out')), /already collected/);
-  // a stage collected with another ledger (reset) or a repeated seq is refused
-  mk('s4', 'H-asc-1-1'); fs.writeFileSync(path.join(root, 's4/H-asc-1-1/meta.json'), JSON.stringify({ledgerId: 'L2', ledgerSeq: 9}));
-  assert.throws(() => collect(path.join(root, 's4'), path.join(root, 'out')), /ledger check failed/);
-  mk('s5', 'P-asc-1-1'); fs.writeFileSync(path.join(root, 's5/P-asc-1-1/meta.json'), JSON.stringify({ledgerId: 'L1', ledgerSeq: 0}));
-  assert.throws(() => collect(path.join(root, 's5'), path.join(root, 'out')), /seq 0 repeated/);
+  const mk = (runs, name, meta) => { fs.mkdirSync(path.join(root, runs, name), {recursive: true}); fs.writeFileSync(path.join(root, runs, name, 'trace.jsonl'), trace([], {text: 'x'})); fs.writeFileSync(path.join(root, runs, name, 'meta.json'), JSON.stringify(meta)); };
+  mk('s1', 'B-asc-1-1', {costUsd: 0.1, ledgerId: 'L1', ledgerSeq: 0}); mk('s1', 'S-asc-1-1', {costUsd: 0.1, ledgerId: 'L1', ledgerSeq: 1});
+  collect(path.join(root, 's1'), path.join(root, 'out'));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'out/trials.json'), 'utf8')).map((r) => r.trial), ['B-asc-1-1', 'S-asc-1-1']);
+  assert.throws(() => collect(path.join(root, 's1'), path.join(root, 'out')), /collected once/);
+  mk('s4', 'B-asc-1-1', {ledgerId: 'L1', ledgerSeq: 0}); mk('s4', 'S-asc-1-1', {ledgerId: 'L2', ledgerSeq: 1});
+  assert.throws(() => collect(path.join(root, 's4'), path.join(root, 'out4')), /ledger check failed/);
+  mk('s5', 'B-asc-1-1', {ledgerId: 'L1', ledgerSeq: 0}); mk('s5', 'S-asc-1-1', {ledgerId: 'L1', ledgerSeq: 0});
+  assert.throws(() => collect(path.join(root, 's5'), path.join(root, 'out5')), /seq 0 repeated/);
+  assert.equal(fs.existsSync(path.join(root, 'out4')) || fs.existsSync(path.join(root, 'out5')), false); // nothing written
 });
 
 test('product hook: hookFired reflects the trace evidence in the summary (L-3)', () => {
@@ -318,11 +328,11 @@ test('#1817 L1: replacements are one per failed planned trial (rep 5, 6, ...), a
   };
   mk('B-asc-1-1', null); mk('B-asc-1-2', 'x'); mk('B-asc-1-3', 'x', false); mk('B-asc-1-4', 'x'); mk('S-asc-1-1', 'x');
   const reservedNow = () => new Set(fs.readdirSync(root)); // every directory made here stands for a reserved trial
-  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow()}).map((x) => x.name), ['B-asc-1-5', 'B-asc-1-6']);
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow(), settled: settledFrom(root)}).map((x) => x.name), ['B-asc-1-5', 'B-asc-1-6']);
   mk('B-asc-1-5', 'x', false); // the replacement failed: it is not replaced again
-  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow()}).map((x) => x.name), ['B-asc-1-6']);
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow(), settled: settledFrom(root)}).map((x) => x.name), ['B-asc-1-6']);
   mk('B-asc-1-6', 'x');
-  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow()}), []);
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow(), settled: settledFrom(root)}), []);
   // scoring matches: 1 -> 5 (a failure), 3 -> 6; a rep 7 is not counted
   const row = (run, failure) => ({condition: 'B', case: 'asc-1', run, ...(failure ? {failure: 'x'} : {})});
   const rows = selectCounted([row(1, true), row(2), row(3, true), row(4), row(5, true), row(6), row(7)], 4);
@@ -372,7 +382,7 @@ test('#1817 L-1: after all planned trials, only the next trial of the replacemen
     fs.writeFileSync(path.join(root, n, 'meta.json'), '{}');
   }
   const reserved = new Set(names);
-  const r = (c, k, rep, res = reserved) => orderRefusal({condition: c, caseId: k, rep: String(rep), reserved: res, runsRoot: root, spec});
+  const r = (c, k, rep, res = reserved) => orderRefusal({condition: c, caseId: k, rep: String(rep), reserved: res, settled: settledFrom(root), runsRoot: root, spec});
   assert.equal(r('B', 'rr-1', 5), null); // first required replacement in order (rr-1 comes before es-1)
   assert.match(r('S', 'es-1', 5), /not the next required replacement \(next: B-rr-1-5\)/);
   assert.match(r('B', 'asc-1', 5), /not the next required replacement/); // no failure there
@@ -514,6 +524,101 @@ test('#1817 Low-B: at the replacement stage a directory without a reservation do
   }
   fs.mkdirSync(path.join(root, 'B-rr-1-5')); // the replacement stopped after its directory was made, before its reservation
   const reserved = new Set(names);
-  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved}).map((x) => x.name), ['B-rr-1-5']); // still required
-  assert.equal(orderRefusal({condition: 'B', caseId: 'rr-1', rep: '5', reserved, runsRoot: root, spec}), null); // run-trial then refuses it with "exists"
+  const settled = settledFrom(root);
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved, settled}).map((x) => x.name), ['B-rr-1-5']); // still required
+  assert.equal(orderRefusal({condition: 'B', caseId: 'rr-1', rep: '5', reserved, settled, runsRoot: root, spec}), null); // run-trial then refuses it with "exists"
+});
+
+// A runs root and ledger as run-trial leaves them: the given trials reserved, and settled unless listed in unsettled.
+function settledRun(d, names, {unsettled = []} = {}) {
+  const runsRoot = path.join(d, 'runs'), lf = path.join(d, 'ledger.jsonl');
+  ledgerOps.create(lf);
+  for (const n of names) {
+    const dir = path.join(runsRoot, n);
+    fs.mkdirSync(dir, {recursive: true});
+    const seq = ledgerOps.reservations(lf).length;
+    fs.writeFileSync(path.join(dir, 'trace.jsonl'), trace([read(body('asc'))], {text: `answer ${n}`}, `${dir}/work`));
+    fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({costUsd: 0.08, ledgerId: ledgerOps.ledgerId(lf), ledgerSeq: seq}));
+    const {id} = ledgerOps.reserve(lf, n, 0.6);
+    if (!unsettled.includes(n)) ledgerOps.settle(lf, id, n, 0.08, {exit: 0, traceSha256: ledgerOps.fileSha256(path.join(dir, 'trace.jsonl')), metaSha256: ledgerOps.fileSha256(path.join(dir, 'meta.json'))});
+  }
+  return {runsRoot, lf};
+}
+
+test('#1817 fifth review Medium-1: the published traces and trials.json must equal a rebuild from the raw runs root', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-rebuild-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const {runsRoot, lf} = settledRun(d, plannedTrials().slice(0, 6).map((x) => x.name));
+  const dir = path.join(d, 'results/traces'), pub = path.join(d, 'results/ledger.jsonl');
+  collect(runsRoot, dir, {ledger: lf, publishLedger: pub});
+  const check = () => publishedProblems({runsRoot, dir, ledger: lf, publishedLedger: pub});
+  assert.deepEqual(check(), []);
+  assert.equal(fs.readFileSync(path.join(dir, 'B-asc-1-1.jsonl'), 'utf8').includes('<trial>/work'), true); // redacted
+  const tracePath = path.join(dir, 'S-asc-1-1.jsonl'), original = fs.readFileSync(tracePath);
+  fs.writeFileSync(tracePath, original.toString().replace('answer S-asc-1-1', 'worktree-create worktree')); // edit a collected trace
+  assert.match(check().join(), /published file differs from the rebuild: S-asc-1-1.jsonl/);
+  fs.writeFileSync(tracePath, original);
+  const trialsPath = path.join(dir, 'trials.json'), rows = JSON.parse(fs.readFileSync(trialsPath, 'utf8'));
+  fs.writeFileSync(trialsPath, JSON.stringify(rows.map((r) => (r.trial === 'B-rr-1-1' ? {...r, exit: 1} : r)), null, 1)); // edit a trials.json field
+  assert.match(check().join(), /published file differs from the rebuild: trials.json/);
+  fs.writeFileSync(trialsPath, JSON.stringify(rows, null, 1));
+  fs.writeFileSync(path.join(dir, 'B-neg-1-1.jsonl.missing'), 'no trace\n'); // a file collect did not produce
+  assert.match(check().join(), /not produced by collect: B-neg-1-1.jsonl.missing/);
+  fs.rmSync(path.join(dir, 'B-neg-1-1.jsonl.missing'));
+  assert.deepEqual(check(), []);
+});
+
+test('#1817 fifth review Low-1: a reserved trial without a settlement is a failure whatever files exist', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-unsettled-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const names = plannedTrials().map((x) => x.name);
+  const {runsRoot, lf} = settledRun(d, names, {unsettled: ['S-tw-1-1']}); // complete-looking files, but no settlement
+  const settled = ledgerOps.settlements(lf);
+  assert.equal(trialFailure(path.join(runsRoot, 'S-tw-1-1'), spec, 'tw-1', settled.get('S-tw-1-1') ?? null), 'not settled');
+  assert.deepEqual(replacementPlan({runsRoot, spec, reserved: ledgerOps.reservedNames(lf), settled}).map((x) => x.name), ['S-tw-1-5']);
+  const out = path.join(d, 'traces');
+  collect(runsRoot, out, {ledger: lf});
+  assert.equal(fs.readFileSync(path.join(out, 'S-tw-1-1.jsonl.missing'), 'utf8'), 'not settled\n');
+  assert.equal(fs.existsSync(path.join(out, 'S-tw-1-1.jsonl')), false);
+  const row = scoreDir(spec, out, ['S'], {S: false}, 4).find((r) => r.case === 'tw-1' && r.run === 1);
+  assert.equal(row.failure, 'missing trace');
+});
+
+test('#1817 fifth review Low-2: a hand-edited ledger and a published ledger that differs are refused', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-handedit-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const names = plannedTrials().slice(0, 4).map((x) => x.name);
+  const {runsRoot, lf} = settledRun(d, names);
+  assert.deepEqual(ledgerOps.ledgerProblems(lf), []);
+  const original = fs.readFileSync(lf, 'utf8');
+  const lines = original.trim().split('\n').map((l) => JSON.parse(l));
+  const settle = lines.find((e) => e.trial === 'S-asc-1-1' && 'costUsd' in e);
+  // a second settlement for the same reservation (e.g. to lower the cost)
+  fs.appendFileSync(lf, JSON.stringify({...settle, costUsd: 0.01}) + '\n');
+  assert.match(ledgerOps.ledgerProblems(lf).join(), /S-asc-1-1 is settled twice/);
+  assert.throws(() => collect(runsRoot, path.join(d, 'o1'), {ledger: lf}), /ledger refused: .*settled twice/);
+  assert.throws(() => trialsToStart('planned', {runsRoot, ledger: lf, spec}), /edited by hand/);
+  fs.writeFileSync(lf, original);
+  // a settlement without its reservation, and one under another trial name
+  fs.appendFileSync(lf, JSON.stringify({id: 'x', trial: 'B-rr-1-1', costUsd: 0.1}) + '\n');
+  assert.match(ledgerOps.ledgerProblems(lf).join(), /B-rr-1-1 has no reservation/);
+  fs.writeFileSync(lf, original.replace(`"id":"${settle.id}","trial":"S-asc-1-1","costUsd"`, `"id":"${settle.id}","trial":"B-asc-1-1","costUsd"`));
+  assert.match(ledgerOps.ledgerProblems(lf).join(), /names another trial than its reservation/);
+  // the settled cost rewritten in place (no second line): differs from the sha-bound meta.json
+  fs.writeFileSync(lf, original.replace(`"trial":"S-asc-1-1","costUsd":0.08`, '"trial":"S-asc-1-1","costUsd":0.01'));
+  assert.deepEqual(ledgerOps.ledgerProblems(lf), []);
+  assert.match(ledgerOps.settledFilesProblem(path.join(runsRoot, 'S-asc-1-1'), ledgerOps.settlements(lf).get('S-asc-1-1')), /settled costUsd 0.01 differs from meta.json costUsd 0.08/);
+  assert.throws(() => collect(runsRoot, path.join(d, 'o2'), {ledger: lf}), /costUsd/);
+  fs.writeFileSync(lf, original);
+  // the published ledger must equal the ledger read
+  const dir = path.join(d, 'results/traces'), pub = path.join(d, 'results/ledger.jsonl');
+  collect(runsRoot, dir, {ledger: lf, publishLedger: pub});
+  assert.deepEqual(publishedProblems({runsRoot, dir, ledger: lf, publishedLedger: pub}), []);
+  fs.appendFileSync(pub, '\n');
+  assert.match(publishedProblems({runsRoot, dir, ledger: lf, publishedLedger: pub}).join(), /published ledger differs/);
+  fs.rmSync(pub);
+  assert.match(publishedProblems({runsRoot, dir, ledger: lf, publishedLedger: pub}).join(), /published ledger is missing/);
+  // a trial directory without a reservation is refused by the rebuild
+  fs.mkdirSync(path.join(runsRoot, 'B-neg-1-1'));
+  assert.match(publishedProblems({runsRoot, dir, ledger: lf, publishedLedger: pub}).join(), /without a reservation .*: B-neg-1-1/);
 });

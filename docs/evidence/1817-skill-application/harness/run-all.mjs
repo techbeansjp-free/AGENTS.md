@@ -21,6 +21,7 @@ const ev = path.resolve(here, '..');
 export function trialsToStart(mode, {runsRoot, ledger, spec}) {
   const reserved = fs.existsSync(ledger) ? ledgerOps.reservedNames(ledger) : new Set();
   const settled = fs.existsSync(ledger) ? ledgerOps.settlements(ledger) : new Map();
+  if (fs.existsSync(ledger) && ledgerOps.ledgerProblems(ledger).length) throw new Error(`the ledger was edited by hand: ${ledgerOps.ledgerProblems(ledger).join('; ')}`);
   if (mode === 'planned') return plannedTrials().filter((t) => !reserved.has(t.name));
   if (mode === 'replacements') {
     const left = plannedTrials().filter((t) => !reserved.has(t.name));
