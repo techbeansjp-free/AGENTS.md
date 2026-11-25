@@ -50,7 +50,7 @@ dry runで使ったtarball：**releaseの本物ではない。** この作業の
   - `debugPathsInsideTrial`・`noRealHomeOrRepoInDebug`：原因は3つだった。(1) 目印のReadが拒否されたときにClaude Codeが書く`Permission suggestions for Read`の行（各probe 2行。ruleContentは2つの目印のfileの親directory）。実HOMEとrepositoryのpathが現れたのは、各probeでこの2行だけだった。repository側の行が`debugPathsInsideTrial`でも数えられたのは、repositoryのdirectory名に`AGENTS.md`が含まれ、keywordの絞り込みに当たったため（各probe 1行）。(2) 機械の管理用policyのpath（`/Library/Application Support/ClaudeCode/managed-settings.json`）が空白を含むため、「missing file」の行（各probe 6行）で途中から切れた断片が外のpathと数えられた。(3) Hではhookの出力の行（3行）にある文例の相対path`.agent-skill-chain/skills/asc/SKILL.md`の断片が外のpathと数えられた。加工していないdebug logはlocalのpathを含むのでrepositoryに入れない。代わりに、各probeのtrace・debug.log・stderrのsha256と、原因ごとの行数（pathの文字列は含まない）を[results/stage0/sources.json](results/stage0/sources.json)に記録した。
 - 是正（段階0の後の是正。`harness/probe-check.mjs`だけを変更）：(1) は、行のすべてのruleContentが2つの目印のfileかその親directoryで、他の絶対pathを含まない場合だけ除外する。目印のpathを含む他の行も、他の絶対pathが無い場合だけ除外する。(2) は「missing file・broken symlink」の行に限り、管理用policyのpathを全体として除いてから断片を取る（存在して読み込まれた管理用のfileは外のpathとして残り、存在する管理用のfileの名前を`managedPolicyPresent`に記録する。今回は無し）。(3) は`.agent-skill-chain/`・`.claude/`で始まる相対path（直前がpathの文字でないもの）を全体として除く。`/x/.claude/…`・`~/.claude/…`は検査に残る。反例（同梱でないplugin、名前の違う同梱plugin、条件で違う同梱pluginの一覧、提案の行の外の実HOMEのpath、別のdirectoryを含む提案、目印と同じ行の別の絶対path、読み込まれた管理用のfile、相対pathと同じ行の実HOMEのpath等）が不合格になることを試験した。
 - 判定し直した結果：3条件とも、`markerTokensAbsent`を除くすべての項目が合格。条件の間の比較は差が無い（`differ: []`）。`markerTokensAbsent`は、目印のfileを確認の後に消したため照合する文字列が無く、判定し直しでは不合格になる（実行時の判定では3条件とも合格。この項目のcodeと入力は是正で変わっていない）。どの1回の実行でも全項目が合格した記録はまだ無いので、規則6を満たすため、refixの後に目印を新しく作り、R・P・Hのprobeを`probe 2`として再実行する（統括が行う）。
-- 未了：この是正の独立レビューと、統括による`fixation.mjs refix`の実行。
+- 完了：この是正は独立レビューを通し、統括が`fixation.mjs refix`で固定の記録に追記した。その後、目印を新しく作り、R・P・Hのprobeを`probe 2`として再実行した。比較（`compare`）でcommitの件名の前の短いidの有無だけが違ったため、`probe-check.mjs`の`gitSubjects`をもう一度だけ直し（独立レビューを通して2回目のrefix）、**R・P・Hとも全22項目が合格、比較も合格（差なし）**を確かめた。費用はR 0.067・P 0.068・H 0.070 USD。記録：[results/stage0/probe2/](results/stage0/probe2/)（localのpathを置き換えたもの）。
 
 ## 独立レビュー（1回目、HEAD `e2477706`）への対応
 
@@ -185,6 +185,8 @@ High・Mediumなし、Low 2件。固定したfileは変えず（変えてよい�
 
 ## 改善の実装（ownerの判断：条件Pを標準、hookは採用しない）
 
+ownerの判断の経緯：規則1では現状Rは「不足なし」（本文の読込み91%）だったが、但し書きにより手順の適用68%と、#1807と同じ形の依頼での未選択・誤選択を報告した。ownerは段階2（条件P・H）も測ると決め（[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1814#issuecomment-7153864082)）、段階2の後に条件Pを標準にし、hookは採用しないと決めた（[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1814#issuecomment-7154406019)）。
+
 `project-assets`が、Claude Codeを登録した利用先で、USAGEの文例をCLAUDE.mdの末尾へ区切り付きで追記する案を差分付きで示し、`--adopt-read-trigger claude-md@<beforeSha256|absent>`で承認した場合だけ追記するようにした（[IMPROVEMENT_DESIGN.md](IMPROVEMENT_DESIGN.md)の先頭の注記）。承認の値は、製品のレビューを受けて`claude-md@<beforeSha256>:<blockSha256>`にした。そのため`harness/condition-i.mjs`を変えており、段階3の固定で理由とレビューの参照を付けて記録する。段階3（条件I）は、この変更を含むreleaseが出た後に行う。
 
 承認の値と組立ての規則（2回目の製品レビューのLow-B）：承認の値は、変更前のfileのsha256と、追記する塊のsha256に結び付く。区切りの改行の入れ方や、CRLFへの変換といった組立ての規則には結び付いていない。それでも次の理由で、承認の形式は変えない（変えると`harness/condition-i.mjs`を再び変える必要がある）。(1) 適用の前に、結果の先頭が既存のbyteと完全に一致することを確かめるので、既存の内容は変わらない。(2) 追記する文はhashで結び付いている。(3) 計画と適用は、通常は同じ導入済みのreleaseで行う。(4) 組立ての規則が食い違いうるのは、計画と適用の間でASCの版を変えた場合だけである。CRLFとLFが混在するfileは、表示する差分と実際の追記が一致しないので、提案せず手で採用に回す。
@@ -239,3 +241,13 @@ High・Mediumなし、Low 2件。固定したfileは変えず（変えてよい�
 - 段階3の費用：隔離の確認0.08 USD＋測定2.32 USD＝約2.40 USD。全段階の累計は約9.95 USD（台帳の精算額。未精算0件、予約119件）。上限30 USDの内。
 - 段階3の前に、台帳が段階2の後の記録（181行、sha256 `3495ef6e0b7c53c6a05e6d3e47b25c92c30ea2a8244193e8c8b9ec725a4f8b58`）と一致することを確かめた。段階3の後も、先頭の181行のsha256は同じだった。
 - 段階3の後の台帳：**239行、sha256 `f929c9f4aa06332ff7f11b58c85ab9f9908a0f0f71a672858a75859ba7cad882`**。
+
+## 公開した記録の置換（2026-11-25）
+
+- `results/traces/`等の公開した記録では、取り出しのときに試行のdirectoryを`<trial>`、利用者名を`<local>`に置き換えた（`collect.mjs`）。ただしPR #1816でmainに入った段階1・2の記録（P・Hのtraceの一部）には、一時directoryの名前と、測定を統括したsessionのidが残っていた。段階3のPRのcommitで、次のとおり置き換えた：一時directory以下のscratchのpath→`<scratch>/`、Claude Codeの設定のproject名→`<tmp-project>`、統括のsessionのid→`<session>`、残りの一時directory名→`<tmp>`・`<tmp-user>`。置換前の値はgitの履歴（PR #1816のmerge）に残る。
+- P・Hのtraceのpathが`<scratch>/run1814b/runs/…/work/…`、R・Iが`<trial>/work/…`と書き方が違うのは、P・Hを別のruns root（symlink）から取り出したためで、数え方には影響しない（採点は置き換える前の記録で行った）。
+- 各試行の`session_id`・message/requestのid・rate limitのevent・socketのpathは、隔離したHOMEで動かした使い捨ての`claude -p`のもので秘密ではないため、置き換えずに残す。
+
+## この文書の古い記述について
+
+「準備の段階の記録」の節と、ファイル一覧のうち`IMPROVEMENT_DESIGN.md`を「未実装」とする記述、「行っていないこと」「未解決の懸念」は、測定の前の時点の記録として残している。現在の状態は、段階1〜3の節と、上の「改善の実装」の節が正である。
