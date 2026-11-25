@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import {checkProbe, compareProbes, description, installDirProblems, ownerCanaries, gitSubjects} from './probe-check.mjs';
 import {placementProblems} from './guard.mjs';
 import * as ledger from './ledger.mjs';
-import {differences, digests, FIXED, stage3Violations, invariantDigests, nonProbeTrials, conditionIProblems} from './fixation.mjs';
+import {differences, digests, FIXED, stage3Violations, invariantDigests, refixViolations, refixAfterMeasurement, conditionIProblems, moduleShape} from './fixation.mjs';
 import {fileURLToPath} from 'node:url';
 import {installProblems, fixationFileProblems, filesContaining} from './run-trial.mjs';
 import {applyCondition, NEUTRAL_SUBJECT} from './apply-condition.mjs';
@@ -159,9 +159,9 @@ test('ledger: cumulative by unique id, reserved at budget until settled, duplica
   t.after(() => fs.rmSync(d, {recursive: true, force: true}));
   const f = path.join(d, 'ledger.jsonl');
   assert.equal(ledger.spent(f), 0);
-  const a = ledger.reserve(f, 'R-asc-1-1', 0.6); ledger.settle(f, a, 'R-asc-1-1', 0.21);
+  const a = ledger.reserve(f, 'R-asc-1-1', 0.6).id; ledger.settle(f, a, 'R-asc-1-1', 0.21);
   ledger.reserve(f, 'R-asc-1-2', 0.6); // parent killed: never settled
-  const c = ledger.reserve(f, 'P-asc-1-1', 0.6); ledger.settle(f, c, 'P-asc-1-1', null); // no cost reported
+  const c = ledger.reserve(f, 'P-asc-1-1', 0.6).id; ledger.settle(f, c, 'P-asc-1-1', null); // no cost reported
   assert.equal(Number(ledger.spent(f).toFixed(2)), 1.41);
   assert.throws(() => ledger.reserve(f, 'R-asc-1-1', 0.6), /already in the ledger/); // rerun under the same name
   // even if a duplicate name got in (hand-edited ledger), both reservations count by id
@@ -215,6 +215,13 @@ test('stage 3: only condition-i.mjs may change, with a reason and a review; the 
   fs.appendFileSync(path.join(root, 'harness/condition-i.mjs'), '// adapted to the released flag name\n');
   assert.deepEqual(stage3Violations(first, root), ['harness/condition-i.mjs changed without --reason and --review']);
   assert.deepEqual(stage3Violations(first, root, {'harness/condition-i.mjs': {reason: 'flag renamed', review: 'review #3'}}), []);
+  const shaped = {...first, conditionIShape: moduleShape(fs.readFileSync(path.join(ev, 'harness/condition-i.mjs'), 'utf8'))};
+  assert.deepEqual(stage3Violations(shaped, root, {'harness/condition-i.mjs': {reason: 'r', review: 'v'}}), []);
+  const ci = fs.readFileSync(path.join(root, 'harness/condition-i.mjs'));
+  fs.appendFileSync(path.join(root, 'harness/condition-i.mjs'), "export const productHookFiredInTrial2 = () => true;\nprocess.env.X = '1';\n");
+  const v = stage3Violations(shaped, root, {'harness/condition-i.mjs': {reason: 'r', review: 'v'}});
+  assert.ok(v.includes('condition-i.mjs exports changed') && v.includes('condition-i.mjs has top-level statements'), v.join());
+  fs.writeFileSync(path.join(root, 'harness/condition-i.mjs'), ci);
   assert.deepEqual(stage3Violations(first, root, {'harness/score.mjs': {reason: 'x', review: 'y'}}), ['harness/condition-i.mjs changed without --reason and --review', 'harness/score.mjs is not changeable at stage 3']);
   fs.appendFileSync(path.join(root, 'harness/probe-check.mjs'), '\n');
   assert.ok(stage3Violations(first, root, {'harness/condition-i.mjs': {reason: 'r', review: 'v'}}).includes('harness/probe-check.mjs changed'));
@@ -223,15 +230,65 @@ test('stage 3: only condition-i.mjs may change, with a reason and a review; the 
   assert.deepEqual(conditionIProblems(undefined), ['conditions.I is not defined']);
 });
 
-test('refix is a pre-measurement correction: allowed while the ledger holds only probe trials', (t) => {
+test('ledger id and seq: one ledger, each seq once; a copied earlier state is detected (N-1 (d))', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-lid-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const f = path.join(d, 'l.jsonl');
+  const id = ledger.create(f);
+  assert.throws(() => ledger.create(f), /exists/);
+  assert.equal(ledger.ledgerId(f), id); assert.equal(ledger.spent(f), 0);
+  assert.equal(ledger.reserve(f, 'R-probe-1', 0.6).seq, 0); assert.equal(ledger.reserve(f, 'R-asc-1-1', 0.6).seq, 1);
+  assert.deepEqual(ledger.ledgerConsistency([{trial: 'a', ledgerId: id, ledgerSeq: 1}, {trial: 'b', ledgerId: id, ledgerSeq: 2}]), []);
+  assert.match(ledger.ledgerConsistency([{trial: 'a', ledgerId: id, ledgerSeq: 1}, {trial: 'b', ledgerId: 'other', ledgerSeq: 2}]).join(), /2 ledger id/);
+  assert.match(ledger.ledgerConsistency([{trial: 'a', ledgerId: id, ledgerSeq: 1}, {trial: 'b', ledgerId: id, ledgerSeq: 1}]).join(), /seq 1 repeated/);
+  assert.match(ledger.ledgerConsistency([{trial: 'a', ledgerSeq: 1}]).join(), /without an id/);
+});
+
+test('refix: recorded ledger, probe reservations only, only probe-check.mjs may change (N-1 (b)(c))', (t) => {
+  const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-refix-'));
   t.after(() => fs.rmSync(d, {recursive: true, force: true}));
-  const f = path.join(d, 'ledger.jsonl');
-  assert.deepEqual(nonProbeTrials(f), []);
-  ledger.reserve(f, 'R-probe-1', 0.6); ledger.reserve(f, 'P-probe-2', 0.6);
-  assert.deepEqual(nonProbeTrials(f), []);
-  ledger.reserve(f, 'R-asc-1-1', 0.6);
-  assert.deepEqual(nonProbeTrials(f), ['R-asc-1-1']);
+  const root = path.join(d, 'ev');
+  for (const f of FIXED) { fs.mkdirSync(path.dirname(path.join(root, f)), {recursive: true}); fs.copyFileSync(path.join(ev, f), path.join(root, f)); }
+  const lf = path.join(d, 'ledger.jsonl');
+  const base = {files: digests(root), ledgerId: null};
+  assert.deepEqual(refixViolations(base, path.join(d, 'absent.jsonl'), root), ['the ledger file does not exist']);
+  base.ledgerId = ledger.create(lf);
+  assert.deepEqual(refixViolations(base, lf, root), ['the ledger has no probe reservation']);
+  ledger.reserve(lf, 'R-probe-1', 0.6);
+  assert.deepEqual(refixViolations(base, lf, root), []);
+  fs.appendFileSync(path.join(root, 'harness/probe-check.mjs'), '\n');
+  assert.deepEqual(refixViolations(base, lf, root), []);
+  for (const f of ['harness/score.mjs', 'cases.json', 'decision-criteria.md']) {
+    const orig = fs.readFileSync(path.join(root, f)); fs.appendFileSync(path.join(root, f), ' ');
+    assert.ok(refixViolations(base, lf, root).some((x) => x.startsWith(`${f} changed`)), f);
+    fs.writeFileSync(path.join(root, f), orig);
+  }
+  const cj = JSON.parse(fs.readFileSync(path.join(root, 'conditions.json'), 'utf8')); cj.budget.capUsd = 100;
+  fs.writeFileSync(path.join(root, 'conditions.json'), JSON.stringify(cj));
+  assert.ok(refixViolations(base, lf, root).includes('conditions.json changed (refix may change only harness/probe-check.mjs)'));
+  assert.ok(refixViolations({...base, ledgerId: 'other'}, lf, root).includes('the ledger is not the one recorded at init'));
+  ledger.reserve(lf, 'R-asc-1-1', 0.6);
+  assert.ok(refixViolations(base, lf, root).some((x) => /stage-1\/2 trials exist/.test(x)));
+});
+
+test('a refix record later than the first stage-1/2 reservation is refused at run time (N-1 (a))', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-late-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const lf = path.join(d, 'l.jsonl'); ledger.create(lf);
+  ledger.reserve(lf, 'R-probe-1', 0.6);
+  assert.deepEqual(refixAfterMeasurement({records: [{at: '2099-01-01T00:00:00Z', refix: {}}]}, lf), []);
+  ledger.reserve(lf, 'R-asc-1-1', 0.6);
+  assert.deepEqual(refixAfterMeasurement({records: [{at: '2000-01-01T00:00:00Z', refix: {}}]}, lf), []);
+  assert.deepEqual(refixAfterMeasurement({records: [{at: '2099-01-01T00:00:00Z', refix: {}}]}, lf), ['2099-01-01T00:00:00Z']);
+});
+
+test('condition-i.mjs shape: exports, imports and no top-level statements are checked at stage 3 (L-1)', () => {
+  const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const shape = moduleShape(fs.readFileSync(path.join(ev, 'harness/condition-i.mjs'), 'utf8'));
+  assert.deepEqual(shape.exports, ['adoptFromPlan', 'pointerExpectedI', 'pointerHeadI', 'productHookFiredInProbe', 'productHookFiredInTrial']);
+  assert.deepEqual(shape.sideEffects, []);
+  assert.deepEqual(moduleShape("import x from 'y';\nglobalThis.z = 1;\nexport const a = 1;\n").sideEffects, ['globalThis.z = 1;']);
 });
 
 test('fixation file must be committed, its commits in history, and the first commit named in README (L-c)', (t) => {

@@ -23,7 +23,7 @@ ownerの要求（2026-11-25）：利用者の環境と同等で、このreposito
 | tool | 組込みtoolは`Read`・`Glob`・`Grep`・`Skill`だけ（`Bash`・`Write`・`Edit`・Web・`Agent`は無し）。MCP無し（`--strict-mcp-config`）。sessionは保存しない。利用者の環境との意図した違い（下の節） | `run-trial.mjs` |
 | model | `sonnet`の別名（統括の決定。#1807の生成と同じ）。試行ごとにinit eventの解決後のmodel idを記録する。`--model`の指定は受け付けない | `conditions.json`の`model`、`run-trial.mjs` |
 | 試行のcommit | どの条件でも、条件の適用の後に同じ中立の件名（`Update project files`）のcommitを1件だけ入れる（Rは空のcommit）。Hostがgitの状態として最近のcommitの件名をContextへ入れる場合に、条件ごとに違う文字列が入らないようにする（レビューM1） | `apply-condition.mjs` |
-| 試行の後始末 | 試行の`HOME`と設定ディレクトリは、CLIがアカウントの情報を書き得るので、試行の後に消す（レビューL9）。公開する記録は、取り出すときにメールアドレス・key・アカウントの欄の形の文字列を置き換え、件数を記録する | `run-trial.mjs`、`collect.mjs` |
+| 試行の後始末 | 試行の`HOME`と設定ディレクトリは、CLIがアカウントの情報を書き得るので、試行の後に消す（レビューL9）。親processが強制終了されて台帳のlockが残った場合は、lockを消す前に`<runs-root>/<試行>/home`と`<runs-root>/<試行>/config`を手で消す（レビューL-5）。公開する記録は、取り出すときにメールアドレス・key・アカウントの欄の形の文字列を置き換え、件数を記録する | `run-trial.mjs`、`collect.mjs` |
 | 記録 | `--output-format stream-json --verbose --include-hook-events`。hookは、発火のたびにsample projectの外のlogへ1行書く（モデルの申告に依らない発火の証拠） | `run-trial.mjs`、[harness/apply-condition.mjs](harness/apply-condition.mjs) |
 | 公開前の処理 | 記録を取り出すときに、試行のディレクトリ・`/Users/<名前>`等・scratchの名前を置き換える | [harness/collect.mjs](harness/collect.mjs) |
 
@@ -102,7 +102,7 @@ ownerの要求は「利用者と同等の環境」だが、次の点は安全と
 
 停止の規則：
 
-- 全段階（隔離の確認、段階1〜3、再実行）で、repositoryの外の**1つの台帳file**（`--ledger`）を使う（レビューM4）。予約には試行ごとに一意なidを付け、累計はidごとに数える。同じ試行名は台帳に1回しか予約できない（再実行は新しい反復の番号で行う。レビューN1）。試行は起動の前に予算額（0.6 USD）を台帳へ予約し、終了後にHostの`total_cost_usd`で精算する。精算されなかった試行（親processの強制終了等）は予算額のまま数える。
+- 全段階（隔離の確認、段階1〜3、再実行）で、repositoryの外の**1つの台帳file**（`--ledger`）を使う（レビューM4）。台帳は`fixation.mjs init --ledger`で作り、1行目の台帳idを`fixation.json`に記録する。`run-trial.mjs`は、別のidの台帳や存在しない台帳では起動しない。試行の`meta.json`・`trials.json`に台帳idと予約の番号（seq）を残し、`collect.mjs`・`score.mjs`は、違う台帳idや重なったseq（台帳を前の状態の複製に戻した場合）が混ざれば拒否する（レビューN-1）。予約には試行ごとに一意なidを付け、累計はidごとに数える。同じ試行名は台帳に1回しか予約できない（再実行は新しい反復の番号で行う。レビューN1）。試行は起動の前に予算額（0.6 USD）を台帳へ予約し、終了後にHostの`total_cost_usd`で精算する。精算されなかった試行（親processの強制終了等）は予算額のまま数える。
 - `run-trial.mjs`は、台帳の累計にその試行の予算を足して、上限30 USDから余裕1 USDを引いた29 USDを超えるなら起動しない。上限・余裕・1試行の予算（0.6 USD）は`conditions.json`の`budget`だけから取り、`--stop-usd`・`--budget`の引数は拒否する（レビューL-a）。最後の試行の実際の費用が`--max-budget-usd`を少し超えても、30 USDに届かないようにする（レビューL-5）。
 - 試行は1つずつ順に実行する。台帳のlock fileが残っていれば、人が台帳を確かめてlockを消すまで、次の試行は起動しない。
 - `results/fixation.json`の最後の記録（測定の前のHEADと、条件・gold・判定・起動に関わるfileのsha256）と現在のfileが違えば起動しない。各試行の`meta.json`に、`fixation.json`のsha256・記録のcommit・段階を残す（レビューN2）。
@@ -114,11 +114,11 @@ ownerの要求は「利用者と同等の環境」だが、次の点は安全と
 `results/fixation.json`は追記だけの記録である。`run-trial.mjs`は最後の記録と照合し、加えて、`fixation.json`がcommit済みで変更が無いこと、各記録のcommitがHEADの履歴にあること、最初の記録のcommitがこのREADMEに書かれていることを確かめる。
 
 - **最初の記録**：`fixation.mjs init`。既存のfileは上書きしない。
-- **段階0の後の是正（refix）**：隔離の確認の結果、`probe-check.mjs`等の固定したfileを直す必要が出た場合は、測定の前の是正として扱う。台帳に段階1・2の試行が1件も無い（probeだけ）間に限り、独立レビューを通したうえで、`node harness/fixation.mjs refix results/fixation.json --ledger <台帳> --reason <理由> --review <独立レビューの参照>`で、段階0〜2の記録を足す。段階1の試行が1件でも台帳にあれば拒否する。
+- **段階0の後の是正（refix）**：隔離の確認の結果、`probe-check.mjs`を直す必要が出た場合は、測定の前の是正として扱う。`node harness/fixation.mjs refix results/fixation.json --ledger <台帳> --reason <理由> --review <独立レビューの参照>`で、段階0〜2の記録を足す。足せるのは、台帳fileが存在して`init`で記録した台帳idと同じで、probeの予約が1件以上あり、段階1・2の予約が1件も無い場合だけ。変えてよいfileは`harness/probe-check.mjs`だけで、`conditions.json`（`budget`・`model`・`runs`を含む）・`decision-criteria.md`・`cases.json`・`score.mjs`等はbytesで同じでなければ拒否する（レビューN-1）。`run-trial.mjs`は、refixの記録の時刻が台帳の最初の段階1・2の予約より後なら起動しない。refixの前に独立レビューを通す。
 - **段階3（条件I）**：`node harness/fixation.mjs stage3 results/fixation.json [--change <file> --reason <理由> --review <参照>]…`で1回だけ足す。最新の段階0〜2の記録と比べて、次をすべて満たす場合だけ足せる。
   1. `conditions.json`の違いが`conditions.I`の追加だけで、`conditions.I`が`conditionISchema`を満たす（`pointer: false`、`hook`は`null`か`"product"`、`pointerDelivered: true`、`adopt`は選択肢のid、許された項目だけ）。
   2. `release.json`の違いが`phase3`の記入だけ。
-  3. 変えてよいfileの一覧（`STAGE3_ALLOWED`）は`harness/condition-i.mjs`だけ。条件Iに固有の部分（製品のinterfaceの前提：計画の`readTrigger`の形と`--adopt-read-trigger`の指定、条件Iのprobeの期待、製品のhookの発火の数え方）をこのfileに集めた。変える場合は、fileごとに理由と独立レビューの参照を付け、記録に残す。
+  3. 変えてよいfileの一覧（`STAGE3_ALLOWED`）は`harness/condition-i.mjs`だけ。条件Iに固有の部分（製品のinterfaceの前提：計画の`readTrigger`の形と`--adopt-read-trigger`の指定、条件Iのprobeの期待と照合する文例の頭の文面、製品のhookの発火の数え方）をこのfileに集めた。変える場合は、fileごとに理由と独立レビューの参照を付け、記録に残す。exportの名前の一覧とimportの行が最初の記録と同じで、最上位の処理（import・export・注記以外の行）が無いことを`stage3`が機械的に確かめる。独立レビューでは加えて、規則5の意味（hookが発火しなかった試行は失敗）が保たれていること、R/P/Hの採点に影響する変更が無いことを確かめる（レビューL-1）。
   4. それ以外の固定したfile（採点・判定・gold・判定の規則・R/P/Hの経路・起動・台帳・固定のscript）は、bytesで同じ。
   満たさなければ足さずに止まる。その場合は段階3へ進まず、統括・ownerへ報告する。
 - **条件Iのprobeの期待**：文例の頭が回答の**どこかに**現れること（最後の行でなくてよい）。採用した塊が`CLAUDE.md`の末尾に閉じの区切りを置く形でも判定できるよう、probeの質問8で「`.agent-skill-chain/skills/asc/SKILL.md`を含む文」を原文で答えさせる。
@@ -161,8 +161,8 @@ node docs/evidence/1814-skill-invocation/harness/dry-run.mjs <tarball> <sha256> 
 0. `node harness/fixation.mjs check results/fixation.json`が一致すること（`run-trial.mjs`も起動の前に確かめる）。
 1. `gh release download v0.5.106 --pattern 'agent-skill-chain-0.5.106.tgz' --pattern SHA256SUMS --dir <scratch>/release`。tarballのsha256が`release.json`の`assetSha256`とSHA256SUMSの両方と一致することを確かめる。
 2. `node harness/dry-run.mjs <tarball> <sha256> <scratch>/dry-release`（`--allow-unreleased`なし）で、本物のreleaseでも採点器のSkillの一覧が配布一覧と一致すること等を確かめる。続いて`node harness/make-fixture.mjs <tarball> <sha256> <scratch>/sample <scratch>/tmp`。sha256が`release.json`のものでなければ止まる（dry runだけが`--allow-unreleased`で外す。レビューL7）。版・digest・入口のsha256・sample projectのHEADを`<scratch>/sample.install.json`に記録し、各試行の`meta.json`へ写す（レビューL8）。
-3. 段階0：`node harness/markers.mjs create <repo>`、条件R・P・Hごとに`node harness/run-trial.mjs <scratch>/runs <条件> probe 1 --fixture <scratch>/sample --home-marker <…> --repo-marker <…> --ledger <scratch>/ledger.jsonl --run`、`node harness/probe-check.mjs <scratch>/runs/<条件>-probe-1 <条件> <…> <…> <repo> > <scratch>/probe-<条件>.json`、`node harness/probe-check.mjs compare <scratch>/probe-*.json`、`node harness/markers.mjs remove <repo>`。
-4. 段階1・2：`node harness/run-trial.mjs <scratch>/runs <条件> <case> <1|2> --fixture <scratch>/sample --ledger <scratch>/ledger.jsonl --run`を全ケースで、1つずつ順に。
+3. 段階0：`node harness/markers.mjs create <repo>`、条件R・P・Hごとに`node harness/run-trial.mjs <scratch>/runs <条件> probe 1 --fixture <scratch>/sample --home-marker <…> --repo-marker <…> --ledger <台帳（initで記録したもの）> --run`、`node harness/probe-check.mjs <scratch>/runs/<条件>-probe-1 <条件> <…> <…> <repo> > <scratch>/probe-<条件>.json`、`node harness/probe-check.mjs compare <scratch>/probe-*.json`、`node harness/markers.mjs remove <repo>`。
+4. 段階1・2：`node harness/run-trial.mjs <scratch>/runs <条件> <case> <1|2> --fixture <scratch>/sample --ledger <台帳> --run`を全ケースで、1つずつ順に。
 5. `node harness/collect.mjs <scratch>/runs results/traces`、`node harness/score.mjs cases.json results/traces R P H --runs-json results/runs.json --judge R P`（Hも同様）。
 6. 段階3：`conditions.json`へ`conditions.I`を、`release.json`へ`phase3`を記入してcommitし（製品のinterfaceが前提と違えば`harness/condition-i.mjs`だけを直し、独立レビューを通す）、`node harness/fixation.mjs stage3 results/fixation.json …`で記録を足してcommitする。採用した仕組みを含むreleaseで、`make-fixture.mjs … --adopt <選択肢のid>`から2〜5を繰り返す。runs-rootは分けてよいが、台帳は同じfileを使う。
 

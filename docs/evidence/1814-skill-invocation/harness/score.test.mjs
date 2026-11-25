@@ -180,11 +180,22 @@ test('collect: a trace without meta.json becomes a failure row instead of a cras
 test('collect extends trials.json across stages and refuses a trial already collected (L-e)', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-collect2-'));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
-  const mk = (runs, name) => { fs.mkdirSync(path.join(root, runs, name), {recursive: true}); fs.writeFileSync(path.join(root, runs, name, 'trace.jsonl'), trace([], {text: 'x'})); fs.writeFileSync(path.join(root, runs, name, 'meta.json'), JSON.stringify({costUsd: 0.1})); };
+  const mk = (runs, name) => { fs.mkdirSync(path.join(root, runs, name), {recursive: true}); fs.writeFileSync(path.join(root, runs, name, 'trace.jsonl'), trace([], {text: 'x'})); fs.writeFileSync(path.join(root, runs, name, 'meta.json'), JSON.stringify({costUsd: 0.1, ledgerId: 'L1', ledgerSeq: seq++})); };
+  let seq = 0;
   mk('s1', 'R-asc-1-1'); mk('s3', 'I-asc-1-1'); mk('s3b', 'R-asc-1-1');
   collect(path.join(root, 's1'), path.join(root, 'out')); collect(path.join(root, 's3'), path.join(root, 'out'));
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'out/trials.json'), 'utf8')).map((r) => r.trial), ['R-asc-1-1', 'I-asc-1-1']);
   assert.throws(() => collect(path.join(root, 's3b'), path.join(root, 'out')), /already collected/);
+  // a stage collected with another ledger (reset) or a repeated seq is refused
+  mk('s4', 'H-asc-1-1'); fs.writeFileSync(path.join(root, 's4/H-asc-1-1/meta.json'), JSON.stringify({ledgerId: 'L2', ledgerSeq: 9}));
+  assert.throws(() => collect(path.join(root, 's4'), path.join(root, 'out')), /ledger check failed/);
+  mk('s5', 'P-asc-1-1'); fs.writeFileSync(path.join(root, 's5/P-asc-1-1/meta.json'), JSON.stringify({ledgerId: 'L1', ledgerSeq: 0}));
+  assert.throws(() => collect(path.join(root, 's5'), path.join(root, 'out')), /seq 0 repeated/);
+});
+
+test('product hook: hookFired reflects the trace evidence in the summary (L-3)', () => {
+  const t = parseTrace(trace([{hook: true}, read(body('asc'))], {text: 'worktree-create worktree'}));
+  assert.equal(scoreRun(spec, kase('asc-1'), t, [], {expectHook: 'product'}).hookFired, true);
 });
 
 test('scrubSensitive replaces mail addresses, keys and account fields (L9)', () => {

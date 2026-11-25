@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {loadConditions} from './apply-condition.mjs';
+import {ledgerConsistency} from './ledger.mjs';
 
 export function redact(text, trialDir) {
   return text.split(trialDir).join('<trial>').replace(/\/(Users|home|private\/var\/folders)\/[^/"\s\\]+/g, '/<local>').replace(/-Users-[A-Za-z0-9_.-]+/g, '-<local>');
@@ -28,38 +29,37 @@ export function collect(runsRoot, out) {
   const priorNames = new Set(fs.existsSync(priorFile) ? JSON.parse(fs.readFileSync(priorFile, 'utf8')).map((r) => r.trial) : []);
   const clash = fs.readdirSync(runsRoot).filter((n) => priorNames.has(n));
   if (clash.length) throw new Error(`trials already collected: ${clash.join(', ')}`); // before any file is written
+  // All checks run before any file is written (pending writes are applied at the end).
+  const writes = [];
+  const put = (f, text) => writes.push([path.join(out, f), text]);
   for (const name of fs.readdirSync(runsRoot).sort()) {
     const dir = path.join(runsRoot, name);
     const m = /^([A-Z]+)-(.+)-(\d+)$/.exec(name);
     if (!m || !fs.statSync(dir).isDirectory() || m[2] === 'probe') continue;
     const trace = path.join(dir, 'trace.jsonl');
     const has = fs.existsSync(trace) && fs.statSync(trace).size > 0;
-    if (!has) { fs.writeFileSync(path.join(out, `${name}.jsonl.missing`), 'no trace\n'); rows.push({trial: name, missing: true}); continue; }
+    if (!has) { put(`${name}.jsonl.missing`, 'no trace\n'); rows.push({trial: name, missing: true}); continue; }
+    // review L-6: a trace without meta.json (killed after the trace was written) is a failure row, not a crash.
+    if (!fs.existsSync(path.join(dir, 'meta.json'))) { put(`${name}.jsonl.missing`, 'no meta.json\n'); rows.push({trial: name, missing: 'meta.json'}); continue; }
     const clean = scrubSensitive(redact(fs.readFileSync(trace, 'utf8'), dir));
-    fs.writeFileSync(path.join(out, `${name}.jsonl`), clean.text);
+    put(`${name}.jsonl`, clean.text);
     if (conds[m[1]]?.hook) {
       const log = path.join(dir, 'hook.jsonl');
-      fs.writeFileSync(path.join(out, `${name}.hook.jsonl`), fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '');
-    }
-    // review L-6: a trace without meta.json (killed after the trace was written) is a failure row, not a crash.
-    if (!fs.existsSync(path.join(dir, 'meta.json'))) {
-      fs.rmSync(path.join(out, `${name}.jsonl`), {force: true});
-      fs.writeFileSync(path.join(out, `${name}.jsonl.missing`), 'no meta.json\n');
-      rows.push({trial: name, missing: 'meta.json'});
-      continue;
+      put(`${name}.hook.jsonl`, fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '');
     }
     const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
     rows.push({trial: name, model: meta.model, resolvedModel: meta.resolvedModel, claudeVersion: meta.claudeVersion, ascRuntimeVersion: meta.ascRuntimeVersion,
       tarballSha256: meta.tarballSha256, released: meta.released, adopted: meta.adopted, sampleHead: meta.sampleHead, applied: meta.applied, expectHook: meta.expectHook,
-      fixationSha256: meta.fixationSha256, fixedAtCommit: meta.fixedAtCommit, fixationStage: meta.fixationStage,
+      ledgerId: meta.ledgerId ?? null, ledgerSeq: meta.ledgerSeq ?? null, fixationSha256: meta.fixationSha256, fixedAtCommit: meta.fixedAtCommit, fixationStage: meta.fixationStage,
       exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: clean.hits});
   }
-  // review L-e: stages are collected into the same directory; trials.json is extended, never overwritten, and a trial
-  // name that is already recorded is refused.
+  // review L-e: stages are collected into the same directory; trials.json is extended, never overwritten.
   const file = path.join(out, 'trials.json');
   const prior = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : [];
-  const dup = rows.filter((r) => prior.some((q) => q.trial === r.trial)).map((r) => r.trial);
-  if (dup.length) throw new Error(`trials already collected: ${dup.join(', ')}`);
+  // review N-1 (d): one ledger for all stages, each reservation seq once.
+  const lc = ledgerConsistency([...prior, ...rows].filter((r) => !r.missing));
+  if (lc.length) throw new Error(`ledger check failed: ${lc.join('; ')}`);
+  for (const [f, text] of writes) fs.writeFileSync(f, text);
   fs.writeFileSync(file, JSON.stringify([...prior, ...rows], null, 1));
   return rows.length;
 }

@@ -12,7 +12,7 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {parseTrace} from './score.mjs';
 import {loadConditions, NEUTRAL_SUBJECT} from './apply-condition.mjs';
-import {pointerExpectedI, productHookFiredInProbe} from './condition-i.mjs';
+import {pointerExpectedI, pointerHeadI, productHookFiredInProbe} from './condition-i.mjs';
 
 const ALLOWED_TOOLS = new Set(['Read', 'Glob', 'Grep', 'Skill', 'ToolSearch']);
 const MANAGED = ['/Library/Application Support/ClaudeCode/', '/etc/claude-code/'];
@@ -89,7 +89,8 @@ export function checkProbe(i) {
   // review N3: the probe asks for the first and the last line of each instruction source; the pointer is CLAUDE.md's last
   // paragraph (P) or the whole hook context (H), so it appears in the answer only when the condition delivers it.
   const expectPointer = cond.adopt ? pointerExpectedI(cond) : Boolean(cond.pointer || cond.hook === 'usage');
-  add('pointerMatchesCondition', text.includes(i.pointerHead) === expectPointer, {expectPointer});
+  const head = cond.adopt ? pointerHeadI : i.pointerHead;
+  add('pointerMatchesCondition', text.includes(head) === expectPointer, {expectPointer});
   const leaked = i.forbiddenTexts.filter((s) => text.includes(s));
   add('noRepoInstructions', leaked.length === 0, `${leaked.length} repository instruction line(s) found`);
   const ownerLeaks = i.ownerLines.filter((s) => [text, i.debug ?? ''].some((x) => x.includes(s)));

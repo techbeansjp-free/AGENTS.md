@@ -1,8 +1,11 @@
 // Append-only fixation of the plan before model runs (reviews N2, M-1, L-c, L-d). results/fixation.json = {records: [...]}.
-//   init     first record (refused when the file exists).
-//   refix    stage-0 correction (e.g. probe-check must change after the isolation probe): appends a new "stages 0-2"
-//            record, only while the ledger holds no stage-1/2 trial (only probe trials), and only with --reason and
-//            --review (an independent review reference). Later checks and stage 3 compare with this newest base record.
+//   init     first record (refused when the file exists). Takes --ledger: creates the ledger when absent (or accepts an
+//            existing one with no reservation) and records its ledgerId; run-trial refuses any other ledger (review N-1).
+//   refix    stage-0 correction (probe-check must change after the isolation probe): appends a new "stages 0-2" record,
+//            only when the recorded ledger exists, holds at least one probe reservation and no stage-1/2 reservation, and
+//            only with --reason and --review. Only harness/probe-check.mjs may differ from the base record; every other
+//            fixed file (conditions.json incl. budget/model/runs, criteria, gold, scoring) stays byte-identical. run-trial
+//            also refuses when a refix record is later than the first stage-1/2 reservation.
 //   stage3   appends the stage-3 record once. Compared with the newest base record: conditions.json may differ only by an
 //            added conditions.I that satisfies the conditionISchema; release.json only by a filled phase3; the files in
 //            STAGE3_ALLOWED (condition-I specific code) may differ only with --reason and --review per changed file;
@@ -10,7 +13,7 @@
 //   check    compares the current files with the last record.
 // run-trial.mjs refuses a paid run when check fails, when results/fixation.json is not committed and clean, or when the
 // first record's commit is not named in README.md. No model call.
-// Usage: node fixation.mjs init|check <fixation.json>
+// Usage: node fixation.mjs init <fixation.json> --ledger <ledger> | check <fixation.json>
 //        node fixation.mjs refix <fixation.json> --ledger <ledger> --reason <text> --review <ref>
 //        node fixation.mjs stage3 <fixation.json> [--change <file> --reason <text> --review <ref>]...
 import fs from 'node:fs';
@@ -18,12 +21,25 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import * as ledgerOps from './ledger.mjs';
 
 const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const FIXED = ['cases.json', 'conditions.json', 'decision-criteria.md', 'release.json',
   ...['apply-condition', 'collect', 'condition-i', 'fixation', 'guard', 'install-asc', 'ledger', 'make-fixture', 'markers', 'probe-check', 'run-trial', 'score'].map((n) => `harness/${n}.mjs`)];
 // Files stage 3 may change, each with a reason and an independent review (condition-I specific only).
 export const STAGE3_ALLOWED = ['harness/condition-i.mjs'];
+// The only fixed file a stage-0 correction may change (review N-1 (c)).
+export const REFIX_ALLOWED = ['harness/probe-check.mjs'];
+
+// Static shape of condition-i.mjs (review L-1): exported names, import lines, and top-level lines that are neither
+// imports, exports, comments nor closing brackets (top-level side effects). Stage 3 keeps exports and imports and allows
+// no top-level side effects.
+export function moduleShape(text) {
+  const top = text.split('\n').filter((l) => /^\S/.test(l));
+  return {exports: top.flatMap((l) => /^export\s+(?:const|function|let)\s+([A-Za-z0-9_$]+)/.exec(l)?.[1] ?? []).sort(),
+    imports: top.filter((l) => l.startsWith('import ')).sort(),
+    sideEffects: top.filter((l) => !/^(import |export |\/\/|[}\])])/.test(l))};
+}
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const read = (f, root = ev) => fs.readFileSync(path.join(root, f));
 
@@ -66,17 +82,36 @@ export function stage3Violations(base, root = ev, changes = {}) {
   if (inv.releaseWithoutPhase3 !== base.invariants.releaseWithoutPhase3) v.push('release.json changed beyond filling phase3');
   v.push(...conditionIProblems(JSON.parse(read('conditions.json', root)).conditions.I));
   if (!JSON.parse(read('release.json', root)).phase3?.assetSha256) v.push('release.json phase3 is not filled');
+  if (base.conditionIShape) {
+    const now = moduleShape(read('harness/condition-i.mjs', root).toString());
+    if (JSON.stringify(now.exports) !== JSON.stringify(base.conditionIShape.exports)) v.push('condition-i.mjs exports changed');
+    if (JSON.stringify(now.imports) !== JSON.stringify(base.conditionIShape.imports)) v.push('condition-i.mjs imports changed');
+    if (now.sideEffects.length) v.push('condition-i.mjs has top-level statements');
+  }
+  return v;
+}
+
+// Stage-0 correction admissibility (review N-1): the recorded ledger, probe reservations only, probe-check.mjs only.
+export function refixViolations(base, ledgerFile, root = ev) {
+  const v = [];
+  if (!ledgerFile || !fs.existsSync(ledgerFile)) return ['the ledger file does not exist'];
+  if (ledgerOps.ledgerId(ledgerFile) !== base.ledgerId) v.push('the ledger is not the one recorded at init');
+  const res = ledgerOps.reservations(ledgerFile);
+  if (!res.some((e) => ledgerOps.isProbe(e.trial))) v.push('the ledger has no probe reservation');
+  const started = res.filter((e) => !ledgerOps.isProbe(e.trial)).map((e) => e.trial);
+  if (started.length) v.push(`stage-1/2 trials exist in the ledger (${started.slice(0, 3).join(', ')})`);
+  const now = digests(root);
+  for (const f of FIXED) if (base.files[f] !== now[f] && !REFIX_ALLOWED.includes(f)) v.push(`${f} changed (refix may change only ${REFIX_ALLOWED.join(', ')})`);
   return v;
 }
 
 export const lastRecord = (fx) => fx.records.at(-1);
 export const baseRecord = (fx) => fx.records.filter((r) => r.stage === 'stages 0-2').at(-1);
 
-// Stage-0 re-fixation is allowed only before any stage-1/2 trial is in the ledger (probe trials only).
-export function nonProbeTrials(ledgerFile) {
-  if (!fs.existsSync(ledgerFile)) return [];
-  return fs.readFileSync(ledgerFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
-    .filter((e) => typeof e.reservedUsd === 'number' && !/-probe-\d+$/.test(e.trial)).map((e) => e.trial);
+// run-trial: a refix record must be older than the first stage-1/2 reservation of the ledger.
+export function refixAfterMeasurement(fx, ledgerFile) {
+  const first = ledgerOps.reservations(ledgerFile).find((e) => !ledgerOps.isProbe(e.trial));
+  return first ? fx.records.filter((r) => r.refix && r.at > first.at).map((r) => r.at) : [];
 }
 
 function main() {
@@ -94,7 +129,13 @@ function main() {
   const save = (fx) => fs.writeFileSync(file, JSON.stringify(fx, null, 1) + '\n');
   if (action === 'init') {
     if (fs.existsSync(file)) fail(`${file} exists; records are append-only`);
-    const r = record('stages 0-2');
+    const ledgerFile = opt('--ledger');
+    if (!ledgerFile) fail('init needs --ledger (outside the repository)');
+    const lf = path.resolve(ledgerFile);
+    if (!fs.existsSync(lf)) ledgerOps.create(lf);
+    if (!ledgerOps.ledgerId(lf)) fail('the ledger has no ledgerId line');
+    if (ledgerOps.reservations(lf).length) fail('the ledger already holds reservations; init is pre-measurement only');
+    const r = record('stages 0-2', {ledgerId: ledgerOps.ledgerId(lf), conditionIShape: moduleShape(read('harness/condition-i.mjs').toString())});
     save({schema: 'asc-1814-fixation/v3', note: 'Append-only. run-trial.mjs --run checks the last record. See fixation.mjs for refix and stage3.', records: [r]});
     console.log(JSON.stringify({stage: r.stage, fixedAtCommit: r.fixedAtCommit, files: FIXED.length}));
   } else if (action === 'refix') {
@@ -102,9 +143,10 @@ function main() {
     const ledgerFile = opt('--ledger'), reason = opt('--reason'), review = opt('--review');
     if (!ledgerFile || !reason || !review) fail('refix needs --ledger, --reason and --review');
     if (fx.records.some((r) => r.stage === 'stage 3')) fail('stage 3 has been fixed; no refix');
-    const started = nonProbeTrials(path.resolve(ledgerFile));
-    if (started.length) fail(`stage-1/2 trials exist in the ledger (${started.slice(0, 3).join(', ')}…); refix is only a pre-measurement correction`);
-    fx.records.push(record('stages 0-2', {refix: {reason, review, changed: differences(baseRecord(fx))}}));
+    const v = refixViolations(baseRecord(fx), path.resolve(ledgerFile));
+    if (v.length) fail(`${v.join('; ')}; refix is only a pre-measurement correction of probe-check.mjs`);
+    const base = baseRecord(fx);
+    fx.records.push(record('stages 0-2', {ledgerId: base.ledgerId, conditionIShape: base.conditionIShape, refix: {reason, review, changed: differences(base)}}));
     save(fx);
     console.log(JSON.stringify({stage: 'stages 0-2 (refix)', records: fx.records.length}));
   } else if (action === 'stage3') {
@@ -115,7 +157,7 @@ function main() {
     const changes = Object.fromEntries(files.map((f, k) => [f, {reason: reasons[k], review: reviews[k]}]));
     const v = stage3Violations(baseRecord(fx), ev, changes);
     if (v.length) fail(v.join('; '));
-    fx.records.push(record('stage 3', {changes: Object.fromEntries(Object.entries(changes).filter(([f]) => differences(baseRecord(fx)).includes(f)))}));
+    fx.records.push(record('stage 3', {ledgerId: baseRecord(fx).ledgerId, changes: Object.fromEntries(Object.entries(changes).filter(([f]) => differences(baseRecord(fx)).includes(f)))}));
     save(fx);
     console.log(JSON.stringify({stage: 'stage 3', records: fx.records.length}));
   } else if (action === 'check') {

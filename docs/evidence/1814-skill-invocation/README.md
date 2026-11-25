@@ -16,7 +16,7 @@
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| 採点器・隔離の判定器・配置の検査・台帳・固定・中立のcommit・導入の照合・記録の取り出しの試験（合成の記録） | 35件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt)（command・HEAD・Nodeの版・終了code付き） |
+| 採点器・隔離の判定器・配置の検査・台帳・固定・中立のcommit・導入の照合・記録の取り出しの試験（合成の記録） | 45件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt)（command・HEAD・Nodeの版・終了code付き） |
 | 全体のdry run | 合格。採点器のSkillの一覧がreleaseの配布一覧と一致、全条件のcommitの件名が同じ（中立の1件）。導入（16件の入口がすべてあり、`distribution.json`の記録と一致し、本文へのlinkだけの薄い入口で、本文がpackageと一致）、goldのSkill本文とreferenceがreleaseにある、依頼が名指すfileがある、sample projectと条件ごとの複製の配置が合格、5条件の適用（`CLAUDE.md`の文例の有無、hookの出力が文例と一致・終了コード0・発火のlog）、試行の計画116試行・計画の費用25.04 USD | [results/dry-run.json](results/dry-run.json) |
 | 起動の経路の拒否（反例） | 許可の環境変数が無い、台帳・上限が無い、`results/fixation.json`が無い、固定したfileが記録と違う、`--model`の指定、repositoryと実HOMEの下、releaseに無いdigest、tarballとdigestの不一致、dry runの代用品で作ったsample projectでの有料の試行を、それぞれ拒否した。`fixation.mjs check`の合格も記録した | [results/refusals.txt](results/refusals.txt) |
 
@@ -100,6 +100,19 @@ Medium 1件・Low 6件（Highなし）。すべて是正した。
 
 ownerの判断（2回目、2026-11-25）：認証、目印file、toolの制限の3つを了承。上の表と[EVAL_PLAN.md](EVAL_PLAN.md)に反映した。
 
+## 4回目のレビュー（HEAD `d3232bfe`）への対応
+
+Medium 1件・Low 5件（Highなし）。すべて是正した。
+
+| 指摘 | 是正 |
+| --- | --- |
+| N-1 refixが存在しない`--ledger`で段階1・2の後にも使え、固定したfileを何でも変えられる。`run-trial`の`--ledger`の差替えで累計を戻せる | (b) refixは、記録した台帳idと同じ台帳fileが存在し、probeの予約が1件以上、段階1・2の予約が0件の場合だけ。(c) refixで変えてよいのは`probe-check.mjs`だけ（`conditions.json`の`budget`・`model`・`runs`、判定の規則、gold、採点はbytesで同じ）。(d) 台帳の1行目に一意なidを書き、`fixation.json`の`init`で記録する。`run-trial`は別の台帳を拒否し、試行の記録に台帳idと予約の番号を残し、`collect`・`score`は違うidや重なった番号を拒否する。(a) refixの記録が最初の段階1・2の予約より後なら`run-trial`は起動しない |
+| L-1 `condition-i.mjs`の変更で採点を変えうる | exportの名前・importの行が最初の記録と同じで、最上位の処理が無いことを`stage3`で確かめる。独立レビューで確かめる点をEVAL_PLANに書いた |
+| L-2 条件Iの文例の頭がprobe-checkにある | `condition-i.mjs`の`pointerHeadI`へ移した |
+| L-3 条件Iで`hookFired`がfalseと数えられる | 製品のhookではtraceの証拠から取る |
+| L-4 READMEの試験の件数 | 下の「実施したこと」を最新の件数に直した |
+| L-5 強制終了で試行のHOME・設定が残る | lockが残ったときに手で消す手順をEVAL_PLANに書いた |
+
 ## 費用の見込み
 
 計画の単価（#1783・#1801の実績から1試行0.22 USD、隔離の確認1回0.1 USD）で、段階0〜3の合計116試行・25.04 USD（上限30 USD、起動を止める線は余裕を引いた29 USD）。各条件2回の反復にしたのは、3回では段階3（改善の後）が上限を超えるため。段階ごとに実績の単価で残りを見積もり、上限を超える見込みなら次の段階へ進まずに報告する。
@@ -137,7 +150,7 @@ ownerの判断（2回目、2026-11-25）：認証、目印file、toolの制限�
 | [harness/probe-check.mjs](harness/probe-check.mjs)・[harness/markers.mjs](harness/markers.mjs) | 隔離の確認の判定と目印file |
 | [harness/collect.mjs](harness/collect.mjs)・[harness/score.mjs](harness/score.mjs) | 記録の取り出し（local pathと認証情報の形の文字列の置換）と採点・判定 |
 | [harness/condition-i.mjs](harness/condition-i.mjs) | 条件Iに固有の部分（段階3で理由と独立レビュー付きで変えてよい唯一のfile） |
-| [harness/ledger.mjs](harness/ledger.mjs)・[harness/fixation.mjs](harness/fixation.mjs) | 全段階の費用の台帳（一意なid、同じ名前の拒否）と順次実行のlock、追記だけの固定（段階3の制約付き）と照合 |
+| [harness/ledger.mjs](harness/ledger.mjs)・[harness/fixation.mjs](harness/fixation.mjs) | 全段階の費用の台帳（台帳id、予約ごとのidと番号、同じ名前の拒否）と順次実行のlock、追記だけの固定（refixと段階3の制約付き）と照合 |
 | [harness/dry-run.mjs](harness/dry-run.mjs) | モデルを呼ばない全体の確認 |
 | [harness/score.test.mjs](harness/score.test.mjs)・[harness/probe.test.mjs](harness/probe.test.mjs) | 合成の記録による試験 |
 | [results/](results/) | dry run・試験・拒否の反例の結果、測定の前の固定（`fixation.json`） |

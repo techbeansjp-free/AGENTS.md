@@ -15,7 +15,7 @@
 | --- | --- |
 | `src/project-assets.mjs`の`projectAssets` | 計画（`--apply`なし）の結果に`readTrigger`を加える。登録Hostに`.claude`があり、まだ採用されていなければ、選択肢ごとに対象path・動作（作成／追記）・現在のsha256（無ければ`absent`）・unified diffを返す。既定の選択肢（測定で決まったもの）を`default`で示す。既存の`changes`・`conflicts`の意味は変えない |
 | 同上の適用 | `--apply`に`--adopt-read-trigger <id>@<表示されたsha256>`を加えたときだけ、その選択肢を適用する。sha256が現在のfileと違えば全体を止める（計画と適用の間の変更の検出。既存の`Asset changed after planning`と同じ考え方）。配布資産の適用と同じtransaction（一時ディレクトリでの差分の作成、`git apply`、失敗時の復元）に載せる |
-| `CLAUDE.md`の選択肢 | 末尾に区切り付きの塊（`<!-- asc:read-trigger v1 -->`〜`<!-- /asc:read-trigger -->`）で文例を追記する。fileが無ければ塊だけのfileを作る。塊が既にあれば提案しない。最後の行は閉じの区切りになるので、測定の条件Iでは文例が回答のどこかに現れるかで確かめる（#1814のprobe-checkの条件I。interfaceが変わった場合は`harness/condition-i.mjs`だけを直す） |
+| `CLAUDE.md`の選択肢 | 末尾に区切り付きの塊（`<!-- asc:read-trigger v1 -->`〜`<!-- /asc:read-trigger -->`）で文例を追記する。fileが無ければ塊だけのfileを作る。塊が既にあれば提案しない。最後の行は閉じの区切りになるので、測定の条件Iでは文例が回答のどこかに現れるかで確かめる（#1814のprobe-checkの条件I。interfaceや文例の頭の文面が変わった場合は`harness/condition-i.mjs`だけを直す） |
 | `.claude/settings.json`の選択肢 | JSONとして読み、`hooks.SessionStart`の配列へ1件を足す。他のkeyとhookは保持する。元のfileを同じ書式（2空白のindent）で書き直すと元のbytesに戻らない場合（コメント・別の書式）は、自動で適用せず手で貼る断片を示す。同じcommandの登録が既にあれば提案しない |
 | hookのcommand | `node "$CLAUDE_PROJECT_DIR/.agent-skill-chain/bin/asc.mjs" read-trigger --hook`。新しい`src/read-trigger.mjs`（`src/resume-context.mjs`と同じ形）が、同梱本体の`v05/USAGE.md`の文例を`additionalContext`として返す。文例の正本はUSAGEの1か所のまま（複製しない）。版の更新で文面は同梱本体とともに変わり、利用者の`settings.json`は変わらない。読取りだけで、networkと書込みは無い。失敗しても終了コード0でsessionを止めない |
 | `bin/asc-v05.mjs` | `project-assets`の引数に`--adopt-read-trigger`を加え、`read-trigger --hook`を加える。help文を直す |

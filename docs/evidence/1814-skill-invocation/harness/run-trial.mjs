@@ -29,7 +29,7 @@ import {fileURLToPath} from 'node:url';
 import {applyCondition, loadConditions} from './apply-condition.mjs';
 import {assertPlacement} from './guard.mjs';
 import * as ledgerOps from './ledger.mjs';
-import {differences, lastRecord} from './fixation.mjs';
+import {differences, lastRecord, refixAfterMeasurement} from './fixation.mjs';
 import {releaseDigests, gitEnv} from './make-fixture.mjs';
 import crypto from 'node:crypto';
 
@@ -152,6 +152,11 @@ function main() {
   const diff = differences(fixation);
   if (diff.length) fail(`fixed files differ from results/fixation.json: ${diff.join(', ')}`);
   for (const p of fixationFileProblems(fx)) fail(p);
+  // review N-1: only the ledger recorded at init (a new ledger would reset the cumulative total).
+  if (!fs.existsSync(ledger)) fail('the ledger file does not exist (create it with fixation.mjs init --ledger)');
+  if (ledgerOps.ledgerId(ledger) !== fx.records[0].ledgerId) fail('the ledger is not the one recorded in results/fixation.json');
+  const late = refixAfterMeasurement(fx, ledger);
+  if (late.length) fail(`a refix record (${late.join(', ')}) is later than the first stage-1/2 reservation`);
   const credential = process.env.CLAUDE_CODE_OAUTH_TOKEN ? 'CLAUDE_CODE_OAUTH_TOKEN' : process.env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY' : null;
   if (!credential) fail('no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in the environment');
   if (fs.existsSync(dir)) fail(`exists: ${dir}`);
@@ -191,11 +196,11 @@ function main() {
     const init = events.find((e) => e?.type === 'system' && e.subtype === 'init') ?? null;
     const meta = {...plan, claudeVersion: version, resolvedModel: init?.model ?? null, sampleHead, ascRuntimeVersion: install?.install?.runtimeVersion ?? null,
       tarballSha256: install?.install?.tarballSha256 ?? null, released: install?.released ?? null, adopted: install?.install?.adopted ?? null, applied, expectHook: conds.conditions[cond].hook ?? null,
-      fixationSha256: fileSha(fixationFile), fixedAtCommit: fixation.fixedAtCommit, fixationStage: fixation.stage,
+      ledgerId: fx.records[0].ledgerId, ledgerSeq: reservation.seq, fixationSha256: fileSha(fixationFile), fixedAtCommit: fixation.fixedAtCommit, fixationStage: fixation.stage,
       credentialKind: credential, exit: r.status, signal: r.signal, error: r.error ? String(r.error) : null, wallMs: Date.now() - t0, costUsd: last?.total_cost_usd ?? null, budget};
     meta.credentialInChildFiles = filesContaining(home, secret) + filesContaining(config, secret);
     fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 1));
-    ledgerOps.settle(ledger, reservation, name, meta.costUsd);
+    ledgerOps.settle(ledger, reservation.id, name, meta.costUsd);
     console.log(JSON.stringify({trial: name, exit: r.status, costUsd: meta.costUsd, resolvedModel: meta.resolvedModel}));
   } finally {
     fs.rmSync(home, {recursive: true, force: true}); fs.rmSync(config, {recursive: true, force: true});

@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {productHookFiredInTrial} from './condition-i.mjs';
+import {ledgerConsistency} from './ledger.mjs';
 
 export const ASC_SKILLS = ['asc', 'contract-enforcement', 'decision-ownership', 'engineering-judgment', 'estimate-and-scope', 'execution-recovery', 'migration-assurance', 'project-foundation', 'research-to-implementation', 'review-and-remediation', 'security-evidence', 'subagent-model-selection', 'tracker-issue-writing', 'user-journey-acceptance', 'verification-optimization', 'work-coordination'];
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -69,6 +70,7 @@ export function scoreRun(spec, k, t, hookLines = null, {expectHook = false} = {}
   // review L6: in a hook condition, a trial whose hook did not fire did not receive the condition.
   // The product hook (condition I) does not write the fixture log; its firing is taken from SessionStart hook events.
   const fired = expectHook === 'product' ? productHookFiredInTrial(t.hookEvents) : Boolean(hookLines && hookLines.length > 0);
+  if (expectHook === 'product') row.hookFired = fired; // review L-3: the fixture log is empty by design
   if (expectHook && !fired) return {...row, failure: 'hook did not fire'};
   const sub = String(t.result.subtype ?? '');
   // A budget stop is a completed observation of what was read; any other error is a failure.
@@ -178,6 +180,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const pair = take('--judge', 2);
   const [casesFile, dir, ...conds] = args;
   const spec = JSON.parse(fs.readFileSync(casesFile, 'utf8'));
+  // review N-1 (d): refuse traces collected from more than one ledger or with a repeated ledger seq.
+  const trialsFile = path.join(dir, 'trials.json');
+  if (!fs.existsSync(trialsFile)) throw new Error('trials.json (from collect.mjs) is missing');
+  const lc = ledgerConsistency(JSON.parse(fs.readFileSync(trialsFile, 'utf8')).filter((r) => !r.missing));
+  if (lc.length) throw new Error(`ledger check failed: ${lc.join('; ')}`);
   const runs = scoreDir(spec, dir, conds);
   if (out) fs.writeFileSync(out, JSON.stringify(runs, null, 1));
   const sums = Object.fromEntries(conds.map((c) => [c, summarize(spec, runs, c)]));
