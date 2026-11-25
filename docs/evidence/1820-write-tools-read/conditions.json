@@ -1,0 +1,48 @@
+{
+ "schema": "asc-1820-conditions/v1",
+ "note": "Fixed before any model run (analysis-plan.md). Stage 1 of #1820 (owner decision 2026-11-26): 3 tools levels x 2 prompt levels x 2 fixtures = 12 cells, 4 reps each, first two turns only; plus the three #1814 negative prompts in the cells RSA and WSA, 2 reps each. Every cell installs the same release (release.json) with the documented user steps and adopts the read trigger (#1814 condition I). The cells differ only in the launch flags of their tools level, the prompt, and the fixture.",
+ "model": "sonnet",
+ "modelNote": "Same as #1814/#1815/#1817 (the `sonnet` alias). The resolved model id (init event) is recorded per trial.",
+ "runs": 4,
+ "negativeRuns": 2,
+ "maxTurns": 2,
+ "probeMaxTurns": 12,
+ "maxTurnsNote": "Every measurement trial runs with --max-turns 2 (the decision to read ASC is made in the first assistant message, Issue #1820 cause analysis). The isolation probe needs more turns for its steps; that is its only flag difference from the trials of its tools level.",
+ "budget": {"ownerCapUsd": 25, "capUsd": 6.5, "safetyMarginUsd": 0.5, "perTrialUsd": 0.3,
+  "note": "Owner cap 25 USD for stages 1 and 2 together (Issue #1820 owner decision 2026-11-26). Stage 1 stops at about 6 USD: run-trial.mjs refuses a trial when the ledger total + perTrialUsd exceeds capUsd - safetyMarginUsd = 6 USD. perTrialUsd is the --max-budget-usd of every trial and probe and its ledger reservation: #1817 measured 0.085 USD per full trial on average and 0.141 USD at most (112 trials, results/ledger.jsonl there); a two-turn trial costs less, and 0.3 is about twice the #1817 maximum. Stage 2 must count this ledger's total against the 25 USD cap."},
+ "adopt": "claude-md",
+ "toolLevels": {
+  "R": {"label": "読取りだけ（#1814・#1817と同じ）", "tools": "Read,Glob,Grep,Skill", "disallowed": "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task", "permissionMode": null, "initPermissionMode": "default"},
+  "W": {"label": "書込みあり（#1815と同じtool。browser MCPなし）", "tools": "Read,Write,Edit,Glob,Grep,Skill", "disallowed": "Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task", "permissionMode": "acceptEdits", "initPermissionMode": "acceptEdits"},
+  "X": {"label": "書込み＋コマンド実行（Bashは隔離設定のsandboxの中だけ）", "tools": "Read,Write,Edit,Glob,Grep,Skill,Bash", "disallowed": "NotebookEdit,WebFetch,WebSearch,Agent,Task", "permissionMode": "acceptEdits", "initPermissionMode": "acceptEdits"}
+ },
+ "settingsNote": "Every level gets the same --settings file (run-trial.mjs isolationSettings): permissions.blockReadsOutsideWorkingDirectories, and a sandbox for Bash (enabled, failIfUnavailable, no unsandboxed escape, auto-allow of sandboxed commands, no network domain, denyRead of /Users, the runs root, the fixture and the ledger directory with the trial's work/ re-allowed, denyWrite of the fixture and the ledger directory). Only X has Bash, so the sandbox acts only there; the same file in all levels keeps the levels apart only by their tools and permission mode.",
+ "promptLevels": {
+  "S": {"label": "短い形（#1814・#1817のasc-3）"},
+  "G": {"label": "#1815の形（#1807 gen-prompt.txtの最初の段落。browserの注意書きは除く）"}
+ },
+ "fixtures": {
+  "A": {"label": "アプリのrepo（#1814・#1817と同じ合成のTypeScript/Express repo。CLAUDE.mdにプロジェクトの説明1行＋案内文）", "kind": "app",
+   "baseClaudeMd": "# ユーザー管理API\n\nTypeScript/Expressのユーザー管理API。`src/`にAPI、`public/`に管理画面、`docs/`に要件メモがある。\n"},
+  "D": {"label": "画面の依頼のフォルダ（#1815と同じ形。ui03のBRIEF.md・data.json・FONTS.md・空のout/。CLAUDE.mdは案内文だけ）", "kind": "design",
+   "baseClaudeMd": null,
+   "files": {
+    "BRIEF.md": {"from": "1804-design-judgment/cases/ui03-dashboard/BRIEF.md", "sha256": "d7523652a9dcf1070e910ad3a73ca2c51f00bb957bf00a8d6b791788bfed5a1b"},
+    "data.json": {"from": "1804-design-judgment/cases/ui03-dashboard/data.json", "sha256": "8bfc52909e6107759f7388b4b66e407cf5cb124cb6347ba92867b21cbd6d7685"},
+    "FONTS.md": {"from": "1807-design-eval-browser/cases/FONTS.md", "sha256": "5bbf686e1f397632ec853c3bc4f85139a8df4bbdd110414dbc96fd6e7d887cbb"}
+   },
+   "emptyDirs": ["out"]}
+ },
+ "cells": {
+  "RSA": {"tools": "R", "prompt": "S", "fixture": "A"}, "RSD": {"tools": "R", "prompt": "S", "fixture": "D"},
+  "RGA": {"tools": "R", "prompt": "G", "fixture": "A"}, "RGD": {"tools": "R", "prompt": "G", "fixture": "D"},
+  "WSA": {"tools": "W", "prompt": "S", "fixture": "A"}, "WSD": {"tools": "W", "prompt": "S", "fixture": "D"},
+  "WGA": {"tools": "W", "prompt": "G", "fixture": "A"}, "WGD": {"tools": "W", "prompt": "G", "fixture": "D"},
+  "XSA": {"tools": "X", "prompt": "S", "fixture": "A"}, "XSD": {"tools": "X", "prompt": "S", "fixture": "D"},
+  "XGA": {"tools": "X", "prompt": "G", "fixture": "A"}, "XGD": {"tools": "X", "prompt": "G", "fixture": "D"}
+ },
+ "negativeCells": ["RSA", "WSA"],
+ "negativeNote": "The negative cases replace the prompt; they use the cell's tools level and fixture A. The prompt level does not apply to them.",
+ "probeCells": ["RSA", "WSA", "XSA"],
+ "probeNote": "One isolation probe per tools level (the tools change the launch), on fixture A. probe-check.mjs judges each against its level; compare checks that they differ only in tools and permission mode."
+}

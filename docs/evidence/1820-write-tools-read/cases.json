@@ -1,0 +1,38 @@
+{
+ "schema": "asc-1820-cases/v1",
+ "note": "Fixed before any model run (analysis-plan.md). Stage 1 of #1820 has one applicable case (brief: the request is in a BRIEF file of the sample project) whose prompt depends on the cell's prompt level and fixture, and the three non-applicable cases neg-1..3 copied unchanged from docs/evidence/1814-skill-invocation/cases.json (prompts, markers). Only the first two assistant messages are observed (conditions.json maxTurns).",
+ "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches.",
+ "entryPattern": "^\\.claude/skills/<skill>/SKILL\\.md$",
+ "bodyPattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
+ "readmePattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/README\\.md$",
+ "promptSources": {
+  "S": {"from": "1817-skill-application/cases.json asc-3", "text": "docs/BRIEF.md の依頼に対応して。", "adapt": "fixture D has the BRIEF at the project root: docs/BRIEF.md -> BRIEF.md"},
+  "G": {"from": "1807-design-eval-browser/env/gen-prompt.txt", "part": "the first paragraph (up to the first blank line); the browser tool notes after it are left out because stage 1 has no browser MCP server", "adapt": "fixture A has the BRIEF under docs/: BRIEF.md -> docs/BRIEF.md"}
+ },
+ "cases": [
+  {"id": "brief", "kind": "positive", "expect": "asc", "prompts": {
+   "SA": "docs/BRIEF.md の依頼に対応して。",
+   "SD": "BRIEF.md の依頼に対応して。",
+   "GA": "このフォルダの docs/BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "GD": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。"
+  }, "why": "変更を伴う依頼で、依頼の中身がfileにある（#1814・#1817のasc-3、#1815の生成）。prompts の鍵は promptLevel + fixture（conditions.json cells）"},
+  {"id": "neg-1", "origin": "1783", "kind": "negative", "expect": null, "prompt": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。", "references": [], "answerAll": [], "answerAny": ["search"]},
+  {"id": "neg-2", "origin": "1783", "kind": "negative", "expect": null, "prompt": "HTTPのPUTとPATCHの違いを簡単に教えて。", "references": [], "answerAll": ["PATCH"], "answerAny": []},
+  {"id": "neg-3", "origin": "new", "kind": "negative", "expect": null, "prompt": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。", "references": [], "answerAll": ["@"], "answerAny": [], "why": "コードに関する質問だが変更を伴わない。開発工程を追加しないことを見る"}
+ ],
+ "scoring": {
+  "messages": "assistant events of the stream are grouped by message.id in order of appearance; message 1 and message 2 are the first two model turns (the run is stopped after two by --max-turns)",
+  "issuedRead": "a Read tool_use in message 1 or 2 whose tool_result is not is_error; a tool_use without a tool_result (stopped after the turn) counts as issued and is flagged resultMissing",
+  "bodyRead2": "primary metric: the asc body .agent-skill-chain/skills/asc/SKILL.md issued-Read in message 1 or 2",
+  "bodyRead1": "the same in message 1 only",
+  "skillAsc1": "message 1 calls the Skill tool with asc (or <plugin>:asc)",
+  "entryRead1": "message 1 Reads the thin entry .claude/skills/asc/SKILL.md",
+  "readmeRead1": "message 1 Reads the purpose-Skill list .agent-skill-chain/skills/README.md",
+  "reach2": "bodyRead2 or Skill(asc) or the asc entry in message 1 or 2",
+  "firstTools": "message 1 tool calls as name and target (project-relative path, Skill name or pattern), recorded, not scored",
+  "overapplication": "negative case with any ASC Skill call or any ASC entry or body Read in message 1 or 2",
+  "condition": "a trial whose init event shows other tools or another permission mode than its cell's tools level did not receive the condition and is a failure",
+  "stopped": "the max-turns or budget stop is a completed observation, not a failure",
+  "failure": "process error, API error, missing trace or init/result event, or the condition mismatch above; counted separately"
+ }
+}

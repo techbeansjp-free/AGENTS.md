@@ -1,0 +1,10 @@
+{
+ "schema": "asc-1820-run-order/v1",
+ "note": "Fixed before any model run. Reps are outermost (1..conditions.json runs). Within a rep the entries of perRep run in this order; an entry <cell>:<case> of a negative case runs only in reps 1..negativeRuns. The cells are grouped by prompt level and fixture with the three tools levels next to each other, so a cap stop leaves the tools levels of a group at most one trial apart; the negative trials are interleaved, never adjacent and never last. harness/run-all.mjs runs only this order; run-trial.mjs refuses a planned trial that is not the next unreserved one and a replacement before every planned trial is reserved.",
+ "perRep": [
+  "RSA:brief", "WSA:brief", "XSA:brief", "RSA:neg-1",
+  "RGD:brief", "WSA:neg-1", "WGD:brief", "XGD:brief", "RSA:neg-2",
+  "RSD:brief", "WSA:neg-2", "WSD:brief", "XSD:brief", "RSA:neg-3",
+  "RGA:brief", "WSA:neg-3", "WGA:brief", "XGA:brief"
+ ]
+}

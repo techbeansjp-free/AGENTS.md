@@ -1,0 +1,6 @@
+{
+ "ownerConfirmed": null,
+ "at": null,
+ "reference": null,
+ "note": "Placeholder. The coordinator records here the owner's approval of the isolation-probe marker files (one in the real HOME, one in the repository's git-ignored .agent-skill-chain/local/) for #1820 and commits it. Until then markers.mjs create and every probe run are refused (markers.mjs approvalProblems)."
+}
