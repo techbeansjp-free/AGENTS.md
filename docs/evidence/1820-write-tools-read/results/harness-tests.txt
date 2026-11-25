@@ -1,7 +1,7 @@
-# #1820 harness tests (HEAD cc786927, clean tree; fixed files equal the first fixation record 85a0fe81; v20.12.2)
+# #1820 harness tests (HEAD 88ff9af5, clean tree; fixed files equal the first fixation record c7478b7d; v20.12.2)
 
 $ node docs/evidence/1820-write-tools-read/harness/fixation.mjs check docs/evidence/1820-write-tools-read/results/fixation.json
-{"ok":true,"stage":"stage 1","records":1,"firstFixedAtCommit":"85a0fe81cd083fc7af4606eb1dc444e34a1fb1a9","fixedAtCommit":"85a0fe81cd083fc7af4606eb1dc444e34a1fb1a9","differs":[]}
+{"ok":true,"stage":"stage 1","records":1,"firstFixedAtCommit":"c7478b7d47ee541d68cbd4accfaa854d61b540e1","fixedAtCommit":"c7478b7d47ee541d68cbd4accfaa854d61b540e1","differs":[]}
 
 $ node --test docs/evidence/1820-write-tools-read/harness/harness.test.mjs
 ok 1 - files copied from \#1817 are byte-identical; the fixed list names every plan file and harness module
@@ -15,25 +15,26 @@ ok 8 - order gate: only the next planned trial; probes only in probe cells and b
 ok 9 - score: body read in message 1, or only in message 2; first tools recorded; max-turns stop is not a failure
 ok 10 - score: several stream events of one message are one message; a third message is not observed
 ok 11 - score: a refused Read does not count; a Read without result (stopped) counts and is flagged; Skill(asc), entry and README in message 1
-ok 12 - score (review M1): a Bash read of the body counts in bodyRead2 and in bodyReadBash2; a failed Bash does not; first tools keep the Bash path
+ok 12 - score (review M1, Low-1): a Bash content read of the body counts in bodyRead2 and in bodyReadBash2; an existence check or a failed Bash does not; first tools keep the Bash path
 ok 13 - score: other tools or permission mode than the cell is a failure; an API error is a failure
 ok 14 - score: negative case overapplication counts any ASC Skill, entry or body in the first two messages
 ok 15 - replacements: planned reps per case (brief 4, negatives 2); the k-th failure is replaced by planned+k
 ok 16 - main effects are differences of unweighted means of cell rates; a cell without a valid trial is not analysed
 ok 17 - summary per cell and completion: complete only with every planned trial; cap-reached needs no late probe
 ok 18 - probe approval: the committed placeholder refuses; a filled but uncommitted record refuses
-ok 19 - probe gate (review L2): the comparison must pass, cover every probe cell and be bound to the latest settled probes in the ledger
-ok 20 - drop of X (review L1): pre-written 8-cell plan, only after XSA-probe-2 failed, bound comparison, before any planned trial
-ok 21 - failure rule (review L3): one failed replacement in a cell (1/4 = 25%) is analysed, two are not; negatives do not count
-ok 22 - fixture D: source files must have the pinned sha256; the install record must be the cell's fixture
-ok 23 - probe-check R: the level's tools and permission mode pass; any other set fails; Glob and Grep outside must be refused
-ok 24 - probe-check W: the Writes into the trial directory and the repository must be attempted and refused, and no sentinel file may exist
-ok 25 - probe-check X: every step attempted with a result; refusals need positive evidence; work/ readable, git recorded
-ok 26 - probe compare: tools may differ between the levels, every other session fact must not
-ok 27 - collect: a row records the cell, its factors and the init facts; a directory without a reservation is refused
-ok 28 - replacement plan: a failed negative trial (rep 1) is replaced by rep 3 after every planned trial
-# tests 28
-# pass 28
+ok 19 - probe gate (review L2, Low-2): the comparison must pass, cover every probe cell, be bound to the latest settled probes and agree with the probes recomputed from the runs root
+ok 20 - probe gate (review Low-2): a tampered pass true with a failing trace is refused; tokens are rechecked by their sha256; host checks are taken as recorded
+ok 21 - drop of X (review L1): pre-written 8-cell plan, only after XSA-probe-2 failed, bound comparison, before any planned trial
+ok 22 - failure rule (review L3): one failed replacement in a cell (1/4 = 25%) is analysed, two are not; negatives do not count
+ok 23 - fixture D: source files must have the pinned sha256; the install record must be the cell's fixture
+ok 24 - probe-check R: the level's tools and permission mode pass; any other set fails; Glob and Grep outside must be refused
+ok 25 - probe-check W: the Writes into the trial directory and the repository must be attempted and refused, and no sentinel file may exist
+ok 26 - probe-check X: every step attempted with a result; refusals need positive evidence; work/ readable, git recorded
+ok 27 - probe compare: tools may differ between the levels, every other session fact must not
+ok 28 - collect: a row records the cell, its factors and the init facts; a directory without a reservation is refused
+ok 29 - replacement plan: a failed negative trial (rep 1) is replaced by rep 3 after every planned trial
+# tests 29
+# pass 29
 # fail 0
 
 $ node --test docs/evidence/1817-skill-application/harness/*.test.mjs   (files copied byte for byte are covered here)

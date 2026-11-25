@@ -129,12 +129,12 @@ node $EV/harness/analyze.mjs $EV/results/traces --runs-root <scratch>/run1820m/r
 
 ## モデルを呼ばない確認
 
-HEAD `cc786927`（clean tree。固定したfileは最初の記録`85a0fe81`と同じで、`fixation.mjs check`は差なし）で行った。
+HEAD `88ff9af5`（clean tree。固定したfileは最初の記録`c7478b7d`と同じで、`fixation.mjs check`は差なし）で行った。
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| harnessの試験（合成の記録） | 28件すべて合格。#1817から写した4つのfileは#1817の試験68件で合格。`test/test_source_quality.mjs` 2件合格、`npx eslint src bin test v05`は指摘なし | [results/harness-tests.txt](results/harness-tests.txt) |
-| dry run（本物のtarball、`--allow-unreleased`なし。fixtureは`<scratch>/run1820b/`） | 全11項目が合格（下の箇条） | [results/dry-run.json](results/dry-run.json) |
+| harnessの試験（合成の記録） | 29件すべて合格（Low-1の反例を試験12に、Low-2の改ざんの拒否を試験19・20に加えた）。#1817から写した4つのfileは#1817の試験68件で合格。`test/test_source_quality.mjs` 2件合格、`npx eslint src bin test v05`は指摘なし | [results/harness-tests.txt](results/harness-tests.txt) |
+| dry run（本物のtarball、`--allow-unreleased`なし、記録した台帳。fixtureは新しい`<scratch>/run1820c/`） | 全11項目が合格（下の箇条）。出力は前回（`run1820b`）の記録とbyteで同じ | [results/dry-run.json](results/dry-run.json) |
 
 dry runの内容：
 
