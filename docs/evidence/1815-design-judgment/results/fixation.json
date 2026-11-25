@@ -403,6 +403,74 @@
      "harness/probe.mjs"
     ]
    }
+  },
+  {
+   "stage": "plan (refix)",
+   "fixedAtCommit": "dd7b785886c9d5e329e0d724a90b0531f8bc6504",
+   "at": "2026-11-25T15:54:38.032Z",
+   "files": {
+    "cases.json": "1c1aa1670fa50f0f539f7d9435f3e76e47f050e78d5537701ecb928bc9844c6f",
+    "conditions.json": "ba101d31fa35618c7072ec3bd5fd0a8066a8752d7a14cff4a757d97cd47c0c4a",
+    "release.json": "b8a79b513035168bf0e9a030585f358c020cc44d95b6819fe6d80e775b70f6f5",
+    "run-order.json": "fd8ce2c787bb2514f55b8c4d634c007253994def058f1cd5efef8ff6a3a01363",
+    "decision-criteria.md": "e8d812290b93ceb1b5fc39cacad30ae733c03536aeae4bad5e24f6d799f0a8c3",
+    "harness/rank-prompt.txt": "691c20e8ee3ddfee4d1da5fc26ebd4a36aeb37164a3ab5ac0dcb81ce501cafd1",
+    "harness/budget.mjs": "943d2896d9baff396dcfb429f198d354560b8658884b1c965615c096f8524dc5",
+    "harness/clock.mjs": "db90df65d5cf11e32e65c8d4eb30f397294cd22d745655eb2fafff62a8c3ce9e",
+    "harness/collect.mjs": "48b37915272ae1df559866cb6b7005a5d7836cbcdacb348844e64f9fb07f16aa",
+    "harness/decide.mjs": "025aad9f9d1851bc43acef1070ea7ecf7b5272b5ac7b4551fec6c587762096d7",
+    "harness/first-view.mjs": "c6d1b5cf798cb0405fb2f3be0db0a61c97b76f5490c3899e4fbf7d859caf531f",
+    "harness/fixation.mjs": "b97d9033a4e0afb89d36270dcd6a8252893db1181c80336839441eb324ce98b3",
+    "harness/make-blind.mjs": "7641e4c4251605dd29d249db845a169c972140079a6b026837179807a912516f",
+    "harness/make-sample.mjs": "0a9d3ac30f496cef9723b51830c81602c5d6b27dd0be72cac02f7e39277bde9c",
+    "harness/order.mjs": "f12a2a5610fe1646421880b5f9fdfecba6376c9adc740a0b62a8143edf153118",
+    "harness/pairing.mjs": "0c62c4d26d7186587e99879f39a827df94e9c13b5de5a2627882e8b5869642b0",
+    "harness/probe.mjs": "7b2005a07484ea3975e57f05752502e29e23d6de5751f48b56a9089c11140fec",
+    "harness/rank-guard.mjs": "9f480fff393fc5493f83e9c04402b3ba4018530db8634f343963b70f0f9b340e",
+    "harness/reads.mjs": "860868698e2838e07648bba971f8f0eef3cabb7c4c8a82996d494e802847f551",
+    "harness/run-all.mjs": "16e92518e35ed747ab0af48d6bfa9356d8ed181286eb2323da6d9b3eddb5852d",
+    "harness/run-indicators.mjs": "c93b95cb81c8ce0212c0ac26f1c26063741078c5558e75ba6a60ac2ff077ee7e",
+    "harness/run-trial.mjs": "3e3689bf38a1802f9e31cfdfac8029efe6795af6b8f3948c6863f30545e68b1b",
+    "../1807-design-eval-browser/harness/core-steps.mjs": "bb09d4ce884003047f327ad5b4b75bf971a7edb1940056645c3af4c083cda39d",
+    "../1807-design-eval-browser/harness/gold-check.mjs": "86e22e9323c6d1d44d5c9bd9aab95a9eff5521e52108646f213f62f8a4684e34",
+    "../1807-design-eval-browser/harness/render.mjs": "eae8ef93dcc074500b549333f0675a2c6bf2e97478c7cdf9179a4fd36335b8d1",
+    "../1807-design-eval-browser/harness/run-render.mjs": "a258bb183128a3b1025ef63cd0cddbbc08e0784e466baad456ca93aa3752a4d3",
+    "../1807-design-eval-browser/gold.json": "667d93b6d8480d49863da5e666488622c378189e0fe1cf98d841c9804417f403",
+    "../1807-design-eval-browser/env/gen-prompt.txt": "12090b336abc26c48c8df1eb0a79711c972185e92cb24f3ee455ffc723d772dd",
+    "../1807-design-eval-browser/env/mcp-server.mjs": "8a0ec558cd37846314bdb1234f66c063f68f563b241975c2fb4722d55c1b5791",
+    "../1807-design-eval-browser/env/proxy.mjs": "ce20e66695587bb0ca409a25d485c58c8f4a4a4d12765184b2567390027ba945",
+    "../1807-design-eval-browser/env/allowlist.json": "8d61312c8eff94c9daccecf80e1c47bae06aa433494881359ab65fde01f78641",
+    "../1807-design-eval-browser/env/allowlist-catalog.json": "2ca010ea56fea29a2b86a8c568e4c11408bd8530178a27d41fa59d5dbfb56649",
+    "../1807-design-eval-browser/env/Dockerfile": "e0870464f1be00afe1a22d59fc53109c8da38a9c1184f71de67d8f09500ee1a9",
+    "../1807-design-eval-browser/cases/FONTS.md": "5bbf686e1f397632ec853c3bc4f85139a8df4bbdd110414dbc96fd6e7d887cbb",
+    "../1807-design-eval-browser/cases/ui04-parts-search/BRIEF.md": "6a9fbc156aad191f200979af7f8990972da15dc48fe80bfc2ae18678bcf1f291",
+    "../1807-design-eval-browser/cases/ui04-parts-search/data.json": "c42b8d8d030eb6f1c30862fc38814b87377596bb893112934ce6b18b01a386a3",
+    "../1807-design-eval-browser/cases/ui07-bus-mobile/BRIEF.md": "bfbdd6c6bba286a4225c69621a538f948f50f77c9bc9346e65f12218117004a1",
+    "../1807-design-eval-browser/cases/ui07-bus-mobile/data.json": "031287ba302eaa52553cc7e48c325888f9847d01e16535c7395eee186a592e8e",
+    "../1804-design-judgment/cases/ui03-dashboard/BRIEF.md": "d7523652a9dcf1070e910ad3a73ca2c51f00bb957bf00a8d6b791788bfed5a1b",
+    "../1804-design-judgment/cases/ui03-dashboard/data.json": "8bfc52909e6107759f7388b4b66e407cf5cb124cb6347ba92867b21cbd6d7685",
+    "../1814-skill-invocation/harness/guard.mjs": "eb533b6e6ce6da772491b8c793939b4fbfd5a77185586ad77866d3e9279a42a6",
+    "../1814-skill-invocation/harness/ledger.mjs": "5d5463095e1dbb2235f0f2617cd1477b45712e80a92e947f2f23b1765059eac6",
+    "../1814-skill-invocation/harness/install-asc.mjs": "529384b4ad6eb4cff479293b571ea9f37337460eb70e8c1be4c832358ece838b",
+    "../1814-skill-invocation/harness/condition-i.mjs": "8ff3f606a6c84a29917f6e511da44959638f7f6a47ac190bb774f95abbc16c1d",
+    "../1814-skill-invocation/harness/make-fixture.mjs": "23cf5d62011aabe38f310023f77515a763962bbd3161491b96e857ddc845a9a7",
+    "../1814-skill-invocation/harness/collect.mjs": "f2dcfa7adb3082ae95c3d4cbf746824e79776d40416d16fc7cc7833ced42e7a8",
+    "../1814-skill-invocation/harness/apply-condition.mjs": "8487e9b67e0ecae21fd1910ef659243ac8f27a0c5429fd7443cd2176f309db7f",
+    "../1814-skill-invocation/harness/probe-check.mjs": "2fe949ff3e27a73dc7323857ecb0f9c75c09f7fe14fbad409a9fd11a762bc343",
+    "../1814-skill-invocation/harness/score.mjs": "3e53c6c3711de9e7c7b880d5fe7ad0273437949965a3cecf740aa177f0749397"
+   },
+   "ledgerId": "5ce46e2b-49ba-4584-8b01-4deeae0ee18a",
+   "refix": {
+    "reason": "第3のレビュー（HEAD e6d9e7c8、Medium 1・Low 3）の指摘の是正：精算した出力の封と評価者を1人ずつにすること、decideでの封の解除、SVGの手掛かりの除去、rank-guardの記録の先頭の一致、停止線と順位の再試行の扱いの記載。台帳に予約なし",
+    "review": "第3のレビュー（統括の依頼、HEAD e6d9e7c8）の指摘への是正。是正の再確認は未実施",
+    "changed": [
+     "decision-criteria.md",
+     "harness/budget.mjs",
+     "harness/decide.mjs",
+     "harness/make-blind.mjs",
+     "harness/rank-guard.mjs"
+    ]
+   }
   }
  ]
 }

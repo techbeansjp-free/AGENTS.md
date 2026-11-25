@@ -201,7 +201,7 @@ tokenは親processの環境変数`CLAUDE_CODE_OAUTH_TOKEN`からだけ受け取�
 
 ## 固定
 
-[results/fixation.json](results/fixation.json)は追記だけの記録で、測定には最後の記録を使う。最初の記録：`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`（計画の初版）。2件目（refix）：`ff3dba9eabdc03a3ae0477d1a2be730d2ee57dd0`。3件目（refix）：`79cdf7d6ad2c1c7190bef0c1276c9dcc60a7772e`。4件目（refix、独立レビューの指摘の是正）：`b5bad141fb9c8c924c6fbeb688cbfc763649916d`。5件目（refix、再レビューの指摘の是正）：`9f78bb802f0fd79d010f7066839a07414865b3ac`。6件目（refix、L-cのownerの承認の記録）：`952bf2082c6a8675080bf1ef4a7f8d0bf04fc7e9`。7件目（refix、第3のレビューの指摘の是正）：FIXCOMMIT。測定はこの最後の記録で行う。どの記録の時点でも台帳に予約は無い。
+[results/fixation.json](results/fixation.json)は追記だけの記録で、測定には最後の記録を使う。最初の記録：`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`（計画の初版）。2件目（refix）：`ff3dba9eabdc03a3ae0477d1a2be730d2ee57dd0`。3件目（refix）：`79cdf7d6ad2c1c7190bef0c1276c9dcc60a7772e`。4件目（refix、独立レビューの指摘の是正）：`b5bad141fb9c8c924c6fbeb688cbfc763649916d`。5件目（refix、再レビューの指摘の是正）：`9f78bb802f0fd79d010f7066839a07414865b3ac`。6件目（refix、L-cのownerの承認の記録）：`952bf2082c6a8675080bf1ef4a7f8d0bf04fc7e9`。7件目（refix、第3のレビューの指摘の是正）：`dd7b785886c9d5e329e0d724a90b0531f8bc6504`。測定はこの最後の記録で行う。どの記録の時点でも台帳に予約は無い。
 
 注：4件目のrefixの理由の文は「Medium 5・Low 6」と書いたが、是正したLowはL-1〜L-7の7件だった（記録は追記だけなので直さず、5件目の理由で訂正した）。
 
