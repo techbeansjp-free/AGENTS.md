@@ -60,7 +60,7 @@ probeでXが2回とも合格しない場合は、事前に決めた手順（[ana
 
 [analysis-plan.md](analysis-plan.md)で固定した。
 
-- 主な指標：最初の2つのmessageでのASC本文の読込み（`bodyRead2`）を、セルごとに件数／有効な試行で示す。読込みはReadと、水準XのBash（引数に本文のpathがあるcommand）の両方を数え、Bashの分は`bodyReadBash2`として別にも示す。
+- 主な指標：最初の2つのmessageでのASC本文の読込み（`bodyRead2`）を、セルごとに件数／有効な試行で示す。読込みはReadと、水準XのBash（中身を読むcommand、`cat`・`head`・`tail`・`sed`・`awk`・`less`・`more`・`grep`・`rg`・`nl`・`bat`・`view`・`strings`の引数に本文のpathがあるもの）の両方を数え、Bashの分は`bodyReadBash2`として別にも示す。`ls`・`test`・`stat`・`wc`等の存在の確認は数えない。入口・目的別一覧・過剰な読込みも同じ規則で数える。
 - 併せて記録する：最初のmessageでの本文の読込み・`Skill(asc)`・入口・`skills/README.md`の読込みと、最初のtool呼出し。
 - 主効果：水準ごとにセルの率を単純平均し、その差（W−R、X−R、X−W、G−S、D−A）を示す。交互作用は2要因の平均の表だけ。
 - 該当しない依頼（RSA・WSA）での過剰な読込みの件数。
@@ -99,6 +99,8 @@ node $EV/harness/probe-check.mjs compare <scratch>/run1820m/probe-RSA.json <scra
 #   node $EV/harness/probe-check.mjs compare <RSAの結果> <WSAの結果> <XSA回2の結果> --drop X --out <scratch>/run1820m/runs/probe-compare.json
 #   node $EV/harness/fixation.mjs drop-level $EV/results/fixation.json X --ledger $LEDGER --runs-root <scratch>/run1820m/runs --reason "<理由>" --review "<記録>"
 #   （results/fixation.jsonをcommitする）
+#   各probeの結果（回2を含む）と比較を、目印・local path・HOMEを伏せて写す（目印fileを消す前に。tokenが残れば拒否する）
+node $EV/harness/probe-check.mjs publish $EV/results/probes <scratch>/run1820m/probe-*.json <scratch>/run1820m/runs/probe-compare.json --home-marker <home marker> --repo-marker <repo marker> --repo-root <repo-root> --runs-root <scratch>/run1820m/runs
 node $EV/harness/markers.mjs remove <repo-root>
 # 3. 測定：固定した順の60試行（止まった場合は同じcommandで次の試行から続く）、その後に必須の置き換え
 CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC1820_ALLOW_PAID=1 node $EV/harness/run-all.mjs planned <scratch>/run1820m/runs --fixture-A <scratch>/run1820m/fixture-A --fixture-D <scratch>/run1820m/fixture-D --ledger $LEDGER --run
@@ -107,14 +109,20 @@ CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC1820_ALLOW_PAID=1 node $EV/ha
 node $EV/harness/fixation.mjs check $EV/results/fixation.json
 node $EV/harness/collect.mjs <scratch>/run1820m/runs $EV/results/traces --ledger $LEDGER --publish-ledger $EV/results/ledger.jsonl
 node $EV/harness/analyze.mjs $EV/results/traces --runs-root <scratch>/run1820m/runs --ledger $LEDGER --runs-json $EV/results/runs.json --out $EV/results/analysis.json
+#   results/probes/（手順2で写したprobe-*.jsonとprobe-compare.json）を、結果と一緒にcommitする
 ```
+
+計画した試行の前に、`run-trial.mjs`は`probe-compare.json`の記録を信用せず、各probeをruns rootの`trace.jsonl`と`meta.json`から計算し直して照合する（[analysis-plan.md](analysis-plan.md)「隔離の確認」）。probeの結果は目印のtokenそのものを持たず、各tokenのsha256だけを持つ。
 
 `--run`を付けない`run-trial.mjs`・`run-all.mjs`は、起動するcommandや試行の一覧を出すだけでモデルを呼ばない。途中で止まった試行からの再開は#1817の[README](../1817-skill-application/README.md)「途中で止まった試行からの再開」と同じ（`run1817e`を`run1820m`と読み替える）。
 
 ## 測定の前の固定
 
-- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`85a0fe81cd083fc7af4606eb1dc444e34a1fb1a9`である。`run-trial.mjs`と`analyze.mjs`はこの記載を照合する。`fixation.mjs check`は合格（差なし）。
-- 作り直した理由：独立レビューの是正で固定したfileが変わったため、台帳に予約が無いことを確かめたうえで、記録を新しい最初の記録として作り直した（同じ台帳）。前の記録（`b698bfef`）はgitの履歴に残る。
+- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`c7478b7d47ee541d68cbd4accfaa854d61b540e1`である。`run-trial.mjs`と`analyze.mjs`はこの記載を照合する。`fixation.mjs check`は合格（差なし）。
+- 作り直した理由（2回目）：有料の測定の前の指摘2件（Low）を是正し、固定したfile（`analysis-plan.md`・`cases.json`・`harness/score.mjs`・`harness/order.mjs`・`harness/probe-check.mjs`・`harness/run-trial.mjs`）が変わったため、台帳に予約が無い（0件）ことを確かめたうえで、記録を新しい最初の記録として作り直した（同じ台帳）。
+  - Low-1：Bashで本文のpathを挙げるだけのcommand（`ls -l`・`test -f`・`wc -l`・`stat`等）が本文の読込みに数えられ、`bodyRead`とXの主効果を水増ししていた。中身を読むcommandの区切りだけを数える形にした。
+  - Low-2：計画した試行の前の照合が`probe-compare.json`の`pass`を信用し、probeの結果も公開されていなかった。照合でprobeをruns rootの記録から計算し直し、probeの結果を`results/probes/`に写す手順を加えた。
+- 前の記録（`b698bfef`、1回目の作り直しの`85a0fe81`）はgitの履歴に残る。1回目は、独立レビューの是正で固定したfileが変わったための作り直しだった。
 - 固定したfile：`analysis-plan.md`・`cases.json`・`conditions.json`・`release.json`・`run-order.json`と、`harness/`の15件（`dry-run.mjs`と試験を除く）。
 - 台帳：repositoryの外の`<scratch>/rel1820/ledger/ledger-1820.jsonl`（予約0件）。台帳idは`results/fixation.json`にあり、`run-trial.mjs`と`analyze.mjs`はこの台帳だけを使う。
 - `results/probe-approval.json`は固定の対象に含めない（承認の記録で計画は変わらない）。
@@ -145,9 +153,9 @@ dry runの内容：
 
 - `make-fixture.mjs`：fixtureをA・Dの2つにした。Dの元のfileはsha256を[conditions.json](conditions.json)で固定した。導入するのは1つのreleaseだけ。
 - `run-trial.mjs`：セル（tool×依頼文×フォルダ）と依頼で試行を決める。toolの水準ごとの引数、`--max-turns 2`、隔離の`--settings`を加えた。probeは#1820の承認の記録を、計画した試行は3つのprobeの比較の合格（台帳の精算に結んだもの）を条件にした。probeの操作は水準ごとの固定の一覧（`probeSteps`）。許可の環境変数は`ASC1820_ALLOW_PAID`。
-- `score.mjs`：最初の2つのmessage（message idでまとめる）で採点する形にした。Bashの引数での本文の読込みも数える。セルのtool・permission modeと違うinitは失敗とする。セルごとの集計と主効果（`summarizeCell`・`mainEffects`）を加えた。
-- `order.mjs`・`run-all.mjs`：`run-order.json`の`perRep`から計画を作る。該当しない依頼は回1・2だけで、置き換えはその次の番号。probeはprobeセルだけ。`probe-compare.json`を台帳に結ぶ照合（`probeCompareProblems`）。
-- `probe-check.mjs`：toolの水準ごとの期待（tool・permission mode）と、水準ごとの操作の一覧の判定（結果の有無、拒否の証拠、成功、`work/`の読込み、`git status`の記録）を加えた。`compare`はtool以外を比べ、各probeの試行名とsha256を持ち、`--drop X`と`--out`を受ける。
+- `score.mjs`：最初の2つのmessage（message idでまとめる）で採点する形にした。Bashの中身を読むcommand（`BASH_READERS`）の引数での本文の読込みも数える。セルのtool・permission modeと違うinitは失敗とする。セルごとの集計と主効果（`summarizeCell`・`mainEffects`）を加えた。
+- `order.mjs`・`run-all.mjs`：`run-order.json`の`perRep`から計画を作る。該当しない依頼は回1・2だけで、置き換えはその次の番号。probeはprobeセルだけ。`probe-compare.json`を台帳に結び、各probeをruns rootの記録から計算し直す照合（`probeCompareProblems`）。
+- `probe-check.mjs`：toolの水準ごとの期待（tool・permission mode）と、水準ごとの操作の一覧の判定（結果の有無、拒否の証拠、成功、`work/`の読込み、`git status`の記録）を加えた。`compare`はtool以外を比べ、各probeの試行名とsha256、項目の合否、目印のtokenのsha256、sessionの事実を持ち、`--drop X`と`--out`を受ける。`recheckProbe`（照合での計算し直し）と`publish`（伏せた写し）を加えた。
 - `apply-condition.mjs`・`fixation.mjs`：事前に決めたXの削除（`applyDrop`、`drop-level`）。
 - `analyze.mjs`：#1817の`judge.mjs`の照合をそのまま行い、判定の代わりに分析を出す。失敗の規則はセルあたり1件まで（`cellRuleReasons`）。
 - `collect.mjs`：hookの記録を除き、セルと要因・initの事実を行に加えた。
@@ -162,4 +170,5 @@ dry runの内容：
 - フォルダDはui03だけ。#1815の他の2つの依頼（ui04・ui07）は使わない。
 - 依頼文Gは、#1815の文面からbrowserの注意書きを除き、AではBRIEFの位置を`docs/BRIEF.md`に変えた。#1815の文面そのものではない。
 - 該当しない依頼は、RとWのアプリのrepoで各2回だけ。Xとフォルダ`D`での過剰な読込みは測らない。
-- Bashでの本文の読込みは、commandの引数に本文のpathがある場合だけ数える。`cd`で移動してから相対pathで読む形や、変数・globで指す形は数えない。
+- Bashでの本文の読込みは、中身を読むcommand（`cat`・`head`・`tail`・`sed`・`awk`・`less`・`more`・`grep`・`rg`・`nl`・`bat`・`view`・`strings`）の引数に本文のpathがある場合だけ数える。一覧に無い読むcommand（`od`・`xxd`・`python`での読込み等）は数えない。`cd`で移動してから相対pathで読む形や、変数・globで指す形も数えない。
+- 計画した試行の前の照合は、probeの時点のhostの状態による項目（Claude Codeのprogram directory、ownerのSkill・指示file・memory、debug logのpathとprogram directoryの関係）を計算し直さず、記録の値を使う。目印のtokenの照合は記録されたsha256による（tokenそのものは目印fileと一緒に消える）。

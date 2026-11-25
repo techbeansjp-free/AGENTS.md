@@ -4,11 +4,11 @@
  "records": [
   {
    "stage": "stage 1",
-   "fixedAtCommit": "85a0fe81cd083fc7af4606eb1dc444e34a1fb1a9",
-   "at": "2026-11-25T19:05:34.082Z",
+   "fixedAtCommit": "c7478b7d47ee541d68cbd4accfaa854d61b540e1",
+   "at": "2026-11-25T19:18:26.399Z",
    "files": {
-    "analysis-plan.md": "bfcf9346495ba156d28ffdd75d6d8795b769ac7e0c5b1468f18857f6d39eab96",
-    "cases.json": "1a318bd6780001291d200778a62322ebd1d3061aaced893db937980021169e82",
+    "analysis-plan.md": "833e7aeea24337aba5cd8d4081c98b7f9fae3417b0097041ba37dee967d4866b",
+    "cases.json": "ad300d74adb6d0c714b525574af88c7efc9d61db6e84753d60b6153eca0a18c4",
     "conditions.json": "21543ed034917b59057ec28c3ac270e886a6ed158d958cbfaa5ed054c5d3d494",
     "release.json": "e03bc422c072fa5efcf213010b075782655b8c48d690ab31af56b86d7a621a71",
     "run-order.json": "a4af71f7733d9278be2c45e902bb08a20fbcffdaf1fc7662381129e89c41c8f3",
@@ -22,11 +22,11 @@
     "harness/ledger.mjs": "6ce2d8a4c78765e5e2cff73c08cf69229e90a691d2f7f2bf37950fcfb2bb127d",
     "harness/make-fixture.mjs": "da24ddd3a87614e6cdbc88dada611f2060d90b299a610fac2607fb177611e0f2",
     "harness/markers.mjs": "d5e32aad16eabb081209d03e9461e2705a0bfaa777da34d30b5e3f8c0a5eefff",
-    "harness/order.mjs": "cabc77d5d4ac13622636e63e23683b309d8e5df569b05300c71a6ab629da0910",
-    "harness/probe-check.mjs": "d19344f44e498fa2b595e4dabcda5471eff511713796605dde560c90642a09a1",
+    "harness/order.mjs": "8e3323ca66439d44d1986073e1790d6437bd54c23557d23dc67abfc56900981b",
+    "harness/probe-check.mjs": "82d8d7e1d4a6d1a0a121deb642ef989618349fdbd7cf812eee040b9b2d9e032f",
     "harness/run-all.mjs": "13862beef50f7fe365d1e1e2adfa05c0991725c1a44eb7f6762391dce00f4b31",
-    "harness/run-trial.mjs": "ba8c8f0980a2717fcabb3321759095937f6825e5a42bef7747d84d6a4623d620",
-    "harness/score.mjs": "ea3367eed521e35cbe8878e17be08d8e62e51ba0fcaa57caada25321bd0eb23b"
+    "harness/run-trial.mjs": "4760d6edf9c4055bd006d651a228fdff8cd353cd592e558267fd0baec9d718cb",
+    "harness/score.mjs": "ef87f992429a40a6ec55e656fc52e4e266ea49e50135e3b0226fc544e283aa38"
    },
    "ledgerId": "1ceebdc5-63a4-458e-bead-d033651577d4"
   }
