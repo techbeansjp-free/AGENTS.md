@@ -1,6 +1,6 @@
 # 改善の設計案：読む契機を`project-assets`の既定の選択肢として提案する（#1814、未実装）
 
-> **実装の状態（2026-11-25）**：ownerの判断（Issueのコメント）により、条件P（CLAUDE.mdの文例）を標準にし、SessionStartのhook（条件H）は採用しなかった。`CLAUDE.md`の選択肢だけを実装した（`src/project-assets.mjs`、`bin/asc-v05.mjs`、`v05/USAGE.md`、`test/test_project_read_trigger.mjs`）。下の表の`.claude/settings.json`の選択肢・`read-trigger --hook`・`src/read-trigger.mjs`・`src/runtime-files.json`の変更は実装していない。interfaceは`harness/condition-i.mjs`の前提（`readTrigger.default`・`options[].{id,path,action,beforeSha256,diff}`・`--adopt-read-trigger <id>@<sha|absent>`）のままで、`condition-i.mjs`は変えていない。
+> **実装の状態（2026-11-25）**：ownerの判断（Issueのコメント）により、条件P（CLAUDE.mdの文例）を標準にし、SessionStartのhook（条件H）は採用しなかった。`CLAUDE.md`の選択肢だけを実装した（`src/project-assets.mjs`、`bin/asc-v05.mjs`、`v05/USAGE.md`、`test/test_project_read_trigger.mjs`）。下の表の`.claude/settings.json`の選択肢・`read-trigger --hook`・`src/read-trigger.mjs`・`src/runtime-files.json`の変更は実装していない。製品の独立レビュー（Medium）を受けて、承認の値を`--adopt-read-trigger <id>@<beforeSha256|absent>:<blockSha256>`に変え（表示した文と適用する文の一致を確かめる）、`options[]`に`blockSha256`を加えた。これに合わせて`harness/condition-i.mjs`の`adoptFromPlan`だけを変えた（exportの名前・importの行・最上位の処理は不変）。段階3の固定（`fixation.mjs stage3 --change harness/condition-i.mjs --reason … --review …`）で、理由と独立レビューの参照を付けて記録する。それまで`fixation.mjs check`は`harness/condition-i.mjs`の違いを示す。`default`は推奨の名前のまま残した（`condition-i.mjs`が記録に読むため）。それだけでは何も適用しないことをUSAGEとhelpに書いた。
 
 開発時の検証資料であり、配布対象に含めない。実装の前の設計の素案である。どの仕組み（`CLAUDE.md`の文例・SessionStartのhook）を既定にするかは、測定の後にownerが決める。測定で不足が無ければ実装しない（[decision-criteria.md](decision-criteria.md)の規則1）。
 

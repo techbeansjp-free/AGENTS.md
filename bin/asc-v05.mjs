@@ -50,7 +50,7 @@ try {
     'docker-cleanup-plan':'docker-cleanup-plan <worktree> [--project <name>] [--label <key>=<value>] [--output <external-plan.json>]\nmerge後の整理で、そのworktreeのDocker資源の削除候補と保持理由を読取り専用で一覧します。削除・down・停止は行わず、出力は削除許可ではありません。--project省略時はdirectory名をcomposeの規則で正規化、--label省略時はasc.worktree=<worktreeの実path>。Dockerが使えなければexit 1。',
     'resume-context':'resume-context [<directory>] | resume-context --hook\ncompaction後・新しいContextの開始時に、repositoryのworktree・branch・HEAD・未commit件数を短い文で表示します（読取りのみ・ネットワークなし）。--hookはHostのSessionStart hookの入力JSONのcwdを使い、入力の読取りを含めて全体を約10秒で打ち切り、読取りに失敗しても終了コード0で一文を返します。',
     uninstall:'uninstall <project-directory> [--apply]\n既定は撤去候補の表示のみ。--applyで正常な記録と配布時hashから所有を確認できた未編集資産・Host入口・管理記録を撤去します。競合があれば全体を停止し、利用者のfile・directory・設定・npm prefixは保持します。',
-    'project-assets':'project-assets <project-directory> [--register-skill] [--register-claude-skill] [--apply [--adopt-read-trigger <id>@<beforeSha256|absent>]]\n既定は差分表示のみ。登録オプションはHost選択を保存します。以後の通常更新でも登録Hostの入口を追加・更新し、未編集の廃止入口だけを削除します。--applyで適用し、編集・削除済み入口や未登録の同名fileとの競合は全体を停止します。Claude Codeを登録した利用先では、ASCを読む契機（CLAUDE.mdの末尾への区切り付きの文例）を readTrigger として差分付きで提案します。適用は、表示されたidとbeforeSha256を --adopt-read-trigger に指定した場合だけで、表示の後にCLAUDE.mdが変わっていれば全体を停止します。既存の内容は変更・並べ替えしません。'
+    'project-assets':'project-assets <project-directory> [--register-skill] [--register-claude-skill] [--apply [--adopt-read-trigger <id>@<beforeSha256|absent>:<blockSha256>]]\n既定は差分表示のみ。登録オプションはHost選択を保存します。以後の通常更新でも登録Hostの入口を追加・更新し、未編集の廃止入口だけを削除します。--applyで適用し、編集・削除済み入口や未登録の同名fileとの競合は全体を停止します。Claude Codeを登録した利用先では、ASCを読む契機（CLAUDE.mdの末尾への区切り付きの文例）を readTrigger として差分付きで提案します。適用は、表示されたid・beforeSha256・blockSha256を --adopt-read-trigger に指定した場合だけです（defaultは推奨の名前で、それだけでは適用しません）。表示の後にCLAUDE.mdや追記する文が変わっていれば全体を停止します。既存のbyteは変更・並べ替えしません。'
   };
   if(Object.hasOwn(nativeHelp,command)&&args.length===1&&['--help','-h'].includes(args[0])){
     console.log(`使い方: asc-v05 ${nativeHelp[command]}\n詳細: ${fileURLToPath(new URL('../v05/USAGE.md',import.meta.url))}`);
@@ -89,7 +89,7 @@ try {
   --version                                配布版を表示
 
 導入・更新・撤去:
-  project-assets <project-directory> [--register-skill] [--register-claude-skill] [--apply [--adopt-read-trigger <id>@<sha|absent>]]       配布資産・登録Host入口の差分表示／未編集資産だけ同期／承認したCLAUDE.mdの文例の追記
+  project-assets <project-directory> [--register-skill] [--register-claude-skill] [--apply [--adopt-read-trigger <id>@<sha|absent>:<blockSha>]]       配布資産・登録Host入口の差分表示／未編集資産だけ同期／承認したCLAUDE.mdの文例の追記
 
   uninstall <project-directory> [--apply]  撤去候補の表示／所有を確認できる未編集資産だけ撤去
 

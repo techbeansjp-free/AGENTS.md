@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
+import {TextDecoder} from 'node:util';
 import {hash,safeName} from './controller.mjs';
 import {projectLocation} from './project-location.mjs';
 import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,GIT_NULL_DEVICE} from './source-limits.mjs';
@@ -146,52 +147,72 @@ function catalog(packageRoot,hosts){
  demand(assets.size<=maxAssets&&[...assets.values()].every(v=>Buffer.isBuffer(v)),'Invalid distribution assets');return assets;
 }
 // Read trigger (#1814): the owner adopted the CLAUDE.md pointer as the standard. It is proposed as a shown diff and
-// applied only with --adopt-read-trigger claude-md@<beforeSha256|absent> from that plan. The block is appended at the
-// end, existing bytes are never changed or reordered, and the text comes from the package's v05/USAGE.md (single source).
+// applied only with --adopt-read-trigger claude-md@<beforeSha256|absent>:<blockSha256> from that plan, so the approval
+// binds both the file the owner saw and the exact text shown. The block is appended at the end; the result is built
+// byte-wise, so existing bytes are never changed or reordered. The text comes from the package's v05/USAGE.md (single
+// source). `default` names the recommended option only; nothing is ever applied without the approval value.
 const readTriggerPath='CLAUDE.md',readTriggerId='claude-md',readTriggerOpen='<!-- asc:read-trigger v1 -->',readTriggerClose='<!-- /asc:read-trigger -->';
-function readTriggerBlock(packageRoot){
- const usage=read(packageRoot,'v05/USAGE.md').toString();
- const m=/### ASCを読む契機を利用先へ採用する（任意）[\s\S]*?```text\n([\s\S]*?)\n```/.exec(usage);
- demand(m,'Read trigger text missing from v05/USAGE.md');
- return `${readTriggerOpen}\n${m[1].trim()}\n${readTriggerClose}\n`;
+export function readTriggerText(packageRoot=defaultPackage){
+ const usage=read(packageRoot,'v05/USAGE.md');
+ const m=usage&&/### ASCを読む契機を利用先へ採用する（任意）[\s\S]*?```text\n([\s\S]*?)\n```/.exec(usage.toString());
+ return m?m[1].trim():null;
 }
-function appendDiff(before,block){
- const old=before===null?[]:before.toString().split('\n');
- const endsWithNewline=before===null||before.length===0||before.toString().endsWith('\n');
- if(endsWithNewline&&old.length&&old.at(-1)==='')old.pop();
- const added=[...(before!==null&&before.length?['']:[]),...block.replace(/\n$/,'').split('\n')];
+// The block always uses LF; a CRLF file gets the block with CRLF so its line endings do not mix. blockSha256 is the
+// hash of the LF block, independent of the file's line endings.
+const blockLf=text=>`${readTriggerOpen}\n${text}\n${readTriggerClose}\n`;
+// Only UTF-8 text without NUL and without a UTF-16/32 byte order mark is appended to; anything else is left to the owner.
+function utf8Text(bytes){
+ if(bytes.includes(0)||(bytes.length>=2&&((bytes[0]===0xff&&bytes[1]===0xfe)||(bytes[0]===0xfe&&bytes[1]===0xff))))return null;
+ try{return new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{return null;}
+}
+function eolOf(text){return text.includes('\r\n')?'\r\n':'\n';}
+function readTriggerAfter(before,text){
+ if(before===null)return Buffer.from(blockLf(text));
+ const eol=eolOf(utf8Text(before)),block=Buffer.from(blockLf(text).replaceAll('\n',eol)),e=Buffer.from(eol);
+ const sep=before.length===0?Buffer.alloc(0):before.subarray(before.length-e.length).equals(e)?e:Buffer.concat([e,e]);
+ return Buffer.concat([before,sep,block]);
+}
+function appendDiff(before,text){
  const head=`--- ${before===null?GIT_NULL_DEVICE:`a/${readTriggerPath}`}\n+++ b/${readTriggerPath}\n`;
- if(endsWithNewline)return head+`@@ -${old.length},0 +${old.length+1},${added.length} @@\n`+added.map(l=>`+${l}`).join('\n')+'\n';
+ const blockLines=blockLf(text).replace(/\n$/,'').split('\n');
+ if(before===null)return head+`@@ -0,0 +1,${blockLines.length} @@\n`+blockLines.map(l=>`+${l}`).join('\n')+'\n';
+ const str=utf8Text(before),eol=eolOf(str),old=str.split(eol);
+ const endsWithNewline=str.length===0||str.endsWith(eol);
+ if(endsWithNewline&&old.at(-1)==='')old.pop();
+ const added=[...(str.length?['']:[]),...blockLines],note=eol==='\r\n'?'# line endings: CRLF, as in the existing file\n':'';
+ if(endsWithNewline)return note+head+`@@ -${old.length},0 +${old.length+1},${added.length} @@\n`+added.map(l=>`+${l}`).join('\n')+'\n';
  // Without a final newline the last line gains one; the diff shows that line replaced, nothing else changes.
  const last=old.at(-1);
- return head+`@@ -${old.length},1 +${old.length},${added.length+1} @@\n-${last}\n\\ No newline at end of file\n+${last}\n`+added.map(l=>`+${l}`).join('\n')+'\n';
-}
-function readTriggerAfter(before,block){
- if(before===null)return Buffer.from(block);
- const text=before.toString();
- return Buffer.from((text.length===0?'':text.endsWith('\n')?text+'\n':text+'\n\n')+block);
+ return note+head+`@@ -${old.length},1 +${old.length},${added.length+1} @@\n-${last}\n\\ No newline at end of file\n+${last}\n`+added.map(l=>`+${l}`).join('\n')+'\n';
 }
 // A CLAUDE.md whose every substantive line points at AGENTS.md defers to another canonical file; ASC cannot tell which
 // file the owner treats as canonical, so it shows the text for manual adoption instead of proposing an edit.
 function onlyReferencesAgents(text){
- const lines=text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));
+ const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));
  return lines.length>0&&lines.every(l=>l.includes('AGENTS.md'));
 }
 function readTriggerPlan(repo,packageRoot,adopted){
- const block=readTriggerBlock(packageRoot),manual={path:readTriggerPath,text:block};
  const result={default:readTriggerId,options:[],adopted:[...adopted]};
- if(adopted.some(a=>a.id===readTriggerId))return {result,current:null,block};
+ // Already adopted: nothing is proposed and the text is not needed.
+ if(adopted.some(a=>a.id===readTriggerId))return {result,current:null,text:null};
+ const text=readTriggerText(packageRoot);
+ if(text===null)return {result:{...result,manual:{path:readTriggerPath,text:null,reason:'the read trigger text is missing from this package (v05/USAGE.md); nothing is proposed'}},current:null,text:null};
+ const manual=(reason)=>({result:{...result,manual:{path:readTriggerPath,text:blockLf(text),reason}},current:null,text});
+ // A differently cased name (e.g. claude.md) on a case-insensitive file system would collide with a new CLAUDE.md.
+ const cased=fs.readdirSync(repo).filter(n=>n!==readTriggerPath&&n.toLowerCase()===readTriggerPath.toLowerCase());
+ if(cased.length)return manual(`a file named ${cased[0]} exists; adopt the text by hand in the file Claude Code reads`);
+ const st=fs.lstatSync(path.join(repo,readTriggerPath),{throwIfNoEntry:false});
+ if(st?.isSymbolicLink())return manual('CLAUDE.md is a symlink; adopt the text by hand in the canonical file');
  let current;
- try{
-  const st=fs.lstatSync(path.join(repo,readTriggerPath),{throwIfNoEntry:false});
-  if(st)demand(st.isFile()&&!st.isSymbolicLink(),'CLAUDE.md is not a regular file');
-  current=inspect(repo,readTriggerPath);
- }catch{return {result:{...result,manual:{...manual,reason:'CLAUDE.md is a symlink or not a regular file; adopt the text by hand in the canonical file'}},current:null,block};}
+ try{current=inspect(repo,readTriggerPath);}
+ catch(error){return manual(`CLAUDE.md cannot be read safely (${error.message}); adopt the text by hand`);}
  const before=current.bytes;
- if(before!==null&&before.toString().includes(readTriggerOpen))return {result:{...result,present:true},current:null,block};
- if(before!==null&&onlyReferencesAgents(before.toString()))return {result:{...result,manual:{...manual,reason:'CLAUDE.md only refers to AGENTS.md; adopt the text by hand in the canonical file'}},current:null,block};
- result.options.push({id:readTriggerId,path:readTriggerPath,action:before===null?'create':'append',beforeSha256:before===null?'absent':hash(before),diff:appendDiff(before,block)});
- return {result,current,block};
+ const str=before===null?null:utf8Text(before);
+ if(before!==null&&str===null)return manual('CLAUDE.md is not UTF-8 text (or holds NUL or a UTF-16/32 byte order mark); adopt the text by hand');
+ if(str!==null&&str.includes(readTriggerOpen))return {result:{...result,present:true},current:null,text};
+ if(str!==null&&onlyReferencesAgents(str))return manual('CLAUDE.md only refers to AGENTS.md; adopt the text by hand in the canonical file');
+ result.options.push({id:readTriggerId,path:readTriggerPath,action:before===null?'create':'append',beforeSha256:before===null?'absent':hash(before),blockSha256:hash(blockLf(text)),diff:appendDiff(before,text)});
+ return {result,current,text};
 }
 // Asset Git children never read stdin. With a large spawnSync input on a
 // loaded macOS, Git was seen blocked reading stdin until the timeout (#1669);
@@ -268,12 +289,15 @@ export function projectAssets(directory,{apply=false,registerSkill=false,registe
  const trigger=hosts.includes('.claude')?readTriggerPlan(repo,packageRoot,adoptedTriggers):null;
  let adoption=null;
  if(adoptReadTrigger!==null){
-  const m=/^([a-z-]+)@([a-f0-9]{64}|absent)$/.exec(adoptReadTrigger);
-  demand(m,'Invalid --adopt-read-trigger value; use <id>@<beforeSha256|absent> from the plan');
+  const m=/^([a-z-]+)@([a-f0-9]{64}|absent):([a-f0-9]{64})$/.exec(adoptReadTrigger);
+  demand(m,'Invalid --adopt-read-trigger value; use <id>@<beforeSha256|absent>:<blockSha256> from the plan');
   const option=trigger?.result.options.find(o=>o.id===m[1]);
   demand(option,'No such read trigger option in the current plan');
   demand(option.beforeSha256===m[2],'Read trigger target changed after planning; review the new plan');
-  adoption={option,current:trigger.current,after:readTriggerAfter(trigger.current.bytes,trigger.block),blockSha256:hash(trigger.block)};
+  demand(option.blockSha256===m[3],'Read trigger text changed after planning; review the new plan');
+  adoption={option,current:trigger.current,after:readTriggerAfter(trigger.current.bytes,trigger.text),blockSha256:option.blockSha256};
+  // The appended result must start with the exact existing bytes.
+  demand(trigger.current.bytes===null||adoption.after.subarray(0,trigger.current.bytes.length).equals(trigger.current.bytes),'Read trigger would change existing bytes');
  }
  const adoptedNext=adoption?[...adoptedTriggers,{id:adoption.option.id,path:adoption.option.path,blockSha256:adoption.blockSha256}]:adoptedTriggers;
  const nextRecord=Buffer.from(JSON.stringify({schema:'asc-project-assets/v1',registeredHosts:hosts,hostEntries:[...nextOwned].sort(),files:Object.fromEntries(Object.entries(files).sort(([a],[b])=>a<b?-1:a>b?1:0)),...(adoptedNext.length?{readTrigger:{adopted:adoptedNext}}:{})},null,2)+'\n');

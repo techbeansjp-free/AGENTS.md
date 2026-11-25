@@ -6,16 +6,17 @@
 // rule 5 (a trial whose hook did not fire is a failure) is kept. No model call.
 //
 // Assumed product interface (IMPROVEMENT_DESIGN.md, a draft): the project-assets plan has
-// readTrigger: {default, options: [{id, path, action, beforeSha256, diff}]}, and apply accepts
-// --adopt-read-trigger <id>@<beforeSha256>.
+// readTrigger: {default, options: [{id, path, action, beforeSha256, blockSha256, diff}]}, and apply accepts
+// --adopt-read-trigger <id>@<beforeSha256>:<blockSha256> (the released interface after the product review; changed at
+// stage 3 under the STAGE3_ALLOWED rule with a recorded reason and review).
 import crypto from 'node:crypto';
 
 // Extra arguments for `project-assets ... --apply` and the record of what was adopted, from the plan shown to the user.
 export function adoptFromPlan(plan, id) {
   const option = (plan.readTrigger?.options ?? []).find((o) => o.id === id);
   if (!option) throw new Error(`the release's project-assets plan offers no read-trigger option ${id}`);
-  return {args: ['--adopt-read-trigger', `${option.id}@${option.beforeSha256}`],
-    adopted: {id: option.id, path: option.path, action: option.action, beforeSha256: option.beforeSha256, diffSha256: crypto.createHash('sha256').update(String(option.diff ?? '')).digest('hex'), default: plan.readTrigger.default ?? null}};
+  return {args: ['--adopt-read-trigger', `${option.id}@${option.beforeSha256}:${option.blockSha256}`],
+    adopted: {id: option.id, path: option.path, action: option.action, beforeSha256: option.beforeSha256, blockSha256: option.blockSha256, diffSha256: crypto.createHash('sha256').update(String(option.diff ?? '')).digest('hex'), default: plan.readTrigger.default ?? null}};
 }
 
 // Probe expectation for condition I: the pointer head appears anywhere in the answer (the adopted CLAUDE.md block may end

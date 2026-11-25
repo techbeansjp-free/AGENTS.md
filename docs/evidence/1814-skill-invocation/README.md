@@ -185,7 +185,7 @@ High・Mediumなし、Low 2件。固定したfileは変えず（変えてよい�
 
 ## 改善の実装（ownerの判断：条件Pを標準、hookは採用しない）
 
-`project-assets`が、Claude Codeを登録した利用先で、USAGEの文例をCLAUDE.mdの末尾へ区切り付きで追記する案を差分付きで示し、`--adopt-read-trigger claude-md@<beforeSha256|absent>`で承認した場合だけ追記するようにした（[IMPROVEMENT_DESIGN.md](IMPROVEMENT_DESIGN.md)の先頭の注記）。段階3（条件I）は、この変更を含むreleaseが出た後に行う。
+`project-assets`が、Claude Codeを登録した利用先で、USAGEの文例をCLAUDE.mdの末尾へ区切り付きで追記する案を差分付きで示し、`--adopt-read-trigger claude-md@<beforeSha256|absent>`で承認した場合だけ追記するようにした（[IMPROVEMENT_DESIGN.md](IMPROVEMENT_DESIGN.md)の先頭の注記）。承認の値は、製品のレビューを受けて`claude-md@<beforeSha256>:<blockSha256>`にした。そのため`harness/condition-i.mjs`を変えており、段階3の固定で理由とレビューの参照を付けて記録する。段階3（条件I）は、この変更を含むreleaseが出た後に行う。
 
 ## 段階2（条件P・H）の結果と判定（2026-11-25）
 
