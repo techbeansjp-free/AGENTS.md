@@ -22,7 +22,7 @@
 | 区分 | 内容 |
 | --- | --- |
 | 費用（Hostの計算値） | 合計 **19.95 USD** と、Codexの費用（取得できず欠測）。内訳：1回目7.87、2回目9.22、Fableの順位付け2.86。上限40・停止規則36の内。Codexの費用が欠測のため、上限の内に収まったことは、Codex分を除いて確かめた範囲である |
-| 未実施・skip | 2回目の誤発火の確認（1回目で実施済み、計画どおり）。1回目の比較画面の順位付け（2回目に置き換えた） |
+| 未実施・skip | 人の審美評価（ownerの判断で2モデルの順位に置換）。2回目の誤発火の確認（1回目で実施済み、計画どおり）。1回目の比較画面の順位付け（2回目に置き換えた） |
 
 ## 本番2回目の結果
 
@@ -41,7 +41,7 @@
 | UI-07 | 0/3 | **3/3** | 0/3 | 0/3 |
 
 - APは全9試行で、見本を`view_page`で2回ずつ閲覧し、2案（`out/alt-a.html`・`out/alt-b.html`）と成果物を狭幅・広幅で描画した（`screenshot`は6〜7回）。多くの試行で、最初にallowlist外（ダッシュボードの製品サイト、部品の通販、規格・解説、行政のサイト等）を試して拒否され、応答の一覧から許可されたサイト（`linear.app`・鉄道会社・交通当局・美術館等）を選び直した。
-- D・Eは、2回目では閲覧のtoolを1回も呼ばず、Art Direction・Product DesignのSkillのfileも1回も読まなかった（Skill toolの呼出しも0回）。1回目（Dの9試行中4試行が`SKILL.md`を読んだ）より少ない。候補のSkillは、2回目のD・Eの全18試行で、生成Agentの起動時のSkill一覧に載っていた（[results/skill-listing.json](results/skill-listing.json)。起動記録の一覧から、候補の名前の有無だけを取り出した。A・APの一覧には無い）。配置はされていたが選ばれず、手順が動かなかった。
+- D・Eは、2回目では閲覧のtoolを1回も呼ばず、Art Direction・Product DesignのSkillのfileも1回も読まなかった（Skill toolの呼出しも0回）。1回目（Dの9試行中4試行が`SKILL.md`を読んだ）より少ない。候補のSkillは、2回目のD・Eの全18試行で、生成Agentの起動時のSkill一覧に載っていた（[results/skill-listing.json](results/skill-listing.json)。起動記録の一覧から、候補の名前の有無だけを取り出した。A・APの一覧には無い）。出典は各試行の起動記録（git管理外のmetaの`initSkills`。commitするmetaからは`harness/collect.mjs`が除く）で、Skill名に`art-direction`・`product-design`（`_`区切りも可）を含むかを小文字で部分一致で照合した。`count`は一覧の全件数で、Hostの組込みSkillを含む。1回目と誤発火の確認（UI-10）の試行も同じ形で含む。1回目もDの全試行・Eの全試行で載っていた。配置はされていたが選ばれず、手順が動かなかった。
 - 広幅の確認：UI-07で、A・D・Eは全試行が狭幅だけを確認した。APは全試行が両幅を確認した。
 - 見本の描画の欠け：`linear.app`の描画では、allowlist外の要求が1回あたり約300件中止された。APの生成者が見た見本は、多くが不完全な描画だった可能性がある。
 
@@ -113,7 +113,7 @@ Hostの`total_cost_usd`の合計 **7.87 USD**（上限40、停止規則36に届�
 
 ### 補助の採点（opus、各ケース1回、notesは伏せた）
 
-参考値。審美の判定には使わない。rationale（説明可能性）を除く9項目の合計（18点満点）の3試行の範囲：UI-03 A 15〜18・D 15〜17・E 15〜17、UI-04 A 14〜15・D 15〜15・E 14〜16、UI-07 A 15〜16・D 15〜16・E 14〜16。条件の間で範囲が重なる。[results/run/evals/](results/run/evals/)（**順位付けの前に開かない**）。
+参考値。審美の判定には使わない。rationale（説明可能性）を除く9項目の合計（18点満点）の3試行の範囲：UI-03 A 15〜18・D 15〜17・E 15〜17、UI-04 A 14〜15・D 15〜15・E 14〜16、UI-07 A 15〜16・D 15〜16・E 14〜16。条件の間で範囲が重なる。[results/run/evals/](results/run/evals/)（**順位付けの前に開かない**（1回目の順位付けは行わないことになった））。
 
 ### 1回目の比較画面（順位付けは行っていない）
 
@@ -157,7 +157,7 @@ Hostの`total_cost_usd`の合計 **7.87 USD**（上限40、停止規則36に届�
 | [env/](env/) | 生成環境：`proxy.mjs`（allowlistのproxy）、`mcp-server.mjs`（生成Agentのtool）、`Dockerfile`、`gen-prompt.txt`、`allowlist.json`（承認された80 host）、`allowlist.proposed.json`（案と出典・理由）と、案を作る`allowlist-extract.py`・`allowlist-propose.py` |
 | [isolation/](isolation/) | 隔離の反例：`run.sh`、container内で確かめる`probe.mjs`、dummy site、試験用のallowlist。実際のCLIでの再確認`cli-recheck.mjs` |
 | [harness/](harness/) | `core-steps.mjs`（中心の手順の集計）と試験、`gold-check.mjs`（goldの判定器）と合成の画面（`dryrun/`）、`run-gen.mjs`（生成の起動器）、`render.mjs`・`run-render.mjs`（描画と採点）、`misfire.mjs`（誤発火）、`make-blind.mjs`（盲検の比較画面）、`aggregate.mjs`（判定の規則）、`collect.mjs`（記録の取り出し） |
-| [results/](results/) | 隔離の反例の原始結果（準備：`isolation/`、本番のimage：`isolation-tools/`）、集計器の試験結果、goldの判定器の結果、本番の記録（`run/`：試行ごとのmeta・中心の手順・proxyとtoolの記録・描画の指標・gold、判定、誤発火、補助の採点、再確認） |
+| [results/](results/) | 隔離の反例の原始結果（準備：`isolation/`、本番のimage：`isolation-tools/`）、集計器の試験結果、goldの判定器の結果、本番の記録（`run/`：試行ごとのmeta・中心の手順・proxyとtoolの記録・描画の指標・gold、判定、誤発火、補助の採点、再確認）、本番2回目の記録（`run2/`：同じ形の試行の記録、判定、keys、2モデルの順位`model-ranks/`）、候補Skillの一覧掲載（`skill-listing.json`） |
 
 ### 生成環境
 
