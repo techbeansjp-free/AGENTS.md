@@ -28,7 +28,7 @@ snapshot Controllerは明示選択の別経路です。利用する場合だけ 
 
 ## 標準経路の流れ
 
-Git管理済みrepoでの1 Issueの流れです。各段階の詳細は[ASC Skill](skills/asc/SKILL.md)、[独立レビューとmerge直前の確認](skills/asc/references/review.md)、[同期と整理](skills/asc/references/post-merge.md)が正本です。Git未管理のフォルダーでは専用worktree・PR提出・merge後の整理を使わず、実装・実テスト・独立レビューで完了できます。Gitでの提出を求められた場合だけ、許可されたGit導入と専用worktreeへの移行を行います。commit・push・PR提出・mergeはどれも利用者の許可がある場合だけ行います。
+Git管理済みrepoでの1 Issueの流れです。各段階の詳細は[ASC Skill](skills/asc/SKILL.md)、[独立レビューとmerge直前の確認](skills/asc/references/review.md)、[同期と整理](skills/asc/references/post-merge.md)が正本です。Git未管理のフォルダーでは専用worktree・PR提出・merge後の整理を使わず、実装・実テスト・独立レビューで完了できます。Gitでの提出を求められた場合だけ、許可されたGit導入と専用worktreeへの移行を行います。変更の依頼は、専用branchへのcommit・pushとPR提出まで含みます（例外は[進め方の原則](skills/asc/SKILL.md#進め方の原則)）。merge・releaseは利用者の許可がある場合だけ行います。
 
 ```mermaid
 flowchart TD
@@ -39,7 +39,7 @@ flowchart TD
   D -->|"未完了（対象を確認できない等）"| X["提出へ進まず未完了として報告"]
   E -->|"High・Medium、または振る舞い・契約・権限が変わる／影響不明のLow"| D
   E -->|"影響しないと確認できたLowだけ"| P
-  D -->|指摘なし| P{"利用者が提出を許可したか"}
+  D -->|指摘なし| P{"変更の依頼か（調査・下書きだけ等の例外でないか）"}
   P -->|いいえ| Q["検証結果を報告"]
   P -->|はい| F["Draft PR提出とCI確認"]
   F --> G{"利用者がmergeを許可したか"}
@@ -56,7 +56,7 @@ sequenceDiagram
   participant R as 独立レビューのContext
   participant G as GitHub（PR・CI）
   U->>H: Issueの開発を依頼
-  Note over U,H: commit・push・Draft PR提出とmergeは利用者の許可が必要
+  Note over U,H: 変更の依頼はcommit・push・PR提出まで含む。merge・releaseは利用者の許可が必要
   H->>C: start・worktree-create
   C-->>H: 作業場所と規約の参照
   H->>H: 実装・実テスト
