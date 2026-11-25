@@ -1,52 +1,58 @@
 # command: node --test docs/evidence/1814-skill-invocation/harness/score.test.mjs docs/evidence/1814-skill-invocation/harness/probe.test.mjs
-# HEAD: 5e588f26b68610da12004412003eb7439ea6b153 (clean tree)
+# HEAD: 2c81ff661e3b9bf3610bd17249bbcc5f5e618858 (clean tree)
 # node: v20.12.2
 ok 1 - clean R probe passes; heading mark omitted in the answer is accepted (L3)
 ok 2 - each leak or mismatch fails the probe
-ok 3 - the program directory is excluded only when it is a safe directory (M2)
-ok 4 - hook condition passes with pointer delivered, the hook log and only its own hook events
-ok 5 - P: the pointer is the last line of CLAUDE.md, so the first/last-line answer shows it (N3)
-ok 6 - hook events: shapes by event name, counts against the log (L-1)
-ok 7 - compare: conditions may differ only by CLAUDE.md / hook output (M1); git subjects compared as a set (L-7)
-ok 8 - ownerCanaries reads first lines and Skill names, never content beyond them
-ok 9 - description() reads the single-line frontmatter description
-ok 10 - guard refuses ancestors with instruction files or git, and the real HOME
-ok 11 - ledger: cumulative by unique id, reserved at budget until settled, duplicate names refused, sequential (M4, N1)
-ok 12 - fixation: a change to a fixed file is detected; stage 3 may only add conditions.I and fill phase3 (N2)
-ok 13 - stage 3: only condition-i.mjs may change, with a reason and a review; the conditionISchema is enforced (M-1, L-d)
-ok 14 - ledger id and seq: one ledger, each seq once; a copied earlier state is detected (N-1 (d))
-ok 15 - refix: recorded ledger, probe reservations only, only probe-check.mjs may change (N-1 (b)(c))
-ok 16 - a refix record later than the first stage-1/2 reservation is refused at run time (N-1 (a))
-ok 17 - condition-i.mjs shape: exports, imports and no top-level statements are checked at stage 3 (L-1)
-ok 18 - fixation file must be committed, its commits in history, and the first commit named in README (L-c)
-ok 19 - the token value is found in child files by count only
-ok 20 - run path requires a released, clean install at the recorded HEAD whose entries match, and the adopted option (L-2, L-b)
-ok 21 - condition I: the pointer may appear anywhere in the answer, not only as the last line (M-1)
-ok 22 - every condition gets one commit with the same neutral subject (M1)
-ok 23 - asc case: body + reference + markers => applied
-ok 24 - Skill tool alone is the first hop only
-ok 25 - two hops: thin entry Read, then body by a relative path resolved against the project root
-ok 26 - paths outside the project root never match; /private/tmp equals /tmp
-ok 27 - a refused or unanswered Read does not count as read
-ok 28 - the registered entry (.claude/skills) is not the body
-ok 29 - managed-runtime body path counts
-ok 30 - misselect: another ASC body read instead of the expected one
-ok 31 - answerGroups require every group (ui-1)
-ok 32 - secondary Skill is recorded but not required (asc-3)
-ok 33 - negative: an ASC body read or Skill call is overapplication
-ok 34 - budget stop is scored with the last text; API error is a failure
-ok 35 - scoreDir: names, multi-letter conditions, hook log, missing trace
-ok 36 - judge: owner pass level
-ok 37 - missing init event and an unfired hook in a hook condition are failures (L5, L6)
-ok 38 - only planned reps count; a later rep only replaces a failed planned trial once (L-3)
-ok 39 - product hook (condition I) is fired by SessionStart hook events in the trace
-ok 40 - collect: a trace without meta.json becomes a failure row instead of a crash (L-6)
-ok 41 - collect extends trials.json across stages and refuses a trial already collected (L-e)
-ok 42 - product hook: hookFired reflects the trace evidence in the summary (L-3)
-ok 43 - scrubSensitive replaces mail addresses, keys and account fields (L9)
-ok 44 - redact removes local paths and user-specific names
-ok 45 - pointer text is extracted from v05/USAGE.md and the hook emits it as SessionStart context
-# tests 45
-# pass 45
+ok 3 - stage-0 refix: bundled plugins allowed and named; any other plugin fails
+ok 4 - stage-0 refix: only permission-suggestion lines for the two markers are excluded from the debug checks
+ok 5 - stage-0 refix: the managed-policy path with a space and relative paths in hook text are not outside paths
+ok 6 - the program directory is excluded only when it is a safe directory (M2)
+ok 7 - hook condition passes with pointer delivered, the hook log and only its own hook events
+ok 8 - P: the pointer is the last line of CLAUDE.md, so the first/last-line answer shows it (N3)
+ok 9 - hook events: shapes by event name, counts against the log (L-1)
+ok 10 - compare: conditions may differ only by CLAUDE.md / hook output (M1); git subjects compared as a set (L-7)
+ok 11 - ownerCanaries reads first lines and Skill names, never content beyond them
+ok 12 - description() reads the single-line frontmatter description
+ok 13 - guard refuses ancestors with instruction files or git, and the real HOME
+ok 14 - ledger: cumulative by unique id, reserved at budget until settled, duplicate names refused, sequential (M4, N1)
+ok 15 - fixation: a change to a fixed file is detected; stage 3 may only add conditions.I and fill phase3 (N2)
+ok 16 - stage 3: only condition-i.mjs may change, with a reason and a review; the conditionISchema is enforced (M-1, L-d)
+ok 17 - ledger id and seq: one ledger, each seq once; a copied earlier state is detected (N-1 (d))
+ok 18 - refix: recorded ledger, probe reservations only, only probe-check.mjs may change (N-1 (b)(c))
+ok 19 - a refix record later than the first stage-1/2 reservation is refused at run time (N-1 (a))
+ok 20 - condition-i.mjs shape: exports, imports and no top-level statements are checked at stage 3 (L-1)
+ok 21 - fixation file must be committed, its commits in history, and the first commit named in README (L-c)
+ok 22 - the token value is found in child files by count only
+ok 23 - run path requires a released, clean install at the recorded HEAD whose entries match, and the adopted option (L-2, L-b)
+ok 24 - condition I: the pointer may appear anywhere in the answer, not only as the last line (M-1)
+ok 25 - every condition gets one commit with the same neutral subject (M1)
+ok 26 - asc case: body + reference + markers => applied
+ok 27 - Skill tool alone is the first hop only
+ok 28 - two hops: thin entry Read, then body by a relative path resolved against the project root
+ok 29 - paths outside the project root never match; /private/tmp equals /tmp
+ok 30 - a refused or unanswered Read does not count as read
+ok 31 - the registered entry (.claude/skills) is not the body
+ok 32 - managed-runtime body path counts
+ok 33 - misselect: another ASC body read instead of the expected one
+ok 34 - answerGroups require every group (ui-1)
+ok 35 - secondary Skill is recorded but not required (asc-3)
+ok 36 - negative: an ASC body read or Skill call is overapplication
+ok 37 - budget stop is scored with the last text; API error is a failure
+ok 38 - scoreDir: names, multi-letter conditions, hook log, missing trace
+ok 39 - judge: owner pass level
+ok 40 - missing init event and an unfired hook in a hook condition are failures (L5, L6)
+ok 41 - only planned reps count; a later rep only replaces a failed planned trial once (L-3)
+ok 42 - product hook (condition I) is fired by SessionStart hook events in the trace
+ok 43 - collect: a trace without meta.json becomes a failure row instead of a crash (L-6)
+ok 44 - collect extends trials.json across stages and refuses a trial already collected (L-e)
+ok 45 - product hook: hookFired reflects the trace evidence in the summary (L-3)
+ok 46 - scrubSensitive replaces mail addresses, keys and account fields (L9)
+ok 47 - redact removes local paths and user-specific names
+ok 48 - pointer text is extracted from v05/USAGE.md and the hook emits it as SessionStart context
+# tests 48
+# pass 48
 # fail 0
 # exit: 0
+# fixation check at this HEAD (expected: only harness/probe-check.mjs differs until 'fixation.mjs refix' is run):
+{"ok":false,"stage":"stages 0-2","records":1,"firstFixedAtCommit":"d1ba482e5c4d315f6d4506a2372601104cb4c235","fixedAtCommit":"d1ba482e5c4d315f6d4506a2372601104cb4c235","differs":["harness/probe-check.mjs"]}
+# exit: 1
