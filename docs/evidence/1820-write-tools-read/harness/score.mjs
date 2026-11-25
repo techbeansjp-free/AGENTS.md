@@ -5,10 +5,15 @@
 // tool calls, and overapplication for the negative cases (cases.json scoring). A trial whose init event shows other tools
 // or another permission mode than its cell's tools level is a failure (the condition was not received). The summary is per
 // cell; mainEffects gives the analysis of analysis-plan.md (no adoption decision in stage 1). No model call.
+// Review M1: in level X the body can be read with Bash (cat, head, sed, ...). A Bash call whose arguments name the body
+// (resolved against the session cwd) and whose result is not an error counts as a body read (bodyRead*), and is also
+// reported on its own (bodyReadBash*). The first tools record a Bash call as its command with project-relative paths.
+// Review L1: the conditions are those of apply-condition.mjs loadConditions (a dropped tools level is left out).
 // Usage: node score.mjs <traces-dir> [--runs-json <out.json>]   (descriptive only; the analysis is analyze.mjs)
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {loadConditions} from './apply-condition.mjs';
 
 const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(ev, f), 'utf8'));
@@ -60,25 +65,43 @@ export function markersOk(k, text) {
     ((k.answerAny ?? []).length === 0 || k.answerAny.some((a) => new RegExp(a, 'i').test(text)));
 }
 
+// The words of a Bash command that can name a file: split at blanks and shell operators, quotes removed, options dropped.
+export function bashArgs(command) {
+  return String(command).split(/[\s;|&()<>]+/).map((w) => w.replace(/^['"`]+|['"`]+$/g, '')).filter((w) => w && !w.startsWith('-'));
+}
+
+// A Bash call as it is recorded in the first tools: the command with each path-like word made project-relative, or
+// <outside> when it lies outside the project root (no local absolute path in the record); at most 200 characters.
+export function bashTarget(command, root) {
+  return String(command).trim().split(/\s+/).map((w) => {
+    const bare = w.replace(/^['"`]+|['"`]+$/g, '');
+    if (!bare.includes('/') || /^[a-z]+:\/\//i.test(bare)) return w;
+    return projectRelative(bare, root) ?? '<outside>';
+  }).join(' ').slice(0, 200);
+}
+
 // What one assistant message did, relative to the project root.
 export function messageFacts(spec, m, t) {
   const pat = (key, s = '') => new RegExp(spec[key].replace('<skill>', esc(s)));
   const issued = (u) => !t.results.has(u.id) || !t.results.get(u.id).is_error; // a missing result (stopped) counts as issued
   const reads = m.uses.filter((u) => u.name === 'Read' && issued(u)).map((u) => projectRelative(String(u.input?.file_path ?? ''), t.cwd)).filter(Boolean);
+  // review M1: Bash calls whose arguments name a file of the project (issued like a Read: not an error result).
+  const bashReads = m.uses.filter((u) => u.name === 'Bash' && issued(u)).flatMap((u) => bashArgs(u.input?.command ?? '').map((w) => projectRelative(w, t.cwd))).filter(Boolean);
   const skills = m.uses.filter((u) => u.name === 'Skill').map((u) => String(u.input?.skill ?? ''));
-  const ascBodies = ASC_SKILLS.filter((s) => reads.some((r) => pat('bodyPattern', s).test(r)));
-  const ascEntries = ASC_SKILLS.filter((s) => reads.some((r) => pat('entryPattern', s).test(r)));
+  const named = (key, xs, s) => xs.some((r) => pat(key, s).test(r));
+  const ascBodies = ASC_SKILLS.filter((s) => named('bodyPattern', reads, s) || named('bodyPattern', bashReads, s));
+  const ascEntries = ASC_SKILLS.filter((s) => named('entryPattern', reads, s) || named('entryPattern', bashReads, s));
   const target = (u) => {
     const i = u.input ?? {};
     if (u.name === 'Skill') return String(i.skill ?? '');
     const p = i.file_path ?? i.path ?? null;
     if (p) return projectRelative(String(p), t.cwd) ?? '<outside>';
     if (i.pattern) return String(i.pattern);
-    if (i.command) return String(i.command).split(/\s+/)[0];
+    if (i.command) return bashTarget(i.command, t.cwd);
     return '';
   };
-  return {bodyRead: ascBodies.includes('asc'), skillAsc: skills.some((s) => same(s, 'asc')), entryRead: ascEntries.includes('asc'),
-    readmeRead: reads.some((r) => pat('readmePattern').test(r)), ascTouched: ascBodies.length > 0 || ascEntries.length > 0 || skills.some((c) => ASC_SKILLS.some((s) => same(c, s))),
+  return {bodyRead: ascBodies.includes('asc'), bodyReadBash: named('bodyPattern', bashReads, 'asc'), skillAsc: skills.some((s) => same(s, 'asc')), entryRead: ascEntries.includes('asc'),
+    readmeRead: [...reads, ...bashReads].some((r) => pat('readmePattern').test(r)), ascTouched: ascBodies.length > 0 || ascEntries.length > 0 || skills.some((c) => ASC_SKILLS.some((s) => same(c, s))),
     resultMissing: m.uses.some((u) => !t.results.has(u.id)), tools: m.uses.map((u) => ({name: u.name, target: target(u)}))};
 }
 
@@ -112,7 +135,7 @@ export function scoreRun(spec, k, t, {level = null} = {}) {
   if (t.result.is_error && !row.stopped) return {...row, failure: `result error: ${String(t.result.result ?? sub).slice(0, 120)}`};
   if (!m1) return {...row, failure: 'no assistant message'};
   const either = (f) => Boolean(m1?.[f] || m2?.[f]);
-  Object.assign(row, {bodyRead1: m1.bodyRead, bodyRead2: either('bodyRead'), skillAsc1: m1.skillAsc, entryRead1: m1.entryRead, readmeRead1: m1.readmeRead,
+  Object.assign(row, {bodyRead1: m1.bodyRead, bodyRead2: either('bodyRead'), bodyReadBash1: m1.bodyReadBash, bodyReadBash2: either('bodyReadBash'), skillAsc1: m1.skillAsc, entryRead1: m1.entryRead, readmeRead1: m1.readmeRead,
     skillAsc2: either('skillAsc'), readmeRead2: either('readmeRead'), reach2: either('bodyRead') || either('skillAsc') || either('entryRead'),
     resultMissing: Boolean(m1.resultMissing || m2?.resultMissing)});
   if (!k.expect) { row.overapplication = either('ascTouched'); row.markers = markersOk(k, t.text); }
@@ -139,7 +162,7 @@ export function selectCounted(runs, plannedOf) {
   return runs;
 }
 
-export function scoreDir(spec, dir, conds = readJson('conditions.json')) {
+export function scoreDir(spec, dir, conds = loadConditions()) {
   const runs = [];
   for (const file of fs.readdirSync(dir).sort()) {
     const m = /^([A-Z]+)-(.+)-(\d+)\.jsonl(\.missing)?$/.exec(file);
@@ -164,7 +187,7 @@ export function summarizeCell(runs, cell) {
   const ok = rs.filter((r) => !r.failure), pos = ok.filter((r) => r.expect), neg = ok.filter((r) => !r.expect);
   const n = (xs, f) => xs.filter(f).length;
   return {cell, runs: rs.filter((r) => r.expect).length, failures: n(rs.filter((r) => r.expect), (r) => r.failure), valid: pos.length,
-    bodyRead2: n(pos, (r) => r.bodyRead2), bodyRead1: n(pos, (r) => r.bodyRead1), skillAsc1: n(pos, (r) => r.skillAsc1), entryRead1: n(pos, (r) => r.entryRead1),
+    bodyRead2: n(pos, (r) => r.bodyRead2), bodyReadBash2: n(pos, (r) => r.bodyReadBash2), bodyRead1: n(pos, (r) => r.bodyRead1), skillAsc1: n(pos, (r) => r.skillAsc1), entryRead1: n(pos, (r) => r.entryRead1),
     readmeRead1: n(pos, (r) => r.readmeRead1), reach2: n(pos, (r) => r.reach2), stopped: n(pos, (r) => r.stopped),
     replacementsMissing: n(rs, (r) => r.replacementMissing),
     perRun: pos.sort((a, b) => a.run - b.run).map((r) => (r.bodyRead2 ? (r.bodyRead1 ? '1' : '2') : r.reach2 ? 'E' : '-')).join(''),
@@ -175,7 +198,9 @@ export function summarizeCell(runs, cell) {
 // analysis-plan.md: the rate of a cell is bodyRead2/valid; the rate of a factor level is the unweighted mean of the cell
 // rates with that level; a main effect is the difference of level rates (tools: W - R, X - R, X - W; prompt: G - S;
 // fixture: D - A). Pooled counts per level are reported beside it. Interactions are shown as two-way tables of means only.
-export function mainEffects(cellSums, conds = readJson('conditions.json')) {
+// Review L1: with a dropped tools level (8 cells) only the levels present are used; the tools effects that need the
+// dropped level are not computed (only W - R remains).
+export function mainEffects(cellSums, conds = loadConditions()) {
   const rate = (s) => (s.valid ? s.bodyRead2 / s.valid : null);
   const cells = Object.entries(conds.cells).map(([id, c]) => ({id, ...c, s: cellSums[id]}));
   const missing = cells.filter((c) => !c.s || !c.s.valid).map((c) => c.id);
@@ -185,13 +210,15 @@ export function mainEffects(cellSums, conds = readJson('conditions.json')) {
     const cs = cells.filter((c) => c[factor] === v);
     return {meanOfCellRates: mean(cs.map((c) => rate(c.s))), pooled: `${cs.reduce((a, c) => a + c.s.bodyRead2, 0)}/${cs.reduce((a, c) => a + c.s.valid, 0)}`, cells: cs.map((c) => c.id)};
   };
-  const levels = {tools: Object.fromEntries(['R', 'W', 'X'].map((v) => [v, level('tools', v)])),
+  const toolsLevels = ['R', 'W', 'X'].filter((v) => cells.some((c) => c.tools === v));
+  const levels = {tools: Object.fromEntries(toolsLevels.map((v) => [v, level('tools', v)])),
     prompt: Object.fromEntries(['S', 'G'].map((v) => [v, level('prompt', v)])), fixture: Object.fromEntries(['A', 'D'].map((v) => [v, level('fixture', v)]))};
   const d = (f, a, b) => Number((levels[f][a].meanOfCellRates - levels[f][b].meanOfCellRates).toFixed(4));
-  const effects = {'tools W-R': d('tools', 'W', 'R'), 'tools X-R': d('tools', 'X', 'R'), 'tools X-W': d('tools', 'X', 'W'), 'prompt G-S': d('prompt', 'G', 'S'), 'fixture D-A': d('fixture', 'D', 'A')};
+  const effects = Object.fromEntries([['tools', 'W', 'R'], ['tools', 'X', 'R'], ['tools', 'X', 'W'], ['prompt', 'G', 'S'], ['fixture', 'D', 'A']]
+    .filter(([f, a, b]) => levels[f][a] && levels[f][b]).map(([f, a, b]) => [`${f} ${a}-${b}`, d(f, a, b)]));
   const table = (f1, v1s, f2, v2s) => Object.fromEntries(v1s.map((a) => [a, Object.fromEntries(v2s.map((b) => [b, mean(cells.filter((c) => c[f1] === a && c[f2] === b).map((c) => rate(c.s)))]))]));
-  return {analysed: true, metric: 'bodyRead2', levels, effects,
-    twoWay: {'tools x prompt': table('tools', ['R', 'W', 'X'], 'prompt', ['S', 'G']), 'tools x fixture': table('tools', ['R', 'W', 'X'], 'fixture', ['A', 'D']), 'prompt x fixture': table('prompt', ['S', 'G'], 'fixture', ['A', 'D'])},
+  return {analysed: true, metric: 'bodyRead2', droppedLevel: conds.droppedLevel ?? null, levels, effects,
+    twoWay: {'tools x prompt': table('tools', toolsLevels, 'prompt', ['S', 'G']), 'tools x fixture': table('tools', toolsLevels, 'fixture', ['A', 'D']), 'prompt x fixture': table('prompt', ['S', 'G'], 'fixture', ['A', 'D'])},
     note: 'Stage 1 is diagnostic: 4 trials per cell, no adoption decision; a difference of one or two trials per cell is within chance.'};
 }
 
@@ -202,5 +229,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const spec = readJson('cases.json');
   const runs = scoreDir(spec, path.resolve(args[0]));
   if (out) fs.writeFileSync(out, JSON.stringify(runs, null, 1));
-  for (const cell of Object.keys(readJson('conditions.json').cells)) console.log(JSON.stringify(summarizeCell(runs, cell)));
+  for (const cell of Object.keys(loadConditions().cells)) console.log(JSON.stringify(summarizeCell(runs, cell)));
 }

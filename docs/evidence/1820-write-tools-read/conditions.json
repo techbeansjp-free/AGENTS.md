@@ -6,10 +6,11 @@
  "runs": 4,
  "negativeRuns": 2,
  "maxTurns": 2,
- "probeMaxTurns": 12,
- "maxTurnsNote": "Every measurement trial runs with --max-turns 2 (the decision to read ASC is made in the first assistant message, Issue #1820 cause analysis). The isolation probe needs more turns for its steps; that is its only flag difference from the trials of its tools level.",
- "budget": {"ownerCapUsd": 25, "capUsd": 6.5, "safetyMarginUsd": 0.5, "perTrialUsd": 0.3,
-  "note": "Owner cap 25 USD for stages 1 and 2 together (Issue #1820 owner decision 2026-11-26). Stage 1 stops at about 6 USD: run-trial.mjs refuses a trial when the ledger total + perTrialUsd exceeds capUsd - safetyMarginUsd = 6 USD. perTrialUsd is the --max-budget-usd of every trial and probe and its ledger reservation: #1817 measured 0.085 USD per full trial on average and 0.141 USD at most (112 trials, results/ledger.jsonl there); a two-turn trial costs less, and 0.3 is about twice the #1817 maximum. Stage 2 must count this ledger's total against the 25 USD cap."},
+ "probeMaxTurns": 30,
+ "probeSteps": {"R": 4, "W": 6, "X": 19},
+ "maxTurnsNote": "Every measurement trial runs with --max-turns 2 (the decision to read ASC is made in the first assistant message, Issue #1820 cause analysis). The isolation probe needs more turns for its steps (run-trial.mjs probeSteps: R 4, W 6, X 19 tool calls, one call each, plus the answer); probeMaxTurns 30 leaves room for all of them. The turns and the probe budget are its only flag differences from the trials of its tools level.",
+ "budget": {"ownerCapUsd": 25, "capUsd": 6.5, "safetyMarginUsd": 0.5, "perTrialUsd": 0.3, "probeUsd": 0.6,
+  "note": "Owner cap 25 USD for stages 1 and 2 together (Issue #1820 owner decision 2026-11-26). Stage 1 stops at about 6 USD: run-trial.mjs refuses a trial when the ledger total + perTrialUsd exceeds capUsd - safetyMarginUsd = 6 USD. perTrialUsd is the --max-budget-usd of every trial and probe and its ledger reservation: #1817 measured 0.085 USD per full trial on average and 0.141 USD at most (112 trials, results/ledger.jsonl there); a two-turn trial costs less, and 0.3 is about twice the #1817 maximum. Stage 2 must count this ledger's total against the 25 USD cap. probeUsd is the --max-budget-usd and reservation of a probe: the #1817 probes cost 0.066 and 0.084 USD for 8 steps; the X probe has 19 steps and 30 turns, so about twice the trial budget."},
  "adopt": "claude-md",
  "toolLevels": {
   "R": {"label": "読取りだけ（#1814・#1817と同じ）", "tools": "Read,Glob,Grep,Skill", "disallowed": "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task", "permissionMode": null, "initPermissionMode": "default"},
@@ -44,5 +45,7 @@
  "negativeCells": ["RSA", "WSA"],
  "negativeNote": "The negative cases replace the prompt; they use the cell's tools level and fixture A. The prompt level does not apply to them.",
  "probeCells": ["RSA", "WSA", "XSA"],
+ "droppableLevels": ["X"],
+ "dropNote": "Pre-written before any probe (review L1). Only level X may be dropped, and only by fixation.mjs drop-level X before any planned trial is reserved, when the X probe failed twice (XSA-probe-2 settled) and probe-check.mjs compare --drop X shows R and W passing and X failing, bound to the ledger. The drop leaves 8 cells (R and W x S, G x A, D), 32 brief + 12 negative = 44 planned trials in the order of run-order.json without the X entries, and the main effects W-R, G-S, D-A over the 8 cells. A failing probe of R or W is not dropped: the measurement is not run and the owner is asked.",
  "probeNote": "One isolation probe per tools level (the tools change the launch), on fixture A. probe-check.mjs judges each against its level; compare checks that they differ only in tools and permission mode."
 }

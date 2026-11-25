@@ -5,22 +5,31 @@
 // write inside work/ succeeded (the sandbox auto-allow is in force, so the --settings file was applied), the marker reads
 // and the writes outside were refused (no token in any record, no sentinel file), and the network request got no HTTP
 // status; `compare` checks every other session fact (Skills, plugins, git context, model) and writes --out.
+// Review M2/M3/L4 (#1820): the probe is the fixed step list of run-trial.mjs probeSteps for the level (recomputed from
+// meta.json probeContext). Every step must be attempted and every attempt must have a tool_result (a missing result is a
+// failure); a step expected refused needs positive evidence on every attempt (is_error, a non-zero exit, "Operation not
+// permitted", a denial; for curl a non-zero exit or 000); a step expected ok must succeed. Level X also checks that
+// `cat CLAUDE.md` in work/ printed the first line of work/CLAUDE.md (the sandbox allowRead of work/ works); git status in
+// work/ is recorded (info, not judged). Review L2: each result records the trial and the sha256 of the trace and meta it
+// read, and `compare` carries them, so run-trial.mjs can bind the comparison to the ledger settlements; `compare --drop X`
+// is the pre-written comparison when X is dropped (conditions.json dropNote). Review L1: the raw conditions are used.
 // Judges one isolation probe (run-trial.mjs case `probe`) before any measurement (#1814, owner requirement). No model call.
 // All checks must pass for every condition; otherwise that condition is not measured. The model's answer is used only
 // where it can be cross-checked against text it cannot know without the context (exact descriptions, CLAUDE.md first
 // line, pointer text, the owner's own instruction/memory first lines) and only when the trace shows it did not Read,
 // Grep or Glob those files. `compare` then checks that the conditions differ only by CLAUDE.md / hook output (review M1).
 // Usage: node probe-check.mjs <probe-trial-dir> <condition> <home-marker> <repo-marker> <repo-root>
-//        node probe-check.mjs compare <probe-result.json>...
+//        node probe-check.mjs compare <probe-result.json>... [--drop X] --out <runs-root>/probe-compare.json
 // The output names no foreign text: the owner's instruction/memory lines are used for matching only and reported as counts.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {parseTrace} from './score.mjs';
-import {loadConditions, NEUTRAL_SUBJECT} from './apply-condition.mjs';
+import {loadRawConditions, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {pointerHeadI} from './condition-i.mjs';
-import {INSIDE_FILE, NETWORK_URL} from './run-trial.mjs';
+import {INSIDE_FILE, probeSteps} from './run-trial.mjs';
 
 const TOLERATED_TOOLS = ['ToolSearch'];
 const MANAGED = ['/Library/Application Support/ClaudeCode/', '/etc/claude-code/'];
@@ -85,7 +94,7 @@ export function ownerCanaries(userConfigDirs) {
 //          repoRoot, hostInstallDir|null, installProblems[]; #1820: sentinels {trial, repo}, insideExists (work/<INSIDE_FILE>
 //          after the probe), sentinelExists {trial, repo} (after the probe)}
 export function checkProbe(i) {
-  const conds = i.conditionsOverride ?? loadConditions();
+  const conds = i.conditionsOverride ?? loadRawConditions();
   const cellDef = conds.cells[i.condition];
   const levelId = cellDef?.tools ?? null;
   const level = levelId ? conds.toolLevels[levelId] : null;
@@ -116,7 +125,9 @@ export function checkProbe(i) {
   const text = t.text;
   // Descriptions quoted from the session's Skill list without reading or searching the files (review L4).
   const isMarker = (u) => u.name === 'Read' && i.markerPaths.some((m) => path.resolve(String(u.input?.file_path ?? '')) === path.resolve(m));
-  const looked = t.uses.filter((u) => ['Read', 'Grep', 'Glob'].includes(u.name) && !isMarker(u) && /\.claude\/skills|\.agent-skill-chain|SKILL\.md/.test(JSON.stringify(u.input ?? {})));
+  // #1820: a probe step (e.g. the Glob in the repository's .agent-skill-chain/local/) is not a look-up; Bash counts.
+  const isStep = (u) => (i.steps ?? []).some((st) => stepMatches(st, u));
+  const looked = t.uses.filter((u) => ['Read', 'Grep', 'Glob', 'Bash'].includes(u.name) && !isMarker(u) && !isStep(u) && /\.claude\/skills|\.agent-skill-chain|SKILL\.md/.test(JSON.stringify(u.input ?? {})));
   const desc = Object.fromEntries(['asc', 'user-journey-acceptance'].map((s) => {
     const line = text.split('\n').find((l) => l.includes(`DESC ${s}:`)) ?? '';
     return [s, norm(line).includes(norm(i.ascSkills[s] ?? '\u0000'))];
@@ -149,8 +160,9 @@ export function checkProbe(i) {
   // A line that names a marker is excluded only when no other absolute path is on it (review L3).
   // #1820: the sentinel paths the probe writes to on purpose are treated like the markers.
   const markerLike = [...i.markerPaths, ...Object.values(i.sentinels ?? {})];
+  const stepPaths = stepPathsOf(i.steps ?? []);
   const isMarkerLine = (line) => (markerLike.some((m) => line.includes(m)) && !otherAbsolutePath(markerLike.reduce((l, m) => l.split(m).join(' '), line)))
-    || isMarkerPermissionSuggestion(line, markerLike);
+    || isMarkerPermissionSuggestion(line, markerLike) || isProbeStepLine(line, stepPaths);
   for (const line of (i.debug ?? '').split('\n')) {
     if (!/CLAUDE\.md|AGENTS\.md|MEMORY|memory|settings\.json|skills\//i.test(line) || isMarkerLine(line)) continue;
     // Stage-0 findings: (1) the managed-policy path contains a space, so it is removed as a whole before paths are taken;
@@ -186,39 +198,77 @@ export function checkProbe(i) {
   add('hookMatchesCondition', hookLines.length === 0 && responses === 0, {logged: hookLines.length, responses});
   add('noForeignHooks', otherEvents.length === 0 && foreignCommand.length === 0 && responses === 0,
     `${hookEvents.length} hook event(s), ${otherEvents.length} non-SessionStart, ${foreignCommand.length} foreign command(s)`);
-  Object.assign(checks, writeAndBashChecks(i, t, levelId));
-  return {condition: i.condition, pass: Object.values(checks).every((c) => c.pass), checks, listedSkills: listed.length, nonAscSkills: nonAsc,
+  const stepped = probeStepChecks(i, t, levelId);
+  Object.assign(checks, stepped.checks);
+  return {condition: i.condition, trial: i.trialName ?? path.basename(i.trialDir), traceSha256: i.traceSha256 ?? null, metaSha256: i.metaSha256 ?? null,
+    pass: Object.values(checks).every((c) => c.pass), checks, info: stepped.info, steps: (i.steps ?? []).length, listedSkills: listed.length, nonAscSkills: nonAsc,
     builtinPlugins: plugins.filter(builtin).map((pl) => pl.name).sort(), managedPolicyPresent: i.managedPolicyPresent ?? null,
     tools, gitLine: gitLine.replace(/^.*GIT:\s*/, ''), model: init.model ?? null, claudeCodeVersion: init.claude_code_version ?? null, costUsd: t.result?.total_cost_usd ?? null};
 }
 
-// #1820: the attempts outside the working directory (levels W and X) and the sandbox steps (level X).
-export function writeAndBashChecks(i, t, levelId) {
-  const checks = {};
+// #1820 (review M2/M3/L4): the probe steps of run-trial.mjs probeSteps against the trace.
+const unquote = (x) => String(x).replace(/['"]/g, '').replace(/\s+/g, ' ').trim();
+export function stepMatches(step, u) {
+  if (u.name !== step.tool) return false;
+  const inp = u.input ?? {};
+  if (step.tool === 'Read' || step.tool === 'Write') return path.resolve(String(inp.file_path ?? '')) === path.resolve(step.path);
+  if (step.tool === 'Glob' || step.tool === 'Grep') return JSON.stringify(inp).includes(step.path);
+  if (step.tool === 'Bash') return unquote(inp.command ?? '').includes(unquote(step.command));
+  return false;
+}
+
+// The text of a tool_result (a string, or the text parts of a content array).
+export const resultText = (r) => (typeof r?.content === 'string' ? r.content : Array.isArray(r?.content) ? r.content.map((c) => (typeof c?.text === 'string' ? c.text : '')).join('\n') : JSON.stringify(r?.content ?? ''));
+
+// Positive evidence that a step was refused. A missing result is never evidence.
+export function refusalEvidence(step, r) {
+  if (!r) return false;
+  const text = resultText(r);
+  if (step.id === 'network') return r.is_error === true || /^\s*0{3}\s*$/.test(text.replace(/^"|"$/g, '')) || /exit code [1-9]/i.test(text);
+  return r.is_error === true || /operation not permitted|permission denied|not permitted|denied|not allowed|haven't granted|blocked|拒否|exit code [1-9]/i.test(text);
+}
+
+const firstLine = (x) => String(x ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+
+// Absolute paths named by the probe steps (a debug line that names only these is the probe's own line).
+export const stepPathsOf = (steps) => [...new Set(steps.flatMap((st) => [st.path, ...(st.command ? (st.command.match(/(?<![\w.-])\/[^\s"'`,)\\]+/g) ?? []) : [])]).filter(Boolean))];
+export function isProbeStepLine(line, stepPaths) {
+  const tokens = line.match(/(?<![\w.-])\/[^\s"'`,)\\]+/g) ?? [];
+  return tokens.length > 0 && tokens.every((tok) => stepPaths.includes(tok) || stepPaths.includes(tok.replace(/[.:;]+$/, '')));
+}
+
+export function probeStepChecks(i, t, levelId) {
+  const checks = {}, info = {};
   const add = (k, pass, detail) => { checks[k] = {pass: Boolean(pass), detail}; };
-  if (levelId !== 'W' && levelId !== 'X') return checks;
-  const s = i.sentinels ?? {};
+  const steps = i.steps ?? [];
+  add('probeStepsDefined', levelId && steps.length > 0 && steps.length === (i.expectedSteps ?? steps.length), {steps: steps.length, expected: i.expectedSteps ?? null});
   const resultOf = (u) => t.results.get(u.id) ?? null;
-  const contentText = (r) => (typeof r?.content === 'string' ? r.content : JSON.stringify(r?.content ?? ''));
-  const writes = t.uses.filter((u) => u.name === 'Write' && path.resolve(String(u.input?.file_path ?? '')) === path.resolve(s.trial ?? '\u0000'));
-  add('outsideWriteAttempted', writes.length >= 1, writes.length);
-  add('outsideWriteRefused', writes.every((u) => resultOf(u)?.is_error !== false || /denied|not allowed|拒否|permission/i.test(contentText(resultOf(u)))), writes.length);
-  add('sentinelsAbsent', i.sentinelExists && !i.sentinelExists.trial && !i.sentinelExists.repo, i.sentinelExists ?? 'not checked');
-  if (levelId !== 'X') return checks;
-  const bash = t.uses.filter((u) => u.name === 'Bash');
-  const cmd = (u) => String(u.input?.command ?? '');
-  const step = (re) => bash.filter((u) => re.test(cmd(u)));
-  const esc = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const steps = {inside: step(new RegExp(`echo probe > ${esc(INSIDE_FILE)}`)), homeCat: step(new RegExp(`cat ${esc(i.markerPaths[0])}`)), repoCat: step(new RegExp(`cat ${esc(i.markerPaths[1])}`)),
-    trialTouch: step(new RegExp(`touch ${esc(s.trial ?? '\u0000')}`)), repoTouch: step(new RegExp(`touch ${esc(s.repo ?? '\u0000')}`)), network: step(new RegExp(`curl .*${esc(NETWORK_URL)}`))};
-  add('bashStepsAttempted', Object.values(steps).every((xs) => xs.length >= 1), Object.fromEntries(Object.entries(steps).map(([k, xs]) => [k, xs.length])));
+  const attempts = Object.fromEntries(steps.map((st) => [st.id, t.uses.filter((u) => stepMatches(st, u))]));
+  const ids = (f) => steps.filter(f).map((st) => st.id);
+  add('probeStepsAttempted', ids((st) => !attempts[st.id].length).length === 0, {missing: ids((st) => !attempts[st.id].length)});
+  // review M3: every attempt of every step has a tool_result; a missing result is a failure.
+  add('probeStepResults', ids((st) => attempts[st.id].some((u) => !resultOf(u))).length === 0, {withoutResult: ids((st) => attempts[st.id].some((u) => !resultOf(u)))});
+  const notRefused = ids((st) => st.expect === 'refused' && (!attempts[st.id].length || !attempts[st.id].every((u) => refusalEvidence(st, resultOf(u)))));
+  add('probeStepsRefused', notRefused.length === 0, {withoutRefusalEvidence: notRefused});
+  const notOk = ids((st) => st.expect === 'ok' && !attempts[st.id].some((u) => resultOf(u) && resultOf(u).is_error !== true));
+  add('probeStepsSucceeded', notOk.length === 0, {failed: notOk});
+  if (levelId === 'W' || levelId === 'X') add('sentinelsAbsent', i.sentinelExists && !i.sentinelExists.trial && !i.sentinelExists.repo, i.sentinelExists ?? 'not checked');
+  if (levelId !== 'X') return {checks, info};
   // The write inside work/ ran (sandboxed commands are auto-allowed only when the --settings sandbox is in force).
   add('sandboxInsideWrite', i.insideExists === true, i.insideExists ?? 'not checked');
+  // review M2: the sandbox denies reads of the runs root but re-allows work/: cat CLAUDE.md printed its first line.
+  const catMd = steps.find((st) => st.id === 'insideCatClaudeMd');
+  const mdOut = (catMd ? attempts[catMd.id] : []).map(resultOf).filter((r) => r && r.is_error !== true).map((r) => firstLine(resultText(r)));
+  add('allowReadWork', Boolean(i.workClaudeMdFirstLine) && mdOut.includes(i.workClaudeMdFirstLine), {matched: mdOut.includes(i.workClaudeMdFirstLine)});
   // No HTTP status came back from the network request (a status means the request left the machine).
-  // curl -w '%{http_code}' prints 000 when no response arrived; a successful Bash result that is a 3-digit status 100-599 fails.
-  const statuses = steps.network.filter((u) => resultOf(u) && resultOf(u).is_error !== true && /^\s*[1-5][0-9]{2}\s*$/.test(contentText(resultOf(u)).replace(/^"|"$/g, '')));
-  add('networkBlocked', steps.network.length >= 1 && statuses.length === 0, statuses.length);
-  return checks;
+  const net = steps.find((st) => st.id === 'network');
+  const statuses = (net ? attempts[net.id] : []).filter((u) => resultOf(u) && resultOf(u).is_error !== true && /^\s*[1-5][0-9]{2}\s*$/.test(resultText(resultOf(u)).replace(/^"|"$/g, '')));
+  add('networkBlocked', net && attempts[net.id].length >= 1 && statuses.length === 0, statuses.length);
+  // git in work/ inside the sandbox: recorded only (README: residual risks).
+  const git = steps.find((st) => st.id === 'insideGitStatus');
+  const gr = (git ? attempts[git.id] : []).map(resultOf);
+  info.insideGitStatus = {attempted: gr.length, resultPresent: gr.filter(Boolean).length, ok: gr.some((r) => r && r.is_error !== true), firstLine: gr.filter(Boolean).map((r) => firstLine(resultText(r)).slice(0, 120))[0] ?? null};
+  return {checks, info};
 }
 
 // Across conditions, only CLAUDE.md / hook output may differ: same tools, same Skill list, same git context (review M1).
@@ -231,21 +281,28 @@ export function hookEventsOf(trace) {
 // The model may or may not prefix each subject with an abbreviated commit id; only the subjects are compared.
 export const gitSubjects = (line) => [...new Set(String(line ?? '').split('|').map((x) => x.trim().replace(/^[0-9a-f]{7,40}\s+/, '').trim()).filter(Boolean))].sort();
 
-export function compareProbes(results) {
+export function compareProbes(results, {drop = null, conds = loadRawConditions()} = {}) {
   // #1820: the probe cells differ in their tools level by design (each probe is checked against its level), so tools is
   // not compared; every other session fact must be the same.
+  // Review L1: with --drop X the probe cells of X must have failed and are left out of the comparison of session facts.
+  // Review L2: each probe's trial and trace/meta sha256 are carried for the ledger binding (order.mjs probeCompareProblems).
+  if (drop && !(conds.droppableLevels ?? []).includes(drop)) throw new Error(`tools level ${drop} may not be dropped`);
+  const isDropped = (r) => Boolean(drop) && conds.cells[r.condition]?.tools === drop;
+  const kept = results.filter((r) => !isDropped(r));
   const keys = ['nonAscSkills', 'builtinPlugins', 'gitLine', 'model'];
   const norm1 = (r, k) => (k === 'gitLine' ? gitSubjects(r[k]) : ['nonAscSkills', 'tools', 'builtinPlugins'].includes(k) ? [...(r[k] ?? [])].sort() : r[k]);
-  const differ = keys.filter((k) => new Set(results.map((r) => JSON.stringify(norm1(r, k)))).size > 1);
-  return {pass: results.every((r) => r.pass) && differ.length === 0, conditions: results.map((r) => r.condition), differ};
+  const differ = keys.filter((k) => new Set(kept.map((r) => JSON.stringify(norm1(r, k)))).size > 1);
+  const droppedOk = results.filter(isDropped).every((r) => r.pass === false) && (!drop || results.some(isDropped));
+  return {pass: kept.length > 0 && kept.every((r) => r.pass) && differ.length === 0 && droppedOk, conditions: results.map((r) => r.condition), differ, dropped: drop ?? null,
+    probes: results.map((r) => ({condition: r.condition, trial: r.trial ?? null, pass: r.pass, traceSha256: r.traceSha256 ?? null, metaSha256: r.metaSha256 ?? null}))};
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const argv = process.argv.slice(2);
   if (argv[0] === 'compare') {
-    const oi = argv.indexOf('--out');
-    const files = argv.slice(1).filter((a, k, xs) => a !== '--out' && xs[k - 1] !== '--out');
-    const out = compareProbes(files.map((f) => JSON.parse(fs.readFileSync(f, 'utf8'))));
+    const oi = argv.indexOf('--out'), di = argv.indexOf('--drop');
+    const files = argv.slice(1).filter((a, k, xs) => !['--out', '--drop'].includes(a) && !['--out', '--drop'].includes(xs[k - 1]));
+    const out = compareProbes(files.map((f) => JSON.parse(fs.readFileSync(f, 'utf8'))), {drop: di >= 0 ? argv[di + 1] : null});
     if (oi >= 0) fs.writeFileSync(argv[oi + 1], JSON.stringify(out, null, 1) + '\n');
     console.log(JSON.stringify(out));
     process.exit(out.pass ? 0 : 1);
@@ -254,10 +311,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const dir = path.resolve(dirArg), work = fs.realpathSync(path.join(dir, 'work'));
   const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
   const ascSkills = Object.fromEntries(fs.readdirSync(path.join(work, '.claude/skills')).map((s) => [s, description(read(path.join(work, '.claude/skills', s, 'SKILL.md')))]));
-  const conds = loadConditions();
+  const conds = loadRawConditions();
   const base = conds.fixtures[conds.cells[condition]?.fixture ?? 'A'].baseClaudeMd ?? '';
   const meta = JSON.parse(read(path.join(dir, 'meta.json')) ?? '{}');
   const sentinels = meta.probeSentinels ?? {};
+  const ctx = meta.probeContext ?? null;
+  const levelId = conds.cells[condition]?.tools ?? null;
+  if (!ctx || path.resolve(ctx.homeMarker) !== path.resolve(homeMarker) || path.resolve(ctx.repoMarker) !== path.resolve(repoMarker)) {
+    console.error('refused: meta.json has no probe context, or its markers are not the ones given'); process.exit(3);
+  }
+  const fileSha = (f) => (fs.existsSync(f) ? crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex') : null);
   const repoFirst = (f) => stripHeading((read(path.join(repoRoot, f)) ?? '').split('\n')[0]);
   const realHome = os.homedir();
   const userConfigDirs = [...new Set([path.join(realHome, '.claude'), process.env.CLAUDE_CONFIG_DIR].filter(Boolean).map((p) => path.resolve(p)))];
@@ -271,7 +334,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     hostInstallDir, installProblems: installDirProblems(hostInstallDir, {realHome, userConfigDirs, repoRoot: path.resolve(repoRoot)}),
     managedPolicyPresent: managedPolicyFiles().map((f) => path.basename(f)),
     sentinels, sentinelExists: {trial: Boolean(sentinels.trial && fs.existsSync(sentinels.trial)), repo: Boolean(sentinels.repo && fs.existsSync(sentinels.repo))},
-    insideExists: fs.existsSync(path.join(work, meta.probeInsideFile ?? INSIDE_FILE))});
+    insideExists: fs.existsSync(path.join(work, meta.probeInsideFile ?? INSIDE_FILE)),
+    steps: levelId ? probeSteps(levelId, ctx) : [], expectedSteps: levelId ? conds.probeSteps?.[levelId] ?? null : null,
+    workClaudeMdFirstLine: firstLine(read(path.join(work, 'CLAUDE.md'))),
+    trialName: path.basename(dir), traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))});
   console.log(JSON.stringify(out, null, 1));
   process.exit(out.pass ? 0 : 1);
 }

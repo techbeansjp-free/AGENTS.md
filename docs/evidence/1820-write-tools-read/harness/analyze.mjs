@@ -108,17 +108,26 @@ export function scoringProblems({rows, fx, fxSha, ledgerIdNow, root = ev, filePr
 }
 
 // analysis-plan.md: analysed only when complete or cap-reached, every required replacement is present, and no cell has
-// more than maxFailureRate failures after replacement; otherwise the per-cell counts are reported without main effects.
-export function analyzeRun({spec, dir, ledger, conds = loadConditions(), maxFailureRate = 0.1}) {
+// more than maxFailuresPerCell failures among its counted brief trials after replacement (review L3: with 4 trials per
+// cell one failed replacement is 1/4 = 25% of the cell; it is allowed and the cell's rate is taken over its 3 valid
+// trials; two are not). The negative trials do not count toward this rule: their failures are reported per cell
+// (negatives.failures) and the overapplication is counted over their valid trials only.
+export function cellRuleReasons(sums, maxFailuresPerCell = 1) {
+  const reasons = [];
+  for (const s of Object.values(sums)) {
+    if (s.replacementsMissing) reasons.push(`${s.cell}: ${s.replacementsMissing} failed trial(s) without the mandatory replacement`);
+    if (s.failures > maxFailuresPerCell) reasons.push(`${s.cell}: ${s.failures} of ${s.runs} counted brief trials failed after replacement (more than ${maxFailuresPerCell})`);
+  }
+  return reasons;
+}
+
+export function analyzeRun({spec, dir, ledger, conds = loadConditions(), maxFailuresPerCell = 1}) {
   const runs = scoreDir(spec, dir, conds);
   const sums = Object.fromEntries(Object.keys(conds.cells).map((c) => [c, summarizeCell(runs, c)]));
   const completion = completionStatus({runs, reserved: ledgerOps.reservedNames(ledger), reservations: ledgerOps.reservations(ledger), spentUsd: ledgerOps.spent(ledger), budget: conds.budget});
   const reasons = [];
   if (!completion.basis) reasons.push(`run neither complete nor stopped at the cap (${completion.missingPlanned} planned and ${completion.missingReplacements.length} required replacement(s) not reserved)`);
-  for (const s of Object.values(sums)) {
-    if (s.replacementsMissing) reasons.push(`${s.cell}: ${s.replacementsMissing} failed trial(s) without the mandatory replacement`);
-    if (s.runs && s.failures / s.runs > maxFailureRate) reasons.push(`${s.cell}: failures above ${maxFailureRate * 100}%`);
-  }
+  reasons.push(...cellRuleReasons(sums, maxFailuresPerCell));
   const negatives = Object.fromEntries(conds.negativeCells.map((c) => [c, sums[c].negatives]));
   const analysis = reasons.length ? {analysed: false, reason: reasons.join('; ')} : mainEffects(sums, conds);
   return {runs, sums, negatives, completion, basis: completion.basis, analysis};
