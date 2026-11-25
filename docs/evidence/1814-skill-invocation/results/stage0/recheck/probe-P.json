@@ -139,6 +139,12 @@
   "run-skill-generator",
   "plugin-authoring"
  ],
+ "builtinPlugins": [
+  "cc-plugin-agents-md",
+  "cc-plugin-plugin-authoring",
+  "cc-plugin-privacy"
+ ],
+ "managedPolicyPresent": [],
  "tools": [
   "Glob",
   "Grep",

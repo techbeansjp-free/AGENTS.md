@@ -16,7 +16,7 @@
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| 採点器・隔離の判定器・配置の検査・台帳・固定・中立のcommit・導入の照合・記録の取り出しの試験（合成の記録） | 48件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt)（command・HEAD・Nodeの版・終了code付き） |
+| 採点器・隔離の判定器・配置の検査・台帳・固定・中立のcommit・導入の照合・記録の取り出しの試験（合成の記録） | 49件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt)（command・HEAD・Nodeの版・終了code付き） |
 | 全体のdry run | 合格。採点器のSkillの一覧がreleaseの配布一覧と一致、全条件のcommitの件名が同じ（中立の1件）。導入（16件の入口がすべてあり、`distribution.json`の記録と一致し、本文へのlinkだけの薄い入口で、本文がpackageと一致）、goldのSkill本文とreferenceがreleaseにある、依頼が名指すfileがある、sample projectと条件ごとの複製の配置が合格、5条件の適用（`CLAUDE.md`の文例の有無、hookの出力が文例と一致・終了コード0・発火のlog）、試行の計画116試行・計画の費用25.04 USD | [results/dry-run.json](results/dry-run.json) |
 | 起動の経路の拒否（反例） | 許可の環境変数が無い、台帳・上限が無い、`results/fixation.json`が無い、固定したfileが記録と違う、`--model`の指定、repositoryと実HOMEの下、releaseに無いdigest、tarballとdigestの不一致、dry runの代用品で作ったsample projectでの有料の試行を、それぞれ拒否した。`fixation.mjs check`の合格も記録した | [results/refusals.txt](results/refusals.txt) |
 
@@ -45,11 +45,11 @@ dry runで使ったtarball：**releaseの本物ではない。** この作業の
 
 統括が実行した（R・P・H各1回、Hostの計算値で合計約0.22 USD、解決後のmodelは`claude-sonnet-5-5`）。判定の記録は[results/stage0/first/](results/stage0/first/)（実行時）と[results/stage0/recheck/](results/stage0/recheck/)（probe-checkの是正の後、同じ記録で判定し直したもの。モデルは呼んでいない）。
 
-- 実行時は3条件とも、次の2点を除いてすべて合格した。
-  - `noPlugins`：Claude Codeの同梱plugin 3件（`cc-plugin-agents-md`・`cc-plugin-privacy`・`cc-plugin-plugin-authoring`、`path: "builtin"`、`source: "<名前>@builtin"`）がinit eventに載っていた。利用者の環境にも必ずあるので許可し、名前を記録する。それ以外のpluginは不合格のまま。
-  - `debugPathsInsideTrial`・`noRealHomeOrRepoInDebug`：調べた結果、原因は3つだった。(1) 目印のReadが拒否されたときにClaude Codeが書く`Permission suggestions for Read`の行（ruleContentが目印のfileの親directory。実HOMEとrepositoryのpathが現れたのはこの行だけ）、(2) 機械の管理用policyのpath（`/Library/Application Support/ClaudeCode/managed-settings.json`）が空白を含むため、途中で切れた断片が外のpathと数えられた、(3) Hではhookの出力（文例の`.agent-skill-chain/skills/asc/SKILL.md`という相対path）の断片が外のpathと数えられた。
-- 是正（段階0の後の是正。`harness/probe-check.mjs`だけを変更）：(1) は、行のすべてのruleContentが2つの目印のfileかその親directoryで、他の絶対pathを含まない場合だけ除外する。(2) は管理用policyのpathを全体として除いてから断片を取る。(3) は`.agent-skill-chain/`・`.claude/`で始まる相対path（直前がpathの文字でないもの）を全体として除く。`/x/.claude/…`・`~/.claude/…`は検査に残る。反例（同梱でないplugin、提案の行の外の実HOMEのpath、別のdirectoryの提案、`~/.claude/settings.json`等）が不合格になることを試験した。
-- 判定し直した結果：3条件とも、`markerTokensAbsent`を除くすべての項目が合格。`markerTokensAbsent`は、目印のfileを確認の後に消したため照合する文字列が無く、判定し直しでは不合格になる（実行時の判定では3条件とも合格）。条件の間の比較（`compare`）は差が無い（`differ: []`）。
+- 実行時は3条件とも、次の3項目を除いてすべて合格した：`noPlugins`、`debugPathsInsideTrial`、`noRealHomeOrRepoInDebug`。
+  - `noPlugins`：Claude Codeの同梱plugin 3件（`cc-plugin-agents-md`・`cc-plugin-privacy`・`cc-plugin-plugin-authoring`、`path: "builtin"`、`source: "<名前>@builtin"`）がinit eventに載っていた。利用者の環境にも必ずあるので許可し、名前を結果の`builtinPlugins`に記録して条件の間で比べる。それ以外のpluginは不合格のまま。
+  - `debugPathsInsideTrial`・`noRealHomeOrRepoInDebug`：原因は3つだった。(1) 目印のReadが拒否されたときにClaude Codeが書く`Permission suggestions for Read`の行（各probe 2行。ruleContentは2つの目印のfileの親directory）。実HOMEとrepositoryのpathが現れたのは、各probeでこの2行だけだった。repository側の行が`debugPathsInsideTrial`でも数えられたのは、repositoryのdirectory名に`AGENTS.md`が含まれ、keywordの絞り込みに当たったため（各probe 1行）。(2) 機械の管理用policyのpath（`/Library/Application Support/ClaudeCode/managed-settings.json`）が空白を含むため、「missing file」の行（各probe 6行）で途中から切れた断片が外のpathと数えられた。(3) Hではhookの出力の行（3行）にある文例の相対path`.agent-skill-chain/skills/asc/SKILL.md`の断片が外のpathと数えられた。加工していないdebug logはlocalのpathを含むのでrepositoryに入れない。代わりに、各probeのtrace・debug.log・stderrのsha256と、原因ごとの行数（pathの文字列は含まない）を[results/stage0/sources.json](results/stage0/sources.json)に記録した。
+- 是正（段階0の後の是正。`harness/probe-check.mjs`だけを変更）：(1) は、行のすべてのruleContentが2つの目印のfileかその親directoryで、他の絶対pathを含まない場合だけ除外する。目印のpathを含む他の行も、他の絶対pathが無い場合だけ除外する。(2) は「missing file・broken symlink」の行に限り、管理用policyのpathを全体として除いてから断片を取る（存在して読み込まれた管理用のfileは外のpathとして残り、存在する管理用のfileの名前を`managedPolicyPresent`に記録する。今回は無し）。(3) は`.agent-skill-chain/`・`.claude/`で始まる相対path（直前がpathの文字でないもの）を全体として除く。`/x/.claude/…`・`~/.claude/…`は検査に残る。反例（同梱でないplugin、名前の違う同梱plugin、条件で違う同梱pluginの一覧、提案の行の外の実HOMEのpath、別のdirectoryを含む提案、目印と同じ行の別の絶対path、読み込まれた管理用のfile、相対pathと同じ行の実HOMEのpath等）が不合格になることを試験した。
+- 判定し直した結果：3条件とも、`markerTokensAbsent`を除くすべての項目が合格。条件の間の比較は差が無い（`differ: []`）。`markerTokensAbsent`は、目印のfileを確認の後に消したため照合する文字列が無く、判定し直しでは不合格になる（実行時の判定では3条件とも合格。この項目のcodeと入力は是正で変わっていない）。どの1回の実行でも全項目が合格した記録はまだ無いので、規則6を満たすため、refixの後に目印を新しく作り、R・P・Hのprobeを`probe 2`として再実行する（統括が行う）。
 - 未了：この是正の独立レビューと、統括による`fixation.mjs refix`の実行。
 
 ## 独立レビュー（1回目、HEAD `e2477706`）への対応

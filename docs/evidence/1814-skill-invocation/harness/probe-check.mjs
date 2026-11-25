@@ -48,6 +48,12 @@ export function isMarkerPermissionSuggestion(line, markerPaths) {
   return others.length === 0;
 }
 
+// True when the text still holds an absolute path (a '/' not inside a word or a relative path).
+export const otherAbsolutePath = (text) => /(?<![\w.\-])\/[^\s"'`,)\\]+/.test(text);
+
+// Managed-policy files present on this machine (recorded with every probe result; review L2).
+export const managedPolicyFiles = () => MANAGED.flatMap((d) => { try { return fs.readdirSync(d).map((f) => path.join(d, f)); } catch { return []; } });
+
 export function claudeInstallDir() {
   const w = spawnSync('which', ['claude'], {encoding: 'utf8'}).stdout?.trim();
   return w ? path.dirname(fs.realpathSync(w)) : null;
@@ -127,14 +133,19 @@ export function checkProbe(i) {
   add('markerTokensAbsent', i.tokens.length === 2 && i.tokens.every((tok) => tok && !all.includes(tok)), `${i.tokens.length} token(s) checked (review L2: both required)`);
   // Debug log: instruction/memory/settings paths must be inside the trial, the program directory or the managed location.
   const outside = [];
-  const isMarkerLine = (line) => i.markerPaths.some((m) => line.includes(m)) || isMarkerPermissionSuggestion(line, i.markerPaths);
+  // A line that names a marker is excluded only when no other absolute path is on it (review L3).
+  const isMarkerLine = (line) => (i.markerPaths.some((m) => line.includes(m)) && !otherAbsolutePath(i.markerPaths.reduce((l, m) => l.split(m).join(' '), line)))
+    || isMarkerPermissionSuggestion(line, i.markerPaths);
   for (const line of (i.debug ?? '').split('\n')) {
     if (!/CLAUDE\.md|AGENTS\.md|MEMORY|memory|settings\.json|skills\//i.test(line) || isMarkerLine(line)) continue;
     // Stage-0 findings: (1) the managed-policy path contains a space, so it is removed as a whole before paths are taken;
     // (2) a project-relative path that starts with ".agent-skill-chain/" or ".claude/" (not preceded by a path character;
     // e.g. the pointer text ".agent-skill-chain/skills/asc/SKILL.md" echoed by the hook log line) is removed as a whole;
     // "/x/.claude/..." and "~/.claude/..." stay and are checked.
-    const rest = MANAGED.reduce((l, m) => l.split(m).join(' '), line).replace(/(^|[^\w/.~-])\.(?:agent-skill-chain|claude)\/[^\s"'`,)\\]*/g, '$1 ');
+    // The managed-policy path is removed only on the "missing file / broken symlink" lines (review L2); a managed file
+    // that exists and is loaded stays visible (and its presence is recorded in managedPolicyPresent).
+    const missingLine = /Broken symlink or missing file/i.test(line);
+    const rest = (missingLine ? MANAGED.reduce((l, m) => l.split(m).join(' '), line) : line).replace(/(^|[^\w/.~-])\.(?:agent-skill-chain|claude)\/[^\s"'`,)\\]*/g, '$1 ');
     for (const p of rest.match(/\/[^\s"'`,)]+/g) ?? []) {
       if (!/CLAUDE\.md|AGENTS\.md|MEMORY|memory|settings|skills/i.test(p)) continue;
       const inTrial = inside(p, i.trialDir) || (fs.existsSync(i.trialDir) && inside(p, fs.realpathSync(i.trialDir)));
@@ -162,6 +173,7 @@ export function checkProbe(i) {
   add('noForeignHooks', otherEvents.length === 0 && foreignCommand.length === 0 && (!fixtureHook || responses <= hookLines.length) && (cond.hook || responses === 0),
     `${hookEvents.length} hook event(s), ${otherEvents.length} non-SessionStart, ${foreignCommand.length} foreign command(s)`);
   return {condition: i.condition, pass: Object.values(checks).every((c) => c.pass), checks, listedSkills: listed.length, nonAscSkills: nonAsc,
+    builtinPlugins: plugins.filter(builtin).map((pl) => pl.name).sort(), managedPolicyPresent: i.managedPolicyPresent ?? null,
     tools, gitLine: gitLine.replace(/^.*GIT:\s*/, ''), model: init.model ?? null, claudeCodeVersion: init.claude_code_version ?? null, costUsd: t.result?.total_cost_usd ?? null};
 }
 
@@ -175,8 +187,8 @@ export function hookEventsOf(trace) {
 export const gitSubjects = (line) => [...new Set(String(line ?? '').split('|').map((x) => x.trim()).filter(Boolean))].sort();
 
 export function compareProbes(results) {
-  const keys = ['tools', 'nonAscSkills', 'gitLine', 'model'];
-  const norm1 = (r, k) => (k === 'gitLine' ? gitSubjects(r[k]) : k === 'nonAscSkills' || k === 'tools' ? [...r[k]].sort() : r[k]);
+  const keys = ['tools', 'nonAscSkills', 'builtinPlugins', 'gitLine', 'model'];
+  const norm1 = (r, k) => (k === 'gitLine' ? gitSubjects(r[k]) : ['nonAscSkills', 'tools', 'builtinPlugins'].includes(k) ? [...(r[k] ?? [])].sort() : r[k]);
   const differ = keys.filter((k) => new Set(results.map((r) => JSON.stringify(norm1(r, k)))).size > 1);
   return {pass: results.every((r) => r.pass) && differ.length === 0, conditions: results.map((r) => r.condition), differ};
 }
@@ -203,7 +215,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     pointerHead: 'このプロジェクトでASCを使う', forbiddenTexts: [repoFirst('CLAUDE.md'), repoFirst('AGENTS.md')].filter(Boolean),
     ownerLines: owner.lines, ownerSkills: owner.skills, markerPaths: [homeMarker, repoMarker],
     tokens: [homeMarker, repoMarker].map((m) => read(m)?.trim()).filter(Boolean), realHome, repoRoot: path.resolve(repoRoot),
-    hostInstallDir, installProblems: installDirProblems(hostInstallDir, {realHome, userConfigDirs, repoRoot: path.resolve(repoRoot)})});
+    hostInstallDir, installProblems: installDirProblems(hostInstallDir, {realHome, userConfigDirs, repoRoot: path.resolve(repoRoot)}),
+    managedPolicyPresent: managedPolicyFiles().map((f) => path.basename(f))});
   console.log(JSON.stringify(out, null, 1));
   process.exit(out.pass ? 0 : 1);
 }

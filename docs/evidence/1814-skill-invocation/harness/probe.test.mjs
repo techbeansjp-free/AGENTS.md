@@ -95,6 +95,27 @@ test('stage-0 refix: only permission-suggestion lines for the two markers are ex
   assert.equal(isMarkerPermissionSuggestion('Read /h/asc1814-home-marker.txt', [HOME_M, REPO_M]), false);
 });
 
+test('review L1-L4: builtin plugin names compared across conditions; tighter marker and managed-policy exclusions', () => {
+  const mk = (name) => ({name, path: 'builtin', source: `${name}@builtin`});
+  const r1 = checkProbe(base({trace: trace({text: goodText(), plugins: [mk('a'), mk('b')]})}));
+  const r2 = checkProbe(base({trace: trace({text: goodText(), plugins: [mk('a'), mk('b'), mk('c')]})}));
+  assert.deepEqual(r1.builtinPlugins, ['a', 'b']);
+  assert.deepEqual(compareProbes([r1, r2]).differ, ['builtinPlugins']);
+  // L3: a marker line with another absolute path is not excluded
+  assert.equal(checkProbe(base({debug: 'Read /h/asc1814-home-marker.txt /h/.claude/CLAUDE.md'})).pass, false);
+  assert.equal(checkProbe(base({debug: 'Read /h/asc1814-home-marker.txt denied'})).pass, true);
+  // L4: a suggestion mixing a marker directory and another directory
+  const perm2 = `"Permission suggestions for Read: [{\\"rules\\": [{\\"toolName\\": \\"Read\\", \\"ruleContent\\": \\"//h/**\\"}, {\\"toolName\\": \\"Read\\", \\"ruleContent\\": \\"//h/.claude/**\\"}]}]"`;
+  assert.equal(isMarkerPermissionSuggestion(perm2, [HOME_M, REPO_M]), false);
+  assert.equal(checkProbe(base({debug: perm2})).checks.noRealHomeOrRepoInDebug.pass, false);
+  // L2: a loaded managed-policy file (not a missing-file line) is an outside path
+  assert.equal(checkProbe(base({debug: 'Loading CLAUDE.md from /Library/Application Support/ClaudeCode/CLAUDE.md'})).checks.debugPathsInsideTrial.pass, false);
+  assert.equal(checkProbe(base({debug: 'loading skills/ from /Library/Application Support/ClaudeCode/skills/x'})).checks.debugPathsInsideTrial.pass, false);
+  // L4: removing a project-relative .claude/ path keeps a real-HOME path on the same line visible
+  assert.equal(checkProbe(base({debug: 'memory: .claude/skills/asc/SKILL.md and /h/notes/memory.md'})).checks.noRealHomeOrRepoInDebug.pass, false);
+  assert.equal(checkProbe(base({managedPolicyPresent: ['managed-settings.json']})).managedPolicyPresent[0], 'managed-settings.json');
+});
+
 test('stage-0 refix: the managed-policy path with a space and relative paths in hook text are not outside paths', () => {
   const managed = 'Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json';
   const hookText = 'Hooks: {"additionalContext":"…では、.agent-skill-chain/skills/asc/SKILL.mdを読み…"}';
