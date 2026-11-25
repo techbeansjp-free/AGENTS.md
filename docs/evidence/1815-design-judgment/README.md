@@ -6,7 +6,7 @@
 
 ## 結果
 
-測定は統括が実行した（2026-11-26、固定の記録の7件目 `dd7b7858` の下、release v0.5.109（B）と候補（S、`5fad2293…09af`））。公開する記録は[results/run/](results/run/)（`collect.mjs`の派生の記録だけ。trace・tool log・proxyの記録・screenshotはscratchに残した）。
+測定は統括が実行した（2026-11-26、固定の記録の7件目 `dd7b7858` の下、release v0.5.109（B）と候補（S、`5fad2293…09af`））。公開する記録は[results/run/](results/run/)（`collect.mjs`の派生の記録と、下の`decide.mjs`の出力`decision-no-ranks.json`。trace・tool log・proxyの記録・screenshotはscratchに残した）。
 
 - **隔離の確認**：B・Sとも20項目すべて合格し、条件の間の比較も合格した（[results/run/probes.json](results/run/probes.json)。費用0.087・0.068 USD）。目印fileは確認の後に消した。
 - **生成**：計画の18試行すべてが成功した（終了0、`success`、init eventのtoolとMCPの状態が測定どおり）。置換えは無し。費用は生成3.63 USD、probeを含めて3.79 USD（Hostの計算値）。model `claude-sonnet-5-5`、Claude Code 2.1.323。
@@ -32,10 +32,10 @@
 
   UI-04では全試行で狭幅に3項目（改訂日・寸法図・取扱説明書）が操作の後でしか見えないが、依頼が狭幅で一覧から詳細へ移る設計を認めているので、I2（広幅）には数えない。UI-03とUI-07の差は、各条件3回のうち1試行の狭幅の1項目だけで、向きが逆であり、偶然の範囲である。規則の上ではUI-03は害のケースだが、判定できるケースが0なので、全体はどちらにしても**未判定（取り込まない）**である（規則7）。
 - **順位**：ownerの判断（2026-11-26、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1815#issuecomment-7168583280)）で、FableとCodexの順位付けは行わなかった。読込みの門で全ケースが未判定なので、順位は判定を変えない。
-- **decide.mjsの実行（順位なし）**：`decide.mjs`を順位の入力なし（ranksに`-`）で実行し、出力を[results/run/decision-no-ranks.json](results/run/decision-no-ranks.json)に公開した（pathは`<runs>`・`<scratch>`に置き換えた）。これで、測定の前提を機械的に確かめた：台帳の予約・試行のdirectory・数える試行の名前の一致、固定の記録との一致（全試行の`fixationSha256`・`fixedAtCommit`）、実行の完全性（欠け0、置換え0、測定の開始後のprobe 0）、失敗0、読込みの門のreadS（Sで本文と候補の文のreferenceを読んだ試行）が全ケース0/3。`decide.mjs`の各ケースの状態は「順位待ち」、全体も「順位待ち」になる。これは、`caseDecision`が順位の有無を読込みの門より先に調べる作りのためである。確かめた値に、固定した読込みの門の規則（[decision-criteria.md](decision-criteria.md)「判定の規則」の3と、全体の6〜8）を当てはめると、3ケースとも「未判定（候補の文が読まれていない）」で、判定できるケースは0、全体は未判定（取り込まない）になる。固定したharnessのfileは変えていない。
+- **decide.mjsの実行（順位なし）**：`decide.mjs`を順位の入力なし（ranksに`-`）で実行し、出力を[results/run/decision-no-ranks.json](results/run/decision-no-ranks.json)に公開した（runs rootのpathは手で`<runs>`に置き換えた。`decide.mjs`の出力は`collect.mjs`の公開の検査を通らないので、置き換えた後に下の「公開の確認」の検索で確かめた）。これで、測定の前提を機械的に確かめた：台帳の予約・試行のdirectory・数える試行の名前の一致、固定の記録との一致（全試行の`fixationSha256`・`fixedAtCommit`）、実行の完全性（欠け0、置換え0、測定の開始後のprobe 0）、失敗0、読込みの門のreadS（Sで本文と候補の文のreferenceを読んだ試行）が全ケース0/3。`decide.mjs`の各ケースの状態は「順位待ち」、全体も「順位待ち」になる。これは、`caseDecision`が順位の有無を読込みの門より先に調べる作りのためである。確かめた値に、固定した読込みの門の規則（[decision-criteria.md](decision-criteria.md)「判定の規則」の3と、全体の6〜8）を当てはめると、3ケースとも「未判定（候補の文が読まれていない）」で、判定できるケースは0、全体は未判定（取り込まない）になる。固定したharnessのfileは変えていない。
 - **主な発見**：書込みとbrowserのtoolがある、利用者に近い環境では、`CLAUDE.md`の案内文を採用していても、ASCはほとんど読まれなかった（本文2/18、referenceは0/18）。Read系のtoolだけで依頼した#1814・#1817では本文が読まれていたことと対照的である（#1817の結果：[PR #1819](https://github.com/techbeansjp-free/AGENTS.md/pull/1819)、[Issue #1817のコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1817#issuecomment-7167955108)）。原因の調査と改善は、ownerの判断で[#1820](https://github.com/techbeansjp-free/AGENTS.md/issues/1820)で扱う。
 - **候補のSkill本文**：ownerの判断で配布しない。このbranchで候補の追記（`c997f274`・`bb1d1886`）を取り消し、`skills/`はmainと同じにした。[release.json](release.json)のSは、測定した候補の記録として残す。
-- **公開の確認**：公開する記録に、localのpath・利用者名・一時directoryの名前・session id・mail address・token・第三者のページの本文・画像のデータが無いことを確かめた（一時directoryの名前は`collect.mjs`がruns rootを`<runs>`に置き換えたので現れず、追加の置換えは不要だった）。
+- **公開の確認**：公開する記録に、localのpath・利用者名・一時directoryの名前・session id・mail address・token・第三者のページの本文・画像のデータが無いことを確かめた（`collect.mjs`の記録では、runs rootを`<runs>`に置き換えるので一時directoryの名前は現れなかった。`decision-no-ranks.json`はruns rootを手で置き換え、同じ検索で0件を確かめた）。
 
 結果の限界：各条件3回で、候補の文がほぼ読まれなかったので、候補の文そのものの効果については何も言えない。読まれない原因（書込みのtoolの有無か、依頼の形か、browserのtoolか）は、この測定では分けていない。
 
