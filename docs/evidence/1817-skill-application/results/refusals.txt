@@ -1,21 +1,21 @@
-# HEAD: f1cdb02bf41983c17b1a51bc5f9e5d3bf11dc35e; node v20.12.2; no model call. <scratch> = the scratch directory. Outputs are verbatim unless a line says otherwise.
+# HEAD: 8ae7b145c18801a188583286256e2a3651b443c6; node v20.12.2; no model call. <scratch> = the scratch directory. Outputs are verbatim unless a line says otherwise.
 ## run-trial installProblems on the dry-run fixtures (real tarballs) and their crossed pairings
-# command: node <scratch>/cross.mjs (scratch script: copies each sample project and calls run-trial.mjs installProblems with the given condition) docs/evidence/1817-skill-application <scratch>/run1817g
+# command: node <scratch>/cross.mjs (scratch script: copies each sample project and calls run-trial.mjs installProblems with the given condition) docs/evidence/1817-skill-application <scratch>/run1817h
 fixture B for condition B: accepted
 fixture S for condition S: accepted
 fixture S for condition B: refused: sample project was built for condition S, not B; sample project source candidate is not the release release.json pins for B; install record released flag does not match the pinned kind; tarball digest is not the one release.json pins for condition B
 fixture B for condition S: refused: sample project was built for condition B, not S; sample project source release is not the candidate release.json pins for S; install record released flag does not match the pinned kind; tarball digest is not the one release.json pins for condition S
 ## make-fixture with the other condition's tarball, and with the replaced earlier candidates
-# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs B <scratch>/rel1817/candidate3/agent-skill-chain-0.5.109.tgz 7e48d5cfac449506fd4f2cc7d741d926c122a860ab2a4a9cd2bc7ab2f0075939 <scratch>/run1817g/x <scratch>/run1817g/tmp
+# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs B <scratch>/rel1817/candidate3/agent-skill-chain-0.5.109.tgz 7e48d5cfac449506fd4f2cc7d741d926c122a860ab2a4a9cd2bc7ab2f0075939 <scratch>/run1817h/x <scratch>/run1817h/tmp
 Error: refused: digest is not the release digest release.json pins for condition B (use --allow-unreleased only for a dry run)
 # exit: 1 (only the Error line of the stack trace is shown)
-# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs S <scratch>/rel1817/release/agent-skill-chain-0.5.109.tgz 05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f <scratch>/run1817g/x <scratch>/run1817g/tmp
+# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs S <scratch>/rel1817/release/agent-skill-chain-0.5.109.tgz 05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f <scratch>/run1817h/x <scratch>/run1817h/tmp
 Error: refused: digest is not the candidate digest release.json pins for condition S (use --allow-unreleased only for a dry run)
 # exit: 1 (only the Error line of the stack trace is shown)
-# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs S <scratch>/rel1817/candidate/agent-skill-chain-0.5.109.tgz f8c3eae78b36951746a4e615a173cc3c91777131fb06c4cdaae53b32aa512b1e <scratch>/run1817g/x <scratch>/run1817g/tmp
+# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs S <scratch>/rel1817/candidate/agent-skill-chain-0.5.109.tgz f8c3eae78b36951746a4e615a173cc3c91777131fb06c4cdaae53b32aa512b1e <scratch>/run1817h/x <scratch>/run1817h/tmp
 Error: refused: digest is not the candidate digest release.json pins for condition S (use --allow-unreleased only for a dry run)
 # exit: 1 (only the Error line of the stack trace is shown)
-# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs S <scratch>/rel1817/candidate2/agent-skill-chain-0.5.109.tgz 3a01647368b12966d52f617b6739520971791d4a75f2e37ec1c515d8c9ff14d2 <scratch>/run1817g/x <scratch>/run1817g/tmp
+# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs S <scratch>/rel1817/candidate2/agent-skill-chain-0.5.109.tgz 3a01647368b12966d52f617b6739520971791d4a75f2e37ec1c515d8c9ff14d2 <scratch>/run1817h/x <scratch>/run1817h/tmp
 Error: refused: digest is not the candidate digest release.json pins for condition S (use --allow-unreleased only for a dry run)
 # exit: 1 (only the Error line of the stack trace is shown)
 ## order and probes (run-trial.mjs uses order.mjs orderRefusal after its other gates)
@@ -32,21 +32,24 @@ S-probe-2 with 1 reserved: refused: probe refused: S-probe-2 needs S-probe-1 fir
 B-probe-3 with 2 reserved: refused: probe refused: rep must be 1, or 2 for the one re-run (got 3)
 B-probe-2 with 62 reserved: refused: probe refused: measurement has started (B-asc-1-1 is reserved)
 ## run-all.mjs planned without --run (prints the order, starts nothing; full output)
-# command: node docs/evidence/1817-skill-application/harness/run-all.mjs planned <scratch>/run1817g/runs --fixture-B <scratch>/run1817g/sample-B --fixture-S <scratch>/run1817g/sample-S --ledger <scratch>/run1817g/absent-ledger.jsonl
+# command: node docs/evidence/1817-skill-application/harness/run-all.mjs planned <scratch>/run1817h/runs --fixture-B <scratch>/run1817h/sample-B --fixture-S <scratch>/run1817h/sample-S --ledger <scratch>/run1817h/absent-ledger.jsonl
 {"dryRun":true,"mode":"planned","trials":["B-asc-1-1","S-asc-1-1","B-rr-1-1","S-rr-1-1","B-neg-1-1","S-neg-1-1","B-tw-1-1","S-tw-1-1","B-asc-2-1","S-asc-2-1","B-ri-1-1","S-ri-1-1","B-neg-2-1","S-neg-2-1","B-se-1-1","S-se-1-1","B-asc-3-1","S-asc-3-1","B-ma-1-1","S-ma-1-1","B-neg-3-1","S-neg-3-1","B-ui-1-1","S-ui-1-1","B-es-1-1","S-es-1-1","B-do-1-1","S-do-1-1","B-asc-1-2","S-asc-1-2","B-rr-1-2","S-rr-1-2","B-neg-1-2","S-neg-1-2","B-tw-1-2","S-tw-1-2","B-asc-2-2","S-asc-2-2","B-ri-1-2","S-ri-1-2","B-neg-2-2","S-neg-2-2","B-se-1-2","S-se-1-2","B-asc-3-2","S-asc-3-2","B-ma-1-2","S-ma-1-2","B-neg-3-2","S-neg-3-2","B-ui-1-2","S-ui-1-2","B-es-1-2","S-es-1-2","B-do-1-2","S-do-1-2","B-asc-1-3","S-asc-1-3","B-rr-1-3","S-rr-1-3","B-neg-1-3","S-neg-1-3","B-tw-1-3","S-tw-1-3","B-asc-2-3","S-asc-2-3","B-ri-1-3","S-ri-1-3","B-neg-2-3","S-neg-2-3","B-se-1-3","S-se-1-3","B-asc-3-3","S-asc-3-3","B-ma-1-3","S-ma-1-3","B-neg-3-3","S-neg-3-3","B-ui-1-3","S-ui-1-3","B-es-1-3","S-es-1-3","B-do-1-3","S-do-1-3","B-asc-1-4","S-asc-1-4","B-rr-1-4","S-rr-1-4","B-neg-1-4","S-neg-1-4","B-tw-1-4","S-tw-1-4","B-asc-2-4","S-asc-2-4","B-ri-1-4","S-ri-1-4","B-neg-2-4","S-neg-2-4","B-se-1-4","S-se-1-4","B-asc-3-4","S-asc-3-4","B-ma-1-4","S-ma-1-4","B-neg-3-4","S-neg-3-4","B-ui-1-4","S-ui-1-4","B-es-1-4","S-es-1-4","B-do-1-4","S-do-1-4"]}
 # exit: 0
 ## collect and scoring entry points
-# command: node docs/evidence/1817-skill-application/harness/collect.mjs <scratch>/run1817g/runs <scratch>/run1817g/out
-usage: node collect.mjs <runs-root> <traces-dir> --ledger <file>
+# command: node docs/evidence/1817-skill-application/harness/collect.mjs <scratch>/run1817h/runs <scratch>/run1817h/out --ledger <scratch>/run1817h/other-ledger.jsonl
+usage: node collect.mjs <runs-root> <traces-dir> --ledger <file> --publish-ledger <results/ledger.jsonl>
 # exit: 2
-# command: node docs/evidence/1817-skill-application/harness/score.mjs docs/evidence/1817-skill-application/cases.json <scratch>/run1817g/empty-traces B S --judge B S
+# command: node docs/evidence/1817-skill-application/harness/score.mjs docs/evidence/1817-skill-application/cases.json <scratch>/run1817h/empty-traces B S --judge B S
 refused: judge with judge.mjs (fixation, trial fixation digests and ledger completion are checked there)
 # exit: 3 (the two summary lines of the empty directory are not shown)
-# command: node docs/evidence/1817-skill-application/harness/judge.mjs <scratch>/run1817g/empty-traces --ledger <scratch>/run1817g/other-ledger.jsonl
-# (run after fixation.mjs init, before results/fixation.json and README were committed; another ledger)
-refused: results/fixation.json is not committed or has local changes; README.md does not name the first fixation commit; the ledger is not the one recorded in results/fixation.json
+# command: node docs/evidence/1817-skill-application/harness/judge.mjs <scratch>/run1817h/empty-traces --ledger <scratch>/run1817h/other-ledger.jsonl
+usage: node judge.mjs <traces-dir> --runs-root <dir> --ledger <file> [--published-ledger <file>] [--runs-json <out>] [--out <json>]
+# exit: 2
+# command: node docs/evidence/1817-skill-application/harness/judge.mjs <scratch>/run1817h/empty-traces --runs-root <scratch>/run1817h/empty-runs --ledger <scratch>/run1817h/other-ledger.jsonl
+# (run after fixation.mjs init, before results/fixation.json and README were committed; another ledger; no published ledger)
+refused: results/fixation.json is not committed or has local changes; README.md does not name the first fixation commit; the ledger is not the one recorded in results/fixation.json; published file differs from the rebuild: trials.json; the published ledger is missing
 # exit: 3
 ## run-trial --run without ASC1817_ALLOW_PAID (no model call)
-# command: node docs/evidence/1817-skill-application/harness/run-trial.mjs <scratch>/run1817g/runs B asc-1 1 --fixture <scratch>/run1817g/sample-B --run
+# command: node docs/evidence/1817-skill-application/harness/run-trial.mjs <scratch>/run1817h/runs B asc-1 1 --fixture <scratch>/run1817h/sample-B --run
 refused: ASC1817_ALLOW_PAID is not 1 (measurement not authorised)
 # exit: 3

@@ -1,5 +1,5 @@
 # command: node --test docs/evidence/1817-skill-application/harness/score.test.mjs docs/evidence/1817-skill-application/harness/probe.test.mjs
-# HEAD: f1cdb02bf41983c17b1a51bc5f9e5d3bf11dc35e (clean tree)
+# HEAD: 8ae7b145c18801a188583286256e2a3651b443c6 (clean tree)
 # node: v20.12.2
 ok 1 - clean R probe passes; heading mark omitted in the answer is accepted (L3)
 ok 2 - each leak or mismatch fails the probe
@@ -47,7 +47,7 @@ ok 43 - missing init event and an unfired hook in a hook condition are failures 
 ok 44 - only planned reps count; a later rep only replaces a failed planned trial once (L-3)
 ok 45 - product hook (condition I) is fired by SessionStart hook events in the trace
 ok 46 - collect: a trace without meta.json becomes a failure row instead of a crash (L-6)
-ok 47 - collect extends trials.json across stages and refuses a trial already collected (L-e)
+ok 47 - collect writes once into an empty directory; another ledger id or a repeated seq is refused (L-e, N-1, \#1817)
 ok 48 - product hook: hookFired reflects the trace evidence in the summary (L-3)
 ok 49 - scrubSensitive replaces mail addresses, keys and account fields (L9)
 ok 50 - redact removes local paths and user-specific names
@@ -66,7 +66,19 @@ ok 62 - \#1817 L-6: scoring is refused when the fixation check fails or a trial 
 ok 63 - \#1817 Low-1: ledger reservations, trials.json and traces must be the same set of trials; seqs without gaps
 ok 64 - \#1817 Medium-A: a settled trial whose trace or meta was deleted or edited is refused by collect and judge and never replaced
 ok 65 - \#1817 Low-B: at the replacement stage a directory without a reservation does not count as started
-# tests 65
-# pass 65
+ok 66 - \#1817 fifth review Medium-1: the published traces and trials.json must equal a rebuild from the raw runs root
+ok 67 - \#1817 fifth review Low-1: a reserved trial without a settlement is a failure whatever files exist
+ok 68 - \#1817 fifth review Low-2: a hand-edited ledger and a published ledger that differs are refused
+# tests 68
+# pass 68
 # fail 0
+# exit: 0
+# command: node --test test/test_source_quality.mjs
+ok 1 - repository sources pass the source-language checker used by trusted CI
+ok 2 - source-language checker rejects a non-TypeScript source such as a Python evidence script
+# tests 2
+# pass 2
+# fail 0
+# exit: 0
+# command: npx --no-install eslint src bin test v05
 # exit: 0
