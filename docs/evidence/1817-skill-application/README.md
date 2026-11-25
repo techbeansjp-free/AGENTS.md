@@ -1,10 +1,10 @@
-# Skill本文の改善案の測定の準備（#1817）
+# Skill本文の改善案の測定（#1817）
 
 開発時の検証資料であり、配布対象に含めない。記載のcommit・版に対する記録で、現行仕様の正本ではない。通常のASC実行時に読み込ませない。
 
 ## 目的
 
-#1814の段階3（条件I）では、Skillの本文は22/22で読まれたが、手順の適用（本文・必要なreference・回答の目印のすべて）は16/22だった。#1817の調査（[Issue](https://github.com/techbeansjp-free/AGENTS.md/issues/1817)）で、不適用の多くは回答の目印の表記の揺れで、Skill本文の書き方で直せる候補は2つ（`asc-3`で作業場所の手順を読まない、`es-1`で調査が必要な作業を明示しない）と分かった。commit `4c95f8d4`でこの2か所を`skills/asc/SKILL.md`と`skills/estimate-and-scope/SKILL.md`に書いた。その後、独立レビューの指摘を受けて`asc`の文を2回直した。commit `ee77daa0`で、変更を伴う依頼だけに絞った。commit `6d6e1223`で、除外を作業場所の決定だけに掛かる形にした（「調査・レビュー・見積だけの依頼では作業場所を作らない」）。ここでは、その改善案（S）を現状（B）と同じ隔離環境で比べる準備をする。**モデルはまだ呼んでいない。**
+#1814の段階3（条件I）では、Skillの本文は22/22で読まれたが、手順の適用（本文・必要なreference・回答の目印のすべて）は16/22だった。#1817の調査（[Issue](https://github.com/techbeansjp-free/AGENTS.md/issues/1817)）で、不適用の多くは回答の目印の表記の揺れで、Skill本文の書き方で直せる候補は2つ（`asc-3`で作業場所の手順を読まない、`es-1`で調査が必要な作業を明示しない）と分かった。commit `4c95f8d4`でこの2か所を`skills/asc/SKILL.md`と`skills/estimate-and-scope/SKILL.md`に書いた。その後、独立レビューの指摘を受けて`asc`の文を2回直した。commit `ee77daa0`で、変更を伴う依頼だけに絞った。commit `6d6e1223`で、除外を作業場所の決定だけに掛かる形にした（「調査・レビュー・見積だけの依頼では作業場所を作らない」）。ここでは、その改善案（S）を現状（B）と同じ隔離環境で比べる。測定は2026-11-26に行い、結果は下の「結果」に書いた（「結果」より前の節は、測定の前の準備の記録である）。
 
 ## ownerの判断（2026-11-25、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1817#issuecomment-7159921981)）
 
@@ -248,7 +248,7 @@ CIのsource検査（`test/test_source_quality.mjs`、`scripts/check_source_quali
 
 ### ownerの判断
 
-2026-11-26に、ownerがSを採用すると決めた（[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1817#issuecomment-7168582633)）。採用したのは、このbranchの`skills/asc/SKILL.md`と`skills/estimate-and-scope/SKILL.md`の変更（commit `6d6e1223`・`4c95f8d4`）である。配布は、mergeの後の通常のreleaseで行う。
+2026-11-26に、ownerがSを採用すると決めた（[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1817#issuecomment-7168582633)）。採用したのは、このbranchの`skills/asc/SKILL.md`と`skills/estimate-and-scope/SKILL.md`の変更である。最後の状態は、測ったSと同じく、commit `6d6e1223`の時点の2つの本文である。配布は、mergeの後の通常のreleaseで行う。
 
 ### 公開した記録の置換え
 
@@ -259,5 +259,6 @@ CIのsource検査（`test/test_source_quality.mjs`、`scripts/check_source_quali
 
 ### 限界（測定の後に分かったこと）
 
-- この測定のtoolは、読取り（`Read`・`Glob`・`Grep`・`Skill`）だけである。同じ時期に行った#1815の測定は、書込みとブラウザーのtoolがある、利用者に近い環境で行った。そこでは、同じ形の依頼（「BRIEF.md の依頼に対応して」）でも、ASCの本文が読まれたのは18回中2回だけだった。
+- この測定のtoolは、読取り（`Read`・`Glob`・`Grep`・`Skill`）だけである。同じ時期に行った#1815の測定（[PR #1821](https://github.com/techbeansjp-free/AGENTS.md/pull/1821)、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1815#issuecomment-7167955621)）は、書込みとブラウザーのtoolがある、利用者に近い環境で行った。そこでは、同じ形の依頼（「BRIEF.md の依頼に対応して」）でも、ASCの本文が読まれたのは18回中2回だけだった。
+- `es-1`では、Sで足した文（「何を調べれば見積が確定するかと、その調査の工数」）が、合否の目印の語「調査」をそのまま含む。そのため、Sの4/4の一部は、調査が必要な作業を実際に分けたことではなく、本文の語を回答に写したことによる可能性がある。判定と採否はこの可能性を含めたものである（前の節の「限界」にある、目印が緩いためにBも一致しやすい向きとは逆の向きの影響である）。
 - したがって、本文の読込み（44/44）と手順の適用の水準は、読取りのtoolだけの環境での値である。書込みのtoolがある環境でも同じかは分からない。
