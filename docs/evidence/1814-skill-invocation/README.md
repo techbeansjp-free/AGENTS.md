@@ -4,7 +4,7 @@
 
 ## 現在の状態
 
-**モデルを呼ばない準備だけを終えた段階である。モデルの実行（隔離の確認を含む）はまだ1回も行っていない。測定の結果は無い。**
+**段階0〜3の測定を終えた（2026-11-25）。結論は末尾の「[段階3（条件I）の結果と最終の結論](#段階3条件iの結果と最終の結論2026-11-25)」。この節の下の箇条と「実施したこと」「行っていないこと」は、モデルを呼ぶ前の準備の段階の記録として残している。**
 
 - 測定の計画：[EVAL_PLAN.md](EVAL_PLAN.md)。条件はR（登録だけ）・P（`CLAUDE.md`に文例）・H（SessionStartのhookで文例を注入）。PH（両方）・S（強い文面のhook）は費用の上限の外に置いた。
 - 合格の水準と判定の規則：[decision-criteria.md](decision-criteria.md)。ownerの決定（費用の上限30 USD、Claude Codeだけ、本文の読込み80%以上かつ手順の適用が現状より多い、該当しない依頼での過剰な読込みは現状＋1試行まで）を反映した。
@@ -173,7 +173,7 @@ High・Mediumなし、Low 2件。固定したfileは変えず（変えてよい�
 | [harness/ledger.mjs](harness/ledger.mjs)・[harness/fixation.mjs](harness/fixation.mjs) | 全段階の費用の台帳（台帳id、予約ごとのidと番号、同じ名前の拒否）と順次実行のlock、追記だけの固定（refixと段階3の制約付き）と照合 |
 | [harness/dry-run.mjs](harness/dry-run.mjs) | モデルを呼ばない全体の確認 |
 | [harness/score.test.mjs](harness/score.test.mjs)・[harness/probe.test.mjs](harness/probe.test.mjs) | 合成の記録による試験 |
-| [results/](results/) | dry run・試験・拒否の反例の結果、測定の前の固定（`fixation.json`） |
+| [results/](results/) | dry run・試験・拒否の反例の結果、測定の前の固定（`fixation.json`）、段階1〜3の記録と判定（`traces/`・`stage1-R-score.json`・`stage2-judge.json`・`stage3-judge.json`） |
 
 ## 段階1（現状R）の結果（2026-11-25）
 
@@ -201,3 +201,41 @@ High・Mediumなし、Low 2件。固定したfileは変えず（変えてよい�
 
 - #1807と同じ形の依頼（`asc-3`）は、Rでは未選択・誤選択だったが、Pでは2回とも本文・reference・回答の目印まで満たした（`AA`）。Hでは2回とも本文を読んだが、手順の適用までは至らなかった（`BB`）。
 - どの仕組みを標準にするかはownerが決める（規則2）。
+
+## 段階3（条件I）の結果と最終の結論（2026-11-25）
+
+### 固定と導入
+
+- 条件I：`conditions.json`の`conditions.I`（`adopt: "claude-md"`、`hook: null`、`pointerDelivered: true`）。`release.json`の`phase3`にv0.5.108（PR #1816を含む、target commit `14801e9e`）を記入した。releaseはdraft・prereleaseではなく、tarballのsha256 `3f470278…`がSHA256SUMSとreleaseのassetのdigestの両方と一致した。
+- 固定：`fixation.mjs stage3`で4件目の記録（段階`stage 3`）を足した。変えたfileは`harness/condition-i.mjs`だけで、理由は「承認の値に`:<blockSha256>`が加わった（PR #1816のレビューのMedium-1）。記録にblockSha256を加えた」、レビューの参照は「PR #1816の製品の変更の独立な再レビュー（host-session、opus、HEAD `a1b0e940`）で、condition-iの変更は条件Iの意味を変えないと判断」。それ以外の固定したfileはbytesで同じ（`stage3`の検査が合格、`fixation.mjs check`も合格）。
+- sample project：v0.5.108のtarballから`make-fixture.mjs … --adopt claude-md`で新しく作った。`project-assets`の計画が示した`readTrigger`の選択肢`claude-md`（default `claude-md`、action `append`、beforeSha256 `cabbf71a…`＝条件R・Pと同じ基の`CLAUDE.md`、blockSha256 `444b31b5…`）を`--adopt-read-trigger`で承認して適用した。導入の記録は`released: true`、16件の入口が記録・packageと一致。
+
+### 段階3の最初の隔離の確認（規則6）
+
+- 新しい目印fileを実HOMEとこのrepositoryに作り、`I-probe-1`を1回実行した（0.08 USD、`claude-sonnet-5-5`、Claude Code 2.1.323）。`probe-check.mjs`の**全22項目が合格**（文例の頭が回答にある、hookの発火・応答が0、目印の読取りは拒否され文字列はどこにも無い、debug logに外のpathが0、ownerの指示・memory・個人用Skillが無い等）。段階0の実行時の判定（R・P・Hの`probe 2`）と`compare`して、tool・ASC以外のSkill・同梱plugin・gitの件名・modelに差が無い（`differ: []`、合格）。目印fileは確認の後に削除した。記録：[results/stage0/stage3/](results/stage0/stage3/)。
+
+### 測定と採点
+
+- 28試行（14依頼×2回）、失敗0、費用2.32 USD（Hostの計算値）。記録：[results/traces/](results/traces/)の`I-*`（localのpathを置き換えたもの、`trials.json`に追記）。試行はR/P/Hとは別のruns-rootで実行し、台帳は同じfileを使った。
+- 採点は段階1・2と同じ手順（置き換える前の記録を同じ名前の並びにし、`collect.mjs`が作った`trials.json`と一緒に`score.mjs`へ渡す）で、`--judge R I`。判定：[results/stage3-judge.json](results/stage3-judge.json)。
+
+| 条件 | 本文の読込み | 手順の適用 | 過剰な読込み | 誤選択・未選択 | 判定 |
+| --- | --- | --- | --- | --- | --- |
+| R（現状、登録だけ。段階1） | 20/22 | 15/22 | 0/6 | 1・1 | （基準） |
+| P（`CLAUDE.md`に手で文例。段階2、参考） | 22/22 | 19/22 | 0/6 | 0・0 | 水準を満たす |
+| **I（v0.5.108の`project-assets`の提案を承認して採用）** | **22/22** | **16/22** | **0/6** | 0・0 | **水準を満たす**（規則3） |
+
+- 依頼ごと（I）：`asc-1`・`asc-2`・`rr-1`・`tw-1`・`se-1`・`ma-1`・`ui-1`・`do-1`は2回とも`AA`。`asc-3`・`ri-1`・`es-1`は2回とも`BB`（本文は読んだが、referenceの読込みか回答の目印が欠けた）。
+- #1807と同じ形の依頼（`asc-3`）は、Rでは未選択・誤選択だったが、Iでは2回とも`asc`の本文を読んだ。ただしreferenceを読まず、手順の適用まで至らなかった（Pでは2回とも`AA`）。
+- 手順の適用は、Rより1試行多いだけで、Pの19/22より少ない。Iの文例の本文はPと1字も違わず、違いは`project-assets`の採用で前後に区切りの注記（`<!-- asc:read-trigger v1 -->`・`<!-- /asc:read-trigger -->`）が付くこととASCの版（v0.5.106→v0.5.108）だけである。この差が手順の適用の差の原因かは、各条件2回の測定では区別できない（「限界」のとおり、境界付近の判定は粗い）。
+
+### 最終の結論（規則3）
+
+- 改善の後の条件I（ownerが採用した条件Pを、v0.5.108の`project-assets`の提案から承認して適用したもの）は、規則3の3つ（本文の読込み22/22＝100%≧80%、手順の適用16/22＞Rの15/22、過剰な読込み0≦Rの0＋1）をすべて満たし、**水準を満たす**。
+- 留意点（ownerへの報告）：手順の適用の上積みは1試行で、水準の境界にある。本文まで読ませる効果（R 20/22→I 22/22、誤選択・未選択0）は明確だが、referenceまで読ませる効果は段階2のPより小さかった。
+
+### 費用と台帳
+
+- 段階3の費用：隔離の確認0.08 USD＋測定2.32 USD＝約2.40 USD。全段階の累計は約9.95 USD（台帳の精算額。未精算0件、予約119件）。上限30 USDの内。
+- 段階3の前に、台帳が段階2の後の記録（181行、sha256 `3495ef6e0b7c53c6a05e6d3e47b25c92c30ea2a8244193e8c8b9ec725a4f8b58`）と一致することを確かめた。段階3の後も、先頭の181行のsha256は同じだった。
+- 段階3の後の台帳：**239行、sha256 `f929c9f4aa06332ff7f11b58c85ab9f9908a0f0f71a672858a75859ba7cad882`**。
