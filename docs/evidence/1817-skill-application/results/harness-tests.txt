@@ -1,5 +1,5 @@
 # command: node --test docs/evidence/1817-skill-application/harness/score.test.mjs docs/evidence/1817-skill-application/harness/probe.test.mjs
-# HEAD: 5bbd96f2e9bff78a326c896fae9b615f54612065 (clean tree)
+# HEAD: 992c98b69c82e2d834ea54abcf59c2613b845190 (clean tree)
 # node: v20.12.2
 ok 1 - clean R probe passes; heading mark omitted in the answer is accepted (L3)
 ok 2 - each leak or mismatch fails the probe
@@ -55,7 +55,12 @@ ok 51 - pointer text is extracted from v05/USAGE.md and the hook emits it as Ses
 ok 52 - \#1817: redacted public traces (<trial>/work) are scored like the unredacted ones
 ok 53 - \#1817 relaxed markers: spelling variants pass, the procedure is still required
 ok 54 - \#1817 judge: applied above B, bodyRead not lower than B - 1, overapplication at most B + 1; targeted cases reported
-# tests 54
-# pass 54
+ok 55 - \#1817 M1: the fixed order is reps outermost, negatives interleaved, B then S; counterexamples fail
+ok 56 - \#1817 M1: run-trial accepts only the next planned trial, replacements only after all planned; probes are free
+ok 57 - \#1817 L1: replacements are one per failed planned trial (rep 5, 6, ...), and a failed replacement is not replaced
+ok 58 - \#1817 run-all: planned trials skip the reserved ones; replacements wait for every planned trial
+ok 59 - \#1817 M1: judge1817 is not-judged without valid negative trials, with an unmeasured case, or a missing replacement
+# tests 59
+# pass 59
 # fail 0
 # exit: 0

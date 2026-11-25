@@ -1,21 +1,32 @@
-# HEAD: 5bbd96f2e9bff78a326c896fae9b615f54612065; node v20.12.2; no model call. <scratch> = the scratch directory
+# HEAD: 992c98b69c82e2d834ea54abcf59c2613b845190; node v20.12.2; no model call. <scratch> = the scratch directory
 ## run-trial installProblems on the dry-run fixtures (real tarballs) and their crossed pairings
-# command: node <scratch>/cross.mjs (scratch script: copies each sample project and calls run-trial.mjs installProblems with the given condition) docs/evidence/1817-skill-application <scratch>/run1817
+# command: node <scratch>/cross.mjs (scratch script: copies each sample project and calls run-trial.mjs installProblems with the given condition) docs/evidence/1817-skill-application <scratch>/run1817b
 fixture B for condition B: accepted
 fixture S for condition S: accepted
 fixture S for condition B: refused: sample project was built for condition S, not B; sample project source candidate is not the release release.json pins for B; install record released flag does not match the pinned kind; tarball digest is not the one release.json pins for condition B
 fixture B for condition S: refused: sample project was built for condition B, not S; sample project source release is not the candidate release.json pins for S; install record released flag does not match the pinned kind; tarball digest is not the one release.json pins for condition S
-## make-fixture with the other condition's tarball
-# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs B <scratch>/rel1817/candidate/agent-skill-chain-0.5.109.tgz f8c3eae7… <scratch>/run1817/x-B <scratch>/run1817/tmp
+## make-fixture with the other condition's tarball, and with the replaced first candidate
+# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs B <scratch>/rel1817/candidate2/agent-skill-chain-0.5.109.tgz 3a016473… <scratch>/run1817b/x <scratch>/run1817b/tmp
 Error: refused: digest is not the release digest release.json pins for condition B (use --allow-unreleased only for a dry run)
 # exit: 1
-# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs S <scratch>/rel1817/release/agent-skill-chain-0.5.109.tgz 05901c4b… <scratch>/run1817/x-S <scratch>/run1817/tmp
+# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs S <scratch>/rel1817/release/agent-skill-chain-0.5.109.tgz 05901c4b… <scratch>/run1817b/x <scratch>/run1817b/tmp
 Error: refused: digest is not the candidate digest release.json pins for condition S (use --allow-unreleased only for a dry run)
 # exit: 1
-# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs S <scratch>/rel1817/release/agent-skill-chain-0.5.109.tgz f8c3eae7… (candidate digest, release tarball)
-Error: tarball sha256 05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f != expected f8c3eae78b36951746a4e615a173cc3c91777131fb06c4cdaae53b32aa512b1e
+# command: node docs/evidence/1817-skill-application/harness/make-fixture.mjs S <scratch>/rel1817/candidate/agent-skill-chain-0.5.109.tgz f8c3eae7… <scratch>/run1817b/x <scratch>/run1817b/tmp
+Error: refused: digest is not the candidate digest release.json pins for condition S (use --allow-unreleased only for a dry run)
 # exit: 1
+## order (run-trial.mjs uses order.mjs orderRefusal after its other gates)
+# command: node <scratch>/order-check.mjs (scratch script: calls order.mjs orderRefusal) docs/evidence/1817-skill-application
+B-asc-1-1 with 0 reserved: accepted
+S-asc-1-1 with 0 reserved: refused: out of order: the next planned trial is B-asc-1-1, not S-asc-1-1
+B-rr-1-1 with 2 reserved: accepted
+B-asc-1-2 with 2 reserved: refused: out of order: the next planned trial is B-rr-1-1, not B-asc-1-2
+B-asc-1-5 with 50 reserved: refused: replacement B-asc-1-5 before every planned trial is reserved (next planned: B-ui-1-2)
+B-asc-1-5 with 112 reserved: accepted
+## run-all.mjs planned without --run (prints the order, starts nothing)
+# command: node docs/evidence/1817-skill-application/harness/run-all.mjs planned <scratch>/run1817b/runs --fixture-B <scratch>/run1817b/sample-B --fixture-S <scratch>/run1817b/sample-S --ledger <scratch>/run1817b/absent-ledger.jsonl
+{"dryRun":true,"count":112,"first":["B-asc-1-1","S-asc-1-1","B-rr-1-1","S-rr-1-1","B-neg-1-1","S-neg-1-1"],"rep2first":"B-asc-1-2","last":"S-do-1-4"}
 ## run-trial --run without ASC1817_ALLOW_PAID (no model call)
-# command: node docs/evidence/1817-skill-application/harness/run-trial.mjs <scratch>/run1817/runs B asc-1 1 --fixture <scratch>/run1817/sample-B --run
+# command: node docs/evidence/1817-skill-application/harness/run-trial.mjs <scratch>/run1817b/runs B asc-1 1 --fixture <scratch>/run1817b/sample-B --run
 refused: ASC1817_ALLOW_PAID is not 1 (measurement not authorised)
 # exit: 3
