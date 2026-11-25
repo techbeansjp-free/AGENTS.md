@@ -1,0 +1,210 @@
+{
+ "traces": "docs/evidence/1814-skill-invocation/results/traces",
+ "planned": 2,
+ "scorings": {
+  "cases1814": {
+   "R": {
+    "runs": 28,
+    "failures": 0,
+    "positives": 22,
+    "bodyRead": 20,
+    "applied": 15,
+    "negatives": 6,
+    "overapplication": 0,
+    "perCase": {
+     "asc-1": "AB",
+     "asc-2": "BB",
+     "asc-3": "UM",
+     "rr-1": "AA",
+     "tw-1": "AA",
+     "ri-1": "AB",
+     "se-1": "AA",
+     "ma-1": "AA",
+     "ui-1": "AA",
+     "es-1": "AB",
+     "do-1": "AA",
+     "neg-1": "--",
+     "neg-2": "--",
+     "neg-3": "--"
+    }
+   },
+   "P": {
+    "runs": 28,
+    "failures": 0,
+    "positives": 22,
+    "bodyRead": 22,
+    "applied": 19,
+    "negatives": 6,
+    "overapplication": 0,
+    "perCase": {
+     "asc-1": "AA",
+     "asc-2": "AA",
+     "asc-3": "AA",
+     "rr-1": "AA",
+     "tw-1": "AA",
+     "ri-1": "BB",
+     "se-1": "AA",
+     "ma-1": "AA",
+     "ui-1": "AB",
+     "es-1": "AA",
+     "do-1": "AA",
+     "neg-1": "--",
+     "neg-2": "--",
+     "neg-3": "--"
+    }
+   },
+   "H": {
+    "runs": 28,
+    "failures": 0,
+    "positives": 22,
+    "bodyRead": 22,
+    "applied": 15,
+    "negatives": 6,
+    "overapplication": 0,
+    "perCase": {
+     "asc-1": "AA",
+     "asc-2": "AB",
+     "asc-3": "BB",
+     "rr-1": "AA",
+     "tw-1": "AA",
+     "ri-1": "BB",
+     "se-1": "AA",
+     "ma-1": "AA",
+     "ui-1": "AA",
+     "es-1": "BB",
+     "do-1": "AA",
+     "neg-1": "--",
+     "neg-2": "--",
+     "neg-3": "--"
+    }
+   },
+   "I": {
+    "runs": 28,
+    "failures": 0,
+    "positives": 22,
+    "bodyRead": 22,
+    "applied": 16,
+    "negatives": 6,
+    "overapplication": 0,
+    "perCase": {
+     "asc-1": "AA",
+     "asc-2": "AA",
+     "asc-3": "BB",
+     "rr-1": "AA",
+     "tw-1": "AA",
+     "ri-1": "BB",
+     "se-1": "AA",
+     "ma-1": "AA",
+     "ui-1": "AA",
+     "es-1": "BB",
+     "do-1": "AA",
+     "neg-1": "--",
+     "neg-2": "--",
+     "neg-3": "--"
+    }
+   }
+  },
+  "cases1817": {
+   "R": {
+    "runs": 28,
+    "failures": 0,
+    "positives": 22,
+    "bodyRead": 20,
+    "applied": 18,
+    "negatives": 6,
+    "overapplication": 0,
+    "perCase": {
+     "asc-1": "AB",
+     "asc-2": "AA",
+     "asc-3": "UM",
+     "rr-1": "AA",
+     "tw-1": "AA",
+     "ri-1": "AA",
+     "se-1": "AA",
+     "ma-1": "AA",
+     "ui-1": "AA",
+     "es-1": "AB",
+     "do-1": "AA",
+     "neg-1": "--",
+     "neg-2": "--",
+     "neg-3": "--"
+    }
+   },
+   "P": {
+    "runs": 28,
+    "failures": 0,
+    "positives": 22,
+    "bodyRead": 22,
+    "applied": 22,
+    "negatives": 6,
+    "overapplication": 0,
+    "perCase": {
+     "asc-1": "AA",
+     "asc-2": "AA",
+     "asc-3": "AA",
+     "rr-1": "AA",
+     "tw-1": "AA",
+     "ri-1": "AA",
+     "se-1": "AA",
+     "ma-1": "AA",
+     "ui-1": "AA",
+     "es-1": "AA",
+     "do-1": "AA",
+     "neg-1": "--",
+     "neg-2": "--",
+     "neg-3": "--"
+    }
+   },
+   "H": {
+    "runs": 28,
+    "failures": 0,
+    "positives": 22,
+    "bodyRead": 22,
+    "applied": 19,
+    "negatives": 6,
+    "overapplication": 0,
+    "perCase": {
+     "asc-1": "AA",
+     "asc-2": "AA",
+     "asc-3": "BB",
+     "rr-1": "AA",
+     "tw-1": "AA",
+     "ri-1": "AA",
+     "se-1": "AA",
+     "ma-1": "AA",
+     "ui-1": "AA",
+     "es-1": "BA",
+     "do-1": "AA",
+     "neg-1": "--",
+     "neg-2": "--",
+     "neg-3": "--"
+    }
+   },
+   "I": {
+    "runs": 28,
+    "failures": 0,
+    "positives": 22,
+    "bodyRead": 22,
+    "applied": 18,
+    "negatives": 6,
+    "overapplication": 0,
+    "perCase": {
+     "asc-1": "AA",
+     "asc-2": "AA",
+     "asc-3": "BB",
+     "rr-1": "AA",
+     "tw-1": "AA",
+     "ri-1": "AA",
+     "se-1": "AA",
+     "ma-1": "AA",
+     "ui-1": "AA",
+     "es-1": "BB",
+     "do-1": "AA",
+     "neg-1": "--",
+     "neg-2": "--",
+     "neg-3": "--"
+    }
+   }
+  }
+ }
+}
