@@ -1,0 +1,57 @@
+{
+ "case": "ui03-dashboard",
+ "condition": "A",
+ "rep": 1,
+ "schema": "asc-1807-core-steps/v1",
+ "parseErrors": 0,
+ "events": 30,
+ "toolCalls": {
+  "fetch_page": {
+   "calls": 0,
+   "ok": 0,
+   "failed": 0,
+   "noResult": 0
+  },
+  "view_page": {
+   "calls": 0,
+   "ok": 0,
+   "failed": 0,
+   "noResult": 0
+  },
+  "screenshot": {
+   "calls": 2,
+   "ok": 2,
+   "failed": 0,
+   "noResult": 0
+  }
+ },
+ "otherBrowserTools": [],
+ "viewedUrls": [],
+ "viewPageWidths": [],
+ "renderedFiles": [
+  "out/index.html"
+ ],
+ "screenshotWidths": [
+  800,
+  1440
+ ],
+ "renderedVersions": {
+  "out/index.html": 1
+ },
+ "exemplarViewed": false,
+ "alternativesCompared": false,
+ "narrowChecked": true,
+ "wideChecked": true,
+ "finalBothWidths": true,
+ "widths": {
+  "narrow": 800,
+  "wide": 1440
+ },
+ "coreSteps": false,
+ "proxy": {
+  "allowed": 0,
+  "denied": 0,
+  "deniedReasons": {}
+ },
+ "proxyCorroborates": true
+}

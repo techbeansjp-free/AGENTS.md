@@ -80,4 +80,21 @@ if(v.length<sel.length){msg.textContent='未入力：'+(sel.length-v.length)+'�
 msg.textContent='';out.value=JSON.stringify({"${caseId}":r},null,1)}
 sel.forEach(e=>e.addEventListener('change',upd));upd();
 </script></body></html>`);
+// Optional folder for the auxiliary model scoring (#1804 run-eval.mjs layout; same IDs; notes withheld).
+const evalIdx = process.argv.indexOf('--eval');
+if (evalIdx > 0) {
+  const ed = path.join(process.argv[evalIdx + 1], caseId);
+  fs.mkdirSync(ed, {recursive: true});
+  const evd = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const caseDir = caseId === 'ui03-dashboard' ? path.join(evd, '../1804-design-judgment/cases/ui03-dashboard') : path.join(evd, 'cases', caseId);
+  fs.copyFileSync(path.join(caseDir, 'BRIEF.md'), path.join(ed, 'BRIEF.md'));
+  fs.copyFileSync(path.join(evd, 'rubric.md'), path.join(ed, 'RUBRIC.md'));
+  order.forEach((t, i) => {
+    const id = ids[i]; const r = path.join(renderRoot, caseId, t);
+    for (const [src, dst] of [['desktop.png', 'desktop'], [`${NARROW[0]}.png`, NARROW[0]], ['desktop-gray.png', 'gray']]) {
+      if (fs.existsSync(path.join(r, src))) fs.copyFileSync(path.join(r, src), path.join(ed, `${id}-${dst}.png`));
+    }
+    fs.writeFileSync(path.join(ed, `${id}-notes.md`), 'この評価では、生成者のnotesを伏せた。rationale（説明可能性）は採点せず null にする。\n');
+  });
+}
 console.log(JSON.stringify({case: caseId, screens: cards.length, live: cards.filter((c) => c.live).length, out}));

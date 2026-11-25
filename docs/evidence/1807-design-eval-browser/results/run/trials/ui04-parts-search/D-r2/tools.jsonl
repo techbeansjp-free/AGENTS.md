@@ -1,0 +1,3 @@
+{"t":"2026-11-24T23:56:23.268Z","tool":"fetch_page","ok":false,"input":{"url":"https://jp.misumi-ec.com/"},"error":"host not in allowlist: jp.misumi-ec.com","ms":0}
+{"t":"2026-11-24T23:57:08.336Z","tool":"screenshot","ok":true,"input":{"path":"out/index.html","width":1440},"info":{"path":"out/index.html","width":1440,"horizontalOverflow":false,"scrollHeight":1507,"capturedHeight":1507,"blockedRequests":0,"blockedSample":[]},"ms":1008}
+{"t":"2026-11-24T23:57:09.018Z","tool":"screenshot","ok":true,"input":{"path":"out/index.html","width":390},"info":{"path":"out/index.html","width":390,"horizontalOverflow":false,"scrollHeight":1533,"capturedHeight":1533,"blockedRequests":0,"blockedSample":[]},"ms":655}

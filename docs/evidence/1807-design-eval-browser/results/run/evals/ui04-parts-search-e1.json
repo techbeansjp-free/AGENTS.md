@@ -1,0 +1,209 @@
+{
+ "schema": "asc-1804-eval/v1",
+ "blind": "ui04-parts-search",
+ "order": [
+  "pnr2",
+  "zbf7",
+  "yad3",
+  "8sf8",
+  "3nj9",
+  "rqeb",
+  "3cp2",
+  "bw4k",
+  "se7w"
+ ],
+ "exit": 0,
+ "wallMs": 89726,
+ "subtype": "success",
+ "isError": false,
+ "costUsd": 0.7652487,
+ "numTurns": 40,
+ "usage": {
+  "input_tokens": 22,
+  "cache_creation_input_tokens": 64894,
+  "cache_read_input_tokens": 349815,
+  "output_tokens": 8795,
+  "output_tokens_details": {
+   "thinking_tokens": 1292
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 64894,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 2290,
+    "cache_read_input_tokens": 62517,
+    "cache_creation_input_tokens": 5600,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 5600
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-haiku-5-5": {
+   "inputTokens": 1332,
+   "outputTokens": 25,
+   "cacheReadInputTokens": 0,
+   "cacheCreationInputTokens": 0,
+   "webSearchRequests": 0,
+   "costUSD": 0.00014570000000000002,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 0,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 0,
+   "canonicalModel": "claude-haiku-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  },
+  "claude-opus-5-5": {
+   "inputTokens": 22,
+   "outputTokens": 8795,
+   "cacheReadInputTokens": 349815,
+   "cacheCreationInputTokens": 64894,
+   "webSearchRequests": 0,
+   "costUSD": 0.765103,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1292,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 64894,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "scores": {
+  "pnr2": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "詳細の上部に在庫バッジ・48個・納期をまとめ、一覧は記号付きバッジと等幅の品番で統一されているが、一覧には在庫数が無く納期のみで、PCでは詳細パネルの下に大きな空白が残り、構成は汎用の一覧と詳細の型である。"
+  },
+  "zbf7": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "分類をチップで並べ、一覧の各行で在庫数と納期を比べられ、詳細で「即日出荷」を大きく示すが、PCでは詳細の下が大きく空き、末尾の凡例は小さい文字で折り返す。"
+  },
+  "yad3": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "検索・分類・凡例を上部の帯に集め、一覧だけをスクロールさせて詳細を常に見せる構成で、一覧の右端に数量と納期を揃えて比較しやすいが、題材固有の視覚表現は等幅の品番程度である。"
+  },
+  "8sf8": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "件数（全12件中）と、一覧右端の在庫数・納期、詳細の大きい在庫バッジと数量で階層ははっきりしているが、一覧の納期表記に「納期」の語が付く行と付かない行が混在し、詳細の品番は等幅でなく、PCでは詳細の下に空白が残る。"
+  },
+  "3nj9": {
+   "subject": 1,
+   "hierarchy": 1,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "一覧では在庫数と納期を一貫した書式で比べられるが、詳細では納期が表の1行に埋もれて強調が無く、在庫バッジが名称の下と在庫の行に重複し、PCでは詳細の下が大きく空く。"
+  },
+  "rqeb": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "一覧を固定の高さでスクロールさせ、詳細の上部に在庫・数量・納期をまとめているが、一覧の補足が「48個・即日出荷」と「納期 約3週間」で書式が揃わず、資料は箇条書きで操作できる要素に見えない。"
+  },
+  "3cp2": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "詳細で「在庫の状態と数量」と「納期」を並ぶ2つのカードに分けて強調し、凡例を一覧の下端に固定しているが、一覧には在庫数が無く、生産終了の行が「納期：注文不可」と表記されて項目の意味がずれる。"
+  },
+  "bw4k": {
+   "subject": 1,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "一覧の生産終了の行に後継品の品番を直接示し、詳細の納期カードを大きく示すが、詳細の在庫数（48個）はバッジ横の小さい文字にとどまり、一覧の補足の書式が状態によって揃わず、スマートフォンには凡例が無い。"
+  },
+  "se7w": {
+   "subject": 1,
+   "hierarchy": 1,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 1,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "一覧は品番と右端の在庫バッジだけで、数量と納期が無いため候補を比べにくく、詳細では在庫の状態と数量が上部の要約と表の行に重複し、詳細の品番は見出しが等幅なのに表の行は等幅でない。"
+  }
+ },
+ "rawResult": "9件すべての画像（desktop・mobile・gray）を開いて見たうえで採点しました。9件とも notes ファイルには「生成者のnotesを伏せた」としか書かれていないため、RUBRIC の指示に従い rationale はすべて `null` にしています。\n\n全体の傾向は次のとおりです。\n- **共通点：** 9件とも、ほぼ同じ汎用の型でした（左に一覧、右に詳細、品番は等幅の太字、記号付きの在庫バッジ）。そのため subject と distinctiveness は全件1点です。\n- **色に頼らない区別：** 白黒画面でも、全件で在庫の状態を記号（●▲◆×）と枠線の違いで見分けられます。color は全件2点です。\n- **差が出た点：** 一覧で在庫数と納期を比べられるか、選んだ部品の納期が目立つか、表記が統一されているか、の3点です。\n- **画像で確かめられなかった点：** どの画像も初期表示のため、次の3点は見られませんでした。採点の対象外です。\n  - 0件のときの表示\n  - スマートフォンで一覧から詳細へ移り、戻る操作\n  - 詳細での後継品の表示\n\n```json\n{\"scores\": {\n\"pnr2\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"詳細の上部に在庫バッジ・48個・納期をまとめ、一覧は記号付きバッジと等幅の品番で統一されているが、一覧には在庫数が無く納期のみで、PCでは詳細パネルの下に大きな空白が残り、構成は汎用の一覧と詳細の型である。\"},\n\"zbf7\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"分類をチップで並べ、一覧の各行で在庫数と納期を比べられ、詳細で「即日出荷」を大きく示すが、PCでは詳細の下が大きく空き、末尾の凡例は小さい文字で折り返す。\"},\n\"yad3\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"検索・分類・凡例を上部の帯に集め、一覧だけをスクロールさせて詳細を常に見せる構成で、一覧の右端に数量と納期を揃えて比較しやすいが、題材固有の視覚表現は等幅の品番程度である。\"},\n\"8sf8\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 1, \"decoration\": 2, \"rationale\": null, \"evidence\": \"件数（全12件中）と、一覧右端の在庫数・納期、詳細の大きい在庫バッジと数量で階層ははっきりしているが、一覧の納期表記に「納期」の語が付く行と付かない行が混在し、詳細の品番は等幅でなく、PCでは詳細の下に空白が残る。\"},\n\"3nj9\": {\"subject\": 1, \"hierarchy\": 1, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"一覧では在庫数と納期を一貫した書式で比べられるが、詳細では納期が表の1行に埋もれて強調が無く、在庫バッジが名称の下と在庫の行に重複し、PCでは詳細の下が大きく空く。\"},\n\"rqeb\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 1, \"decoration\": 2, \"rationale\": null, \"evidence\": \"一覧を固定の高さでスクロールさせ、詳細の上部に在庫・数量・納期をまとめているが、一覧の補足が「48個・即日出荷」と「納期 約3週間」で書式が揃わず、資料は箇条書きで操作できる要素に見えない。\"},\n\"3cp2\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 1, \"decoration\": 2, \"rationale\": null, \"evidence\": \"詳細で「在庫の状態と数量」と「納期」を並ぶ2つのカードに分けて強調し、凡例を一覧の下端に固定しているが、一覧には在庫数が無く、生産終了の行が「納期：注文不可」と表記されて項目の意味がずれる。\"},\n\"bw4k\": {\"subject\": 1, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 1, \"decoration\": 2, \"rationale\": null, \"evidence\": \"一覧の生産終了の行に後継品の品番を直接示し、詳細の納期カードを大きく示すが、詳細の在庫数（48個）はバッジ横の小さい文字にとどまり、一覧の補足の書式が状態によって揃わず、スマートフォンには凡例が無い。\"},\n\"se7w\": {\"subject\": 1, \"hierarchy\": 1, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 1, \"decoration\": 2, \"rationale\": null, \"evidence\": \"一覧は品番と右端の在庫バッジだけで、数量と納期が無いため候補を比べにくく、詳細では在庫の状態と数量が上部の要約と表の行に重複し、詳細の品番は見出しが等幅なのに表の行は等幅でない。\"}\n}}\n```"
+}

@@ -1,0 +1,1 @@
+{"schema":"asc-1807-gold-check/v1","case":"ui04-parts-search","missing":[],"coverage":1,"interactions":[{"query":"LG-2040","ok":true,"textOk":true,"absentOk":true},{"query":"ZZZ-NOTFOUND","ok":true,"textOk":true,"absentOk":true}],"narrowOverflow":false,"externalRequests":0}

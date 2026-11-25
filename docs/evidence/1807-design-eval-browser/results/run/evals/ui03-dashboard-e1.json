@@ -1,0 +1,254 @@
+{
+ "schema": "asc-1804-eval/v1",
+ "blind": "ui03-dashboard",
+ "order": [
+  "au8x",
+  "tfpy",
+  "p5zz",
+  "9xz8",
+  "8g3w",
+  "tqjb",
+  "czyc",
+  "caa7",
+  "kpx4"
+ ],
+ "exit": 0,
+ "wallMs": 99045,
+ "subtype": "success",
+ "isError": false,
+ "costUsd": 0.8276629000000001,
+ "numTurns": 40,
+ "usage": {
+  "input_tokens": 22,
+  "cache_creation_input_tokens": 69567,
+  "cache_read_input_tokens": 355407,
+  "output_tokens": 9982,
+  "output_tokens_details": {
+   "thinking_tokens": 1970
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 69567,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 2790,
+    "cache_read_input_tokens": 66776,
+    "cache_creation_input_tokens": 6014,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 6014
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-haiku-5-5": {
+   "inputTokens": 1330,
+   "outputTokens": 369,
+   "cacheReadInputTokens": 0,
+   "cacheCreationInputTokens": 0,
+   "webSearchRequests": 0,
+   "costUSD": 0.0003175,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 345,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 0,
+   "canonicalModel": "claude-haiku-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  },
+  "claude-opus-5-5": {
+   "inputTokens": 22,
+   "outputTokens": 9982,
+   "cacheReadInputTokens": 355407,
+   "cacheCreationInputTokens": 69567,
+   "webSearchRequests": 0,
+   "costUSD": 0.8273454000000001,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1970,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 69567,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "scores": {
+  "au8x": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "冒頭の「▲要対処4件」帯に対象を列挙し、レーン表は遅延順で出荷/計画の進捗バーと締切を並べ、取得失敗の源は右列に再試行付きで示す（tabletでは帯→データ源→KPI→表に並べ替えて関係を保つ）が、構成は一般的な監視画面の型。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "tfpy": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "要対処の集計帯と取得失敗帯（最後に成功した時刻・再試行）を最上部に置き、レーン行に▲と「遅延がしきい値超過」の文字、さらに最終更新時刻と締切を比べた「締切後・未出荷あり」の注記を付けるという、この依頼に固有の判断があり、desktop・tabletとも表の関係が保たれている。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "p5zz": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "要対処帯・▲要対処/✓正常のラベル・締切を大きな数字で示すレーンカードで状態は明確だが、desktopのレーンカードはIDと進捗バーの間に大きな空白があり、構成はカード一覧の汎用型。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "9xz8": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 1,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "要対処帯と取得失敗帯（最終更新より230分前・再試行）は明確だが、tabletでは締切と注文参照の列が消えてレーン詳細の関係が崩れ、遅延の「61件」の「件」が改行される。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "8g3w": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "レーンを運送会社名で大きく示し、締切列に「締切済み・未出荷222件」「完了」を付けるなど題材に固有の判断がある一方、ピッキング速度のKPIで「しきい値 ≧ 1／20件/時」と数字の途中で改行されている。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "tqjb": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "KPIとレーンに「▲超過/▲遅延超過」「✓正常」「基準なし」のラベルを統一して付け、要対処帯と取得失敗帯を上部に置くが、desktopの表は状態列と遅延件数列の間が大きく空いており、構成は汎用の表の型。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "czyc": {
+   "subject": 2,
+   "hierarchy": 1,
+   "typography": 2,
+   "composition": 2,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 2,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "要対処帯に「KPI超過/レーン超過/データ源エラー」の種別を付け、レーンに「上限8超」「締切超過・未出荷222」を添える固有の判断があるが、取得失敗源の最終成功時刻と再試行は画面最下部に置かれ埋もれている。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "caa7": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 1,
+   "color": 2,
+   "spacing": 2,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "要対処帯と取得失敗帯（230分前・再試行）は明確だが、ピッキング速度のKPIで「下限120／件/時」と単位の前で改行され、tabletのレーンカードでは担当者が遅延件数の下に離れて置かれ、項目どうしの関係が読み取りにくい。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  },
+  "kpx4": {
+   "subject": 2,
+   "hierarchy": 2,
+   "typography": 1,
+   "composition": 2,
+   "color": 2,
+   "spacing": 1,
+   "distinctiveness": 1,
+   "consistency": 2,
+   "decoration": 2,
+   "rationale": null,
+   "evidence": "対処が必要な項目を箇条書きの帯にまとめ、データ源を右列に再試行付きで置くが、レーンIDが細く小さい等幅で読みにくく、tabletでは「北陸トラッ/ク」が途中で改行され、KPIカードの値と目標の間やデータ源列の下に空白が目立つ。",
+   "flaggedInGray": [
+    "出荷遅延率",
+    "LANE-B01",
+    "LANE-C02"
+   ]
+  }
+ },
+ "rawResult": "9件すべての画像（desktop・tablet・gray）を開いて見ました。notesは9件とも「生成者のnotesを伏せた」とあり、RUBRICの指示どおりrationaleはすべて`null`にしています。\n\n**全体の傾向**\n- 9件とも、6つのKPI・8つのレーン・最終更新時刻・取得に失敗したデータ源（失敗の事実、最後に成功した時刻、再試行ボタン）を表示しています。\n- 白黒の画面でも、9件とも同じ3件をしきい値超過と読み取れました：出荷遅延率、LANE-B01、LANE-C02。手掛かりは▲の記号と「超過」「要対処」の文字、左端の太い線です。\n- 差がついたのは主に独自性です。締切を過ぎて未出荷が残るレーンを示した画面（tfpy・8g3w・czyc）を2点、汎用の監視画面の型にとどまるものを1点にしました。\n- そのほかの主な減点：\n  - **9xz8**：tablet幅で締切と注文参照の列が消えています。「61件」の「件」も折り返しています。\n  - **8g3w・caa7**：KPIの「120件/時」が途中で改行されています。\n  - **p5zz・tqjb・kpx4**：大きな空白があります。\n  - **czyc**：再試行ボタンが画面の最下部にあります。\n  - **caa7**：tablet幅で担当者が遅延件数の下に離れて置かれています。\n\n```json\n{\"scores\": {\n\"au8x\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"冒頭の「▲要対処4件」帯に対象を列挙し、レーン表は遅延順で出荷/計画の進捗バーと締切を並べ、取得失敗の源は右列に再試行付きで示す（tabletでは帯→データ源→KPI→表に並べ替えて関係を保つ）が、構成は一般的な監視画面の型。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"tfpy\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"要対処の集計帯と取得失敗帯（最後に成功した時刻・再試行）を最上部に置き、レーン行に▲と「遅延がしきい値超過」の文字、さらに最終更新時刻と締切を比べた「締切後・未出荷あり」の注記を付けるという、この依頼に固有の判断があり、desktop・tabletとも表の関係が保たれている。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"p5zz\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"要対処帯・▲要対処/✓正常のラベル・締切を大きな数字で示すレーンカードで状態は明確だが、desktopのレーンカードはIDと進捗バーの間に大きな空白があり、構成はカード一覧の汎用型。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"9xz8\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 1, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"要対処帯と取得失敗帯（最終更新より230分前・再試行）は明確だが、tabletでは締切と注文参照の列が消えてレーン詳細の関係が崩れ、遅延の「61件」の「件」が改行される。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"8g3w\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"レーンを運送会社名で大きく示し、締切列に「締切済み・未出荷222件」「完了」を付けるなど題材に固有の判断がある一方、ピッキング速度のKPIで「しきい値 ≧ 1／20件/時」と数字の途中で改行されている。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"tqjb\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"KPIとレーンに「▲超過/▲遅延超過」「✓正常」「基準なし」のラベルを統一して付け、要対処帯と取得失敗帯を上部に置くが、desktopの表は状態列と遅延件数列の間が大きく空いており、構成は汎用の表の型。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"czyc\": {\"subject\": 2, \"hierarchy\": 1, \"typography\": 2, \"composition\": 2, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 2, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"要対処帯に「KPI超過/レーン超過/データ源エラー」の種別を付け、レーンに「上限8超」「締切超過・未出荷222」を添える固有の判断があるが、取得失敗源の最終成功時刻と再試行は画面最下部に置かれ埋もれている。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"caa7\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 1, \"color\": 2, \"spacing\": 2, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"要対処帯と取得失敗帯（230分前・再試行）は明確だが、ピッキング速度のKPIで「下限120／件/時」と単位の前で改行され、tabletのレーンカードでは担当者が遅延件数の下に離れて置かれ、項目どうしの関係が読み取りにくい。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]},\n\"kpx4\": {\"subject\": 2, \"hierarchy\": 2, \"typography\": 1, \"composition\": 2, \"color\": 2, \"spacing\": 1, \"distinctiveness\": 1, \"consistency\": 2, \"decoration\": 2, \"rationale\": null, \"evidence\": \"対処が必要な項目を箇条書きの帯にまとめ、データ源を右列に再試行付きで置くが、レーンIDが細く小さい等幅で読みにくく、tabletでは「北陸トラッ/ク」が途中で改行され、KPIカードの値と目標の間やデータ源列の下に空白が目立つ。\", \"flaggedInGray\": [\"出荷遅延率\", \"LANE-B01\", \"LANE-C02\"]}\n}}\n```"
+}

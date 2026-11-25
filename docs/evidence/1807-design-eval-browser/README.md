@@ -1,44 +1,115 @@
-# 見本の閲覧と実画面比較が動く環境でのデザイン判断Skillの評価（#1807、準備）
+# 見本の閲覧と実画面比較が動く環境でのデザイン判断Skillの評価（#1807）
 
 開発時の検証資料であり、配布対象に含めない。
 
 ## 状態
 
-**準備の段階**。Issueの「承認までは、環境の構築、隔離の反例、ケースとgoldの準備（モデルの有料実行を除く）を進められる」の範囲だけを行った。モデルは一度も呼んでいない。containerからinternetへは一度も通信していない。
+**生成・描画・採点と、盲検の比較画面の作成まで終えた。審美の順位付けはownerが行う（下の「ownerの順位付け」）。**
 
 | 区分 | 内容 |
 | --- | --- |
-| 済み | 生成環境（proxy・tool・container構成）の実装、隔離の反例（21項目すべて合格、内部networkとdummy siteで、モデル・internetなし）、tool呼出しの記録から中心の手順を数える集計器と合成の記録での試験（8件合格）、UI-04・UI-07のケースとgold、goldの判定器と合成の画面での区別の確認、評価計画の下書き、allowlistの案 |
-| ownerの判断済み | 閲覧の許可範囲の方針、人の評価の方法、試行数・ケース（27生成）、費用の上限（40 USD）。Issue #1807のコメント（2026-11-25）。[EVAL_PLAN.md](EVAL_PLAN.md)に反映した |
-| ownerの確認待ち | allowlistの具体的な一覧（[env/allowlist.proposed.json](env/allowlist.proposed.json)、80 host）、誤発火（UI-10相当）の追加生成、生成imageの作成時の通信、実行前の隔離の再確認（haiku 1回）、実行の許可。推奨は[EVAL_PLAN.md](EVAL_PLAN.md#ownerに確認したい残りの事項) |
-| 未実施 | 生成・評価のすべて（有料のモデル実行）。生成image（Claude Code CLIと書体を含む段階）の作成。#1804の描画器（axe-core・keyboard・reduced-motion）のUI-04・UI-07への対応。独立レビュー |
+| 判定 | D（Art Direction）・E（Art Direction＋Product Design）とも **未判定**。27生成のどれでも、中心の手順（見本の閲覧と2案の実描画比較）が行われなかった。事前に固定した規則で、全ケースが「未判定」になる。「効果なし」ではない |
+| 済み | 準備（下の各節）、ownerの承認したallowlistの適用、toolのimageでの隔離の反例（21項目合格）、実際のCLIでの再確認（haiku、合格）、生成27回＋誤発火の確認6回、描画と決定論の採点、補助の採点（opus、各ケース1回）、盲検の比較画面 |
+| ownerの作業 | ケースごとに9画面の順位付け（下の「ownerの順位付け」）。順位は未判定の分類を変えないが、審美の記述として記録する |
+| 未実施・skip | 追加の試行（差が見えたケースが無いため提案しない。下の「再評価の条件」）、独立レビュー |
+
+## 本番の結果
+
+### 費用
+
+Hostの`total_cost_usd`の合計 **7.87 USD**（上限40、停止規則36に届いていない）。生成27回 5.08、誤発火の確認6回 0.38、実行前の再確認（haiku）0.005、補助の採点3回 2.41。1回の生成は0.12〜0.26 USD。生成の失敗・timeout・上限到達は0件で、再実行はしていない。
+
+### 中心の手順（tool呼出しの記録から数えた。notesは使っていない）
+
+| ケース | 条件 | 中心の手順 | 見本の閲覧の成功 | `fetch_page`の試行（全て拒否） | 2案の描画 | 狭幅の確認 | 広幅の確認 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-03 | A | 0/3 | 0 | 0 | 0 | 3 | 3 |
+| UI-03 | D | 0/3 | 0 | 0 | 0 | 3 | 2 |
+| UI-03 | E | 0/3 | 0 | 0 | 0 | 3 | 3 |
+| UI-04 | A | 0/3 | 0 | 0 | 0 | 3 | 3 |
+| UI-04 | D | 0/3 | 0 | 2（2試行） | 0 | 3 | 3 |
+| UI-04 | E | 0/3 | 0 | 0 | 0 | 3 | 3 |
+| UI-07 | A | 0/3 | 0 | 0 | 0 | 3 | 0 |
+| UI-07 | D | 0/3 | 0 | 1（1試行） | 0 | 3 | 0 |
+| UI-07 | E | 0/3 | 0 | 0 | 0 | 3 | 0 |
+
+- 全試行で、`screenshot`で自分の画面を1〜3回描画した（成果物の1ファイルだけ）。2つ目の案を描いた試行は無い。UI-07では、全条件が狭幅（390px）だけを確認した。
+- Dの3回の閲覧の試みは、どれもallowlistの外（部品の通販サイト、W3Cの解説）だったので、toolが拒否した（[results/run/trials/](results/run/trials/)の`tools.jsonl`）。toolの段階で拒否したので、proxyへの要求は0件だった。拒否の後に、作品案内（`references/design-works.md`）を開いて許可されたhostを探した試行は無い。
+- Art Directionの`SKILL.md`を読んだのは、Dの9試行のうち4試行。Eの9試行では、どのSkillのfileも読まれなかった（Skill toolの呼出しも0回）。Dの生成者は、notesに「見本の実見は未実施」と書いた試行がある。
+- 行われなかった理由（記録から分かる範囲）：(1) 生成者が閲覧を選ばなかった（24試行）、(2) 選んだ閲覧先がallowlistの外だった（3試行）。依頼文には、allowlistのhostを書いていない（[EVAL_PLAN.md](EVAL_PLAN.md)の技術的な事項。Aへ知識を与えないため）。
+
+### 非劣化（[results/run/decision.json](results/run/decision.json)）
+
+参考として記録する（判定可能なケースが無いので、分類には使わない）。D・Eとも、全ケースで非劣化の失敗は無い。指標は全条件でほぼ上限に張り付いた。
+
+- 必須情報の網羅率：UI-03・UI-07は全試行1.0。UI-04は0.958（後継品の品番が初期表示に無い）で、Eの1試行だけ1.0。
+- axe-coreのserious・critical：全試行0。狭幅の横scroll・外部への要求・reduced-motion非対応：全試行0件。
+- UI-04の検索操作：全試行2/2。UI-07の初期表示の範囲：全試行2/2、押せる要素の最小は52〜56px。
+- UI-03の白黒での読取り（補助の採点者）：全試行で再現率1.0。
+- 費用比（生成費用の中央値、X÷A）：D 0.94、E 1.03。
+
+### 誤発火（UI-10相当、D・E各3回）
+
+デザインSkillの利用（呼出し・fileのRead）0件、UI fileの作成0件、閲覧のtoolの呼出し0件。隠しoracleのtestは全6試行で3/3（#1804のAも3/3）。[results/run/misfire.json](results/run/misfire.json)。
+
+### 補助の採点（opus、各ケース1回、notesは伏せた）
+
+参考値。審美の判定には使わない。rationale（説明可能性）を除く9項目の合計（18点満点）の3試行の範囲：UI-03 A 15〜18・D 15〜17・E 15〜17、UI-04 A 14〜15・D 15〜15・E 14〜16、UI-07 A 15〜16・D 15〜16・E 14〜16。条件の間で範囲が重なる。[results/run/evals/](results/run/evals/)（**順位付けの前に開かない**）。
+
+### ownerの順位付け
+
+盲検の比較画面は、このworktreeの`.agent-skill-chain/local/1807/blind/<ケース>/index.html`にある（git管理外。worktreeを削除すると消える）。ケースは`ui03-dashboard`・`ui04-parts-search`・`ui07-bus-mobile`の3つ。
+
+1. ブラウザーで`index.html`を開く。9画面それぞれに、狭幅（UI-03は800px、他は390px）と広幅（1440px）の全体の画像、「実画面を開く」（生成したHTML。外部への通信を止めてある）が並ぶ。条件名・notes・試行番号は伏せた。
+2. 依頼文（各ケースの`BRIEF.md`）の利用者・目的に合っている順に、1（最も良い）〜9の順位を付ける。同順位は付けられない。入力は画面のブラウザーに保存される。
+3. 9画面すべてに付けると、下に`{"<ケース>": {"<ID>": 順位}}`のJSONが出る。それを会話に貼るか、`ranks.json`として保存する。
+4. keyは`.agent-skill-chain/local/1807/keys/`にある。その内容のsha256を[results/run/keys-sha256.txt](results/run/keys-sha256.txt)に記録した。順位を付ける前にkeyと`results/run/evals/`・`results/run/decision.json`を開かない。
+
+順位は`node harness/aggregate.mjs <runs> <render> <out.json> --keys <keys> --ranks <ranks.json> --evals <evals>`で集計できる。ただし判定可能なケースが無いので、分類は「未判定」のまま変わらない。順位は、審美の記述（条件の間に差が見えるか）として記録する。
+
+### 再評価の条件
+
+中心の手順が動く条件をそろえないと、この2候補の効果は判定できない。次のどれかをownerが決めたうえで、再評価を提案する。
+
+- allowlistを全条件の依頼文に示す（Aにも同じ一覧を与える）、または、拒否の応答に許可されたhostの一覧を含める。今回の拒否3回のうち2回は、依頼に近い題材（部品の通販）の見本を探したもので、作品案内由来の一覧とは合わなかった。
+- 規格・解説のサイト（W3C等）をallowlistに加えるかを決める。
+- 依頼文で、見本の閲覧と2案の比較を全条件に求める（Skillの効果ではなく、手順そのものの効果を測る評価になる）。
+
+## 生成環境の変更（本番の前）
+
+準備の段階では、生成Agent（Claude Code CLI）もcontainerで動かす設計だった。本番では、CLIをhostで動かし、閲覧と描画のtoolだけをcontainerで動かした。CLIをcontainerで動かすには認証の情報をcontainerへ渡す必要があり、その情報はこの作業の権限では用意できなかった。hostで動かすことで、認証の情報はhostの保管場所から出ない。理由と範囲は[EVAL_PLAN.md](EVAL_PLAN.md#実装者が決めた技術的な事項理由付き)に書いた。
+
+- 実際のCLIでの再確認（[results/run/cli-recheck.json](results/run/cli-recheck.json)、haiku、0.005 USD、合格）：fixture外のRead（相対・絶対path）、`/etc/hosts`のRead、fixture外のGrep・Writeの5回がすべて権限で拒否された。目印の文字列は記録に現れず、fixture外のfileは作られなかった。組込みtoolはEdit・Glob・Grep・Read・Skill・Writeだけで、`browser`の3つのtoolがあり、`screenshot`が動いた。
+- toolのimage（`env/Dockerfile`の`tools`段階：Noto CJK等の書体とaxe-coreを追加）で、隔離の反例をやり直し、21項目すべて合格した（[results/isolation-tools/probe.json](results/isolation-tools/probe.json)）。
+
+## 準備の段階の記録
 
 ## 構成
 
 | path | 内容 |
 | --- | --- |
-| [EVAL_PLAN.md](EVAL_PLAN.md) | 評価計画の下書き（条件A・D・E、判定の規則、費用と停止） |
+| [EVAL_PLAN.md](EVAL_PLAN.md) | 評価計画（条件A・D・E、判定の規則、費用と停止）。生成の前にcommitで固定した |
 | [conditions.json](conditions.json) | 条件とケースの定義 |
 | [gold.json](gold.json) | 決定論の採点の正解（UI-03は#1804のまま、UI-04・UI-07を追加） |
 | [rubric.md](rubric.md) | 補助の採点（モデル）の基準。#1804の基準にUI-04・UI-07を加えた |
 | [cases/](cases/) | UI-04（部品の検索・一覧・詳細）、UI-07（バス停の発車案内、スマートフォン向け）、書体の案内。UI-03は#1804の`cases/ui03-dashboard`を使う |
-| [env/](env/) | 生成環境：`proxy.mjs`（allowlistのproxy）、`mcp-server.mjs`（生成Agentのtool）、`Dockerfile`、`mcp.json`、`gen-prompt.txt`、`allowlist.json`（閲覧先は空）、`allowlist.proposed.json`（案）と、案を作る`allowlist-extract.py`・`allowlist-propose.py` |
-| [isolation/](isolation/) | 隔離の反例：`run.sh`、container内で確かめる`probe.mjs`、dummy site、試験用のallowlist |
-| [harness/](harness/) | `core-steps.mjs`（中心の手順の集計）と試験、`gold-check.mjs`（goldの判定器）と合成の画面（`dryrun/`）、`run-gen-docker.mjs`（生成の起動器。未実行） |
-| [results/](results/) | 隔離の反例の原始結果、集計器の試験結果、goldの判定器の結果 |
+| [env/](env/) | 生成環境：`proxy.mjs`（allowlistのproxy）、`mcp-server.mjs`（生成Agentのtool）、`Dockerfile`、`gen-prompt.txt`、`allowlist.json`（承認された80 host）、`allowlist.proposed.json`（案と出典・理由）と、案を作る`allowlist-extract.py`・`allowlist-propose.py` |
+| [isolation/](isolation/) | 隔離の反例：`run.sh`、container内で確かめる`probe.mjs`、dummy site、試験用のallowlist。実際のCLIでの再確認`cli-recheck.mjs` |
+| [harness/](harness/) | `core-steps.mjs`（中心の手順の集計）と試験、`gold-check.mjs`（goldの判定器）と合成の画面（`dryrun/`）、`run-gen.mjs`（生成の起動器）、`render.mjs`・`run-render.mjs`（描画と採点）、`misfire.mjs`（誤発火）、`make-blind.mjs`（盲検の比較画面）、`aggregate.mjs`（判定の規則）、`collect.mjs`（記録の取り出し） |
+| [results/](results/) | 隔離の反例の原始結果（準備：`isolation/`、本番のimage：`isolation-tools/`）、集計器の試験結果、goldの判定器の結果、本番の記録（`run/`：試行ごとのmeta・中心の手順・proxyとtoolの記録・描画の指標・gold、判定、誤発火、補助の採点、再確認） |
 
 ## 生成環境
 
-第三者のコードは、Playwrightの公式image（Chromiumを含む、digest固定）と`playwright-core` 1.49.1（依存なし、install scriptなし。npm registryの`sha512`と一致を確認）だけである。proxy・tool・集計器はNodeの標準機能だけで書いた。
+第三者のコードは、Playwrightの公式image（Chromiumを含む、digest固定）、`playwright-core` 1.49.1・`axe-core` 4.10.2（どちらも依存なし、install scriptを実行せず導入。npm registryの`sha512`と一致を確認）と、aptの書体だけである。proxy・tool・集計器はNodeの標準機能だけで書いた。
 
 ```text
-[生成container] --(内部専用network)--> [proxy] --(外向きnetwork)--> allowlistのhostだけ
-  Claude Code CLI ── HTTPS_PROXY ──> :3128 model入口（CONNECTだけ、モデルAPIのhostだけ）
-  tool（MCP stdio）── 明示 ──────> :3129 browse入口（CONNECT・GET・HEAD、閲覧allowlistだけ）
+[host] Claude Code CLI（cwd＝fixture、組込みtoolはRead・Write・Edit・Glob・Grep・Skillだけ）── モデルAPI（hostから直接）
+   └─ MCP stdio: docker run -i --rm [toolのcontainer] --(内部専用network)--> [proxy] --(外向きnetwork)--> allowlistのhostだけ
 ```
 
-- **生成container**：read-only root、cap-drop ALL、no-new-privileges、pids・memory・cpuの上限、`/tmp`だけtmpfs、非rootの利用者。mountはfixture（`/work`）、tool（`/opt/env`、読取り専用）、allowlist（読取り専用）、記録（`/log`）だけ。homeとDockerのsocketはmountしない。認証の情報は、実行時に`--env-file`（repositoryの外のfile）で渡す。組込みtoolは`Read,Write,Edit,Glob,Grep,Skill`だけ（Bash・WebFetch・WebSearchなし）。
-- **proxy**（[env/proxy.mjs](env/proxy.mjs)）：hostは完全一致（`.`で始まる項目だけsubdomainを許す）。IPの直書き、許可外のport、GET・HEAD以外、HTTPの絶対URI以外を拒否する。`denyPrivateAddresses`（本番は有効）で、内部addressへ解決されるhostを拒否し、確認したaddressへ接続を固定する（DNSの再解決をしない）。判断をすべてJSON行で記録する。生成containerの外にあるので、生成Agentは記録を変えられない。
+- **生成Agent**：hostのCLIを、試行ごとの新しいfixtureで起動する。project設定だけ、hookは無効、session保存なし。fixture外の読み書きは権限で拒否される（実行前の再確認で合格）。認証の情報はhostの保管場所から出ない。
+- **toolのcontainer**：read-only root、cap-drop ALL、no-new-privileges、pids・memory・cpuの上限、`/tmp`だけtmpfs、非rootの利用者。mountはfixture（`/work`、読取り専用）、tool（`/opt/env`、読取り専用）、allowlist（読取り専用）、記録（`/log`）だけ。homeとDockerのsocketはmountしない。内部専用のnetworkにだけ接続する。
+- **proxy**（[env/proxy.mjs](env/proxy.mjs)）：hostは完全一致（`.`で始まる項目だけsubdomainを許す）。IPの直書き、許可外のport、GET・HEAD以外、HTTPの絶対URI以外を拒否する。`denyPrivateAddresses`（本番は有効）で、内部addressへ解決されるhostを拒否し、確認したaddressへ接続を固定する（DNSの再解決をしない）。判断をすべてJSON行で記録する。toolのcontainerの外にあるので、生成Agentは記録を変えられない。
 - **tool**（[env/mcp-server.mjs](env/mcp-server.mjs)）：
   - `fetch_page`：URLを検査し（http・https、認証情報なし、2048字以内、allowlist）、転送を自分で1 hopずつ追い、各hopを再検査する（最大5）。本文を文字列にして、命令ではないことを明記した`<untrusted-content>`で包む。ページの中の区切り文字は無効化する。
   - `view_page`：Chromiumをbrowse入口のproxyで起動し、allowlistのhost以外への要求を中止する。Playwrightの`route`は転送のhopを捕らえないので、全要求を別に監視し、最後のURLがallowlist外なら画像を返さずに失敗にする（反例の1回目で見つけて直した。下の「反例」）。
@@ -93,7 +164,7 @@ containerの設定は[results/isolation/probe-hostconfig.json](results/isolation
 
 ## allowlistの案
 
-[env/allowlist.proposed.json](env/allowlist.proposed.json)（**ownerの確認待ち。`env/allowlist.json`には未反映**）。
+[env/allowlist.proposed.json](env/allowlist.proposed.json)。ownerがそのまま承認し（2026-11-25）、[env/allowlist.json](env/allowlist.json)へ写した。
 
 - 出典：Art Directionの固定commit（`046e42c7`）の作品案内（`references/design-works.md`、247行・299 host）。fileのsha256を記録した。第三者の本文は転載せず、行番号・節名・hostだけを記録した。
 - 選定：「地域・媒体・年」の欄に「Web」「アプリ」「操作」「案内」を含む71行（103 host）から、作品そのもの（21）・制作者（44）・発注者や運営者（15）の公式サイトの80 hostを選んだ。動画配信・投稿の場・報道や告知配信・賞やデータベース・汎用のfile配信・第三者の紹介記事・印刷物の23 hostを、分類と理由を付けて除いた。
@@ -101,14 +172,16 @@ containerの設定は[results/isolation/probe-hostconfig.json](results/isolation
 
 ## 残存リスク・限界
 
-- **認証の情報**：生成containerの環境変数に、モデルAPIの認証の情報を置く。生成AgentにBashは無いが、Readで`/proc`を読めれば見える。fixture外のReadは、CLIの権限の仕組み（`-p`での確認の拒否）で拒否される想定で、#1804では確認したが、このimageの実際のCLIでは未確認。実行前の再確認を計画に入れた。漏れても送れる先はallowlistのhostとモデルAPIだけだが、URLに含めて送ることはproxyでは防げない。
+- **生成Agentの隔離はCLIの権限に依存する**：生成Agentはhostで動くので、fixture外の読み書きの拒否は、CLIの権限の仕組み（`-p`での確認の拒否）による。実行前の再確認と#1804で合格したが、OSの境界ではない。生成AgentにBash等のコード実行のtoolは無い。
 - **URLによる送出**：allowlistのhostへのGETのURLに、依頼の内容を含めることは技術的に可能である。依頼の内容は架空で、依頼文で禁止しているが、遮断はしていない。proxyの記録で事後に確認できる。
-- **外部ページの指示**：区切りと注記は構造の対策で、モデルが外部ページの指示に従わないことは確かめていない（モデルを呼んでいない）。
+- **外部ページの指示**：区切りと注記は構造の対策である。本番では外部ページが一度も取得されなかったので、モデルが外部ページの指示に従わないことは確かめられていない。
 - **見本の描画の欠け**：`view_page`はallowlist外の要求（CDNの画像・書体・script）を中止するので、多くの公式サイトが崩れて描画され得る。見本の実見が不完全になり、Art Directionに不利に働く可能性がある。CDNのhostを足すかはownerの判断になる。
 - **ChromiumのsandboxをOFFにしている**：cap-drop ALLのcontainerではChromiumのsandboxが動かないため。外部ページのscriptはcontainerの中で動く。containerのnetworkは内部専用で、通信はproxyだけを通る。
-- **書体**：反例に使った`browser`段階のimageには、Noto CJKが無い（IPAゴシック等だけ）。生成imageでは`cases/FONTS.md`の書体を入れる計画である。
+- **書体**：準備の段階の反例に使った`browser`段階のimageには、Noto CJKが無い。本番のtoolのimage（`tools`段階）には`cases/FONTS.md`の書体を入れた。
+- **Hostの組込みSkill**：全条件で、Hostが持つ組込みのSkill（`design`・`dataviz`等）も一覧に現れた（`--setting-sources project`でも除かれない）。全条件で同じで、どの試行でも呼ばれていない。
+- **上限効果**：#1804と同じく、決定論の指標と補助の採点はほぼ上限に張り付いた。
 - **集計の定義**：2案の比較は「異なる2つ以上のHTMLの描画」とした。1つのファイルを書き換えて描き比べる進め方は、比較として数えない（版の数は記録する）。
-- **公平性**：allowlistはArt Directionの資料から作ったので、Aは閲覧先を知らない。これはSkillの持つ知識の効果として測る対象であり、計画に理由を書いた。
+- **公平性と閲覧先の不一致**：allowlistはArt Directionの資料から作り、依頼文には書かなかった。本番では、Dの生成者が閲覧を試みた3回とも、依頼の題材に近い通販サイトや規格の解説を選び、allowlistの外だった。閲覧先の決め方そのものが、中心の手順が動かなかった一因である可能性がある（「再評価の条件」）。
 
 ## 再現
 
@@ -124,3 +197,9 @@ python3 -I env/allowlist-propose.py <S>/ad-hosts.json <Art Directionのcheckout>
 ```
 
 作成したcontainer・network・imageには`asc.worktree=<W>`のlabelを付け、作業の終わりに削除した。
+
+## 計画からの逸脱
+
+- 生成Agentの置き場所を、準備の段階の設計（containerの中）からhostへ変えた（上の「生成環境の変更」）。生成の前に計画へ書き、commitで固定した。
+- 生成の後に、EVAL_PLAN.mdの題（「下書き」を削除）と、起動器のfile名の変更に伴うlinkだけを直した。判定の規則・goldは変えていない。
+- `fetch_page`がallowlist外として拒否した要求は、toolの段階で止まるので、proxyの記録には現れない。toolの記録（`tools.jsonl`）に全て残っている。
