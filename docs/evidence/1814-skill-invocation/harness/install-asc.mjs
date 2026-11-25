@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
+import {adoptFromPlan} from './condition-i.mjs';
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 function run(cmd, args, opts) {
@@ -64,10 +65,10 @@ export function installAsc(tarball, expected, project, tempParent, {adopt = null
   let adopted = null;
   const applyArgs = [cli, 'project-assets', project, '--register-claude-skill', '--apply'];
   if (adopt) {
-    const option = (plan.readTrigger?.options ?? []).find((o) => o.id === adopt);
-    if (!option) throw new Error(`the release's project-assets plan offers no read-trigger option ${adopt}`);
-    applyArgs.push('--adopt-read-trigger', `${option.id}@${option.beforeSha256}`);
-    adopted = {id: option.id, path: option.path, action: option.action, beforeSha256: option.beforeSha256, diffSha256: sha(String(option.diff ?? '')), default: plan.readTrigger.default ?? null};
+    // The product interface is condition-I specific and lives in condition-i.mjs (review M-1).
+    const a = adoptFromPlan(plan, adopt);
+    applyArgs.push(...a.args);
+    adopted = a.adopted;
   }
   const applied = JSON.parse(run(process.execPath, applyArgs, {cwd: project, env}));
   if (!applied.applied || applied.conflicts.length) throw new Error('project-assets --apply did not apply cleanly');

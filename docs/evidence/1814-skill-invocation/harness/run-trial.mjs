@@ -2,7 +2,7 @@
 // condition, one prompt, `claude -p` with the project as cwd. Case id `probe` runs the isolation probe (probe-check.mjs).
 // Default is a dry run that prepares nothing and prints the plan. A model call happens only with --run AND env
 // ASC1814_ALLOW_PAID=1 AND a credential in the environment AND the fixed files equal results/fixation.json AND the
-// cumulative ledger (all stages) + this trial's budget stays within --stop-usd. Trials run strictly one at a time
+// cumulative ledger (all stages) + this trial's budget stays within conditions.json budget (cap - safety margin). Trials run strictly one at a time
 // (ledger lock); a trial is reserved at its budget before it starts, so a killed run never counts as zero (review M4).
 //
 // Isolation (EVAL_PLAN.md「実行環境」):
@@ -11,14 +11,17 @@
 // - HOME and CLAUDE_CONFIG_DIR are new empty directories per trial: no user settings, CLAUDE.md, memory, Skills, plugins
 //   or hooks; only Claude Code's bundled Skills remain. Default setting sources (as a user has); user/local are empty.
 //   Both directories are deleted after the trial (they may hold account data written by the CLI; review L9).
-// - The credential comes only from CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in the parent environment and is passed
-//   to the child process environment only. It is never written to a file; meta.json records only which kind was used.
+// - The credential comes only from CLAUDE_CODE_OAUTH_TOKEN (owner decision; ANTHROPIC_API_KEY only as a fallback) in the
+//   parent environment, e.g. CLAUDE_CODE_OAUTH_TOKEN="$(cat <owner file>)" node run-trial.mjs ... The harness never reads a
+//   token file, never prints the value, and passes it to the child process environment only. It is replaced in the
+//   trace/stderr/debug log, the child HOME/config are searched for it (count recorded) and deleted after the trial.
 // - Built-in tools Read, Glob, Grep, Skill only (no Bash, Write, Edit, Web, Agent), no MCP servers. This is an intentional
 //   deviation from a user's environment (EVAL_PLAN.md「利用者の環境との意図した違い」).
 // - Model: conditions.json `model` (the `sonnet` alias, fixed before any run); the resolved id is recorded per trial.
 //
 // Usage: node run-trial.mjs <runs-root> <condition> <case-id|probe> <rep> --fixture <sample-project>
-//          [--budget 0.6] [--ledger <file> --stop-usd <n>] [--home-marker <file> --repo-marker <file>] [--run]
+//          [--ledger <file>] [--home-marker <file> --repo-marker <file>] [--run]
+// The cap, safety margin and per-trial budget come only from conditions.json `budget` (review L-a).
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -27,7 +30,7 @@ import {applyCondition, loadConditions} from './apply-condition.mjs';
 import {assertPlacement} from './guard.mjs';
 import * as ledgerOps from './ledger.mjs';
 import {differences, lastRecord} from './fixation.mjs';
-import {releaseDigests} from './make-fixture.mjs';
+import {releaseDigests, gitEnv} from './make-fixture.mjs';
 import crypto from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -35,16 +38,50 @@ const ev = path.resolve(here, '..');
 const repoRoot = path.resolve(ev, '../../..');
 export const TOOLS = 'Read,Glob,Grep,Skill';
 export const DISALLOWED = 'Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task';
-// review L-5: the last trial's actual cost can exceed its --max-budget-usd; stop this much below the cap.
-export const SAFETY_MARGIN_USD = 1;
+// review L-5, L-a: the last trial's actual cost can exceed its --max-budget-usd; stop below the cap by the fixed margin.
+export const BUDGET = loadConditions().budget;
+export const SAFETY_MARGIN_USD = BUDGET.safetyMarginUsd;
 const fileSha = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 
 // review L-2: a paid trial runs only on a sample project installed from a release in release.json, and its copy must
 // still carry exactly the entries and distribution record the install verified; for condition I, the adopted option.
+// review L-c: results/fixation.json itself must be committed and clean, every record's commit must be in HEAD's history,
+// and the first record's commit must be named in README.md (where reviewers and the PR see it).
+export function fixationFileProblems(fx, root = ev) {
+  const g = (a) => spawnSync('git', a, {cwd: root, encoding: 'utf8'});
+  const p = [];
+  const st = g(['status', '--porcelain', '--', 'results/fixation.json']);
+  if (st.status !== 0 || st.stdout.trim()) p.push('results/fixation.json is not committed or has local changes');
+  for (const r of fx.records) if (g(['merge-base', '--is-ancestor', r.fixedAtCommit, 'HEAD']).status !== 0) p.push(`fixation record commit ${r.fixedAtCommit} is not in HEAD's history`);
+  const readme = fs.existsSync(path.join(root, 'README.md')) ? fs.readFileSync(path.join(root, 'README.md'), 'utf8') : '';
+  if (!readme.includes(fx.records[0].fixedAtCommit)) p.push('README.md does not name the first fixation commit');
+  return p;
+}
+
+// Owner decision (2026-11-25): the token reaches only the child process environment. After the trial, the child's HOME
+// and config directories are searched for the value (count of files only, never the value) before they are deleted.
+export function filesContaining(dir, secret) {
+  let n = 0;
+  const walk = (d) => {
+    for (const e of fs.existsSync(d) ? fs.readdirSync(d, {withFileTypes: true}) : []) {
+      const f = path.join(d, e.name);
+      if (e.isDirectory()) walk(f);
+      else if (e.isFile() && fs.statSync(f).size < 16 * 1024 * 1024 && fs.readFileSync(f).includes(secret)) n += 1;
+    }
+  };
+  if (secret) walk(dir);
+  return n;
+}
+
 export function installProblems(install, work, cond) {
   if (!install) return ['no install record (<fixture>.install.json)'];
   const p = [];
   if (install.released !== true) p.push('sample project was not installed from a release (dry-run stand-in)');
+  // review L-b: the copy must be exactly the installed commit with a clean tree (covers bodies and any added file).
+  const g = (a) => spawnSync('git', a, {cwd: work, env: gitEnv(work), encoding: 'utf8'});
+  if (g(['rev-parse', 'HEAD']).stdout.trim() !== install.sampleHead) p.push('sample project HEAD differs from the install record');
+  const st = g(['status', '--porcelain', '--untracked-files=all']);
+  if (st.status !== 0 || st.stdout.trim()) p.push('sample project has uncommitted or untracked changes');
   if (!releaseDigests().includes(install.install?.tarballSha256)) p.push('tarball digest is not in release.json');
   for (const e of install.install?.entries ?? []) {
     const f = path.join(work, '.claude/skills', e.name, 'SKILL.md');
@@ -72,19 +109,20 @@ export function probePrompt(homeMarker, repoMarker) {
     '3. 2のうち、名前が asc と user-journey-acceptance のSkillのdescriptionを、それぞれ「DESC asc: <原文>」「DESC user-journey-acceptance: <原文>」の形で1行ずつ書いてください。',
     `4. Readで ${homeMarker} を読む。`, `5. Readで ${repoMarker} を読む。`,
     '6. 4と5の結果（読めたか、拒否されたか）を1行ずつ書いてください。',
-    '7. Contextにgitの状態（branch、最近のcommitの件名等）があれば、「GIT: 」で始めて、最近のcommitの件名を原文のまま「 | 」区切りで1行に書いてください。無ければ「GIT: なし」と書いてください。'].join('\n');
+    '7. Contextにgitの状態（branch、最近のcommitの件名等）があれば、「GIT: 」で始めて、最近のcommitの件名を原文のまま「 | 」区切りで1行に書いてください。無ければ「GIT: なし」と書いてください。',
+    '8. Contextの指示ファイルやSessionStart等で追加された文脈に、.agent-skill-chain/skills/asc/SKILL.md というpathを含む文があれば、その文を原文のまま「READ-TRIGGER: 」で始めて1行で書いてください。無ければ「READ-TRIGGER: なし」と書いてください。'].join('\n');
 }
 
 function main() {
   const args = process.argv.slice(2);
   const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
   const [runsRootArg, cond, caseId, rep] = args;
-  const fixtureArg = opt('--fixture', null), budget = Number(opt('--budget', '0.6'));
-  const stopUsd = opt('--stop-usd', null), ledgerArg = opt('--ledger', null), wantRun = args.includes('--run');
+  const fixtureArg = opt('--fixture', null), budget = BUDGET.perTrialUsd, stopUsd = BUDGET.capUsd;
+  const ledgerArg = opt('--ledger', null), wantRun = args.includes('--run');
   const homeMarker = opt('--home-marker', null), repoMarker = opt('--repo-marker', null);
   const fail = (m) => { console.error(`refused: ${m}`); process.exit(3); };
-  if (args.includes('--model')) fail('the model is fixed in conditions.json; --model is not accepted');
-  if (!runsRootArg || !cond || !caseId || !rep || !fixtureArg) fail('usage: <runs-root> <cond> <case|probe> <rep> --fixture <dir> [--budget n] [--ledger f --stop-usd n] [--run]');
+  for (const k of ['--model', '--budget', '--stop-usd']) if (args.includes(k)) fail(`${k} is fixed in conditions.json and is not accepted`);
+  if (!runsRootArg || !cond || !caseId || !rep || !fixtureArg) fail('usage: <runs-root> <cond> <case|probe> <rep> --fixture <dir> [--ledger f] [--run]');
   const conds = loadConditions();
   if (!conds.conditions[cond]) fail(`unknown condition ${cond}`);
   const model = conds.model;
@@ -104,14 +142,16 @@ function main() {
   if (!wantRun) { console.log(JSON.stringify({dryRun: true, ...plan})); return; }
 
   if (process.env.ASC1814_ALLOW_PAID !== '1') fail('ASC1814_ALLOW_PAID is not 1 (measurement not authorised)');
-  if (!stopUsd || !ledgerArg) fail('--ledger and --stop-usd are required for a run (one ledger for every stage)');
+  if (!ledgerArg) fail('--ledger is required for a run (one ledger for every stage)');
   const ledger = path.resolve(ledgerArg);
   try { assertPlacement(ledger, {repoRoot}); } catch (e) { fail(`ledger: ${e.message}`); }
   const fixationFile = path.join(ev, 'results/fixation.json');
   if (!fs.existsSync(fixationFile)) fail('results/fixation.json is missing (fix the plan before running)');
-  const fixation = lastRecord(JSON.parse(fs.readFileSync(fixationFile, 'utf8')));
+  const fx = JSON.parse(fs.readFileSync(fixationFile, 'utf8'));
+  const fixation = lastRecord(fx);
   const diff = differences(fixation);
   if (diff.length) fail(`fixed files differ from results/fixation.json: ${diff.join(', ')}`);
+  for (const p of fixationFileProblems(fx)) fail(p);
   const credential = process.env.CLAUDE_CODE_OAUTH_TOKEN ? 'CLAUDE_CODE_OAUTH_TOKEN' : process.env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY' : null;
   if (!credential) fail('no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in the environment');
   if (fs.existsSync(dir)) fail(`exists: ${dir}`);
@@ -153,6 +193,7 @@ function main() {
       tarballSha256: install?.install?.tarballSha256 ?? null, released: install?.released ?? null, adopted: install?.install?.adopted ?? null, applied, expectHook: conds.conditions[cond].hook ?? null,
       fixationSha256: fileSha(fixationFile), fixedAtCommit: fixation.fixedAtCommit, fixationStage: fixation.stage,
       credentialKind: credential, exit: r.status, signal: r.signal, error: r.error ? String(r.error) : null, wallMs: Date.now() - t0, costUsd: last?.total_cost_usd ?? null, budget};
+    meta.credentialInChildFiles = filesContaining(home, secret) + filesContaining(config, secret);
     fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 1));
     ledgerOps.settle(ledger, reservation, name, meta.costUsd);
     console.log(JSON.stringify({trial: name, exit: r.status, costUsd: meta.costUsd, resolvedModel: meta.resolvedModel}));

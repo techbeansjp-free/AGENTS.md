@@ -19,7 +19,7 @@ ownerの要求（2026-11-25）：利用者の環境と同等で、このreposito
 | sample project | このrepositoryと実HOMEの外（scratchの下）に作る、Gitで管理した小さなアプリ：TypeScript/Expressのユーザー管理API、一覧画面、要件メモ（未決事項を含む）、依頼文`docs/BRIEF.md`、CI、Dockerfile、ASC導入前からある`CLAUDE.md`（ASCに触れない概要だけ）。repositoryには含めず、作り方をscriptで残す | `make-fixture.mjs` |
 | 配置の検査 | sample project・試行の作業ディレクトリの祖先（親から`/`まで）に`CLAUDE.md`・`CLAUDE.local.md`・`AGENTS.md`・`.claude`・`.agents`・`.codex`・`.git`があれば、または実HOMEやこのrepositoryの下なら、実行を拒否する | [harness/guard.mjs](harness/guard.mjs) |
 | HOME | 試行ごとに新しい空の`HOME`と`CLAUDE_CONFIG_DIR`。利用者の設定・`CLAUDE.md`・memory・Skill・plugin・hookは無く、Claude Codeの同梱Skillだけが残る。設定の読込み元は既定のまま（利用者と同じ）で、user・localは空 | [harness/run-trial.mjs](harness/run-trial.mjs) |
-| 認証 | 親の環境変数`CLAUDE_CODE_OAUTH_TOKEN`（`claude setup-token`で作るtoken）または`ANTHROPIC_API_KEY`だけを、子processの環境へ渡す。fileへ書かない。traceとstderrとdebug logに値が現れたら`<credential>`へ置き換える。記録するのは種類だけ。どちらも無ければ実行を拒否する | `run-trial.mjs` |
+| 認証 | ownerの決定（2026-11-25、Issueのコメント）：`claude setup-token`で作るtoken（`CLAUDE_CODE_OAUTH_TOKEN`）を、測定を動かすprocessの環境変数だけで子processへ渡す。統括は`CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/asc-eval/claude-oauth-token)" node harness/run-trial.mjs …`の形で起動する（fileはownerが作り、mode 600）。harnessはそのfileを読まず、値を表示・記録しない。子processの環境へ渡すだけで、試行のHOME・設定ディレクトリには書かない。試行の後、それらのディレクトリから値を探して件数だけを`meta.json`に記録（`credentialInChildFiles`）してから消す。`ANTHROPIC_API_KEY`は予備。fileへ書かない。traceとstderrとdebug logに値が現れたら`<credential>`へ置き換える。記録するのは種類だけ。どちらも無ければ実行を拒否する | `run-trial.mjs` |
 | tool | 組込みtoolは`Read`・`Glob`・`Grep`・`Skill`だけ（`Bash`・`Write`・`Edit`・Web・`Agent`は無し）。MCP無し（`--strict-mcp-config`）。sessionは保存しない。利用者の環境との意図した違い（下の節） | `run-trial.mjs` |
 | model | `sonnet`の別名（統括の決定。#1807の生成と同じ）。試行ごとにinit eventの解決後のmodel idを記録する。`--model`の指定は受け付けない | `conditions.json`の`model`、`run-trial.mjs` |
 | 試行のcommit | どの条件でも、条件の適用の後に同じ中立の件名（`Update project files`）のcommitを1件だけ入れる（Rは空のcommit）。Hostがgitの状態として最近のcommitの件名をContextへ入れる場合に、条件ごとに違う文字列が入らないようにする（レビューM1） | `apply-condition.mjs` |
@@ -31,7 +31,7 @@ ownerの要求（2026-11-25）：利用者の環境と同等で、このreposito
 
 ## 利用者の環境との意図した違い
 
-ownerの要求は「利用者と同等の環境」だが、次の点は安全と費用のために意図して変えている（統括の決定。ownerの了承を求める）。
+ownerの要求は「利用者と同等の環境」だが、次の点は安全と費用のために意図して変えている（統括の決定。ownerが了承した：2026-11-25、Issueのコメント「ownerの判断（2回目）」）。
 
 | 違い | 理由 | 観測への影響 |
 | --- | --- | --- |
@@ -103,21 +103,25 @@ ownerの要求は「利用者と同等の環境」だが、次の点は安全と
 停止の規則：
 
 - 全段階（隔離の確認、段階1〜3、再実行）で、repositoryの外の**1つの台帳file**（`--ledger`）を使う（レビューM4）。予約には試行ごとに一意なidを付け、累計はidごとに数える。同じ試行名は台帳に1回しか予約できない（再実行は新しい反復の番号で行う。レビューN1）。試行は起動の前に予算額（0.6 USD）を台帳へ予約し、終了後にHostの`total_cost_usd`で精算する。精算されなかった試行（親processの強制終了等）は予算額のまま数える。
-- `run-trial.mjs`は、台帳の累計にその試行の予算を足して、`--stop-usd 30`から余裕1 USDを引いた29 USDを超えるなら起動しない。最後の試行の実際の費用が`--max-budget-usd`を少し超えても、30 USDに届かないようにする（レビューL-5）。
+- `run-trial.mjs`は、台帳の累計にその試行の予算を足して、上限30 USDから余裕1 USDを引いた29 USDを超えるなら起動しない。上限・余裕・1試行の予算（0.6 USD）は`conditions.json`の`budget`だけから取り、`--stop-usd`・`--budget`の引数は拒否する（レビューL-a）。最後の試行の実際の費用が`--max-budget-usd`を少し超えても、30 USDに届かないようにする（レビューL-5）。
 - 試行は1つずつ順に実行する。台帳のlock fileが残っていれば、人が台帳を確かめてlockを消すまで、次の試行は起動しない。
 - `results/fixation.json`の最後の記録（測定の前のHEADと、条件・gold・判定・起動に関わるfileのsha256）と現在のfileが違えば起動しない。各試行の`meta.json`に、`fixation.json`のsha256・記録のcommit・段階を残す（レビューN2）。
-- 有料の試行は、`release.json`にあるtarballから導入したsample projectでだけ起動する。導入の記録（`<sample>.install.json`）が無い、dry runの代用品で作った、試行の複製の入口・`distribution.json`が記録と違う、条件Iの採用した選択肢が条件と違う、のどれかなら起動しない（レビューL-2）。
+- 有料の試行は、`release.json`にあるtarballから導入したsample projectでだけ起動する。複製の直後に、HEADが導入の記録の`sampleHead`と同じで、未commit・未追跡のfileが無いことも確かめる（本文や後から置いたfileの改変を検出する。レビューL-b）。導入の記録（`<sample>.install.json`）が無い、dry runの代用品で作った、試行の複製の入口・`distribution.json`が記録と違う、条件Iの採用した選択肢が条件と違う、のどれかなら起動しない（レビューL-2）。
 - 再実行：規則5の失敗だけ、同じ条件・ケースで次の番号の試行を1回実行でき、採点では失敗の代わりに数える。それ以外の追加の試行は採点に含めず、別に報告する（`score.mjs`の`selectCounted`。レビューL-3）。
 
-### 段階3の固定（レビューN2）
+### 固定の記録と変えてよい範囲（レビューN2・M-1・L-c・L-d）
 
-`results/fixation.json`は追記だけの記録である。最初の記録（段階0〜2）は`fixation.mjs init`で作り、上書きできない。段階3の前に`node harness/fixation.mjs stage3 results/fixation.json`で2つ目の記録を足す。足せるのは、最初の記録と比べて次の3つを満たす場合だけである。
+`results/fixation.json`は追記だけの記録である。`run-trial.mjs`は最後の記録と照合し、加えて、`fixation.json`がcommit済みで変更が無いこと、各記録のcommitがHEADの履歴にあること、最初の記録のcommitがこのREADMEに書かれていることを確かめる。
 
-1. `conditions.json`の違いが、`conditions.I`の追加だけである。
-2. `release.json`の違いが、`phase3`の記入だけである。
-3. それ以外の固定したfile（採点・判定・gold・起動のscript）が、最初の記録とbytesで同じである。
-
-満たさなければ足さずに止まる。その場合は段階3へ進まず、統括・ownerへ報告する。
+- **最初の記録**：`fixation.mjs init`。既存のfileは上書きしない。
+- **段階0の後の是正（refix）**：隔離の確認の結果、`probe-check.mjs`等の固定したfileを直す必要が出た場合は、測定の前の是正として扱う。台帳に段階1・2の試行が1件も無い（probeだけ）間に限り、独立レビューを通したうえで、`node harness/fixation.mjs refix results/fixation.json --ledger <台帳> --reason <理由> --review <独立レビューの参照>`で、段階0〜2の記録を足す。段階1の試行が1件でも台帳にあれば拒否する。
+- **段階3（条件I）**：`node harness/fixation.mjs stage3 results/fixation.json [--change <file> --reason <理由> --review <参照>]…`で1回だけ足す。最新の段階0〜2の記録と比べて、次をすべて満たす場合だけ足せる。
+  1. `conditions.json`の違いが`conditions.I`の追加だけで、`conditions.I`が`conditionISchema`を満たす（`pointer: false`、`hook`は`null`か`"product"`、`pointerDelivered: true`、`adopt`は選択肢のid、許された項目だけ）。
+  2. `release.json`の違いが`phase3`の記入だけ。
+  3. 変えてよいfileの一覧（`STAGE3_ALLOWED`）は`harness/condition-i.mjs`だけ。条件Iに固有の部分（製品のinterfaceの前提：計画の`readTrigger`の形と`--adopt-read-trigger`の指定、条件Iのprobeの期待、製品のhookの発火の数え方）をこのfileに集めた。変える場合は、fileごとに理由と独立レビューの参照を付け、記録に残す。
+  4. それ以外の固定したfile（採点・判定・gold・判定の規則・R/P/Hの経路・起動・台帳・固定のscript）は、bytesで同じ。
+  満たさなければ足さずに止まる。その場合は段階3へ進まず、統括・ownerへ報告する。
+- **条件Iのprobeの期待**：文例の頭が回答の**どこかに**現れること（最後の行でなくてよい）。採用した塊が`CLAUDE.md`の末尾に閉じの区切りを置く形でも判定できるよう、probeの質問8で「`.agent-skill-chain/skills/asc/SKILL.md`を含む文」を原文で答えさせる。
 - 段階1の後と段階2の後に、実績の平均単価で残りの段階の費用を見積もり、合計が30 USDを超える見込みなら、次の段階へ進まずに報告する。段階3の費用（約6.3 USD）を残すため、段階2を始める時点の見込みを優先する。
 - 1試行の予算上限は0.6 USD（#1783の最大の数倍）。
 
@@ -125,7 +129,7 @@ ownerの要求は「利用者と同等の環境」だが、次の点は安全と
 
 測定と同じ起動の設定（同じsample project・条件・HOMEの作り方・tool・model）で、[run-trial.mjs](harness/run-trial.mjs)の`probe`を実行し、[harness/probe-check.mjs](harness/probe-check.mjs)で判定する。モデルを1回呼ぶので、統括の許可の後に行う。
 
-準備：`node harness/markers.mjs create <このrepositoryのroot>`で、実HOME（`asc1814-home-marker.txt`）とこのrepository（git管理外の`.agent-skill-chain/local/asc1814-repo-marker.txt`）に、乱数の目印を書いたfileを1つずつ作る（既存fileは上書きしない）。2つの名前を変え、完全なpathでそれぞれの読込みの試みを照合する（レビューL1）。確認の後に`remove`で消す。
+準備（ownerの了承：実HOMEに一時的に置き、確認の後に削除する）：`node harness/markers.mjs create <このrepositoryのroot>`で、実HOME（`asc1814-home-marker.txt`）とこのrepository（git管理外の`.agent-skill-chain/local/asc1814-repo-marker.txt`）に、乱数の目印を書いたfileを1つずつ作る（既存fileは上書きしない）。2つの名前を変え、完全なpathでそれぞれの読込みの試みを照合する（レビューL1）。確認の後に`remove`で消す。
 
 すべてが合格した条件だけを測定する。
 
@@ -152,15 +156,15 @@ node --test docs/evidence/1814-skill-invocation/harness/score.test.mjs docs/evid
 node docs/evidence/1814-skill-invocation/harness/dry-run.mjs <tarball> <sha256> <新しいscratchのdirectory> --out <json>
 ```
 
-測定（統括の許可の後。`ASC1814_ALLOW_PAID=1`と認証の環境変数を、実行するshellだけに設定する）：
+測定（統括の許可の後。`ASC1814_ALLOW_PAID=1`と認証の環境変数を、実行するcommandだけに付ける。例：`ASC1814_ALLOW_PAID=1 CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/asc-eval/claude-oauth-token)" node harness/run-trial.mjs …`）：
 
 0. `node harness/fixation.mjs check results/fixation.json`が一致すること（`run-trial.mjs`も起動の前に確かめる）。
 1. `gh release download v0.5.106 --pattern 'agent-skill-chain-0.5.106.tgz' --pattern SHA256SUMS --dir <scratch>/release`。tarballのsha256が`release.json`の`assetSha256`とSHA256SUMSの両方と一致することを確かめる。
 2. `node harness/dry-run.mjs <tarball> <sha256> <scratch>/dry-release`（`--allow-unreleased`なし）で、本物のreleaseでも採点器のSkillの一覧が配布一覧と一致すること等を確かめる。続いて`node harness/make-fixture.mjs <tarball> <sha256> <scratch>/sample <scratch>/tmp`。sha256が`release.json`のものでなければ止まる（dry runだけが`--allow-unreleased`で外す。レビューL7）。版・digest・入口のsha256・sample projectのHEADを`<scratch>/sample.install.json`に記録し、各試行の`meta.json`へ写す（レビューL8）。
-3. 段階0：`node harness/markers.mjs create <repo>`、条件R・P・Hごとに`node harness/run-trial.mjs <scratch>/runs <条件> probe 1 --fixture <scratch>/sample --home-marker <…> --repo-marker <…> --ledger <scratch>/ledger.jsonl --stop-usd 30 --run`、`node harness/probe-check.mjs <scratch>/runs/<条件>-probe-1 <条件> <…> <…> <repo> > <scratch>/probe-<条件>.json`、`node harness/probe-check.mjs compare <scratch>/probe-*.json`、`node harness/markers.mjs remove <repo>`。
-4. 段階1・2：`node harness/run-trial.mjs <scratch>/runs <条件> <case> <1|2> --fixture <scratch>/sample --ledger <scratch>/ledger.jsonl --stop-usd 30 --run`を全ケースで、1つずつ順に。
+3. 段階0：`node harness/markers.mjs create <repo>`、条件R・P・Hごとに`node harness/run-trial.mjs <scratch>/runs <条件> probe 1 --fixture <scratch>/sample --home-marker <…> --repo-marker <…> --ledger <scratch>/ledger.jsonl --run`、`node harness/probe-check.mjs <scratch>/runs/<条件>-probe-1 <条件> <…> <…> <repo> > <scratch>/probe-<条件>.json`、`node harness/probe-check.mjs compare <scratch>/probe-*.json`、`node harness/markers.mjs remove <repo>`。
+4. 段階1・2：`node harness/run-trial.mjs <scratch>/runs <条件> <case> <1|2> --fixture <scratch>/sample --ledger <scratch>/ledger.jsonl --run`を全ケースで、1つずつ順に。
 5. `node harness/collect.mjs <scratch>/runs results/traces`、`node harness/score.mjs cases.json results/traces R P H --runs-json results/runs.json --judge R P`（Hも同様）。
-6. 段階3：`conditions.json`へ`conditions.I`を、`release.json`へ`phase3`を記入してcommitし、`node harness/fixation.mjs stage3 results/fixation.json`で記録を足してcommitする。採用した仕組みを含むreleaseで、`make-fixture.mjs … --adopt <選択肢のid>`から2〜5を繰り返す。runs-rootは分けてよいが、台帳は同じfileを使う。
+6. 段階3：`conditions.json`へ`conditions.I`を、`release.json`へ`phase3`を記入してcommitし（製品のinterfaceが前提と違えば`harness/condition-i.mjs`だけを直し、独立レビューを通す）、`node harness/fixation.mjs stage3 results/fixation.json …`で記録を足してcommitする。採用した仕組みを含むreleaseで、`make-fixture.mjs … --adopt <選択肢のid>`から2〜5を繰り返す。runs-rootは分けてよいが、台帳は同じfileを使う。
 
 ## 実装者が決めた技術的な事項（理由付き）
 
@@ -175,9 +179,9 @@ node docs/evidence/1814-skill-invocation/harness/dry-run.mjs <tarball> <sha256> 
 
 ## 実行の前に統括・ownerが用意すること
 
-- 認証：試行ごとの空のHOMEではOSの資格情報の保管場所を使わないので、`CLAUDE_CODE_OAUTH_TOKEN`（`claude setup-token`）または`ANTHROPIC_API_KEY`を、実行するshellの環境変数として用意する。値はrepository・記録に残らない（`run-trial.mjs`が置き換える）。
+- 認証（ownerが決定済み）：試行ごとの空のHOMEではOSの資格情報の保管場所を使わないので、`CLAUDE_CODE_OAUTH_TOKEN`（`claude setup-token`）または`ANTHROPIC_API_KEY`を、実行するshellの環境変数として用意する。値はrepository・記録に残らない（`run-trial.mjs`が置き換える）。
 - releaseのtarballとSHA256SUMSの取得（GitHubからのdownload）。
-- 実HOMEへの目印fileの作成と削除（ownerの要求による。`markers.mjs`が作る1 fileだけ）。
+- 実HOMEへの目印fileの作成と削除（ownerが了承済み。`markers.mjs`が作る1 fileだけで、確認の後に消す）。
 - 台帳file（repositoryの外）の置き場所。
 
 ## 限界

@@ -20,7 +20,7 @@
 | 全体のdry run | 合格。採点器のSkillの一覧がreleaseの配布一覧と一致、全条件のcommitの件名が同じ（中立の1件）。導入（16件の入口がすべてあり、`distribution.json`の記録と一致し、本文へのlinkだけの薄い入口で、本文がpackageと一致）、goldのSkill本文とreferenceがreleaseにある、依頼が名指すfileがある、sample projectと条件ごとの複製の配置が合格、5条件の適用（`CLAUDE.md`の文例の有無、hookの出力が文例と一致・終了コード0・発火のlog）、試行の計画116試行・計画の費用25.04 USD | [results/dry-run.json](results/dry-run.json) |
 | 起動の経路の拒否（反例） | 許可の環境変数が無い、台帳・上限が無い、`results/fixation.json`が無い、固定したfileが記録と違う、`--model`の指定、repositoryと実HOMEの下、releaseに無いdigest、tarballとdigestの不一致、dry runの代用品で作ったsample projectでの有料の試行を、それぞれ拒否した。`fixation.mjs check`の合格も記録した | [results/refusals.txt](results/refusals.txt) |
 
-dry runで使ったtarball：**releaseの本物ではない。** このworktreeのHEAD（`51c3e022`、v0.5.106の対象commitと同じ）を`npm pack`で作った代用品（版の表記は0.5.0、sha256 `8a01707f…`）である。GitHubからのdownloadを、この準備の段階では行わないため。測定では[release.json](release.json)のtarballを取得し、sha256を照合してから使う。
+dry runで使ったtarball：**releaseの本物ではない。** この作業の始めにHEAD `51c3e022`（v0.5.106の対象commitと同じ）で`npm pack`して作った代用品（版の表記は0.5.0、sha256 `8a01707f…`）である。このbranchは配布物に入るfileを変えていないので、配布物の内容はv0.5.106の対象commitと同じである。dry runそのものは、各記録のlabelにあるHEADで実行した。GitHubからのdownloadを、この準備の段階では行わないため。測定では[release.json](release.json)のtarballを取得し、sha256を照合してから使う。
 
 導入の手順はUSAGEのとおり「Git管理済みの対象では専用worktreeで実施する」に従った（最初の試行で、main checkoutに直接`project-assets`を実行すると`Use a dedicated Git worktree`で止まったため、sample projectの中に作業用worktreeを作って導入・commitし、mainへ取り込む形にした）。
 
@@ -33,9 +33,9 @@ dry runで使ったtarball：**releaseの本物ではない。** このworktree�
 | 改善の合格の水準 | 決定：[decision-criteria.md](decision-criteria.md) |
 | 改善で標準にする仕組みの採否 | 測定の後にownerが決める |
 | 測定に使うmodel | 統括の決定：`sonnet`の別名（#1807の生成と同じ）。解決後のmodel idを試行ごとに記録。[decision-criteria.md](decision-criteria.md)で固定 |
-| toolの制限 | 統括の決定：`Read`・`Glob`・`Grep`・`Skill`だけ。利用者の環境との意図した違いとして記録（[EVAL_PLAN.md](EVAL_PLAN.md#利用者の環境との意図した違い)）。ownerの了承を求める |
-| 認証の渡し方 | 統括の確認事項。試行ごとの空のHOMEではOSの資格情報の保管場所を使わないため、`CLAUDE_CODE_OAUTH_TOKEN`または`ANTHROPIC_API_KEY`を実行するshellの環境変数で渡す |
-| releaseの取得・実HOMEへの目印fileの作成 | 測定の開始時に行う（[EVAL_PLAN.md](EVAL_PLAN.md#手順)） |
+| toolの制限 | 統括の決定：`Read`・`Glob`・`Grep`・`Skill`だけ。利用者の環境との意図した違いとして記録（[EVAL_PLAN.md](EVAL_PLAN.md#利用者の環境との意図した違い)）。ownerが了承（2026-11-25、Issueのコメント「ownerの判断（2回目）」） |
+| 認証の渡し方 | ownerの決定（同上）：`claude setup-token`のtokenを、測定を動かすprocessの環境変数`CLAUDE_CODE_OAUTH_TOKEN`だけで子processへ渡す。統括が`CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" node harness/run-trial.mjs …`の形で起動し、harnessはfileを読まず、値を表示・記録しない |
+| releaseの取得・実HOMEへの目印fileの作成 | 目印fileは実HOMEに一時的に置き、確認の後に削除することをownerが了承（同上）。どちらも測定の開始時に行う（[EVAL_PLAN.md](EVAL_PLAN.md#手順)） |
 
 ## 独立レビュー（1回目、HEAD `e2477706`）への対応
 
@@ -78,7 +78,23 @@ Medium 3件・Low 7件（Highなし）。すべて是正した。
 | L-6 `meta.json`の無い試行で`collect`が止まる | 失敗の行として記録して続ける |
 | L-7 `compare`がgitの行を文字列のまま比べる | commitの件名の集合として比べる |
 | 注記：Skillの名前の直書き | 測定の手順2で、本物のreleaseでもdry run（`--allow-unreleased`なし）を行い、配布一覧との一致を確かめる |
-| 注記：toolの制限 | ownerの了承待ちのまま。測定の前に了承の記録が必要 |
+| 注記：toolの制限 | ownerが了承した（2026-11-25） |
+
+## 3回目のレビュー（HEAD `34323b5f`）への対応
+
+Medium 1件・Low 6件（Highなし）。すべて是正した。
+
+| 指摘 | 是正 |
+| --- | --- |
+| M-1 条件Iが、まだ無い製品のinterfaceを前提にしているのに、実物と違ったときに直す道が無い | 条件Iに固有の部分（計画の`readTrigger`の形と`--adopt-read-trigger`、条件Iのprobeの期待、製品のhookの発火の数え方）を`harness/condition-i.mjs`に集めた。段階3で変えてよいのはこのfileだけで、fileごとに理由と独立レビューの参照を記録する。採点・gold・判定の規則・R/P/Hの経路はbytesで同じであることを`fixation.mjs stage3`が確かめる。条件Iのprobeの期待は、文例の頭が回答のどこかに現れることにした。probeに質問8（`.agent-skill-chain/skills/asc/SKILL.md`を含む文を原文で答える）を足した。段階0の後にprobe-check等を直す場合の固定のやり直し（refix）は、段階1・2の試行が台帳に無い間だけ、独立レビューを通して行える |
+| L-a 上限と1試行の予算が引数で変えられる | `conditions.json`の`budget`（上限30・余裕1・1試行0.6 USD）だけから取る。`--stop-usd`・`--budget`は拒否する |
+| L-b 複製の照合が入口と`distribution.json`だけ | 複製の直後に、HEADが`sampleHead`と同じで、未commit・未追跡のfileが無いことを必須にした（本文の改変と後から置いたfileを反例で確かめた） |
+| L-c `fixation.json`自体を照合していない | 起動時に、`fixation.json`がcommit済みで変更が無いこと、各記録のcommitがHEADの履歴にあること、最初の記録のcommitがこのREADMEに書かれていることを確かめる |
+| L-d `conditionISchema`を強制していない | `fixation.mjs stage3`が強制する（判定は`condition-i.mjs`ではなく`fixation.mjs`に置き、段階3で緩められないようにした） |
+| L-e 段階3で`trials.json`を上書きする | 追記にし、既に集めた試行名は、何も書く前に拒否する |
+| L-f READMEの代用品の説明がdry runのlabelと食い違う | tarballを作ったHEADとdry runを実行したHEADを分けて書いた |
+
+ownerの判断（2回目、2026-11-25）：認証、目印file、toolの制限の3つを了承。上の表と[EVAL_PLAN.md](EVAL_PLAN.md)に反映した。
 
 ## 費用の見込み
 
@@ -86,9 +102,9 @@ Medium 3件・Low 7件（Highなし）。すべて是正した。
 
 ## 行っていないこと
 
-- モデルの実行（隔離の確認・段階1〜3）。認証・modelの確定と、統括の許可を待つ。
+- モデルの実行（隔離の確認・段階1〜3）。統括が最終確認の後に段階0を実行する。
 - releaseのtarballの取得（dry runは代用品）。
-- 実HOMEへの目印fileの作成。
+- 実HOMEへの目印fileの作成（了承済み。測定の開始時に行い、確認の後に消す）。
 - 改善の実装（不足の有無とownerの採否が決まってから）。
 - Codexの測定（ownerの決定で対象外）。
 
@@ -116,6 +132,7 @@ Medium 3件・Low 7件（Highなし）。すべて是正した。
 | [harness/run-trial.mjs](harness/run-trial.mjs) | 1試行の起動（既定はdry run） |
 | [harness/probe-check.mjs](harness/probe-check.mjs)・[harness/markers.mjs](harness/markers.mjs) | 隔離の確認の判定と目印file |
 | [harness/collect.mjs](harness/collect.mjs)・[harness/score.mjs](harness/score.mjs) | 記録の取り出し（local pathと認証情報の形の文字列の置換）と採点・判定 |
+| [harness/condition-i.mjs](harness/condition-i.mjs) | 条件Iに固有の部分（段階3で理由と独立レビュー付きで変えてよい唯一のfile） |
 | [harness/ledger.mjs](harness/ledger.mjs)・[harness/fixation.mjs](harness/fixation.mjs) | 全段階の費用の台帳（一意なid、同じ名前の拒否）と順次実行のlock、追記だけの固定（段階3の制約付き）と照合 |
 | [harness/dry-run.mjs](harness/dry-run.mjs) | モデルを呼ばない全体の確認 |
 | [harness/score.test.mjs](harness/score.test.mjs)・[harness/probe.test.mjs](harness/probe.test.mjs) | 合成の記録による試験 |

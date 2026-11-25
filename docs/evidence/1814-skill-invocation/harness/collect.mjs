@@ -24,6 +24,10 @@ export function collect(runsRoot, out) {
   const conds = loadConditions().conditions;
   fs.mkdirSync(out, {recursive: true});
   const rows = [];
+  const priorFile = path.join(out, 'trials.json');
+  const priorNames = new Set(fs.existsSync(priorFile) ? JSON.parse(fs.readFileSync(priorFile, 'utf8')).map((r) => r.trial) : []);
+  const clash = fs.readdirSync(runsRoot).filter((n) => priorNames.has(n));
+  if (clash.length) throw new Error(`trials already collected: ${clash.join(', ')}`); // before any file is written
   for (const name of fs.readdirSync(runsRoot).sort()) {
     const dir = path.join(runsRoot, name);
     const m = /^([A-Z]+)-(.+)-(\d+)$/.exec(name);
@@ -50,7 +54,13 @@ export function collect(runsRoot, out) {
       fixationSha256: meta.fixationSha256, fixedAtCommit: meta.fixedAtCommit, fixationStage: meta.fixationStage,
       exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: clean.hits});
   }
-  fs.writeFileSync(path.join(out, 'trials.json'), JSON.stringify(rows, null, 1));
+  // review L-e: stages are collected into the same directory; trials.json is extended, never overwritten, and a trial
+  // name that is already recorded is refused.
+  const file = path.join(out, 'trials.json');
+  const prior = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : [];
+  const dup = rows.filter((r) => prior.some((q) => q.trial === r.trial)).map((r) => r.trial);
+  if (dup.length) throw new Error(`trials already collected: ${dup.join(', ')}`);
+  fs.writeFileSync(file, JSON.stringify([...prior, ...rows], null, 1));
   return rows.length;
 }
 

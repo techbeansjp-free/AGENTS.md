@@ -177,6 +177,16 @@ test('collect: a trace without meta.json becomes a failure row instead of a cras
   assert.equal(fs.existsSync(path.join(root, 'out/R-asc-1-1.jsonl')), false);
 });
 
+test('collect extends trials.json across stages and refuses a trial already collected (L-e)', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-collect2-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const mk = (runs, name) => { fs.mkdirSync(path.join(root, runs, name), {recursive: true}); fs.writeFileSync(path.join(root, runs, name, 'trace.jsonl'), trace([], {text: 'x'})); fs.writeFileSync(path.join(root, runs, name, 'meta.json'), JSON.stringify({costUsd: 0.1})); };
+  mk('s1', 'R-asc-1-1'); mk('s3', 'I-asc-1-1'); mk('s3b', 'R-asc-1-1');
+  collect(path.join(root, 's1'), path.join(root, 'out')); collect(path.join(root, 's3'), path.join(root, 'out'));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'out/trials.json'), 'utf8')).map((r) => r.trial), ['R-asc-1-1', 'I-asc-1-1']);
+  assert.throws(() => collect(path.join(root, 's3b'), path.join(root, 'out')), /already collected/);
+});
+
 test('scrubSensitive replaces mail addresses, keys and account fields (L9)', () => {
   const r = scrubSensitive('a someone@example.org b sk-ant-api03-abcdefgh123 "oauthAccount":"x" ok');
   assert.equal(r.hits, 3); assert.equal(/@example|sk-ant|oauthAccount":"x/.test(r.text), false);

@@ -12,6 +12,7 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {parseTrace} from './score.mjs';
 import {loadConditions, NEUTRAL_SUBJECT} from './apply-condition.mjs';
+import {pointerExpectedI, productHookFiredInProbe} from './condition-i.mjs';
 
 const ALLOWED_TOOLS = new Set(['Read', 'Glob', 'Grep', 'Skill', 'ToolSearch']);
 const MANAGED = ['/Library/Application Support/ClaudeCode/', '/etc/claude-code/'];
@@ -54,7 +55,7 @@ export function ownerCanaries(userConfigDirs) {
 //          baseFirstLine, pointerHead, forbiddenTexts[], ownerLines[], ownerSkills[], markerPaths[2], tokens[], realHome,
 //          repoRoot, hostInstallDir|null, installProblems[]}
 export function checkProbe(i) {
-  const cond = loadConditions().conditions[i.condition];
+  const cond = (i.conditionsOverride ?? loadConditions()).conditions[i.condition]; // override: tests of condition I only
   const t = parseTrace(i.trace);
   const checks = {};
   const add = (k, pass, detail) => { checks[k] = {pass: Boolean(pass), detail}; };
@@ -87,7 +88,7 @@ export function checkProbe(i) {
   add('projectClaudeMd', text.replace(/#/g, '').includes(stripHeading(i.baseFirstLine)), 'heading marks ignored (review L3)');
   // review N3: the probe asks for the first and the last line of each instruction source; the pointer is CLAUDE.md's last
   // paragraph (P) or the whole hook context (H), so it appears in the answer only when the condition delivers it.
-  const expectPointer = Boolean(cond.pointerDelivered ?? (cond.pointer || cond.hook === 'usage'));
+  const expectPointer = cond.adopt ? pointerExpectedI(cond) : Boolean(cond.pointer || cond.hook === 'usage');
   add('pointerMatchesCondition', text.includes(i.pointerHead) === expectPointer, {expectPointer});
   const leaked = i.forbiddenTexts.filter((s) => text.includes(s));
   add('noRepoInstructions', leaked.length === 0, `${leaked.length} repository instruction line(s) found`);
@@ -131,7 +132,7 @@ export function checkProbe(i) {
   const foreignCommand = hookEvents.filter((e) => typeof e.command === 'string' && !e.command.includes('asc-read-trigger') && cond.hook !== 'product');
   const responses = hookEvents.filter((e) => e.subtype === 'hook_response' && (!nameOf(e) || /SessionStart/.test(nameOf(e)))).length;
   const fixtureHook = cond.hook === 'usage' || cond.hook === 'strong';
-  add('hookMatchesCondition', fixtureHook ? hookLines.some((h) => h.source === 'startup') : cond.hook === 'product' ? hookLines.length === 0 && responses >= 1 : hookLines.length === 0 && responses === 0,
+  add('hookMatchesCondition', fixtureHook ? hookLines.some((h) => h.source === 'startup') : cond.hook === 'product' ? productHookFiredInProbe(hookLines.length, responses) : hookLines.length === 0 && responses === 0,
     {logged: hookLines.length, responses});
   add('noForeignHooks', otherEvents.length === 0 && foreignCommand.length === 0 && (!fixtureHook || responses <= hookLines.length) && (cond.hook || responses === 0),
     `${hookEvents.length} hook event(s), ${otherEvents.length} non-SessionStart, ${foreignCommand.length} foreign command(s)`);

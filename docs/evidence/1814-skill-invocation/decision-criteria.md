@@ -16,11 +16,12 @@
 | 項目 | 決定 |
 | --- | --- |
 | model | `sonnet`の別名（#1807の生成と同じ。現象が観測された条件）。試行ごとに、init eventの解決後のmodel idを記録する。`run-trial.mjs`は`conditions.json`の`model`だけを使い、別の指定を受け付けない |
-| tool | `Read`・`Glob`・`Grep`・`Skill`だけ。安全のための、利用者の環境との意図した違いとして記録する（影響は[EVAL_PLAN.md](EVAL_PLAN.md#利用者の環境との意図した違い)） |
+| tool | `Read`・`Glob`・`Grep`・`Skill`だけ。安全のための、利用者の環境との意図した違いとして記録する（影響は[EVAL_PLAN.md](EVAL_PLAN.md#利用者の環境との意図した違い)）。ownerが了承した（2026-11-25） |
+| 認証 | `claude setup-token`のtokenを、測定を動かすprocessの環境変数だけで子processへ渡し、file・ログに値を残さない（ownerの決定、2026-11-25） |
 | 試行のcommit | どの条件でも同じ中立の件名のcommitを1件入れる（Rは空のcommit）。段階0で、条件の間で違うのが`CLAUDE.md`とhookの出力だけであることを確かめる |
-| 費用の数え方 | 全段階で1つの台帳を使い、試行は1つずつ順に実行する。精算されなかった試行は予算額で数える。予約は一意なidで数え、同じ試行名は1回だけ。累計と次の試行の予算の和が29 USD（上限30 USDから余裕1 USD）を超えるなら起動しない |
+| 費用の数え方 | 全段階で1つの台帳を使い、試行は1つずつ順に実行する。精算されなかった試行は予算額で数える。予約は一意なidで数え、同じ試行名は1回だけ。累計と次の試行の予算の和が29 USD（上限30 USDから余裕1 USD）を超えるなら起動しない。上限・余裕・1試行の予算は`conditions.json`の`budget`で固定し、引数では変えられない |
 | 反復 | 各条件2回（`conditions.json`の`runs`）。採点は反復の番号1〜2だけ。再実行は規則5のとおり |
-| 固定 | 測定の前のHEADと、条件・gold・判定・起動に関わるfileのsha256を`results/fixation.json`に追記だけで記録する。`run-trial.mjs`は、最後の記録と違うfileがあれば起動しない。段階3で足せる記録は、`conditions.I`の追加と`release.json`の`phase3`の記入だけを含むもの（`fixation.mjs stage3`が確かめる） |
+| 固定 | 測定の前のHEADと、条件・gold・判定・起動に関わるfileのsha256を`results/fixation.json`に追記だけで記録する。`run-trial.mjs`は、最後の記録と違うfileがあれば起動しない。段階0の後の是正（refix）は、段階1・2の試行が台帳に無い間だけ、独立レビューを通して足せる。段階3で足せる記録は、`conditions.I`の追加（`conditionISchema`を満たすもの）、`release.json`の`phase3`の記入、`harness/condition-i.mjs`の変更（fileごとに理由と独立レビューの参照を記録）だけを含むもの。採点・gold・判定の規則・R/P/Hの経路はbytesで同じ（`fixation.mjs stage3`が確かめる。[EVAL_PLAN.md](EVAL_PLAN.md)「固定の記録と変えてよい範囲」） |
 
 ## 判定に使う数え方
 

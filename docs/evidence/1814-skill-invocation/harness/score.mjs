@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {productHookFiredInTrial} from './condition-i.mjs';
 
 export const ASC_SKILLS = ['asc', 'contract-enforcement', 'decision-ownership', 'engineering-judgment', 'estimate-and-scope', 'execution-recovery', 'migration-assurance', 'project-foundation', 'research-to-implementation', 'review-and-remediation', 'security-evidence', 'subagent-model-selection', 'tracker-issue-writing', 'user-journey-acceptance', 'verification-optimization', 'work-coordination'];
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -67,7 +68,7 @@ export function scoreRun(spec, k, t, hookLines = null, {expectHook = false} = {}
   if (!t.result) return {...row, failure: 'no result event'};
   // review L6: in a hook condition, a trial whose hook did not fire did not receive the condition.
   // The product hook (condition I) does not write the fixture log; its firing is taken from SessionStart hook events.
-  const fired = expectHook === 'product' ? t.hookEvents > 0 : Boolean(hookLines && hookLines.length > 0);
+  const fired = expectHook === 'product' ? productHookFiredInTrial(t.hookEvents) : Boolean(hookLines && hookLines.length > 0);
   if (expectHook && !fired) return {...row, failure: 'hook did not fire'};
   const sub = String(t.result.subtype ?? '');
   // A budget stop is a completed observation of what was read; any other error is a failure.

@@ -11,9 +11,9 @@ import crypto from 'node:crypto';
 import {checkProbe, compareProbes, description, installDirProblems, ownerCanaries, gitSubjects} from './probe-check.mjs';
 import {placementProblems} from './guard.mjs';
 import * as ledger from './ledger.mjs';
-import {differences, digests, FIXED, stage3Violations, invariantDigests} from './fixation.mjs';
+import {differences, digests, FIXED, stage3Violations, invariantDigests, nonProbeTrials, conditionIProblems} from './fixation.mjs';
 import {fileURLToPath} from 'node:url';
-import {installProblems} from './run-trial.mjs';
+import {installProblems, fixationFileProblems, filesContaining} from './run-trial.mjs';
 import {applyCondition, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {gitEnv} from './make-fixture.mjs';
 
@@ -201,22 +201,103 @@ test('fixation: a change to a fixed file is detected; stage 3 may only add condi
   assert.ok(stage3Violations(first, root).includes('release.json changed beyond filling phase3'));
 });
 
-test('run path requires a released install whose entries and record still match, and the adopted option (L-2)', (t) => {
+test('stage 3: only condition-i.mjs may change, with a reason and a review; the conditionISchema is enforced (M-1, L-d)', (t) => {
+  const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-fix3-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  for (const f of FIXED) { fs.mkdirSync(path.dirname(path.join(root, f)), {recursive: true}); fs.copyFileSync(path.join(ev, f), path.join(root, f)); }
+  const first = {files: digests(root), invariants: invariantDigests(root)};
+  const cj = JSON.parse(fs.readFileSync(path.join(root, 'conditions.json'), 'utf8'));
+  cj.conditions.I = {label: 'I', pointer: false, hook: 'product', pointerDelivered: true, adopt: 'claude-hook', core: true};
+  fs.writeFileSync(path.join(root, 'conditions.json'), JSON.stringify(cj, null, 1));
+  const rj = JSON.parse(fs.readFileSync(path.join(root, 'release.json'), 'utf8'));
+  rj.phase3 = {tag: 'v0.5.200', assetSha256: 'a'.repeat(64)}; fs.writeFileSync(path.join(root, 'release.json'), JSON.stringify(rj, null, 1));
+  fs.appendFileSync(path.join(root, 'harness/condition-i.mjs'), '// adapted to the released flag name\n');
+  assert.deepEqual(stage3Violations(first, root), ['harness/condition-i.mjs changed without --reason and --review']);
+  assert.deepEqual(stage3Violations(first, root, {'harness/condition-i.mjs': {reason: 'flag renamed', review: 'review #3'}}), []);
+  assert.deepEqual(stage3Violations(first, root, {'harness/score.mjs': {reason: 'x', review: 'y'}}), ['harness/condition-i.mjs changed without --reason and --review', 'harness/score.mjs is not changeable at stage 3']);
+  fs.appendFileSync(path.join(root, 'harness/probe-check.mjs'), '\n');
+  assert.ok(stage3Violations(first, root, {'harness/condition-i.mjs': {reason: 'r', review: 'v'}}).includes('harness/probe-check.mjs changed'));
+  assert.deepEqual(conditionIProblems({label: 'I', pointer: false, hook: 'product', pointerDelivered: true, adopt: 'claude-hook', core: true}), []);
+  assert.ok(conditionIProblems({label: 'I', pointer: true, hook: 'usage', pointerDelivered: false, adopt: '', extra: 1}).length >= 5);
+  assert.deepEqual(conditionIProblems(undefined), ['conditions.I is not defined']);
+});
+
+test('refix is a pre-measurement correction: allowed while the ledger holds only probe trials', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-refix-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const f = path.join(d, 'ledger.jsonl');
+  assert.deepEqual(nonProbeTrials(f), []);
+  ledger.reserve(f, 'R-probe-1', 0.6); ledger.reserve(f, 'P-probe-2', 0.6);
+  assert.deepEqual(nonProbeTrials(f), []);
+  ledger.reserve(f, 'R-asc-1-1', 0.6);
+  assert.deepEqual(nonProbeTrials(f), ['R-asc-1-1']);
+});
+
+test('fixation file must be committed, its commits in history, and the first commit named in README (L-c)', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-fxfile-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const git = (a) => spawnSync('git', a, {cwd: d, env: gitEnv(d), encoding: 'utf8'});
+  git(['init', '-q', '-b', 'main']); fs.mkdirSync(path.join(d, 'results'));
+  fs.writeFileSync(path.join(d, 'README.md'), 'x'); git(['add', '-A']); git(['commit', '-q', '-m', 'a']);
+  const c1 = git(['rev-parse', 'HEAD']).stdout.trim();
+  const fx = {records: [{fixedAtCommit: c1}]};
+  fs.writeFileSync(path.join(d, 'results/fixation.json'), JSON.stringify(fx));
+  assert.match(fixationFileProblems(fx, d).join(), /not committed/);
+  assert.match(fixationFileProblems(fx, d).join(), /README.md does not name/);
+  fs.writeFileSync(path.join(d, 'README.md'), `fixed at ${c1}`); git(['add', '-A']); git(['commit', '-q', '-m', 'b']);
+  assert.deepEqual(fixationFileProblems(fx, d), []);
+  assert.match(fixationFileProblems({records: [{fixedAtCommit: c1}, {fixedAtCommit: 'f'.repeat(40)}]}, d).join(), /not in HEAD's history/);
+});
+
+test('the token value is found in child files by count only', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-secret-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  fs.mkdirSync(path.join(d, 'a/b'), {recursive: true});
+  fs.writeFileSync(path.join(d, 'a/b/c.json'), '{"t":"SECRET-123"}'); fs.writeFileSync(path.join(d, 'x'), 'none');
+  assert.equal(filesContaining(d, 'SECRET-123'), 1); assert.equal(filesContaining(d, ''), 0);
+});
+
+test('run path requires a released, clean install at the recorded HEAD whose entries match, and the adopted option (L-2, L-b)', (t) => {
   const w = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-inst-'));
   t.after(() => fs.rmSync(w, {recursive: true, force: true}));
-  fs.mkdirSync(path.join(w, '.claude/skills/asc'), {recursive: true}); fs.mkdirSync(path.join(w, '.agent-skill-chain'), {recursive: true});
+  const git = (a) => spawnSync('git', a, {cwd: w, env: gitEnv(w), encoding: 'utf8'});
+  fs.mkdirSync(path.join(w, '.claude/skills/asc'), {recursive: true}); fs.mkdirSync(path.join(w, '.agent-skill-chain/skills/asc'), {recursive: true});
   fs.writeFileSync(path.join(w, '.claude/skills/asc/SKILL.md'), 'entry'); fs.writeFileSync(path.join(w, '.agent-skill-chain/distribution.json'), '{}');
+  fs.writeFileSync(path.join(w, '.agent-skill-chain/skills/asc/SKILL.md'), 'body');
+  git(['init', '-q', '-b', 'main']); git(['add', '-A']); git(['commit', '-q', '-m', 'Install ASC']);
+  const head = git(['rev-parse', 'HEAD']).stdout.trim();
   const h = (s) => crypto.createHash('sha256').update(s).digest('hex');
   const rel = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../release.json'), 'utf8')).phases0to2.assetSha256;
-  const good = {released: true, install: {tarballSha256: rel, entries: [{name: 'asc', entrySha256: h('entry')}], distributionSha256: h('{}'), adopted: null}};
+  const good = {released: true, sampleHead: head, install: {tarballSha256: rel, entries: [{name: 'asc', entrySha256: h('entry')}], distributionSha256: h('{}'), adopted: null}};
   assert.deepEqual(installProblems(good, w, {}), []);
   assert.match(installProblems(null, w, {}).join(), /no install record/);
   assert.match(installProblems({...good, released: false}, w, {}).join(), /not installed from a release/);
   assert.match(installProblems({...good, install: {...good.install, tarballSha256: 'x'}}, w, {}).join(), /not in release.json/);
+  assert.match(installProblems({...good, sampleHead: 'f'.repeat(40)}, w, {}).join(), /HEAD differs/);
+  fs.writeFileSync(path.join(w, '.agent-skill-chain/skills/asc/SKILL.md'), 'edited body'); // body edit: caught by the clean-tree check
+  assert.match(installProblems(good, w, {}).join(), /uncommitted or untracked/);
+  git(['checkout', '-q', '--', '.']);
+  fs.writeFileSync(path.join(w, 'AGENTS.md'), 'added later');
+  assert.match(installProblems(good, w, {}).join(), /uncommitted or untracked/);
+  fs.rmSync(path.join(w, 'AGENTS.md'));
   fs.writeFileSync(path.join(w, '.claude/skills/asc/SKILL.md'), 'edited');
   assert.match(installProblems(good, w, {}).join(), /entry asc differs/);
-  fs.writeFileSync(path.join(w, '.claude/skills/asc/SKILL.md'), 'entry');
+  git(['checkout', '-q', '--', '.']);
   assert.match(installProblems(good, w, {adopt: 'claude-hook'}).join(), /does not match the condition/);
+});
+
+test('condition I: the pointer may appear anywhere in the answer, not only as the last line (M-1)', () => {
+  const iText = goodText().replace('最後の行: TypeScript/Expressのユーザー管理API。', '最後の行: <!-- /asc:read-trigger -->') + '\nREAD-TRIGGER: このプロジェクトでASCを使う開発の開始…';
+  const own = {type: 'system', subtype: 'hook_response', hook_name: 'SessionStart:startup'};
+  const withI = (o) => ({...base(o), condition: 'I'});
+  const conds = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../conditions.json'), 'utf8'));
+  conds.conditions.I = {label: 'I', pointer: false, hook: 'product', pointerDelivered: true, adopt: 'claude-hook', core: true};
+  const r = checkProbe({...withI({trace: trace({text: iText, hooks: [own]})}), conditionsOverride: conds});
+  assert.equal(r.checks.pointerMatchesCondition.pass, true, JSON.stringify(r.checks));
+  assert.equal(r.checks.hookMatchesCondition.pass, true, JSON.stringify(r.checks));
+  const none = checkProbe({...withI({trace: trace({text: goodText(), hooks: [own]})}), conditionsOverride: conds});
+  assert.equal(none.checks.pointerMatchesCondition.pass, false);
 });
 
 test('every condition gets one commit with the same neutral subject (M1)', (t) => {
