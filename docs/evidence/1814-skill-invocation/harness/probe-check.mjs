@@ -184,7 +184,8 @@ export function hookEventsOf(trace) {
 }
 
 // review L-7: the git line is compared as the set of commit subjects, not as the model's exact wording.
-export const gitSubjects = (line) => [...new Set(String(line ?? '').split('|').map((x) => x.trim()).filter(Boolean))].sort();
+// The model may or may not prefix each subject with an abbreviated commit id; only the subjects are compared.
+export const gitSubjects = (line) => [...new Set(String(line ?? '').split('|').map((x) => x.trim().replace(/^[0-9a-f]{7,40}\s+/, '').trim()).filter(Boolean))].sort();
 
 export function compareProbes(results) {
   const keys = ['tools', 'nonAscSkills', 'builtinPlugins', 'gitLine', 'model'];

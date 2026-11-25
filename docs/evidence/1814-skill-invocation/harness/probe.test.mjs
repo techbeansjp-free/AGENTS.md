@@ -178,6 +178,9 @@ test('compare: conditions may differ only by CLAUDE.md / hook output (M1); git s
   const other = checkProbe(base({condition: 'P', trace: trace({text: pText, skills: [...ASC, 'dataviz', 'extra']})}));
   assert.deepEqual(compareProbes([r, other]).differ, ['nonAscSkills']);
   assert.deepEqual(gitSubjects(' b | a|b '), ['a', 'b']);
+  assert.deepEqual(gitSubjects('55c4bad Update project files | 8372d40 Install ASC | edf4f07 initial'), gitSubjects('Update project files | Install ASC | initial'));
+  assert.notDeepEqual(gitSubjects('55c4bad Adopt ASC read trigger | Install ASC'), gitSubjects('Update project files | Install ASC'));
+  assert.deepEqual(gitSubjects('deadbeef'), ['deadbeef']);
 });
 
 test('ownerCanaries reads first lines and Skill names, never content beyond them', (t) => {
