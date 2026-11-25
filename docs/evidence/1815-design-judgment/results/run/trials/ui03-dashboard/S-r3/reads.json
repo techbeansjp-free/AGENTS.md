@@ -1,0 +1,24 @@
+{
+ "ascBodyRead": false,
+ "implementationRead": false,
+ "ujaBodyRead": false,
+ "journeysRead": false,
+ "firstReadOrder": [],
+ "relevantReferenceRead": false,
+ "skillCalls": [
+  "dataviz"
+ ],
+ "ascFilesRead": [
+  ".agent-skill-chain/skills/README.md"
+ ],
+ "readsOutsideProject": 0,
+ "readAttempts": 4,
+ "toolCounts": {
+  "Read": 4,
+  "Glob": 1,
+  "Skill": 1,
+  "Write": 2,
+  "mcp__browser__screenshot": 2
+ },
+ "cwd": "<runs>/ui03-dashboard/S-r3/fixture"
+}

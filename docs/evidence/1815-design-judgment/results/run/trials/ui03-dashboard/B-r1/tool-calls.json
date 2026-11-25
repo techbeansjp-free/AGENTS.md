@@ -1,0 +1,52 @@
+[
+ {
+  "name": "Read",
+  "target": "BRIEF.md",
+  "ok": true
+ },
+ {
+  "name": "Glob",
+  "target": "**/* in <outside the project>",
+  "ok": true
+ },
+ {
+  "name": "Read",
+  "target": "data.json",
+  "ok": true
+ },
+ {
+  "name": "Read",
+  "target": "FONTS.md",
+  "ok": true
+ },
+ {
+  "name": "Write",
+  "target": "out/index.html",
+  "ok": true
+ },
+ {
+  "name": "Write",
+  "target": "out/DESIGN-NOTES.md",
+  "ok": true
+ },
+ {
+  "name": "mcp__browser__screenshot",
+  "target": "out/index.html @1440",
+  "ok": true
+ },
+ {
+  "name": "mcp__browser__screenshot",
+  "target": "out/index.html @800",
+  "ok": true
+ },
+ {
+  "name": "Edit",
+  "target": "out/index.html",
+  "ok": true
+ },
+ {
+  "name": "mcp__browser__screenshot",
+  "target": "out/index.html @800",
+  "ok": true
+ }
+]

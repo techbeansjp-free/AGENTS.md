@@ -1,0 +1,84 @@
+{
+ "schema": "asc-1815-trial/v2",
+ "trial": "ui07-bus-mobile/B-r1",
+ "case": "ui07-bus-mobile",
+ "condition": "B",
+ "rep": 1,
+ "model": "sonnet",
+ "budget": 1.5,
+ "claudeVersion": "2.1.323 (Claude Code)",
+ "resolvedModel": "claude-sonnet-5-5",
+ "initProblems": [],
+ "tarballSha256": "05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f",
+ "release": "B",
+ "sampleHead": "23014e38e1038ee36eed175c47e54677aaf43e48",
+ "ascRuntimeVersion": "0.5.109",
+ "adopted": {
+  "id": "claude-md",
+  "path": "CLAUDE.md",
+  "action": "create",
+  "beforeSha256": "absent",
+  "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+  "diffSha256": "1218bcb470c6dfcee3d6448a21f8f95e282551b15e59ae1d34ef74a6d0bd2b70",
+  "default": "claude-md"
+ },
+ "images": {
+  "tools": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8",
+  "proxy": "sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603"
+ },
+ "ledgerId": "<id>",
+ "ledgerSeq": 4,
+ "fixedAtCommit": "dd7b785886c9d5e329e0d724a90b0531f8bc6504",
+ "fixationSha256": "c2b91fed532026de4d0df087c3802e40bfd2f6990a12cddaec4f296cdeca066d",
+ "exit": 0,
+ "signal": null,
+ "wallMs": 52987,
+ "resultSubtype": "success",
+ "isError": false,
+ "costUsd": 0.1535661,
+ "numTurns": 8,
+ "usage": {
+  "input_tokens": 12,
+  "cache_creation_input_tokens": 18900,
+  "cache_read_input_tokens": 90221,
+  "output_tokens": 6892,
+  "output_tokens_details": {
+   "thinking_tokens": 254
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 18900,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "toolCounts": {
+  "Read": 3,
+  "Glob": 1,
+  "Write": 2,
+  "mcp__browser__screenshot": 1
+ },
+ "reads": {
+  "ascBody": false,
+  "implementation": false,
+  "ujaBody": false,
+  "journeys": false,
+  "skillCalls": []
+ },
+ "coreSteps": {
+  "alternativesCompared": false,
+  "narrowChecked": true,
+  "wideChecked": false,
+  "finalBothWidths": false,
+  "exemplarViewed": false
+ },
+ "credentialInChildFiles": 0,
+ "permissionDenials": []
+}

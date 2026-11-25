@@ -1,0 +1,19 @@
+{
+ "ascBodyRead": false,
+ "implementationRead": false,
+ "ujaBodyRead": false,
+ "journeysRead": false,
+ "firstReadOrder": [],
+ "relevantReferenceRead": false,
+ "skillCalls": [],
+ "ascFilesRead": [],
+ "readsOutsideProject": 0,
+ "readAttempts": 3,
+ "toolCounts": {
+  "Read": 3,
+  "Glob": 1,
+  "Write": 2,
+  "mcp__browser__screenshot": 2
+ },
+ "cwd": "<runs>/ui03-dashboard/S-r2/fixture"
+}

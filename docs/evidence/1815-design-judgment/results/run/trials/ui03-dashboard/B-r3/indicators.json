@@ -1,0 +1,240 @@
+{
+ "gold": {
+  "schema": "asc-1807-gold-check/v1",
+  "case": "ui03-dashboard",
+  "missing": [],
+  "coverage": 1,
+  "wideOverflow": false,
+  "narrowOverflow": false,
+  "externalRequests": 0
+ },
+ "firstView": {
+  "schema": "asc-1815-first-view/v2",
+  "case": "ui03-dashboard",
+  "widths": {
+   "narrow": {
+    "width": 800,
+    "height": 1280,
+    "answerFound": [
+     "出荷遅延率",
+     "LANE-B01",
+     "LANE-C02",
+     "温度センサー"
+    ],
+    "answerMissing": [],
+    "selectorsInView": {},
+    "answerAll": true,
+    "screensToAnswer": {
+     "出荷遅延率": 1,
+     "LANE-B01": 1,
+     "LANE-C02": 1,
+     "温度センサー": 1
+    },
+    "hiddenRequired": []
+   },
+   "wide": {
+    "width": 1440,
+    "height": 900,
+    "answerFound": [
+     "出荷遅延率",
+     "LANE-B01",
+     "LANE-C02",
+     "温度センサー"
+    ],
+    "answerMissing": [],
+    "selectorsInView": {},
+    "answerAll": true,
+    "screensToAnswer": {
+     "出荷遅延率": 1,
+     "LANE-B01": 1,
+     "LANE-C02": 1,
+     "温度センサー": 1
+    },
+    "hiddenRequired": []
+   }
+  },
+  "fixedNow": "2027-03-08T14:32:00+09:00",
+  "externalRequests": 0
+ },
+ "render": {
+  "id": "B-r3",
+  "case": "ui03",
+  "exists": true,
+  "viewports": {
+   "desktop": {
+    "externalRequests": [],
+    "consoleErrors": [],
+    "pageErrors": [],
+    "scrollWidth": 1440,
+    "innerWidth": 1440,
+    "overflowX": false,
+    "docHeight": 1191,
+    "textLen": 1339,
+    "lcp": 139.80000000004657,
+    "cls": 0,
+    "fontBody": "\"Noto Sans CJK JP\", \"Liberation Sans\", \"DejaVu Sans\", sans-serif",
+    "fontH1": "\"Noto Sans CJK JP\", \"Liberation Sans\", \"DejaVu Sans\", sans-serif",
+    "fontH2": "\"Noto Sans CJK JP\", \"Liberation Sans\", \"DejaVu Sans\", sans-serif",
+    "bodyBg": "rgb(243, 244, 246)",
+    "htmlBg": "rgba(0, 0, 0, 0)",
+    "topColors": [
+     [
+      "rgb(26, 29, 33)",
+      148
+     ],
+     [
+      "rgb(74, 80, 88)",
+      65
+     ],
+     [
+      "rgb(255, 255, 255)",
+      19
+     ],
+     [
+      "rgb(179, 38, 30)",
+      18
+     ],
+     [
+      "rgb(46, 107, 58)",
+      14
+     ],
+     [
+      "rgb(229, 231, 235)",
+      8
+     ],
+     [
+      "rgb(107, 114, 128)",
+      8
+     ],
+     [
+      "rgb(217, 220, 225)",
+      6
+     ],
+     [
+      "rgb(91, 100, 114)",
+      6
+     ],
+     [
+      "rgb(253, 236, 234)",
+      4
+     ]
+    ],
+    "animations": 0,
+    "hasReducedMotionQuery": false,
+    "firstY": {
+     "出荷遅延率": 99,
+     "温度センサー": 99,
+     "LANE-B01": 553,
+     "汐見台三丁目": null,
+     "中央通り": null,
+     "在庫あり": null,
+     "LG-2040-SS-HT-0500-JISB1192": null
+    },
+    "landmarks": {
+     "main": 0,
+     "h1": 1,
+     "nav": 0
+    },
+    "lang": "ja",
+    "axe": [
+     {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 2
+     }
+    ],
+    "axeSeriousCritical": 2,
+    "tabStops": 1,
+    "tabStopsWithIndicator": 1,
+    "tabsToRetry": 1,
+    "tabsToSearch": null,
+    "animationsReduced": 0
+   },
+   "tablet": {
+    "externalRequests": [],
+    "consoleErrors": [],
+    "pageErrors": [],
+    "scrollWidth": 800,
+    "innerWidth": 800,
+    "overflowX": false,
+    "docHeight": 2118,
+    "textLen": 1350,
+    "lcp": 138.5,
+    "cls": 0,
+    "fontBody": "\"Noto Sans CJK JP\", \"Liberation Sans\", \"DejaVu Sans\", sans-serif",
+    "fontH1": "\"Noto Sans CJK JP\", \"Liberation Sans\", \"DejaVu Sans\", sans-serif",
+    "fontH2": "\"Noto Sans CJK JP\", \"Liberation Sans\", \"DejaVu Sans\", sans-serif",
+    "bodyBg": "rgb(243, 244, 246)",
+    "htmlBg": "rgba(0, 0, 0, 0)",
+    "topColors": [
+     [
+      "rgb(26, 29, 33)",
+      148
+     ],
+     [
+      "rgb(74, 80, 88)",
+      64
+     ],
+     [
+      "rgb(107, 114, 128)",
+      32
+     ],
+     [
+      "rgb(255, 255, 255)",
+      19
+     ],
+     [
+      "rgb(179, 38, 30)",
+      18
+     ],
+     [
+      "rgb(46, 107, 58)",
+      14
+     ],
+     [
+      "rgb(229, 231, 235)",
+      8
+     ],
+     [
+      "rgb(217, 220, 225)",
+      6
+     ],
+     [
+      "rgb(91, 100, 114)",
+      6
+     ],
+     [
+      "rgb(253, 236, 234)",
+      4
+     ]
+    ],
+    "animations": 0,
+    "hasReducedMotionQuery": false,
+    "firstY": {
+     "出荷遅延率": 114,
+     "温度センサー": 114,
+     "LANE-B01": 718,
+     "汐見台三丁目": null,
+     "中央通り": null,
+     "在庫あり": null,
+     "LG-2040-SS-HT-0500-JISB1192": null
+    },
+    "landmarks": {
+     "main": 0,
+     "h1": 1,
+     "nav": 0
+    },
+    "lang": "ja",
+    "axe": [
+     {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 8
+     }
+    ],
+    "axeSeriousCritical": 8,
+    "animationsReduced": 0
+   }
+  }
+ }
+}
