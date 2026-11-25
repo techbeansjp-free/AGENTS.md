@@ -10,7 +10,7 @@ import {parseTrace, scoreRun, scoreDir, summarize, judge, judge1817, shortfall, 
 import {redact, scrubSensitive, collect} from './collect.mjs';
 import {pointerText, hookScript, loadConditions} from './apply-condition.mjs';
 import {plannedTrials, orderProblems, orderRefusal, replacementPlan, loadOrder, completionStatus} from './order.mjs';
-import {scoringProblems} from './judge.mjs';
+import {scoringProblems, nameSetProblems, traceNamesOf} from './judge.mjs';
 import {digests, invariantDigests} from './fixation.mjs';
 import {trialsToStart} from './run-all.mjs';
 import * as ledgerOps from './ledger.mjs';
@@ -288,7 +288,7 @@ test('#1817 M1: the fixed order is reps outermost, negatives interleaved, B then
   assert.match(orderProblems({...order, conditionOrder: ['S', 'B']}, spec, loadConditions()).join(), /conditionOrder/);
 });
 
-test('#1817 M1: run-trial accepts only the next planned trial, replacements only after all planned; probes are free', () => {
+test('#1817 M1: run-trial accepts only the next planned trial, replacements only after all planned; probes only before (Medium-1)', () => {
   const names = plannedTrials().map((t) => t.name);
   const r = (condition, caseId, rep, reserved) => orderRefusal({condition, caseId, rep: String(rep), reserved: new Set(reserved)});
   assert.equal(r('B', 'asc-1', 1, []), null);
@@ -297,6 +297,12 @@ test('#1817 M1: run-trial accepts only the next planned trial, replacements only
   assert.equal(r('S', 'asc-1', 1, ['B-asc-1-1']), null);
   assert.match(r('B', 'asc-1', 2, ['B-asc-1-1']), /out of order/); // rep 2 before rep 1 of the other cases
   assert.equal(r('B', 'probe', 1, []), null);
+  assert.equal(r('S', 'probe', 1, ['B-probe-1']), null);
+  assert.equal(r('B', 'probe', 2, ['B-probe-1', 'S-probe-1']), null); // the one re-run (rule 5)
+  assert.match(r('S', 'probe', 2, ['B-probe-1']), /S-probe-2 needs S-probe-1 first/);
+  assert.match(r('B', 'probe', 3, ['B-probe-1', 'B-probe-2']), /rep must be 1, or 2/);
+  assert.match(r('B', 'probe', 1, ['B-probe-1', 'S-probe-1', 'B-asc-1-1']), /measurement has started \(B-asc-1-1 is reserved\)/);
+  assert.match(r('S', 'probe', 2, ['S-probe-1', ...names.slice(0, 60)]), /measurement has started/); // after 60 planned trials
   assert.match(r('B', 'asc-1', 5, names.slice(0, -1)), /before every planned trial is reserved/);
   assert.match(r('B', 'asc-1', 5, names), /needs the runs root/); // L-1: a replacement needs the replacement plan
   assert.match(r('B', 'asc-1', 4, names), /all planned trials are reserved/); // a planned name cannot be rerun
@@ -391,10 +397,17 @@ test('#1817 M-1: an early stop is not judged; a complete run or a stop at the ca
   assert.equal(j.verdict, 'not-judged'); assert.match(j.reason, /neither complete nor stopped at the cap/);
   assert.equal(judge1817(S4({condition: 'B'}), S4({condition: 'S', applied: 20})).verdict, 'not-judged'); // no completion record
   // the same stop when the cap was reached (13.5 + 0.6 > 14): judged, basis cap-reached
-  const cap = completionStatus({runs: names.slice(0, 60).map((n) => row(n)), reserved: new Set(names.slice(0, 60)), spentUsd: 13.5, budget});
+  const resv = (list) => list.map((trial, seq) => ({trial, seq}));
+  const cap = completionStatus({runs: names.slice(0, 60).map((n) => row(n)), reserved: new Set(names.slice(0, 60)), reservations: resv(['B-probe-1', 'S-probe-1', ...names.slice(0, 60)]), spentUsd: 13.5, budget});
   assert.equal(cap.basis, 'cap-reached');
   const jc = judge1817(S4({condition: 'B'}), S4({condition: 'S', applied: 20}), {completion: cap});
   assert.equal(jc.verdict, 'adoption-candidate'); assert.equal(jc.basis, 'cap-reached');
+  // Medium-1: probes reserved after the first planned trial (run to inflate the ledger) never give cap-reached
+  const late = completionStatus({runs: names.slice(0, 60).map((n) => row(n)), reserved: new Set(names.slice(0, 60)), reservations: resv(['B-probe-1', 'S-probe-1', ...names.slice(0, 60), 'B-probe-2', 'S-probe-2']), spentUsd: 13.5, budget});
+  assert.equal(late.capReached, false); assert.equal(late.basis, null); assert.deepEqual(late.lateProbes, ['B-probe-2', 'S-probe-2']);
+  assert.equal(judge1817(S4({condition: 'B'}), S4({condition: 'S', applied: 20}), {completion: late}).verdict, 'not-judged');
+  // without the ledger's reservations cap-reached is not granted either
+  assert.equal(completionStatus({runs: [], reserved: new Set(names.slice(0, 60)), spentUsd: 13.5, budget}).capReached, false);
   // complete: all planned reserved, and the replacement of the one failed planned trial
   const rows = names.map((n) => row(n, n === 'S-tw-1-2'));
   const missingRepl = completionStatus({runs: rows, reserved: new Set(names), spentUsd: 9, budget});
@@ -412,7 +425,9 @@ test('#1817 L-6: scoring is refused when the fixation check fails or a trial ran
   for (const f of FIXED) { fs.mkdirSync(path.dirname(path.join(root, f)), {recursive: true}); fs.copyFileSync(path.join(ev, f), path.join(root, f)); }
   const fx = {records: [{fixedAtCommit: 'c', ledgerId: 'L1', files: digests(root), invariants: invariantDigests(root)}]};
   const rows = [{trial: 'B-asc-1-1', fixationSha256: 'F1', ledgerId: 'L1', ledgerSeq: 2}, {trial: 'S-asc-1-1', fixationSha256: 'F1', ledgerId: 'L1', ledgerSeq: 3}, {trial: 'B-rr-1-1', missing: true}];
-  const base = {rows, fx, fxSha: 'F1', ledgerIdNow: 'L1', root, fileProblems: []};
+  const reservations = [{trial: 'B-probe-1', seq: 0}, {trial: 'S-probe-1', seq: 1}, {trial: 'B-asc-1-1', seq: 2}, {trial: 'S-asc-1-1', seq: 3}, {trial: 'B-rr-1-1', seq: 4}];
+  const traceNames = ['B-asc-1-1', 'S-asc-1-1', 'B-rr-1-1'];
+  const base = {rows, fx, fxSha: 'F1', ledgerIdNow: 'L1', root, fileProblems: [], reservations, traceNames};
   assert.deepEqual(scoringProblems(base), []);
   assert.match(scoringProblems({...base, rows: [{...rows[0], fixationSha256: 'F0'}, rows[1]]}).join(), /another fixation record: B-asc-1-1/);
   assert.match(scoringProblems({...base, ledgerIdNow: 'L2'}).join(), /not the one recorded/);
@@ -420,4 +435,24 @@ test('#1817 L-6: scoring is refused when the fixation check fails or a trial ran
   assert.match(scoringProblems({...base, fileProblems: ['results/fixation.json is not committed or has local changes']}).join(), /not committed/);
   fs.appendFileSync(path.join(root, 'cases.json'), ' ');
   assert.match(scoringProblems(base).join(), /fixed files differ from results\/fixation.json: cases.json/);
+});
+
+test('#1817 Low-1: ledger reservations, trials.json and traces must be the same set of trials; seqs without gaps', (t) => {
+  const reservations = [{trial: 'B-probe-1', seq: 0}, {trial: 'S-probe-1', seq: 1}, {trial: 'B-asc-1-1', seq: 2}, {trial: 'S-asc-1-1', seq: 3}];
+  const rows = [{trial: 'B-asc-1-1', ledgerSeq: 2}, {trial: 'S-asc-1-1', ledgerSeq: 3}];
+  assert.deepEqual(nameSetProblems({rows, reservations, traceNames: ['B-asc-1-1', 'S-asc-1-1']}), []);
+  // a reserved trial deleted from the runs root before collect: absent from trials.json and the traces
+  const deleted = nameSetProblems({rows: rows.slice(0, 1), reservations, traceNames: ['B-asc-1-1']});
+  assert.match(deleted.join(), /not in trials.json: S-asc-1-1/); assert.match(deleted.join(), /not in traces: S-asc-1-1/);
+  // a trace that was never reserved, a seq gap, a wrong ledgerSeq
+  assert.match(nameSetProblems({rows, reservations, traceNames: ['B-asc-1-1', 'S-asc-1-1', 'B-rr-1-1']}).join(), /not in ledger: B-rr-1-1/);
+  assert.match(nameSetProblems({rows, reservations: reservations.filter((e) => e.seq !== 1), traceNames: ['B-asc-1-1', 'S-asc-1-1']}).join(), /not 0\.\.n-1/);
+  assert.match(nameSetProblems({rows: [rows[0], {...rows[1], ledgerSeq: 7}], reservations, traceNames: ['B-asc-1-1', 'S-asc-1-1']}).join(), /ledgerSeq differs.*S-asc-1-1/);
+  // trace names: .jsonl and .jsonl.missing count, hook logs and trials.json do not
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-names-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  for (const f of ['B-asc-1-1.jsonl', 'S-asc-1-1.jsonl.missing', 'B-asc-1-1.hook.jsonl', 'trials.json']) fs.writeFileSync(path.join(d, f), '');
+  assert.deepEqual(traceNamesOf(d).sort(), ['B-asc-1-1', 'S-asc-1-1']);
+  // scoringProblems refuses without the ledger reservations and trace names
+  assert.match(scoringProblems({rows, fx: {records: [{ledgerId: 'L1', files: {}}]}, fxSha: 'x', ledgerIdNow: 'L1', fileProblems: []}).join(), /reservations and the trace names are required/);
 });

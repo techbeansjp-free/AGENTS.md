@@ -35,11 +35,22 @@ export function plannedTrials(order = loadOrder(), runs = readJson('conditions.j
   return out;
 }
 
-// run-trial: may this trial start now, given the names already reserved in the ledger? Probes are not ordered.
+// Probes (decision-criteria.md rule 5, review Medium-1): only before the first planned trial is reserved; rep 1 per
+// condition, and rep 2 (the one re-run of a failed or not-passing probe) only after rep 1 of that condition is reserved.
+// A probe after measurement started would add cost to the ledger without measuring anything (e.g. to reach the cap).
+export function probeRefusal({condition, rep, reserved, order = loadOrder(), runs = readJson('conditions.json').runs}) {
+  const started = plannedTrials(order, runs).find((t) => reserved.has(t.name));
+  if (started) return `probe refused: measurement has started (${started.name} is reserved)`;
+  if (!['1', '2'].includes(String(rep))) return `probe refused: rep must be 1, or 2 for the one re-run (got ${rep})`;
+  if (String(rep) === '2' && !reserved.has(trialName(condition, 'probe', 1))) return `probe refused: ${trialName(condition, 'probe', 2)} needs ${trialName(condition, 'probe', 1)} first`;
+  return null;
+}
+
+// run-trial: may this trial start now, given the names already reserved in the ledger?
 // A replacement (rep > runs) may start only after every planned trial is reserved, and only when it is the next trial of
 // replacementPlan for the trials in runsRoot (review L-1); without runsRoot and spec a replacement is refused.
 export function orderRefusal({condition, caseId, rep, reserved, runsRoot = null, spec = null, order = loadOrder(), runs = readJson('conditions.json').runs}) {
-  if (caseId === 'probe') return null;
+  if (caseId === 'probe') return probeRefusal({condition, rep, reserved, order, runs});
   const planned = plannedTrials(order, runs);
   const next = planned.find((t) => !reserved.has(t.name));
   const name = trialName(condition, caseId, rep);
@@ -86,7 +97,9 @@ export function replacementPlan({runsRoot, spec, order = loadOrder(), runs = rea
 // reserved in the ledger) or when it stopped because the cap was reached (ledger total + perTrialUsd > cap - margin, the
 // condition under which run-trial refuses the next trial). Required replacements come from the scored runs: the k-th
 // failed planned trial of a condition/case requires rep runs+k.
-export function completionStatus({runs: scored, reserved, spentUsd, budget, order = loadOrder(), plannedReps = readJson('conditions.json').runs}) {
+// review Medium-1 (defence in depth): cap-reached is not granted when any probe reservation comes after the first planned
+// reservation (reservations: the ledger's reservations in order, each {trial, seq}); without them it is not granted either.
+export function completionStatus({runs: scored, reserved, reservations = null, spentUsd, budget, order = loadOrder(), plannedReps = readJson('conditions.json').runs}) {
   const runs = plannedReps;
   const missingPlanned = plannedTrials(order, runs).map((t) => t.name).filter((n) => !reserved.has(n));
   const failed = new Map();
@@ -95,8 +108,11 @@ export function completionStatus({runs: scored, reserved, spentUsd, budget, orde
   const missingReplacements = required.filter((n) => !reserved.has(n));
   const complete = missingPlanned.length === 0 && missingReplacements.length === 0;
   const stopLine = budget.capUsd - budget.safetyMarginUsd;
-  const capReached = spentUsd + budget.perTrialUsd > stopLine;
-  return {basis: complete ? 'complete' : capReached ? 'cap-reached' : null, complete, capReached,
+  const plannedNames = new Set(plannedTrials(order, runs).map((t) => t.name));
+  const firstPlannedSeq = reservations ? Math.min(...reservations.filter((e) => plannedNames.has(e.trial)).map((e) => e.seq)) : null;
+  const lateProbes = reservations ? reservations.filter((e) => /-probe-\d+$/.test(e.trial) && e.seq > firstPlannedSeq).map((e) => e.trial) : null;
+  const capReached = spentUsd + budget.perTrialUsd > stopLine && lateProbes !== null && lateProbes.length === 0;
+  return {basis: complete ? 'complete' : capReached ? 'cap-reached' : null, complete, capReached, lateProbes,
     missingPlanned: missingPlanned.length, firstMissingPlanned: missingPlanned[0] ?? null, missingReplacements,
     spentUsd: Number(spentUsd.toFixed(4)), stopLineUsd: stopLine, perTrialUsd: budget.perTrialUsd};
 }

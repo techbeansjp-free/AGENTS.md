@@ -1,6 +1,6 @@
 # 判定の規則（モデル実行の前に固定）
 
-対象：#1817。規則はownerの判断（2026-11-25、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1817#issuecomment-7159921981)、および同日の会話での(b)(c)の承認）による。判定の手順は[harness/score.mjs](harness/score.mjs)の`judge1817`で実装し、合成の記録で試験した（[harness/score.test.mjs](harness/score.test.mjs)）。判定は[harness/judge.mjs](harness/judge.mjs)だけで行う。judge.mjsは、固定の照合、試行ごとの固定の記録と台帳の照合、台帳による完了の確認をしてから採点する。評価結果を見た後に、この規則・[cases.json](cases.json)・[conditions.json](conditions.json)・[release.json](release.json)・[run-order.json](run-order.json)・採点の処理を変えない。
+対象：#1817。規則はownerの判断（2026-11-25、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1817#issuecomment-7159921981)、および同日の会話での(b)(c)の承認）による。判定の手順は[harness/score.mjs](harness/score.mjs)の`judge1817`で実装し、合成の記録で試験した（[harness/score.test.mjs](harness/score.test.mjs)）。判定は[harness/judge.mjs](harness/judge.mjs)だけで行う。judge.mjsは、固定の照合、試行ごとの固定の記録と台帳の照合、台帳の予約・`trials.json`・traceが同じ試行の集まりであること（予約の番号の欠けが無いことを含む）、台帳による完了の確認をしてから採点する。評価結果を見た後に、この規則・[cases.json](cases.json)・[conditions.json](conditions.json)・[release.json](release.json)・[run-order.json](run-order.json)・採点の処理を変えない。
 
 ## ownerの決定
 
@@ -47,6 +47,9 @@ model（`sonnet`の別名、解決後のidを記録）、tool（`Read`・`Glob`�
    - 1試行ごとの予算上限による停止は失敗ではない。停止までの記録で採点し、件数を報告する。
    - 実装：[harness/order.mjs](harness/order.mjs)の`replacementPlan`（実行）と[harness/score.mjs](harness/score.mjs)の`selectCounted`（採点）。
 5. 隔離の確認：測定の前に、B・Sそれぞれ1回の隔離の確認（probe）を行い、[harness/probe-check.mjs](harness/probe-check.mjs)のすべての項目が合格し、`compare`で条件の間に差が無い条件だけを測定する（#1814の規則6と同じ）。
+   - probeが失敗した、または不合格だった条件に限り、同じ条件で1回だけ再実行できる（回2）。それでも合格しなければ、その条件は測定せずにownerへ報告する。
+   - probeは、計画した試行が1件でも台帳に予約された後は実行しない。`run-trial.mjs`は、そのprobe、回3以上のprobe、回1の無い回2を拒否する（[harness/order.mjs](harness/order.mjs)の`probeRefusal`）。
+   - 規則7の`cap-reached`は、最初の計画した試行より後に予約されたprobeが台帳にあれば認めない。probeの費用で上限に届かせることを防ぐため。
 6. 実行の順序は[run-order.json](run-order.json)で、モデル実行の前に固定する。
    - 回を外側にする（回1の14依頼、回2の14依頼、…）。
    - 各回の中は固定した依頼の順にする。該当しない依頼は間に挟み、最後にまとめない。
@@ -55,7 +58,7 @@ model（`sonnet`の別名、解決後のidを記録）、tool（`Read`・`Glob`�
    - 置き換えは、計画した112試行の後に、同じ依頼・条件の順で行う。
 7. 途中で止まった場合：判定してよいのは、次のどちらかに当たる場合だけである。どちらに当たったかを判定の出力（`basis`、`completion`）に記録する。
    - `complete`：計画した112試行と、規則4で必要な置き換えのすべてが、台帳に予約されている。
-   - `cap-reached`：止まった時点で、台帳の累計＋1試行の予算（0.6 USD）が、上限−余裕（14 USD）を超えている。つまり`run-trial.mjs`が次の試行を拒否する状態である。
+   - `cap-reached`：止まった時点で、台帳の累計＋1試行の予算（0.6 USD）が、上限−余裕（14 USD）を超えている。つまり`run-trial.mjs`が次の試行を拒否する状態である。ただし、最初の計画した試行より後に予約されたprobeがあれば認めない（規則5）。
    - どちらでもない停止（結果を見た後の打切りを含む）は判定しない。ownerへ報告する。
    - `cap-reached`の場合は、測れた試行で規則1を割合として判定し、測れなかった試行の数を条件ごとに報告する。実行の順序により、条件の間の差は最大1試行で、どの依頼も前の回までは両条件で測れている。
    - 規則1の他の「判定しない場合」に当たれば、`cap-reached`でも判定しない。
