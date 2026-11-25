@@ -24,7 +24,7 @@
 - **読込みの門**：Sの試行で本文と候補の文のreferenceを読んだのは、全ケースで0/3。規則により**3ケースとも「未判定（候補の文が読まれていない）」**、判定できるケースは0で、全体は**未判定（取り込まない）**。
 - **指標**：I1（両幅の初期表示の答え）はB・Sとも上限近くで、差は上の2試行の狭幅の欠けだけ（UI-03でSに1件、UI-07でBに1件）。I2（広幅で操作しないと見えない必須情報）は全試行0。UI-04では全試行で狭幅に3項目（改訂日・寸法図・取扱説明書）が操作の後でしか見えないが、依頼が狭幅で一覧から詳細へ移る設計を認めているので、I2（広幅）には数えない。網羅率はUI-03・UI-07で1.0、UI-04で0.958（後継品の品番が全試行で欠け）。
 - **順位**：ownerの判断（2026-11-26、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1815#issuecomment-7168583280)）で、FableとCodexの順位付けは行わなかった。読込みの門で全ケースが未判定なので、順位が判定を変えない。このため`decide.mjs`は実行していない（順位の入力を必須にする作りで、判定は固定した読込みの門の規則だけから決まる）。固定したharnessのfileは変えていない。
-- **主な発見**：書込みとbrowserのtoolがある、利用者に近い環境では、`CLAUDE.md`の案内文を採用していても、ASCはほとんど読まれなかった（本文2/18、referenceは0/18）。Read系のtoolだけで依頼した#1814・#1817では本文が読まれていたことと対照的である。原因の調査と改善は、ownerの判断で別のIssueで扱う。
+- **主な発見**：書込みとbrowserのtoolがある、利用者に近い環境では、`CLAUDE.md`の案内文を採用していても、ASCはほとんど読まれなかった（本文2/18、referenceは0/18）。Read系のtoolだけで依頼した#1814・#1817では本文が読まれていたことと対照的である。原因の調査と改善は、ownerの判断で[#1820](https://github.com/techbeansjp-free/AGENTS.md/issues/1820)で扱う。
 - **候補のSkill本文**：ownerの判断で配布しない。このbranchで候補の追記（`c997f274`・`bb1d1886`）を取り消し、`skills/`はmainと同じにした。[release.json](release.json)のSは、測定した候補の記録として残す。
 - **公開の確認**：公開する記録に、localのpath・利用者名・一時directoryの名前・session id・mail address・token・第三者のページの本文・画像のデータが無いことを確かめた（一時directoryの名前は`collect.mjs`がruns rootを`<runs>`に置き換えたので現れず、追加の置換えは不要だった）。
 
@@ -235,4 +235,4 @@ tokenは親processの環境変数`CLAUDE_CODE_OAUTH_TOKEN`からだけ受け取�
 
 ## 未決
 
-なし。有料の測定は、ownerが上限40 USDで承認した（2026-11-25、[Issue #1815のコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1815#issuecomment-7159922599)）。測定は終わり、Issueは未判定として開いたままにする（ownerの判断、2026-11-26）。ASCが書込みのtoolのある環境で読まれない問題は、別のIssueで扱う。
+なし。有料の測定は、ownerが上限40 USDで承認した（2026-11-25、[Issue #1815のコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1815#issuecomment-7159922599)）。測定は終わり、Issueは未判定として開いたままにする（ownerの判断、2026-11-26）。ASCが書込みのtoolのある環境で読まれない問題は、[#1820](https://github.com/techbeansjp-free/AGENTS.md/issues/1820)で扱う。
