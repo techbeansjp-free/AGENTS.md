@@ -1,0 +1,23 @@
+{
+ "schema": "asc-1817-release/v1",
+ "note": "The tarball each condition installs. make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition: B only from the release entry, S only from the candidate entry. There is no other way to install an unreleased package for a paid run (dry-run.mjs --allow-unreleased builds stand-ins that run-trial refuses).",
+ "B": {
+  "kind": "release",
+  "tag": "v0.5.109",
+  "targetCommit": "af2ab12e2d871f9f229f25ae9d31f0f3aae9c819",
+  "asset": "agent-skill-chain-0.5.109.tgz",
+  "assetSha256": "05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f",
+  "sha256sumsAssetSha256": "15853b310b16520870a650441b3f8e5037a0b6daa963448e19d46a2f5dd474d1",
+  "note": "Not a draft, not a prerelease. The tarball sha256 matched SHA256SUMS and the GitHub release asset digest (2026-11-25). Kept under <scratch>/rel1817/release/."
+ },
+ "S": {
+  "kind": "candidate",
+  "asset": "agent-skill-chain-0.5.109.tgz",
+  "assetSha256": "7e48d5cfac449506fd4f2cc7d741d926c122a860ab2a4a9cd2bc7ab2f0075939",
+  "packedFromCommit": "6d6e12238876f9a9ced823d0e03db04c615efbed",
+  "packCommand": "node scripts/pack-candidate.mjs <scratch>/rel1817/candidate3 --version=0.5.109",
+  "baseRelease": "B",
+  "differsFromReleaseOnly": ["package/release-identity.json", "package/skills/asc/SKILL.md", "package/skills/estimate-and-scope/SKILL.md"],
+  "note": "Packed at commit 6d6e1223 (= v0.5.109 target commit af2ab12e plus the two Skill text edits of 4c95f8d4; the asc sentence narrowed to requests that involve changes in ee77daa0 and its exclusion limited to the workplace decision in 6d6e1223; reviews L3, L-4). Replaces the candidates packed at 4c95f8d4 (sha256 f8c3eae7...) and ee77daa0 (sha256 3a016473...), neither measured. Unpacked and compared with the B tarball on 2026-11-25: only the three listed files differ; release-identity.json differs only in the sha256 of the two Skill bodies, and both Skill bodies equal the files at 6d6e1223 (release: at af2ab12e). Kept under <scratch>/rel1817/candidate3/. Not published; used only in this measurement."
+ }
+}

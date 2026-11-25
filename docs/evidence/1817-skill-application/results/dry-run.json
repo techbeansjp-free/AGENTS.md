@@ -1,0 +1,221 @@
+{
+ "label": "dry run at HEAD 8ae7b145c18801a188583286256e2a3651b443c6 (clean tree); tarballs: B = release v0.5.109 (<scratch>/rel1817/release), S = candidate packed at 6d6e1223 (<scratch>/rel1817/candidate3); no --allow-unreleased",
+ "allowUnreleased": false,
+ "checks": {
+  "fixturesInstalledAsPinned": {
+   "pass": true,
+   "detail": {
+    "B": true,
+    "S": true
+   }
+  },
+  "conditionsApplied": {
+   "pass": true,
+   "detail": null
+  },
+  "sameCommitSubjects": {
+   "pass": true,
+   "detail": null
+  },
+  "sameClaudeMd": {
+   "pass": true,
+   "detail": null
+  },
+  "skillsDifferOnlyInEditedBodies": {
+   "pass": true,
+   "detail": [
+    "asc/SKILL.md",
+    "estimate-and-scope/SKILL.md"
+   ]
+  },
+  "entriesIdentical": {
+   "pass": true,
+   "detail": []
+  },
+  "projectDiffersOnlyInEditedBodies": {
+   "pass": true,
+   "detail": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+    ".agent-skill-chain/managed-runtime/skills/estimate-and-scope/SKILL.md",
+    ".agent-skill-chain/skills/asc/SKILL.md",
+    ".agent-skill-chain/skills/estimate-and-scope/SKILL.md"
+   ]
+  }
+ },
+ "fixtures": {
+  "B": {
+   "condition": "B",
+   "source": "release",
+   "pinned": true,
+   "released": true,
+   "expectedSource": "release",
+   "tarballSha256": "05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f",
+   "packageVersion": "0.5.109",
+   "runtimeVersion": "0.5.109",
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": {
+    "id": "claude-md",
+    "path": "CLAUDE.md",
+    "action": "append",
+    "beforeSha256": "cabbf71a0d719dcd4315e2b4e628295fea8a771b133e9c1d014e80f5f654b0d7",
+    "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "diffSha256": "6f925deee852d47486e81c7d467ddbd7af97e694028b202ae828398b8a927845",
+    "default": "claude-md"
+   },
+   "claudeMdSha256": "2c5f97a5787cb2a99d4f194cc337b169611df27c6e79d17bd0e260c1241bb24b",
+   "claudeMdProblems": [],
+   "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+   "goldMissing": [],
+   "scorerSkillsMatchRelease": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "edits": {
+    "asc/SKILL.md": false,
+    "estimate-and-scope/SKILL.md": false
+   },
+   "ok": true
+  },
+  "S": {
+   "condition": "S",
+   "source": "candidate",
+   "pinned": true,
+   "released": false,
+   "expectedSource": "candidate",
+   "tarballSha256": "7e48d5cfac449506fd4f2cc7d741d926c122a860ab2a4a9cd2bc7ab2f0075939",
+   "packageVersion": "0.5.109",
+   "runtimeVersion": "0.5.109",
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": {
+    "id": "claude-md",
+    "path": "CLAUDE.md",
+    "action": "append",
+    "beforeSha256": "cabbf71a0d719dcd4315e2b4e628295fea8a771b133e9c1d014e80f5f654b0d7",
+    "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "diffSha256": "6f925deee852d47486e81c7d467ddbd7af97e694028b202ae828398b8a927845",
+    "default": "claude-md"
+   },
+   "claudeMdSha256": "2c5f97a5787cb2a99d4f194cc337b169611df27c6e79d17bd0e260c1241bb24b",
+   "claudeMdProblems": [],
+   "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+   "goldMissing": [],
+   "scorerSkillsMatchRelease": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "edits": {
+    "asc/SKILL.md": true,
+    "estimate-and-scope/SKILL.md": true
+   },
+   "ok": true
+  }
+ },
+ "conditions": {
+  "B": {
+   "applied": {
+    "condition": "B",
+    "claudeMdSha256": "2c5f97a5787cb2a99d4f194cc337b169611df27c6e79d17bd0e260c1241bb24b",
+    "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+    "pointer": false,
+    "hook": null,
+    "adopt": "claude-md",
+    "changedFiles": []
+   },
+   "claudeMdKept": true,
+   "settings": false,
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "placement": [],
+   "ok": true
+  },
+  "S": {
+   "applied": {
+    "condition": "S",
+    "claudeMdSha256": "2c5f97a5787cb2a99d4f194cc337b169611df27c6e79d17bd0e260c1241bb24b",
+    "pointerSha256": "7b3c5054f8a73d15a9d8b54beebc49f7864d6b2eae34436d7c35f05ca1e308cb",
+    "pointer": false,
+    "hook": null,
+    "adopt": "claude-md",
+    "changedFiles": []
+   },
+   "claudeMdKept": true,
+   "settings": false,
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "placement": [],
+   "ok": true
+  }
+ },
+ "bsDiff": {
+  "skills": [
+   "asc/SKILL.md",
+   "estimate-and-scope/SKILL.md"
+  ],
+  "project": [
+   ".agent-skill-chain/distribution.json",
+   ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+   ".agent-skill-chain/managed-runtime/skills/estimate-and-scope/SKILL.md",
+   ".agent-skill-chain/skills/asc/SKILL.md",
+   ".agent-skill-chain/skills/estimate-and-scope/SKILL.md"
+  ],
+  "entriesDiffer": [],
+  "distributionRecordDiffers": true
+ },
+ "plan": {
+  "phases": [
+   {
+    "phase": "isolation probe (one per condition, before the measurement)",
+    "conditions": [
+     "B",
+     "S"
+    ],
+    "cases": [
+     "probe"
+    ],
+    "runs": 1,
+    "trials": 2,
+    "planningUsd": 0.2
+   },
+   {
+    "phase": "measurement (B and S interleaved per case and rep)",
+    "conditions": [
+     "B",
+     "S"
+    ],
+    "cases": [
+     "asc-1",
+     "asc-2",
+     "asc-3",
+     "rr-1",
+     "tw-1",
+     "ri-1",
+     "se-1",
+     "ma-1",
+     "ui-1",
+     "es-1",
+     "do-1",
+     "neg-1",
+     "neg-2",
+     "neg-3"
+    ],
+    "runs": 4,
+    "trials": 112,
+    "planningUsd": 11.2
+   }
+  ],
+  "totalTrials": 114,
+  "totalPlanningUsd": 11.4,
+  "capUsd": 15,
+  "stopBelowUsd": 14,
+  "breakEvenPerTrialUsd": 0.119
+ },
+ "command": "claude -p <prompt> --model sonnet --tools Read,Glob,Grep,Skill --disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent,Task --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events",
+ "pass": true
+}

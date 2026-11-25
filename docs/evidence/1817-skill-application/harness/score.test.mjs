@@ -1,0 +1,624 @@
+// Synthetic-transcript tests for score.mjs, collect.mjs and apply-condition.mjs (#1817, copied from #1814). No model call.
+// Usage: node --test docs/evidence/1817-skill-application/harness/score.test.mjs
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {parseTrace, scoreRun, scoreDir, summarize, judge, judge1817, shortfall, markersOk, projectRelative, selectCounted} from './score.mjs';
+import {redact, scrubSensitive, collect} from './collect.mjs';
+import {pointerText, hookScript, loadConditions} from './apply-condition.mjs';
+import {plannedTrials, orderProblems, orderRefusal, replacementPlan, loadOrder, completionStatus, trialFailure} from './order.mjs';
+import {scoringProblems, nameSetProblems, traceNamesOf, settlementProblems, publishedProblems} from './judge.mjs';
+import {digests, invariantDigests} from './fixation.mjs';
+import {trialsToStart} from './run-all.mjs';
+import * as ledgerOps from './ledger.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+// A complete run (every planned trial and replacement reserved), for the rule tests that are not about completion.
+const DONE = {basis: 'complete', complete: true, capReached: false, missingPlanned: 0, missingReplacements: [], spentUsd: 10, stopLineUsd: 14, perTrialUsd: 0.6};
+const judgeDone = (b, c, o = {}) => judge1817(b, c, {completion: DONE, ...o});
+const spec = JSON.parse(fs.readFileSync(path.join(here, '../cases.json'), 'utf8'));
+const kase = (id) => spec.cases.find((c) => c.id === id);
+
+// Builds a stream-json transcript. steps: [{tool, input, error}] or {text}; result: {text, subtype, is_error, cost}.
+let seq = 0;
+function trace(steps, result = {}, cwd = '/w') {
+  const lines = [{type: 'system', subtype: 'init', cwd, model: 'test-model', tools: ['Read', 'Glob', 'Grep', 'Skill']}];
+  for (const s of steps) {
+    if (s.text) { lines.push({type: 'assistant', message: {content: [{type: 'text', text: s.text}]}}); continue; }
+    if (s.hook) { lines.push({type: 'system', subtype: 'hook_response', hook_event: 'SessionStart'}); continue; }
+    const id = `toolu_${++seq}`;
+    lines.push({type: 'assistant', message: {content: [{type: 'tool_use', id, name: s.tool, input: s.input}]}});
+    if (!s.noResult) lines.push({type: 'user', message: {content: [{type: 'tool_result', tool_use_id: id, is_error: Boolean(s.error), content: s.error ? 'denied' : 'ok'}]}});
+  }
+  if (result !== null) lines.push({type: 'result', subtype: result.subtype ?? 'success', is_error: result.is_error ?? false, result: result.text ?? '', total_cost_usd: result.cost ?? 0.2, num_turns: 3, duration_ms: 1000});
+  return lines.map((l) => JSON.stringify(l)).join('\n') + '\n';
+}
+// Settlements as run-trial writes them, for every trial directory that holds trace.jsonl and meta.json (a directory
+// without them stands for a trial stopped during its run: reserved, never settled).
+function settledFrom(root) {
+  const m = new Map();
+  for (const n of fs.readdirSync(root)) {
+    const t = path.join(root, n, 'trace.jsonl'), mf = path.join(root, n, 'meta.json');
+    if (!fs.existsSync(t) || !fs.existsSync(mf)) continue;
+    m.set(n, {trial: n, costUsd: JSON.parse(fs.readFileSync(mf, 'utf8')).costUsd ?? null, traceSha256: ledgerOps.fileSha256(t), metaSha256: ledgerOps.fileSha256(mf)});
+  }
+  return m;
+}
+const read = (p, error = false) => ({tool: 'Read', input: {file_path: p}, error});
+const body = (s) => `/w/.agent-skill-chain/skills/${s}/SKILL.md`;
+const ref = (s, r) => `/w/.agent-skill-chain/skills/${s}/references/${r}`;
+
+test('asc case: body + reference + markers => applied', () => {
+  const t = parseTrace(trace([{tool: 'Skill', input: {skill: 'asc'}}, read(body('asc')), read(ref('asc', 'workspace.md'))], {text: 'worktree-create で .worktrees に作る。worktree'}));
+  const r = scoreRun(spec, kase('asc-1'), t);
+  assert.equal(r.reach, true); assert.equal(r.bodyRead, true); assert.equal(r.referenceRead, true); assert.equal(r.markers, true); assert.equal(r.applied, true);
+});
+
+test('Skill tool alone is the first hop only', () => {
+  const r = scoreRun(spec, kase('asc-1'), parseTrace(trace([{tool: 'Skill', input: {skill: 'project:asc'}}], {text: 'worktree-create worktree'})));
+  assert.equal(r.entryHop, true); assert.equal(r.reach, true); assert.equal(r.bodyRead, false); assert.equal(r.applied, false);
+});
+
+test('two hops: thin entry Read, then body by a relative path resolved against the project root', () => {
+  const t = parseTrace(trace([read('.claude/skills/asc/SKILL.md'), read('.claude/skills/asc/../../../.agent-skill-chain/skills/asc/SKILL.md'), read('.agent-skill-chain/skills/asc/references/workspace.md')], {text: 'worktree-create worktree'}));
+  const r = scoreRun(spec, kase('asc-1'), t);
+  assert.deepEqual([r.entryHop, r.bodyRead, r.referenceRead, r.applied], [true, true, true, true]);
+  assert.deepEqual(r.ascEntries, ['asc']);
+});
+
+test('paths outside the project root never match; /private/tmp equals /tmp', () => {
+  assert.equal(projectRelative('/other/.agent-skill-chain/skills/asc/SKILL.md', '/w'), null);
+  assert.equal(projectRelative('../x/.agent-skill-chain/skills/asc/SKILL.md', '/w'), null);
+  assert.equal(projectRelative('/tmp/r/work/.claude/skills/asc/SKILL.md', '/private/tmp/r/work'), '.claude/skills/asc/SKILL.md');
+  const r = scoreRun(spec, kase('asc-1'), parseTrace(trace([read('/repo/.agent-skill-chain/skills/asc/SKILL.md')], {text: 'worktree'})));
+  assert.equal(r.bodyRead, false); assert.equal(r.unselected, true);
+});
+
+test('a refused or unanswered Read does not count as read', () => {
+  const t = parseTrace(trace([read(body('asc'), true), {tool: 'Read', input: {file_path: ref('asc', 'workspace.md')}, noResult: true}], {text: 'worktree-create worktree'}));
+  const r = scoreRun(spec, kase('asc-1'), t);
+  assert.equal(r.bodyRead, false); assert.equal(r.readAttempts, 2); assert.equal(r.unselected, true);
+});
+
+test('the registered entry (.claude/skills) is not the body', () => {
+  const r = scoreRun(spec, kase('asc-1'), parseTrace(trace([read('/w/.claude/skills/asc/SKILL.md')], {text: 'worktree'})));
+  assert.equal(r.bodyRead, false); assert.equal(r.entryHop, true); assert.equal(r.unselected, false);
+});
+
+test('managed-runtime body path counts', () => {
+  const r = scoreRun(spec, kase('rr-1'), parseTrace(trace([read('/w/.agent-skill-chain/managed-runtime/skills/review-and-remediation/SKILL.md'), read('/w/.agent-skill-chain/managed-runtime/skills/review-and-remediation/references/review-method.md')], {text: '認可の確認が無い'})));
+  assert.equal(r.applied, true);
+});
+
+test('misselect: another ASC body read instead of the expected one', () => {
+  const r = scoreRun(spec, kase('asc-2'), parseTrace(trace([read(body('execution-recovery'))], {text: 'worktree start'})));
+  assert.equal(r.reach, false); assert.equal(r.misselect, true); assert.equal(r.unselected, false);
+});
+
+test('answerGroups require every group (ui-1)', () => {
+  const k = kase('ui-1');
+  assert.equal(markersOk(k, '0件のとき、通信失敗のとき、再読込み後を確かめる'), true);
+  assert.equal(markersOk(k, '0件のとき、通信失敗のときを確かめる'), false);
+});
+
+test('secondary Skill is recorded but not required (asc-3)', () => {
+  const r = scoreRun(spec, kase('asc-3'), parseTrace(trace([read(body('asc')), read(ref('asc', 'implementation.md')), read(body('user-journey-acceptance'))], {text: '専用の worktree で進める'})));
+  assert.equal(r.applied, true); assert.deepEqual(r.secondaryRead, {'user-journey-acceptance': true});
+});
+
+test('negative: an ASC body read or Skill call is overapplication', () => {
+  assert.equal(scoreRun(spec, kase('neg-1'), parseTrace(trace([], {text: 'Added search.'}))).overapplication, false);
+  assert.equal(scoreRun(spec, kase('neg-1'), parseTrace(trace([read(body('asc'))], {text: 'Added search.'}))).overapplication, true);
+  assert.equal(scoreRun(spec, kase('neg-2'), parseTrace(trace([{tool: 'Skill', input: {skill: 'asc'}}], {text: 'PATCH'}))).overapplication, true);
+  assert.equal(scoreRun(spec, kase('neg-3'), parseTrace(trace([read('.claude/skills/asc/SKILL.md')], {text: '@'}))).overapplication, true);
+  const bundled = scoreRun(spec, kase('neg-2'), parseTrace(trace([{tool: 'Skill', input: {skill: 'dataviz'}}], {text: 'PATCH'})));
+  assert.equal(bundled.overapplication, false); assert.deepEqual(bundled.otherSkillCalls, ['dataviz']);
+});
+
+test('budget stop is scored with the last text; API error is a failure', () => {
+  const stopped = scoreRun(spec, kase('asc-1'), parseTrace(trace([read(body('asc')), {text: 'worktree-create worktree'}], {subtype: 'error_max_budget_usd', is_error: true, text: ''})));
+  assert.equal(stopped.failure, undefined); assert.equal(stopped.stopped, 'error_max_budget_usd'); assert.equal(stopped.bodyRead, true);
+  const failed = scoreRun(spec, kase('asc-1'), parseTrace(trace([], {subtype: 'error_during_execution', is_error: true, text: 'API Error: 529'})));
+  assert.match(failed.failure, /result error/);
+  assert.equal(scoreRun(spec, kase('asc-1'), parseTrace(trace([], null))).failure, 'no result event');
+});
+
+test('scoreDir: names, multi-letter conditions, hook log, missing trace', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-score-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  fs.writeFileSync(path.join(dir, 'PH-asc-1-1.jsonl'), trace([{hook: true}, read(body('asc')), read(ref('asc', 'workspace.md'))], {text: 'worktree-create worktree', cost: 0.3}));
+  fs.writeFileSync(path.join(dir, 'PH-asc-1-1.hook.jsonl'), '{"event":"SessionStart","source":"startup"}\n');
+  fs.writeFileSync(path.join(dir, 'PH-neg-1-1.jsonl'), trace([], {text: 'search', cost: 0.1}));
+  fs.writeFileSync(path.join(dir, 'PH-neg-1-1.hook.jsonl'), '{"source":"startup"}\n');
+  fs.writeFileSync(path.join(dir, 'PH-rr-1-1.jsonl.missing'), 'no trace\n');
+  fs.writeFileSync(path.join(dir, 'R-asc-1-1.jsonl'), trace([], {text: 'plan'}));
+  fs.writeFileSync(path.join(dir, 'PH-neg-2-1.jsonl'), trace([], {text: 'PATCH', cost: 0.1}));
+  fs.writeFileSync(path.join(dir, 'PH-neg-2-1.hook.jsonl'), '');
+  const runs = scoreDir(spec, dir, ['PH'], {PH: 'usage'}, 2); // #1814 hook condition, given explicitly (not in #1817 conditions.json)
+  assert.equal(runs.length, 4);
+  const s = summarize(spec, runs, 'PH');
+  assert.deepEqual([s.runs, s.failures, s.positives, s.applied, s.negatives, s.overapplication, s.hookFired], [4, 2, 1, 1, 1, 0, 2]);
+  assert.equal(runs.find((r) => r.case === 'neg-2').failure, 'hook did not fire');
+  assert.equal(s.perCase['asc-1'], 'A'); assert.equal(s.perCase['neg-1'], '-'); assert.equal(s.costUsd, 0.5);
+});
+
+const S = (o) => ({condition: 'X', runs: 28, failures: 0, positives: 22, negatives: 6, bodyRead: 0, applied: 0, overapplication: 0, ...o});
+test('judge: owner pass level', () => {
+  const base = S({condition: 'R', bodyRead: 10, applied: 5, overapplication: 0});
+  assert.equal(judge(base, S({bodyRead: 18, applied: 6, overapplication: 1})).verdict, 'pass'); // 18/22 = 81.8%
+  assert.equal(judge(base, S({bodyRead: 17, applied: 9})).verdict, 'fail'); // 77.3% < 80%
+  assert.equal(judge(base, S({bodyRead: 22, applied: 5})).verdict, 'fail'); // application not above current
+  assert.equal(judge(base, S({bodyRead: 22, applied: 9, overapplication: 2})).verdict, 'fail'); // current + 2
+  assert.equal(judge(base, S({runs: 28, failures: 3, bodyRead: 22, applied: 9})).verdict, 'not-judged'); // 3/28 > 10%
+  // rates, not counts, when valid trials differ
+  assert.equal(judge(S({condition: 'R', positives: 22, applied: 11}), S({positives: 20, bodyRead: 20, applied: 11})).verdict, 'pass');
+  assert.equal(shortfall(base), true); assert.equal(shortfall(S({bodyRead: 18})), false);
+});
+
+test('missing init event and an unfired hook in a hook condition are failures (L5, L6)', () => {
+  const noInit = trace([read(body('asc'))], {text: 'worktree-create worktree'}).split('\n').slice(1).join('\n');
+  assert.equal(scoreRun(spec, kase('asc-1'), parseTrace(noInit)).failure, 'no init event');
+  const t = parseTrace(trace([read(body('asc'))], {text: 'worktree-create worktree'}));
+  assert.equal(scoreRun(spec, kase('asc-1'), t, [], {expectHook: true}).failure, 'hook did not fire');
+  assert.equal(scoreRun(spec, kase('asc-1'), t, null, {expectHook: true}).failure, 'hook did not fire');
+  assert.equal(scoreRun(spec, kase('asc-1'), t, ['{"source":"startup"}'], {expectHook: true}).failure, undefined);
+  assert.equal(scoreRun(spec, kase('asc-1'), t, null, {expectHook: false}).failure, undefined);
+});
+
+test('only planned reps count; a later rep only replaces a failed planned trial once (L-3)', () => {
+  const r = (run, failure) => ({condition: 'R', case: 'asc-1', run, ...(failure ? {failure: 'x'} : {})});
+  const rows = selectCounted([r(1), r(2, true), r(3), r(4)], 2);
+  assert.deepEqual(rows.map((x) => [x.run, x.counted]), [[1, true], [2, false], [3, true], [4, false]]);
+  assert.equal(rows[2].replaces, 2);
+  const extraOnly = selectCounted([r(1), r(2), r(3)], 2);
+  assert.deepEqual(extraOnly.map((x) => x.counted), [true, true, false]);
+  const s = summarize(spec, [{...r(1), expect: 'asc', bodyRead: true, costUsd: 0.2, counted: true}, {...r(3), expect: 'asc', costUsd: 0.2, counted: false}], 'R');
+  assert.deepEqual([s.runs, s.notCounted, s.costUsd], [1, 1, 0.4]);
+});
+
+test('product hook (condition I) is fired by SessionStart hook events in the trace', () => {
+  const t = parseTrace(trace([{hook: true}, read(body('asc'))], {text: 'worktree-create worktree'}));
+  assert.equal(scoreRun(spec, kase('asc-1'), t, [], {expectHook: 'product'}).failure, undefined);
+  const none = parseTrace(trace([read(body('asc'))], {text: 'worktree-create worktree'}));
+  assert.equal(scoreRun(spec, kase('asc-1'), none, [], {expectHook: 'product'}).failure, 'hook did not fire');
+});
+
+test('collect: a trace without meta.json becomes a failure row instead of a crash (L-6)', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1814-collect-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  fs.mkdirSync(path.join(root, 'runs/R-asc-1-1'), {recursive: true});
+  fs.writeFileSync(path.join(root, 'runs/R-asc-1-1/trace.jsonl'), trace([], {text: 'x'}));
+  assert.equal(collect(path.join(root, 'runs'), path.join(root, 'out')), 1);
+  assert.equal(fs.existsSync(path.join(root, 'out/R-asc-1-1.jsonl.missing')), true);
+  assert.equal(fs.existsSync(path.join(root, 'out/R-asc-1-1.jsonl')), false);
+});
+
+test('collect writes once into an empty directory; another ledger id or a repeated seq is refused (L-e, N-1, #1817)', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-collect2-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const mk = (runs, name, meta) => { fs.mkdirSync(path.join(root, runs, name), {recursive: true}); fs.writeFileSync(path.join(root, runs, name, 'trace.jsonl'), trace([], {text: 'x'})); fs.writeFileSync(path.join(root, runs, name, 'meta.json'), JSON.stringify(meta)); };
+  mk('s1', 'B-asc-1-1', {costUsd: 0.1, ledgerId: 'L1', ledgerSeq: 0}); mk('s1', 'S-asc-1-1', {costUsd: 0.1, ledgerId: 'L1', ledgerSeq: 1});
+  collect(path.join(root, 's1'), path.join(root, 'out'));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'out/trials.json'), 'utf8')).map((r) => r.trial), ['B-asc-1-1', 'S-asc-1-1']);
+  assert.throws(() => collect(path.join(root, 's1'), path.join(root, 'out')), /collected once/);
+  mk('s4', 'B-asc-1-1', {ledgerId: 'L1', ledgerSeq: 0}); mk('s4', 'S-asc-1-1', {ledgerId: 'L2', ledgerSeq: 1});
+  assert.throws(() => collect(path.join(root, 's4'), path.join(root, 'out4')), /ledger check failed/);
+  mk('s5', 'B-asc-1-1', {ledgerId: 'L1', ledgerSeq: 0}); mk('s5', 'S-asc-1-1', {ledgerId: 'L1', ledgerSeq: 0});
+  assert.throws(() => collect(path.join(root, 's5'), path.join(root, 'out5')), /seq 0 repeated/);
+  assert.equal(fs.existsSync(path.join(root, 'out4')) || fs.existsSync(path.join(root, 'out5')), false); // nothing written
+});
+
+test('product hook: hookFired reflects the trace evidence in the summary (L-3)', () => {
+  const t = parseTrace(trace([{hook: true}, read(body('asc'))], {text: 'worktree-create worktree'}));
+  assert.equal(scoreRun(spec, kase('asc-1'), t, [], {expectHook: 'product'}).hookFired, true);
+});
+
+test('scrubSensitive replaces mail addresses, keys and account fields (L9)', () => {
+  const r = scrubSensitive('a someone@example.org b sk-ant-api03-abcdefgh123 "oauthAccount":"x" ok');
+  assert.equal(r.hits, 3); assert.equal(/@example|sk-ant|oauthAccount":"x/.test(r.text), false);
+});
+
+test('redact removes local paths and user-specific names', () => {
+  const trial = '/private/tmp/x-1/-Users-someone-proj/runs/R-asc-1-1';
+  const out = redact(`{"cwd":"${trial}/work","p":"/Users/someone/a","q":"/home/other/b","r":"/tmp/-Users-someone-x"}`, trial);
+  assert.equal(out.includes('someone'), false); assert.equal(out.includes('other'), false); assert.match(out, /<trial>\/work/);
+});
+
+test('pointer text is extracted from v05/USAGE.md and the hook emits it as SessionStart context', (t) => {
+  const usage = fs.readFileSync(path.join(here, '../../../../v05/USAGE.md'), 'utf8');
+  const p = pointerText(usage);
+  assert.match(p, /\.agent-skill-chain\/skills\/asc\/SKILL\.md/);
+  assert.throws(() => pointerText('no section'));
+  const script = hookScript();
+  assert.match(script, /hookEventName: 'SessionStart'/); assert.match(script, /additionalContext/);
+  t.diagnostic(`pointer chars=${p.length}`);
+});
+
+test('#1817: redacted public traces (<trial>/work) are scored like the unredacted ones', () => {
+  assert.equal(projectRelative('<trial>/work/.agent-skill-chain/skills/asc/SKILL.md', '<trial>/work'), '.agent-skill-chain/skills/asc/SKILL.md');
+  assert.equal(projectRelative('<scratch>/run/runs/P-asc-1-1/work/.claude/skills/asc/SKILL.md', '<scratch>/run/runs/P-asc-1-1/work'), '.claude/skills/asc/SKILL.md');
+  assert.equal(projectRelative('<trial>/work/../x/SKILL.md', '<trial>/work'), null);
+  assert.equal(projectRelative('<trial>/work', '<trial>/work'), null);
+  assert.equal(projectRelative('.agent-skill-chain/skills/asc/SKILL.md', '<trial>/work'), '.agent-skill-chain/skills/asc/SKILL.md'); // relative to cwd
+  const r = scoreRun(spec, kase('asc-1'), parseTrace(trace([read('<trial>/work/.agent-skill-chain/skills/asc/SKILL.md'), read('<trial>/work/.agent-skill-chain/skills/asc/references/workspace.md')], {text: 'worktree-create worktree'}, '<trial>/work')));
+  assert.equal(r.applied, true);
+});
+
+test('#1817 relaxed markers: spelling variants pass, the procedure is still required', () => {
+  const ri = kase('ri-1');
+  assert.equal(markersOk(ri, '決定1 受入: 登録できる。未決: 対応端末'), true);
+  assert.equal(markersOk(ri, '受け入れの確認と未決事項'), true);
+  assert.equal(markersOk(ri, '受入条件と未決'), true);
+  assert.equal(markersOk(ri, '決定1 受入: 登録できる'), false); // 未決 still required
+  assert.equal(markersOk(ri, '未決: 対応端末'), false); // acceptance still required
+  const a2 = kase('asc-2');
+  assert.equal(markersOk(a2, 'worktreeの未コミットの変更を確かめる'), true);
+  assert.equal(markersOk(a2, 'worktreeで続ける'), false);
+  const ui = kase('ui-1');
+  assert.equal(markersOk(ui, '一覧が空になること、通信失敗、再読込み'), true);
+  assert.equal(markersOk(ui, '空のときの案内、エラー、リロード'), true);
+  assert.equal(markersOk(ui, '空白を入れる、エラー、リロード'), false); // 空白 is not the empty state
+  assert.equal(markersOk(ui, '空きポートで起動、エラー、リロード'), false);
+  const es = kase('es-1');
+  assert.equal(markersOk(es, '仮置き：3人日。調査が必要な部分は保存期間。未決：閲覧者'), true);
+  assert.equal(markersOk(es, '前提：既存のログ基盤。確認が必要：保存期間。未決：閲覧者'), false); // 調査 is not relaxed
+  assert.equal(markersOk(es, '調査：保存期間。未決：閲覧者'), false); // an assumption is still required
+});
+
+test('#1817 judge: applied above B, bodyRead not lower than B - 1, overapplication at most B + 1; targeted cases reported', () => {
+  const S2 = (o) => ({condition: 'X', runs: 56, failures: 0, positives: 44, negatives: 12, bodyRead: 40, applied: 30, overapplication: 0, perCase: {'asc-3': 'BBBB', 'es-1': 'BBAB'}, ...o});
+  const b = S2({condition: 'B'});
+  const pass = judgeDone(b, S2({condition: 'S', applied: 31, bodyRead: 39, overapplication: 1, perCase: {'asc-3': 'AABA', 'es-1': 'AAAA'}}));
+  assert.equal(pass.verdict, 'adoption-candidate', JSON.stringify(pass.checks));
+  assert.deepEqual(pass.targeted['asc-3'], {B: 'BBBB', S: 'AABA', applied: {B: 0, S: 3}});
+  assert.equal(pass.targeted['es-1'].applied.B, 1);
+  assert.equal(judgeDone(b, S2({condition: 'S', applied: 30})).verdict, 'not-a-candidate'); // equal is not above
+  assert.equal(judgeDone(b, S2({condition: 'S', applied: 31, bodyRead: 38})).verdict, 'not-a-candidate'); // B - 2
+  assert.equal(judgeDone(b, S2({condition: 'S', applied: 31, overapplication: 2})).verdict, 'not-a-candidate'); // B + 2
+  assert.equal(judgeDone(b, S2({condition: 'S', applied: 40, failures: 6})).verdict, 'not-judged'); // 6/56 > 10%
+  // rates when the valid positives differ (one failure not replaced): 30/43 > 30/44
+  assert.equal(judgeDone(b, S2({condition: 'S', positives: 43, applied: 30, bodyRead: 39})).verdict, 'adoption-candidate');
+});
+
+test('#1817 M1: the fixed order is reps outermost, negatives interleaved, B then S; counterexamples fail', () => {
+  const order = loadOrder();
+  assert.deepEqual(orderProblems(order, spec, loadConditions()), []);
+  const p = plannedTrials();
+  assert.equal(p.length, 112);
+  assert.deepEqual(p.slice(0, 6).map((t) => t.name), ['B-asc-1-1', 'S-asc-1-1', 'B-rr-1-1', 'S-rr-1-1', 'B-neg-1-1', 'S-neg-1-1']);
+  assert.equal(p[27].name, 'S-do-1-1'); assert.equal(p[28].name, 'B-asc-1-2'); assert.equal(p.at(-1).name, 'S-do-1-4');
+  const withCases = (caseOrder) => orderProblems({...order, caseOrder}, spec, loadConditions());
+  const pos = order.caseOrder.filter((id) => !id.startsWith('neg-')), neg = order.caseOrder.filter((id) => id.startsWith('neg-'));
+  assert.match(withCases([...pos, ...neg]).join(), /ends with a negative case/);
+  assert.match(withCases([neg[0], neg[1], ...pos, neg[2]]).join(), /adjacent/);
+  assert.match(withCases(order.caseOrder.slice(1)).join(), /not a permutation/);
+  assert.match(orderProblems({...order, conditionOrder: ['S', 'B']}, spec, loadConditions()).join(), /conditionOrder/);
+});
+
+test('#1817 M1: run-trial accepts only the next planned trial, replacements only after all planned; probes only before (Medium-1)', () => {
+  const names = plannedTrials().map((t) => t.name);
+  const r = (condition, caseId, rep, reserved) => orderRefusal({condition, caseId, rep: String(rep), reserved: new Set(reserved)});
+  assert.equal(r('B', 'asc-1', 1, []), null);
+  assert.match(r('S', 'asc-1', 1, []), /next planned trial is B-asc-1-1/);
+  assert.match(r('B', 'rr-1', 1, ['B-asc-1-1']), /next planned trial is S-asc-1-1/);
+  assert.equal(r('S', 'asc-1', 1, ['B-asc-1-1']), null);
+  assert.match(r('B', 'asc-1', 2, ['B-asc-1-1']), /out of order/); // rep 2 before rep 1 of the other cases
+  assert.equal(r('B', 'probe', 1, []), null);
+  assert.equal(r('S', 'probe', 1, ['B-probe-1']), null);
+  assert.equal(r('B', 'probe', 2, ['B-probe-1', 'S-probe-1']), null); // the one re-run (rule 5)
+  assert.match(r('S', 'probe', 2, ['B-probe-1']), /S-probe-2 needs S-probe-1 first/);
+  assert.match(r('B', 'probe', 3, ['B-probe-1', 'B-probe-2']), /rep must be 1, or 2/);
+  assert.match(r('B', 'probe', 1, ['B-probe-1', 'S-probe-1', 'B-asc-1-1']), /measurement has started \(B-asc-1-1 is reserved\)/);
+  assert.match(r('S', 'probe', 2, ['S-probe-1', ...names.slice(0, 60)]), /measurement has started/); // after 60 planned trials
+  assert.match(r('B', 'asc-1', 5, names.slice(0, -1)), /before every planned trial is reserved/);
+  assert.match(r('B', 'asc-1', 5, names), /needs the runs root/); // L-1: a replacement needs the replacement plan
+  assert.match(r('B', 'asc-1', 4, names), /all planned trials are reserved/); // a planned name cannot be rerun
+});
+
+test('#1817 L1: replacements are one per failed planned trial (rep 5, 6, ...), and a failed replacement is not replaced', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-repl-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const mk = (name, text, ok = true) => {
+    fs.mkdirSync(path.join(root, name), {recursive: true});
+    if (text !== null) fs.writeFileSync(path.join(root, name, 'trace.jsonl'), ok ? trace([], {text}) : trace([], {subtype: 'error_during_execution', is_error: true, text: 'API Error: 529'}));
+    if (text !== null) fs.writeFileSync(path.join(root, name, 'meta.json'), '{}');
+  };
+  mk('B-asc-1-1', null); mk('B-asc-1-2', 'x'); mk('B-asc-1-3', 'x', false); mk('B-asc-1-4', 'x'); mk('S-asc-1-1', 'x');
+  const reservedNow = () => new Set(fs.readdirSync(root)); // every directory made here stands for a reserved trial
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow(), settled: settledFrom(root)}).map((x) => x.name), ['B-asc-1-5', 'B-asc-1-6']);
+  mk('B-asc-1-5', 'x', false); // the replacement failed: it is not replaced again
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow(), settled: settledFrom(root)}).map((x) => x.name), ['B-asc-1-6']);
+  mk('B-asc-1-6', 'x');
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow(), settled: settledFrom(root)}), []);
+  // scoring matches: 1 -> 5 (a failure), 3 -> 6; a rep 7 is not counted
+  const row = (run, failure) => ({condition: 'B', case: 'asc-1', run, ...(failure ? {failure: 'x'} : {})});
+  const rows = selectCounted([row(1, true), row(2), row(3, true), row(4), row(5, true), row(6), row(7)], 4);
+  assert.deepEqual(rows.map((x) => [x.run, x.counted]), [[1, false], [2, true], [3, false], [4, true], [5, true], [6, true], [7, false]]);
+  assert.deepEqual([rows[0].replacedBy, rows[2].replacedBy, rows[4].replaces], [5, 6, 1]);
+  // a rep 6 without a second failure does not count; a missing replacement is flagged
+  const gap = selectCounted([row(1, true), row(2), row(3), row(4), row(6)], 4);
+  assert.deepEqual(gap.map((x) => x.counted), [true, true, true, true, false]);
+  assert.equal(gap[0].replacementMissing, true);
+  assert.equal(summarize(spec, gap, 'B').replacementsMissing, 1);
+});
+
+test('#1817 run-all: planned trials skip the reserved ones; replacements wait for every planned trial', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-runall-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const lf = path.join(d, 'l.jsonl'); ledgerOps.create(lf);
+  ledgerOps.reserve(lf, 'B-probe-1', 0.6); ledgerOps.reserve(lf, 'B-asc-1-1', 0.6);
+  const todo = trialsToStart('planned', {runsRoot: path.join(d, 'runs'), ledger: lf, spec});
+  assert.equal(todo.length, 111); assert.equal(todo[0].name, 'S-asc-1-1');
+  assert.throws(() => trialsToStart('replacements', {runsRoot: path.join(d, 'runs'), ledger: lf, spec}), /after every planned trial/);
+});
+
+test('#1817 M1: judge1817 is not-judged without valid negative trials, with an unmeasured case, or a missing replacement', () => {
+  const S3 = (o) => ({condition: 'X', runs: 56, failures: 0, positives: 44, negatives: 12, bodyRead: 40, applied: 30, overapplication: 0, casesWithoutValidTrial: [], replacementsMissing: 0, perCase: {}, ...o});
+  const b = S3({condition: 'B'});
+  assert.equal(judgeDone(b, S3({condition: 'S', applied: 31})).verdict, 'adoption-candidate');
+  const noNeg = judgeDone(b, S3({condition: 'S', applied: 31, negatives: 0}));
+  assert.equal(noNeg.verdict, 'not-judged'); assert.match(noNeg.reason, /S: no valid negative trial/);
+  assert.match(judgeDone(S3({condition: 'B', negatives: 0}), S3({condition: 'S', applied: 31})).reason, /B: no valid negative trial/);
+  assert.match(judgeDone(b, S3({condition: 'S', applied: 31, casesWithoutValidTrial: ['do-1']})).reason, /no valid trial for do-1/);
+  assert.match(judgeDone(b, S3({condition: 'S', applied: 31, replacementsMissing: 1})).reason, /without the mandatory replacement/);
+  // summarize reports the cases without a valid trial (a cap stop before a case, or only failures)
+  const rows = selectCounted([{condition: 'S', case: 'asc-1', run: 1, kind: 'asc', expect: 'asc', bodyRead: true, applied: true}, {condition: 'S', case: 'neg-1', run: 1, kind: 'negative', expect: null, failure: 'x'}], 4);
+  const s = summarize(spec, rows, 'S');
+  assert.ok(s.casesWithoutValidTrial.includes('neg-1') && s.casesWithoutValidTrial.includes('do-1') && !s.casesWithoutValidTrial.includes('asc-1'));
+  assert.equal(judgeDone(b, s).verdict, 'not-judged');
+});
+
+test('#1817 L-1: after all planned trials, only the next trial of the replacement plan may start', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-l1-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const names = plannedTrials().map((x) => x.name);
+  for (const n of names) {
+    fs.mkdirSync(path.join(root, n), {recursive: true});
+    const failed = n === 'B-rr-1-2' || n === 'S-es-1-3';
+    fs.writeFileSync(path.join(root, n, 'trace.jsonl'), failed ? trace([], {subtype: 'error_during_execution', is_error: true, text: 'API Error: 529'}) : trace([], {text: 'x'}));
+    fs.writeFileSync(path.join(root, n, 'meta.json'), '{}');
+  }
+  const reserved = new Set(names);
+  const r = (c, k, rep, res = reserved) => orderRefusal({condition: c, caseId: k, rep: String(rep), reserved: res, settled: settledFrom(root), runsRoot: root, spec});
+  assert.equal(r('B', 'rr-1', 5), null); // first required replacement in order (rr-1 comes before es-1)
+  assert.match(r('S', 'es-1', 5), /not the next required replacement \(next: B-rr-1-5\)/);
+  assert.match(r('B', 'asc-1', 5), /not the next required replacement/); // no failure there
+  assert.match(r('B', 'rr-1', 6), /not the next required replacement/); // only one failure: rep 6 is never allowed
+  const after = new Set([...names, 'B-rr-1-5']);
+  fs.mkdirSync(path.join(root, 'B-rr-1-5'));
+  assert.equal(r('S', 'es-1', 5, after), null);
+  assert.match(r('B', 'rr-1', 6, after), /next: S-es-1-5/);
+  fs.mkdirSync(path.join(root, 'S-es-1-5'));
+  assert.match(r('S', 'es-1', 6, new Set([...after, 'S-es-1-5'])), /next: none/); // a failed replacement is not replaced
+});
+
+test('#1817 M-1: an early stop is not judged; a complete run or a stop at the cap is, and the basis is recorded', () => {
+  const budget = {capUsd: 15, safetyMarginUsd: 1, perTrialUsd: 0.6};
+  const names = plannedTrials().map((x) => x.name);
+  const row = (n, failure) => { const m = /^([A-Z])-(.+)-(\d+)$/.exec(n); return {condition: m[1], case: m[2], run: Number(m[3]), ...(failure ? {failure: 'x'} : {})}; };
+  // synthetic early stop: 60 of 112 planned reserved, 6 USD spent (well below the 14 USD stop line)
+  const early = completionStatus({runs: names.slice(0, 60).map((n) => row(n)), reserved: new Set(names.slice(0, 60)), spentUsd: 6, budget});
+  assert.equal(early.basis, null); assert.equal(early.missingPlanned, 52); assert.equal(early.firstMissingPlanned, names[60]);
+  const S4 = (o) => ({condition: 'X', runs: 30, failures: 0, positives: 24, negatives: 6, bodyRead: 22, applied: 15, overapplication: 0, casesWithoutValidTrial: [], replacementsMissing: 0, perCase: {}, ...o});
+  const j = judge1817(S4({condition: 'B'}), S4({condition: 'S', applied: 20}), {completion: early});
+  assert.equal(j.verdict, 'not-judged'); assert.match(j.reason, /neither complete nor stopped at the cap/);
+  assert.equal(judge1817(S4({condition: 'B'}), S4({condition: 'S', applied: 20})).verdict, 'not-judged'); // no completion record
+  // the same stop when the cap was reached (13.5 + 0.6 > 14): judged, basis cap-reached
+  const resv = (list) => list.map((trial, seq) => ({trial, seq}));
+  const cap = completionStatus({runs: names.slice(0, 60).map((n) => row(n)), reserved: new Set(names.slice(0, 60)), reservations: resv(['B-probe-1', 'S-probe-1', ...names.slice(0, 60)]), spentUsd: 13.5, budget});
+  assert.equal(cap.basis, 'cap-reached');
+  const jc = judge1817(S4({condition: 'B'}), S4({condition: 'S', applied: 20}), {completion: cap});
+  assert.equal(jc.verdict, 'adoption-candidate'); assert.equal(jc.basis, 'cap-reached');
+  // Medium-1: probes reserved after the first planned trial (run to inflate the ledger) never give cap-reached
+  const late = completionStatus({runs: names.slice(0, 60).map((n) => row(n)), reserved: new Set(names.slice(0, 60)), reservations: resv(['B-probe-1', 'S-probe-1', ...names.slice(0, 60), 'B-probe-2', 'S-probe-2']), spentUsd: 13.5, budget});
+  assert.equal(late.capReached, false); assert.equal(late.basis, null); assert.deepEqual(late.lateProbes, ['B-probe-2', 'S-probe-2']);
+  assert.equal(judge1817(S4({condition: 'B'}), S4({condition: 'S', applied: 20}), {completion: late}).verdict, 'not-judged');
+  // without the ledger's reservations cap-reached is not granted either
+  assert.equal(completionStatus({runs: [], reserved: new Set(names.slice(0, 60)), spentUsd: 13.5, budget}).capReached, false);
+  // complete: all planned reserved, and the replacement of the one failed planned trial
+  const rows = names.map((n) => row(n, n === 'S-tw-1-2'));
+  const missingRepl = completionStatus({runs: rows, reserved: new Set(names), spentUsd: 9, budget});
+  assert.equal(missingRepl.basis, null); assert.deepEqual(missingRepl.missingReplacements, ['S-tw-1-5']);
+  const done = completionStatus({runs: rows, reserved: new Set([...names, 'S-tw-1-5']), spentUsd: 9.1, budget});
+  assert.equal(done.basis, 'complete');
+  assert.equal(judge1817(S4({condition: 'B'}), S4({condition: 'S', applied: 20}), {completion: done}).basis, 'complete');
+});
+
+test('#1817 L-6: scoring is refused when the fixation check fails or a trial ran under another fixation record or ledger', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-l6-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const ev = path.resolve(here, '..');
+  const {FIXED} = {FIXED: Object.keys(digests())};
+  for (const f of FIXED) { fs.mkdirSync(path.dirname(path.join(root, f)), {recursive: true}); fs.copyFileSync(path.join(ev, f), path.join(root, f)); }
+  const fx = {records: [{fixedAtCommit: 'c', ledgerId: 'L1', files: digests(root), invariants: invariantDigests(root)}]};
+  const rows = [{trial: 'B-asc-1-1', fixationSha256: 'F1', ledgerId: 'L1', ledgerSeq: 2}, {trial: 'S-asc-1-1', fixationSha256: 'F1', ledgerId: 'L1', ledgerSeq: 3}, {trial: 'B-rr-1-1', missing: true}];
+  const reservations = [{trial: 'B-probe-1', seq: 0}, {trial: 'S-probe-1', seq: 1}, {trial: 'B-asc-1-1', seq: 2}, {trial: 'S-asc-1-1', seq: 3}, {trial: 'B-rr-1-1', seq: 4}];
+  const traceNames = ['B-asc-1-1', 'S-asc-1-1', 'B-rr-1-1'];
+  const base = {rows, fx, fxSha: 'F1', ledgerIdNow: 'L1', root, fileProblems: [], reservations, traceNames, settled: new Map()};
+  assert.deepEqual(scoringProblems(base), []);
+  assert.match(scoringProblems({...base, rows: [{...rows[0], fixationSha256: 'F0'}, rows[1]]}).join(), /another fixation record: B-asc-1-1/);
+  assert.match(scoringProblems({...base, ledgerIdNow: 'L2'}).join(), /not the one recorded/);
+  assert.match(scoringProblems({...base, rows: [{...rows[0], ledgerId: 'L9'}, rows[1]]}).join(), /another ledger/);
+  assert.match(scoringProblems({...base, fileProblems: ['results/fixation.json is not committed or has local changes']}).join(), /not committed/);
+  fs.appendFileSync(path.join(root, 'cases.json'), ' ');
+  assert.match(scoringProblems(base).join(), /fixed files differ from results\/fixation.json: cases.json/);
+});
+
+test('#1817 Low-1: ledger reservations, trials.json and traces must be the same set of trials; seqs without gaps', (t) => {
+  const reservations = [{trial: 'B-probe-1', seq: 0}, {trial: 'S-probe-1', seq: 1}, {trial: 'B-asc-1-1', seq: 2}, {trial: 'S-asc-1-1', seq: 3}];
+  const rows = [{trial: 'B-asc-1-1', ledgerSeq: 2}, {trial: 'S-asc-1-1', ledgerSeq: 3}];
+  assert.deepEqual(nameSetProblems({rows, reservations, traceNames: ['B-asc-1-1', 'S-asc-1-1']}), []);
+  // a reserved trial deleted from the runs root before collect: absent from trials.json and the traces
+  const deleted = nameSetProblems({rows: rows.slice(0, 1), reservations, traceNames: ['B-asc-1-1']});
+  assert.match(deleted.join(), /not in trials.json: S-asc-1-1/); assert.match(deleted.join(), /not in traces: S-asc-1-1/);
+  // a trace that was never reserved, a seq gap, a wrong ledgerSeq
+  assert.match(nameSetProblems({rows, reservations, traceNames: ['B-asc-1-1', 'S-asc-1-1', 'B-rr-1-1']}).join(), /not in ledger: B-rr-1-1/);
+  assert.match(nameSetProblems({rows, reservations: reservations.filter((e) => e.seq !== 1), traceNames: ['B-asc-1-1', 'S-asc-1-1']}).join(), /not 0\.\.n-1/);
+  assert.match(nameSetProblems({rows: [rows[0], {...rows[1], ledgerSeq: 7}], reservations, traceNames: ['B-asc-1-1', 'S-asc-1-1']}).join(), /ledgerSeq differs.*S-asc-1-1/);
+  // trace names: .jsonl and .jsonl.missing count, hook logs and trials.json do not
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-names-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  for (const f of ['B-asc-1-1.jsonl', 'S-asc-1-1.jsonl.missing', 'B-asc-1-1.hook.jsonl', 'trials.json']) fs.writeFileSync(path.join(d, f), '');
+  assert.deepEqual(traceNamesOf(d).sort(), ['B-asc-1-1', 'S-asc-1-1']);
+  // scoringProblems refuses without the ledger reservations and trace names
+  assert.match(scoringProblems({rows, fx: {records: [{ledgerId: 'L1', files: {}}]}, fxSha: 'x', ledgerIdNow: 'L1', fileProblems: []}).join(), /reservations and the trace names are required/);
+});
+
+test('#1817 Medium-A: a settled trial whose trace or meta was deleted or edited is refused by collect and judge and never replaced', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-tamper-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const runsRoot = path.join(d, 'runs'), lf = path.join(d, 'ledger.jsonl');
+  ledgerOps.create(lf);
+  const names = plannedTrials().map((x) => x.name);
+  // all 112 planned trials ran and were settled with the sha256 of their files (as run-trial does)
+  for (const n of names) {
+    const dir = path.join(runsRoot, n);
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 'trace.jsonl'), trace([], {text: `answer ${n}`}));
+    fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({costUsd: 0.08, ledgerId: ledgerOps.ledgerId(lf), ledgerSeq: ledgerOps.reservations(lf).length}));
+    const {id} = ledgerOps.reserve(lf, n, 0.6);
+    ledgerOps.settle(lf, id, n, 0.08, {exit: 0, traceSha256: ledgerOps.fileSha256(path.join(dir, 'trace.jsonl')), metaSha256: ledgerOps.fileSha256(path.join(dir, 'meta.json'))});
+  }
+  const reserved = ledgerOps.reservedNames(lf), settled = ledgerOps.settlements(lf);
+  assert.equal(settled.get('B-asc-1-1').exit, 0);
+  assert.deepEqual(replacementPlan({runsRoot, spec, reserved, settled}), []); // untouched: nothing to replace
+  const out = path.join(d, 'out');
+  collect(runsRoot, out, {ledger: lf});
+  const rows = JSON.parse(fs.readFileSync(path.join(out, 'trials.json'), 'utf8'));
+  assert.deepEqual(settlementProblems({rows, settled}), []);
+  const victim = path.join(runsRoot, 'S-es-1-2');
+  const cases = {
+    'trace deleted': () => fs.rmSync(path.join(victim, 'trace.jsonl')),
+    'trace edited': () => fs.appendFileSync(path.join(victim, 'trace.jsonl'), '{"type":"system"}\n'),
+    'meta deleted': () => fs.rmSync(path.join(victim, 'meta.json')),
+  };
+  const keep = {trace: fs.readFileSync(path.join(victim, 'trace.jsonl')), meta: fs.readFileSync(path.join(victim, 'meta.json'))};
+  for (const [label, tamper] of Object.entries(cases)) {
+    tamper();
+    // no replacement can be planned or started for it
+    assert.throws(() => replacementPlan({runsRoot, spec, reserved, settled}), /settled trial S-es-1-2/, label);
+    assert.match(orderRefusal({condition: 'S', caseId: 'es-1', rep: '5', reserved, settled, runsRoot, spec}), /refused: settled trial S-es-1-2/, label);
+    assert.throws(() => trialsToStart('replacements', {runsRoot, ledger: lf, spec}), /settled trial S-es-1-2/, label);
+    // collect refuses before writing; a collect without the ledger records the raw digests, and judge refuses them
+    assert.throws(() => collect(runsRoot, path.join(d, `out-${label}`), {ledger: lf}), /settled trial S-es-1-2/, label);
+    assert.equal(fs.existsSync(path.join(d, `out-${label}`, 'trials.json')), false, label);
+    collect(runsRoot, path.join(d, `raw-${label}`));
+    const rawRows = JSON.parse(fs.readFileSync(path.join(d, `raw-${label}`, 'trials.json'), 'utf8'));
+    assert.match(settlementProblems({rows: rawRows, settled}).join(), /settled trial S-es-1-2/, label);
+    fs.writeFileSync(path.join(victim, 'trace.jsonl'), keep.trace); fs.writeFileSync(path.join(victim, 'meta.json'), keep.meta);
+  }
+  assert.deepEqual(replacementPlan({runsRoot, spec, reserved, settled}), []);
+});
+
+test('#1817 Low-B: at the replacement stage a directory without a reservation does not count as started', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-lowb-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const names = plannedTrials().map((x) => x.name);
+  for (const n of names) {
+    fs.mkdirSync(path.join(root, n), {recursive: true});
+    fs.writeFileSync(path.join(root, n, 'trace.jsonl'), n === 'B-rr-1-2' ? trace([], {subtype: 'error_during_execution', is_error: true, text: 'API Error: 529'}) : trace([], {text: 'x'}));
+    fs.writeFileSync(path.join(root, n, 'meta.json'), '{}');
+  }
+  fs.mkdirSync(path.join(root, 'B-rr-1-5')); // the replacement stopped after its directory was made, before its reservation
+  const reserved = new Set(names);
+  const settled = settledFrom(root);
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved, settled}).map((x) => x.name), ['B-rr-1-5']); // still required
+  assert.equal(orderRefusal({condition: 'B', caseId: 'rr-1', rep: '5', reserved, settled, runsRoot: root, spec}), null); // run-trial then refuses it with "exists"
+});
+
+// A runs root and ledger as run-trial leaves them: the given trials reserved, and settled unless listed in unsettled.
+function settledRun(d, names, {unsettled = []} = {}) {
+  const runsRoot = path.join(d, 'runs'), lf = path.join(d, 'ledger.jsonl');
+  ledgerOps.create(lf);
+  for (const n of names) {
+    const dir = path.join(runsRoot, n);
+    fs.mkdirSync(dir, {recursive: true});
+    const seq = ledgerOps.reservations(lf).length;
+    fs.writeFileSync(path.join(dir, 'trace.jsonl'), trace([read(body('asc'))], {text: `answer ${n}`}, `${dir}/work`));
+    fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({costUsd: 0.08, ledgerId: ledgerOps.ledgerId(lf), ledgerSeq: seq}));
+    const {id} = ledgerOps.reserve(lf, n, 0.6);
+    if (!unsettled.includes(n)) ledgerOps.settle(lf, id, n, 0.08, {exit: 0, traceSha256: ledgerOps.fileSha256(path.join(dir, 'trace.jsonl')), metaSha256: ledgerOps.fileSha256(path.join(dir, 'meta.json'))});
+  }
+  return {runsRoot, lf};
+}
+
+test('#1817 fifth review Medium-1: the published traces and trials.json must equal a rebuild from the raw runs root', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-rebuild-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const {runsRoot, lf} = settledRun(d, plannedTrials().slice(0, 6).map((x) => x.name));
+  const dir = path.join(d, 'results/traces'), pub = path.join(d, 'results/ledger.jsonl');
+  collect(runsRoot, dir, {ledger: lf, publishLedger: pub});
+  const check = () => publishedProblems({runsRoot, dir, ledger: lf, publishedLedger: pub});
+  assert.deepEqual(check(), []);
+  assert.equal(fs.readFileSync(path.join(dir, 'B-asc-1-1.jsonl'), 'utf8').includes('<trial>/work'), true); // redacted
+  const tracePath = path.join(dir, 'S-asc-1-1.jsonl'), original = fs.readFileSync(tracePath);
+  fs.writeFileSync(tracePath, original.toString().replace('answer S-asc-1-1', 'worktree-create worktree')); // edit a collected trace
+  assert.match(check().join(), /published file differs from the rebuild: S-asc-1-1.jsonl/);
+  fs.writeFileSync(tracePath, original);
+  const trialsPath = path.join(dir, 'trials.json'), rows = JSON.parse(fs.readFileSync(trialsPath, 'utf8'));
+  fs.writeFileSync(trialsPath, JSON.stringify(rows.map((r) => (r.trial === 'B-rr-1-1' ? {...r, exit: 1} : r)), null, 1)); // edit a trials.json field
+  assert.match(check().join(), /published file differs from the rebuild: trials.json/);
+  fs.writeFileSync(trialsPath, JSON.stringify(rows, null, 1));
+  fs.writeFileSync(path.join(dir, 'B-neg-1-1.jsonl.missing'), 'no trace\n'); // a file collect did not produce
+  assert.match(check().join(), /not produced by collect: B-neg-1-1.jsonl.missing/);
+  fs.rmSync(path.join(dir, 'B-neg-1-1.jsonl.missing'));
+  assert.deepEqual(check(), []);
+});
+
+test('#1817 fifth review Low-1: a reserved trial without a settlement is a failure whatever files exist', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-unsettled-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const names = plannedTrials().map((x) => x.name);
+  const {runsRoot, lf} = settledRun(d, names, {unsettled: ['S-tw-1-1']}); // complete-looking files, but no settlement
+  const settled = ledgerOps.settlements(lf);
+  assert.equal(trialFailure(path.join(runsRoot, 'S-tw-1-1'), spec, 'tw-1', settled.get('S-tw-1-1') ?? null), 'not settled');
+  assert.deepEqual(replacementPlan({runsRoot, spec, reserved: ledgerOps.reservedNames(lf), settled}).map((x) => x.name), ['S-tw-1-5']);
+  const out = path.join(d, 'traces');
+  collect(runsRoot, out, {ledger: lf});
+  assert.equal(fs.readFileSync(path.join(out, 'S-tw-1-1.jsonl.missing'), 'utf8'), 'not settled\n');
+  assert.equal(fs.existsSync(path.join(out, 'S-tw-1-1.jsonl')), false);
+  const row = scoreDir(spec, out, ['S'], {S: false}, 4).find((r) => r.case === 'tw-1' && r.run === 1);
+  assert.equal(row.failure, 'missing trace');
+});
+
+test('#1817 fifth review Low-2: a hand-edited ledger and a published ledger that differs are refused', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-handedit-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const names = plannedTrials().slice(0, 4).map((x) => x.name);
+  const {runsRoot, lf} = settledRun(d, names);
+  assert.deepEqual(ledgerOps.ledgerProblems(lf), []);
+  const original = fs.readFileSync(lf, 'utf8');
+  const lines = original.trim().split('\n').map((l) => JSON.parse(l));
+  const settle = lines.find((e) => e.trial === 'S-asc-1-1' && 'costUsd' in e);
+  // a second settlement for the same reservation (e.g. to lower the cost)
+  fs.appendFileSync(lf, JSON.stringify({...settle, costUsd: 0.01}) + '\n');
+  assert.match(ledgerOps.ledgerProblems(lf).join(), /S-asc-1-1 is settled twice/);
+  assert.throws(() => collect(runsRoot, path.join(d, 'o1'), {ledger: lf}), /ledger refused: .*settled twice/);
+  assert.throws(() => trialsToStart('planned', {runsRoot, ledger: lf, spec}), /edited by hand/);
+  fs.writeFileSync(lf, original);
+  // a settlement without its reservation, and one under another trial name
+  fs.appendFileSync(lf, JSON.stringify({id: 'x', trial: 'B-rr-1-1', costUsd: 0.1}) + '\n');
+  assert.match(ledgerOps.ledgerProblems(lf).join(), /B-rr-1-1 has no reservation/);
+  fs.writeFileSync(lf, original.replace(`"id":"${settle.id}","trial":"S-asc-1-1","costUsd"`, `"id":"${settle.id}","trial":"B-asc-1-1","costUsd"`));
+  assert.match(ledgerOps.ledgerProblems(lf).join(), /names another trial than its reservation/);
+  // the settled cost rewritten in place (no second line): differs from the sha-bound meta.json
+  fs.writeFileSync(lf, original.replace(`"trial":"S-asc-1-1","costUsd":0.08`, '"trial":"S-asc-1-1","costUsd":0.01'));
+  assert.deepEqual(ledgerOps.ledgerProblems(lf), []);
+  assert.match(ledgerOps.settledFilesProblem(path.join(runsRoot, 'S-asc-1-1'), ledgerOps.settlements(lf).get('S-asc-1-1')), /settled costUsd 0.01 differs from meta.json costUsd 0.08/);
+  assert.throws(() => collect(runsRoot, path.join(d, 'o2'), {ledger: lf}), /costUsd/);
+  fs.writeFileSync(lf, original);
+  // the published ledger must equal the ledger read
+  const dir = path.join(d, 'results/traces'), pub = path.join(d, 'results/ledger.jsonl');
+  collect(runsRoot, dir, {ledger: lf, publishLedger: pub});
+  assert.deepEqual(publishedProblems({runsRoot, dir, ledger: lf, publishedLedger: pub}), []);
+  fs.appendFileSync(pub, '\n');
+  assert.match(publishedProblems({runsRoot, dir, ledger: lf, publishedLedger: pub}).join(), /published ledger differs/);
+  fs.rmSync(pub);
+  assert.match(publishedProblems({runsRoot, dir, ledger: lf, publishedLedger: pub}).join(), /published ledger is missing/);
+  // a trial directory without a reservation is refused by the rebuild
+  fs.mkdirSync(path.join(runsRoot, 'B-neg-1-1'));
+  assert.match(publishedProblems({runsRoot, dir, ledger: lf, publishedLedger: pub}).join(), /without a reservation .*: B-neg-1-1/);
+});

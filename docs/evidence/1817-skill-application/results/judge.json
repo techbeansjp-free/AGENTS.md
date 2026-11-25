@@ -1,0 +1,137 @@
+{
+ "summaries": {
+  "B": {
+   "condition": "B",
+   "runs": 56,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 0,
+   "positives": 44,
+   "entryHop": 20,
+   "reach": 43,
+   "bodyRead": 43,
+   "referenceRead": 42,
+   "applied": 40,
+   "misselect": 1,
+   "unselected": 0,
+   "negatives": 12,
+   "overapplication": 0,
+   "negMarkers": 12,
+   "hookFired": 0,
+   "hookMissing": 0,
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [],
+   "perCase": {
+    "asc-1": "AAAA",
+    "asc-2": "AAAA",
+    "asc-3": "BAAM",
+    "rr-1": "AAAA",
+    "tw-1": "AAAA",
+    "ri-1": "AAAA",
+    "se-1": "AAAA",
+    "ma-1": "AAAA",
+    "ui-1": "AAAA",
+    "es-1": "BAAB",
+    "do-1": "AAAA",
+    "neg-1": "----",
+    "neg-2": "----",
+    "neg-3": "----"
+   },
+   "costUsd": 4.7922,
+   "turns": 491,
+   "durationSec": 1262
+  },
+  "S": {
+   "condition": "S",
+   "runs": 56,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 0,
+   "positives": 44,
+   "entryHop": 24,
+   "reach": 44,
+   "bodyRead": 44,
+   "referenceRead": 43,
+   "applied": 42,
+   "misselect": 0,
+   "unselected": 0,
+   "negatives": 12,
+   "overapplication": 0,
+   "negMarkers": 12,
+   "hookFired": 0,
+   "hookMissing": 0,
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [],
+   "perCase": {
+    "asc-1": "AAAA",
+    "asc-2": "AAAA",
+    "asc-3": "AAAA",
+    "rr-1": "ABAA",
+    "tw-1": "AAAA",
+    "ri-1": "AAAA",
+    "se-1": "AAAA",
+    "ma-1": "ABAA",
+    "ui-1": "AAAA",
+    "es-1": "AAAA",
+    "do-1": "AAAA",
+    "neg-1": "----",
+    "neg-2": "----",
+    "neg-3": "----"
+   },
+   "costUsd": 4.6811,
+   "turns": 489,
+   "durationSec": 1268
+  }
+ },
+ "judge": [
+  "B",
+  "S"
+ ],
+ "verdict": "adoption-candidate",
+ "basis": "complete",
+ "completion": {
+  "basis": "complete",
+  "complete": true,
+  "capReached": false,
+  "lateProbes": [],
+  "missingPlanned": 0,
+  "firstMissingPlanned": null,
+  "missingReplacements": [],
+  "spentUsd": 9.6232,
+  "stopLineUsd": 14,
+  "perTrialUsd": 0.6
+ },
+ "checks": {
+  "appliedAboveBaseline": {
+   "value": "42/44 vs 40/44",
+   "pass": true
+  },
+  "bodyReadNotLower": {
+   "value": "44/44 vs 43/44 - 1",
+   "pass": true
+  },
+  "overapplication": {
+   "value": "0/12 vs 0/12",
+   "pass": true
+  }
+ },
+ "targeted": {
+  "asc-3": {
+   "B": "BAAM",
+   "S": "AAAA",
+   "applied": {
+    "B": 2,
+    "S": 4
+   }
+  },
+  "es-1": {
+   "B": "BAAB",
+   "S": "AAAA",
+   "applied": {
+    "B": 2,
+    "S": 4
+   }
+  }
+ },
+ "note": "With 4 runs per case small differences are not significant; adoption is the owner's decision."
+}
