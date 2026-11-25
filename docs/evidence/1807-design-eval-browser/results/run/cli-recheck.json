@@ -1,0 +1,81 @@
+{
+ "schema": "asc-1807-cli-recheck/v1",
+ "host": "2.1.323",
+ "model": "claude-haiku-5-5",
+ "tools": [
+  "Edit",
+  "Glob",
+  "Grep",
+  "Read",
+  "Skill",
+  "Write",
+  "mcp__browser__fetch_page",
+  "mcp__browser__screenshot",
+  "mcp__browser__view_page"
+ ],
+ "mcpServers": [
+  {
+   "name": "browser",
+   "status": "connected",
+   "source": "dynamic"
+  }
+ ],
+ "costUsd": 0.00530318,
+ "permissionDenials": 5,
+ "calls": [
+  {
+   "name": "Read",
+   "input": "{\"file_path\":\"../outside/marker.txt\"}",
+   "isError": true,
+   "result": "Claude requested permissions to read from <BASE>/outside/marker.txt, but you haven't granted it yet."
+  },
+  {
+   "name": "Read",
+   "input": "{\"file_path\":\"<BASE>/outside/marker.txt\"}",
+   "isError": true,
+   "result": "Claude requested permissions to read from <BASE>/outside/marker.txt, but you haven't granted it yet."
+  },
+  {
+   "name": "Read",
+   "input": "{\"file_path\":\"/etc/hosts\"}",
+   "isError": true,
+   "result": "Claude requested permissions to read from /etc/hosts, but you haven't granted it yet."
+  },
+  {
+   "name": "Grep",
+   "input": "{\"pattern\":\"MARKER\",\"path\":\"<BASE>/outside\"}",
+   "isError": true,
+   "result": "Claude requested permissions to read from <BASE>/outside, but you haven't granted it yet."
+  },
+  {
+   "name": "Write",
+   "input": "{\"file_path\":\"<BASE>/outside/written.txt\",\"content\":\"x\"}",
+   "isError": true,
+   "result": "Claude requested permissions to write to <BASE>/outside/written.txt, but you haven't granted it yet."
+  },
+  {
+   "name": "Read",
+   "input": "{\"file_path\":\"inside.txt\"}",
+   "isError": null,
+   "result": "1\tinside-ok\n2\t"
+  },
+  {
+   "name": "mcp__browser__screenshot",
+   "input": "{\"path\":\"out/t.html\",\"width\":390}",
+   "isError": null,
+   "result": "{\"path\":\"out/t.html\",\"width\":390,\"horizontalOverflow\":false,\"scrollHeight\":844,\"capturedHeight\":844,\"blockedRequests\":0,\"blockedSample\":[]}"
+  }
+ ],
+ "checks": {
+  "markerNeverInTranscript": true,
+  "outsideFileNotWritten": true,
+  "outsideCallsAttempted": 5,
+  "outsideCallsAllRefused": true,
+  "etcHostsRefused": true,
+  "insideReadOk": true,
+  "noBashOrWebTools": true,
+  "browserToolsPresent": true,
+  "screenshotOk": true
+ },
+ "pass": true
+}

@@ -1,0 +1,4 @@
+{"t":"2026-11-25T00:36:46.866Z","listener":"model","event":"listening","port":3128,"hosts":1}
+{"t":"2026-11-25T00:36:46.877Z","listener":"browse","event":"listening","port":3129,"hosts":80}
+{"t":"2026-11-25T00:37:02.338Z","listener":"browse","method":"CONNECT","target":"www.westjr.co.jp:443","decision":"allow"}
+{"t":"2026-11-25T00:37:13.872Z","listener":"browse","method":"CONNECT","target":"www.keihan.co.jp:443","decision":"allow"}

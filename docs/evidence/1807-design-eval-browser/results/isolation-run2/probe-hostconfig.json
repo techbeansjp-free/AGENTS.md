@@ -1,0 +1,26 @@
+{
+ "ReadonlyRootfs": true,
+ "CapDrop": [
+  "ALL"
+ ],
+ "CapAdd": null,
+ "SecurityOpt": [
+  "no-new-privileges"
+ ],
+ "Privileged": false,
+ "PidsLimit": 512,
+ "Memory": 2147483648,
+ "NanoCpus": 2000000000,
+ "ShmSize": 536870912,
+ "NetworkMode": "asc1807-gen",
+ "Tmpfs": {
+  "/tmp": "rw,size=256m"
+ },
+ "bindTargets": [
+  "/work",
+  "/opt/env",
+  "/opt/iso",
+  "/config",
+  "/log"
+ ]
+}

@@ -1,0 +1,1686 @@
+{
+ "schema": "asc-1807-decision/v1",
+ "cases": {
+  "ui03-dashboard": {
+   "trials": [
+    {
+     "trial": "A-r1",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.2192537,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "lowQuality": false,
+     "grayRecall": 1
+    },
+    {
+     "trial": "A-r2",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.183036,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "lowQuality": false,
+     "grayRecall": 1
+    },
+    {
+     "trial": "A-r3",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.20192800000000002,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "lowQuality": false,
+     "grayRecall": 1
+    },
+    {
+     "trial": "D-r1",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.26113739999999996,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "lowQuality": false,
+     "grayRecall": 1
+    },
+    {
+     "trial": "D-r2",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.18188299999999996,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "finalBothWidths": false,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 1,
+       "ok": 1,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "lowQuality": false,
+     "grayRecall": 1
+    },
+    {
+     "trial": "D-r3",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1791541,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "lowQuality": false,
+     "grayRecall": 1
+    },
+    {
+     "trial": "E-r1",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.2061757,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 3,
+       "ok": 3,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "lowQuality": false,
+     "grayRecall": 1
+    },
+    {
+     "trial": "E-r2",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.199885,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "lowQuality": false,
+     "grayRecall": 1
+    },
+    {
+     "trial": "E-r3",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.2338116,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 3,
+       "ok": 3,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "lowQuality": false,
+     "grayRecall": 1
+    }
+   ],
+   "candidates": {
+    "D": {
+     "trials": 3,
+     "coreSteps": 0,
+     "status": "未判定",
+     "notExecuted": [
+      {
+       "trial": "D-r1",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "D-r2",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "D-r3",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      }
+     ],
+     "defer": false,
+     "failures": 0,
+     "nonDegradation": {
+      "coverage": true,
+      "axe": true,
+      "narrowOverflow": true,
+      "reducedMotionViolation": true,
+      "lowQuality": true,
+      "externalRequests": true,
+      "grayRecall": true
+     },
+     "ux": null,
+     "aesthetic": {
+      "status": "owner順位待ち"
+     },
+     "nonDegradationFailed": false,
+     "nonDegradationMissing": []
+    },
+    "E": {
+     "trials": 3,
+     "coreSteps": 0,
+     "status": "未判定",
+     "notExecuted": [
+      {
+       "trial": "E-r1",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "E-r2",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "E-r3",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      }
+     ],
+     "defer": false,
+     "failures": 0,
+     "nonDegradation": {
+      "coverage": true,
+      "axe": true,
+      "narrowOverflow": true,
+      "reducedMotionViolation": true,
+      "lowQuality": true,
+      "externalRequests": true,
+      "grayRecall": true
+     },
+     "ux": null,
+     "aesthetic": {
+      "status": "owner順位待ち"
+     },
+     "nonDegradationFailed": false,
+     "nonDegradationMissing": []
+    }
+   },
+   "coreStepsByCondition": {
+    "A": {
+     "trials": 3,
+     "coreSteps": 0,
+     "exemplarViewed": 0,
+     "alternativesCompared": 0,
+     "narrowChecked": 3,
+     "wideChecked": 3
+    },
+    "D": {
+     "trials": 3,
+     "coreSteps": 0,
+     "exemplarViewed": 0,
+     "alternativesCompared": 0,
+     "narrowChecked": 3,
+     "wideChecked": 2
+    },
+    "E": {
+     "trials": 3,
+     "coreSteps": 0,
+     "exemplarViewed": 0,
+     "alternativesCompared": 0,
+     "narrowChecked": 3,
+     "wideChecked": 3
+    }
+   }
+  },
+  "ui04-parts-search": {
+   "trials": [
+    {
+     "trial": "A-r1",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1931819,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 14,
+     "tabStopsWithIndicator": 14,
+     "interactionsPassed": 2,
+     "lowQuality": false
+    },
+    {
+     "trial": "A-r2",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.20052339999999996,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 14,
+     "tabStopsWithIndicator": 14,
+     "interactionsPassed": 2,
+     "lowQuality": false
+    },
+    {
+     "trial": "A-r3",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1985539,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 14,
+     "tabStopsWithIndicator": 14,
+     "interactionsPassed": 2,
+     "lowQuality": false
+    },
+    {
+     "trial": "D-r1",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.2641059,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 1,
+       "ok": 0,
+       "failed": 1,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 14,
+     "tabStopsWithIndicator": 14,
+     "interactionsPassed": 2,
+     "lowQuality": false
+    },
+    {
+     "trial": "D-r2",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.25010609999999994,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 1,
+       "ok": 0,
+       "failed": 1,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 20,
+     "tabStopsWithIndicator": 20,
+     "interactionsPassed": 2,
+     "lowQuality": false
+    },
+    {
+     "trial": "D-r3",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1932981,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 14,
+     "tabStopsWithIndicator": 14,
+     "interactionsPassed": 2,
+     "lowQuality": false
+    },
+    {
+     "trial": "E-r1",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1923861,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 14,
+     "tabStopsWithIndicator": 14,
+     "interactionsPassed": 2,
+     "lowQuality": false
+    },
+    {
+     "trial": "E-r2",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.20600649999999998,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 14,
+     "tabStopsWithIndicator": 14,
+     "interactionsPassed": 2,
+     "lowQuality": false
+    },
+    {
+     "trial": "E-r3",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.21800079999999997,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "finalBothWidths": true,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 14,
+     "tabStopsWithIndicator": 14,
+     "interactionsPassed": 2,
+     "lowQuality": false
+    }
+   ],
+   "candidates": {
+    "D": {
+     "trials": 3,
+     "coreSteps": 0,
+     "status": "未判定",
+     "notExecuted": [
+      {
+       "trial": "D-r1",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "D-r2",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "D-r3",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      }
+     ],
+     "defer": false,
+     "failures": 0,
+     "nonDegradation": {
+      "coverage": true,
+      "axe": true,
+      "narrowOverflow": true,
+      "reducedMotionViolation": true,
+      "lowQuality": true,
+      "externalRequests": true,
+      "interactions": true
+     },
+     "ux": {
+      "improved": false
+     },
+     "aesthetic": {
+      "status": "owner順位待ち"
+     },
+     "nonDegradationFailed": false,
+     "nonDegradationMissing": []
+    },
+    "E": {
+     "trials": 3,
+     "coreSteps": 0,
+     "status": "未判定",
+     "notExecuted": [
+      {
+       "trial": "E-r1",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "E-r2",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "E-r3",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      }
+     ],
+     "defer": false,
+     "failures": 0,
+     "nonDegradation": {
+      "coverage": true,
+      "axe": true,
+      "narrowOverflow": true,
+      "reducedMotionViolation": true,
+      "lowQuality": true,
+      "externalRequests": true,
+      "interactions": true
+     },
+     "ux": {
+      "improved": false
+     },
+     "aesthetic": {
+      "status": "owner順位待ち"
+     },
+     "nonDegradationFailed": false,
+     "nonDegradationMissing": []
+    }
+   },
+   "coreStepsByCondition": {
+    "A": {
+     "trials": 3,
+     "coreSteps": 0,
+     "exemplarViewed": 0,
+     "alternativesCompared": 0,
+     "narrowChecked": 3,
+     "wideChecked": 3
+    },
+    "D": {
+     "trials": 3,
+     "coreSteps": 0,
+     "exemplarViewed": 0,
+     "alternativesCompared": 0,
+     "narrowChecked": 3,
+     "wideChecked": 3
+    },
+    "E": {
+     "trials": 3,
+     "coreSteps": 0,
+     "exemplarViewed": 0,
+     "alternativesCompared": 0,
+     "narrowChecked": 3,
+     "wideChecked": 3
+    }
+   }
+  },
+  "ui07-bus-mobile": {
+   "trials": [
+    {
+     "trial": "A-r1",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1287962,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "finalBothWidths": false,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 1,
+       "ok": 1,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "firstViewportPassed": 2,
+     "minTapTargetPx": 52,
+     "lowQuality": false
+    },
+    {
+     "trial": "A-r2",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1493995,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "finalBothWidths": false,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "firstViewportPassed": 2,
+     "minTapTargetPx": 52,
+     "lowQuality": false
+    },
+    {
+     "trial": "A-r3",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1226063,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "finalBothWidths": false,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 1,
+       "ok": 1,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "firstViewportPassed": 2,
+     "minTapTargetPx": 52,
+     "lowQuality": false
+    },
+    {
+     "trial": "D-r1",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1671542,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "finalBothWidths": false,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 1,
+       "ok": 0,
+       "failed": 1,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 1,
+       "ok": 1,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "firstViewportPassed": 2,
+     "minTapTargetPx": 52,
+     "lowQuality": false
+    },
+    {
+     "trial": "D-r2",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.13638279999999997,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "finalBothWidths": false,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 1,
+       "ok": 1,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "firstViewportPassed": 2,
+     "minTapTargetPx": 56,
+     "lowQuality": false
+    },
+    {
+     "trial": "D-r3",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1419925,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "finalBothWidths": false,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 1,
+       "ok": 1,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "firstViewportPassed": 2,
+     "minTapTargetPx": 52,
+     "lowQuality": false
+    },
+    {
+     "trial": "E-r1",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.16027550000000002,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "finalBothWidths": false,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 2,
+       "ok": 2,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "firstViewportPassed": 2,
+     "minTapTargetPx": 56,
+     "lowQuality": false
+    },
+    {
+     "trial": "E-r2",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1314186,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "finalBothWidths": false,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 1,
+       "ok": 1,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "firstViewportPassed": 2,
+     "minTapTargetPx": 52,
+     "lowQuality": false
+    },
+    {
+     "trial": "E-r3",
+     "failed": false,
+     "genFailed": false,
+     "renderFailed": false,
+     "costUsd": 0.1562892,
+     "coreSteps": false,
+     "exemplarViewed": false,
+     "alternativesCompared": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "finalBothWidths": false,
+     "toolCalls": {
+      "fetch_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "view_page": {
+       "calls": 0,
+       "ok": 0,
+       "failed": 0,
+       "noResult": 0
+      },
+      "screenshot": {
+       "calls": 1,
+       "ok": 1,
+       "failed": 0,
+       "noResult": 0
+      }
+     },
+     "proxy": {
+      "allowed": 0,
+      "denied": 0,
+      "deniedReasons": {}
+     },
+     "proxyCorroborates": true,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "narrowOverflow": false,
+     "externalRequests": 0,
+     "reducedMotionViolation": false,
+     "tabStops": 1,
+     "tabStopsWithIndicator": 1,
+     "firstViewportPassed": 2,
+     "minTapTargetPx": 56,
+     "lowQuality": false
+    }
+   ],
+   "candidates": {
+    "D": {
+     "trials": 3,
+     "coreSteps": 0,
+     "status": "未判定",
+     "notExecuted": [
+      {
+       "trial": "D-r1",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "D-r2",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "D-r3",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      }
+     ],
+     "defer": false,
+     "failures": 0,
+     "nonDegradation": {
+      "coverage": true,
+      "axe": true,
+      "narrowOverflow": true,
+      "reducedMotionViolation": true,
+      "lowQuality": true,
+      "externalRequests": true,
+      "minTapTarget": true
+     },
+     "ux": {
+      "improved": false
+     },
+     "aesthetic": {
+      "status": "owner順位待ち"
+     },
+     "nonDegradationFailed": false,
+     "nonDegradationMissing": []
+    },
+    "E": {
+     "trials": 3,
+     "coreSteps": 0,
+     "status": "未判定",
+     "notExecuted": [
+      {
+       "trial": "E-r1",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "E-r2",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      },
+      {
+       "trial": "E-r3",
+       "exemplarViewed": false,
+       "alternativesCompared": false,
+       "genFailed": false
+      }
+     ],
+     "defer": false,
+     "failures": 0,
+     "nonDegradation": {
+      "coverage": true,
+      "axe": true,
+      "narrowOverflow": true,
+      "reducedMotionViolation": true,
+      "lowQuality": true,
+      "externalRequests": true,
+      "minTapTarget": true
+     },
+     "ux": {
+      "improved": false
+     },
+     "aesthetic": {
+      "status": "owner順位待ち"
+     },
+     "nonDegradationFailed": false,
+     "nonDegradationMissing": []
+    }
+   },
+   "coreStepsByCondition": {
+    "A": {
+     "trials": 3,
+     "coreSteps": 0,
+     "exemplarViewed": 0,
+     "alternativesCompared": 0,
+     "narrowChecked": 3,
+     "wideChecked": 0
+    },
+    "D": {
+     "trials": 3,
+     "coreSteps": 0,
+     "exemplarViewed": 0,
+     "alternativesCompared": 0,
+     "narrowChecked": 3,
+     "wideChecked": 0
+    },
+    "E": {
+     "trials": 3,
+     "coreSteps": 0,
+     "exemplarViewed": 0,
+     "alternativesCompared": 0,
+     "narrowChecked": 3,
+     "wideChecked": 0
+    }
+   }
+  }
+ },
+ "candidates": {
+  "D": {
+   "judgeableCases": [],
+   "improvedCases": [],
+   "nonDegradationFailed": false,
+   "costMedianA": 0.1931819,
+   "costMedianX": 0.18188299999999996,
+   "costRatio": 0.9415116012421452,
+   "classification": "未判定"
+  },
+  "E": {
+   "judgeableCases": [],
+   "improvedCases": [],
+   "nonDegradationFailed": false,
+   "costMedianA": 0.1931819,
+   "costMedianX": 0.199885,
+   "costRatio": 1.0346983853042133,
+   "classification": "未判定"
+  }
+ }
+}

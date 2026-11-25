@@ -1,0 +1,406 @@
+{
+ "schema": "asc-1807-allowlist-catalog/v1",
+ "note": "閲覧が拒否されたときにtoolが返す、許可されたサイトの一覧（ownerの3回目の判断）。各hostの区分と、出典の作品の媒体だけを載せる。env/allowlist.proposed.jsonから機械的に作った。",
+ "entries": [
+  {
+   "host": "www.britishmuseum.org",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.webusability.co.uk",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.andreabrown.co",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "空間・案内"
+  },
+  {
+   "host": "www.clarityhk.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "coosy.co.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "loftwork.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "空間・案内"
+  },
+  {
+   "host": "s-modern.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "空間・案内"
+  },
+  {
+   "host": "www.wfs.games",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "ゲーム・操作"
+  },
+  {
+   "host": "www.imhds.co.jp",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "アプリ・仮想空間"
+  },
+  {
+   "host": "tusitala.sg",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "ゲーム・操作"
+  },
+  {
+   "host": "cappen.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.riomarrecife.com.br",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.cstone.co.kr",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "naviplus.dgbt.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.takashimaya.co.jp",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.1-10.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "yakai.1-10.com",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "mount.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.kai-group.com",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.cinra.co.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.shashin-kagaku.co.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "linear.app",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "nmwa.org",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.purplerockscissors.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.pentagram.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "空間・案内"
+  },
+  {
+   "host": "madebyfieldwork.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "area17.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "archive.area17.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "design.google",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "goodpatch.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "huntersvillage.jp",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "baigie.me",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "keitatakemura.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.perfectdays-movie.jp",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.sprocket.bz",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.matthuynh.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.sbs.com.au",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "toyota.jp",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "linx.jp",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.smoothandfriendly.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "sevendex.com",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.nintendo.co.jp",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "ゲーム・Web・デジタル"
+  },
+  {
+   "host": "p5r.jp",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "ゲーム・Web・デジタル"
+  },
+  {
+   "host": "www.jp.square-enix.com",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "ゲーム・Web・デジタル"
+  },
+  {
+   "host": "captown.capcom.com",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "appirits.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "kyoto.studio-uni.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル・広告・印刷"
+  },
+  {
+   "host": "www.ndc.co.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.daimaru-matsuzakaya.com",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "aniary.com",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "service.hhms.co.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "toyooka-theaterfestival.jp",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル・広告・印刷"
+  },
+  {
+   "host": "relier-inc.co.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル・広告・印刷"
+  },
+  {
+   "host": "games.parco.jp",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.jred.co.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "空間・案内"
+  },
+  {
+   "host": "accessability.rgd.ca",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "空間・案内"
+  },
+  {
+   "host": "www.gk-kyoto.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "空間・案内"
+  },
+  {
+   "host": "www.lta.gov.sg",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "空間・案内"
+  },
+  {
+   "host": "mutlaqstudio.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "zyda.com",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.drindesigns.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "空間・案内"
+  },
+  {
+   "host": "wondr.io",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.nendo.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "空間・案内"
+  },
+  {
+   "host": "about.tsuzuku.tokyo",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "boutiquestar.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "flamegame.studio",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "haajapan.com",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "包装・商品・Web・デジタル"
+  },
+  {
+   "host": "recruit-note.kai-group.com",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "tipomap.lat",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "ブランド識別・案内"
+  },
+  {
+   "host": "website.hankyu-dept.co.jp",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.dotzero.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "包装・商品・Web・デジタル"
+  },
+  {
+   "host": "www.elpalaciodehierro.com",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "ブランド識別・案内"
+  },
+  {
+   "host": "www.keihan.co.jp",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.shop.keihan-dept.co.jp",
+   "category": "作品（画面・サイト）そのもの",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.kirin1.com",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "空間・案内・広告・グラフィック"
+  },
+  {
+   "host": "www.master-apps.jp",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.nintendo.com",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "ゲーム・Web・デジタル"
+  },
+  {
+   "host": "www.w2solution.co.jp",
+   "category": "制作者（スタジオ・設計者）の公式サイト",
+   "medium": "Web・デジタル"
+  },
+  {
+   "host": "www.westjr.co.jp",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "空間・案内・広告・グラフィック"
+  },
+  {
+   "host": "benesse-artsite.jp",
+   "category": "発注者・運営者の公式サイト（作品の掲載元）",
+   "medium": "空間・案内"
+  }
+ ]
+}

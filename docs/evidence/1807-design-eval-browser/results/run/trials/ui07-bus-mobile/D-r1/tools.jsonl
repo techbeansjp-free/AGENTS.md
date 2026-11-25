@@ -1,0 +1,2 @@
+{"t":"2026-11-24T23:54:03.790Z","tool":"fetch_page","ok":false,"input":{"url":"https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html"},"error":"host not in allowlist: www.w3.org","ms":0}
+{"t":"2026-11-24T23:54:32.110Z","tool":"screenshot","ok":true,"input":{"path":"out/index.html","width":390},"info":{"path":"out/index.html","width":390,"horizontalOverflow":false,"scrollHeight":1363,"capturedHeight":1363,"blockedRequests":0,"blockedSample":[]},"ms":1491}

@@ -1,0 +1,1410 @@
+{
+ "schema": "asc-1807-allowlist-proposal/v1",
+ "status": "proposal: owner review pending (not applied to env/allowlist.json)",
+ "basis": {
+  "skill": "anything-frontend-art-direction",
+  "commit": "046e42c7de149373993109cf4a211a577b1c3bcc",
+  "file": "references/design-works.md",
+  "fileSha256": "320f9d4b510c3abc45a430b109b30e215f455f8df73c4437adf29265867cfb0e",
+  "rowsTotal": 247,
+  "hostsTotal": 299
+ },
+ "selection": [
+  "作品案内の行のうち、「地域・媒体・年」の欄に「Web」「アプリ」「操作」「案内」を含む行（画面・情報設計の作品）を対象にする（71行、103 host）",
+  "その行の公開資料のリンク先hostのうち、作品そのもの、制作者、または発注者・運営者の公式サイトだけを選ぶ",
+  "動画配信・投稿の場・報道や告知配信・賞やデータベース・汎用のfile配信は除く（下のexcluded）",
+  "hostは完全一致だけ（subdomainの一括許可はしない）。portは443だけ。転送先も同じ規則で検査し、外れたら遮断する"
+ ],
+ "hosts": [
+  {
+   "host": "www.britishmuseum.org",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 18,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.webusability.co.uk",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 18,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.andreabrown.co",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 20,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.clarityhk.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 25,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "coosy.co.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 27,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "loftwork.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 34,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "s-modern.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 42,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.wfs.games",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 68,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "ゲーム・操作"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（ゲーム・操作）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.imhds.co.jp",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 72,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "アプリ・仮想空間"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（アプリ・仮想空間）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "tusitala.sg",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 79,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "ゲーム・操作"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（ゲーム・操作）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "cappen.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 80,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.riomarrecife.com.br",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 80,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.cstone.co.kr",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 84,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "naviplus.dgbt.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 88,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.takashimaya.co.jp",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 94,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.1-10.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 102,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "yakai.1-10.com",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 102,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "mount.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 104,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    },
+    {
+     "file": "references/design-works.md",
+     "line": 121,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    },
+    {
+     "file": "references/design-works.md",
+     "line": 127,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    },
+    {
+     "file": "references/design-works.md",
+     "line": 128,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    },
+    {
+     "file": "references/design-works.md",
+     "line": 141,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    },
+    {
+     "file": "references/design-works.md",
+     "line": 170,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    },
+    {
+     "file": "references/design-works.md",
+     "line": 172,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 7,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.kai-group.com",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 104,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.cinra.co.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 108,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.shashin-kagaku.co.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 109,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "linear.app",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 110,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "nmwa.org",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 111,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.purplerockscissors.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 111,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.pentagram.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 112,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "madebyfieldwork.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 114,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "area17.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 115,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "archive.area17.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 115,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "design.google",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 116,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "goodpatch.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 117,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    },
+    {
+     "file": "references/design-works.md",
+     "line": 173,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "huntersvillage.jp",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 117,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "baigie.me",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 118,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "keitatakemura.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 119,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.perfectdays-movie.jp",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 121,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.sprocket.bz",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 129,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.matthuynh.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 130,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.sbs.com.au",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 130,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "toyota.jp",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 141,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "linx.jp",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 142,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.smoothandfriendly.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 142,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "sevendex.com",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 150,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 4,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.nintendo.co.jp",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 151,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "ゲーム・Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（ゲーム・Web・デジタル）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "p5r.jp",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 152,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "ゲーム・Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（ゲーム・Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.jp.square-enix.com",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 153,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "ゲーム・Web・デジタル"
+   ],
+   "linkCount": 3,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（ゲーム・Web・デジタル）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "captown.capcom.com",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 154,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "appirits.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 154,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "kyoto.studio-uni.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 165,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル・広告・印刷"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル・広告・印刷）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.ndc.co.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 168,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.daimaru-matsuzakaya.com",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 170,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "aniary.com",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 172,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "service.hhms.co.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 177,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "toyooka-theaterfestival.jp",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 188,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル・広告・印刷"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル・広告・印刷）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "relier-inc.co.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 194,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル・広告・印刷"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル・広告・印刷）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "games.parco.jp",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 195,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.jred.co.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 204,
+     "section": "駅・空港の案内"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 4,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "accessability.rgd.ca",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 206,
+     "section": "駅・空港の案内"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.gk-kyoto.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 207,
+     "section": "駅・空港の案内"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.lta.gov.sg",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 208,
+     "section": "駅・空港の案内"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "mutlaqstudio.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 241,
+     "section": "世界の商業・ブランド"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "zyda.com",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 241,
+     "section": "世界の商業・ブランド"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 3,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.drindesigns.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 252,
+     "section": "世界の商業・ブランド"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "wondr.io",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 253,
+     "section": "世界の商業・ブランド"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.nendo.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 255,
+     "section": "世界の商業・ブランド"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "about.tsuzuku.tokyo",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 128,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "boutiquestar.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 181,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "flamegame.studio",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 63,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "haajapan.com",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 125,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "包装・商品・Web・デジタル"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（包装・商品・Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "recruit-note.kai-group.com",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 104,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "tipomap.lat",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 250,
+     "section": "世界の商業・ブランド"
+    }
+   ],
+   "medium": [
+    "ブランド識別・案内"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（ブランド識別・案内）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "website.hankyu-dept.co.jp",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 177,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 2,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.dotzero.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 191,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "包装・商品・Web・デジタル"
+   ],
+   "linkCount": 3,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（包装・商品・Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.elpalaciodehierro.com",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 250,
+     "section": "世界の商業・ブランド"
+    }
+   ],
+   "medium": [
+    "ブランド識別・案内"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（ブランド識別・案内）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.keihan.co.jp",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 124,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.shop.keihan-dept.co.jp",
+   "role": "作品（画面・サイト）そのもの",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 124,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる作品（画面・サイト）そのもの。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.kirin1.com",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 171,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "空間・案内・広告・グラフィック"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内・広告・グラフィック）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.master-apps.jp",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 118,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.nintendo.com",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 151,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "ゲーム・Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（ゲーム・Web・デジタル）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.w2solution.co.jp",
+   "role": "制作者（スタジオ・設計者）の公式サイト",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 146,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "Web・デジタル"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（Web・デジタル）の公開資料として挙げる制作者（スタジオ・設計者）の公式サイト。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "www.westjr.co.jp",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 171,
+     "section": "商業・ゲーム・Webの作品（日本と世界）"
+    }
+   ],
+   "medium": [
+    "空間・案内・広告・グラフィック"
+   ],
+   "linkCount": 1,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内・広告・グラフィック）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  },
+  {
+   "host": "benesse-artsite.jp",
+   "role": "発注者・運営者の公式サイト（作品の掲載元）",
+   "source": [
+    {
+     "file": "references/design-works.md",
+     "line": 275,
+     "section": "世界の作品台帳"
+    },
+    {
+     "file": "references/design-works.md",
+     "line": 276,
+     "section": "世界の作品台帳"
+    }
+   ],
+   "medium": [
+    "空間・案内"
+   ],
+   "linkCount": 5,
+   "reason": "Art Directionの作品案内が、画面・案内の作品（空間・案内）の公開資料として挙げる発注者・運営者の公式サイト（作品の掲載元）。業務画面・検索一覧・モバイルの見本として閲覧の対象になり得る"
+  }
+ ],
+ "excluded": [
+  {
+   "category": "動画配信（画面の静止画で確認できず、外部scriptが多い）",
+   "hosts": [
+    "www.youtube.com",
+    "vimeo.com",
+    "player.vimeo.com"
+   ]
+  },
+  {
+   "category": "投稿・資料共有の場（作品・制作者の公式ではない）",
+   "hosts": [
+    "note.com",
+    "speakerdeck.com",
+    "www.behance.net"
+   ]
+  },
+  {
+   "category": "報道・告知配信・業界誌（第三者の記事）",
+   "hosts": [
+    "prtimes.jp",
+    "prtimes.com",
+    "cgworld.jp",
+    "www.4gamer.net",
+    "www.famitsu.com",
+    "news.mynavi.jp",
+    "www.theguardian.com",
+    "news.cision.com"
+   ]
+  },
+  {
+   "category": "賞・データベース・集約（第三者の登録）",
+   "hosts": [
+    "ifdesign.com",
+    "www.i-award.or.kr",
+    "segd.org",
+    "award.kidp.or.kr",
+    "www.designdb.com",
+    "www.commarts.com",
+    "www.uisdc.com",
+    "cedec-kyushu.jp"
+   ]
+  },
+  {
+   "category": "汎用のfile配信・大規模サービス",
+   "hosts": [
+    "storage.googleapis.com",
+    "artsandculture.google.com",
+    "blog.google",
+    "www.uniqlo.com"
+   ]
+  },
+  {
+   "category": "第三者の紹介記事・公募の場（教育機関・ツール提供者・公募）",
+   "hosts": [
+    "www.lasalle.edu.sg",
+    "www.unrealengine.com",
+    "totsukuru.jp"
+   ]
+  },
+  {
+   "category": "媒体が印刷物（年の欄の「案内」で抽出された行）",
+   "hosts": [
+    "nationalartsfestival.co.za",
+    "assets.nationalartsfestival.co.za"
+   ]
+  }
+ ],
+ "excludedOtherScreenHosts": [],
+ "hostsOnlyInOtherRows": 188
+}

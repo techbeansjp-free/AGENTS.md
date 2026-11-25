@@ -1,0 +1,83 @@
+{
+ "schema": "asc-1807-gen/v1",
+ "case": "ui07-bus-mobile",
+ "condition": "D",
+ "rep": 1,
+ "model": "sonnet",
+ "budget": 1.5,
+ "exit": 0,
+ "signal": null,
+ "spawnError": null,
+ "wallMs": 57778,
+ "initModel": "claude-sonnet-5-5",
+ "initTools": [
+  "Edit",
+  "Glob",
+  "Grep",
+  "Read",
+  "Skill",
+  "Write",
+  "mcp__browser__fetch_page",
+  "mcp__browser__screenshot",
+  "mcp__browser__view_page"
+ ],
+ "mcpServers": [
+  {
+   "name": "browser",
+   "status": "connected",
+   "source": "dynamic"
+  }
+ ],
+ "resultSubtype": "success",
+ "isError": false,
+ "costUsd": 0.1671542,
+ "durationMs": 52261,
+ "numTurns": 10,
+ "usage": {
+  "input_tokens": 14,
+  "cache_creation_input_tokens": 19979,
+  "cache_read_input_tokens": 132192,
+  "output_tokens": 7374,
+  "output_tokens_details": {
+   "thinking_tokens": 425
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 19979,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 480,
+    "cache_read_input_tokens": 26749,
+    "cache_creation_input_tokens": 1563,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 1563
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "permissionDenials": [],
+ "toolCounts": {
+  "Read": 4,
+  "Glob": 1,
+  "mcp__browser__fetch_page": 1,
+  "Write": 2,
+  "mcp__browser__screenshot": 1
+ },
+ "skillCalls": [],
+ "skillFileReads": [
+  ".claude/skills/anything-frontend-art-direction/SKILL.md"
+ ],
+ "coreSteps": false
+}

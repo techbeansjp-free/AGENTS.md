@@ -1,0 +1,169 @@
+{
+ "id": "E-r1",
+ "case": "ui03",
+ "exists": true,
+ "viewports": {
+  "desktop": {
+   "externalRequests": [],
+   "consoleErrors": [],
+   "pageErrors": [],
+   "scrollWidth": 1440,
+   "innerWidth": 1440,
+   "overflowX": false,
+   "docHeight": 900,
+   "textLen": 1277,
+   "lcp": 240,
+   "cls": 0,
+   "fontBody": "\"Noto Sans CJK JP\", sans-serif",
+   "fontH1": "\"Noto Sans CJK JP\", sans-serif",
+   "fontH2": "\"Noto Sans CJK JP\", sans-serif",
+   "bodyBg": "rgb(243, 244, 246)",
+   "htmlBg": "rgba(0, 0, 0, 0)",
+   "topColors": [
+    [
+     "rgb(27, 31, 36)",
+     149
+    ],
+    [
+     "rgb(75, 85, 99)",
+     56
+    ],
+    [
+     "rgb(253, 236, 234)",
+     15
+    ],
+    [
+     "rgb(179, 38, 30)",
+     12
+    ],
+    [
+     "rgb(255, 255, 255)",
+     10
+    ],
+    [
+     "rgb(213, 217, 223)",
+     8
+    ],
+    [
+     "rgb(227, 231, 236)",
+     8
+    ],
+    [
+     "rgb(59, 91, 131)",
+     8
+    ],
+    [
+     "rgb(31, 107, 58)",
+     4
+    ],
+    [
+     "rgb(232, 244, 236)",
+     4
+    ]
+   ],
+   "animations": 0,
+   "hasReducedMotionQuery": false,
+   "firstY": {
+    "出荷遅延率": 77,
+    "温度センサー": 77,
+    "LANE-B01": 80,
+    "汐見台三丁目": null,
+    "中央通り": null,
+    "在庫あり": null,
+    "LG-2040-SS-HT-0500-JISB1192": null
+   },
+   "landmarks": {
+    "main": 1,
+    "h1": 1,
+    "nav": 0
+   },
+   "lang": "ja",
+   "axe": [],
+   "axeSeriousCritical": 0,
+   "tabStops": 1,
+   "tabStopsWithIndicator": 1,
+   "tabsToRetry": 1,
+   "tabsToSearch": null,
+   "animationsReduced": 0
+  },
+  "tablet": {
+   "externalRequests": [],
+   "consoleErrors": [],
+   "pageErrors": [],
+   "scrollWidth": 800,
+   "innerWidth": 800,
+   "overflowX": false,
+   "docHeight": 1429,
+   "textLen": 1277,
+   "lcp": 191.39999999990687,
+   "cls": 0,
+   "fontBody": "\"Noto Sans CJK JP\", sans-serif",
+   "fontH1": "\"Noto Sans CJK JP\", sans-serif",
+   "fontH2": "\"Noto Sans CJK JP\", sans-serif",
+   "bodyBg": "rgb(243, 244, 246)",
+   "htmlBg": "rgba(0, 0, 0, 0)",
+   "topColors": [
+    [
+     "rgb(27, 31, 36)",
+     149
+    ],
+    [
+     "rgb(75, 85, 99)",
+     56
+    ],
+    [
+     "rgb(253, 236, 234)",
+     15
+    ],
+    [
+     "rgb(179, 38, 30)",
+     12
+    ],
+    [
+     "rgb(255, 255, 255)",
+     10
+    ],
+    [
+     "rgb(213, 217, 223)",
+     8
+    ],
+    [
+     "rgb(227, 231, 236)",
+     8
+    ],
+    [
+     "rgb(59, 91, 131)",
+     8
+    ],
+    [
+     "rgb(31, 107, 58)",
+     4
+    ],
+    [
+     "rgb(232, 244, 236)",
+     4
+    ]
+   ],
+   "animations": 0,
+   "hasReducedMotionQuery": false,
+   "firstY": {
+    "出荷遅延率": 164,
+    "温度センサー": 196,
+    "LANE-B01": 167,
+    "汐見台三丁目": null,
+    "中央通り": null,
+    "在庫あり": null,
+    "LG-2040-SS-HT-0500-JISB1192": null
+   },
+   "landmarks": {
+    "main": 1,
+    "h1": 1,
+    "nav": 0
+   },
+   "lang": "ja",
+   "axe": [],
+   "axeSeriousCritical": 0,
+   "animationsReduced": 0
+  }
+ }
+}

@@ -1,0 +1,176 @@
+{
+ "company": "産業用部品メーカー（架空）",
+ "updated_at": "2027-03-08T09:00:00+09:00",
+ "stock_labels": {
+  "在庫あり": "10個以上",
+  "残少": "1〜9個",
+  "取寄せ": "在庫0、納期は表示どおり",
+  "生産終了": "注文不可、後継品を案内"
+ },
+ "parts": [
+  {
+   "part_no": "LG-2040-SS-HT-0500-JISB1192",
+   "name": "リニアガイド 20形 標準ブロック",
+   "category": "直動部品",
+   "standard": "JIS B 1192",
+   "stock": "在庫あり",
+   "qty": 48,
+   "lead_time": "即日出荷",
+   "revised": "2027-02-14",
+   "documents": [
+    "寸法図",
+    "取扱説明書"
+   ]
+  },
+  {
+   "part_no": "LG-2040-SS-HT-1000-JISB1192",
+   "name": "リニアガイド 20形 標準ブロック（長尺）",
+   "category": "直動部品",
+   "standard": "JIS B 1192",
+   "stock": "残少",
+   "qty": 3,
+   "lead_time": "即日出荷",
+   "revised": "2027-02-14",
+   "documents": [
+    "寸法図"
+   ]
+  },
+  {
+   "part_no": "BB-6204-ZZ-C3-NSKCOMPAT",
+   "name": "深溝玉軸受 6204 両シールド",
+   "category": "軸受",
+   "standard": "JIS B 1521",
+   "stock": "在庫あり",
+   "qty": 320,
+   "lead_time": "即日出荷",
+   "revised": "2027-01-30",
+   "documents": [
+    "寸法図",
+    "許容回転数表"
+   ]
+  },
+  {
+   "part_no": "BB-6905-2RS-LOWTORQUE-FG",
+   "name": "深溝玉軸受 6905 低トルク 食品機械用グリース",
+   "category": "軸受",
+   "standard": "JIS B 1521",
+   "stock": "取寄せ",
+   "qty": 0,
+   "lead_time": "約3週間",
+   "revised": "2026-12-08",
+   "documents": [
+    "寸法図",
+    "グリース適合表"
+   ]
+  },
+  {
+   "part_no": "CP-SR25-ALU-D8D10-SETSCREW",
+   "name": "スリット形カップリング 外径25",
+   "category": "伝動部品",
+   "standard": "社内規格 CP-2",
+   "stock": "在庫あり",
+   "qty": 75,
+   "lead_time": "即日出荷",
+   "revised": "2027-02-02",
+   "documents": [
+    "寸法図"
+   ]
+  },
+  {
+   "part_no": "CP-OL32-STEEL-D12D14-CLAMP",
+   "name": "オルダム形カップリング 外径32",
+   "category": "伝動部品",
+   "standard": "社内規格 CP-2",
+   "stock": "残少",
+   "qty": 5,
+   "lead_time": "2営業日",
+   "revised": "2027-02-02",
+   "documents": [
+    "寸法図",
+    "トルク表"
+   ]
+  },
+  {
+   "part_no": "BS-1605-C7-L0450-FIXEDEND",
+   "name": "ボールねじ 軸径16 リード5 転造",
+   "category": "直動部品",
+   "standard": "JIS B 1192",
+   "stock": "取寄せ",
+   "qty": 0,
+   "lead_time": "約6週間",
+   "revised": "2026-11-20",
+   "documents": [
+    "寸法図",
+    "取扱説明書",
+    "精度等級表"
+   ]
+  },
+  {
+   "part_no": "SP-CMP-0.8X6X20-SUS304",
+   "name": "圧縮コイルばね 線径0.8 外径6 自由長20",
+   "category": "ばね",
+   "standard": "JIS B 2704",
+   "stock": "在庫あり",
+   "qty": 1200,
+   "lead_time": "即日出荷",
+   "revised": "2027-03-01",
+   "documents": [
+    "ばね定数表"
+   ]
+  },
+  {
+   "part_no": "SP-EXT-1.0X8X35-SWPB-HOOK",
+   "name": "引張コイルばね 線径1.0 外径8",
+   "category": "ばね",
+   "standard": "JIS B 2704",
+   "stock": "在庫あり",
+   "qty": 640,
+   "lead_time": "即日出荷",
+   "revised": "2027-03-01",
+   "documents": [
+    "ばね定数表"
+   ]
+  },
+  {
+   "part_no": "PL-HB-M8-POM-WHITE-KNOB",
+   "name": "ハンドル用ノブ M8 樹脂 白",
+   "category": "操作部品",
+   "standard": "社内規格 PL-1",
+   "stock": "生産終了",
+   "qty": 0,
+   "lead_time": "—（後継品あり：PL-HB-M8-PA66-GRAY-KNOB）",
+   "revised": "2026-10-15",
+   "documents": [
+    "寸法図",
+    "後継品の案内"
+   ]
+  },
+  {
+   "part_no": "SN-PRX-M12-NPN-NO-2M-CABLE",
+   "name": "近接センサー M12 NPN 常時開 ケーブル2m",
+   "category": "センサー",
+   "standard": "IEC 60947-5-2",
+   "stock": "在庫あり",
+   "qty": 36,
+   "lead_time": "即日出荷",
+   "revised": "2027-02-20",
+   "documents": [
+    "配線図",
+    "取扱説明書"
+   ]
+  },
+  {
+   "part_no": "SN-PRX-M18-PNP-NC-M12CONN",
+   "name": "近接センサー M18 PNP 常時閉 コネクター",
+   "category": "センサー",
+   "standard": "IEC 60947-5-2",
+   "stock": "残少",
+   "qty": 2,
+   "lead_time": "2営業日",
+   "revised": "2027-02-20",
+   "documents": [
+    "配線図"
+   ]
+  }
+ ]
+}

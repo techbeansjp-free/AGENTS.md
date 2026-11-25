@@ -1,0 +1,10 @@
+{"host":"allowed.test","path":"/ok","port":80}
+{"host":"allowed.test","path":"/ok","port":443}
+{"host":"allowed.test","path":"/redirect-blocked","port":80}
+{"host":"allowed.test","path":"/redirect-ok","port":80}
+{"host":"allowed.test","path":"/ok","port":80}
+{"host":"allowed.test","path":"/redirect-blocked","port":80}
+{"host":"allowed.test","path":"/inject","port":80}
+{"host":"allowed.test","path":"/subres","port":80}
+{"host":"allowed.test","path":"/ok","port":80}
+{"host":"allowed.test","path":"/redirect-blocked","port":80}

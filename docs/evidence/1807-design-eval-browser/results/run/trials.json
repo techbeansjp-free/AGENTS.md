@@ -1,0 +1,556 @@
+[
+ {
+  "case": "ui03-dashboard",
+  "trial": "A-r1",
+  "cost": 0.2192537,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui03-dashboard",
+  "trial": "A-r2",
+  "cost": 0.183036,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui03-dashboard",
+  "trial": "A-r3",
+  "cost": 0.20192800000000002,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui03-dashboard",
+  "trial": "D-r1",
+  "cost": 0.26113739999999996,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 4,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": [
+   ".claude/skills/anything-frontend-art-direction/SKILL.md"
+  ]
+ },
+ {
+  "case": "ui03-dashboard",
+  "trial": "D-r2",
+  "cost": 0.18188299999999996,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 1,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui03-dashboard",
+  "trial": "D-r3",
+  "cost": 0.1791541,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui03-dashboard",
+  "trial": "E-r1",
+  "cost": 0.2061757,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Write": 2,
+   "mcp__browser__screenshot": 3,
+   "Edit": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui03-dashboard",
+  "trial": "E-r2",
+  "cost": 0.199885,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui03-dashboard",
+  "trial": "E-r3",
+  "cost": 0.2338116,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 3,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui04-parts-search",
+  "trial": "A-r1",
+  "cost": 0.1931819,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui04-parts-search",
+  "trial": "A-r2",
+  "cost": 0.20052339999999996,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui04-parts-search",
+  "trial": "A-r3",
+  "cost": 0.1985539,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui04-parts-search",
+  "trial": "D-r1",
+  "cost": 0.2641059,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 4,
+   "Glob": 1,
+   "mcp__browser__fetch_page": 1,
+   "Bash": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": [
+   ".claude/skills/anything-frontend-art-direction/SKILL.md"
+  ]
+ },
+ {
+  "case": "ui04-parts-search",
+  "trial": "D-r2",
+  "cost": 0.25010609999999994,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 4,
+   "Glob": 1,
+   "mcp__browser__fetch_page": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": [
+   ".claude/skills/anything-frontend-art-direction/SKILL.md"
+  ]
+ },
+ {
+  "case": "ui04-parts-search",
+  "trial": "D-r3",
+  "cost": 0.1932981,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui04-parts-search",
+  "trial": "E-r1",
+  "cost": 0.1923861,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui04-parts-search",
+  "trial": "E-r2",
+  "cost": 0.20600649999999998,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui04-parts-search",
+  "trial": "E-r3",
+  "cost": 0.21800079999999997,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui07-bus-mobile",
+  "trial": "A-r1",
+  "cost": 0.1287962,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 1,
+   "Edit": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui07-bus-mobile",
+  "trial": "A-r2",
+  "cost": 0.1493995,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui07-bus-mobile",
+  "trial": "A-r3",
+  "cost": 0.1226063,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui07-bus-mobile",
+  "trial": "D-r1",
+  "cost": 0.1671542,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 4,
+   "Glob": 1,
+   "mcp__browser__fetch_page": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": [
+   ".claude/skills/anything-frontend-art-direction/SKILL.md"
+  ]
+ },
+ {
+  "case": "ui07-bus-mobile",
+  "trial": "D-r2",
+  "cost": 0.13638279999999997,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 1,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui07-bus-mobile",
+  "trial": "D-r3",
+  "cost": 0.1419925,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 1,
+   "Edit": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui07-bus-mobile",
+  "trial": "E-r1",
+  "cost": 0.16027550000000002,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 2,
+   "Edit": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui07-bus-mobile",
+  "trial": "E-r2",
+  "cost": 0.1314186,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "mcp__browser__screenshot": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui07-bus-mobile",
+  "trial": "E-r3",
+  "cost": 0.1562892,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Write": 2,
+   "Edit": 2,
+   "mcp__browser__screenshot": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui10-cli",
+  "trial": "D-r1",
+  "cost": 0.06391079999999999,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Edit": 1,
+   "Write": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui10-cli",
+  "trial": "D-r2",
+  "cost": 0.0629915,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Edit": 1,
+   "Write": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui10-cli",
+  "trial": "D-r3",
+  "cost": 0.0621654,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Edit": 1,
+   "Write": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui10-cli",
+  "trial": "E-r1",
+  "cost": 0.0640748,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Edit": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui10-cli",
+  "trial": "E-r2",
+  "cost": 0.0623031,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Edit": 1,
+   "Write": 1
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ },
+ {
+  "case": "ui10-cli",
+  "trial": "E-r3",
+  "cost": 0.0639118,
+  "exit": 0,
+  "subtype": "success",
+  "coreSteps": false,
+  "toolCounts": {
+   "Read": 3,
+   "Glob": 1,
+   "Edit": 2
+  },
+  "skillCalls": [],
+  "skillFileReads": []
+ }
+]

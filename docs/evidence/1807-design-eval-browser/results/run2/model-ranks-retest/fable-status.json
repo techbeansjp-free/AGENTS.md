@@ -1,0 +1,9 @@
+{
+ "host": "claude",
+ "model": "fable",
+ "status": "completed",
+ "naming": "completed",
+ "startedAt": "2026-11-25T02:44:33.319Z",
+ "finishedAt": "2026-11-25T02:47:39.351Z",
+ "note": "実行状態のうち、localのpath・session ID・permission profileを除いた"
+}

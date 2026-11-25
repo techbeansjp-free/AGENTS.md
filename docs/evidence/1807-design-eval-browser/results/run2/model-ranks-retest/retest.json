@@ -1,0 +1,13 @@
+{
+ "rule": "Issue #1807 のコメント（ownerの5回目の判断）で、結果を得る前に固定した分析規則。表示順とIDを変え、新しいContextで同じ36画面を同じ2モデルに再び順位付けさせた",
+ "retestSpearman": {"ui03-dashboard": {"fable": 0.38, "codex": 0.59}, "ui04-parts-search": {"fable": 0.89, "codex": 0.94}, "ui07-bus-mobile": {"fable": 0.38, "codex": 0.96}},
+ "betweenJudgesSpearman": {"ui03-dashboard": {"run1": 0.19, "run2": 0.67}, "ui04-parts-search": {"run1": 0.80, "run2": 0.70}, "ui07-bus-mobile": {"run1": 0.38, "run2": -0.06}},
+ "meanRankOfTwoRuns_meanAndSpread": {
+  "ui03-dashboard": {"fable": {"A": [7.7, 5.5], "AP": [4.2, 6.0], "D": [7.0, 5.0], "E": [7.2, 7.5]}, "codex": {"A": [7.3, 5.5], "AP": [4.3, 3.5], "D": [7.3, 10.0], "E": [7.0, 6.0]}},
+  "ui04-parts-search": {"fable": {"A": [7.7, 4.0], "AP": [4.5, 7.0], "D": [7.5, 6.5], "E": [6.3, 10.0]}, "codex": {"A": [5.7, 7.0], "AP": [6.0, 8.0], "D": [6.3, 9.0], "E": [8.0, 8.0]}},
+  "ui07-bus-mobile": {"fable": {"A": [6.7, 9.0], "AP": [6.7, 8.5], "D": [5.8, 5.0], "E": [6.8, 3.5]}, "codex": {"A": [6.2, 7.5], "AP": [6.2, 9.0], "D": [5.5, 7.5], "E": [8.2, 7.0]}}},
+ "run2CombinedPairs": {"ui03-dashboard": {"AP>A": 9, "D>A": 6, "E>A": 5, "D>AP": 1, "E>AP": 1}, "ui04-parts-search": {"AP>A": 7, "D>A": 5, "E>A": 5, "D>AP": 2, "E>AP": 3}, "ui07-bus-mobile": {"AP>A": 6, "D>A": 5, "E>A": 3, "D>AP": 4, "E>AP": 0}},
+ "interpretation": {"ui03-dashboard": "Fableは採点の揺れが大きい（0.5未満）、Codexは保留域", "ui04-parts-search": "両モデル安定。条件内の幅4〜10は生成のばらつき", "ui07-bus-mobile": "Fableは揺れが大きい、Codexは安定で条件内の幅7〜9は生成のばらつき"},
+ "classificationUnchanged": "確定した分類（1回目の統合、全組「差なし」）は規則どおり変えない。UI-03のAP対Aは1回目6/9、2回目9/9で安定しない",
+ "costUSD": {"fable": 2.97, "codex": null}
+}
