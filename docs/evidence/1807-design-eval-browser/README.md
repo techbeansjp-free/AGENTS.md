@@ -8,10 +8,10 @@
 | --- | --- | --- |
 | D（ASC＋Art Direction） | **未判定** | 1回目・2回目の計18試行（3ケース×3回×2）のどれでも、中心の手順（見本の閲覧と2案の実描画比較）が行われなかった。2回目では、Skillのfileが一度も読まれなかった。Skillが選ばれず、手順が動かない |
 | E（ASC＋Art Direction＋Product Design） | **未判定** | Dと同じ。1回目・2回目とも、どのSkillのfileも読まれなかった |
-| AP（現行ASC＋手順の指示） | **reject**（事前に固定した分類規則：判定可能なケースが2件以上で改善なし） | 全3ケースで中心の手順が3/3行われ「判定可能」。審美（2モデルの順位）は全ケースで「差なし」、UXの指標は上限近くでAと差が無く、非劣化の失敗は無い。費用は生成1回あたりAの約2.3倍 |
+| AP（現行ASC＋手順の指示） | **reject**（事前に固定した分類規則：判定可能なケースが2件以上で改善なし）。審美の部分は2モデルの順位だけによる | 全3ケースで中心の手順が3/3行われ「判定可能」。審美（2モデルの順位）は全ケースで「差なし」、UXの指標は上限近くでAと差が無く、非劣化の失敗は無い。費用は生成1回あたりAの約2.3倍 |
 
 - **実務上の知見**：依頼文で手順（見本の閲覧と2案の描画比較）を強制すると、手順は確実に動いた。しかし、測った範囲（審美の順位・UX・非劣化）では改善が無く、費用は約2.3倍になった。この結果からは、手順を既存Skillへ部分的に取り込む根拠は得られない。
-- **審美の判定は人の評価ではない**：ownerの判断（4回目、Issue #1807のコメント）で、審美の順位付けを、ownerの代わりにFableとCodexの2モデルが行った。Issueの完了の基準「人の評価で判定」は、この判断で置き換えられた。
+- **審美の判定は人の評価ではない**：ownerの判断（4回目、Issue #1807のコメント）で、審美の順位付けを、ownerの代わりにFableとCodexの2モデルが行った。人の評価は一度も行っていない。この置き換えは、Issueの完了の基準「審美的品質の採否は、条件名を伏せた人の評価で判定」と、Issueの禁止「モデルの採点だけで審美的品質の採否を決めること」（#1804の基準「AIによる評価を唯一の正解としない」）の両方に関わる。AP=rejectの審美の部分は、AIの2モデルだけで決まっている。この点を未達のまま受け入れるかは、ownerが決める（PRとIssueで確認を求める）。
 - **評価者の間の一致は低い**：2モデルの順位のSpearmanの相関は、UI-03 0.19、UI-04 0.80、UI-07 0.38。UI-03・UI-07では、どちらのモデルの順位でも同じ分類（全組「差なし」）だったが、画面ごとの評価は大きく食い違った。
 - D・Eの効果（Skillとしての価値）は、2回の評価でも判定できていない。「効果なし」ではない。
 
@@ -21,8 +21,8 @@
 
 | 区分 | 内容 |
 | --- | --- |
-| 費用（Hostの計算値） | 合計 **19.95 USD** と、Codexの費用（取得できず欠測）。内訳：1回目7.87、2回目9.22、Fableの順位付け2.86。上限40・停止規則36の内 |
-| 未実施・skip | 独立レビュー。2回目の誤発火の確認（1回目で実施済み、計画どおり）。1回目の比較画面の順位付け（2回目に置き換えた） |
+| 費用（Hostの計算値） | 合計 **19.95 USD** と、Codexの費用（取得できず欠測）。内訳：1回目7.87、2回目9.22、Fableの順位付け2.86。上限40・停止規則36の内。Codexの費用が欠測のため、上限の内に収まったことは、Codex分を除いて確かめた範囲である |
+| 未実施・skip | 2回目の誤発火の確認（1回目で実施済み、計画どおり）。1回目の比較画面の順位付け（2回目に置き換えた） |
 
 ## 本番2回目の結果
 
@@ -41,7 +41,7 @@
 | UI-07 | 0/3 | **3/3** | 0/3 | 0/3 |
 
 - APは全9試行で、見本を`view_page`で2回ずつ閲覧し、2案（`out/alt-a.html`・`out/alt-b.html`）と成果物を狭幅・広幅で描画した（`screenshot`は6〜7回）。多くの試行で、最初にallowlist外（ダッシュボードの製品サイト、部品の通販、規格・解説、行政のサイト等）を試して拒否され、応答の一覧から許可されたサイト（`linear.app`・鉄道会社・交通当局・美術館等）を選び直した。
-- D・Eは、2回目では閲覧のtoolを1回も呼ばず、Art Direction・Product DesignのSkillのfileも1回も読まなかった（Skill toolの呼出しも0回）。1回目（Dの9試行中4試行が`SKILL.md`を読んだ）より少ない。Skillが選ばれない限り、手順は動かない。
+- D・Eは、2回目では閲覧のtoolを1回も呼ばず、Art Direction・Product DesignのSkillのfileも1回も読まなかった（Skill toolの呼出しも0回）。1回目（Dの9試行中4試行が`SKILL.md`を読んだ）より少ない。候補のSkillは、2回目のD・Eの全18試行で、生成Agentの起動時のSkill一覧に載っていた（[results/skill-listing.json](results/skill-listing.json)。起動記録の一覧から、候補の名前の有無だけを取り出した。A・APの一覧には無い）。配置はされていたが選ばれず、手順が動かなかった。
 - 広幅の確認：UI-07で、A・D・Eは全試行が狭幅だけを確認した。APは全試行が両幅を確認した。
 - 見本の描画の欠け：`linear.app`の描画では、allowlist外の要求が1回あたり約300件中止された。APの生成者が見た見本は、多くが不完全な描画だった可能性がある。
 
@@ -145,7 +145,7 @@ Hostの`total_cost_usd`の合計 **7.87 USD**（上限40、停止規則36に届�
 
 ## 準備の段階の記録
 
-## 構成
+### 構成
 
 | path | 内容 |
 | --- | --- |
@@ -159,7 +159,7 @@ Hostの`total_cost_usd`の合計 **7.87 USD**（上限40、停止規則36に届�
 | [harness/](harness/) | `core-steps.mjs`（中心の手順の集計）と試験、`gold-check.mjs`（goldの判定器）と合成の画面（`dryrun/`）、`run-gen.mjs`（生成の起動器）、`render.mjs`・`run-render.mjs`（描画と採点）、`misfire.mjs`（誤発火）、`make-blind.mjs`（盲検の比較画面）、`aggregate.mjs`（判定の規則）、`collect.mjs`（記録の取り出し） |
 | [results/](results/) | 隔離の反例の原始結果（準備：`isolation/`、本番のimage：`isolation-tools/`）、集計器の試験結果、goldの判定器の結果、本番の記録（`run/`：試行ごとのmeta・中心の手順・proxyとtoolの記録・描画の指標・gold、判定、誤発火、補助の採点、再確認） |
 
-## 生成環境
+### 生成環境
 
 第三者のコードは、Playwrightの公式image（Chromiumを含む、digest固定）、`playwright-core` 1.49.1・`axe-core` 4.10.2（どちらも依存なし、install scriptを実行せず導入。npm registryの`sha512`と一致を確認）と、aptの書体だけである。proxy・tool・集計器はNodeの標準機能だけで書いた。
 
@@ -176,7 +176,7 @@ Hostの`total_cost_usd`の合計 **7.87 USD**（上限40、停止規則36に届�
   - `view_page`：Chromiumをbrowse入口のproxyで起動し、allowlistのhost以外への要求を中止する。Playwrightの`route`は転送のhopを捕らえないので、全要求を別に監視し、最後のURLがallowlist外なら画像を返さずに失敗にする（反例の1回目で見つけて直した。下の「反例」）。
   - `screenshot`：`out/`の中のHTMLだけ（実体pathで確認、symlink・`..`での脱出を拒否）を、幅390・800・1440で描画する。file以外の要求はすべて中止する。
 
-## 隔離の反例
+### 隔離の反例
 
 [isolation/run.sh](isolation/run.sh)で実行した。内部専用のDocker network 2つ（生成側・上流側）、上流側にdummy site（`allowed.test`・`blocked.test`等の別名）を置いた。internetとモデルは使っていない。生成側のcontainerは、本番の生成imageからClaude Code CLIと書体を除いた`browser`段階のimage（`docker build --network none`で作成）である。
 
@@ -204,7 +204,7 @@ containerの設定は[results/isolation/probe-hostconfig.json](results/isolation
 
 **1回目の不合格と是正**：1回目（[results/isolation/probe-run1.json](results/isolation/probe-run1.json)）は20/21だった。`view_page`で、allowlistのページからallowlist外への転送を、Playwrightの`route`が捕らえなかった。proxyは転送先を拒否した（403、[results/isolation/proxy-run1.jsonl](results/isolation/proxy-run1.jsonl)）ので外部へは出ていないが、toolは拒否のページの画像を成功として返した。全要求の監視と、最後のURLの検査を加え、2回目で合格した。反例の判定条件も、画像を返さないことまで求めるように厳しくした。
 
-## 中心の手順の集計
+### 中心の手順の集計
 
 [harness/core-steps.mjs](harness/core-steps.mjs)は、生成Agentのstream-json（`tool_use`と、対応する`tool_result`）だけから、試行ごとに次を数える。notesの自己申告は使わない。
 
@@ -215,7 +215,7 @@ containerの設定は[results/isolation/probe-hostconfig.json](results/isolation
 
 合成の記録での試験（[harness/core-steps.test.mjs](harness/core-steps.test.mjs)、`node --test`）：8件合格（[results/core-steps-test.txt](results/core-steps-test.txt)）。notesだけが実施を主張する記録、拒否・失敗・結果なしの呼出し、同じファイルの描き直し、UI-03の狭幅800、別serverのtool、壊れた行、proxyの記録との照合、3回中1回・2回中1回の「未判定」を含む。
 
-## ケースとgold
+### ケースとgold
 
 - UI-04（[cases/ui04-parts-search/](cases/ui04-parts-search/)）：架空の部品メーカーの技術資料の検索・一覧・詳細。長い品番、在庫の4状態（色以外でも区別）、生産終了の後継品、0件の状態、PCでの一覧と詳細の同時表示、スマートフォンでの一覧と詳細の移動。
 - UI-07（[cases/ui07-bus-mobile/](cases/ui07-bus-mobile/)）：架空の市のコミュニティバスの発車案内。遅れ・運休（色以外でも区別）、運行のお知らせを初期表示の範囲に出す、低床車両、押せる要素の大きさ、幅390pxではみ出さない。
@@ -223,7 +223,7 @@ containerの設定は[results/isolation/probe-hostconfig.json](results/isolation
 - [gold.json](gold.json)：UI-04は必須24項目と検索の操作2件、UI-07は必須26項目と初期表示の範囲の2項目・押せる要素の大きさ。判定器（[harness/gold-check.mjs](harness/gold-check.mjs)）を、合成の良い画面・悪い画面で、network無しのcontainerで動かした（[results/gold-dryrun.txt](results/gold-dryrun.txt)）。良い画面は全項目合格、悪い画面は網羅率0.292・0.846、横はみ出し、初期表示の欠け、押せる要素11px、外部要求を検出した。
   - 1回目の試行で、良い画面が0件の検索で不合格になった（詳細の欄に先頭の部品を残す設計を不合格にしていた）。0件の検索では「0件である表示」だけを求めるようにgoldを直した。生成の前の修正である。
 
-## allowlistの案
+### allowlistの案
 
 [env/allowlist.proposed.json](env/allowlist.proposed.json)。ownerがそのまま承認し（2026-11-25）、[env/allowlist.json](env/allowlist.json)へ写した。
 
@@ -263,7 +263,7 @@ python3 -I env/allowlist-propose.py <S>/ad-hosts.json <Art Directionのcheckout>
 
 - 生成Agentの置き場所を、準備の段階の設計（containerの中）からhostへ変えた（上の「生成環境の変更」）。これは、認証の情報の所在を確かめる操作が、実行環境の自動判定（auto mode）に拒否された後に、ownerに確認せずに行った変更であり、逸脱として記録する。拒否された操作を別の方法で行うことはしていない。生成の前に計画へ書き、commitで固定した。2回目もこの構成を変えていない。
 - 生成の後に、EVAL_PLAN.mdの題（「下書き」を削除）と、起動器のfile名の変更に伴うlinkだけを直した。判定の規則・goldは変えていない。
-- 2回目の比較画面を作った後、APの実画面のfolderに2案のfile（`alt-a.html`・`alt-b.html`）が入り、条件が分かることに気付いた。成果物だけを置くよう`make-blind.mjs`を直して作り直した（IDとkeyは同じseedで同じ）。ownerが開く前の修正である。
+- 2回目の比較画面を作った後、APの実画面のfolderに2案のfile（`alt-a.html`・`alt-b.html`）が入り、条件が分かることに気付いた。成果物だけを置くよう`make-blind.mjs`を直して作り直した（IDとkeyは同じseedで同じ）。順位付け（2モデルの実行）の前の修正である。
 - 2回目のUI-03の補助の採点は、2案のfileを含まない画像だけのfolderで行ったので、この修正の影響を受けない。
 - 審美の判定を、計画（ownerによる順位）から、FableとCodexの2モデルの順位に置き換えた。ownerの判断（4回目）による。統合の規則は、順位を得る前にIssueのコメントで固定された。
 - `fetch_page`がallowlist外として拒否した要求は、toolの段階で止まるので、proxyの記録には現れない。toolの記録（`tools.jsonl`）に全て残っている。

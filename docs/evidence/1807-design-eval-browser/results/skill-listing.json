@@ -1,0 +1,351 @@
+{
+ "run": {
+  "ui03-dashboard/A-r1": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui03-dashboard/A-r2": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui03-dashboard/A-r3": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui03-dashboard/D-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui03-dashboard/D-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui03-dashboard/D-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui03-dashboard/E-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui03-dashboard/E-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui03-dashboard/E-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui04-parts-search/A-r1": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui04-parts-search/A-r2": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui04-parts-search/A-r3": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui04-parts-search/D-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui04-parts-search/D-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui04-parts-search/D-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui04-parts-search/E-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui04-parts-search/E-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui04-parts-search/E-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui07-bus-mobile/A-r1": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui07-bus-mobile/A-r2": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui07-bus-mobile/A-r3": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui07-bus-mobile/D-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui07-bus-mobile/D-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui07-bus-mobile/D-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui07-bus-mobile/E-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui07-bus-mobile/E-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui07-bus-mobile/E-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui10-cli/D-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui10-cli/D-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui10-cli/D-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui10-cli/E-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui10-cli/E-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui10-cli/E-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  }
+ },
+ "run2": {
+  "ui03-dashboard/A-r1": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui03-dashboard/A-r2": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui03-dashboard/A-r3": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui03-dashboard/AP-r1": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui03-dashboard/AP-r2": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui03-dashboard/AP-r3": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui03-dashboard/D-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui03-dashboard/D-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui03-dashboard/D-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui03-dashboard/E-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui03-dashboard/E-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui03-dashboard/E-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui04-parts-search/A-r1": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui04-parts-search/A-r2": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui04-parts-search/A-r3": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui04-parts-search/AP-r1": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui04-parts-search/AP-r2": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui04-parts-search/AP-r3": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui04-parts-search/D-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui04-parts-search/D-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui04-parts-search/D-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui04-parts-search/E-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui04-parts-search/E-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui04-parts-search/E-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui07-bus-mobile/A-r1": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui07-bus-mobile/A-r2": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui07-bus-mobile/A-r3": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui07-bus-mobile/AP-r1": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui07-bus-mobile/AP-r2": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui07-bus-mobile/AP-r3": {
+   "artDirectionListed": false,
+   "productDesignListed": false,
+   "count": 39
+  },
+  "ui07-bus-mobile/D-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui07-bus-mobile/D-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui07-bus-mobile/D-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": false,
+   "count": 40
+  },
+  "ui07-bus-mobile/E-r1": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui07-bus-mobile/E-r2": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  },
+  "ui07-bus-mobile/E-r3": {
+   "artDirectionListed": true,
+   "productDesignListed": true,
+   "count": 41
+  }
+ }
+}
