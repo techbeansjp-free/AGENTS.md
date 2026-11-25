@@ -118,11 +118,11 @@ node $EV/harness/analyze.mjs $EV/results/traces --runs-root <scratch>/run1820m/r
 
 ## 測定の前の固定
 
-- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`c7478b7d47ee541d68cbd4accfaa854d61b540e1`である。`run-trial.mjs`と`analyze.mjs`はこの記載を照合する。`fixation.mjs check`は合格（差なし）。
-- 作り直した理由（2回目）：有料の測定の前の指摘2件（Low）を是正し、固定したfile（`analysis-plan.md`・`cases.json`・`harness/score.mjs`・`harness/order.mjs`・`harness/probe-check.mjs`・`harness/run-trial.mjs`）が変わったため、台帳に予約が無い（0件）ことを確かめたうえで、記録を新しい最初の記録として作り直した（同じ台帳）。
-  - Low-1：Bashで本文のpathを挙げるだけのcommand（`ls -l`・`test -f`・`wc -l`・`stat`等）が本文の読込みに数えられ、`bodyRead`とXの主効果を水増ししていた。中身を読むcommandの区切りだけを数える形にした。
-  - Low-2：計画した試行の前の照合が`probe-compare.json`の`pass`を信用し、probeの結果も公開されていなかった。照合でprobeをruns rootの記録から計算し直し、probeの結果を`results/probes/`に写す手順を加えた。
-- 前の記録（`b698bfef`、1回目の作り直しの`85a0fe81`）はgitの履歴に残る。1回目は、独立レビューの是正で固定したfileが変わったための作り直しだった。
+- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`41e78e923428c661edc91c488ccaaeb740911851`である。`run-trial.mjs`と`analyze.mjs`はこの記載を照合する。`fixation.mjs check`は合格（差なし）。
+- 作り直した理由（3回目）：有料の測定の前の指摘2件（Low）を是正し、固定したfile（`analysis-plan.md`・`harness/score.mjs`・`harness/probe-check.mjs`）が変わったため、台帳に予約が無い（0件）ことを確かめたうえで、記録を新しい最初の記録として作り直した（同じ台帳）。
+  - Low-A：shellの構文の中の本文の読込み（`if [ -f B ]; then cat B; fi`、`do`・`{`の後、`$(cat B)`、`` `cat B` ``）が数えられず、`bodyRead`を少なく数えるおそれがあった。区切りの先頭の予約語と開き記号を飛ばしてcommandを決め、commandの置換の中身を別の区切りとして見る形にした。
+  - Low-B：目印のtokenの漏れの照合が、記録されたsha256を信用していた（sha256を書き換えると漏れが隠れた）。記録にtokenの形の文字列が1つでもあれば、sha256によらず不合格とする形にした。
+- 前の記録（`b698bfef`、1回目の作り直しの`85a0fe81`、2回目の`c7478b7d`）はgitの履歴に残る。1回目は独立レビューの是正、2回目は測定の前の指摘2件（Low-1：存在の確認を読込みに数えていた、Low-2：照合が`probe-compare.json`の`pass`を信用していた）の是正で、固定したfileが変わったための作り直しだった。
 - 固定したfile：`analysis-plan.md`・`cases.json`・`conditions.json`・`release.json`・`run-order.json`と、`harness/`の15件（`dry-run.mjs`と試験を除く）。
 - 台帳：repositoryの外の`<scratch>/rel1820/ledger/ledger-1820.jsonl`（予約0件）。台帳idは`results/fixation.json`にあり、`run-trial.mjs`と`analyze.mjs`はこの台帳だけを使う。
 - `results/probe-approval.json`は固定の対象に含めない（承認の記録で計画は変わらない）。

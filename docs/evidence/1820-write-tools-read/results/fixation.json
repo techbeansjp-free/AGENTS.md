@@ -4,10 +4,10 @@
  "records": [
   {
    "stage": "stage 1",
-   "fixedAtCommit": "c7478b7d47ee541d68cbd4accfaa854d61b540e1",
-   "at": "2026-11-25T19:18:26.399Z",
+   "fixedAtCommit": "41e78e923428c661edc91c488ccaaeb740911851",
+   "at": "2026-11-25T19:29:55.754Z",
    "files": {
-    "analysis-plan.md": "833e7aeea24337aba5cd8d4081c98b7f9fae3417b0097041ba37dee967d4866b",
+    "analysis-plan.md": "eba02b7aeade2604ef497f7aa345e394c0812644153fc8205949c8d506fcad91",
     "cases.json": "ad300d74adb6d0c714b525574af88c7efc9d61db6e84753d60b6153eca0a18c4",
     "conditions.json": "21543ed034917b59057ec28c3ac270e886a6ed158d958cbfaa5ed054c5d3d494",
     "release.json": "e03bc422c072fa5efcf213010b075782655b8c48d690ab31af56b86d7a621a71",
@@ -23,10 +23,10 @@
     "harness/make-fixture.mjs": "da24ddd3a87614e6cdbc88dada611f2060d90b299a610fac2607fb177611e0f2",
     "harness/markers.mjs": "d5e32aad16eabb081209d03e9461e2705a0bfaa777da34d30b5e3f8c0a5eefff",
     "harness/order.mjs": "8e3323ca66439d44d1986073e1790d6437bd54c23557d23dc67abfc56900981b",
-    "harness/probe-check.mjs": "82d8d7e1d4a6d1a0a121deb642ef989618349fdbd7cf812eee040b9b2d9e032f",
+    "harness/probe-check.mjs": "8494aa6d1c7f6ffa18dd8d4892b7a236a1ea91d3da5baa96d2cfe94836119ca4",
     "harness/run-all.mjs": "13862beef50f7fe365d1e1e2adfa05c0991725c1a44eb7f6762391dce00f4b31",
     "harness/run-trial.mjs": "4760d6edf9c4055bd006d651a228fdff8cd353cd592e558267fd0baec9d718cb",
-    "harness/score.mjs": "ef87f992429a40a6ec55e656fc52e4e266ea49e50135e3b0226fc544e283aa38"
+    "harness/score.mjs": "9baa0763b24cdafd8bff29c17034e80d9bd3d80ec36f3d2e04b8cdeefd91f8e0"
    },
    "ledgerId": "1ceebdc5-63a4-458e-bead-d033651577d4"
   }
