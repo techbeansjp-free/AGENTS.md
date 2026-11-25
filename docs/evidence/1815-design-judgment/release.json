@@ -1,0 +1,43 @@
+{
+ "schema": "asc-1815-release/v1",
+ "note": "Each condition installs exactly one pinned tarball. run-trial.mjs computes the sha256 of the tarball it is given and refuses a tarball that is not pinned here or is pinned for the other condition; after the install it refuses when the installed reference files differ from installedReferences of the condition. differsOnly was checked by unpacking both tarballs (README「条件の作り方」). installedReferences lists both installed copies of each reference (.agent-skill-chain/skills/ and .agent-skill-chain/managed-runtime/skills/), as project-assets installs them.",
+ "B": {
+  "kind": "release",
+  "tag": "v0.5.109",
+  "targetCommit": "af2ab12e2d871f9f229f25ae9d31f0f3aae9c819",
+  "asset": "agent-skill-chain-0.5.109.tgz",
+  "assetSha256": "05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f",
+  "verifiedAgainst": [
+   "SHA256SUMS of the release",
+   "GitHub release asset digest"
+  ]
+ },
+ "S": {
+  "kind": "candidate",
+  "packedFromCommit": "c997f274f7879513224a5552f0476c9924ea982e",
+  "packCommand": "node scripts/pack-candidate.mjs <absolute new dir> --version=0.5.109",
+  "asset": "agent-skill-chain-0.5.109.tgz",
+  "assetSha256": "12c6e2c96b313805419ec27cfd6ec80283530d6bebcecdf3b489e33cb94632ba",
+  "reproduced": "A second pack from the same commit into another new directory gave the same sha256.",
+  "baseCondition": "B",
+  "differsOnly": [
+   "package/release-identity.json",
+   "package/skills/asc/references/implementation.md",
+   "package/skills/user-journey-acceptance/references/journeys.md"
+  ]
+ },
+ "installedReferences": {
+  "B": {
+   ".agent-skill-chain/skills/asc/references/implementation.md": "1c708b35dcf4ebced58c6caf3c4c051bd04b1a732a6ed47489327150922d0ac6",
+   ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md": "1c708b35dcf4ebced58c6caf3c4c051bd04b1a732a6ed47489327150922d0ac6",
+   ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md": "9e77c5d88722f2aeb96ad7c353de2d3e5805929085eca59da6943f9275e54fd0",
+   ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md": "9e77c5d88722f2aeb96ad7c353de2d3e5805929085eca59da6943f9275e54fd0"
+  },
+  "S": {
+   ".agent-skill-chain/skills/asc/references/implementation.md": "4119c94c87d1a535a32388703cb9ff9d53d748053fbb8eff5d9f7138a6a744a4",
+   ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md": "4119c94c87d1a535a32388703cb9ff9d53d748053fbb8eff5d9f7138a6a744a4",
+   ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md": "98c36ffba76613fcf4f4466376761a5f4154dcae4a7483be7a12bb274c25b3df",
+   ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md": "98c36ffba76613fcf4f4466376761a5f4154dcae4a7483be7a12bb274c25b3df"
+  }
+ }
+}

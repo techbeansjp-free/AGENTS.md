@@ -1,0 +1,418 @@
+{
+ "label": "dry run (no model call, generator not started)",
+ "checks": {
+  "pairingAccepted": {
+   "pass": true,
+   "detail": null
+  },
+  "pairingRefused": {
+   "pass": true,
+   "detail": null
+  },
+  "packageDiffersOnly": {
+   "pass": true,
+   "detail": [
+    "package/release-identity.json",
+    "package/skills/asc/references/implementation.md",
+    "package/skills/user-journey-acceptance/references/journeys.md"
+   ]
+  },
+  "samplesBuilt": {
+   "pass": true,
+   "detail": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md",
+    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md",
+    ".agent-skill-chain/skills/asc/references/implementation.md",
+    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md"
+   ]
+  },
+  "dockerCliWithEmptyHome": {
+   "pass": true,
+   "detail": null
+  },
+  "imagesPresent": {
+   "pass": false,
+   "detail": {
+    "asc-1807-tools:1": null,
+    "node:22-alpine": "sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603"
+   }
+  },
+  "dockerNetworksCreateRemove": {
+   "pass": true,
+   "detail": {
+    "created": [
+     0,
+     0
+    ],
+    "removed": 0
+   }
+  }
+ },
+ "samples": {
+  "ui03-dashboard": {
+   "B": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "c09c755cb59e0c32a3c6ff38e9eb49f7df8d1282",
+    "clean": true,
+    "runtimeVersion": "0.5.109",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+     "diffSha256": "1218bcb470c6dfcee3d6448a21f8f95e282551b15e59ae1d34ef74a6d0bd2b70",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "S": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "e2eb265e55f809aa39e18b19b1229c7896a487d1",
+    "clean": true,
+    "runtimeVersion": "0.5.109",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+     "diffSha256": "1218bcb470c6dfcee3d6448a21f8f95e282551b15e59ae1d34ef74a6d0bd2b70",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "diffBS": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md",
+    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md",
+    ".agent-skill-chain/skills/asc/references/implementation.md",
+    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md"
+   ],
+   "sameClaudeMd": true,
+   "ok": true
+  },
+  "ui07-bus-mobile": {
+   "B": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "23014e38e1038ee36eed175c47e54677aaf43e48",
+    "clean": true,
+    "runtimeVersion": "0.5.109",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+     "diffSha256": "1218bcb470c6dfcee3d6448a21f8f95e282551b15e59ae1d34ef74a6d0bd2b70",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "S": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "0288aeae7f85e366f72dfbb5d651135c16f54231",
+    "clean": true,
+    "runtimeVersion": "0.5.109",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+     "diffSha256": "1218bcb470c6dfcee3d6448a21f8f95e282551b15e59ae1d34ef74a6d0bd2b70",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "diffBS": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md",
+    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md",
+    ".agent-skill-chain/skills/asc/references/implementation.md",
+    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md"
+   ],
+   "sameClaudeMd": true,
+   "ok": true
+  },
+  "ui04-parts-search": {
+   "B": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "5ed8d419e669efa7a7878055e1d3dffd9a6babd8",
+    "clean": true,
+    "runtimeVersion": "0.5.109",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+     "diffSha256": "1218bcb470c6dfcee3d6448a21f8f95e282551b15e59ae1d34ef74a6d0bd2b70",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "S": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "357c639b36795a981296a29c6239d5b45ca7dcf7",
+    "clean": true,
+    "runtimeVersion": "0.5.109",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+     "diffSha256": "1218bcb470c6dfcee3d6448a21f8f95e282551b15e59ae1d34ef74a6d0bd2b70",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "diffBS": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md",
+    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md",
+    ".agent-skill-chain/skills/asc/references/implementation.md",
+    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md"
+   ],
+   "sameClaudeMd": true,
+   "ok": true
+  }
+ },
+ "tarballs": {
+  "B": "05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f",
+  "S": "12c6e2c96b313805419ec27cfd6ec80283530d6bebcecdf3b489e33cb94632ba"
+ },
+ "refusals": [
+  {
+   "condition": "B",
+   "tarball": "S",
+   "exit": 3,
+   "message": "refused: tarball is pinned for condition S, not B"
+  },
+  {
+   "condition": "S",
+   "tarball": "B",
+   "exit": 3,
+   "message": "refused: tarball is pinned for condition B, not S"
+  },
+  {
+   "condition": "B",
+   "tarball": "unpinned",
+   "exit": 3,
+   "message": "refused: tarball sha256 is not pinned in release.json"
+  },
+  {
+   "condition": "S",
+   "tarball": "unpinned",
+   "exit": 3,
+   "message": "refused: tarball sha256 is not pinned in release.json"
+  }
+ ],
+ "packageDiff": [
+  "package/release-identity.json",
+  "package/skills/asc/references/implementation.md",
+  "package/skills/user-journey-acceptance/references/journeys.md"
+ ],
+ "images": {
+  "asc-1807-tools:1": null,
+  "node:22-alpine": "sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603"
+ },
+ "dockerWithEmptyHome": {
+  "exit": 0,
+  "serverVersion": "29.8.0",
+  "dockerHostResolved": true
+ },
+ "networks": {
+  "created": [
+   0,
+   0
+  ],
+  "removed": 0
+ },
+ "plan": {
+  "order": [
+   "ui03-dashboard/B-r1",
+   "ui03-dashboard/S-r1",
+   "ui07-bus-mobile/B-r1",
+   "ui07-bus-mobile/S-r1",
+   "ui04-parts-search/B-r1",
+   "ui04-parts-search/S-r1",
+   "ui03-dashboard/S-r2",
+   "ui03-dashboard/B-r2",
+   "ui07-bus-mobile/S-r2",
+   "ui07-bus-mobile/B-r2",
+   "ui04-parts-search/S-r2",
+   "ui04-parts-search/B-r2",
+   "ui03-dashboard/B-r3",
+   "ui03-dashboard/S-r3",
+   "ui07-bus-mobile/B-r3",
+   "ui07-bus-mobile/S-r3",
+   "ui04-parts-search/B-r3",
+   "ui04-parts-search/S-r3"
+  ],
+  "trials": 18,
+  "perTrialBudgetUsd": 1.5,
+  "worstCaseUsd": 35,
+  "planningUsd": {
+   "low": 8.5,
+   "high": 16.8
+  },
+  "capUsd": 40,
+  "stopAboveUsd": 38,
+  "codexCost": "not Host-computed (missing, as #1807)"
+ },
+ "example": {
+  "trial": "ui03-dashboard/B-r1",
+  "docker": [
+   "docker network create --internal --label asc.evidence=1815 asc1815-ui03-b-r1-gen",
+   "docker network create --label asc.evidence=1815 asc1815-ui03-b-r1-egress",
+   "docker run -d --name asc1815-ui03-b-r1-proxy --read-only --cap-drop ALL --security-opt no-new-privileges --label asc.evidence=1815 --pull never --pids-limit 128 --memory 256m --cpus 0.5 --user node --network asc1815-ui03-b-r1-egress -v <repo>/docs/evidence/1807-design-eval-browser/env:/opt/env:ro node:22-alpine node /opt/env/proxy.mjs /opt/env/allowlist.json",
+   "docker network connect --alias proxy asc1815-ui03-b-r1-gen asc1815-ui03-b-r1-proxy"
+  ],
+  "mcpConfig": {
+   "mcpServers": {
+    "browser": {
+     "type": "stdio",
+     "command": "docker",
+     "args": [
+      "run",
+      "-i",
+      "--rm",
+      "--name",
+      "asc1815-ui03-b-r1-mcp",
+      "--read-only",
+      "--cap-drop",
+      "ALL",
+      "--security-opt",
+      "no-new-privileges",
+      "--label",
+      "asc.evidence=1815",
+      "--pull",
+      "never",
+      "--pids-limit",
+      "512",
+      "--memory",
+      "3g",
+      "--cpus",
+      "2",
+      "--shm-size",
+      "1g",
+      "--tmpfs",
+      "/tmp:rw,size=512m",
+      "--user",
+      "pwuser",
+      "--network",
+      "asc1815-ui03-b-r1-gen",
+      "-v",
+      "<scratch>/runs/ui03-dashboard/B-r1/fixture:/work:ro",
+      "-v",
+      "<repo>/docs/evidence/1807-design-eval-browser/env:/opt/env:ro",
+      "-v",
+      "<repo>/docs/evidence/1807-design-eval-browser/env/allowlist.json:/config/allowlist.json:ro",
+      "-v",
+      "<repo>/docs/evidence/1807-design-eval-browser/env/allowlist-catalog.json:/config/allowlist-catalog.json:ro",
+      "-v",
+      "<scratch>/runs/ui03-dashboard/B-r1/log:/log",
+      "-e",
+      "HOME=/tmp",
+      "-e",
+      "BROWSE_PROXY=http://proxy:3129",
+      "-e",
+      "ALLOWLIST=/config/allowlist.json",
+      "-e",
+      "ALLOWLIST_CATALOG=/config/allowlist-catalog.json",
+      "-e",
+      "WORK_DIR=/work",
+      "-e",
+      "TOOL_LOG=/log/tools.jsonl",
+      "-e",
+      "SHOT_DIR=/log/shots",
+      "asc-1807-tools:1",
+      "node",
+      "/opt/env/mcp-server.mjs"
+     ]
+    }
+   }
+  },
+  "claude": "claude -p <prompt> --model sonnet --permission-mode acceptEdits --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --allowedTools mcp__browser__fetch_page,mcp__browser__view_page,mcp__browser__screenshot --mcp-config <scratch>/runs/ui03-dashboard/B-r1/mcp.json --strict-mcp-config --no-session-persistence --max-budget-usd 1.5 --output-format stream-json --verbose --include-hook-events",
+  "cleanup": [
+   "docker rm -f -v asc1815-ui03-b-r1-mcp asc1815-ui03-b-r1-proxy",
+   "docker network rm asc1815-ui03-b-r1-gen asc1815-ui03-b-r1-egress"
+  ],
+  "cwd": "fixture/",
+  "env": [
+   "PATH",
+   "HOME",
+   "CLAUDE_CONFIG_DIR",
+   "LANG",
+   "CLAUDE_CODE_OAUTH_TOKEN",
+   "DISABLE_AUTOUPDATER",
+   "DISABLE_TELEMETRY",
+   "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+   "DOCKER_HOST"
+  ]
+ },
+ "pass": true
+}

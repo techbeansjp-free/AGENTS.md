@@ -1,0 +1,51 @@
+{
+ "schema": "asc-1815-cases/v1",
+ "note": "Fixed before any model run (decision-criteria.md). The three cases are the #1807 cases that have a deterministic gold, a multi-width requirement and no design system. fromは docs/evidence/ からの相対path。fontsはfixtureの直下にFONTS.mdとして写す（#1807 run-gen.mjsと同じ）。firstViewは、依頼文の問いへの答えが初期表示の範囲（幅×高さ、scroll無し）に見えるかを判定する項目で、各項目は代替表記のどれか1つが見つかれば満たす（#1807 gold-check.mjsと同じ正規化：NFKC、空白除去、〜/～を~）。selectorsは、その要素の矩形が初期表示の範囲と交わり、表示されていること。",
+ "fonts": "1807-design-eval-browser/cases/FONTS.md",
+ "cases": {
+  "ui03-dashboard": {
+   "from": "1804-design-judgment/cases/ui03-dashboard",
+   "goldKey": "ui03",
+   "narrow": {"width": 800, "height": 1280, "renderName": "tablet"},
+   "wide": {"width": 1440, "height": 900, "renderName": "desktop"},
+   "question": "今、対処が必要なものがあるか（BRIEF.md「数秒で判断」）",
+   "firstView": {
+    "narrow": {"items": [["出荷遅延率"], ["LANE-B01"], ["LANE-C02"], ["温度センサー"]], "selectors": []},
+    "wide": {"items": [["出荷遅延率"], ["LANE-B01"], ["LANE-C02"], ["温度センサー"]], "selectors": []}
+   },
+   "itemsNote": "しきい値を超えたKPI（出荷遅延率）とレーン（LANE-B01・LANE-C02、#1804 gold.jsonのflagged）と、取得に失敗しているデータ源（温度センサー）",
+   "reason": "ownerの指定（業務dashboard）。#1807で手順を指示した条件だけが2モデル×2回で上位だったケース。PC常時表示とタブレットの2幅があり（表示幅の確認の段落が当たる）、既存のdesign systemが無い新しい監視画面（構成と密度の段落、方向が未定なら2案の段落が当たる）"
+  },
+  "ui07-bus-mobile": {
+   "from": "1807-design-eval-browser/cases/ui07-bus-mobile",
+   "goldKey": "ui07",
+   "narrow": {"width": 390, "height": 844, "renderName": "mobile"},
+   "wide": {"width": 1440, "height": 900, "renderName": "desktop"},
+   "question": "次のバスはいつ来るか、遅れや運休はないか、どののりばか（BRIEF.md）",
+   "firstView": {
+    "narrow": {"items": [["汐見台三丁目"], ["中央通り"], ["07:48", "7:48"], ["07:52", "7:52"], ["12分"], ["運休"], ["のりば1"], ["のりば2"]], "selectors": []},
+    "wide": {"items": [["汐見台三丁目"], ["中央通り"], ["07:48", "7:48"], ["07:52", "7:52"], ["12分"], ["運休"], ["のりば1"], ["のりば2"]], "selectors": []}
+   },
+   "itemsNote": "バス停名、運行のお知らせ（中央通り）、各のりばの次の便の予定時刻（07:48・07:52）、遅れの分数（12分）、運休、のりば名",
+   "reason": "#1807で、手順の指示が無い条件は全試行が狭幅だけを確認した（表示幅の確認の段落が直接当たる）。依頼が初期表示に答えを求める。スマートフォンが主でPCもある2幅"
+  },
+  "ui04-parts-search": {
+   "from": "1807-design-eval-browser/cases/ui04-parts-search",
+   "goldKey": "ui04",
+   "narrow": {"width": 390, "height": 844, "renderName": "mobile"},
+   "wide": {"width": 1440, "height": 900, "renderName": "desktop"},
+   "question": "部品を探し、在庫と納期を確かめられるか（PCは一覧と詳細を同時に、スマートフォンは在庫と納期）",
+   "firstView": {
+    "narrow": {"items": [["12件"], ["LG-2040-SS-HT-0500-JISB1192"], ["在庫あり"]], "selectors": ["input[type=search]"]},
+    "wide": {"items": [["12件"], ["LG-2040-SS-HT-0500-JISB1192"], ["在庫あり"], ["48"], ["即日出荷"], ["2027-02-14", "2027/02/14", "2027年2月14日", "2027.02.14"]], "selectors": ["input[type=search]"]}
+   },
+   "itemsNote": "広幅：検索欄、件数、一覧の先頭の部品の品番と、その詳細（在庫の状態・数量・納期・改訂日。規格の文字列は品番に含まれるので項目にしない）。狭幅：検索欄、件数、先頭の部品の品番と在庫の状態（詳細は一覧から移る設計を許すので、狭幅では詳細を求めない）",
+   "reason": "比較・入力の画面で、PCとスマートフォンで求める初期表示が違う（構成と密度の段落、表示幅の確認の段落が当たる）。既存のdesign systemが無い"
+  }
+ },
+ "excluded": {
+  "ui02-exhibition": "#1804だけのケースで、#1807のbrowser環境・goldが無く、初期表示の答えを決定論で定める項目が無い（雰囲気を伝える画面）",
+  "ui08-existing-ds": "既存のdesign systemの上の画面で、候補の段落は適用しない場面（誤適用の確認には使えるが、3ケースの枠では効果の測定を優先した）",
+  "ui10-cli": "画面の無い依頼"
+ }
+}

@@ -1,0 +1,130 @@
+TAP version 13
+# Subtest: pairing: each condition accepts only its pinned tarball
+ok 1 - pairing: each condition accepts only its pinned tarball
+  ---
+  duration_ms: 2.422306
+  ...
+# Subtest: pairing: the definitions pin a candidate packed from a commit and different references
+ok 2 - pairing: the definitions pin a candidate packed from a commit and different references
+  ---
+  duration_ms: 0.404475
+  ...
+# Subtest: pairing: installed references and the CLAUDE.md block are checked
+ok 3 - pairing: installed references and the CLAUDE.md block are checked
+  ---
+  duration_ms: 5.108375
+  ...
+# Subtest: pairing: packageDiff lists added, removed and changed files and skips prefixes
+ok 4 - pairing: packageDiff lists added, removed and changed files and skips prefixes
+  ---
+  duration_ms: 6.944542
+  ...
+# Subtest: reads: successful Reads of the body and either copy of a reference count; errors, Grep and Skill do not
+ok 5 - reads: successful Reads of the body and either copy of a reference count; errors, Grep and Skill do not
+  ---
+  duration_ms: 1.894661
+  ...
+# Subtest: reads: no reads at all
+ok 6 - reads: no reads at all
+  ---
+  duration_ms: 0.373324
+  ...
+# Subtest: run-trial: the claude command has the \#1807 tools, the MCP tools only and no prompt-forced procedure
+ok 7 - run-trial: the claude command has the \#1807 tools, the MCP tools only and no prompt-forced procedure
+  ---
+  duration_ms: 0.839672
+  ...
+# Subtest: run-trial: docker plan keeps \#1807 isolation, adds the label and never pulls
+ok 8 - run-trial: docker plan keeps \#1807 isolation, adds the label and never pulls
+  ---
+  duration_ms: 0.538904
+  ...
+# Subtest: run-trial: the child environment carries only the listed variables
+ok 9 - run-trial: the child environment carries only the listed variables
+  ---
+  duration_ms: 0.8682
+  ...
+# Subtest: run-trial: init check and credential scrub
+ok 10 - run-trial: init check and credential scrub
+  ---
+  duration_ms: 0.720105
+  ...
+# Subtest: run-trial CLI: fixed values, wrong pairing, unpinned tarball and an unauthorised run are refused
+ok 11 - run-trial CLI: fixed values, wrong pairing, unpinned tarball and an unauthorised run are refused
+  ---
+  duration_ms: 756.011203
+  ...
+# Subtest: decide: positions, pairs, spearman and the direction thresholds
+ok 12 - decide: positions, pairs, spearman and the direction thresholds
+  ---
+  duration_ms: 1.333771
+  ...
+# Subtest: decide: an evaluator favours S only when the mean of two rounds gives >= 8 of 9 pairs and the rounds agree
+ok 13 - decide: an evaluator favours S only when the mean of two rounds gives >= 8 of 9 pairs and the rounds agree
+  ---
+  duration_ms: 0.653427
+  ...
+# Subtest: decide: indicators compare answer widths, then hidden items; failures are worst for S and best for B
+ok 14 - decide: indicators compare answer widths, then hidden items; failures are worst for S and best for B
+  ---
+  duration_ms: 1.180393
+  ...
+# Subtest: decide: a case shows an effect only with both evaluators, indicators not worse and the text read
+ok 15 - decide: a case shows an effect only with both evaluators, indicators not worse and the text read
+  ---
+  duration_ms: 1.297214
+  ...
+# Subtest: decide: overall needs effects in >= 2 cases, no harm and cost ratio <= 3
+ok 16 - decide: overall needs effects in >= 2 cases, no harm and cost ratio <= 3
+  ---
+  duration_ms: 0.973028
+  ...
+# Subtest: decide: a failed trial is replaced once by the next extra rep of the same condition
+ok 17 - decide: a failed trial is replaced once by the next extra rep of the same condition
+  ---
+  duration_ms: 1.02718
+  ...
+# Subtest: make-blind: ids and order are fixed by the seed and differ between rounds
+ok 18 - make-blind: ids and order are fixed by the seed and differ between rounds
+  ---
+  duration_ms: 18.281238
+  ...
+# Subtest: budget: a reservation must stay within cap minus margin
+ok 19 - budget: a reservation must stay within cap minus margin
+  ---
+  duration_ms: 0.503267
+  ...
+# Subtest: fixation: every fixed file exists and a changed digest is reported
+ok 20 - fixation: every fixed file exists and a changed digest is reported
+  ---
+  duration_ms: 120.445457
+  ...
+# Subtest: dry-run: trial order alternates B/S first by round and covers every case
+ok 21 - dry-run: trial order alternates B/S first by round and covers every case
+  ---
+  duration_ms: 0.567384
+  ...
+# Subtest: collect: the runs root and local paths are removed
+ok 22 - collect: the runs root and local paths are removed
+  ---
+  duration_ms: 5.554398
+  ...
+# Subtest: run-indicators: the first-view container has no network and mounts the runs read-only
+ok 23 - run-indicators: the first-view container has no network and mounts the runs read-only
+  ---
+  duration_ms: 3.156462
+  ...
+# Subtest: cases: three cases incl. ui03-dashboard, two widths each, items for both widths
+ok 24 - cases: three cases incl. ui03-dashboard, two widths each, items for both widths
+  ---
+  duration_ms: 2.076869
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1171.710324
