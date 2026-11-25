@@ -1,0 +1,61 @@
+# command: node --test docs/evidence/1817-skill-application/harness/score.test.mjs docs/evidence/1817-skill-application/harness/probe.test.mjs
+# HEAD: 5bbd96f2e9bff78a326c896fae9b615f54612065 (clean tree)
+# node: v20.12.2
+ok 1 - clean R probe passes; heading mark omitted in the answer is accepted (L3)
+ok 2 - each leak or mismatch fails the probe
+ok 3 - stage-0 refix: bundled plugins allowed and named; any other plugin fails
+ok 4 - stage-0 refix: only permission-suggestion lines for the two markers are excluded from the debug checks
+ok 5 - review L1-L4: builtin plugin names compared across conditions; tighter marker and managed-policy exclusions
+ok 6 - stage-0 refix: the managed-policy path with a space and relative paths in hook text are not outside paths
+ok 7 - the program directory is excluded only when it is a safe directory (M2)
+ok 8 - hook condition passes with pointer delivered, the hook log and only its own hook events
+ok 9 - P: the pointer is the last line of CLAUDE.md, so the first/last-line answer shows it (N3)
+ok 10 - hook events: shapes by event name, counts against the log (L-1)
+ok 11 - compare: conditions may differ only by CLAUDE.md / hook output (M1); git subjects compared as a set (L-7)
+ok 12 - ownerCanaries reads first lines and Skill names, never content beyond them
+ok 13 - description() reads the single-line frontmatter description
+ok 14 - guard refuses ancestors with instruction files or git, and the real HOME
+ok 15 - ledger: cumulative by unique id, reserved at budget until settled, duplicate names refused, sequential (M4, N1)
+ok 16 - fixation: a change to a fixed file is detected; stage 3 may only add conditions.I and fill phase3 (N2)
+ok 17 - stage 3: only condition-i.mjs may change, with a reason and a review; the conditionISchema is enforced (M-1, L-d)
+ok 18 - ledger id and seq: one ledger, each seq once; a copied earlier state is detected (N-1 (d))
+ok 19 - refix: recorded ledger, probe reservations only, only probe-check.mjs may change (N-1 (b)(c))
+ok 20 - a refix record later than the first stage-1/2 reservation is refused at run time (N-1 (a))
+ok 21 - condition-i.mjs shape: exports, imports and no top-level statements are checked at stage 3 (L-1)
+ok 22 - fixation file must be committed, its commits in history, and the first commit named in README (L-c)
+ok 23 - the token value is found in child files by count only
+ok 24 - run path requires the pinned install of the condition, clean at the recorded HEAD, entries matching, and the adopted option (L-2, L-b, \#1817)
+ok 25 - condition I: the pointer may appear anywhere in the answer, not only as the last line (M-1)
+ok 26 - every condition gets one commit with the same neutral subject (M1)
+ok 27 - \#1817 probe: B and S expect the adopted pointer anywhere in the answer and no hook
+ok 28 - \#1817 release.json pins B to the release and S to the candidate; make-fixture refuses the wrong pairing
+ok 29 - asc case: body + reference + markers => applied
+ok 30 - Skill tool alone is the first hop only
+ok 31 - two hops: thin entry Read, then body by a relative path resolved against the project root
+ok 32 - paths outside the project root never match; /private/tmp equals /tmp
+ok 33 - a refused or unanswered Read does not count as read
+ok 34 - the registered entry (.claude/skills) is not the body
+ok 35 - managed-runtime body path counts
+ok 36 - misselect: another ASC body read instead of the expected one
+ok 37 - answerGroups require every group (ui-1)
+ok 38 - secondary Skill is recorded but not required (asc-3)
+ok 39 - negative: an ASC body read or Skill call is overapplication
+ok 40 - budget stop is scored with the last text; API error is a failure
+ok 41 - scoreDir: names, multi-letter conditions, hook log, missing trace
+ok 42 - judge: owner pass level
+ok 43 - missing init event and an unfired hook in a hook condition are failures (L5, L6)
+ok 44 - only planned reps count; a later rep only replaces a failed planned trial once (L-3)
+ok 45 - product hook (condition I) is fired by SessionStart hook events in the trace
+ok 46 - collect: a trace without meta.json becomes a failure row instead of a crash (L-6)
+ok 47 - collect extends trials.json across stages and refuses a trial already collected (L-e)
+ok 48 - product hook: hookFired reflects the trace evidence in the summary (L-3)
+ok 49 - scrubSensitive replaces mail addresses, keys and account fields (L9)
+ok 50 - redact removes local paths and user-specific names
+ok 51 - pointer text is extracted from v05/USAGE.md and the hook emits it as SessionStart context
+ok 52 - \#1817: redacted public traces (<trial>/work) are scored like the unredacted ones
+ok 53 - \#1817 relaxed markers: spelling variants pass, the procedure is still required
+ok 54 - \#1817 judge: applied above B, bodyRead not lower than B - 1, overapplication at most B + 1; targeted cases reported
+# tests 54
+# pass 54
+# fail 0
+# exit: 0
