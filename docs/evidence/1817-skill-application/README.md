@@ -63,13 +63,14 @@
 
 ## 測定の前の固定
 
-- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`f1cdb02bf41983c17b1a51bc5f9e5d3bf11dc35e`である。`run-trial.mjs`と`judge.mjs`はこの記載を照合する。
-- 作り直した理由：レビューの是正で固定したfileが変わったため、記録を新しい最初の記録として作り直した。前の5つの記録はgitの履歴に残る。
+- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`8ae7b145c18801a188583286256e2a3651b443c6`である。`run-trial.mjs`と`judge.mjs`はこの記載を照合する。
+- 作り直した理由：レビューの是正で固定したfileが変わったため、記録を新しい最初の記録として作り直した。前の6つの記録はgitの履歴に残る。
   - commit `5bbd96f2`を固定し、`89d90c46`でcommitしたもの。
   - commit `992c98b6`を固定し、`e5293fae`でcommitしたもの。
   - commit `6131acb1`を固定し、`196110f3`でcommitしたもの。
   - commit `31cc0e90`を固定し、`aec1e065`でcommitしたもの。
   - commit `6c68ea58`を固定し、`576a00bd`でcommitしたもの。
+  - commit `f1cdb02b`を固定し、`b2ba91d7`でcommitしたもの。
 - 追記（`refix`）にしなかった理由：`fixation.mjs`のrefixは、台帳にprobeの予約があり、変わったのが`probe-check.mjs`だけの場合に限る。今回はどちらも満たさない。`stage3`は#1817では拒否する。
 - 作り直してよい状態だった：作り直す前に、台帳が見出しの1行だけ（予約0件、lockのfileなし）であることを確かめた。測定は始まっていない。
 - 記録の段階名：`stages 0-2`は#1814の写しのままで、#1817の測定全体を指す。
@@ -80,6 +81,8 @@
 ## 実行の手順
 
 統括が行う。`<scratch>`は一時directory、`<repo-root>`はこのrepositoryのcheckoutを指す。
+
+**測定全体の前提：統括は台帳（`$LEDGER`）を手で編集しない。** 台帳に行を足すのは`run-trial.mjs`と`fixation.mjs init`だけである。`run-trial.mjs`・`run-all.mjs`・`collect.mjs`・`judge.mjs`は、同じ予約の2回目の精算、予約の無い精算、別の試行名の精算を手の編集として拒否する。精算の`costUsd`は、sha256で結んだ`meta.json`の`costUsd`と照合する。台帳は取り出しのときに`results/ledger.jsonl`として公開し、`judge.mjs`は読んだ台帳と同じことを確かめる。台帳に秘密は無い（id、試行名、費用、sha256、時刻だけ）。
 
 手順2（隔離の確認）は、実HOMEとこのrepositoryに目印fileを一時的に作る。#1817での実行は、2026-11-25にownerが会話で承認した（統括が記録）。手順3は手順2の合格が前提である（decision-criteria.mdの規則5）。
 
@@ -102,8 +105,8 @@ CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC1817_ALLOW_PAID=1 node $EV/ha
 CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC1817_ALLOW_PAID=1 node $EV/harness/run-all.mjs replacements <scratch>/run1817e/runs --fixture-B <scratch>/run1817e/fixture-B --fixture-S <scratch>/run1817e/fixture-S --ledger $LEDGER --run
 # 4. 固定の照合、取り出し、判定（judge.mjsは固定・試行ごとの固定の記録・台帳・完了を照合してから採点する）
 node $EV/harness/fixation.mjs check $EV/results/fixation.json
-node $EV/harness/collect.mjs <scratch>/run1817e/runs $EV/results/traces --ledger $LEDGER
-node $EV/harness/judge.mjs $EV/results/traces --ledger $LEDGER --runs-json $EV/results/runs.json --out $EV/results/judge.json
+node $EV/harness/collect.mjs <scratch>/run1817e/runs $EV/results/traces --ledger $LEDGER --publish-ledger $EV/results/ledger.jsonl
+node $EV/harness/judge.mjs $EV/results/traces --runs-root <scratch>/run1817e/runs --ledger $LEDGER --runs-json $EV/results/runs.json --out $EV/results/judge.json
 ```
 
 `--run`を付けない`run-all.mjs`は、起動する試行の一覧を出すだけでモデルを呼ばない。`run-trial.mjs`を直接使う場合も、固定した順の次の試行以外は拒否される。判定は`judge.mjs`だけで行い、`score.mjs --judge`は拒否する。
@@ -122,7 +125,7 @@ tokenは測定を動かすprocessの環境変数`CLAUDE_CODE_OAUTH_TOKEN`だけ�
 
 (1) 予約がある場合（`grep '"trial":"<試行名>"' $LEDGER`が予約の行を出す）。モデルの実行中に止まった場合がこれに当たる。
 
-- 試行のdirectory（`home/`・`config/`以外）は消さない。精算の行が無いので、traceやmeta.jsonの欠けた試行として失敗に数え、必須の置き換えの対象になる。
+- 試行のdirectory（`home/`・`config/`以外）は消さない。精算の行が無い予約は、どのfileがあっても失敗として数える（`collect.mjs`は`not settled`として出す）。必須の置き換えの対象になる。
 - 台帳は、精算の行の無い予約を予約額（0.6 USD）で数える。
 - ほかに消してよいのは、古い`<ledger>.lock`だけである。台帳の行は変えない。
 - その後、同じ`run-all.mjs planned`で次の試行から続け、計画の後に`run-all.mjs replacements`で置き換える。
@@ -138,12 +141,12 @@ tokenは測定を動かすprocessの環境変数`CLAUDE_CODE_OAUTH_TOKEN`だけ�
 - 予約のある試行を消す：`judge.mjs`が、台帳の予約・`trials.json`・traceの不一致として拒否する。
 - 精算済みの試行の`trace.jsonl`・`meta.json`を消す、または変える：`collect.mjs`・`judge.mjs`が拒否する。置き換えの計画もその試行を失敗として扱わず、拒否する。
 
-## モデルを呼ばない確認（HEAD `f1cdb02b`、clean tree）
+## モデルを呼ばない確認（HEAD `8ae7b145`、clean tree）
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| harnessの試験（合成の記録） | 65件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt) |
-| dry run（本物の2つのtarball、`--allow-unreleased`なし。sample projectは`<scratch>/run1817g/`） | 全7項目が合格（下の箇条） | [results/dry-run.json](results/dry-run.json) |
+| harnessの試験（合成の記録） | 68件すべて合格。`test/test_source_quality.mjs` 2件合格、`npx eslint src bin test v05`は指摘なし | [results/harness-tests.txt](results/harness-tests.txt) |
+| dry run（本物の2つのtarball、`--allow-unreleased`なし。sample projectは`<scratch>/run1817h/`） | 全7項目が合格（下の箇条） | [results/dry-run.json](results/dry-run.json) |
 | 拒否の反例 | 下の箇条 | [results/refusals.txt](results/refusals.txt) |
 | #1814のtraceの採点し直し | 上の「回答の目印の見直し」 | [results/rescore-1814.json](results/rescore-1814.json) |
 | 固定の照合 | `fixation.mjs check`が合格（差なし） | [results/fixation.json](results/fixation.json) |
@@ -164,12 +167,12 @@ dry runの内容：
 - tarballの取り違え：`make-fixture`は、他方の条件のtarballと、置き換えた前の2つの候補を拒否した。
 - 順序：順序の外の試行を拒否した。計画の途中の置き換えと、置き換えの計画の無い置き換えも拒否した。
 - probe：測定の開始（計画した試行の予約）の後のprobe、回3のprobe、回1の無い回2を拒否した。
-- `collect.mjs`：`--ledger`の無い起動を拒否した。
+- `collect.mjs`：`--publish-ledger`の無い起動を拒否した。`judge.mjs`：`--runs-root`の無い起動を拒否した。公開した`trials.json`が作り直しと違う場合と、公開した台帳が無い場合も拒否した。
 - `run-all.mjs planned`（`--run`なし）の実際の出力：固定した順の112試行の一覧。
 - 判定の入口：`score.mjs --judge`は拒否した。`judge.mjs`は、固定の記録が未commit、READMEに固定のcommitが無い、別の台帳、の場合に拒否した。
 - 許可の環境変数なしの`--run`を拒否した。
 
-CIのsource検査（`scripts/check_source_quality.ts`）とESLintは、実行していない。この作業場所に依存packageが無く、取得にnetworkが要るため。代わりに、同じ禁止の型表現・directive・shebangの正規表現と`node --check`で、追加したfileを確かめた（該当なし）。ESLintの対象（`src`・`bin`・`test`・`v05`）に`docs/evidence`は入っていない。
+CIのsource検査（`test/test_source_quality.mjs`、`scripts/check_source_quality.ts`を使う）は2件とも合格し、`npx eslint src bin test v05`は指摘なしだった（[results/harness-tests.txt](results/harness-tests.txt)）。ESLintの対象に`docs/evidence`は入っていない。参考までに`npx eslint docs/evidence/1817-skill-application`を実行すると、`harness/probe-check.mjs`の正規表現の不要なescape（`no-useless-escape`）2件が出る。このfileは#1814とbyteで同じで、#1814の写しにも同じ2件が出る。固定したfileを変えないため、直していない。
 
 `skills/asc/SKILL.md`を変えた後（commit `6d6e1223`の時点）、`test/test_project_read_trigger.mjs`は14件すべて合格した。`test/test_package.mjs`は3件が失敗したが、`ee77daa0`の前と同じ3件である。どれもnpmの出力をJSONとして読む所での失敗で、この環境の問題であり本文の変更とは関係しない。`test/test_project_assets.mjs`（`ee77daa0`の後に43件合格・4件失敗。失敗はどれもGitの操作の失敗の文言の照合で、本文の文言には依存しない）は、`6d6e1223`の後には試していない。
 
@@ -186,7 +189,7 @@ CIのsource検査（`scripts/check_source_quality.ts`）とESLintは、実行し
 - `order.mjs`・`run-all.mjs`・`judge.mjs`（新規）：
   - `order.mjs`：実行の順序、probeの制限（`probeRefusal`）、必須の置き換えの計画、完了・上限の判断（`completionStatus`）。
   - `run-all.mjs`：その順だけを実行するrunner。
-  - `judge.mjs`：判定の唯一の入口。固定・試行ごとの`fixationSha256`・台帳を照合し、台帳の予約・`trials.json`・traceが同じ試行の集まりで予約の番号に欠けが無いこと、精算済みの試行の`trace.jsonl`・`meta.json`のsha256が精算の行と同じことを確かめてから採点する。
+  - `judge.mjs`：判定の唯一の入口。固定・試行ごとの`fixationSha256`・台帳を照合し、台帳の予約・`trials.json`・traceが同じ試行の集まりで予約の番号に欠けが無いこと、精算済みの試行の`trace.jsonl`・`meta.json`のsha256が精算の行と同じことを確かめる。さらに`--runs-root`の元の記録から作り直した出力と、公開したtrace・`trials.json`がbyteで同じこと、公開した台帳が読んだ台帳と同じことを確かめてから採点する。`--runs-root`は取り出しのときと同じpathで渡す（置換がそのpathを使うため）。
 - `score.mjs`：
   - `collect.mjs`が置き換えたpath（`<trial>/work/…`）も採点できるようにした。#1814では、置き換える前の記録で採点する逸脱が必要だった。実際の絶対pathの扱いは変わらない。
   - 判定を`judge1817`（[decision-criteria.md](decision-criteria.md)）にした。
@@ -195,12 +198,16 @@ CIのsource検査（`scripts/check_source_quality.ts`）とESLintは、実行し
   - `--judge`は拒否する。
 - `fixation.mjs`：段階3（`stage3`）を拒否する（#1817には無い）。固定するfileに`run-order.json`・`order.mjs`・`run-all.mjs`・`judge.mjs`を加えた。初期化・refix・照合は同じ。
 - `dry-run.mjs`：B・Sそれぞれのsample projectを本物のtarballから作る形に書き直した。2つの導入済みSkillの差が2つの本文だけであることを確かめる。
-- `ledger.mjs`：精算の行に終了codeと`trace.jsonl`・`meta.json`のsha256を加え、精算済みの試行のfileの欠け・改変を検出する関数を加えた。
-- `collect.mjs`：記録の欄（組合せ、`trace.jsonl`・`meta.json`のsha256）を加えた。`--ledger`を必須にし、精算済みの試行のfileが欠けた、または改変された場合は何も書かずに拒否する。
+- `ledger.mjs`：精算の行に終了codeと`trace.jsonl`・`meta.json`のsha256を加えた。精算済みの試行のfileの欠け・改変と、精算と`meta.json`の`costUsd`の違いを検出する関数、手で編集した台帳を検出する関数（`ledgerProblems`）を加えた。
+- `collect.mjs`：
+  - 記録の欄（組合せ、`trace.jsonl`・`meta.json`のsha256）を加えた。
+  - 出力を、元の記録だけから決まる関数（`buildCollection`・`collectTrial`）で作る形にした。`judge.mjs`が同じ関数で作り直して照合する。
+  - `--ledger`と`--publish-ledger`を必須にした。手で編集した台帳、精算済みの試行のfileの欠けや改変、予約の無い試行のdirectoryは、何も書かずに拒否する。精算の無い予約は`not settled`として出す。台帳を`results/ledger.jsonl`に公開する。
+  - 1回だけ、空のdirectoryへ取り出す（#1814の段階ごとの追記は無くした）。
 - `markers.mjs`：目印の名前だけ。
 - 試験：
   - #1814のR/P/Hのprobeの試験は、#1814の条件の定義を試験の中で与えて残した。
-  - 加えた試験：B/Sのprobe、中立のcommit、release/候補の組合せの拒否、緩めた目印、`judge1817`と判定しない場合（途中の停止の合成の記録を含む）、置き換えたpathの採点、実行の順序、置き換えの計画と次の置き換えだけの受付け、測定の後のprobeの拒否と遅いprobeでの`cap-reached`の否認、判定の入口の拒否（予約した試行を消した記録を含む）、精算済みの試行のtraceの消去・改変とmetaの消去の拒否（置き換えも計画しない）、予約の無いdirectoryを開始済みとみなさないこと。
+  - 加えた試験：B/Sのprobe、中立のcommit、release/候補の組合せの拒否、緩めた目印、`judge1817`と判定しない場合（途中の停止の合成の記録を含む）、置き換えたpathの採点、実行の順序、置き換えの計画と次の置き換えだけの受付け、測定の後のprobeの拒否と遅いprobeでの`cap-reached`の否認、判定の入口の拒否（予約した試行を消した記録を含む）、精算済みの試行のtraceの消去・改変とmetaの消去の拒否（置き換えも計画しない）、予約の無いdirectoryを開始済みとみなさないこと、公開したtrace・`trials.json`の改変の拒否、精算の無い予約を失敗とすること、手で編集した台帳と違う公開した台帳の拒否。
 - 測定の計画（環境・隔離・限界）は#1814の[EVAL_PLAN.md](../1814-skill-invocation/EVAL_PLAN.md)による。hookの条件・段階3の仕組みは使わない。codeには残るが、条件B・Sでは通らない。
 
 ## 限界
