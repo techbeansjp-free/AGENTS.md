@@ -1,0 +1,44 @@
+# #1820 stage 2: tests without a model call (HEAD bfefb93e, fixation record bfefb93e, check: no difference)
+
+## node --test docs/evidence/1820-write-tools-read/stage2/harness/harness.test.mjs
+ok 1 - copied files are byte-identical; the fixed list names every plan file and harness module
+ok 2 - cases: the 14 \#1817 cases unchanged on fixture A, and three design cases with the stage-1 prompt G for a design folder
+ok 3 - conditions: only level W (the stage-1 W), B and S differ only in the release, D fixtures pinned like stage 1
+ok 4 - budget: the stage-1 spend is read from its published ledger; the stage-2 cap is the remainder; both stages stay under 25 USD
+ok 5 - launch: level W flags for every trial; no --max-turns on fixture A, 3 on the design folders, 30 for the probe
+ok 6 - run order: 136 planned trials, reps outermost, B then S, design and negative cases interleaved; counterexamples refused
+ok 7 - score fixture A (\#1817): applied needs the body, a listed reference and the markers; a refused or unanswered Read does not count
+ok 8 - score design: issued Reads of the three messages count; applied = body + implementation.md or workspace.md; no markers
+ok 9 - score: the condition must be level W (tools, acceptEdits, no MCP); an API error is a failure; negatives count overapplication
+ok 10 - rule (owner): body >= 80% and above B, applied not lower, overapplication at most B + 1; otherwise not a candidate or not judged
+ok 11 - summaries and replacements: the k-th failure of a condition/case is replaced by rep 4+k; subsets by fixture; perCase letters
+ok 12 - completion: complete with every planned trial; cap-reached at the stage-2 stop line without a late probe
+ok 13 - install record: built for the trial's condition and fixture from the pinned tarball, unchanged since
+ok 14 - dry-run comparison: only the first sentence of the block may differ, and the rest must be byte-identical
+ok 15 - probe approval and markers: the committed stage-1 approval of \#1820 is used; the marker files are the stage-1 ones
+ok 16 - collect: the per-user temporary directory name is redacted with the other local paths
+ok 17 - probe gate: one W probe per condition, each with its own asc description, bound to the ledger and recomputed
+ok 18 - fixation: a refix record later than the first measurement reservation is reported; the conditions file is the stage-2 one
+# tests 18
+# pass 18
+# fail 0
+
+## npx eslint docs/evidence/1820-write-tools-read/stage2/harness
+no problems
+
+## node --test test/test_project_read_trigger.mjs test/test_source_quality.mjs
+# tests 17
+# pass 17
+# fail 0
+
+## npx eslint src bin test v05
+no problems
+
+## node --test test/test_project_assets.mjs test/test_package.mjs (recorded, not passing in this environment)
+# tests 60
+# pass 52
+# fail 7
+The same 7 tests fail on an export of the base commit 7606d740 without the candidate edits (test_project_assets 39, 40,
+43, 44: "Migration Git operation failed (exit status 1)"; test_package 4, 6, 12: npm pack prints the prepack banner
+"> agent-skill-chain..." on stdout where JSON is expected). They are failures of this local environment, not of the
+candidate edits; CI is the authority for them.

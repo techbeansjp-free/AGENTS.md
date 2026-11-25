@@ -92,7 +92,7 @@
 - 見込み（dry runの`plan`）：
   - 計画の単価：fixture Aの試行0.12 USD（#1817の実績は読取りだけで平均0.085、最大0.141 USD。書込みのtoolでasc-3・ui-1等が長くなりうる分を足した）、画面の依頼0.15 USD（3つのmessage。3番目で画面を書く場合がある。段階1の2ターンの試行は0.033 USD）、probe 0.15 USD（段階1の水準Wのprobeは0.121 USD）。112＋24試行＋probe 2回で約17.3 USD。
   - #1817の平均どおりなら約12.2 USD（ownerの見込み約15 USD）。
-  - 線までに使える1試行の平均は約0.155 USD。これを超えると、最後の試行が起動せず`cap-reached`で判定する。
+  - 線までに使える1試行の平均は約0.156 USD（dry runの`breakEvenPerTrialUsd`）。これを超えると、最後の試行が起動せず`cap-reached`で判定する。
 
 ## 実行の手順
 
@@ -134,13 +134,32 @@ node $EV/harness/judge.mjs $EV/results/traces --runs-root <scratch>/run1820s2m/r
 
 ## 測定の前の固定
 
-- 最初の記録のcommit：（固定の後に記入）
+- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`bfefb93e85f9381c71622dceab2d1345d9ca7d26`である。`run-trial.mjs`と`judge.mjs`はこの記載を照合する。`fixation.mjs check`は合格（差なし）。
 - 固定したfile：`decision-criteria.md`・`cases.json`・`conditions.json`・`release.json`・`run-order.json`と、`harness/`の15件（`dry-run.mjs`と試験を除く）。
 - 台帳：repositoryの外の新しい台帳`<scratch>/rel1820/ledger/ledger-1820-s2.jsonl`（予約0件）。段階1の台帳とは別で、段階1の費用は`conditions.json`の`budget`で数える。台帳idは`results/fixation.json`にあり、`run-trial.mjs`と`judge.mjs`はこの台帳だけを使う。
 
 ## モデルを呼ばない確認
 
-（固定の後に記入）
+HEAD `bfefb93e`（固定した最初の記録と同じ。`fixation.mjs check`は差なし）で行った。
+
+| 項目 | 結果 | 記録 |
+| --- | --- | --- |
+| harnessの試験（合成の記録） | 18件すべて合格。写したfile（`guard`・`ledger`・`install-asc`・`condition-i`は#1817と、`probe-check`は段階1と）がbyteで同じことも試験で照合した。`npx eslint`（harness）は指摘なし | [results/harness-tests.txt](results/harness-tests.txt) |
+| 製品の変更の試験 | `test/test_project_read_trigger.mjs`・`test/test_source_quality.mjs` 17件合格、`npx eslint src bin test v05`は指摘なし。`test/test_project_assets.mjs`・`test/test_package.mjs`の7件は、候補の変更の無い基のcommit `7606d740`でも同じく失敗する（この環境のGit操作とnpmの出力による）。CIで確かめる | [results/harness-tests.txt](results/harness-tests.txt) |
+| dry run（本物の2つのtarball、`--allow-unreleased`なし、記録した台帳。fixtureは新しい`<scratch>/run1820s2/`） | 全15項目が合格（下の箇条） | [results/dry-run.json](results/dry-run.json) |
+
+dry runの内容：
+
+- 8つのfixture（B・S×A・D3・D4・D7）を、Bはrelease（`e7df164a…`）、Sはcandidate（`c51f17ec…`）から利用者の手順で導入し、16件の入口が記録とpackageに一致し、`claude-md`を採用した。Aは基の`CLAUDE.md`への追記（`append`）、D3・D4・D7は案内文だけの`CLAUDE.md`の作成（`create`）。Bの塊のsha256は`444b31b5…`（段階1・#1814の条件Iと同じ）、Sは`9a1de39f…`。
+- BとSの比較（4つのフォルダのすべてで）：
+  - `CLAUDE.md`の塊は最初の文だけが違い、その後の186文字と、塊の外（基の`CLAUDE.md`と区切りの行）はbyteで同じ（`readTriggerFirstSentenceOnly`）。
+  - `.claude/skills/asc/SKILL.md`のdescriptionはBが旧、Sが新の文面で、入口の他の部分と他の15件の入口はbyteで同じ（`ascDescriptionAsIntended`）。
+  - 導入後のfileで違うのは7件：`CLAUDE.md`、`.claude/skills/asc/SKILL.md`、`.agent-skill-chain/distribution.json`、`.agent-skill-chain/skills/asc/SKILL.md`・`.agent-skill-chain/v05/USAGE.md`とそれぞれの`managed-runtime/`の写し（`installedDiffExpected`）。
+- 試行の写しに中立のcommitを入れた後、commitの件名は8つで同じ（`Update project files`・`Install ASC`・`initial`）。
+- 計画：probe 2回と136試行（fixture Aの該当する依頼88、画面の依頼24、該当しない依頼24。各条件68）。計画の単価で17.34 USD、平均の見込みで12.16 USD。段階1の費用2.0281387 USDを台帳から照合し、段階2の線21.97 USD、2段階の合計は最大23.998 USD（`stage1Spend`・`budgetBothStages`）。
+- 全138件の起動のcommand（引数と依頼文）を出した。どれも水準Wの`--tools`・`--disallowedTools`・`--permission-mode acceptEdits`・`--settings`・`--max-budget-usd 0.6`で、`--max-turns`はfixture Aの試行に無く、画面の依頼は3、probeは30（`levelFlags`・`maxTurns`）。probeの操作は6（`probeStepsCounted`）。
+- 隔離の`--settings`の例を、fixture Aの試行（`B-asc-1-1`）と画面の依頼の試行（`B-d-ui03-1`）で記録した。どちらも試行のfixtureを読込み・書込みの禁止に入れる（`fixtureDenied`）。
+- `run-trial.mjs`を`--run`なしで実行すると計画だけを出し、`--run`は許可の環境変数が無いと拒否した。`--max-turns`の指定、Bの条件へのSのtarballも拒否した。台帳は1行（台帳idだけ）のまま。
 
 ## 段階1のharnessからの変更
 

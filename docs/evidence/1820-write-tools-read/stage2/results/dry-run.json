@@ -1,0 +1,2080 @@
+{
+ "label": "dry run (no model call)",
+ "allowUnreleased": false,
+ "checks": {
+  "pinnedTarballs": {
+   "pass": true,
+   "detail": {
+    "B": "release",
+    "S": "candidate"
+   }
+  },
+  "fixturesInstalled": {
+   "pass": true,
+   "detail": {
+    "B-A": true,
+    "B-D3": true,
+    "B-D4": true,
+    "B-D7": true,
+    "S-A": true,
+    "S-D3": true,
+    "S-D4": true,
+    "S-D7": true
+   }
+  },
+  "neutralCommitInCopies": {
+   "pass": true,
+   "detail": null
+  },
+  "sameCommitSubjects": {
+   "pass": true,
+   "detail": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ]
+  },
+  "sameRuntimeVersion": {
+   "pass": true,
+   "detail": "0.5.111"
+  },
+  "readTriggerFirstSentenceOnly": {
+   "pass": true,
+   "detail": {
+    "A": [],
+    "D3": [],
+    "D4": [],
+    "D7": []
+   }
+  },
+  "ascDescriptionAsIntended": {
+   "pass": true,
+   "detail": {
+    "B": "Issue・タスクの開発の開始・再開、worktreeでの実装、PR提出、許可されたmergeで使う。",
+    "S": "Issue・タスクの開発の開始・再開、実装・修正・画面やfileの作成など変更を伴う依頼、PR提出、許可されたmergeで使う。"
+   }
+  },
+  "installedDiffExpected": {
+   "pass": true,
+   "detail": {
+    "A": [
+     ".agent-skill-chain/distribution.json",
+     ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+     ".agent-skill-chain/managed-runtime/v05/USAGE.md",
+     ".agent-skill-chain/skills/asc/SKILL.md",
+     ".agent-skill-chain/v05/USAGE.md",
+     ".claude/skills/asc/SKILL.md",
+     "CLAUDE.md"
+    ],
+    "D3": [
+     ".agent-skill-chain/distribution.json",
+     ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+     ".agent-skill-chain/managed-runtime/v05/USAGE.md",
+     ".agent-skill-chain/skills/asc/SKILL.md",
+     ".agent-skill-chain/v05/USAGE.md",
+     ".claude/skills/asc/SKILL.md",
+     "CLAUDE.md"
+    ],
+    "D4": [
+     ".agent-skill-chain/distribution.json",
+     ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+     ".agent-skill-chain/managed-runtime/v05/USAGE.md",
+     ".agent-skill-chain/skills/asc/SKILL.md",
+     ".agent-skill-chain/v05/USAGE.md",
+     ".claude/skills/asc/SKILL.md",
+     "CLAUDE.md"
+    ],
+    "D7": [
+     ".agent-skill-chain/distribution.json",
+     ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+     ".agent-skill-chain/managed-runtime/v05/USAGE.md",
+     ".agent-skill-chain/skills/asc/SKILL.md",
+     ".agent-skill-chain/v05/USAGE.md",
+     ".claude/skills/asc/SKILL.md",
+     "CLAUDE.md"
+    ]
+   }
+  },
+  "runOrder": {
+   "pass": true,
+   "detail": []
+  },
+  "stage1Spend": {
+   "pass": true,
+   "detail": []
+  },
+  "budgetBothStages": {
+   "pass": true,
+   "detail": {
+    "stage1": 2.0281387,
+    "stopLine": 21.97,
+    "both": 23.9981,
+    "planning": 17.34
+   }
+  },
+  "maxTurns": {
+   "pass": true,
+   "detail": {
+    "probe": 30,
+    "design": 3,
+    "app": "none"
+   }
+  },
+  "levelFlags": {
+   "pass": true,
+   "detail": null
+  },
+  "fixtureDenied": {
+   "pass": true,
+   "detail": [
+    "B-asc-1-1",
+    "B-d-ui03-1"
+   ]
+  },
+  "probeStepsCounted": {
+   "pass": true,
+   "detail": {
+    "B-probe-1": 6,
+    "S-probe-1": 6
+   }
+  }
+ },
+ "fixtures": {
+  "B-A": {
+   "condition": "B",
+   "fixture": "A",
+   "kind": "app",
+   "source": "release",
+   "pinned": true,
+   "tarballSha256": "e7df164a8c132d4d77db270cd8c3fe7ed196906484b0f51d52b4de57125d3be0",
+   "packageVersion": "0.5.111",
+   "runtimeVersion": "0.5.111",
+   "sources": [
+    ".github/workflows/ci.yml",
+    "CLAUDE.md",
+    "Dockerfile",
+    "README.md",
+    "docs/BRIEF.md",
+    "docs/requirements.md",
+    "package.json",
+    "public/users.html",
+    "public/users.js",
+    "src/app.ts",
+    "src/store.ts",
+    "src/users.ts",
+    "src/validate.ts",
+    "tsconfig.json"
+   ],
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": "claude-md",
+   "adoptedAction": "append",
+   "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+   "claudeMdSha256": "2c5f97a5787cb2a99d4f194cc337b169611df27c6e79d17bd0e260c1241bb24b",
+   "claudeMdProblems": [],
+   "scorerSkillsMatchRelease": true,
+   "ascBodyPresent": true,
+   "referencesPresent": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "ok": true
+  },
+  "B-D3": {
+   "condition": "B",
+   "fixture": "D3",
+   "kind": "design",
+   "source": "release",
+   "pinned": true,
+   "tarballSha256": "e7df164a8c132d4d77db270cd8c3fe7ed196906484b0f51d52b4de57125d3be0",
+   "packageVersion": "0.5.111",
+   "runtimeVersion": "0.5.111",
+   "sources": [
+    "BRIEF.md",
+    "FONTS.md",
+    "data.json"
+   ],
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": "claude-md",
+   "adoptedAction": "create",
+   "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+   "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+   "claudeMdProblems": [],
+   "scorerSkillsMatchRelease": true,
+   "ascBodyPresent": true,
+   "referencesPresent": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "ok": true
+  },
+  "B-D4": {
+   "condition": "B",
+   "fixture": "D4",
+   "kind": "design",
+   "source": "release",
+   "pinned": true,
+   "tarballSha256": "e7df164a8c132d4d77db270cd8c3fe7ed196906484b0f51d52b4de57125d3be0",
+   "packageVersion": "0.5.111",
+   "runtimeVersion": "0.5.111",
+   "sources": [
+    "BRIEF.md",
+    "FONTS.md",
+    "data.json"
+   ],
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": "claude-md",
+   "adoptedAction": "create",
+   "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+   "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+   "claudeMdProblems": [],
+   "scorerSkillsMatchRelease": true,
+   "ascBodyPresent": true,
+   "referencesPresent": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "ok": true
+  },
+  "B-D7": {
+   "condition": "B",
+   "fixture": "D7",
+   "kind": "design",
+   "source": "release",
+   "pinned": true,
+   "tarballSha256": "e7df164a8c132d4d77db270cd8c3fe7ed196906484b0f51d52b4de57125d3be0",
+   "packageVersion": "0.5.111",
+   "runtimeVersion": "0.5.111",
+   "sources": [
+    "BRIEF.md",
+    "FONTS.md",
+    "data.json"
+   ],
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": "claude-md",
+   "adoptedAction": "create",
+   "blockSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+   "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+   "claudeMdProblems": [],
+   "scorerSkillsMatchRelease": true,
+   "ascBodyPresent": true,
+   "referencesPresent": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "ok": true
+  },
+  "S-A": {
+   "condition": "S",
+   "fixture": "A",
+   "kind": "app",
+   "source": "candidate",
+   "pinned": true,
+   "tarballSha256": "c51f17ecc6e62e4fa5ccf2b9da1ab5e57ea6f41da43880bb765cad8a8603775f",
+   "packageVersion": "0.5.111",
+   "runtimeVersion": "0.5.111",
+   "sources": [
+    ".github/workflows/ci.yml",
+    "CLAUDE.md",
+    "Dockerfile",
+    "README.md",
+    "docs/BRIEF.md",
+    "docs/requirements.md",
+    "package.json",
+    "public/users.html",
+    "public/users.js",
+    "src/app.ts",
+    "src/store.ts",
+    "src/users.ts",
+    "src/validate.ts",
+    "tsconfig.json"
+   ],
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": "claude-md",
+   "adoptedAction": "append",
+   "blockSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+   "claudeMdSha256": "95a3ef4ceaaec23f5c8c5ab5e3d15b143135755d77ff0af5a11ef455104e2f5c",
+   "claudeMdProblems": [],
+   "scorerSkillsMatchRelease": true,
+   "ascBodyPresent": true,
+   "referencesPresent": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "ok": true
+  },
+  "S-D3": {
+   "condition": "S",
+   "fixture": "D3",
+   "kind": "design",
+   "source": "candidate",
+   "pinned": true,
+   "tarballSha256": "c51f17ecc6e62e4fa5ccf2b9da1ab5e57ea6f41da43880bb765cad8a8603775f",
+   "packageVersion": "0.5.111",
+   "runtimeVersion": "0.5.111",
+   "sources": [
+    "BRIEF.md",
+    "FONTS.md",
+    "data.json"
+   ],
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": "claude-md",
+   "adoptedAction": "create",
+   "blockSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+   "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+   "claudeMdProblems": [],
+   "scorerSkillsMatchRelease": true,
+   "ascBodyPresent": true,
+   "referencesPresent": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "ok": true
+  },
+  "S-D4": {
+   "condition": "S",
+   "fixture": "D4",
+   "kind": "design",
+   "source": "candidate",
+   "pinned": true,
+   "tarballSha256": "c51f17ecc6e62e4fa5ccf2b9da1ab5e57ea6f41da43880bb765cad8a8603775f",
+   "packageVersion": "0.5.111",
+   "runtimeVersion": "0.5.111",
+   "sources": [
+    "BRIEF.md",
+    "FONTS.md",
+    "data.json"
+   ],
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": "claude-md",
+   "adoptedAction": "create",
+   "blockSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+   "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+   "claudeMdProblems": [],
+   "scorerSkillsMatchRelease": true,
+   "ascBodyPresent": true,
+   "referencesPresent": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "ok": true
+  },
+  "S-D7": {
+   "condition": "S",
+   "fixture": "D7",
+   "kind": "design",
+   "source": "candidate",
+   "pinned": true,
+   "tarballSha256": "c51f17ecc6e62e4fa5ccf2b9da1ab5e57ea6f41da43880bb765cad8a8603775f",
+   "packageVersion": "0.5.111",
+   "runtimeVersion": "0.5.111",
+   "sources": [
+    "BRIEF.md",
+    "FONTS.md",
+    "data.json"
+   ],
+   "entries": 16,
+   "entryProblems": [],
+   "adopted": "claude-md",
+   "adoptedAction": "create",
+   "blockSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+   "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+   "claudeMdProblems": [],
+   "scorerSkillsMatchRelease": true,
+   "ascBodyPresent": true,
+   "referencesPresent": true,
+   "promptFilesExist": true,
+   "placement": [],
+   "ok": true
+  }
+ },
+ "copies": {
+  "B-A": {
+   "applied": {
+    "claudeMdSha256": "2c5f97a5787cb2a99d4f194cc337b169611df27c6e79d17bd0e260c1241bb24b",
+    "changedFiles": []
+   },
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "ok": true
+  },
+  "B-D3": {
+   "applied": {
+    "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "changedFiles": []
+   },
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "ok": true
+  },
+  "B-D4": {
+   "applied": {
+    "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "changedFiles": []
+   },
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "ok": true
+  },
+  "B-D7": {
+   "applied": {
+    "claudeMdSha256": "444b31b5b64b2277624dc76572e2433e8da01406b506dda503df10c7c8fc69d3",
+    "changedFiles": []
+   },
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "ok": true
+  },
+  "S-A": {
+   "applied": {
+    "claudeMdSha256": "95a3ef4ceaaec23f5c8c5ab5e3d15b143135755d77ff0af5a11ef455104e2f5c",
+    "changedFiles": []
+   },
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "ok": true
+  },
+  "S-D3": {
+   "applied": {
+    "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+    "changedFiles": []
+   },
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "ok": true
+  },
+  "S-D4": {
+   "applied": {
+    "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+    "changedFiles": []
+   },
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "ok": true
+  },
+  "S-D7": {
+   "applied": {
+    "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+    "changedFiles": []
+   },
+   "commitSubjects": [
+    "Update project files",
+    "Install ASC",
+    "initial"
+   ],
+   "ok": true
+  }
+ },
+ "compare": {
+  "A": {
+   "readTrigger": {
+    "pass": true,
+    "problems": [],
+    "restSha256": "bddc825249e2d8aaddcc5856cc4daa38a1eabdd562d6851037e95ba5ad3313d1",
+    "restChars": 186
+   },
+   "ascDescription": {
+    "B": "Issue・タスクの開発の開始・再開、worktreeでの実装、PR提出、許可されたmergeで使う。",
+    "S": "Issue・タスクの開発の開始・再開、実装・修正・画面やfileの作成など変更を伴う依頼、PR提出、許可されたmergeで使う。",
+    "pass": true,
+    "entryOtherwiseSame": true
+   },
+   "otherEntriesDiffer": [],
+   "installedDiff": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+    ".agent-skill-chain/managed-runtime/v05/USAGE.md",
+    ".agent-skill-chain/skills/asc/SKILL.md",
+    ".agent-skill-chain/v05/USAGE.md",
+    ".claude/skills/asc/SKILL.md",
+    "CLAUDE.md"
+   ]
+  },
+  "D3": {
+   "readTrigger": {
+    "pass": true,
+    "problems": [],
+    "restSha256": "bddc825249e2d8aaddcc5856cc4daa38a1eabdd562d6851037e95ba5ad3313d1",
+    "restChars": 186
+   },
+   "ascDescription": {
+    "B": "Issue・タスクの開発の開始・再開、worktreeでの実装、PR提出、許可されたmergeで使う。",
+    "S": "Issue・タスクの開発の開始・再開、実装・修正・画面やfileの作成など変更を伴う依頼、PR提出、許可されたmergeで使う。",
+    "pass": true,
+    "entryOtherwiseSame": true
+   },
+   "otherEntriesDiffer": [],
+   "installedDiff": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+    ".agent-skill-chain/managed-runtime/v05/USAGE.md",
+    ".agent-skill-chain/skills/asc/SKILL.md",
+    ".agent-skill-chain/v05/USAGE.md",
+    ".claude/skills/asc/SKILL.md",
+    "CLAUDE.md"
+   ]
+  },
+  "D4": {
+   "readTrigger": {
+    "pass": true,
+    "problems": [],
+    "restSha256": "bddc825249e2d8aaddcc5856cc4daa38a1eabdd562d6851037e95ba5ad3313d1",
+    "restChars": 186
+   },
+   "ascDescription": {
+    "B": "Issue・タスクの開発の開始・再開、worktreeでの実装、PR提出、許可されたmergeで使う。",
+    "S": "Issue・タスクの開発の開始・再開、実装・修正・画面やfileの作成など変更を伴う依頼、PR提出、許可されたmergeで使う。",
+    "pass": true,
+    "entryOtherwiseSame": true
+   },
+   "otherEntriesDiffer": [],
+   "installedDiff": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+    ".agent-skill-chain/managed-runtime/v05/USAGE.md",
+    ".agent-skill-chain/skills/asc/SKILL.md",
+    ".agent-skill-chain/v05/USAGE.md",
+    ".claude/skills/asc/SKILL.md",
+    "CLAUDE.md"
+   ]
+  },
+  "D7": {
+   "readTrigger": {
+    "pass": true,
+    "problems": [],
+    "restSha256": "bddc825249e2d8aaddcc5856cc4daa38a1eabdd562d6851037e95ba5ad3313d1",
+    "restChars": 186
+   },
+   "ascDescription": {
+    "B": "Issue・タスクの開発の開始・再開、worktreeでの実装、PR提出、許可されたmergeで使う。",
+    "S": "Issue・タスクの開発の開始・再開、実装・修正・画面やfileの作成など変更を伴う依頼、PR提出、許可されたmergeで使う。",
+    "pass": true,
+    "entryOtherwiseSame": true
+   },
+   "otherEntriesDiffer": [],
+   "installedDiff": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+    ".agent-skill-chain/managed-runtime/v05/USAGE.md",
+    ".agent-skill-chain/skills/asc/SKILL.md",
+    ".agent-skill-chain/v05/USAGE.md",
+    ".claude/skills/asc/SKILL.md",
+    "CLAUDE.md"
+   ]
+  }
+ },
+ "launch": [
+  {
+   "trial": "B-probe-1",
+   "condition": "B",
+   "case": "probe",
+   "kind": "probe",
+   "fixture": "A",
+   "maxTurns": 30,
+   "promptText": "<probe prompt of level W>",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 30 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
+  },
+  {
+   "trial": "S-probe-1",
+   "condition": "S",
+   "case": "probe",
+   "kind": "probe",
+   "fixture": "A",
+   "maxTurns": 30,
+   "promptText": "<probe prompt of level W>",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 30 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events --debug-file debug.log"
+  },
+  {
+   "trial": "B-asc-1-1",
+   "condition": "B",
+   "case": "asc-1",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-1-1",
+   "condition": "S",
+   "case": "asc-1",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui03-1",
+   "condition": "B",
+   "case": "d-ui03",
+   "kind": "design",
+   "fixture": "D3",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui03-1",
+   "condition": "S",
+   "case": "d-ui03",
+   "kind": "design",
+   "fixture": "D3",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-rr-1-1",
+   "condition": "B",
+   "case": "rr-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-rr-1-1",
+   "condition": "S",
+   "case": "rr-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-1-1",
+   "condition": "B",
+   "case": "neg-1",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-1-1",
+   "condition": "S",
+   "case": "neg-1",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-tw-1-1",
+   "condition": "B",
+   "case": "tw-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-tw-1-1",
+   "condition": "S",
+   "case": "tw-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-2-1",
+   "condition": "B",
+   "case": "asc-2",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-2-1",
+   "condition": "S",
+   "case": "asc-2",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui07-1",
+   "condition": "B",
+   "case": "d-ui07",
+   "kind": "design",
+   "fixture": "D7",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui07-1",
+   "condition": "S",
+   "case": "d-ui07",
+   "kind": "design",
+   "fixture": "D7",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ri-1-1",
+   "condition": "B",
+   "case": "ri-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ri-1-1",
+   "condition": "S",
+   "case": "ri-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-2-1",
+   "condition": "B",
+   "case": "neg-2",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-2-1",
+   "condition": "S",
+   "case": "neg-2",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-se-1-1",
+   "condition": "B",
+   "case": "se-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "依存パッケージの脆弱性監査をして、結果をまとめて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-se-1-1",
+   "condition": "S",
+   "case": "se-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "依存パッケージの脆弱性監査をして、結果をまとめて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-3-1",
+   "condition": "B",
+   "case": "asc-3",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-3-1",
+   "condition": "S",
+   "case": "asc-3",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui04-1",
+   "condition": "B",
+   "case": "d-ui04",
+   "kind": "design",
+   "fixture": "D4",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui04-1",
+   "condition": "S",
+   "case": "d-ui04",
+   "kind": "design",
+   "fixture": "D4",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ma-1-1",
+   "condition": "B",
+   "case": "ma-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ma-1-1",
+   "condition": "S",
+   "case": "ma-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-3-1",
+   "condition": "B",
+   "case": "neg-3",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-3-1",
+   "condition": "S",
+   "case": "neg-3",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ui-1-1",
+   "condition": "B",
+   "case": "ui-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "ユーザー一覧画面（public/users.html）に名前で絞り込む検索欄を付けた。画面から本当に使えるか確かめたいので、確認の進め方を示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ui-1-1",
+   "condition": "S",
+   "case": "ui-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "ユーザー一覧画面（public/users.html）に名前で絞り込む検索欄を付けた。画面から本当に使えるか確かめたいので、確認の進め方を示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-es-1-1",
+   "condition": "B",
+   "case": "es-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の「ユーザー削除時に監査ログを残す」を追加すると、何人日くらいかかる？見積もって。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-es-1-1",
+   "condition": "S",
+   "case": "es-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の「ユーザー削除時に監査ログを残す」を追加すると、何人日くらいかかる？見積もって。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-do-1-1",
+   "condition": "B",
+   "case": "do-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の依頼メモについて、このまま進めてよいか、抜けている点を整理して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-do-1-1",
+   "condition": "S",
+   "case": "do-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の依頼メモについて、このまま進めてよいか、抜けている点を整理して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-1-2",
+   "condition": "B",
+   "case": "asc-1",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-1-2",
+   "condition": "S",
+   "case": "asc-1",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui03-2",
+   "condition": "B",
+   "case": "d-ui03",
+   "kind": "design",
+   "fixture": "D3",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui03-2",
+   "condition": "S",
+   "case": "d-ui03",
+   "kind": "design",
+   "fixture": "D3",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-rr-1-2",
+   "condition": "B",
+   "case": "rr-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-rr-1-2",
+   "condition": "S",
+   "case": "rr-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-1-2",
+   "condition": "B",
+   "case": "neg-1",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-1-2",
+   "condition": "S",
+   "case": "neg-1",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-tw-1-2",
+   "condition": "B",
+   "case": "tw-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-tw-1-2",
+   "condition": "S",
+   "case": "tw-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-2-2",
+   "condition": "B",
+   "case": "asc-2",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-2-2",
+   "condition": "S",
+   "case": "asc-2",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui07-2",
+   "condition": "B",
+   "case": "d-ui07",
+   "kind": "design",
+   "fixture": "D7",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui07-2",
+   "condition": "S",
+   "case": "d-ui07",
+   "kind": "design",
+   "fixture": "D7",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ri-1-2",
+   "condition": "B",
+   "case": "ri-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ri-1-2",
+   "condition": "S",
+   "case": "ri-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-2-2",
+   "condition": "B",
+   "case": "neg-2",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-2-2",
+   "condition": "S",
+   "case": "neg-2",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-se-1-2",
+   "condition": "B",
+   "case": "se-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "依存パッケージの脆弱性監査をして、結果をまとめて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-se-1-2",
+   "condition": "S",
+   "case": "se-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "依存パッケージの脆弱性監査をして、結果をまとめて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-3-2",
+   "condition": "B",
+   "case": "asc-3",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-3-2",
+   "condition": "S",
+   "case": "asc-3",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui04-2",
+   "condition": "B",
+   "case": "d-ui04",
+   "kind": "design",
+   "fixture": "D4",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui04-2",
+   "condition": "S",
+   "case": "d-ui04",
+   "kind": "design",
+   "fixture": "D4",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ma-1-2",
+   "condition": "B",
+   "case": "ma-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ma-1-2",
+   "condition": "S",
+   "case": "ma-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-3-2",
+   "condition": "B",
+   "case": "neg-3",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-3-2",
+   "condition": "S",
+   "case": "neg-3",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ui-1-2",
+   "condition": "B",
+   "case": "ui-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "ユーザー一覧画面（public/users.html）に名前で絞り込む検索欄を付けた。画面から本当に使えるか確かめたいので、確認の進め方を示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ui-1-2",
+   "condition": "S",
+   "case": "ui-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "ユーザー一覧画面（public/users.html）に名前で絞り込む検索欄を付けた。画面から本当に使えるか確かめたいので、確認の進め方を示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-es-1-2",
+   "condition": "B",
+   "case": "es-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の「ユーザー削除時に監査ログを残す」を追加すると、何人日くらいかかる？見積もって。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-es-1-2",
+   "condition": "S",
+   "case": "es-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の「ユーザー削除時に監査ログを残す」を追加すると、何人日くらいかかる？見積もって。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-do-1-2",
+   "condition": "B",
+   "case": "do-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の依頼メモについて、このまま進めてよいか、抜けている点を整理して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-do-1-2",
+   "condition": "S",
+   "case": "do-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の依頼メモについて、このまま進めてよいか、抜けている点を整理して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-1-3",
+   "condition": "B",
+   "case": "asc-1",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-1-3",
+   "condition": "S",
+   "case": "asc-1",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui03-3",
+   "condition": "B",
+   "case": "d-ui03",
+   "kind": "design",
+   "fixture": "D3",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui03-3",
+   "condition": "S",
+   "case": "d-ui03",
+   "kind": "design",
+   "fixture": "D3",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-rr-1-3",
+   "condition": "B",
+   "case": "rr-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-rr-1-3",
+   "condition": "S",
+   "case": "rr-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-1-3",
+   "condition": "B",
+   "case": "neg-1",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-1-3",
+   "condition": "S",
+   "case": "neg-1",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-tw-1-3",
+   "condition": "B",
+   "case": "tw-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-tw-1-3",
+   "condition": "S",
+   "case": "tw-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-2-3",
+   "condition": "B",
+   "case": "asc-2",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-2-3",
+   "condition": "S",
+   "case": "asc-2",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui07-3",
+   "condition": "B",
+   "case": "d-ui07",
+   "kind": "design",
+   "fixture": "D7",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui07-3",
+   "condition": "S",
+   "case": "d-ui07",
+   "kind": "design",
+   "fixture": "D7",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ri-1-3",
+   "condition": "B",
+   "case": "ri-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ri-1-3",
+   "condition": "S",
+   "case": "ri-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-2-3",
+   "condition": "B",
+   "case": "neg-2",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-2-3",
+   "condition": "S",
+   "case": "neg-2",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-se-1-3",
+   "condition": "B",
+   "case": "se-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "依存パッケージの脆弱性監査をして、結果をまとめて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-se-1-3",
+   "condition": "S",
+   "case": "se-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "依存パッケージの脆弱性監査をして、結果をまとめて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-3-3",
+   "condition": "B",
+   "case": "asc-3",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-3-3",
+   "condition": "S",
+   "case": "asc-3",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui04-3",
+   "condition": "B",
+   "case": "d-ui04",
+   "kind": "design",
+   "fixture": "D4",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui04-3",
+   "condition": "S",
+   "case": "d-ui04",
+   "kind": "design",
+   "fixture": "D4",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ma-1-3",
+   "condition": "B",
+   "case": "ma-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ma-1-3",
+   "condition": "S",
+   "case": "ma-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-3-3",
+   "condition": "B",
+   "case": "neg-3",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-3-3",
+   "condition": "S",
+   "case": "neg-3",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ui-1-3",
+   "condition": "B",
+   "case": "ui-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "ユーザー一覧画面（public/users.html）に名前で絞り込む検索欄を付けた。画面から本当に使えるか確かめたいので、確認の進め方を示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ui-1-3",
+   "condition": "S",
+   "case": "ui-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "ユーザー一覧画面（public/users.html）に名前で絞り込む検索欄を付けた。画面から本当に使えるか確かめたいので、確認の進め方を示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-es-1-3",
+   "condition": "B",
+   "case": "es-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の「ユーザー削除時に監査ログを残す」を追加すると、何人日くらいかかる？見積もって。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-es-1-3",
+   "condition": "S",
+   "case": "es-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の「ユーザー削除時に監査ログを残す」を追加すると、何人日くらいかかる？見積もって。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-do-1-3",
+   "condition": "B",
+   "case": "do-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の依頼メモについて、このまま進めてよいか、抜けている点を整理して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-do-1-3",
+   "condition": "S",
+   "case": "do-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の依頼メモについて、このまま進めてよいか、抜けている点を整理して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-1-4",
+   "condition": "B",
+   "case": "asc-1",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-1-4",
+   "condition": "S",
+   "case": "asc-1",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui03-4",
+   "condition": "B",
+   "case": "d-ui03",
+   "kind": "design",
+   "fixture": "D3",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui03-4",
+   "condition": "S",
+   "case": "d-ui03",
+   "kind": "design",
+   "fixture": "D3",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-rr-1-4",
+   "condition": "B",
+   "case": "rr-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-rr-1-4",
+   "condition": "S",
+   "case": "rr-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-1-4",
+   "condition": "B",
+   "case": "neg-1",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-1-4",
+   "condition": "S",
+   "case": "neg-1",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-tw-1-4",
+   "condition": "B",
+   "case": "tw-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-tw-1-4",
+   "condition": "S",
+   "case": "tw-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-2-4",
+   "condition": "B",
+   "case": "asc-2",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-2-4",
+   "condition": "S",
+   "case": "asc-2",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui07-4",
+   "condition": "B",
+   "case": "d-ui07",
+   "kind": "design",
+   "fixture": "D7",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui07-4",
+   "condition": "S",
+   "case": "d-ui07",
+   "kind": "design",
+   "fixture": "D7",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ri-1-4",
+   "condition": "B",
+   "case": "ri-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ri-1-4",
+   "condition": "S",
+   "case": "ri-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-2-4",
+   "condition": "B",
+   "case": "neg-2",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-2-4",
+   "condition": "S",
+   "case": "neg-2",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-se-1-4",
+   "condition": "B",
+   "case": "se-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "依存パッケージの脆弱性監査をして、結果をまとめて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-se-1-4",
+   "condition": "S",
+   "case": "se-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "依存パッケージの脆弱性監査をして、結果をまとめて。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-asc-3-4",
+   "condition": "B",
+   "case": "asc-3",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-asc-3-4",
+   "condition": "S",
+   "case": "asc-3",
+   "kind": "asc",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/BRIEF.md の依頼に対応して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-d-ui04-4",
+   "condition": "B",
+   "case": "d-ui04",
+   "kind": "design",
+   "fixture": "D4",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-d-ui04-4",
+   "condition": "S",
+   "case": "d-ui04",
+   "kind": "design",
+   "fixture": "D4",
+   "maxTurns": 3,
+   "promptText": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --max-turns 3 --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ma-1-4",
+   "condition": "B",
+   "case": "ma-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ma-1-4",
+   "condition": "S",
+   "case": "ma-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-neg-3-4",
+   "condition": "B",
+   "case": "neg-3",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-neg-3-4",
+   "condition": "S",
+   "case": "neg-3",
+   "kind": "negative",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-ui-1-4",
+   "condition": "B",
+   "case": "ui-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "ユーザー一覧画面（public/users.html）に名前で絞り込む検索欄を付けた。画面から本当に使えるか確かめたいので、確認の進め方を示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-ui-1-4",
+   "condition": "S",
+   "case": "ui-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "ユーザー一覧画面（public/users.html）に名前で絞り込む検索欄を付けた。画面から本当に使えるか確かめたいので、確認の進め方を示して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-es-1-4",
+   "condition": "B",
+   "case": "es-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の「ユーザー削除時に監査ログを残す」を追加すると、何人日くらいかかる？見積もって。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-es-1-4",
+   "condition": "S",
+   "case": "es-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の「ユーザー削除時に監査ログを残す」を追加すると、何人日くらいかかる？見積もって。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "B-do-1-4",
+   "condition": "B",
+   "case": "do-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の依頼メモについて、このまま進めてよいか、抜けている点を整理して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  },
+  {
+   "trial": "S-do-1-4",
+   "condition": "S",
+   "case": "do-1",
+   "kind": "purpose",
+   "fixture": "A",
+   "maxTurns": null,
+   "promptText": "docs/requirements.md の依頼メモについて、このまま進めてよいか、抜けている点を整理して。",
+   "argv": "claude -p <promptText> --model sonnet --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --permission-mode acceptEdits --settings settings.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.6 --output-format stream-json --verbose --include-hook-events"
+  }
+ ],
+ "settingsExampleA": {
+  "trial": "B-asc-1-1",
+  "settings": {
+   "permissions": {
+    "blockReadsOutsideWorkingDirectories": true
+   },
+   "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+     "allowedDomains": []
+    },
+    "filesystem": {
+     "denyRead": [
+      "/Users",
+      "<scratch>/runs",
+      "<scratch>/fixtures/fixture-B-A",
+      "<ledger-dir>"
+     ],
+     "allowRead": [
+      "<scratch>/runs/B-asc-1-1/work"
+     ],
+     "denyWrite": [
+      "<scratch>/fixtures/fixture-B-A",
+      "<ledger-dir>"
+     ]
+    }
+   }
+  }
+ },
+ "settingsExampleD": {
+  "trial": "B-d-ui03-1",
+  "settings": {
+   "permissions": {
+    "blockReadsOutsideWorkingDirectories": true
+   },
+   "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+     "allowedDomains": []
+    },
+    "filesystem": {
+     "denyRead": [
+      "/Users",
+      "<scratch>/runs",
+      "<scratch>/fixtures/fixture-B-D3",
+      "<ledger-dir>"
+     ],
+     "allowRead": [
+      "<scratch>/runs/B-d-ui03-1/work"
+     ],
+     "denyWrite": [
+      "<scratch>/fixtures/fixture-B-D3",
+      "<ledger-dir>"
+     ]
+    }
+   }
+  }
+ },
+ "probeSteps": {
+  "B-probe-1": {
+   "count": 6,
+   "expected": 6,
+   "steps": [
+    "readHomeMarker Read refused",
+    "readRepoMarker Read refused",
+    "globRepoMarkerDir Glob refused",
+    "grepHomeMarker Grep refused",
+    "writeTrialDir Write refused",
+    "writeRepo Write refused"
+   ]
+  },
+  "S-probe-1": {
+   "count": 6,
+   "expected": 6,
+   "steps": [
+    "readHomeMarker Read refused",
+    "readRepoMarker Read refused",
+    "globRepoMarkerDir Glob refused",
+    "grepHomeMarker Grep refused",
+    "writeTrialDir Write refused",
+    "writeRepo Write refused"
+   ]
+  }
+ },
+ "plan": {
+  "probes": [
+   "B-probe-1",
+   "S-probe-1"
+  ],
+  "plannedTrials": 136,
+  "byCondition": {
+   "B": 68,
+   "S": 68
+  },
+  "positivesA": 88,
+  "design": 24,
+  "negatives": 24,
+  "planningUsd": 17.34,
+  "expectedUsd": 12.16,
+  "stopLineUsd": 21.97,
+  "ownerCapUsd": 25,
+  "stage1SpentUsd": 2.0281387,
+  "bothStagesAtMostUsd": 23.9981,
+  "breakEvenPerTrialUsd": 0.156
+ },
+ "pass": true
+}
