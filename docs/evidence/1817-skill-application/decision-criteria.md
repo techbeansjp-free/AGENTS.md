@@ -45,6 +45,7 @@ model（`sonnet`の別名、解決後のidを記録）、tool（`Read`・`Glob`�
    - この番号以外の追加の試行は採点に含めず、別に報告する。
    - 置き換えが欠けている条件は判定しない。置き換えた後も1条件の失敗が試行の10%を超えた場合、その条件は「判定不能」とし、ownerに報告する。
    - 1試行ごとの予算上限による停止は失敗ではない。停止までの記録で採点し、件数を報告する。
+   - 精算済みの試行（台帳に精算の行がある試行）の`trace.jsonl`・`meta.json`が無い、または精算の行に記録したsha256と違う場合は、失敗ではなく記録の改変として扱う。置き換えを計画せず（`replacementPlan`が拒否する）、`collect.mjs`と`judge.mjs`は採点を拒否する。ownerへ報告する。
    - 実装：[harness/order.mjs](harness/order.mjs)の`replacementPlan`（実行）と[harness/score.mjs](harness/score.mjs)の`selectCounted`（採点）。
 5. 隔離の確認：測定の前に、B・Sそれぞれ1回の隔離の確認（probe）を行い、[harness/probe-check.mjs](harness/probe-check.mjs)のすべての項目が合格し、`compare`で条件の間に差が無い条件だけを測定する（#1814の規則6と同じ）。
    - probeが失敗した、または不合格だった条件に限り、同じ条件で1回だけ再実行できる（回2）。それでも合格しなければ、その条件は測定せずにownerへ報告する。
@@ -60,6 +61,7 @@ model（`sonnet`の別名、解決後のidを記録）、tool（`Read`・`Glob`�
    - `complete`：計画した112試行と、規則4で必要な置き換えのすべてが、台帳に予約されている。
    - `cap-reached`：止まった時点で、台帳の累計＋1試行の予算（0.6 USD）が、上限−余裕（14 USD）を超えている。つまり`run-trial.mjs`が次の試行を拒否する状態である。ただし、最初の計画した試行より後に予約されたprobeがあれば認めない（規則5）。
    - どちらでもない停止（結果を見た後の打切りを含む）は判定しない。ownerへ報告する。
+   - `cap-reached`でも、規則4の置き換えが欠けていれば判定しない。置き換えは計画した試行の後に行うので、実際には上限までに失敗が1件も無い場合だけ判定できる。
    - `cap-reached`の場合は、測れた試行で規則1を割合として判定し、測れなかった試行の数を条件ごとに報告する。実行の順序により、条件の間の差は最大1試行で、どの依頼も前の回までは両条件で測れている。
    - 規則1の他の「判定しない場合」に当たれば、`cap-reached`でも判定しない。
    - 実装：[harness/order.mjs](harness/order.mjs)の`completionStatus`と[harness/judge.mjs](harness/judge.mjs)。
