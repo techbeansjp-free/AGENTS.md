@@ -161,7 +161,7 @@ tokenは親processの環境変数`CLAUDE_CODE_OAUTH_TOKEN`からだけ受け取�
 
 ## 固定
 
-最初の記録：`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`（計画の初版）。今の記録（2件目、refix）：`ff3dba9eabdc03a3ae0477d1a2be730d2ee57dd0`（統括の指摘による測定前の是正。台帳に予約なし。独立レビューは未実施）。測定はこの記録で行う。
+最初の記録：`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`（計画の初版）。2件目（refix）：`ff3dba9eabdc03a3ae0477d1a2be730d2ee57dd0`。今の記録（3件目、refix）：`79cdf7d6ad2c1c7190bef0c1276c9dcc60a7772e`（統括の指摘による測定前の是正。台帳に予約なし。独立レビューは未実施）。測定はこの記録で行う。
 
 ## 未決
 
