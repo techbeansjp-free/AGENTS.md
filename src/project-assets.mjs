@@ -209,6 +209,8 @@ function readTriggerPlan(repo,packageRoot,adopted){
  const before=current.bytes;
  const str=before===null?null:utf8Text(before);
  if(before!==null&&str===null)return manual('CLAUDE.md is not UTF-8 text (or holds NUL or a UTF-16/32 byte order mark); adopt the text by hand');
+ // Mixed CRLF and LF line endings: no single ending can be matched, and the shown diff would not match the append.
+ if(str!==null&&str.includes('\r\n')&&/(^|[^\r])\n/.test(str))return manual('CLAUDE.md mixes CRLF and LF line endings; adopt the text by hand');
  if(str!==null&&str.includes(readTriggerOpen))return {result:{...result,present:true},current:null,text};
  if(str!==null&&onlyReferencesAgents(str))return manual('CLAUDE.md only refers to AGENTS.md; adopt the text by hand in the canonical file');
  result.options.push({id:readTriggerId,path:readTriggerPath,action:before===null?'create':'append',beforeSha256:before===null?'absent':hash(before),blockSha256:hash(blockLf(text)),diff:appendDiff(before,text)});

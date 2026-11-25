@@ -93,6 +93,13 @@ test('non-UTF-8, UTF-16 or NUL-containing CLAUDE.md is never rewritten: manual t
  }
 });
 
+test('mixed CRLF and LF line endings: manual text, the file is not written',t=>{
+ const f=fixture(t);const bytes=Buffer.from('# P\r\nrule\nmore\r\n');fs.writeFileSync(f.claude,bytes);
+ const p=projectAssets(f.work,opts(f));assert.deepEqual(p.readTrigger.options,[]);assert.match(p.readTrigger.manual.reason,/mixes CRLF and LF/);
+ assert.throws(()=>projectAssets(f.work,{...opts(f),apply:true,adoptReadTrigger:`claude-md@${sha(bytes)}:${sha(block())}`}),/No such read trigger option/);
+ assert(fs.readFileSync(f.claude).equals(bytes));
+});
+
 test('a changed preimage, changed text, wrong id or malformed value stops everything before any write',t=>{
  const f=fixture(t);fs.writeFileSync(f.claude,'# Project\n');
  const o=projectAssets(f.work,opts(f)).readTrigger.options[0];

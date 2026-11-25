@@ -187,6 +187,8 @@ High・Mediumなし、Low 2件。固定したfileは変えず（変えてよい�
 
 `project-assets`が、Claude Codeを登録した利用先で、USAGEの文例をCLAUDE.mdの末尾へ区切り付きで追記する案を差分付きで示し、`--adopt-read-trigger claude-md@<beforeSha256|absent>`で承認した場合だけ追記するようにした（[IMPROVEMENT_DESIGN.md](IMPROVEMENT_DESIGN.md)の先頭の注記）。承認の値は、製品のレビューを受けて`claude-md@<beforeSha256>:<blockSha256>`にした。そのため`harness/condition-i.mjs`を変えており、段階3の固定で理由とレビューの参照を付けて記録する。段階3（条件I）は、この変更を含むreleaseが出た後に行う。
 
+承認の値と組立ての規則（2回目の製品レビューのLow-B）：承認の値は、変更前のfileのsha256と、追記する塊のsha256に結び付く。区切りの改行の入れ方や、CRLFへの変換といった組立ての規則には結び付いていない。それでも次の理由で、承認の形式は変えない（変えると`harness/condition-i.mjs`を再び変える必要がある）。(1) 適用の前に、結果の先頭が既存のbyteと完全に一致することを確かめるので、既存の内容は変わらない。(2) 追記する文はhashで結び付いている。(3) 計画と適用は、通常は同じ導入済みのreleaseで行う。(4) 組立ての規則が食い違いうるのは、計画と適用の間でASCの版を変えた場合だけである。CRLFとLFが混在するfileは、表示する差分と実際の追記が一致しないので、提案せず手で採用に回す。
+
 ## 段階2（条件P・H）の結果と判定（2026-11-25）
 
 - 各28試行、失敗0。費用はP 2.44 USD、H 2.40 USD（Hostの計算値）。Hはhookが全28試行で発火した。採点は段階1と同じ手順（置き換える前の記録）で行った。記録：[results/traces/](results/traces/)、判定：[results/stage2-judge.json](results/stage2-judge.json)。
