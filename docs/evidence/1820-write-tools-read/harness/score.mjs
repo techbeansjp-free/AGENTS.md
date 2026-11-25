@@ -71,18 +71,44 @@ export function bashArgs(command) {
   return String(command).split(/[\s;|&()<>]+/).map((w) => w.replace(/^['"`]+|['"`]+$/g, '')).filter((w) => w && !w.startsWith('-'));
 }
 
-// Review Low-1 (#1820): only a content reader counts as a read. A command is split into segments at &&, ||, ;, |, & and
-// newlines; the command of a segment is its first word after environment assignments (X=1) and a prefix (sudo, env,
-// command, exec, nice, nohup, time, builtin, with their options), taken as a basename (/bin/cat is cat). Only a segment
-// whose command is in BASH_READERS contributes its words (bashArgs). Existence checks (ls, test, [, stat, wc, file, find)
-// and any other command do not count; an unlisted reader is not counted either (README: limits).
+// Review Low-1 (#1820): only a content reader counts as a read. The contents of each command substitution ($(...), nested
+// ones too, and `...`) are taken out of the command as their own parts (the substitution is left as a blank in the outer
+// part); each part is split into segments at &&, ||, ;, |, & and newlines. The command of a segment is its first word
+// after leading reserved words and openers (then, do, else, elif, !, {, (, if, while, until), environment assignments
+// (X=1) and a prefix (sudo, env, command, exec, nice, nohup, time, builtin, with their options), taken as a basename
+// (/bin/cat is cat). Only a segment whose command is in BASH_READERS contributes its words (bashArgs). Existence checks
+// (ls, test, [, stat, wc, file, find) and any other command do not count; an unlisted reader is not counted either
+// (README: limits). Review Low-A (#1820): the reserved words and the substitutions were added.
 export const BASH_READERS = ['cat', 'head', 'tail', 'sed', 'awk', 'less', 'more', 'grep', 'rg', 'nl', 'bat', 'view', 'strings'];
 const BASH_PREFIXES = ['sudo', 'env', 'command', 'exec', 'nice', 'nohup', 'time', 'builtin'];
 const PREFIX_VALUE_OPTIONS = ['-u', '-g', '-n', '-C'];
-export const bashSegments = (command) => String(command).split(/&&|\|\||[;|&\n]/).map((x) => x.trim()).filter(Boolean);
+const SHELL_OPENERS = ['then', 'do', 'else', 'elif', '!', '{', '(', 'if', 'while', 'until'];
+// The parts of a command: the command with each substitution left as a blank, then the contents of each substitution
+// (recursively). An unclosed substitution runs to the end of the command.
+export function bashParts(command) {
+  const s = String(command), bodies = [];
+  let outer = '';
+  for (let i = 0; i < s.length; i += 1) {
+    if (s[i] === '$' && s[i + 1] === '(') {
+      let depth = 1, j = i + 2;
+      while (j < s.length && depth > 0) { if (s[j] === '(') depth += 1; else if (s[j] === ')') depth -= 1; j += 1; }
+      bodies.push(s.slice(i + 2, depth === 0 ? j - 1 : j));
+      outer += ' ';
+      i = j - 1;
+    } else if (s[i] === '`') {
+      const j = s.indexOf('`', i + 1), end = j < 0 ? s.length : j;
+      bodies.push(s.slice(i + 1, end));
+      outer += ' ';
+      i = end;
+    } else outer += s[i];
+  }
+  return [outer, ...bodies.flatMap(bashParts)];
+}
+export const bashSegments = (command) => bashParts(command).flatMap((p) => p.split(/&&|\|\||[;|&\n]/)).map((x) => x.trim()).filter(Boolean);
 export function segmentCommand(segment) {
   const words = segment.replace(/[()]/g, ' ').split(/\s+/).map((w) => w.replace(/^['"`]+|['"`]+$/g, '')).filter(Boolean);
   let i = 0, prefixed = false;
+  while (i < words.length && SHELL_OPENERS.includes(words[i])) i += 1; // leading reserved words and openers
   while (i < words.length) {
     const w = words[i];
     if (BASH_PREFIXES.includes(w)) prefixed = true;

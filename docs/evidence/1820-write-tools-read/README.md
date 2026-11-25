@@ -112,7 +112,7 @@ node $EV/harness/analyze.mjs $EV/results/traces --runs-root <scratch>/run1820m/r
 #   results/probes/（手順2で写したprobe-*.jsonとprobe-compare.json）を、結果と一緒にcommitする
 ```
 
-計画した試行の前に、`run-trial.mjs`は`probe-compare.json`の記録を信用せず、各probeをruns rootの`trace.jsonl`と`meta.json`から計算し直して照合する（[analysis-plan.md](analysis-plan.md)「隔離の確認」）。probeの結果は目印のtokenそのものを持たず、各tokenのsha256だけを持つ。
+計画した試行の前に、`run-trial.mjs`は`probe-compare.json`の記録を信用せず、各probeをruns rootの`trace.jsonl`と`meta.json`から計算し直して照合する（[analysis-plan.md](analysis-plan.md)「隔離の確認」）。probeの結果は目印のtokenそのものを持たず、各tokenのsha256だけを情報として持つ。照合は、記録の中に目印のtokenの形（`ASC1820-MARKER-`と16進24桁）の文字列が1つでもあれば、sha256によらず拒否する。
 
 `--run`を付けない`run-trial.mjs`・`run-all.mjs`は、起動するcommandや試行の一覧を出すだけでモデルを呼ばない。途中で止まった試行からの再開は#1817の[README](../1817-skill-application/README.md)「途中で止まった試行からの再開」と同じ（`run1817e`を`run1820m`と読み替える）。
 
@@ -170,5 +170,5 @@ dry runの内容：
 - フォルダDはui03だけ。#1815の他の2つの依頼（ui04・ui07）は使わない。
 - 依頼文Gは、#1815の文面からbrowserの注意書きを除き、AではBRIEFの位置を`docs/BRIEF.md`に変えた。#1815の文面そのものではない。
 - 該当しない依頼は、RとWのアプリのrepoで各2回だけ。Xとフォルダ`D`での過剰な読込みは測らない。
-- Bashでの本文の読込みは、中身を読むcommand（`cat`・`head`・`tail`・`sed`・`awk`・`less`・`more`・`grep`・`rg`・`nl`・`bat`・`view`・`strings`）の引数に本文のpathがある場合だけ数える。一覧に無い読むcommand（`od`・`xxd`・`python`での読込み等）は数えない。`cd`で移動してから相対pathで読む形や、変数・globで指す形も数えない。
-- 計画した試行の前の照合は、probeの時点のhostの状態による項目（Claude Codeのprogram directory、ownerのSkill・指示file・memory、debug logのpathとprogram directoryの関係）を計算し直さず、記録の値を使う。目印のtokenの照合は記録されたsha256による（tokenそのものは目印fileと一緒に消える）。
+- Bashでの本文の読込みは、中身を読むcommand（`cat`・`head`・`tail`・`sed`・`awk`・`less`・`more`・`grep`・`rg`・`nl`・`bat`・`view`・`strings`）の引数に本文のpathがある場合だけ数える。一覧に無い読むcommand（`od`・`xxd`・`python`での読込み等）は数えない。`cd`で移動してから相対pathで読む形や、変数・glob・commandの置換の出力で指す形も数えない（置換の中で読む形、`then`・`do`・`{`等の後で読む形は数える）。`case`の枝の中で読む形は数えない。
+- 計画した試行の前の照合は、probeの時点のhostの状態による項目（Claude Codeのprogram directory、ownerのSkill・指示file・memory、debug logのpathとprogram directoryの関係）を計算し直さず、記録の値を使う。目印のtokenの照合は、tokenの形の文字列を探す（tokenそのものは目印fileと一緒に消える）。形を変えて書き写された（区切りや大文字小文字を変えた）tokenは見つからない。

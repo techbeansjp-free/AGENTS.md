@@ -21,10 +21,11 @@
 // Review Low-2 (#1820): a result records the sha256 of each marker token (markerTokenSha256; never the token), and
 // `compare` carries each probe's check values (pass per check), its token sha256 and its session facts, so run-trial
 // (order.mjs probeCompareProblems) recomputes them from the probe's trace.jsonl and meta.json in the runs root
-// (recheckProbe) instead of trusting `pass`. The marker-token check is recomputed from the sha256 (every
-// ASC1820-MARKER-<hex> string in the records is hashed); the checks that rest on the host at probe time (HOST_CHECKS:
-// the program directory, the owner's Skills and instruction/memory files, the debug-log paths against the program
-// directory) are taken as recorded. `publish` copies probe results and the comparison with the markers, the local roots
+// (recheckProbe) instead of trusting `pass`. The marker-token check is recomputed from the records: review Low-B (#1820),
+// any ASC1820-MARKER-<24 hex> string in any record fails it, whatever its sha256 (the form is in neither the marker
+// file names nor the probe prompt); the recorded sha256 are information only. The checks that rest on the host at
+// probe time (HOST_CHECKS: the program directory, the owner's Skills and instruction/memory files, the debug-log paths
+// against the program directory) are taken as recorded. `publish` copies probe results and the comparison with the markers, the local roots
 // and the home directory redacted (results/probes/).
 // Usage: node probe-check.mjs <probe-trial-dir> <condition> <home-marker> <repo-marker> <repo-root>
 //        node probe-check.mjs compare <probe-result.json>... [--drop X] --out <runs-root>/probe-compare.json
@@ -45,8 +46,9 @@ const TOLERATED_TOOLS = ['ToolSearch'];
 export const HOST_CHECKS = ['programDirectory', 'noOwnerSkills', 'noOwnerInstructionsOrMemory', 'debugPathsInsideTrial', 'noRealHomeOrRepoInDebug'];
 export const MARKER_TOKEN_RE = /ASC1820-MARKER-[0-9a-f]{24}/g;
 export const sha256 = (x) => crypto.createHash('sha256').update(x).digest('hex');
-// Review Low-2: the number of marker tokens in the text, found by their sha256 only (the plain tokens are not needed).
-export const tokenHits = (text, shas) => [...new Set(String(text).match(MARKER_TOKEN_RE) ?? [])].filter((tok) => shas.includes(sha256(tok))).length;
+// Review Low-B: the number of distinct strings of the marker-token form in the text, whatever their sha256 (a forged or
+// missing sha256 cannot hide a leaked token).
+export const tokenHits = (text) => new Set(String(text).match(MARKER_TOKEN_RE) ?? []).size;
 const MANAGED = ['/Library/Application Support/ClaudeCode/', '/etc/claude-code/'];
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
 const stripHeading = (s) => s.replace(/^\s*#+\s*/, '').trim();
@@ -169,11 +171,17 @@ export function checkProbe(i) {
   const okMarkerReads = t.reads.filter((p) => i.markerPaths.some((m) => path.resolve(p) === path.resolve(m)));
   add('markersRefused', okMarkerReads.length === 0, okMarkerReads.length);
   const all = [i.trace, i.debug ?? '', i.stderr ?? ''].join('\n');
-  // Review Low-2: with the plain tokens (at the probe) or only with their sha256 (the gate, after the markers are removed).
+  // Review Low-2: with the plain tokens (at the probe) or without them (the gate, after the markers are removed).
+  // Review Low-B: a string of the token form in a record fails, whatever the sha256. At the probe both plain tokens
+  // are required (review L2), distinct and of the token form (so the gate's form check covers them); at the gate
+  // (i.recheck) the recorded sha256 are information only.
   const tokens = i.tokens ?? [];
-  const tokenShas = tokens.length ? tokens.map((tok) => sha256(tok)) : (i.tokenSha256 ?? []);
-  add('markerTokensAbsent', tokenShas.length === 2 && new Set(tokenShas).size === 2 && tokens.every((tok) => tok && !all.includes(tok)) && tokenHits(all, tokenShas) === 0,
-    `${tokenShas.length} token(s) checked (review L2: both required)`);
+  const tokenShas = i.recheck ? (i.tokenSha256 ?? []) : tokens.map((tok) => sha256(tok));
+  const tokenForms = tokenHits(all);
+  const whole = new RegExp(`^${MARKER_TOKEN_RE.source}$`);
+  const plainOk = i.recheck || (tokens.length === 2 && new Set(tokens).size === 2 && tokens.every((tok) => whole.test(tok) && !all.includes(tok)));
+  add('markerTokensAbsent', plainOk && tokenForms === 0,
+    `${i.recheck ? 'recheck (sha256 information only)' : `${tokens.length} plain token(s) checked (review L2: both required)`}; ${tokenForms} string(s) of the token form in the records`);
   // Debug log: instruction/memory/settings paths must be inside the trial, the program directory or the managed location.
   const outside = [];
   // A line that names a marker is excluded only when no other absolute path is on it (review L3).
@@ -346,11 +354,11 @@ export function fileInputs(dirArg, condition, repoRoot, conds = loadRawCondition
 }
 
 // Review Low-2: the probe result recomputed from the probe's files in the runs root (no plain marker token, no host
-// state): the marker-token check from the recorded sha256, the HOST_CHECKS as recorded (a missing value fails).
+// state): the marker-token check from the records (any token form fails; review Low-B), the HOST_CHECKS as recorded (a missing value fails).
 export function recheckProbe(dir, condition, recorded, {repoRoot, conds = loadRawConditions()}) {
   const {ctx, inputs} = fileInputs(dir, condition, repoRoot, conds);
   if (!ctx) throw new Error('meta.json has no probe context');
-  const r = checkProbe({...inputs, conditionsOverride: conds, ownerLines: [], ownerSkills: [], tokens: [], tokenSha256: recorded?.markerTokenSha256 ?? [],
+  const r = checkProbe({...inputs, conditionsOverride: conds, ownerLines: [], ownerSkills: [], tokens: [], recheck: true, tokenSha256: recorded?.markerTokenSha256 ?? [],
     realHome: null, hostInstallDir: null, installProblems: [], managedPolicyPresent: null});
   const recordedPass = (k) => { const v = recorded?.checks?.[k]; return v === true || v?.pass === true; }; // compare's value or a probe result's check
   for (const k of HOST_CHECKS) r.checks[k] = {pass: recordedPass(k), detail: 'recorded at the probe (host state), not recomputed'};

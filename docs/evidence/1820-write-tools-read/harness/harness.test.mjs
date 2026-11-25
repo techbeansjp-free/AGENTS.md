@@ -9,12 +9,12 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {parseTrace, scoreRun, selectCounted, mainEffects, summarizeCell, initProblems, bashArgs, bashTarget, bashReadArgs, BASH_READERS} from './score.mjs';
+import {parseTrace, scoreRun, selectCounted, mainEffects, summarizeCell, initProblems, bashArgs, bashTarget, bashReadArgs, bashSegments, BASH_READERS} from './score.mjs';
 import {plannedTrials, orderProblems, orderRefusal, probeRefusal, completionStatus, replacementPlan, loadOrder, probeCompareProblems} from './order.mjs';
 import {flags, isolationSettings, promptFor, cellOf, probePrompt, probeGateProblems, installProblems, sentinelPaths, probeSteps, probeContext, INSIDE_FILE, NETWORK_URL} from './run-trial.mjs';
-import {approvalProblems} from './markers.mjs';
+import {approvalProblems, markerPaths} from './markers.mjs';
 import {writeSources, pinned} from './make-fixture.mjs';
-import {checkProbe, compareProbes, probeStepChecks, refusalEvidence, isProbeStepLine, stepPathsOf, fileInputs, recheckProbe, redact, HOST_CHECKS} from './probe-check.mjs';
+import {checkProbe, compareProbes, probeStepChecks, refusalEvidence, isProbeStepLine, stepPathsOf, fileInputs, recheckProbe, redact, sha256, tokenHits, HOST_CHECKS} from './probe-check.mjs';
 import {FIXED, dropViolations, refixAfterMeasurement, digests} from './fixation.mjs';
 import {applyDrop, loadConditions} from './apply-condition.mjs';
 import {cellRuleReasons} from './analyze.mjs';
@@ -206,15 +206,22 @@ test('score (review M1, Low-1): a Bash content read of the body counts in bodyRe
   assert.deepEqual(bashArgs(`cat "${BODY}" | head -n 3; echo ok`), ['cat', BODY, 'head', '3', 'echo', 'ok']);
   // Review Low-1: only a content reader (BASH_READERS) counts; existence checks and other commands that name the body do not.
   for (const cmd of [`ls -l ${BODY}`, `test -f ${BODY}`, `[ -f ${BODY} ]`, `stat ${BODY}`, `wc -l ${BODY}`, `wc -l < ${BODY}`, `file ${BODY}`, `find ${BODY}`,
-    `ls ${BODY} && cat docs/BRIEF.md`, `test -f ${BODY} || echo missing`, `echo ${BODY} | xargs ls`, `cp ${BODY} /tmp/x`]) {
+    `ls ${BODY} && cat docs/BRIEF.md`, `test -f ${BODY} || echo missing`, `echo ${BODY} | xargs ls`, `cp ${BODY} /tmp/x`,
+    // Review Low-A: a reserved word or a substitution does not make an existence check or another command a read.
+    `if [ -f ${BODY} ]; then echo ok; fi`, `while test -f ${BODY}; do sleep 1; done`, `echo "$(ls ${BODY})"`, `n=\`wc -l < ${BODY}\``]) {
     const r = scoreRun(SPEC, brief, xt([[['Bash', {command: cmd}]]]), {level: X});
     assert.deepEqual([r.bodyRead2, r.bodyReadBash2, r.reach2], [false, false, false], cmd);
   }
   for (const cmd of [`test -f ${BODY} && cat ${BODY}`, `FOO=1 sudo -u root /bin/cat ${BODY}`, `nl ${BODY} | head`, `(cd . && tail -n 20 ${BODY})`, `grep -n asc ${BODY}`, `awk 'NR<9' ${BODY}`,
-    `env LANG=C less ${BODY}`, `rg step ${BODY}`, `bat ${BODY}`, `more ${BODY}`, `view ${BODY}`, `strings ${BODY}`]) {
+    `env LANG=C less ${BODY}`, `rg step ${BODY}`, `bat ${BODY}`, `more ${BODY}`, `view ${BODY}`, `strings ${BODY}`,
+    // Review Low-A: the command after a reserved word or an opener, and the contents of $(...) and `...`, are segments too.
+    `if [ -f ${BODY} ]; then cat ${BODY}; fi`, `if false; then :; else head ${BODY}; fi`, `for f in ${BODY}; do cat "$f" ${BODY}; done`,
+    `while true; do tail -n 3 ${BODY}; break; done`, `{ cat ${BODY}; }`, `! grep -q x ${BODY}`, `echo "$(cat ${BODY})"`,
+    `x=$(echo "$(sed -n 1,5p ${BODY})")`, `echo \`cat ${BODY}\``]) {
     assert.equal(scoreRun(SPEC, brief, xt([[['Bash', {command: cmd}]]]), {level: X}).bodyReadBash2, true, cmd);
   }
   assert.deepEqual(bashReadArgs(`ls ${BODY}; head -3 docs/BRIEF.md`), ['head', 'docs/BRIEF.md']);
+  assert.deepEqual(bashSegments(`echo "$(cat a)" \`head b\`; then tail c`), ['echo " "', 'then tail c', 'cat a', 'head b']);
   assert.deepEqual(BASH_READERS, ['cat', 'head', 'tail', 'sed', 'awk', 'less', 'more', 'grep', 'rg', 'nl', 'bat', 'view', 'strings']);
   // The entry, the README and the overapplication use the same rule.
   const entry = scoreRun(SPEC, brief, xt([[['Bash', {command: 'ls .claude/skills/asc/SKILL.md'}], ['Bash', {command: 'wc -l .agent-skill-chain/skills/README.md'}]]]), {level: X});
@@ -284,11 +291,18 @@ test('summary per cell and completion: complete only with every planned trial; c
   assert.equal(completionStatus({runs: [], reserved: some, reservations: [...res, {trial: 'XSA-probe-1', seq: 10}], spentUsd: 5.8, budget: CONDS.budget}).basis, null);
 });
 
-test('probe approval: the committed placeholder refuses; a filled but uncommitted record refuses', (t) => {
-  assert.match(approvalProblems().join(), /does not record the owner approval/);
+test('probe approval: a committed placeholder refuses; a filled but uncommitted record refuses; the committed #1820 record is the approval', (t) => {
+  // The placeholder was replaced by the owner's approval in the repository; it is checked here in a scratch repository.
+  const committed = JSON.parse(read('results/probe-approval.json'));
+  assert.equal(committed.ownerConfirmed, true);
+  assert.deepEqual(approvalProblems(), []);
   const d = tmp(t);
   fs.mkdirSync(path.join(d, 'results'));
   spawnSync('git', ['init', '-q'], {cwd: d});
+  fs.writeFileSync(path.join(d, 'results/probe-approval.json'), JSON.stringify({ownerConfirmed: null, at: null, reference: null, note: 'Placeholder.'}));
+  spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], {cwd: d});
+  spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'p'], {cwd: d});
+  assert.match(approvalProblems(d).join(), /does not record the owner approval/);
   fs.writeFileSync(path.join(d, 'results/probe-approval.json'), JSON.stringify({ownerConfirmed: true, at: '2026-11-26', reference: 'https://example.invalid/x'}));
   assert.deepEqual(approvalProblems(d), ['results/probe-approval.json is not committed']);
   spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], {cwd: d});
@@ -355,7 +369,7 @@ test('probe gate (review L2, Low-2): the comparison must pass, cover every probe
   assert.match(probeCompareProblems(cmp2, {ledgerFile: two.l, runsRoot: two.d, conds: CONDS}).join(), /XSA-probe-1 is not the latest probe/);
 });
 
-test('probe gate (review Low-2): a tampered pass true with a failing trace is refused; tokens are rechecked by their sha256; host checks are taken as recorded', (t) => {
+test('probe gate (review Low-2, Low-B): a tampered pass true with a failing trace is refused; any token form in a record fails whatever the sha256; host checks are taken as recorded', (t) => {
   const at = (id) => probeSteps('X', PCTX).findIndex((st) => st.id === id);
   const lsAllowed = replaced(stepsFor('X'), at('lsRunsRoot'), false, 'RSA-probe-1');
   const {d, l, results} = probeLedger(t, ['RSA-probe-1', 'WSA-probe-1', 'XSA-probe-1'], {calls: {'XSA-probe-1': lsAllowed}});
@@ -378,15 +392,32 @@ test('probe gate (review Low-2): a tampered pass true with a failing trace is re
   assert.equal(recheckProbe(rsaDir, 'RSA', results['RSA-probe-1'], {repoRoot: REPO}).pass, true);
   const hostFailed = {...results['RSA-probe-1'], checks: {...results['RSA-probe-1'].checks, programDirectory: {pass: false}}};
   assert.equal(recheckProbe(rsaDir, 'RSA', hostFailed, {repoRoot: REPO}).pass, false);
-  // The marker tokens: recorded only as sha256, and a token in a record is found from the sha256 alone.
+  // The marker tokens: recorded only as sha256 (information only); a token in a record is found by its form alone.
   const json = JSON.stringify([results, honest]);
   assert.ok(TOKENS.every((tok) => !json.includes(tok)), 'no plain marker token in a probe result or the comparison');
   assert.equal(results['RSA-probe-1'].markerTokenSha256.length, 2);
   const leak = probeLedger(t, ['XSA-probe-1'], {calls: {'XSA-probe-1': [...stepsFor('X'), ['Bash', {command: 'echo x'}, false, TOKENS[1]]]}});
   assert.equal(leak.results['XSA-probe-1'].checks.markerTokensAbsent.pass, false);
-  const re = recheckProbe(path.join(leak.d, 'XSA-probe-1'), 'XSA', leak.results['XSA-probe-1'], {repoRoot: REPO});
-  assert.equal(re.checks.markerTokensAbsent.pass, false, 'found by sha256 without the plain token');
-  assert.equal(recheckProbe(path.join(leak.d, 'XSA-probe-1'), 'XSA', {...leak.results['XSA-probe-1'], markerTokenSha256: []}, {repoRoot: REPO}).checks.markerTokensAbsent.pass, false, 'both sha256 are required');
+  const leakDir = path.join(leak.d, 'XSA-probe-1');
+  const re = recheckProbe(leakDir, 'XSA', leak.results['XSA-probe-1'], {repoRoot: REPO});
+  assert.equal(re.checks.markerTokensAbsent.pass, false, 'found without the plain token');
+  // Review Low-B: the token form is in neither the marker file names nor the probe prompt of any level.
+  assert.equal(tokenHits([...Object.values(markerPaths(REPO)), ...['R', 'W', 'X'].map((lv) => probePrompt(lv, PCTX))].join('\n')), 0);
+  // Review Low-B: a forged markerTokenSha256 (other hashes, none, or the leaked token's hash left out) does not hide the leak.
+  for (const forged of [['0'.repeat(64), '1'.repeat(64)], [], [sha256(TOKENS[0])]]) {
+    const r = recheckProbe(leakDir, 'XSA', {...leak.results['XSA-probe-1'], markerTokenSha256: forged, pass: true}, {repoRoot: REPO});
+    assert.deepEqual([r.checks.markerTokensAbsent.pass, r.pass], [false, false], JSON.stringify(forged));
+  }
+  // A token of another probe (not one of this probe's markers) fails as well, and so does a token at the probe itself.
+  const other = `ASC1820-MARKER-${'c3'.repeat(12)}`;
+  const leak2 = probeLedger(t, ['RSA-probe-1'], {calls: {'RSA-probe-1': [...stepsFor('R'), ['Read', {file_path: 'x'}, false, other]]}});
+  assert.equal(leak2.results['RSA-probe-1'].checks.markerTokensAbsent.pass, false, 'a token form at the probe');
+  assert.equal(recheckProbe(path.join(leak2.d, 'RSA-probe-1'), 'RSA', leak2.results['RSA-probe-1'], {repoRoot: REPO}).checks.markerTokensAbsent.pass, false);
+  // Without a leak, the recheck does not depend on the recorded sha256; at the probe both plain tokens of the form are required.
+  assert.equal(recheckProbe(rsaDir, 'RSA', {...results['RSA-probe-1'], markerTokenSha256: []}, {repoRoot: REPO}).checks.markerTokensAbsent.pass, true);
+  const {inputs: rsaInputs} = fileInputs(rsaDir, 'RSA', REPO);
+  const atProbe = (tokens) => checkProbe({...rsaInputs, ownerLines: [], ownerSkills: [], tokens, realHome: '/nonexistent-home', hostInstallDir: '/opt/claude', installProblems: [], debug: ''}).checks.markerTokensAbsent.pass;
+  assert.deepEqual([atProbe(TOKENS), atProbe([TOKENS[0]]), atProbe([TOKENS[0], TOKENS[0]]), atProbe([TOKENS[0], 'not-a-token'])], [true, false, false, false]);
   // publish: the markers, the roots and the home directory are redacted; a remaining token is refused.
   const text = JSON.stringify({a: `${PCTX.homeMarker} ${PCTX.repoMarker} ${d}/XSA-probe-1 ${REPO}/x ${os.homedir()}/y ${TOKENS[0]}`});
   const out = redact(text, {tokens: [TOKENS[0]], homeMarker: PCTX.homeMarker, repoMarker: PCTX.repoMarker, runsRoot: d, repoRoot: REPO});
@@ -492,7 +523,7 @@ const W_TOOLS = LEVEL_TOOLS.W;
 const cellLevel = {RSA: 'R', WSA: 'W', XSA: 'X'};
 const ptrace = (cell, calls = stepsFor(cellLevel[cell]), o = {}) => probeTrace({tools: LEVEL_TOOLS[cellLevel[cell]], mode: cellLevel[cell] === 'R' ? 'default' : 'acceptEdits', calls, ...o});
 const probeBase = (cell, tr, o = {}) => ({trace: tr, debug: 'Loading /t/X/work/CLAUDE.md', stderr: '', hookLog: null, work: '/t/X/work', trialDir: '/t/X', condition: cell,
-  ascSkills: Object.fromEntries(ASC.map((s) => [s, `${s}の説明。`])), baseFirstLine: '# ユーザー管理API', forbiddenTexts: [], ownerLines: [], ownerSkills: [], markerPaths: [HM, RM], tokens: ['TH', 'TR'],
+  ascSkills: Object.fromEntries(ASC.map((s) => [s, `${s}の説明。`])), baseFirstLine: '# ユーザー管理API', forbiddenTexts: [], ownerLines: [], ownerSkills: [], markerPaths: [HM, RM], tokens: TOKENS,
   realHome: '/h', repoRoot: '/r', hostInstallDir: '/opt/claude', installProblems: [], sentinels: SENT, sentinelExists: {trial: false, repo: false}, insideExists: true,
   steps: probeSteps(cellLevel[cell], PCTX), expectedSteps: CONDS.probeSteps[cellLevel[cell]], workClaudeMdFirstLine: '# ユーザー管理API', trialName: `${cell}-probe-1`, traceSha256: 'a', metaSha256: 'b', ...o});
 const failing = (r) => JSON.stringify(Object.entries(r.checks).filter(([, c]) => !c.pass));
@@ -543,7 +574,7 @@ test('probe-check X: every step attempted with a result; refusals need positive 
   const noGit = checkProbe(probeBase('XSA', ptrace('XSA', replaced(calls, at('insideGitStatus'), true, 'Exit code 128\nfatal: x'))));
   assert.equal(noGit.pass, true, failing(noGit)); assert.equal(noGit.info.insideGitStatus.ok, false);
   assert.equal(checkProbe(probeBase('XSA', ptrace('XSA', calls.slice(0, 9)))).checks.probeStepsAttempted.pass, false);
-  const leaked = ptrace('XSA', [...calls, ['Bash', {command: `cat ${HM}`}, false, 'TH']]);
+  const leaked = ptrace('XSA', [...calls, ['Bash', {command: `cat ${HM}`}, false, TOKENS[0]]]);
   assert.equal(checkProbe(probeBase('XSA', leaked)).checks.markerTokensAbsent.pass, false);
   assert.equal(checkProbe(probeBase('XSA', good, {sentinelExists: {trial: false, repo: true}})).checks.sentinelsAbsent.pass, false);
   assert.equal(checkProbe(probeBase('XSA', good, {expectedSteps: 18})).checks.probeStepsDefined.pass, false);
