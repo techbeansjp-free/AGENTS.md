@@ -1,0 +1,145 @@
+{
+ "condition": "R",
+ "pass": false,
+ "checks": {
+  "init": {
+   "pass": true,
+   "detail": "init event present"
+  },
+  "cwd": {
+   "pass": true,
+   "detail": "compared"
+  },
+  "tools": {
+   "pass": true,
+   "detail": [
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill"
+   ]
+  },
+  "noMcp": {
+   "pass": true,
+   "detail": 0
+  },
+  "noPlugins": {
+   "pass": false,
+   "detail": 3
+  },
+  "programDirectory": {
+   "pass": true,
+   "detail": []
+  },
+  "ascListed": {
+   "pass": true,
+   "detail": {
+    "missing": []
+   }
+  },
+  "noOwnerSkills": {
+   "pass": true,
+   "detail": "0 listed Skill name(s) match the owner's Skills"
+  },
+  "descriptionsInContext": {
+   "pass": true,
+   "detail": {
+    "desc": {
+     "asc": true,
+     "user-journey-acceptance": true
+    },
+    "lookedUp": 0
+   }
+  },
+  "descriptionsVerbatimCount": {
+   "pass": true,
+   "detail": "16/16 (informational)"
+  },
+  "projectClaudeMd": {
+   "pass": true,
+   "detail": "heading marks ignored (review L3)"
+  },
+  "pointerMatchesCondition": {
+   "pass": true,
+   "detail": {
+    "expectPointer": false
+   }
+  },
+  "noRepoInstructions": {
+   "pass": true,
+   "detail": "0 repository instruction line(s) found"
+  },
+  "noOwnerInstructionsOrMemory": {
+   "pass": true,
+   "detail": "0/7 owner line(s) found"
+  },
+  "gitContextNeutral": {
+   "pass": true,
+   "detail": "checked"
+  },
+  "markersAttempted": {
+   "pass": true,
+   "detail": [
+    1,
+    1
+   ]
+  },
+  "markersRefused": {
+   "pass": true,
+   "detail": 0
+  },
+  "markerTokensAbsent": {
+   "pass": true,
+   "detail": "2 token(s) checked (review L2: both required)"
+  },
+  "debugPathsInsideTrial": {
+   "pass": false,
+   "detail": "2 outside path(s)"
+  },
+  "noRealHomeOrRepoInDebug": {
+   "pass": false,
+   "detail": "2 found"
+  },
+  "hookMatchesCondition": {
+   "pass": true,
+   "detail": {
+    "logged": 0,
+    "responses": 0
+   }
+  },
+  "noForeignHooks": {
+   "pass": true,
+   "detail": "0 hook event(s), 0 non-SessionStart, 0 foreign command(s)"
+  }
+ },
+ "listedSkills": 33,
+ "nonAscSkills": [
+  "deep-research",
+  "dataviz",
+  "update-config",
+  "verify",
+  "debug",
+  "code-review",
+  "simplify",
+  "batch",
+  "fewer-permission-prompts",
+  "doctor",
+  "loop",
+  "schedule",
+  "claude-api",
+  "workflow-authoring",
+  "run",
+  "run-skill-generator",
+  "plugin-authoring"
+ ],
+ "tools": [
+  "Glob",
+  "Grep",
+  "Read",
+  "Skill"
+ ],
+ "gitLine": "Update project files | Install ASC | initial",
+ "model": "claude-sonnet-5-5",
+ "claudeCodeVersion": "2.1.323",
+ "costUsd": 0.07898549999999999
+}

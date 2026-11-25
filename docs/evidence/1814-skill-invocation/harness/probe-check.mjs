@@ -33,6 +33,21 @@ export function installDirProblems(dir, {realHome, userConfigDirs, repoRoot}) {
   for (const p of [...userConfigDirs, repoRoot].filter(Boolean)) if (inside(dir, p)) bad.push(`program directory lies in ${p === repoRoot ? 'the repository' : 'a user config directory'}`);
   return bad;
 }
+// Stage-0 finding: when the probe's deliberate marker Reads are denied, Claude Code logs one debug line
+// 'Permission suggestions for Read: [...]' whose ruleContent values are "/" + a directory + "/**". Such a line is
+// excluded only when every ruleContent is a marker file or the parent directory of a marker file, and the line holds no
+// other absolute path. Nothing broader is excluded.
+export function isMarkerPermissionSuggestion(line, markerPaths) {
+  if (!line.includes('Permission suggestions for Read:')) return false;
+  const rules = [...line.matchAll(/\\"ruleContent\\":\s*\\"([^"\\]+)\\"/g)].map((m) => m[1]);
+  if (!rules.length) return false;
+  const allowed = new Set(markerPaths.flatMap((m) => [path.resolve(m), path.dirname(path.resolve(m))]));
+  const target = (r) => r.replace(/^\/(?=\/)/, '').replace(/\/\*\*$/, '');
+  if (!rules.every((r) => allowed.has(target(r)))) return false;
+  const others = (line.replace(/\\"ruleContent\\":\s*\\"[^"\\]+\\"/g, '').match(/(?<![\w.\-])\/[^\s"'`,)\\]+/g) ?? []);
+  return others.length === 0;
+}
+
 export function claudeInstallDir() {
   const w = spawnSync('which', ['claude'], {encoding: 'utf8'}).stdout?.trim();
   return w ? path.dirname(fs.realpathSync(w)) : null;
@@ -65,7 +80,11 @@ export function checkProbe(i) {
   const tools = init.tools ?? [];
   add('tools', tools.length > 0 && tools.every((x) => ALLOWED_TOOLS.has(x)), tools);
   add('noMcp', (init.mcp_servers ?? []).length === 0, (init.mcp_servers ?? []).length);
-  add('noPlugins', (init.plugins ?? []).length === 0, (init.plugins ?? []).length);
+  // Stage-0 finding: Claude Code lists its own bundled plugins (path "builtin", source "<name>@builtin") for every user.
+  // Those are allowed and named; any other plugin fails.
+  const plugins = init.plugins ?? [];
+  const builtin = (pl) => pl && pl.path === 'builtin' && typeof pl.source === 'string' && pl.source === `${pl.name}@builtin`;
+  add('noPlugins', plugins.every(builtin), {builtin: plugins.filter(builtin).map((pl) => pl.name), other: plugins.filter((pl) => !builtin(pl)).length});
   add('programDirectory', (i.installProblems ?? []).length === 0, i.installProblems ?? []);
   const listed = (init.skills ?? []).map(String);
   const asc = Object.keys(i.ascSkills);
@@ -108,10 +127,15 @@ export function checkProbe(i) {
   add('markerTokensAbsent', i.tokens.length === 2 && i.tokens.every((tok) => tok && !all.includes(tok)), `${i.tokens.length} token(s) checked (review L2: both required)`);
   // Debug log: instruction/memory/settings paths must be inside the trial, the program directory or the managed location.
   const outside = [];
-  const isMarkerLine = (line) => i.markerPaths.some((m) => line.includes(m));
+  const isMarkerLine = (line) => i.markerPaths.some((m) => line.includes(m)) || isMarkerPermissionSuggestion(line, i.markerPaths);
   for (const line of (i.debug ?? '').split('\n')) {
     if (!/CLAUDE\.md|AGENTS\.md|MEMORY|memory|settings\.json|skills\//i.test(line) || isMarkerLine(line)) continue;
-    for (const p of line.match(/\/[^\s"'`,)]+/g) ?? []) {
+    // Stage-0 findings: (1) the managed-policy path contains a space, so it is removed as a whole before paths are taken;
+    // (2) a project-relative path that starts with ".agent-skill-chain/" or ".claude/" (not preceded by a path character;
+    // e.g. the pointer text ".agent-skill-chain/skills/asc/SKILL.md" echoed by the hook log line) is removed as a whole;
+    // "/x/.claude/..." and "~/.claude/..." stay and are checked.
+    const rest = MANAGED.reduce((l, m) => l.split(m).join(' '), line).replace(/(^|[^\w/.~-])\.(?:agent-skill-chain|claude)\/[^\s"'`,)\\]*/g, '$1 ');
+    for (const p of rest.match(/\/[^\s"'`,)]+/g) ?? []) {
       if (!/CLAUDE\.md|AGENTS\.md|MEMORY|memory|settings|skills/i.test(p)) continue;
       const inTrial = inside(p, i.trialDir) || (fs.existsSync(i.trialDir) && inside(p, fs.realpathSync(i.trialDir)));
       const program = i.hostInstallDir && (i.installProblems ?? []).length === 0 && inside(p, i.hostInstallDir);

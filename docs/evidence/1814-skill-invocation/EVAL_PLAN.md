@@ -102,7 +102,7 @@ ownerの要求は「利用者と同等の環境」だが、次の点は安全と
 
 停止の規則：
 
-- 全段階（隔離の確認、段階1〜3、再実行）で、repositoryの外の**1つの台帳file**（`--ledger`）を使う（レビューM4）。台帳は`fixation.mjs init --ledger`で作り、1行目の台帳idを`fixation.json`に記録する。`run-trial.mjs`は、別のidの台帳や存在しない台帳では起動しない。試行の`meta.json`・`trials.json`に台帳idと予約の番号（seq）を残し、`collect.mjs`・`score.mjs`は、違う台帳idや重なったseq（台帳を前の状態の複製に戻した場合）が混ざれば拒否する（レビューN-1）。予約には試行ごとに一意なidを付け、累計はidごとに数える。同じ試行名は台帳に1回しか予約できない（再実行は新しい反復の番号で行う。レビューN1）。試行は起動の前に予算額（0.6 USD）を台帳へ予約し、終了後にHostの`total_cost_usd`で精算する。精算されなかった試行（親processの強制終了等）は予算額のまま数える。
+- 全段階（隔離の確認、段階1〜3、再実行）で、repositoryの外の**1つの台帳file**（`--ledger`）を使う（レビューM4）。台帳は`fixation.mjs init --ledger`で作り、1行目の台帳idを`fixation.json`に記録する。`run-trial.mjs`は、別のidの台帳や存在しない台帳では起動しない。試行の`meta.json`・`trials.json`に台帳idと予約の番号（seq）を残し、`collect.mjs`・`score.mjs`は、違う台帳idや重なったseqが混ざれば拒否する（レビューN-1）。ただし、同じidの台帳を前の状態（複製や、行を消した状態）に戻すことは、codeでは防げない。戻した後の試行のseqが、既に集めてcommitした試行のseqと重なる場合にだけ検出できる。このため、次の手順を必須とする（レビューL-α）：各段階の後（少なくとも段階1の後と段階2の後）に、ただちに`collect.mjs`で記録を集めてcommitする。統括は各段階の後に、台帳の行数とsha256をIssueに記録する。次の段階の前に、台帳の行数がその記録以上で、記録した行数までの内容が同じであることを確かめる。予約には試行ごとに一意なidを付け、累計はidごとに数える。同じ試行名は台帳に1回しか予約できない（再実行は新しい反復の番号で行う。レビューN1）。試行は起動の前に予算額（0.6 USD）を台帳へ予約し、終了後にHostの`total_cost_usd`で精算する。精算されなかった試行（親processの強制終了等）は予算額のまま数える。
 - `run-trial.mjs`は、台帳の累計にその試行の予算を足して、上限30 USDから余裕1 USDを引いた29 USDを超えるなら起動しない。上限・余裕・1試行の予算（0.6 USD）は`conditions.json`の`budget`だけから取り、`--stop-usd`・`--budget`の引数は拒否する（レビューL-a）。最後の試行の実際の費用が`--max-budget-usd`を少し超えても、30 USDに届かないようにする（レビューL-5）。
 - 試行は1つずつ順に実行する。台帳のlock fileが残っていれば、人が台帳を確かめてlockを消すまで、次の試行は起動しない。
 - `results/fixation.json`の最後の記録（測定の前のHEADと、条件・gold・判定・起動に関わるfileのsha256）と現在のfileが違えば起動しない。各試行の`meta.json`に、`fixation.json`のsha256・記録のcommit・段階を残す（レビューN2）。
@@ -118,7 +118,7 @@ ownerの要求は「利用者と同等の環境」だが、次の点は安全と
 - **段階3（条件I）**：`node harness/fixation.mjs stage3 results/fixation.json [--change <file> --reason <理由> --review <参照>]…`で1回だけ足す。最新の段階0〜2の記録と比べて、次をすべて満たす場合だけ足せる。
   1. `conditions.json`の違いが`conditions.I`の追加だけで、`conditions.I`が`conditionISchema`を満たす（`pointer: false`、`hook`は`null`か`"product"`、`pointerDelivered: true`、`adopt`は選択肢のid、許された項目だけ）。
   2. `release.json`の違いが`phase3`の記入だけ。
-  3. 変えてよいfileの一覧（`STAGE3_ALLOWED`）は`harness/condition-i.mjs`だけ。条件Iに固有の部分（製品のinterfaceの前提：計画の`readTrigger`の形と`--adopt-read-trigger`の指定、条件Iのprobeの期待と照合する文例の頭の文面、製品のhookの発火の数え方）をこのfileに集めた。変える場合は、fileごとに理由と独立レビューの参照を付け、記録に残す。exportの名前の一覧とimportの行が最初の記録と同じで、最上位の処理（import・export・注記以外の行）が無いことを`stage3`が機械的に確かめる。独立レビューでは加えて、規則5の意味（hookが発火しなかった試行は失敗）が保たれていること、R/P/Hの採点に影響する変更が無いことを確かめる（レビューL-1）。
+  3. 変えてよいfileの一覧（`STAGE3_ALLOWED`）は`harness/condition-i.mjs`だけ。条件Iに固有の部分（製品のinterfaceの前提：計画の`readTrigger`の形と`--adopt-read-trigger`の指定、条件Iのprobeの期待と照合する文例の頭の文面、製品のhookの発火の数え方）をこのfileに集めた。変える場合は、fileごとに理由と独立レビューの参照を付け、記録に残す。exportの名前の一覧とimportの行が最初の記録と同じで、最上位の処理（import・export・注記以外の行）が無いことを`stage3`が機械的に確かめる。独立レビューでは加えて、規則5の意味（hookが発火しなかった試行は失敗）が保たれていること、R/P/Hの採点に影響する変更が無いことを確かめる（レビューL-1）。機械の検査は行の頭だけを見るので、字下げした最上位の文、exportの初期化式の中の処理（関数の呼出し・即時実行・top-levelの`await`）、`export {…}`や`export async function`による追加は見落とす。`condition-i.mjs`は`run-trial`（`make-fixture`・`install-asc`経由）・`collect`（`apply-condition`経由）・`score`・`probe-check`の読込み時に評価されるので、Reviewerは本文を読んで、読込みの時の処理（副作用）が無いこと、global・他のmoduleの状態を変えないこと、上の見落とす形が無いことを確かめる（レビューL-β）。
   4. それ以外の固定したfile（採点・判定・gold・判定の規則・R/P/Hの経路・起動・台帳・固定のscript）は、bytesで同じ。
   満たさなければ足さずに止まる。その場合は段階3へ進まず、統括・ownerへ報告する。
 - **条件Iのprobeの期待**：文例の頭が回答の**どこかに**現れること（最後の行でなくてよい）。採用した塊が`CLAUDE.md`の末尾に閉じの区切りを置く形でも判定できるよう、probeの質問8で「`.agent-skill-chain/skills/asc/SKILL.md`を含む文」を原文で答えさせる。

@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import crypto from 'node:crypto';
-import {checkProbe, compareProbes, description, installDirProblems, ownerCanaries, gitSubjects} from './probe-check.mjs';
+import {checkProbe, compareProbes, description, installDirProblems, ownerCanaries, gitSubjects, isMarkerPermissionSuggestion} from './probe-check.mjs';
 import {placementProblems} from './guard.mjs';
 import * as ledger from './ledger.mjs';
 import {differences, digests, FIXED, stage3Violations, invariantDigests, refixViolations, refixAfterMeasurement, conditionIProblems, moduleShape} from './fixation.mjs';
@@ -68,6 +68,41 @@ test('each leak or mismatch fails the probe', () => {
   fails({trace: trace({text: goodText().replace(`GIT: ${NEUTRAL_SUBJECT}`, 'GIT: Adopt ASC read trigger (P)')})}, 'gitContextNeutral'); // M1
   fails({trace: trace({text: goodText(), hooks: [{type: 'system', subtype: 'hook_started', hook_name: 'SessionStart:startup', command: 'node user-hook.mjs'}]})}, 'noForeignHooks'); // M3
   fails({installProblems: ['program directory lies in a user config directory']}, 'programDirectory'); // M2
+});
+
+test('stage-0 refix: bundled plugins allowed and named; any other plugin fails', () => {
+  const bundled = ['cc-plugin-agents-md', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring'].map((name) => ({name, path: 'builtin', source: `${name}@builtin`}));
+  const ok = checkProbe(base({trace: trace({text: goodText(), plugins: bundled})}));
+  assert.equal(ok.pass, true, JSON.stringify(ok.checks)); assert.deepEqual(ok.checks.noPlugins.detail.builtin, bundled.map((p) => p.name));
+  for (const bad of [{name: 'x', path: '/h/.claude/plugins/x', source: 'x@market'}, {name: 'y', path: 'builtin', source: 'y@market'}, {name: 'z', path: 'builtin', source: 'other@builtin'}]) {
+    const r = checkProbe(base({trace: trace({text: goodText(), plugins: [...bundled, bad]})}));
+    assert.equal(r.checks.noPlugins.pass, false, JSON.stringify(bad));
+  }
+});
+
+test('stage-0 refix: only permission-suggestion lines for the two markers are excluded from the debug checks', () => {
+  const perm = (rule) => `2026 [DEBUG] "Permission suggestions for Read: [\\n  {\\n    \\"type\\": \\"addRules\\",\\n    \\"rules\\": [\\n      {\\n        \\"toolName\\": \\"Read\\",\\n        \\"ruleContent\\": \\"${rule}\\"\\n      }\\n    ],\\n    \\"behavior\\": \\"allow\\",\\n    \\"destination\\": \\"session\\"\\n  }\\n]"`;
+  const homeDir = perm('//h/**'), repoDir = perm('//r/.agent-skill-chain/local/**');
+  assert.equal(isMarkerPermissionSuggestion(homeDir, [HOME_M, REPO_M]), true);
+  assert.equal(isMarkerPermissionSuggestion(repoDir, [HOME_M, REPO_M]), true);
+  const debug = `Loading ${trial}/work/CLAUDE.md\n${homeDir}\n${repoDir}`;
+  assert.equal(checkProbe(base({debug})).pass, true, JSON.stringify(checkProbe(base({debug})).checks));
+  // counterexamples: another directory in a suggestion, a real-HOME path outside a suggestion block, a suggestion with an extra path
+  assert.equal(isMarkerPermissionSuggestion(perm('//h/.claude/**'), [HOME_M, REPO_M]), false);
+  assert.equal(checkProbe(base({debug: `${homeDir}\n${perm('//h/.claude/**')} memory`})).checks.noRealHomeOrRepoInDebug.pass, false);
+  assert.equal(checkProbe(base({debug: `${homeDir}\nread /h/.claude/settings.json`})).pass, false);
+  assert.equal(isMarkerPermissionSuggestion(`${homeDir} /h/.claude/CLAUDE.md`, [HOME_M, REPO_M]), false);
+  assert.equal(isMarkerPermissionSuggestion('Read /h/asc1814-home-marker.txt', [HOME_M, REPO_M]), false);
+});
+
+test('stage-0 refix: the managed-policy path with a space and relative paths in hook text are not outside paths', () => {
+  const managed = 'Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json';
+  const hookText = 'Hooks: {"additionalContext":"…では、.agent-skill-chain/skills/asc/SKILL.mdを読み…"}';
+  assert.equal(checkProbe(base({debug: `${managed}\n${hookText}`})).checks.debugPathsInsideTrial.pass, true);
+  assert.equal(checkProbe(base({debug: `${managed}\nloading /etc/other/skills/x`})).checks.debugPathsInsideTrial.pass, false);
+  assert.equal(checkProbe(base({debug: 'settings.json at /Library/Application Support/Other/settings.json'})).checks.debugPathsInsideTrial.pass, false);
+  assert.equal(checkProbe(base({debug: 'reading ~/.claude/settings.json'})).checks.debugPathsInsideTrial.pass, false);
+  assert.equal(checkProbe(base({debug: 'reading /h/.claude/CLAUDE.md'})).checks.debugPathsInsideTrial.pass, false);
 });
 
 test('the program directory is excluded only when it is a safe directory (M2)', () => {

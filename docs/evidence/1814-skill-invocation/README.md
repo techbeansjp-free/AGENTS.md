@@ -16,7 +16,7 @@
 
 | 項目 | 結果 | 記録 |
 | --- | --- | --- |
-| 採点器・隔離の判定器・配置の検査・台帳・固定・中立のcommit・導入の照合・記録の取り出しの試験（合成の記録） | 45件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt)（command・HEAD・Nodeの版・終了code付き） |
+| 採点器・隔離の判定器・配置の検査・台帳・固定・中立のcommit・導入の照合・記録の取り出しの試験（合成の記録） | 48件すべて合格 | [results/harness-tests.txt](results/harness-tests.txt)（command・HEAD・Nodeの版・終了code付き） |
 | 全体のdry run | 合格。採点器のSkillの一覧がreleaseの配布一覧と一致、全条件のcommitの件名が同じ（中立の1件）。導入（16件の入口がすべてあり、`distribution.json`の記録と一致し、本文へのlinkだけの薄い入口で、本文がpackageと一致）、goldのSkill本文とreferenceがreleaseにある、依頼が名指すfileがある、sample projectと条件ごとの複製の配置が合格、5条件の適用（`CLAUDE.md`の文例の有無、hookの出力が文例と一致・終了コード0・発火のlog）、試行の計画116試行・計画の費用25.04 USD | [results/dry-run.json](results/dry-run.json) |
 | 起動の経路の拒否（反例） | 許可の環境変数が無い、台帳・上限が無い、`results/fixation.json`が無い、固定したfileが記録と違う、`--model`の指定、repositoryと実HOMEの下、releaseに無いdigest、tarballとdigestの不一致、dry runの代用品で作ったsample projectでの有料の試行を、それぞれ拒否した。`fixation.mjs check`の合格も記録した | [results/refusals.txt](results/refusals.txt) |
 
@@ -40,6 +40,17 @@ dry runで使ったtarball：**releaseの本物ではない。** この作業の
 ## 測定の前の固定
 
 `results/fixation.json`の最初の記録のcommitは`d1ba482e5c4d315f6d4506a2372601104cb4c235`である（`run-trial.mjs`はこの記載を照合する）。費用の台帳（repositoryの外）の台帳idも同じ記録にあり、`run-trial.mjs`はこの台帳だけを使う。以後の記録は追記だけで、段階0の後の是正（refix）と段階3の記録の条件は[EVAL_PLAN.md](EVAL_PLAN.md)「固定の記録と変えてよい範囲」による。
+
+## 段階0（隔離の確認）の結果
+
+統括が実行した（R・P・H各1回、Hostの計算値で合計約0.22 USD、解決後のmodelは`claude-sonnet-5-5`）。判定の記録は[results/stage0/first/](results/stage0/first/)（実行時）と[results/stage0/recheck/](results/stage0/recheck/)（probe-checkの是正の後、同じ記録で判定し直したもの。モデルは呼んでいない）。
+
+- 実行時は3条件とも、次の2点を除いてすべて合格した。
+  - `noPlugins`：Claude Codeの同梱plugin 3件（`cc-plugin-agents-md`・`cc-plugin-privacy`・`cc-plugin-plugin-authoring`、`path: "builtin"`、`source: "<名前>@builtin"`）がinit eventに載っていた。利用者の環境にも必ずあるので許可し、名前を記録する。それ以外のpluginは不合格のまま。
+  - `debugPathsInsideTrial`・`noRealHomeOrRepoInDebug`：調べた結果、原因は3つだった。(1) 目印のReadが拒否されたときにClaude Codeが書く`Permission suggestions for Read`の行（ruleContentが目印のfileの親directory。実HOMEとrepositoryのpathが現れたのはこの行だけ）、(2) 機械の管理用policyのpath（`/Library/Application Support/ClaudeCode/managed-settings.json`）が空白を含むため、途中で切れた断片が外のpathと数えられた、(3) Hではhookの出力（文例の`.agent-skill-chain/skills/asc/SKILL.md`という相対path）の断片が外のpathと数えられた。
+- 是正（段階0の後の是正。`harness/probe-check.mjs`だけを変更）：(1) は、行のすべてのruleContentが2つの目印のfileかその親directoryで、他の絶対pathを含まない場合だけ除外する。(2) は管理用policyのpathを全体として除いてから断片を取る。(3) は`.agent-skill-chain/`・`.claude/`で始まる相対path（直前がpathの文字でないもの）を全体として除く。`/x/.claude/…`・`~/.claude/…`は検査に残る。反例（同梱でないplugin、提案の行の外の実HOMEのpath、別のdirectoryの提案、`~/.claude/settings.json`等）が不合格になることを試験した。
+- 判定し直した結果：3条件とも、`markerTokensAbsent`を除くすべての項目が合格。`markerTokensAbsent`は、目印のfileを確認の後に消したため照合する文字列が無く、判定し直しでは不合格になる（実行時の判定では3条件とも合格）。条件の間の比較（`compare`）は差が無い（`differ: []`）。
+- 未了：この是正の独立レビューと、統括による`fixation.mjs refix`の実行。
 
 ## 独立レビュー（1回目、HEAD `e2477706`）への対応
 
@@ -112,6 +123,15 @@ Medium 1件・Low 5件（Highなし）。すべて是正した。
 | L-3 条件Iで`hookFired`がfalseと数えられる | 製品のhookではtraceの証拠から取る |
 | L-4 READMEの試験の件数 | 下の「実施したこと」を最新の件数に直した |
 | L-5 強制終了で試行のHOME・設定が残る | lockが残ったときに手で消す手順をEVAL_PLANに書いた |
+
+## 5回目のレビュー（HEAD `d7e1e525`）への対応
+
+High・Mediumなし、Low 2件。固定したfileは変えず（変えてよいのは`probe-check.mjs`だけのため）、文書で対応した。
+
+| 指摘 | 対応 |
+| --- | --- |
+| L-α 同じidの台帳を前の状態に戻すと、累計と記録を戻せる | codeでは防げないことをEVAL_PLANに正しく書き直した。各段階の後にただちに記録を集めてcommitし、統括が台帳の行数とsha256をIssueに記録し、次の段階の前に照合する手順を必須にした |
+| L-β 形の検査が字下げした文や初期化式の中の処理を見落とす。`condition-i.mjs`は起動の経路でも読み込まれる | 見落とす形と、読み込む経路（run-trial・collect・score・probe-check）をEVAL_PLANに書き、Reviewerが本文を読んで、読込みの時の処理・globalの変更・見落とす形が無いことを確かめる点として加えた |
 
 ## 費用の見込み
 
