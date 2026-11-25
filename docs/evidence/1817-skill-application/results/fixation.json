@@ -4,32 +4,33 @@
  "records": [
   {
    "stage": "stages 0-2",
-   "fixedAtCommit": "6131acb1d9675f31439044617e79b12b4741a676",
-   "at": "2026-11-25T11:24:34.896Z",
+   "fixedAtCommit": "31cc0e904818fe6266a5d2b55900af91776f4b53",
+   "at": "2026-11-25T14:53:54.188Z",
    "files": {
     "cases.json": "6b54aa87b41ca0afc0853b3d6cab9160e889d2009c5f5f420211730468e285af",
-    "conditions.json": "cb932753500d8b44da36b6bcc000e163702968521ec6bb723789fa1337757ad3",
-    "decision-criteria.md": "275ac13d177905a72966144bd62bded4e5c33c462e12c87b7936572109c74f45",
-    "release.json": "f47536592f07f17354153645bafa7e933766e67fb1fc07f7753c5adea43cba08",
+    "conditions.json": "9f5f5b264dac594ab024afef790ad21c506012db84d5da10d0bd9c8bf1ef0610",
+    "decision-criteria.md": "db251c2db126320cab057432bca50e582a81f3ff284e5f8dde7b721240d5181a",
+    "release.json": "24fd6891df4670268c44fd187425a51e4b6de5642d3bb580c9f1316ecac177d4",
     "run-order.json": "d9b161e9b175ae144bf990cb8946459bf40198d11dcf595e47ae6e9aceaad1fb",
     "harness/apply-condition.mjs": "8487e9b67e0ecae21fd1910ef659243ac8f27a0c5429fd7443cd2176f309db7f",
     "harness/collect.mjs": "133d81716a788e69d68806e932c407ecfd7d414bac3eb79d65536621e39a2bb7",
     "harness/condition-i.mjs": "8ff3f606a6c84a29917f6e511da44959638f7f6a47ac190bb774f95abbc16c1d",
-    "harness/fixation.mjs": "331f0efad56e283bceb94adf81b6cc6ffd6430e7d5bc97dd545ed6bcb4361d8e",
+    "harness/fixation.mjs": "e63d9bbdede2bdce92aaf095a2151d5006a7342d0e101e30b772017f7a80d5a3",
     "harness/guard.mjs": "eb533b6e6ce6da772491b8c793939b4fbfd5a77185586ad77866d3e9279a42a6",
     "harness/install-asc.mjs": "529384b4ad6eb4cff479293b571ea9f37337460eb70e8c1be4c832358ece838b",
+    "harness/judge.mjs": "b24e225b01738c2b1ca7a6de8db3c68cd4292f501c7af8a460fefff29b71e1ad",
     "harness/ledger.mjs": "5d5463095e1dbb2235f0f2617cd1477b45712e80a92e947f2f23b1765059eac6",
     "harness/make-fixture.mjs": "8de76720b191dbb0d004e4cfe1a003e2a392aa083e5be55ed0c0d841c83d23e1",
     "harness/markers.mjs": "5e462ae674f65de264f71796690b8d59fd7e564acdfcdee10ae806ac2518683c",
-    "harness/order.mjs": "1467c1c419aa15910c49324e9276f2bc4e3e6796ad736e6acb3762a7082823eb",
+    "harness/order.mjs": "a81fa3c95f5d5d36d9cd2b1cbeea2c2e1a10804dcb58453e58c97f6ef756d3e3",
     "harness/probe-check.mjs": "2fe949ff3e27a73dc7323857ecb0f9c75c09f7fe14fbad409a9fd11a762bc343",
     "harness/run-all.mjs": "e3674a68abbe8f5433ac7479485e6960e3bd5be0ec87a50ae3bcbad21d3f50bf",
-    "harness/run-trial.mjs": "c7499478a357514b16cd961912229e5518641f7b2eb653ba9151e1806d5e39f6",
-    "harness/score.mjs": "6382dbb3b7b275c333399888d1e502102a6dd60b36a077b3d93d65b76ac01ed6"
+    "harness/run-trial.mjs": "43037fe51ad1d8bd3713f25ac708ae7634bc48672513197652db2957f279dabf",
+    "harness/score.mjs": "a25453f4734af681df72ff80c2951b3d4fa64442b4be397b62e3ffc83ed2039e"
    },
    "invariants": {
-    "conditionsWithoutI": "e9973869733373021b7ad7b5736d0de1491b4c146cbad6a3b9edfb81ebb8d1dc",
-    "releaseWithoutPhase3": "b99d369d8b23aa84d92a2abf83b6ef8b107ea079f5675952238b1832f8413199"
+    "conditionsWithoutI": "d1043e310d631fcf32ad3f8abc5392abbfa4887a0d0893bb5ed20c01658ae1a4",
+    "releaseWithoutPhase3": "d21308e7053a73c243a2bcdd08a03ec212126c203511c1613bc94190ced67619"
    },
    "ledgerId": "69997fe4-4f0f-4c84-823e-1e895722af24",
    "conditionIShape": {

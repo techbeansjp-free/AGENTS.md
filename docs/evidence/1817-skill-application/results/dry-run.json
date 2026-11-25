@@ -1,5 +1,5 @@
 {
- "label": "dry run at HEAD 6131acb1d9675f31439044617e79b12b4741a676 (clean tree); tarballs: B = release v0.5.109 (<scratch>/rel1817/release), S = candidate packed at ee77daa0 (<scratch>/rel1817/candidate2); no --allow-unreleased",
+ "label": "dry run at HEAD 31cc0e904818fe6266a5d2b55900af91776f4b53 (clean tree); tarballs: B = release v0.5.109 (<scratch>/rel1817/release), S = candidate packed at 6d6e1223 (<scratch>/rel1817/candidate3); no --allow-unreleased",
  "allowUnreleased": false,
  "checks": {
   "fixturesInstalledAsPinned": {
@@ -83,7 +83,7 @@
    "pinned": true,
    "released": false,
    "expectedSource": "candidate",
-   "tarballSha256": "3a01647368b12966d52f617b6739520971791d4a75f2e37ec1c515d8c9ff14d2",
+   "tarballSha256": "7e48d5cfac449506fd4f2cc7d741d926c122a860ab2a4a9cd2bc7ab2f0075939",
    "packageVersion": "0.5.109",
    "runtimeVersion": "0.5.109",
    "entries": 16,
