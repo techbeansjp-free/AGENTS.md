@@ -20,12 +20,12 @@ const ev = path.resolve(here, '..');
 
 export function trialsToStart(mode, {runsRoot, ledger, spec}) {
   const reserved = fs.existsSync(ledger) ? ledgerOps.reservedNames(ledger) : new Set();
-  const exists = (name) => reserved.has(name) || fs.existsSync(path.join(runsRoot, name));
+  const settled = fs.existsSync(ledger) ? ledgerOps.settlements(ledger) : new Map();
   if (mode === 'planned') return plannedTrials().filter((t) => !reserved.has(t.name));
   if (mode === 'replacements') {
     const left = plannedTrials().filter((t) => !reserved.has(t.name));
     if (left.length) throw new Error(`replacements start after every planned trial; next planned: ${left[0].name}`);
-    return replacementPlan({runsRoot, spec, exists});
+    return replacementPlan({runsRoot, spec, reserved, settled}); // review Low-B: ledger reservations only
   }
   throw new Error('mode is planned or replacements');
 }

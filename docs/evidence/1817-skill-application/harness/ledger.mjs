@@ -1,3 +1,6 @@
+// #1817: copied from docs/evidence/1814-skill-invocation/harness/ledger.mjs. Change (review Medium-A): the settlement
+// also records the trial's exit and the raw sha256 of trace.jsonl and meta.json, and settledFilesProblem checks that a
+// settled trial's files are still present and unchanged (collect, judge and the replacement plan rely on it).
 // One cumulative spending ledger for every stage of #1814 (reviews M4, N1, N-1). JSON lines in a file outside the
 // repository. The first line is {ledgerId, createdAt}; the id is recorded in results/fixation.json at init, so run-trial
 // refuses any other ledger (a new ledger cannot reset the total). Each reservation {id, seq, trial, reservedUsd, at} has
@@ -59,9 +62,30 @@ export function reserve(ledger, trial, reservedUsd) {
   return {id, seq};
 }
 
-export function settle(ledger, id, trial, costUsd) {
+export function settle(ledger, id, trial, costUsd, {exit = null, traceSha256 = null, metaSha256 = null} = {}) {
   // A missing cost keeps the reservation.
-  fs.appendFileSync(ledger, JSON.stringify({id, trial, costUsd: typeof costUsd === 'number' ? costUsd : null, at: new Date().toISOString()}) + '\n');
+  fs.appendFileSync(ledger, JSON.stringify({id, trial, costUsd: typeof costUsd === 'number' ? costUsd : null, exit, traceSha256, metaSha256, at: new Date().toISOString()}) + '\n');
+}
+
+// The settlement of each trial (by name), for trials that were settled.
+export function settlements(ledger) {
+  const m = new Map();
+  for (const e of entries(ledger)) if ('costUsd' in e && !('reservedUsd' in e)) m.set(e.trial, e);
+  return m;
+}
+export const fileSha256 = (f) => (fs.existsSync(f) ? crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex') : null);
+
+// review Medium-A: a settled trial's trace.jsonl and meta.json must be present and byte-identical to the settlement;
+// otherwise the trial was deleted or edited after it ran (e.g. to have it counted as a failure and redone).
+export function settledFilesProblem(trialDir, settlement) {
+  if (!settlement) return null;
+  const p = [];
+  for (const [file, key] of [['trace.jsonl', 'traceSha256'], ['meta.json', 'metaSha256']]) {
+    const now = fileSha256(`${trialDir}/${file}`);
+    if (now === null) p.push(`${file} is missing`);
+    else if (now !== settlement[key]) p.push(`${file} differs from the ledger settlement`);
+  }
+  return p.length ? `settled trial ${settlement.trial}: ${p.join(', ')}` : null;
 }
 
 // Records from several trials must come from one ledger, each seq once (review N-1 (d)).

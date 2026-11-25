@@ -180,7 +180,7 @@ function main() {
     const spent = ledgerOps.spent(ledger);
     if (spent + budget > Number(stopUsd) - SAFETY_MARGIN_USD) { unlock(); fail(`cumulative spend ${spent.toFixed(2)} + this trial's budget ${budget} would exceed ${stopUsd} minus the safety margin ${SAFETY_MARGIN_USD}`); }
     if (ledgerOps.reservedNames(ledger).has(name)) { unlock(); fail(`trial ${name} is already in the ledger; a rerun needs a new rep number`); }
-    const outOfOrder = orderRefusal({condition: cond, caseId, rep, reserved: ledgerOps.reservedNames(ledger), runsRoot, spec});
+    const outOfOrder = orderRefusal({condition: cond, caseId, rep, reserved: ledgerOps.reservedNames(ledger), settled: ledgerOps.settlements(ledger), runsRoot, spec});
     if (outOfOrder) { unlock(); fail(outOfOrder); }
     const installFile = `${fixture}.install.json`;
     const install = fs.existsSync(installFile) ? JSON.parse(fs.readFileSync(installFile, 'utf8')) : null;
@@ -216,7 +216,8 @@ function main() {
       credentialKind: credential, exit: r.status, signal: r.signal, error: r.error ? String(r.error) : null, wallMs: Date.now() - t0, costUsd: last?.total_cost_usd ?? null, budget};
     meta.credentialInChildFiles = filesContaining(home, secret) + filesContaining(config, secret);
     fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 1));
-    ledgerOps.settle(ledger, reservation.id, name, meta.costUsd);
+    // review Medium-A: the settlement pins the raw trace and meta (collect, judge and the replacement plan check them).
+    ledgerOps.settle(ledger, reservation.id, name, meta.costUsd, {exit: r.status, traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))});
     console.log(JSON.stringify({trial: name, exit: r.status, costUsd: meta.costUsd, resolvedModel: meta.resolvedModel}));
   } finally {
     fs.rmSync(home, {recursive: true, force: true}); fs.rmSync(config, {recursive: true, force: true});

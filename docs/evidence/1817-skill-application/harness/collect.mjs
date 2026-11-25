@@ -1,5 +1,7 @@
 // #1817: copied from docs/evidence/1814-skill-invocation/harness/collect.mjs; trials.json also records installSource and
-// installCondition (release/candidate pairing).
+// installCondition (release/candidate pairing), and (review Medium-A) the raw sha256 of each trial's trace.jsonl and
+// meta.json (rawTraceSha256, rawMetaSha256, null when absent). With a ledger (required on the command line) a settled
+// trial whose files are missing or differ from the settlement is refused before anything is written.
 // Copies each finished trial's record out of the runs root into <traces-dir> under the names score.mjs reads, with local
 // absolute paths replaced (public repository: no local user names or paths). No model call.
 // <cond>-<case>-<n>.jsonl, <same>.hook.jsonl (hook conditions: empty when the hook log is absent = hook did not fire),
@@ -8,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {loadConditions} from './apply-condition.mjs';
-import {ledgerConsistency} from './ledger.mjs';
+import {ledgerConsistency, settlements, settledFilesProblem, fileSha256} from './ledger.mjs';
 
 export function redact(text, trialDir) {
   return text.split(trialDir).join('<trial>').replace(/\/(Users|home|private\/var\/folders)\/[^/"\s\\]+/g, '/<local>').replace(/-Users-[A-Za-z0-9_.-]+/g, '-<local>');
@@ -23,7 +25,10 @@ export function scrubSensitive(text) {
   return {text: out, hits};
 }
 
-export function collect(runsRoot, out) {
+export function collect(runsRoot, out, {ledger = null} = {}) {
+  const settled = ledger ? settlements(ledger) : new Map();
+  const tampered = fs.readdirSync(runsRoot).filter((n) => settled.has(n)).map((n) => settledFilesProblem(path.join(runsRoot, n), settled.get(n))).filter(Boolean);
+  if (tampered.length) throw new Error(tampered.join('; ')); // before any file is written
   const conds = loadConditions().conditions;
   fs.mkdirSync(out, {recursive: true});
   const rows = [];
@@ -40,9 +45,10 @@ export function collect(runsRoot, out) {
     if (!m || !fs.statSync(dir).isDirectory() || m[2] === 'probe') continue;
     const trace = path.join(dir, 'trace.jsonl');
     const has = fs.existsSync(trace) && fs.statSync(trace).size > 0;
-    if (!has) { put(`${name}.jsonl.missing`, 'no trace\n'); rows.push({trial: name, missing: true}); continue; }
+    const raw = {rawTraceSha256: fileSha256(trace), rawMetaSha256: fileSha256(path.join(dir, 'meta.json'))};
+    if (!has) { put(`${name}.jsonl.missing`, 'no trace\n'); rows.push({trial: name, missing: true, ...raw}); continue; }
     // review L-6: a trace without meta.json (killed after the trace was written) is a failure row, not a crash.
-    if (!fs.existsSync(path.join(dir, 'meta.json'))) { put(`${name}.jsonl.missing`, 'no meta.json\n'); rows.push({trial: name, missing: 'meta.json'}); continue; }
+    if (!fs.existsSync(path.join(dir, 'meta.json'))) { put(`${name}.jsonl.missing`, 'no meta.json\n'); rows.push({trial: name, missing: 'meta.json', ...raw}); continue; }
     const clean = scrubSensitive(redact(fs.readFileSync(trace, 'utf8'), dir));
     put(`${name}.jsonl`, clean.text);
     if (conds[m[1]]?.hook) {
@@ -53,7 +59,7 @@ export function collect(runsRoot, out) {
     rows.push({trial: name, model: meta.model, resolvedModel: meta.resolvedModel, claudeVersion: meta.claudeVersion, ascRuntimeVersion: meta.ascRuntimeVersion,
       tarballSha256: meta.tarballSha256, released: meta.released, installSource: meta.installSource ?? null, installCondition: meta.installCondition ?? null, adopted: meta.adopted, sampleHead: meta.sampleHead, applied: meta.applied, expectHook: meta.expectHook,
       ledgerId: meta.ledgerId ?? null, ledgerSeq: meta.ledgerSeq ?? null, fixationSha256: meta.fixationSha256, fixedAtCommit: meta.fixedAtCommit, fixationStage: meta.fixationStage,
-      exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: clean.hits});
+      exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: clean.hits, ...raw});
   }
   // review L-e: stages are collected into the same directory; trials.json is extended, never overwritten.
   const file = path.join(out, 'trials.json');
@@ -67,6 +73,9 @@ export function collect(runsRoot, out) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [root, out] = process.argv.slice(2).map((p) => path.resolve(p));
-  console.log(JSON.stringify({collected: collect(root, out)}));
+  const args = process.argv.slice(2);
+  const i = args.indexOf('--ledger');
+  if (i < 0 || !args[i + 1]) { console.error('usage: node collect.mjs <runs-root> <traces-dir> --ledger <file>'); process.exit(2); }
+  const [root, out] = args.slice(0, 2).map((p) => path.resolve(p));
+  console.log(JSON.stringify({collected: collect(root, out, {ledger: path.resolve(args[i + 1])})}));
 }

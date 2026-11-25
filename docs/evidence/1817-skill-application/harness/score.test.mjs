@@ -10,7 +10,7 @@ import {parseTrace, scoreRun, scoreDir, summarize, judge, judge1817, shortfall, 
 import {redact, scrubSensitive, collect} from './collect.mjs';
 import {pointerText, hookScript, loadConditions} from './apply-condition.mjs';
 import {plannedTrials, orderProblems, orderRefusal, replacementPlan, loadOrder, completionStatus} from './order.mjs';
-import {scoringProblems, nameSetProblems, traceNamesOf} from './judge.mjs';
+import {scoringProblems, nameSetProblems, traceNamesOf, settlementProblems} from './judge.mjs';
 import {digests, invariantDigests} from './fixation.mjs';
 import {trialsToStart} from './run-all.mjs';
 import * as ledgerOps from './ledger.mjs';
@@ -317,12 +317,12 @@ test('#1817 L1: replacements are one per failed planned trial (rep 5, 6, ...), a
     if (text !== null) fs.writeFileSync(path.join(root, name, 'meta.json'), '{}');
   };
   mk('B-asc-1-1', null); mk('B-asc-1-2', 'x'); mk('B-asc-1-3', 'x', false); mk('B-asc-1-4', 'x'); mk('S-asc-1-1', 'x');
-  const exists = (n) => fs.existsSync(path.join(root, n));
-  assert.deepEqual(replacementPlan({runsRoot: root, spec, exists}).map((x) => x.name), ['B-asc-1-5', 'B-asc-1-6']);
+  const reservedNow = () => new Set(fs.readdirSync(root)); // every directory made here stands for a reserved trial
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow()}).map((x) => x.name), ['B-asc-1-5', 'B-asc-1-6']);
   mk('B-asc-1-5', 'x', false); // the replacement failed: it is not replaced again
-  assert.deepEqual(replacementPlan({runsRoot: root, spec, exists}).map((x) => x.name), ['B-asc-1-6']);
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow()}).map((x) => x.name), ['B-asc-1-6']);
   mk('B-asc-1-6', 'x');
-  assert.deepEqual(replacementPlan({runsRoot: root, spec, exists}), []);
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved: reservedNow()}), []);
   // scoring matches: 1 -> 5 (a failure), 3 -> 6; a rep 7 is not counted
   const row = (run, failure) => ({condition: 'B', case: 'asc-1', run, ...(failure ? {failure: 'x'} : {})});
   const rows = selectCounted([row(1, true), row(2), row(3, true), row(4), row(5, true), row(6), row(7)], 4);
@@ -427,7 +427,7 @@ test('#1817 L-6: scoring is refused when the fixation check fails or a trial ran
   const rows = [{trial: 'B-asc-1-1', fixationSha256: 'F1', ledgerId: 'L1', ledgerSeq: 2}, {trial: 'S-asc-1-1', fixationSha256: 'F1', ledgerId: 'L1', ledgerSeq: 3}, {trial: 'B-rr-1-1', missing: true}];
   const reservations = [{trial: 'B-probe-1', seq: 0}, {trial: 'S-probe-1', seq: 1}, {trial: 'B-asc-1-1', seq: 2}, {trial: 'S-asc-1-1', seq: 3}, {trial: 'B-rr-1-1', seq: 4}];
   const traceNames = ['B-asc-1-1', 'S-asc-1-1', 'B-rr-1-1'];
-  const base = {rows, fx, fxSha: 'F1', ledgerIdNow: 'L1', root, fileProblems: [], reservations, traceNames};
+  const base = {rows, fx, fxSha: 'F1', ledgerIdNow: 'L1', root, fileProblems: [], reservations, traceNames, settled: new Map()};
   assert.deepEqual(scoringProblems(base), []);
   assert.match(scoringProblems({...base, rows: [{...rows[0], fixationSha256: 'F0'}, rows[1]]}).join(), /another fixation record: B-asc-1-1/);
   assert.match(scoringProblems({...base, ledgerIdNow: 'L2'}).join(), /not the one recorded/);
@@ -455,4 +455,65 @@ test('#1817 Low-1: ledger reservations, trials.json and traces must be the same 
   assert.deepEqual(traceNamesOf(d).sort(), ['B-asc-1-1', 'S-asc-1-1']);
   // scoringProblems refuses without the ledger reservations and trace names
   assert.match(scoringProblems({rows, fx: {records: [{ledgerId: 'L1', files: {}}]}, fxSha: 'x', ledgerIdNow: 'L1', fileProblems: []}).join(), /reservations and the trace names are required/);
+});
+
+test('#1817 Medium-A: a settled trial whose trace or meta was deleted or edited is refused by collect and judge and never replaced', (t) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-tamper-'));
+  t.after(() => fs.rmSync(d, {recursive: true, force: true}));
+  const runsRoot = path.join(d, 'runs'), lf = path.join(d, 'ledger.jsonl');
+  ledgerOps.create(lf);
+  const names = plannedTrials().map((x) => x.name);
+  // all 112 planned trials ran and were settled with the sha256 of their files (as run-trial does)
+  for (const n of names) {
+    const dir = path.join(runsRoot, n);
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 'trace.jsonl'), trace([], {text: `answer ${n}`}));
+    fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({costUsd: 0.08, ledgerId: ledgerOps.ledgerId(lf), ledgerSeq: ledgerOps.reservations(lf).length}));
+    const {id} = ledgerOps.reserve(lf, n, 0.6);
+    ledgerOps.settle(lf, id, n, 0.08, {exit: 0, traceSha256: ledgerOps.fileSha256(path.join(dir, 'trace.jsonl')), metaSha256: ledgerOps.fileSha256(path.join(dir, 'meta.json'))});
+  }
+  const reserved = ledgerOps.reservedNames(lf), settled = ledgerOps.settlements(lf);
+  assert.equal(settled.get('B-asc-1-1').exit, 0);
+  assert.deepEqual(replacementPlan({runsRoot, spec, reserved, settled}), []); // untouched: nothing to replace
+  const out = path.join(d, 'out');
+  collect(runsRoot, out, {ledger: lf});
+  const rows = JSON.parse(fs.readFileSync(path.join(out, 'trials.json'), 'utf8'));
+  assert.deepEqual(settlementProblems({rows, settled}), []);
+  const victim = path.join(runsRoot, 'S-es-1-2');
+  const cases = {
+    'trace deleted': () => fs.rmSync(path.join(victim, 'trace.jsonl')),
+    'trace edited': () => fs.appendFileSync(path.join(victim, 'trace.jsonl'), '{"type":"system"}\n'),
+    'meta deleted': () => fs.rmSync(path.join(victim, 'meta.json')),
+  };
+  const keep = {trace: fs.readFileSync(path.join(victim, 'trace.jsonl')), meta: fs.readFileSync(path.join(victim, 'meta.json'))};
+  for (const [label, tamper] of Object.entries(cases)) {
+    tamper();
+    // no replacement can be planned or started for it
+    assert.throws(() => replacementPlan({runsRoot, spec, reserved, settled}), /settled trial S-es-1-2/, label);
+    assert.match(orderRefusal({condition: 'S', caseId: 'es-1', rep: '5', reserved, settled, runsRoot, spec}), /refused: settled trial S-es-1-2/, label);
+    assert.throws(() => trialsToStart('replacements', {runsRoot, ledger: lf, spec}), /settled trial S-es-1-2/, label);
+    // collect refuses before writing; a collect without the ledger records the raw digests, and judge refuses them
+    assert.throws(() => collect(runsRoot, path.join(d, `out-${label}`), {ledger: lf}), /settled trial S-es-1-2/, label);
+    assert.equal(fs.existsSync(path.join(d, `out-${label}`, 'trials.json')), false, label);
+    collect(runsRoot, path.join(d, `raw-${label}`));
+    const rawRows = JSON.parse(fs.readFileSync(path.join(d, `raw-${label}`, 'trials.json'), 'utf8'));
+    assert.match(settlementProblems({rows: rawRows, settled}).join(), /settled trial S-es-1-2/, label);
+    fs.writeFileSync(path.join(victim, 'trace.jsonl'), keep.trace); fs.writeFileSync(path.join(victim, 'meta.json'), keep.meta);
+  }
+  assert.deepEqual(replacementPlan({runsRoot, spec, reserved, settled}), []);
+});
+
+test('#1817 Low-B: at the replacement stage a directory without a reservation does not count as started', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1817-lowb-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const names = plannedTrials().map((x) => x.name);
+  for (const n of names) {
+    fs.mkdirSync(path.join(root, n), {recursive: true});
+    fs.writeFileSync(path.join(root, n, 'trace.jsonl'), n === 'B-rr-1-2' ? trace([], {subtype: 'error_during_execution', is_error: true, text: 'API Error: 529'}) : trace([], {text: 'x'}));
+    fs.writeFileSync(path.join(root, n, 'meta.json'), '{}');
+  }
+  fs.mkdirSync(path.join(root, 'B-rr-1-5')); // the replacement stopped after its directory was made, before its reservation
+  const reserved = new Set(names);
+  assert.deepEqual(replacementPlan({runsRoot: root, spec, reserved}).map((x) => x.name), ['B-rr-1-5']); // still required
+  assert.equal(orderRefusal({condition: 'B', caseId: 'rr-1', rep: '5', reserved, runsRoot: root, spec}), null); // run-trial then refuses it with "exists"
 });

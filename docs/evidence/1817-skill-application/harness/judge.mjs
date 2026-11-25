@@ -6,7 +6,9 @@
 // - the ledger is not the one recorded at fixation;
 // - (review Low-1) the non-probe reservation names of the ledger, the trials.json names and the trace files
 //   (<name>.jsonl or <name>.jsonl.missing) are not the same set, the ledger's reservation seqs are not 0..n-1, or a
-//   collected trial's ledgerSeq differs from its reservation (a reserved trial deleted before collect, or a copied ledger).
+//   collected trial's ledgerSeq differs from its reservation (a reserved trial deleted before collect, or a copied ledger);
+// - (review Medium-A) a settled trial's collected row has no raw trace/meta or their sha256 (recorded by collect.mjs)
+//   differs from the ledger settlement (deleted or edited after the run, e.g. to have it redone).
 // Then it scores B and S (score.mjs) and judges with judge1817, passing the completion status of the ledger
 // (order.mjs completionStatus): a run that is neither complete nor stopped at the cap is not judged.
 // Usage: node judge.mjs <traces-dir> --ledger <file> [--runs-json <out.json>] [--out <judge.json>]
@@ -44,8 +46,23 @@ export function nameSetProblems({rows, reservations, traceNames}) {
   return p;
 }
 
-export function scoringProblems({rows, fx, fxSha, ledgerIdNow, root = ev, fileProblems = null, reservations = null, traceNames = null}) {
+// review Medium-A: rows (trials.json) against the ledger settlements (Map name -> settlement).
+export function settlementProblems({rows, settled}) {
   const p = [];
+  const byName = new Map(rows.map((r) => [r.trial, r]));
+  for (const [name, s] of settled) {
+    if (/-probe-\d+$/.test(name)) continue;
+    const r = byName.get(name);
+    if (!r) continue; // reported by nameSetProblems
+    if (r.rawTraceSha256 !== s.traceSha256 || r.rawMetaSha256 !== s.metaSha256) p.push(`settled trial ${name}: trace.jsonl or meta.json is missing or differs from the ledger settlement`);
+  }
+  return p;
+}
+
+export function scoringProblems({rows, fx, fxSha, ledgerIdNow, root = ev, fileProblems = null, reservations = null, traceNames = null, settled = null}) {
+  const p = [];
+  if (settled) p.push(...settlementProblems({rows, settled}));
+  else p.push('the ledger settlements are required');
   if (reservations && traceNames) p.push(...nameSetProblems({rows, reservations, traceNames}));
   else p.push('the ledger reservations and the trace names are required');
   const diff = differences(lastRecord(fx), root);
@@ -80,7 +97,7 @@ function main() {
   const trialsFile = path.join(dir, 'trials.json');
   if (!fs.existsSync(trialsFile)) { console.error('refused: trials.json (from collect.mjs) is missing'); process.exit(3); }
   const problems = scoringProblems({rows: JSON.parse(fs.readFileSync(trialsFile, 'utf8')), fx, fxSha: sha(fs.readFileSync(fxFile)), ledgerIdNow: ledgerOps.ledgerId(path.resolve(ledger)),
-    reservations: ledgerOps.reservations(path.resolve(ledger)), traceNames: traceNamesOf(dir)});
+    reservations: ledgerOps.reservations(path.resolve(ledger)), traceNames: traceNamesOf(dir), settled: ledgerOps.settlements(path.resolve(ledger))});
   if (problems.length) { console.error(`refused: ${problems.join('; ')}`); process.exit(3); }
   const spec = JSON.parse(fs.readFileSync(path.join(ev, 'cases.json'), 'utf8'));
   const {runs, sums, judgement} = judgeRun({spec, dir, ledger: path.resolve(ledger)});

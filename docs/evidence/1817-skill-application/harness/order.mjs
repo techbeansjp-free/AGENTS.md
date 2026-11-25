@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseTrace, scoreRun} from './score.mjs';
+import {settledFilesProblem} from './ledger.mjs';
 
 const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(ev, f), 'utf8'));
@@ -49,7 +50,7 @@ export function probeRefusal({condition, rep, reserved, order = loadOrder(), run
 // run-trial: may this trial start now, given the names already reserved in the ledger?
 // A replacement (rep > runs) may start only after every planned trial is reserved, and only when it is the next trial of
 // replacementPlan for the trials in runsRoot (review L-1); without runsRoot and spec a replacement is refused.
-export function orderRefusal({condition, caseId, rep, reserved, runsRoot = null, spec = null, order = loadOrder(), runs = readJson('conditions.json').runs}) {
+export function orderRefusal({condition, caseId, rep, reserved, settled = new Map(), runsRoot = null, spec = null, order = loadOrder(), runs = readJson('conditions.json').runs}) {
   if (caseId === 'probe') return probeRefusal({condition, rep, reserved, order, runs});
   const planned = plannedTrials(order, runs);
   const next = planned.find((t) => !reserved.has(t.name));
@@ -59,13 +60,17 @@ export function orderRefusal({condition, caseId, rep, reserved, runsRoot = null,
   }
   if (next) return `replacement ${name} before every planned trial is reserved (next planned: ${next.name})`;
   if (!runsRoot || !spec) return `replacement ${name}: the replacement plan needs the runs root and the cases`;
-  const exists = (n) => reserved.has(n) || fs.existsSync(path.join(runsRoot, n));
-  const plan = replacementPlan({runsRoot, spec, order, runs, exists});
+  let plan;
+  try { plan = replacementPlan({runsRoot, spec, order, runs, reserved, settled}); } catch (e) { return `replacement ${name} refused: ${e.message}`; }
   return plan[0]?.name === name ? null : `${name} is not the next required replacement (next: ${plan[0]?.name ?? 'none'})`;
 }
 
-// Failure of one raw trial directory (runs root), as score.mjs would count it after collect.mjs.
-export function trialFailure(dir, spec, caseId) {
+// Failure of one raw trial directory (runs root), as score.mjs would count it after collect.mjs. review Medium-A: a
+// settled trial whose trace.jsonl or meta.json is missing or differs from its settlement is not a failure but a
+// tampered record: this throws, so no replacement can be planned for it.
+export function trialFailure(dir, spec, caseId, settlement = null) {
+  const tampered = settledFilesProblem(dir, settlement);
+  if (tampered) throw new Error(tampered);
   const trace = path.join(dir, 'trace.jsonl');
   if (!fs.existsSync(trace) || fs.statSync(trace).size === 0) return 'missing trace';
   if (!fs.existsSync(path.join(dir, 'meta.json'))) return 'no meta.json';
@@ -74,16 +79,19 @@ export function trialFailure(dir, spec, caseId) {
 }
 
 // The replacement trials still to run, in execution order: for each condition/case, one per failed planned trial, with
-// rep numbers runs+1 .. runs+failures; reps already present (run, whatever their outcome) are not planned again.
-// `exists(name)` tells whether a trial was started (its directory exists or it is reserved in the ledger).
-export function replacementPlan({runsRoot, spec, order = loadOrder(), runs = readJson('conditions.json').runs, exists}) {
+// rep numbers runs+1 .. runs+failures; reps already reserved (whatever their outcome) are not planned again.
+// review Low-B: only ledger reservations count (`reserved`, a Set of names); a directory without a reservation is not a
+// started trial, so its replacement is planned and run-trial refuses it with "exists" (README resume, case 2).
+// `settled` (Map name -> settlement) lets trialFailure detect deleted or edited files of a settled trial (Medium-A).
+export function replacementPlan({runsRoot, spec, order = loadOrder(), runs = readJson('conditions.json').runs, reserved, settled = new Map()}) {
+  const exists = (n) => reserved.has(n);
   const out = [];
   for (const caseId of order.caseOrder) for (const condition of order.conditionOrder) {
     let failed = 0;
     for (let rep = 1; rep <= runs; rep += 1) {
       const name = trialName(condition, caseId, rep);
       if (!exists(name)) continue; // not run yet: not a failure, run-trial's order check comes first
-      if (trialFailure(path.join(runsRoot, name), spec, caseId)) failed += 1;
+      if (trialFailure(path.join(runsRoot, name), spec, caseId, settled.get(name) ?? null)) failed += 1;
     }
     for (let k = 1; k <= failed; k += 1) {
       const name = trialName(condition, caseId, runs + k);
