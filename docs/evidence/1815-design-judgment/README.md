@@ -20,11 +20,20 @@
 | UI-04 | B-r1・B-r2・B-r3 | 0.215・0.218・0.254 | B-r3だけ | なし | なし | 3/3 | 全て○／○ |
 | UI-04 | S-r1・S-r2・S-r3 | 0.217・0.249・0.214 | S-r2だけ | なし | なし | 3/3 | 全て○／○ |
 
-- ASCのSkill toolの呼出しは0回。UI-03のB-r3・S-r3は、Claude Code同梱の`dataviz` Skillを呼び、`.agent-skill-chain/skills/README.md`を読んだが、ASCの本文は読まなかった。2案の描画（`alternativesCompared`）と見本の閲覧（fetch_page・view_page）は全試行で0回。
+- ASCのSkill toolの呼出しは0回。UI-03のB-r3・S-r3は、ASCの外の`dataviz` Skill（試行のHOMEとconfigは空で、projectにはASCのSkillだけを置いたので、Claude Code自身が提供するSkillと推定する。init eventのSkillの一覧に、ASCの16件のほかの17件の1つとして載っていた）を呼び、`.agent-skill-chain/skills/README.md`を読んだが、ASCの本文は読まなかった。2案の描画（`alternativesCompared`）と見本の閲覧（fetch_page・view_page）は全試行で0回。
 - **読込みの門**：Sの試行で本文と候補の文のreferenceを読んだのは、全ケースで0/3。規則により**3ケースとも「未判定（候補の文が読まれていない）」**、判定できるケースは0で、全体は**未判定（取り込まない）**。
-- **指標**：I1（両幅の初期表示の答え）はB・Sとも上限近くで、差は上の2試行の狭幅の欠けだけ（UI-03でSに1件、UI-07でBに1件）。I2（広幅で操作しないと見えない必須情報）は全試行0。UI-04では全試行で狭幅に3項目（改訂日・寸法図・取扱説明書）が操作の後でしか見えないが、依頼が狭幅で一覧から詳細へ移る設計を認めているので、I2（広幅）には数えない。網羅率はUI-03・UI-07で1.0、UI-04で0.958（後継品の品番が全試行で欠け）。
-- **順位**：ownerの判断（2026-11-26、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1815#issuecomment-7168583280)）で、FableとCodexの順位付けは行わなかった。読込みの門で全ケースが未判定なので、順位が判定を変えない。このため`decide.mjs`は実行していない（順位の入力を必須にする作りで、判定は固定した読込みの門の規則だけから決まる）。固定したharnessのfileは変えていない。
-- **主な発見**：書込みとbrowserのtoolがある、利用者に近い環境では、`CLAUDE.md`の案内文を採用していても、ASCはほとんど読まれなかった（本文2/18、referenceは0/18）。Read系のtoolだけで依頼した#1814・#1817では本文が読まれていたことと対照的である。原因の調査と改善は、ownerの判断で[#1820](https://github.com/techbeansjp-free/AGENTS.md/issues/1820)で扱う。
+- **指標**（decision-criteria.md「測れる指標」、[results/run/decision-no-ranks.json](results/run/decision-no-ranks.json)の値。失敗の試行は0なので置換えの値は使っていない）：
+
+| ケース | I1の和 B／S（最大6） | I2の和 B／S | 指標の向き（S） | 非劣化（網羅率の最小・axe serious/criticalの最大・横scroll・外部への要求） | 規則5の害 |
+| --- | --- | --- | --- | --- | --- |
+| UI-03 | 6／5（S-r2の狭幅で温度センサーが欠け） | 0／0 | 悪い | 網羅率 B 1.0・S 1.0、axe B 8（B-r3）・S 0、横scroll 0・0、外部 0・0：失敗なし | **害に当たる**（指標が「悪い」） |
+| UI-07 | 5／6（B-r2の狭幅で運休が欠け） | 0／0 | 良い | 網羅率 1.0・1.0、axe 0・0、横scroll 0・0、外部 0・0：失敗なし | なし |
+| UI-04 | 6／6 | 0／0 | 同じ | 網羅率 0.958・0.958（後継品の品番が全試行で欠け）、axe 0・0、横scroll 0・0、外部 0・0：失敗なし | なし |
+
+  UI-04では全試行で狭幅に3項目（改訂日・寸法図・取扱説明書）が操作の後でしか見えないが、依頼が狭幅で一覧から詳細へ移る設計を認めているので、I2（広幅）には数えない。UI-03とUI-07の差は、各条件3回のうち1試行の狭幅の1項目だけで、向きが逆であり、偶然の範囲である。規則の上ではUI-03は害のケースだが、判定できるケースが0なので、全体はどちらにしても**未判定（取り込まない）**である（規則7）。
+- **順位**：ownerの判断（2026-11-26、[Issueのコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1815#issuecomment-7168583280)）で、FableとCodexの順位付けは行わなかった。読込みの門で全ケースが未判定なので、順位は判定を変えない。
+- **decide.mjsの実行（順位なし）**：`decide.mjs`を順位の入力なし（ranksに`-`）で実行し、出力を[results/run/decision-no-ranks.json](results/run/decision-no-ranks.json)に公開した（pathは`<runs>`・`<scratch>`に置き換えた）。これで、測定の前提を機械的に確かめた：台帳の予約・試行のdirectory・数える試行の名前の一致、固定の記録との一致（全試行の`fixationSha256`・`fixedAtCommit`）、実行の完全性（欠け0、置換え0、測定の開始後のprobe 0）、失敗0、読込みの門のreadS（Sで本文と候補の文のreferenceを読んだ試行）が全ケース0/3。`decide.mjs`の各ケースの状態は「順位待ち」、全体も「順位待ち」になる。これは、`caseDecision`が順位の有無を読込みの門より先に調べる作りのためである。確かめた値に、固定した読込みの門の規則（[decision-criteria.md](decision-criteria.md)「判定の規則」の3と、全体の6〜8）を当てはめると、3ケースとも「未判定（候補の文が読まれていない）」で、判定できるケースは0、全体は未判定（取り込まない）になる。固定したharnessのfileは変えていない。
+- **主な発見**：書込みとbrowserのtoolがある、利用者に近い環境では、`CLAUDE.md`の案内文を採用していても、ASCはほとんど読まれなかった（本文2/18、referenceは0/18）。Read系のtoolだけで依頼した#1814・#1817では本文が読まれていたことと対照的である（#1817の結果：[PR #1819](https://github.com/techbeansjp-free/AGENTS.md/pull/1819)、[Issue #1817のコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1817#issuecomment-7167955108)）。原因の調査と改善は、ownerの判断で[#1820](https://github.com/techbeansjp-free/AGENTS.md/issues/1820)で扱う。
 - **候補のSkill本文**：ownerの判断で配布しない。このbranchで候補の追記（`c997f274`・`bb1d1886`）を取り消し、`skills/`はmainと同じにした。[release.json](release.json)のSは、測定した候補の記録として残す。
 - **公開の確認**：公開する記録に、localのpath・利用者名・一時directoryの名前・session id・mail address・token・第三者のページの本文・画像のデータが無いことを確かめた（一時directoryの名前は`collect.mjs`がruns rootを`<runs>`に置き換えたので現れず、追加の置換えは不要だった）。
 
@@ -54,7 +63,7 @@
 | 条件 | 導入するASC | 固定 |
 | --- | --- | --- |
 | B | release v0.5.109（target `af2ab12e`）のtarball | sha256 `05901c4b…9a4f`。SHA256SUMSとGitHubのasset digestに一致 |
-| S | 候補のtarball。このbranchのcommit `bb1d1886`（`c997f274`の追記に、独立レビューL-1の1文「比べるために作った採らない案は、成果物に残さない。」を加えたもの）で`node scripts/pack-candidate.mjs <新しいdirectory> --version=0.5.109` | sha256 `5fad2293…09af`（`rel1815/candidate2/`）。別のdirectoryへの2回目のpackも同じsha256。最初の候補（`c997f274`、`12c6e2c9…32ba`）は測定の前に置き換えた |
+| S | 候補のtarball。このbranchのcommit `bb1d1886`（`f3202f79`で取り消し済み。`c997f274`の追記に、独立レビューL-1の1文「比べるために作った採らない案は、成果物に残さない。」を加えたもの）で`node scripts/pack-candidate.mjs <新しいdirectory> --version=0.5.109` | sha256 `5fad2293…09af`（`rel1815/candidate2/`）。別のdirectoryへの2回目のpackも同じsha256。最初の候補（`c997f274`、`12c6e2c9…32ba`）は測定の前に置き換えた |
 
 両tarballを展開して比べ、違うのは`package/release-identity.json`、`package/skills/asc/references/implementation.md`、`package/skills/user-journey-acceptance/references/journeys.md`の3つだけだった。2つのreferenceは、`af2ab12e`と`bb1d1886`のgit上のfileとbyte単位で一致した（[release.json](release.json)の`differsOnly`）。
 
@@ -160,7 +169,7 @@ node harness/budget.mjs settle $L rank-codex-$R --host-output <scratch>/ranks/co
 #   起動が失敗した回：settle <name> --host-output <dir> --guard-record … --launch-failed（同じ引数）の後に、同じ reserve で -retry が1回だけ取れ、
 #   出力先は <scratch>/ranks/<評価者>-$R-retry
 node harness/rank-guard.mjs unlock $G --record <scratch>/rank-guard.jsonl
-# 5. 判定と公開する記録
+# 5. 判定と公開する記録（#1815の測定では、ownerの判断で順位付け（4）と順位を入れたdecideは行っていない。順位なしのdecideだけを実行した：上の「結果」）
 node harness/decide.mjs <scratch>/runs <scratch>/render <scratch>/ranks <scratch>/decision.json --ledger $L --keys <scratch>/keys \
   --blind <scratch>/blind --guard-record <scratch>/rank-guard.jsonl
 node harness/collect.mjs <scratch>/runs <scratch>/render results/run
