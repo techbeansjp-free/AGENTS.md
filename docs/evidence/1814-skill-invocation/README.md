@@ -39,7 +39,7 @@ dry runで使ったtarball：**releaseの本物ではない。** この作業の
 
 ## 測定の前の固定
 
-`results/fixation.json`の最初の記録のcommitは`282a6342892a4a485f5c0746088ec5872920342e`である（`run-trial.mjs`はこの記載を照合する）。以後の記録は追記だけで、段階0の後の是正（refix）と段階3の記録の条件は[EVAL_PLAN.md](EVAL_PLAN.md)「固定の記録と変えてよい範囲」による。
+`results/fixation.json`の最初の記録のcommitは`d1ba482e5c4d315f6d4506a2372601104cb4c235`である（`run-trial.mjs`はこの記載を照合する）。費用の台帳（repositoryの外）の台帳idも同じ記録にあり、`run-trial.mjs`はこの台帳だけを使う。以後の記録は追記だけで、段階0の後の是正（refix）と段階3の記録の条件は[EVAL_PLAN.md](EVAL_PLAN.md)「固定の記録と変えてよい範囲」による。
 
 ## 独立レビュー（1回目、HEAD `e2477706`）への対応
 
