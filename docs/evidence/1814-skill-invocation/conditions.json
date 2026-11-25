@@ -21,7 +21,8 @@
   "P": {"label": "CLAUDE.mdに文例", "pointer": true, "hook": null, "core": true},
   "H": {"label": "SessionStart hookで文例を注入", "pointer": false, "hook": "usage", "core": true},
   "PH": {"label": "文例とhookの両方", "pointer": true, "hook": "usage", "core": false, "runWhen": "P・Hのどちらも合格水準に届かない場合だけ（EVAL_PLAN.md「条件」）"},
-  "S": {"label": "hookで強い指示を注入（任意の追加）", "pointer": false, "hook": "strong", "core": false, "runWhen": "ownerが追加を選んだ場合だけ"}
+  "S": {"label": "hookで強い指示を注入（任意の追加）", "pointer": false, "hook": "strong", "core": false, "runWhen": "ownerが追加を選んだ場合だけ"},
+  "I": {"label": "改善の後（project-assetsの提案からCLAUDE.mdへ文例を採用）", "pointer": false, "hook": null, "pointerDelivered": true, "adopt": "claude-md", "core": true}
  },
  "strongHookText": "このプロジェクトではASC（.agent-skill-chain/）を使う。開発の開始・再開・実装・PR提出・許可されたmergeと後片付けの依頼では、作業の前に.agent-skill-chain/skills/asc/SKILL.mdを読み、依頼に必要なreferenceを読んでから進める。レビュー・調査・見積・画面の実操作確認・未決事項の整理などの依頼では、.agent-skill-chain/skills/README.mdの目的別一覧から該当するSkillの本文を読んで適用する。翻訳や通常の質問には開発工程を追加しない。Skillの読取りから外部操作の許可を推定しない。"
 }
