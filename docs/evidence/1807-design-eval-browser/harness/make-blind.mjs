@@ -31,7 +31,8 @@ order.forEach((t, i) => {
   let live = false;
   if (fs.existsSync(path.join(src, 'index.html'))) {
     const dst = path.join(out, 'live', id);
-    fs.cpSync(src, dst, {recursive: true, filter: (p) => !/DESIGN-NOTES\.md$/i.test(p)});
+    // Only the deliverable: other HTML files (e.g. the alternatives a condition was told to draw) would reveal the condition.
+    fs.cpSync(src, dst, {recursive: true, filter: (p) => p === src || (!/DESIGN-NOTES\.md$/i.test(p) && (!/\.html?$/i.test(p) || path.basename(p) === 'index.html'))});
     for (const f of fs.readdirSync(dst).filter((f) => f.endsWith('.html'))) {
       const p = path.join(dst, f); const html = fs.readFileSync(p, 'utf8');
       fs.writeFileSync(p, /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => `${m}${CSP}`) : CSP + html);

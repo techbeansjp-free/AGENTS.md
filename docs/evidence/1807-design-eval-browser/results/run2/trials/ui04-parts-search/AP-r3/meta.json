@@ -1,0 +1,84 @@
+{
+ "schema": "asc-1807-gen/v1",
+ "case": "ui04-parts-search",
+ "condition": "AP",
+ "rep": 3,
+ "prompt": "env/gen-prompt-procedure.txt",
+ "model": "sonnet",
+ "budget": 1.5,
+ "exit": 0,
+ "signal": null,
+ "spawnError": null,
+ "wallMs": 172436,
+ "initModel": "claude-sonnet-5-5",
+ "initTools": [
+  "Edit",
+  "Glob",
+  "Grep",
+  "Read",
+  "Skill",
+  "Write",
+  "mcp__browser__fetch_page",
+  "mcp__browser__screenshot",
+  "mcp__browser__view_page"
+ ],
+ "mcpServers": [
+  {
+   "name": "browser",
+   "status": "connected",
+   "source": "dynamic"
+  }
+ ],
+ "resultSubtype": "success",
+ "isError": false,
+ "costUsd": 0.49891659999999993,
+ "durationMs": 160928,
+ "numTurns": 21,
+ "usage": {
+  "input_tokens": 24,
+  "cache_creation_input_tokens": 55384,
+  "cache_read_input_tokens": 412001,
+  "output_tokens": 23582,
+  "output_tokens_details": {
+   "thinking_tokens": 1813
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 55384,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 710,
+    "cache_read_input_tokens": 61277,
+    "cache_creation_input_tokens": 2601,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 2601
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "permissionDenials": [],
+ "toolCounts": {
+  "Read": 3,
+  "Glob": 1,
+  "mcp__browser__view_page": 3,
+  "mcp__browser__fetch_page": 1,
+  "Write": 4,
+  "mcp__browser__screenshot": 7,
+  "Edit": 1
+ },
+ "skillCalls": [],
+ "skillFileReads": [],
+ "coreSteps": true
+}

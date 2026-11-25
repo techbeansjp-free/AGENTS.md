@@ -1,0 +1,4 @@
+{"t":"2026-11-25T00:50:29.871Z","listener":"model","event":"listening","port":3128,"hosts":1}
+{"t":"2026-11-25T00:50:29.874Z","listener":"browse","event":"listening","port":3129,"hosts":80}
+{"t":"2026-11-25T00:50:43.607Z","listener":"browse","method":"CONNECT","target":"www.lta.gov.sg:443","decision":"allow"}
+{"t":"2026-11-25T00:50:47.098Z","listener":"browse","method":"CONNECT","target":"www.keihan.co.jp:443","decision":"allow"}
