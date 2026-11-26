@@ -218,7 +218,7 @@ dry runの内容：
 - 隔離の確認（probe）：B・Sとも回1で合格した。比較でも差は無かった（Skill一覧の予算の超過は両方で無し、ASCの16件のdescriptionは両方でContextにあった）。費用は約0.22 USD。目印fileは確認の後に削除した。なお、旧台帳での最初の隔離の確認は、測定に使うアカウントの週の利用上限（HTTP 429）で2回とも応答が無く、台帳を取り替えて固定を作り直した（上の「台帳の取り替え」）。
 - 測定：固定した順の136試行がすべて完了した。失敗は0件、置き換えは0件。画面の依頼のフォルダの24試行は、設計どおり最初の3ターンで止めた（`error_max_turns`）。
 - 費用：新しい台帳の累計は13.32 USD（probe 0.22 USDを含む）。段階1の2.03 USDとあわせて約15.4 USDで、全体の上限25 USDの内。
-- 判定は`judge.mjs`で行った。固定（最初の記録のcommit `682123b1`）・台帳・試行ごとの記録・公開した記録の作り直しの照合をすべて通過した。完了の根拠は`complete`。記録：[results/judge.json](results/judge.json)、[results/runs.json](results/runs.json)、[results/ledger.jsonl](results/ledger.jsonl)、[results/probes/](results/probes/)。実行の記録（`traces/`）は加えていない（下の「公開した記録について」）。
+- 判定は`judge.mjs`で行った。固定（最初の記録のcommit `682123b1`）・台帳・試行ごとの記録・取り出した実行の記録（手元）の作り直しの照合をすべて通過した。完了の根拠は`complete`。記録：[results/judge.json](results/judge.json)、[results/runs.json](results/runs.json)、[results/ledger.jsonl](results/ledger.jsonl)、[results/probes/](results/probes/)。実行の記録（`traces/`）は加えていない（下の「公開した記録について」）。
 
 ### 判定（ownerの基準、14の該当する依頼×4回＝56試行／条件）
 
@@ -272,7 +272,7 @@ ownerが改善版Sを採用すると決めた（[Issueのコメント](https://g
 - 公開しているのは、試行ごとの採点（[results/runs.json](results/runs.json)）、判定（[results/judge.json](results/judge.json)）、台帳（[results/ledger.jsonl](results/ledger.jsonl)。精算の行に、実行の記録のsha256が残る）、probe（[results/probes/](results/probes/)）である。
 - 後続の置換えの記述（下の「公開した記録の置換え」）にある`results/traces`のsha256は、加えなかった実行の記録の集合の識別子として残した。
 
-### 公開した記録の置換え
+### 取り出した実行の記録（手元）の置換え
 
 - 取り出しの時点で、一時directoryの名前は自動で伏せた。2つのfile（`S-se-1-2`・`B-se-1-4`）に、この作業を統括したsessionのidが残っていたので、`<session>`に置き換えた（#1814と同じ扱い）。
 - `results/traces`のsha256（全fileをpath順に連結したもの）は、置換えの前が`9c2b02d7c664bf31b2d92161ffd44de7f2a8bfac4da24756190ac521ca3b77c7`、後が`6bd6d7568950982b850ae586048917a88398e3af34d65700051288b31c3e1079`。この集合は公開していないので、第三者が`judge.mjs`を実行し直すことはできない。手元の記録は、置換えの前後とも統括が保管している。
