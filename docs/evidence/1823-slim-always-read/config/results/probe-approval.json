@@ -1,6 +1,6 @@
 {
- "ownerConfirmed": false,
- "at": "",
- "reference": "",
- "note": "PLACEHOLDER. The isolation probe writes one marker file in the real HOME and one under the repository's git-ignored .agent-skill-chain/local/ (asc1823-home-marker.txt, asc1823-repo-marker.txt). markers.mjs create and every probe refuse until the coordinator records the owner's approval for #1823 here (ownerConfirmed true, at, reference URL) and commits it."
+ "ownerConfirmed": true,
+ "at": "2026-11-26",
+ "reference": "https://github.com/techbeansjp-free/AGENTS.md/issues/1823#issuecomment-7186847400",
+ "note": "ownerが会話での質問に回答して、#1823でも目印fileによる隔離の確認を承認した。統括が記録した。"
 }

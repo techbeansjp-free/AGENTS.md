@@ -9,7 +9,7 @@
 | 比べる条件 | B（現状：release v0.5.112）とS（候補：merge許可の記録・取消しの検索と手続き、Draft・auto-mergeの扱い、release起動の判定、merge・releaseの問い方、判断者の細則を条件付きのreferenceへ移したtarball）。どちらも`project-assets`の提案から`CLAUDE.md`へ読む契機を採用する |
 | 環境 | #1820の段階2と同じ書込みのある環境（水準W：Read・Write・Edit・Glob・Grep・Skill、`acceptEdits`、同じ隔離の設定） |
 | 依頼と回数 | #1820の段階2の17依頼と、merge場面の4依頼。各4回 |
-| 費用 | 測定の上限20 USD。独立レビューは合計3回まで（統括が行う） |
+| 費用 | 測定の上限40 USD。独立レビューは合計3回まで（統括が行う） |
 
 ## 数え方
 
@@ -17,7 +17,7 @@
 - 「本文の読込み」`bodyRead`：期待するSkillの本文`.agent-skill-chain/skills/<skill>/SKILL.md`の読込み（#1817・#1820と同じ）。
 - 「手順の適用」`applied`：
   - fixture Aの依頼・画面の依頼：#1820の段階2と同じ。
-  - merge場面：`asc`の本文、その条件で規則を持つreference（Bは本文そのものなので無し、Sは`merge-permission.md`。`referencesByCondition`）、回答の目印（`answerGroups`のすべて）。目印は、現在の`skills/asc/SKILL.md`（main `6e950366`）のL25・L29・L91・L93・L95の規則から決めた。各正規表現の理由は`cases.json`の`markerNotes`。
+  - merge場面：`asc`の本文、その条件で規則を持つreference（Bは本文そのものなので無し、Sは、場面ごとの`merge-permission.md`（Draft・release起動）か`merge-grant.md`（「常に許可」・取消し）。`referencesByCondition`）、回答の目印（`answerGroups`のすべて）。目印は、現在の`skills/asc/SKILL.md`（main `6e950366`）のL25・L29・L91・L93・L95の規則から決めた。各正規表現の理由は`cases.json`の`markerNotes`。
 - 「余計な読込み」`overapplication`：該当しない依頼で、ASCのSkill tool・入口・本文のいずれか（#1817と同じ）。
 - 読込みに基づく記録（判定には使わない）：各試行の`ascReferencesRead`（読んだascのreference）と`markersWithoutReference`（目印は合ったが、その条件で規則を持つreferenceを読んでいない。Sでは`SKILL.md`の入口の文から規則を適用したことを示す）。
 - 効率：各試行の`ascBytesRead`（読んだASCのfile、すなわち入口・本文・referenceの重複を除いたbyte数。試行の`work/`の写しから数える）、`inputTokens`（入力＋cache書込み＋cache読出し）、`durationMs`。
@@ -36,5 +36,5 @@
 4. 失敗と置き換え（#1817と同じ）：process・APIのエラー、traceの欠落、init・result eventの無い記録、水準Wと違うtool・permission mode・MCP serverのinitは失敗として別に数える。計画した試行（回1〜4）の失敗は、同じ条件・依頼で次の番号（5、6、…）の試行で1回ずつ置き換える（必須）。置き換えの失敗はもう置き換えない。1試行の予算による停止と、画面の依頼の`--max-turns`による停止は失敗ではない。台帳に予約があり精算の無い試行は失敗。精算済みの試行の`trace.jsonl`・`meta.json`が無い、または精算のsha256と違えば、採点を拒否する。
 5. 隔離の確認：測定の前に、B・Sそれぞれ1回のprobe（fixture A、水準W、6操作、`--debug-file`）を行い、`probe-check.mjs`のすべての項目と`compare`（Skill一覧の予算の状態と、ASCの16件のdescriptionがContextにあることを含む）が合格した場合だけ測定する。`run-trial.mjs`は記録された`pass`を信用せず、probeの記録から計算し直す。不合格の条件に限り1回だけ再実行できる（回2）。目印fileの使用は、ownerの承認を`results/probe-approval.json`に記録してから行う。
 6. 実行の順序と途中の停止：順序は[run-order.json](run-order.json)（回を外側、各回の中は固定した21依頼の順、各依頼の中はB、Sの順）。判定してよいのは、`complete`（計画した168試行と必要な置き換えのすべてが台帳に予約されている）か、`cap-reached`（台帳の累計＋1試行の予算0.35 USDが、停止の線19.6 USDを超え、最初の計画した試行より後のprobeが無い）の場合だけ。`cap-reached`では測れた試行で規則1を割合として判定し、測れなかった試行の数を条件ごとに報告する。
-7. 費用：上限20 USD（owner）。停止の線は余裕0.4 USDを引いた19.6 USD。`run-trial.mjs`は、台帳の累計＋その試行の予算が線を超えるなら起動しない。`release.json`のSが仮の値（placeholder）の間は、すべての有料の試行を拒否する。
+7. 費用：上限40 USD（owner）。停止の線は余裕0.4 USDを引いた19.6 USD。`run-trial.mjs`は、台帳の累計＋その試行の予算が線を超えるなら起動しない。`release.json`のSが仮の値（placeholder）の間は、すべての有料の試行を拒否する。
 8. 解釈の限界：各依頼4回では、数試行の差は偶然の範囲を出ない。(d)は場面ごとに4試行での比較、(e)のトークンと時間は試行ごとのばらつきが大きい。判定は目安で、採否はownerが決める。

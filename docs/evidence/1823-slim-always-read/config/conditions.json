@@ -20,8 +20,8 @@
  "probeFixture": "A",
  "budget": {
   "ownerCapUsd": 20,
-  "capUsd": 20,
-  "safetyMarginUsd": 0.4,
+  "capUsd": 40,
+  "safetyMarginUsd": 0.8,
   "perTrialUsd": 0.35,
   "probeUsd": 0.35,
   "plan": {
@@ -60,7 +60,7 @@
    },
    "probeOutputTokens": 3000
   },
-  "note": "Owner cap 20 USD for the measurement (Issue #1823 owner decision 2026-11-26). Stop line = capUsd - safetyMarginUsd = 19.6 USD: run-trial.mjs refuses a trial when the ledger total + its budget (0.35 USD) exceeds it, so the ledger total stays at or below 19.6 USD. perTrialUsd is the --max-budget-usd of every trial and its reservation: 0.35 USD, above the #1820 stage-2 maximum of 0.209 USD per trial (S design) and 0.158 (S asc). plan and expect per kind are the #1820 stage-2 S means (the current release carries the adopted S text, so B here is the #1820 S; scenario trials are estimated like the asc cases, which read the asc body and answer with a procedure). Tokens: input = input + cache read + cache write, per trial, from the same runs; scenario and probe are estimates."
+  "note": "Owner cap 40 USD for the measurement (Issue #1823 owner decision 2026-11-26, raised from 20 USD) and the plan as designed (168 trials). Stop line = capUsd - safetyMarginUsd = 39.2 USD: run-trial.mjs refuses a trial when the ledger total + its budget (0.35 USD) exceeds it, so the ledger total stays at or below 39.2 USD. perTrialUsd is the --max-budget-usd of every trial and its reservation: 0.35 USD, above the #1820 stage-2 maximum of 0.209 USD per trial (S design) and 0.158 (S asc). plan and expect per kind are the #1820 stage-2 S means (the current release carries the adopted S text, so B here is the #1820 S; scenario trials are estimated like the asc cases, which read the asc body and answer with a procedure). Tokens: input = input + cache read + cache write, per trial, from the same runs; scenario and probe are estimates."
  },
  "adopt": "claude-md",
  "toolLevels": {
@@ -276,7 +276,9 @@
   ],
   "requiredDiff": [
    ".agent-skill-chain/skills/asc/SKILL.md",
-   ".agent-skill-chain/skills/asc/references/merge-permission.md"
+   ".agent-skill-chain/skills/asc/references/merge-permission.md",
+   ".agent-skill-chain/skills/asc/references/merge-grant.md",
+   ".agent-skill-chain/skills/asc/references/decision-handling.md"
   ],
   "note": "B against S (when both tarballs are given): the installed projects may differ only in the asc Skill (its body and references, and their managed-runtime copies), its Claude Code entry (if the description changes) and the install record; they must differ in the body and add merge-permission.md. An entry starting with ^ is a regular expression."
  }
