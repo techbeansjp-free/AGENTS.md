@@ -102,13 +102,21 @@
   - #1817の平均どおりなら約12.2 USD（ownerの見込み約15 USD）。
   - 線までに使える1試行の平均は約0.156 USD（dry runの`breakEvenPerTrialUsd`）。これを超えると、最後の試行が起動せず`cap-reached`で判定する。
 
+## 台帳の取り替え（2026-11-26）
+
+- 測定の前の独立レビューの後、隔離の確認（probe）をB・S各1回走らせたところ、2回とも、測定に使うアカウントの週の利用上限に当たり、モデルが動かなかった（HTTP 429、費用0 USD）。回2の再実行も、トークンが上限の側のままで同じだった。そのため、固定した規則（probeは条件ごとに回1と、不合格のときの回2だけ）では、旧台帳`ledger-1820-s2.jsonl`にはもうprobeを足せない。
+- 旧台帳には、probeの予約と精算が4件（B・Sの回1・回2、費用0 USD）あり、本番の試行の予約は0件だった。
+- トークンを、上限が戻っているアカウントのものに置き換えたあと、新しい台帳`ledger-1820-s2b.jsonl`（台帳id `d5d56260-f3f9-4a68-ba7a-69cd30b76b37`）で固定の最初の記録を作り直した。固定したfileは変えていない。段階1・#1817と同じ作り直しで、旧台帳が空だった場合と同じく、本番の試行の記録が無いときだけ許される。
+- 旧台帳と旧probeの記録は、scratchに残している（応答が無かったことの記録）。測定の記録は、新しい台帳と新しいruns rootだけを使う。
+- 測定の途中で、アカウントが変わった。段階1（2026-11-26 朝）と、この段階2の測定とで、使うトークンのアカウントが違う可能性がある。同じモデル（`claude-sonnet-5-5`）と同じ設定で走らせるが、アカウント差は統制していない。
+
 ## 実行の手順
 
 統括が行う。`<scratch>`は一時directory、`<repo-root>`はこのrepositoryのcheckoutを指す。harnessはsandboxの外のshellで実行する。台帳を手で編集しない。
 
 ```text
 EV=docs/evidence/1820-write-tools-read/stage2
-LEDGER=<scratch>/rel1820/ledger/ledger-1820-s2.jsonl
+LEDGER=<scratch>/rel1820/ledger/ledger-1820-s2b.jsonl
 TGZ_B=<scratch>/rel1820/release/agent-skill-chain-0.5.111.tgz
 TGZ_S=<scratch>/rel1820/candidate/agent-skill-chain-0.5.111.tgz
 FX=<scratch>/run1820s2m/fixtures
@@ -142,11 +150,11 @@ node $EV/harness/judge.mjs $EV/results/traces --runs-root <scratch>/run1820s2m/r
 
 ## 測定の前の固定
 
-- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`db3078ed89245546f73bbf9d9e597e8d379c397c`である。`run-trial.mjs`と`judge.mjs`はこの記載を照合する。`fixation.mjs check`は合格（差なし）。
+- 最初の記録のcommit：`results/fixation.json`の最初の記録のcommitは`682123b110c9f41865cda45e83583beec8121abc`である（固定したfileは`db3078ed`の時点と同じ。下の「台帳の取り替え」）。`run-trial.mjs`と`judge.mjs`はこの記載を照合する。`fixation.mjs check`は合格（差なし）。
 - 作り直した理由（1回目）：独立レビューの指摘（M1：Skill一覧の予算をBとSで比べていない）を是正し、固定したfile（`decision-criteria.md`・`harness/probe-check.mjs`）が変わったため、台帳に予約が無い（0件、台帳idの1行だけ）ことを確かめたうえで、記録を新しい最初の記録として作り直した（同じ台帳、段階1と同じ手順）。同じレビューのL1（段階1の試験）・L3（重複した試験）・L2・L4（限界の記録）は、固定したfileを変えていない。
 - 前の記録（`bfefb93e`）はgitの履歴に残る。
 - 固定したfile：`decision-criteria.md`・`cases.json`・`conditions.json`・`release.json`・`run-order.json`と、`harness/`の15件（`dry-run.mjs`と試験を除く）。
-- 台帳：repositoryの外の新しい台帳`<scratch>/rel1820/ledger/ledger-1820-s2.jsonl`（予約0件）。段階1の台帳とは別で、段階1の費用は`conditions.json`の`budget`で数える。台帳idは`results/fixation.json`にあり、`run-trial.mjs`と`judge.mjs`はこの台帳だけを使う。
+- 台帳：repositoryの外の新しい台帳`<scratch>/rel1820/ledger/ledger-1820-s2b.jsonl`（予約0件）。段階1の台帳とは別で、段階1の費用は`conditions.json`の`budget`で数える。台帳idは`results/fixation.json`にあり、`run-trial.mjs`と`judge.mjs`はこの台帳だけを使う。
 
 ## モデルを呼ばない確認
 
