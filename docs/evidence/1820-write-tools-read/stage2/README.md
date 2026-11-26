@@ -270,7 +270,7 @@ ownerが改善版Sを採用すると決めた（[Issueのコメント](https://g
 
 - 実行の記録（`traces/`、136試行、約9.9MB）は、リポジトリに加えていない。理由は大きさである（このPRの追加の約半分で、結論は採点・判定・台帳に残る）。統括の手元（scratch）に残している。#1817までの方式（公開した記録からの作り直しの照合）は、この段階2では行えない。判定は、記録を集めた時点（`collect.mjs`・`judge.mjs`、実行の記録がある状態）で行い、完全性・固定・台帳の照合を通過している。
 - 公開しているのは、試行ごとの採点（[results/runs.json](results/runs.json)）、判定（[results/judge.json](results/judge.json)）、台帳（[results/ledger.jsonl](results/ledger.jsonl)。精算の行に、実行の記録のsha256が残る）、probe（[results/probes/](results/probes/)）である。
-- 後続の置換えの記述（下の「公開した記録の置換え」）にある`results/traces`のsha256は、加えなかった実行の記録の集合の識別子として残した。
+- 後続の置換えの記述（下の「取り出した実行の記録（手元）の置換え」）にある`results/traces`のsha256は、加えなかった実行の記録の集合の識別子として残した。
 
 ### 取り出した実行の記録（手元）の置換え
 
