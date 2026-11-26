@@ -4,8 +4,8 @@
  "records": [
   {
    "stage": "stage 2",
-   "fixedAtCommit": "db3078ed89245546f73bbf9d9e597e8d379c397c",
-   "at": "2026-11-25T20:37:00.649Z",
+   "fixedAtCommit": "682123b110c9f41865cda45e83583beec8121abc",
+   "at": "2026-11-26T02:18:14.058Z",
    "files": {
     "decision-criteria.md": "474faf69f962324f3051d193d530bf690a1ca61d282a29db3405f15fcad84ec1",
     "cases.json": "8687afbaff14f7ff3436b4e1765e6e66c5ea5a2280a294d66a09f080bdddf5d2",
@@ -28,7 +28,7 @@
     "harness/run-trial.mjs": "8e4b7cf0390c4e2fb995bf0079cf1ca37a685d859416d742894c26cf01f117cf",
     "harness/score.mjs": "4615016db31717507b3e9ae17108f558606f9d075fd7a4e9ae9b436befcb0bf2"
    },
-   "ledgerId": "81f0521a-dad9-4427-a1d6-1a3d6b0290cb"
+   "ledgerId": "d5d56260-f3f9-4a68-ba7a-69cd30b76b37"
   }
  ]
 }
