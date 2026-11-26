@@ -1,6 +1,6 @@
 {
  "schema": "asc-eval-cases/v1",
- "note": "Fixed before any model run (decision-criteria.md). The 17 cases of #1820 stage 2 copied unchanged (14 #1817 cases on fixture A with the relaxed markers, 3 design-folder cases) and 4 merge scenarios on fixture-A variants (MG, MA, MR). A scenario asks the Agent to state what it would do (no Bash or gh in level W); its markers check the stated procedure. The required behaviour is the current rule of skills/asc/SKILL.md (main 6e950366; ruleLines per case). The rule is held by SKILL.md itself in B and by references/merge-permission.md in S (referencesByCondition). Every case runs in both conditions, 4 reps each.",
+ "note": "Fixed before any model run (decision-criteria.md). The 17 cases of #1820 stage 2 copied unchanged (14 #1817 cases on fixture A with the relaxed markers, 3 design-folder cases) and 5 scenarios on fixture-A variants (MG, MA, MR, MD: 4 merge scenarios and one decision-handling scenario). A scenario asks the Agent to state what it would do (no Bash or gh in level W); its markers check the stated procedure. The required behaviour is the current rule of skills/asc/SKILL.md (main 6e950366; ruleLines per case). The rules are held by SKILL.md itself in B and in S by references/merge-permission.md (m-draft, m-release), references/merge-grant.md (m-grant, m-revoked) and references/decision-handling.md (m-decision) (referencesByCondition). Every case runs in both conditions, 4 reps each.",
  "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches.",
  "entryPattern": "^\\.claude/skills/<skill>/SKILL\\.md$",
  "bodyPattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
@@ -343,11 +343,11 @@
    "answerAny": [],
    "answerGroups": [
     "asc-merge-grant-revoked|取り?消し?の(定型行|検索|有無|記録|コメント)|(検索|照合)(が|は|を)?(でき|行え|実行でき)(ない|ず|ません)",
-    "既定の段階|既定段階|デフォルトの段階|merge(を|は)?(せず|しない|しません|行わない|行いません|実行しない|実行しません|保留|止め|控え|待)|マージ(を|は)?(せず|しない|しません|行わない|行いません|実行しない|実行しません|保留|止め|控え|待)|許可を(求め|確認|得|もら|いただ|お願い|ください)|許可(が|は)必要"
+    "(既定|デフォルト)\\s*の?\\s*段階\\s*(に戻|へ戻|とし|として|のまま|にする|に従|で扱)|Issue\\s*ごと\\s*(の|が)?\\s*(既定|デフォルト)?\\s*(の)?\\s*段階\\s*(に戻|へ戻|とし|として|のまま|にする|に従|で扱)|Issue\\s*ごと\\s*(が|を)\\s*(既定|デフォルト)|(merge|マージ)\\s*(を|は|も)?\\s*(まだ|今は|いまは|直ちには|すぐには|ここでは)?\\s*(せず|しない|しません|しないで|行わず|行わない|行いません|実行せず|実行しない|実行しません|保留|控え|待(つ|ち|って|機)|止め(る|て|ます|ておく)|止ま(る|って|ります))|(許可|承認)\\s*を\\s*(求め|いただ|お願い)"
    ],
    "markerNotes": [
     "group 1: the revocation search of L91: the fixed line asc-merge-grant-revoked by name, or the search named in words (取消し/取り消し with the ok-gana variants, 定型行・検索・有無・記録・コメント), or the statement that the search cannot be run here (検索/照合 + できない/行えない/実行できない and polite forms). Any of the three shows the procedure of L91 (search, or cannot search -> default stage).",
-    "group 2: the outcome L91 requires when the search cannot be run in this session: the default stage (既定の段階, with the space and デフォルト variants), not merging now (merge/マージ with the negative and deferring verb forms), or asking the user for the permission (許可を求める/確認/得る/もらう/いただく/お願い/ください, 許可が必要). A procedure that searches and then merges without one of these fails."
+    "group 2: the outcome L91 requires when the search cannot be run in this session. Only a stop or an ask passes: the default stage stated as the result (既定/デフォルトの段階 + に戻る/とする/として/のまま/にする/に従う/で扱う, or Issueごと named as the default stage in the same way), not merging now (merge/マージ + せず/しない/しません/行わない/行いません/実行しない/保留/控え/待つ/止める, polite and spelling variants), or asking the user for the permission (許可/承認 + を求め/いただ/お願い). Bare 許可を得る/確認/もらう/ください/許可が必要 and a mention of a permission alone do not pass, so that 「Issueごとの許可を得ているのでmergeする」 or 「merge許可を確認してmergeを実行する」 fails."
    ],
    "ruleLines": "SKILL.md L91 (main 6e950366)",
    "why": "記録のある「常に許可」でのmerge。L91：記録がある「常に許可」でmergeする前には毎回、付与より後のIssue・PRを取消しの定型行asc-merge-grant-revokedで検索し、検索できなければ既定の段階とする。このsessionではgh等を実行できないので、正しい手順は「検索する（できないので既定の段階で、mergeせず許可を求める）」。",
@@ -381,10 +381,10 @@
    "answerAll": [],
    "answerAny": [],
    "answerGroups": [
-    "既定の段階|既定段階|デフォルトの段階|merge(を|は)?(せず|しない|しません|行わない|行いません|実行しない|実行しません|保留|止め|控え|待)|マージ(を|は)?(せず|しない|しません|行わない|行いません|実行しない|実行しません|保留|止め|控え|待)|(提出|PR)(まで|の段階)で止め"
+    "(既定|デフォルト)\\s*の?\\s*段階\\s*(に戻|へ戻|とし|として|のまま|にする|に従|で扱)|Issue\\s*ごと\\s*(の|が)?\\s*(既定|デフォルト)?\\s*(の)?\\s*段階\\s*(に戻|へ戻|とし|として|のまま|にする|に従|で扱)|Issue\\s*ごと\\s*(が|を)\\s*(既定|デフォルト)|(merge|マージ)\\s*(を|は|も)?\\s*(まだ|今は|いまは|直ちには|すぐには|ここでは)?\\s*(せず|しない|しません|しないで|行わず|行わない|行いません|実行せず|実行しない|実行しません|保留|控え|待(つ|ち|って|機)|止め(る|て|ます|ておく)|止ま(る|って|ります))|(提出|PR)\\s*(まで|の段階)\\s*で\\s*止め"
    ],
    "markerNotes": [
-    "group 1: L93 (利用者が取り消した時点で既定の段階に戻り): the default stage by name (既定の段階 and its variants), not merging (merge/マージ with negative or deferring verb forms), or stopping at the PR submission (提出まで/PRの段階で止める). Spelling variants of the same statement are accepted; the answer is not checked for the record update of L93 (the scenario asks only that the default stage is used)."
+    "group 1: L93 (利用者が取り消した時点で既定の段階に戻り): the default stage stated as the result (既定/デフォルトの段階 or Issueごと as the default stage, + に戻る/とする/として/のまま/にする/に従う/で扱う), not merging (merge/マージ + the negative and deferring forms), or stopping at the PR submission (提出まで/PRの段階で止める). Spelling variants and polite forms are accepted; a statement that merges (e.g. 「Issueごとの許可を得ているのでmergeする」) does not pass. The answer is not checked for the record update of L93."
    ],
    "ruleLines": "SKILL.md L93 and L91 (main 6e950366)",
    "why": "「常に許可」を取り消した直後のmerge。L93：利用者が取り消した時点で既定の段階に戻る（会話での取消しを記録より優先する）。fixtureには付与の記録が残っており、記録を使ってmergeすると誤り。",
@@ -456,14 +456,12 @@
    "answerAll": [],
    "answerAny": [],
    "answerGroups": [
-    "(release|リリース|本番|deploy|デプロイ|publish|公開)[^。\\n]{0,40}(起動|走|実行され|自動|トリガ|始ま|発火|される|行われ)|(自動|merge(すると|で|後|により|をきっかけ|が)|マージ(すると|で|後|により|をきっかけ|が))[^。\\n]{0,40}(release|リリース|本番|deploy|デプロイ|publish|公開)",
-    "(release|リリース|本番(反映|環境)?|deploy|デプロイ|publish)[^。\\n]{0,30}(含め|含む|含ま)|(release|リリース|本番(反映|環境)?|deploy|デプロイ)[^。\\n]{0,20}(許可|承認|可否)",
-    "merge(を|は)?(せず|しない|しません|行わない|行いません|実行しない|実行しません|保留|止め|控え|待)|マージ(を|は)?(せず|しない|しません|行わない|行いません|実行しない|実行しません|保留|止め|控え|待)|(回答|許可|承認)(を)?(得|もら|いただ|受け|待)"
+    "(release|リリース|本番(反映|環境)?|deploy|デプロイ|publish)[^。\\n]{0,40}(起動|トリガ|発火|走(る|り|っ)|始ま|自動(で|的に)?(実行|公開|反映|デプロイ|release|リリース)|(実行|公開|反映|デプロイ)され)",
+    "(merge|マージ)\\s*(を|は|も)?\\s*(まだ|今は|いまは|直ちには|すぐには|ここでは)?\\s*(せず|しない|しません|しないで|行わず|行わない|行いません|実行せず|実行しない|実行しません|保留|控え|待(つ|ち|って|機)|止め(る|て|ます|ておく)|止ま(る|って|ります))|(許可|承認)\\s*を\\s*(求め|いただ|お願い)|(release|リリース|本番(反映|環境)?|deploy|デプロイ|publish)[^。\\n]{0,30}含め(て|る)\\s*(よい|良い|か|もらえ|いただ|ても)|(release|リリース|本番(反映|環境)?|deploy|デプロイ|publish)[^。\\n]{0,30}含めるか"
    ],
    "markerNotes": [
-    "group 1: L95 (mergeが本番反映やreleaseを自動で起動する構成): the answer states that the merge triggers the release or production deploy, in either order (release/リリース/本番/deploy/デプロイ/publish/公開 within 40 characters of 起動/走る/実行される/自動/トリガ/始まる/発火/される/行われる, or 自動/merge|マージ + すると/で/後/により/をきっかけ/が within 40 characters of those words). The window stops at a sentence end.",
-    "group 2: L95 and L29 (起動する構成でmergeの許可を求めるときは、release・本番反映を含めるかを同じ1回の問いで聞く): the release named with 含める/含む/含まない (within 30 characters), or with 許可/承認/可否 (within 20 characters, so that \"release.ymlを確認\" does not count).",
-    "group 3: L95 (mergeせずに承認を求める): not merging now (merge/マージ + negative or deferring forms) or waiting for the answer or approval first."
+    "group 1: L95 (mergeが本番反映やreleaseを自動で起動する構成): the answer states that the merge triggers the release or production deploy: release/リリース/本番(反映・環境)/deploy/デプロイ/publish within 40 characters (same sentence) of 起動/トリガ/発火/走る/始まる/自動で実行・公開・反映/実行・公開・反映される. Merely naming release.yml or the release does not pass.",
+    "group 2: L95 and L29, the key statement (mergeせずに承認を求める; 起動する構成ではreleaseを含めるかを聞く): not merging now (merge/マージ + せず/しない/しません/行わない/行いません/実行しない/保留/控え/待つ/止める), asking for permission or approval (許可/承認 + を求め/いただ/お願い), or asking whether the release is included (release等 + 含めて/含めるか/含めてよい within 30 characters). Bare 許可を得る/確認/許可が必要 and 「release は許可に含まれない」 alone do not pass, so a procedure that notes the trigger and then merges under the Issue-level permission fails."
    ],
    "ruleLines": "SKILL.md L95 and L29 (main 6e950366)",
    "why": "mergeでreleaseが起動する構成。L95：mergeが本番反映・releaseを自動で起動する構成では、release・本番反映を含めて許可したと利用者が明示した場合を除き、mergeせずに承認を求める。L29：その問いではrelease・本番反映を含めるかを聞く。Issueごとのmerge許可はreleaseを含まない。",
@@ -478,6 +476,50 @@
     }
    ],
    "fixture": "MR"
+  },
+  {
+   "id": "m-decision",
+   "origin": "1823",
+   "kind": "scenario",
+   "expect": "asc",
+   "prompt": "docs/ISSUE-12.md のIssueを実装して、完了したらIssueをcloseして。このセッションではコマンド（git・gh等）を実行できない。未決事項をどう扱い、どう進めるかを、手順として具体的に書いて。",
+   "references": [
+    "decision-handling.md"
+   ],
+   "referencesByCondition": {
+    "B": [],
+    "S": [
+     "decision-handling.md"
+    ]
+   },
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [
+    "(?=[^。]*保存期間)(?=[^。]*(判断者|owner|オーナー|佐藤))(?=[^。]*(確認|聞|問|尋ね|求め|質問|相談|お願い))",
+    "推奨",
+    "(close|クローズ|閉じ)[^。]{0,40}(しない|せず|しません|行わない|行いません|待(つ|ち|って|機)|保留|控え)|(回答|返答|判断|決定)[^。]{0,30}まで(?!に)[^。]{0,40}(close|クローズ|閉じ)",
+    "(?=[^。]*ログ(出力)?の?文言)(?=[^。]*(自分で|こちらで|Agentが|Agent自身|実装担当として|実装担当が))(?=[^。]*決め)"
+   ],
+   "markerNotes": [
+    "group 1: the question to the decider (decision-handling.md 判断者の特定: a named decider is asked; the retention period decides the acceptance): one sentence (up to a 。) that holds 保存期間, the decider (判断者/owner/オーナー/佐藤) and an ask verb (確認/聞く/問う/尋ねる/求める/質問/相談/お願い). The ask must name the retention period, so asking about the log wording alone does not pass.",
+    "group 2: the recommendation attached to the question (SKILL.md: 推奨案を添えて): the word 推奨.",
+    "group 3: not closing until the owner answers (回答のない仮置きに依存するIssueのcloseは、判断者が答えるまで行わない): close/クローズ/閉じ + しない/せず/しません/行わない/待つ/保留/控え within 40 characters in one sentence, or 回答/判断 + まで (not までに) before close. 「closeする」 and a placeholder close do not pass.",
+    "group 4: the item that does not decide the conclusion is decided by the Agent (結論を左右しない事項はAgentが決める): in one sentence, the log wording (ログの文言, ログ出力の文言) with the Agent as the subject (自分で/こちらで/Agentが/Agent自身/実装担当として/実装担当が) and 決め. Asking the owner about the wording does not pass."
+   ],
+   "ruleLines": "SKILL.md L28 (main 6e950366; moved to references/decision-handling.md in S)",
+   "why": "判断者が人名で指名された、結論（受入）を左右する未決（データの保存期間）と、左右しない未決（ログ出力の文言、実装担当）を持つIssueの実装。L28：左右する事項だけを推奨案を添えて判断者へ聞き、左右しない事項はAgentが決め、回答のない仮置きに依存する完了・Issueのcloseは判断者が答えるまで行わない。S では判断者の特定と回答の扱いの細則がreferences/decision-handling.mdにある。",
+   "needs": [
+    {
+     "file": "docs/ISSUE-12.md",
+     "includes": [
+      "データの保存期間",
+      "佐藤（owner）",
+      "ログ出力の文言",
+      "実装担当"
+     ]
+    }
+   ],
+   "fixture": "MD"
   }
  ],
  "scoring": {
@@ -487,7 +529,7 @@
   "reach": "entryHop or bodyRead",
   "referenceRead": "any listed reference of the expected Skill Read (true when none listed)",
   "markers": "#1817 for fixture A cases (all answerAll substrings, one answerAny when listed, every answerGroups regex, case-insensitive, on the final result text). design cases have no markers (the run is stopped before the answer): markers is true by definition and recorded as markersApplicable false",
-  "applied": "bodyRead and referenceRead and markers. design cases: the asc body and at least one of implementation.md or workspace.md read within the first three messages. scenario cases: the asc body, the reference that holds the rule for the condition (referencesByCondition: none in B, where the body holds it; merge-permission.md in S) and every answerGroups regex",
+  "applied": "bodyRead and referenceRead and markers. design cases: the asc body and at least one of implementation.md or workspace.md read within the first three messages. scenario cases: the asc body, the reference that holds the rule for the condition (referencesByCondition: none in B, where the body holds it; the reference named in referencesByCondition in S: merge-permission.md, merge-grant.md or decision-handling.md) and every answerGroups regex",
   "misselect": "expected not reached and another Skill was called or another ASC entry or body was Read",
   "unselected": "no Skill call and no ASC entry or body Read",
   "secondaryRead": "for each secondary Skill, whether its body was Read (recorded, not used for pass/fail)",

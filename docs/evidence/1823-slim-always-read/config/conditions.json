@@ -3,11 +3,11 @@
  "issue": "1823",
  "stage": "slim always-read rules",
  "markerTag": "1823",
- "note": "Fixed before any model run (decision-criteria.md). #1823 (owner decision 2026-11-26): in the write-tools environment of #1820 stage 2 (tools level W, same isolation settings) compare B (release v0.5.112, the current rules) with S (a candidate tarball whose skills/asc/SKILL.md moves the merge-permission rules to skills/asc/references/merge-permission.md). Both install their own tarball the documented way (project-assets register with the read trigger adopted, as #1814 condition I and #1820 stage 2) and differ only in the tarball installed.",
+ "note": "Fixed before any model run (decision-criteria.md). #1823 (owner decision 2026-11-26): in the write-tools environment of #1820 stage 2 (tools level W, same isolation settings) compare B (release v0.5.112, the current rules) with S (a candidate tarball whose skills/asc/SKILL.md moves the merge-permission, grant and decision-handling rules to skills/asc/references/merge-permission.md, merge-grant.md and decision-handling.md). Both install their own tarball the documented way (project-assets register with the read trigger adopted, as #1814 condition I and #1820 stage 2) and differ only in the tarball installed.",
  "model": "sonnet",
  "modelNote": "Same as #1814/#1815/#1817/#1820 stage 1 (the `sonnet` alias). The resolved model id (init event) is recorded per trial.",
  "runs": 4,
- "runsNote": "Planned repetitions per condition and case (all 21 cases, negatives included). Only reps 1..runs are scored; a later rep counts only as the one mandatory replacement of a failed trial (decision-criteria.md rule 4).",
+ "runsNote": "Planned repetitions per condition and case (all 22 cases, negatives included). Only reps 1..runs are scored; a later rep counts only as the one mandatory replacement of a failed trial (decision-criteria.md rule 4).",
  "maxTurnsByKind": {
   "app": null,
   "design": 3
@@ -60,7 +60,7 @@
    },
    "probeOutputTokens": 3000
   },
-  "note": "Owner cap 40 USD for the measurement (Issue #1823 owner decision 2026-11-26, raised from 20 USD) and the plan as designed (168 trials). Stop line = capUsd - safetyMarginUsd = 39.2 USD: run-trial.mjs refuses a trial when the ledger total + its budget (0.35 USD) exceeds it, so the ledger total stays at or below 39.2 USD. perTrialUsd is the --max-budget-usd of every trial and its reservation: 0.35 USD, above the #1820 stage-2 maximum of 0.209 USD per trial (S design) and 0.158 (S asc). plan and expect per kind are the #1820 stage-2 S means (the current release carries the adopted S text, so B here is the #1820 S; scenario trials are estimated like the asc cases, which read the asc body and answer with a procedure). Tokens: input = input + cache read + cache write, per trial, from the same runs; scenario and probe are estimates."
+  "note": "Owner cap 40 USD for the measurement (Issue #1823 owner decision 2026-11-26, raised from 20 USD) and the plan as designed (168 trials, the owner-approved plan) plus the m-decision scenario (8 trials, about 0.13 USD each, about 1 USD in total, inside the same cap): 176 trials. Stop line = capUsd - safetyMarginUsd = 40 - 0.8 = 39.2 USD: run-trial.mjs refuses a trial when the ledger total + its budget (0.35 USD) exceeds it, so the ledger total stays at or below 39.2 USD. perTrialUsd is the --max-budget-usd of every trial and its reservation: 0.35 USD, above the #1820 stage-2 maximum of 0.209 USD per trial (S design) and 0.158 (S asc). plan and expect per kind are the #1820 stage-2 S means (the current release carries the adopted S text, so B here is the #1820 S; scenario trials are estimated like the asc cases, which read the asc body and answer with a procedure). Tokens: input = input + cache read + cache write, per trial, from the same runs; scenario and probe are estimates."
  },
  "adopt": "claude-md",
  "toolLevels": {
@@ -80,7 +80,7 @@
    "release": "B"
   },
   "S": {
-   "label": "縮めた案（Bと同じ手順で、merge許可の規則をreferences/merge-permission.mdへ移した候補のtarballを導入）",
+   "label": "縮めた案（Bと同じ手順で、merge許可・「常に許可」の記録と取消し・判断者の細則の規則を、references/merge-permission.md・merge-grant.md・decision-handling.mdへ移した候補のtarballを導入）",
    "release": "S"
   }
  },
@@ -217,6 +217,18 @@
    "promptFiles": [
     ".github/workflows/release.yml",
     ".github/workflows/ci.yml"
+   ]
+  },
+  "MD": {
+   "label": "merge場面以外の判断者の場面：fixture Aに、判断者が指名された未決事項を持つIssue docs/ISSUE-12.md を加えたもの（保存期間は結論を左右しowner指名、ログ出力の文言は左右せず実装担当）",
+   "kind": "app",
+   "baseClaudeMd": "# ユーザー管理API\n\nTypeScript/Expressのユーザー管理API。`src/`にAPI、`public/`に管理画面、`docs/`に要件メモがある。\n",
+   "extraFiles": {
+    "docs/ISSUE-12.md": "# Issue #12：ユーザー削除時の監査ログ\n\n## 依頼\n\nユーザーを削除したときに、削除の記録（誰が、いつ、どのユーザーを削除したか）を監査ログとして残す機能を実装する。\n\n## 未決事項\n\n| 区分 | 未決 | 判断者 |\n| --- | --- | --- |\n| 結論（受入）を左右する未決 | データの保存期間（監査ログを何日保存するか。受入の可否が変わる） | 佐藤（owner） |\n| 結論を左右しない未決 | ログ出力の文言（メッセージの書き方） | 実装担当 |\n\n- 結論（受入）を左右する未決：データの保存期間。判断者：佐藤（owner）\n- 結論を左右しない未決：ログ出力の文言。判断者：実装担当\n"
+   },
+   "promptFiles": [
+    "docs/ISSUE-12.md",
+    "docs/requirements.md"
    ]
   }
  },

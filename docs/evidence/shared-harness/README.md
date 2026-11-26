@@ -54,7 +54,7 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 ## 大きさ（2026-11-26）
 
 - この仕組み：module 17件（`dry-run.mjs`を含む）と試験1件、計3,048行（moduleは2,457行）。
-- 設定の例（#1823）：7file、980行（大半は`cases.json`）。
+- 設定の例（#1823）：7file、約1,050行（大半は`cases.json`）。
 - 過去の写し：`docs/evidence/`の他の`.mjs`は240件、23,346行（#1820の段階2の写しは17件、2,735行）。
 
 ## 変更するとき
