@@ -1,0 +1,241 @@
+{
+ "conditions": {
+  "B": {
+   "condition": "B",
+   "runs": 68,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 12,
+   "positives": 56,
+   "entryHop": 24,
+   "reach": 44,
+   "bodyRead": 44,
+   "referenceRead": 44,
+   "applied": 40,
+   "misselect": 0,
+   "unselected": 12,
+   "negatives": 12,
+   "overapplication": 0,
+   "negMarkers": 12,
+   "designWriteBeforeBody": 9,
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [],
+   "perCase": {
+    "asc-1": "AAAA",
+    "asc-2": "AAAA",
+    "asc-3": "AAAA",
+    "rr-1": "AAAA",
+    "tw-1": "AAAA",
+    "ri-1": "AAAB",
+    "se-1": "AAAA",
+    "ma-1": "AAAA",
+    "ui-1": "AAAA",
+    "es-1": "BABB",
+    "do-1": "AAAA",
+    "neg-1": "----",
+    "neg-2": "----",
+    "neg-3": "----",
+    "d-ui03": "UUUU",
+    "d-ui04": "UUUU",
+    "d-ui07": "UUUU"
+   },
+   "costUsd": 5.9798,
+   "turns": 527,
+   "durationSec": 1597
+  },
+  "S": {
+   "condition": "S",
+   "runs": 68,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 12,
+   "positives": 56,
+   "entryHop": 7,
+   "reach": 56,
+   "bodyRead": 56,
+   "referenceRead": 48,
+   "applied": 45,
+   "misselect": 0,
+   "unselected": 0,
+   "negatives": 12,
+   "overapplication": 0,
+   "negMarkers": 12,
+   "designWriteBeforeBody": 0,
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [],
+   "perCase": {
+    "asc-1": "AAAA",
+    "asc-2": "AAAA",
+    "asc-3": "AAAA",
+    "rr-1": "AAAA",
+    "tw-1": "AAAA",
+    "ri-1": "BBBA",
+    "se-1": "AAAA",
+    "ma-1": "AAAA",
+    "ui-1": "AAAA",
+    "es-1": "AAAA",
+    "do-1": "AAAA",
+    "neg-1": "----",
+    "neg-2": "----",
+    "neg-3": "----",
+    "d-ui03": "ABAB",
+    "d-ui04": "BBAB",
+    "d-ui07": "BBAB"
+   },
+   "costUsd": 7.1295,
+   "turns": 535,
+   "durationSec": 1731
+  }
+ },
+ "completion": {
+  "basis": "complete",
+  "complete": true,
+  "capReached": false,
+  "lateProbes": [],
+  "missingPlanned": 0,
+  "firstMissingPlanned": null,
+  "missingReplacements": [],
+  "spentUsd": 13.3248,
+  "stopLineUsd": 21.97,
+  "perTrialUsd": 0.6
+ },
+ "judgement": {
+  "verdict": "adoption-candidate",
+  "basis": "complete",
+  "completion": {
+   "basis": "complete",
+   "complete": true,
+   "capReached": false,
+   "lateProbes": [],
+   "missingPlanned": 0,
+   "firstMissingPlanned": null,
+   "missingReplacements": [],
+   "spentUsd": 13.3248,
+   "stopLineUsd": 21.97,
+   "perTrialUsd": 0.6
+  },
+  "checks": {
+   "bodyReadLevel": {
+    "value": "56/56 >= 0.8",
+    "pass": true
+   },
+   "bodyReadAboveBaseline": {
+    "value": "56/56 vs 44/56",
+    "pass": true
+   },
+   "appliedNotLower": {
+    "value": "45/56 vs 40/56",
+    "pass": true
+   },
+   "overapplication": {
+    "value": "0/12 vs 0/12 + 1",
+    "pass": true
+   }
+  },
+  "separate": {
+   "fixtureA": {
+    "B": {
+     "positives": 44,
+     "bodyRead": 44,
+     "applied": 40,
+     "perCase": {
+      "asc-1": "AAAA",
+      "asc-2": "AAAA",
+      "asc-3": "AAAA",
+      "rr-1": "AAAA",
+      "tw-1": "AAAA",
+      "ri-1": "AAAB",
+      "se-1": "AAAA",
+      "ma-1": "AAAA",
+      "ui-1": "AAAA",
+      "es-1": "BABB",
+      "do-1": "AAAA",
+      "neg-1": "----",
+      "neg-2": "----",
+      "neg-3": "----"
+     },
+     "negatives": 12,
+     "overapplication": 0
+    },
+    "S": {
+     "positives": 44,
+     "bodyRead": 44,
+     "applied": 41,
+     "perCase": {
+      "asc-1": "AAAA",
+      "asc-2": "AAAA",
+      "asc-3": "AAAA",
+      "rr-1": "AAAA",
+      "tw-1": "AAAA",
+      "ri-1": "BBBA",
+      "se-1": "AAAA",
+      "ma-1": "AAAA",
+      "ui-1": "AAAA",
+      "es-1": "AAAA",
+      "do-1": "AAAA",
+      "neg-1": "----",
+      "neg-2": "----",
+      "neg-3": "----"
+     },
+     "negatives": 12,
+     "overapplication": 0
+    },
+    "checks": {
+     "bodyReadLevel": {
+      "value": "44/44 >= 0.8",
+      "pass": true
+     },
+     "bodyReadAboveBaseline": {
+      "value": "44/44 vs 44/44",
+      "pass": false
+     },
+     "appliedNotLower": {
+      "value": "41/44 vs 40/44",
+      "pass": true
+     },
+     "overapplication": {
+      "value": "0/12 vs 0/12 + 1",
+      "pass": true
+     }
+    }
+   },
+   "design": {
+    "B": {
+     "positives": 12,
+     "bodyRead": 0,
+     "applied": 0,
+     "perCase": {
+      "d-ui03": "UUUU",
+      "d-ui04": "UUUU",
+      "d-ui07": "UUUU"
+     }
+    },
+    "S": {
+     "positives": 12,
+     "bodyRead": 12,
+     "applied": 4,
+     "perCase": {
+      "d-ui03": "ABAB",
+      "d-ui04": "BBAB",
+      "d-ui07": "BBAB"
+     }
+    },
+    "checks": {
+     "bodyReadLevel": {
+      "value": "12/12 >= 0.8",
+      "pass": true
+     },
+     "bodyReadAboveBaseline": {
+      "value": "12/12 vs 0/12",
+      "pass": true
+     },
+     "appliedNotLower": {
+      "value": "4/12 vs 0/12",
+      "pass": true
+     }
+    }
+   }
+  },
+  "note": "With 4 runs per case small differences are not significant; adoption is the owner's decision. The separate fixture A and design (D) checks are reported, not used for the verdict."
+ }
+}

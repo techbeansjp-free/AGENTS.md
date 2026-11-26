@@ -628,7 +628,7 @@ Linux Hostのsandboxが保護目的で作る読取り専用`/dev/null` mountをG
 
 ### ASCを読む契機を利用先へ採用する（任意）
 
-Skill登録は発見のためのmetadata配置であり、本文を読むことや手順を適用することの保証ではない。#1814の測定（隔離した利用先、Claude Code）では、登録だけの状態に比べ、次の文例をCLAUDE.mdに置いた状態で、該当する依頼のSkill本文の読込みと手順の適用が増え、該当しない依頼への過剰な読込みは増えなかった（#1814の検証資料。配布物には含めない）。SessionStartのhookで同じ文を注入する方式は採用していない。
+Skill登録は発見のためのmetadata配置であり、本文を読むことや手順を適用することの保証ではない。#1814の測定（隔離した利用先、Claude Code、Read系のtoolだけ）では、登録だけの状態に比べ、CLAUDE.mdに文例を置くと、該当する依頼のSkill本文の読込みと手順の適用が増え、該当しない依頼への過剰な読込みは増えなかった。#1820の測定（書込みのtoolがある環境、sonnet）では、コードが無く、CLAUDE.mdが案内文だけの画面の依頼のフォルダで、変更を伴う依頼を明記する前の文例では本文が0/12しか読まれず、次の文例とascのdescriptionでは12/12になった。アプリのrepoでは読込みに差は出ず、該当しない依頼への過剰な読込みも増えなかった。入力トークンは、アプリのrepoの依頼で約15%増えた。品質への寄与は確認できておらず、原因は未解明である（測定の記録は配布物に含めない）。SessionStartのhookで同じ文を注入する方式は採用していない。
 
 Claude Code（`--register-claude-skill`で登録した利用先）では、`project-assets`の差分表示が、この文例をCLAUDE.mdの末尾へ区切り付きの塊（`<!-- asc:read-trigger v1 -->`〜`<!-- /asc:read-trigger -->`）で追記する案を`readTrigger`として示す（`default`は推奨する選択肢の名前で、それだけでは何も適用しない。`options`の各項目に対象path、作成か追記か、現在のfileのsha256（無ければ`absent`）、追記する塊のsha256（`blockSha256`）、unified diff）。所有者が差分を確認し、`--apply --adopt-read-trigger claude-md@<beforeSha256>:<blockSha256>`（表示された値）を指定した場合だけ追記する。表示の後にCLAUDE.mdが変わった場合や、適用に使うASCの版で追記する文が変わった場合は全体を停止する。既存のbyteは変更・並べ替えしない（追記の結果はbyte単位で作り、改行がCRLFのfileには塊もCRLFで追記する）。採用は配布記録（`distribution.json`の`readTrigger.adopted`）に残り、以後は提案しない。塊を後で消しても再追加しない。CLAUDE.mdに既に塊がある場合、CLAUDE.mdの記述がAGENTS.mdの参照だけで正本を判別できない場合、CLAUDE.mdがsymlink・hardlink・大きすぎる等で安全に読めない場合、UTF-8でない（NULやUTF-16の印を含む）場合、改行がCRLFとLFの混在の場合、大文字小文字だけが違う名前のfile（`claude.md`等）がある場合は追記を提案せず、`readTrigger.manual`に文例と理由を示す（共有規約を一方から参照している場合は正本だけへ手で追記する）。Codex（AGENTS.md）は測定していないため、従来どおり所有者が文例を確認して手で採用する。`uninstall`は採用した塊を所有者のfileの一部として残し、`retained`に示す。
 
