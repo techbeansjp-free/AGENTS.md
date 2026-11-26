@@ -58,7 +58,7 @@
 ### 隔離の確認とSkill一覧の予算（独立レビューM1）
 
 - probe（B・S各1回）は段階1と同じく`--debug-file`で実行する（dry runの`probeDebugLog`）。
-- probeの項目に次を加えた。`compare`と、測定の前の照合（`run-trial.mjs`が各probeを`trace.jsonl`・`meta.json`・`debug.log`から計算し直す）の合格の条件である。
+- probeの項目に次を加えた。`compare`と、測定の前の照合（`run-trial.mjs`が各probeを`trace.jsonl`・`meta.json`・`debug.log`から計算し直す。ただし台帳の精算に結び付けるのは`trace.jsonl`・`meta.json`のsha256だけで、`debug.log`は結び付けていない。下の限界）の合格の条件である。
   - (a) `skillListingRecorded`と`compare`：debug logがあり、`Skill listing over budget`の行がBにもSにも無い、または超過の状態（超過の有無、超過ならSkillの件数と予算。文字数はdescriptionの長さで違うので比べない）と、説明文が省かれたASCのSkill（`ascOmitted`）がBとSで同じ。違えば`compare`の`differ`に`skillListing`・`ascOmitted`が入り、不合格。
   - (b) `ascDescriptionsInContext`：ASCの16件のdescriptionがすべてContextにある。initのeventにはSkillの名前しか無く、debug logにも一覧の件数（`Sending 30 skills via attachment`）と超過の行しか無い（段階1のprobeの記録で確かめた）。このため、probeの質問2（Skillの一覧を名前とdescriptionの原文で書く。fileを読まずに）への回答に、16件のdescriptionが原文のまま含まれ、Skillのfileを読む・探す操作が無いことで確かめる。段階1の水準Wのprobeは16/16だった（[../results/probes/probe-WSA.json](../results/probes/probe-WSA.json)の`descriptionsVerbatimCount`）。
 - debug logは、説明文が省かれた同梱Skillの名前を出さない。両方が超過した場合に同梱Skillの省略が同じかは確かめられない（限界）。
@@ -192,6 +192,10 @@ dry runの内容：
 
 - 各依頼4回。数試行の差は偶然の範囲を出ない。
 - 画面の依頼は最初の3つのmessageだけを見る。4番目以降のreferenceの読込みや、画面の出来は見ない。fixture Aの依頼は全体を見る（#1817）ので、2つの種類で観測の長さが違う。全体の率はこの2つを合わせたものである。
+- 3回目の独立レビュー（HEAD `99154333`）の軽い指摘2件は、固定したfileの変更と再レビューが要るので直さずに測定する。
+  - Low-1：(b)の「探す操作」の検出は、tool入力にSkillのfileの名前があるかだけで行う。作業directoryへの`Grep`（patternが`description`等）で16件のdescriptionが出る場合は検出されない。probeの依頼文が指定外のtoolを禁じ、traceにも残るので、起きる見込みは低い。
+  - Low-2：`debug.log`のsha256は台帳の精算に含めない。このため、(a)を`debug.log`から計算し直しても、probeの後の書換えは検出できない（削除は`skillListingRecorded`で不合格になる）。統括が測定の記録を手で書き換えないことが前提である。
+  - 測定の後に、probeの`trace.jsonl`に作業directoryへの`Grep`が無いことと、公開した`results/probes/`の`debug.log`由来の値が測定の時点の記録と合うことを確かめ、結果に書く。
 - 画面の依頼の「適用」は、referenceまで読んだことだけで、referenceの規則に従ったか（作業場所の決定等）は見ない。Bashが無く、`start`等のcommandは実行できない。
 - 「ASC本文の読込み」は、#1817と同じく期待するSkillの本文（目的別の依頼では目的別Skill）で数える。`asc`だけの値は依頼ごとの記号で示す。
 - descriptionを13文字長くした。Skill一覧の予算は、probeの時点のBとSの状態が同じことだけを確かめる（上の(a)(b)）。測定の各試行のdebug logは取らない。両方が超過した場合に、省かれた同梱Skillが同じかは確かめられない。
