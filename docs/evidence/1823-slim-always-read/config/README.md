@@ -112,6 +112,11 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1823/runs --ledger $LEDGE
 - 共通の仕組みの試験（試験用の設定と、この設定）：合格（[../../shared-harness/README.md](../../shared-harness/README.md)）。
 - dry run（B・S両方、本物のrelease tarballと候補のtarball、新しい`<scratch>/run1823dry3/`）：全16項目が合格。条件ごとに8つのfixture（A・D3・D4・D7・MG・MA・MR・MD）に16件の入口と`claude-md`の採用、MGの`CLAUDE.md`に付与の記録と読む契機の塊、MAに`.mergify.yml`、MRに`release.yml`、MDに`docs/ISSUE-12.md`があること（`caseNeeds`）、B・Sの導入後の差が許される範囲（asc Skillの本文・reference3件とその写し、導入の記録、管理用の3ファイル）に収まること、probe 2回と176試行の起動command。見込み176試行・約19.7 USD、入力約1,504万トークン、損益分岐0.221 USD/試行。
 
+## 測定の前の固定
+
+- `results/fixation.json`の最初の記録のcommitは`de5f7ae8817c1d12d4d80293271e2ff7dba70284`。台帳idは`0355b6a3-49c8-4358-ab90-99f9e9e0947e`、台帳は`<scratch>/rel1823/ledger/ledger-1823.jsonl`（予約0件）。`run-trial.mjs`はこの記載を照合する。
+- 測定の前の独立レビュー（1回目）の指摘（Medium 3・Low 2）を、固定の前に直した。固定の後に、固定したfileは変えない。
+
 ## 限界
 
 - 各依頼4回。数試行の差は偶然の範囲を出ない。場面は場面ごとに4試行の比較である。
