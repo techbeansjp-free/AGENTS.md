@@ -19,7 +19,7 @@
  },
  "probeFixture": "A",
  "budget": {
-  "ownerCapUsd": 20,
+  "ownerCapUsd": 40,
   "capUsd": 40,
   "safetyMarginUsd": 0.8,
   "perTrialUsd": 0.35,
@@ -272,7 +272,10 @@
   "installedDiffExpected": [
    ".agent-skill-chain/distribution.json",
    ".claude/skills/asc/SKILL.md",
-   "^\\.agent-skill-chain/(managed-runtime/)?skills/asc/"
+   "^\\.agent-skill-chain/(managed-runtime/)?skills/asc/",
+   ".agent-skill-chain/managed-runtime/package.json",
+   ".agent-skill-chain/managed-runtime/src/project-assets.mjs",
+   ".agent-skill-chain/managed-runtime/src/runtime-files.json"
   ],
   "requiredDiff": [
    ".agent-skill-chain/skills/asc/SKILL.md",
@@ -280,6 +283,6 @@
    ".agent-skill-chain/skills/asc/references/merge-grant.md",
    ".agent-skill-chain/skills/asc/references/decision-handling.md"
   ],
-  "note": "B against S (when both tarballs are given): the installed projects may differ only in the asc Skill (its body and references, and their managed-runtime copies), its Claude Code entry (if the description changes) and the install record; they must differ in the body and add merge-permission.md. An entry starting with ^ is a regular expression."
+  "note": "B against S (when both tarballs are given): the installed projects may differ only in the asc Skill (its body and references, and their managed-runtime copies), its Claude Code entry (if the description changes) and the install record; they must differ in the body and add merge-permission.md. An entry starting with ^ is a regular expression. The candidate also changes the asset-bound constant (src/project-assets.mjs), the package file list (package.json) and src/runtime-files.json, so their managed-runtime copies are expected to differ."
  }
 }
