@@ -218,7 +218,7 @@ dry runの内容：
 - 隔離の確認（probe）：B・Sとも回1で合格した。比較でも差は無かった（Skill一覧の予算の超過は両方で無し、ASCの16件のdescriptionは両方でContextにあった）。費用は約0.22 USD。目印fileは確認の後に削除した。なお、旧台帳での最初の隔離の確認は、測定に使うアカウントの週の利用上限（HTTP 429）で2回とも応答が無く、台帳を取り替えて固定を作り直した（上の「台帳の取り替え」）。
 - 測定：固定した順の136試行がすべて完了した。失敗は0件、置き換えは0件。画面の依頼のフォルダの24試行は、設計どおり最初の3ターンで止めた（`error_max_turns`）。
 - 費用：新しい台帳の累計は13.32 USD（probe 0.22 USDを含む）。段階1の2.03 USDとあわせて約15.4 USDで、全体の上限25 USDの内。
-- 判定は`judge.mjs`で行った。固定（最初の記録のcommit `682123b1`）・台帳・試行ごとの記録・公開した記録の作り直しの照合をすべて通過した。完了の根拠は`complete`。記録：[results/judge.json](results/judge.json)、[results/runs.json](results/runs.json)、[results/ledger.jsonl](results/ledger.jsonl)、[results/traces/](results/traces/)、[results/probes/](results/probes/)。
+- 判定は`judge.mjs`で行った。固定（最初の記録のcommit `682123b1`）・台帳・試行ごとの記録・公開した記録の作り直しの照合をすべて通過した。完了の根拠は`complete`。記録：[results/judge.json](results/judge.json)、[results/runs.json](results/runs.json)、[results/ledger.jsonl](results/ledger.jsonl)、[results/probes/](results/probes/)。実行の記録（`traces/`）は加えていない（下の「公開した記録について」）。
 
 ### 判定（ownerの基準、14の該当する依頼×4回＝56試行／条件）
 
@@ -268,22 +268,23 @@ ownerが改善版Sを採用すると決めた（[Issueのコメント](https://g
 
 ### 公開した記録について
 
-- 実行の記録（`traces/`、136試行、約9.9MB）は、リポジトリに加えていない。統括の手元（scratch）に残している。#1817までの方式（公開した記録からの作り直しの照合）は、この段階2では行えない。
+- 実行の記録（`traces/`、136試行、約9.9MB）は、リポジトリに加えていない。理由は大きさである（このPRの追加の約半分で、結論は採点・判定・台帳に残る）。統括の手元（scratch）に残している。#1817までの方式（公開した記録からの作り直しの照合）は、この段階2では行えない。判定は、記録を集めた時点（`collect.mjs`・`judge.mjs`、実行の記録がある状態）で行い、完全性・固定・台帳の照合を通過している。
 - 公開しているのは、試行ごとの採点（[results/runs.json](results/runs.json)）、判定（[results/judge.json](results/judge.json)）、台帳（[results/ledger.jsonl](results/ledger.jsonl)。精算の行に、実行の記録のsha256が残る）、probe（[results/probes/](results/probes/)）である。
 - 後続の置換えの記述（下の「公開した記録の置換え」）にある`results/traces`のsha256は、加えなかった実行の記録の集合の識別子として残した。
 
 ### 公開した記録の置換え
 
 - 取り出しの時点で、一時directoryの名前は自動で伏せた。2つのfile（`S-se-1-2`・`B-se-1-4`）に、この作業を統括したsessionのidが残っていたので、`<session>`に置き換えた（#1814と同じ扱い）。
-- `results/traces`のsha256（全fileをpath順に連結したもの）は、置換えの前が`9c2b02d7c664bf31b2d92161ffd44de7f2a8bfac4da24756190ac521ca3b77c7`、後が`6bd6d7568950982b850ae586048917a88398e3af34d65700051288b31c3e1079`。公開した記録に対して`judge.mjs`を実行し直すと、作り直しとの照合で拒否される。置換え前の記録は統括の手元（scratch）に残してある。
+- `results/traces`のsha256（全fileをpath順に連結したもの）は、置換えの前が`9c2b02d7c664bf31b2d92161ffd44de7f2a8bfac4da24756190ac521ca3b77c7`、後が`6bd6d7568950982b850ae586048917a88398e3af34d65700051288b31c3e1079`。この集合は公開していないので、第三者が`judge.mjs`を実行し直すことはできない。手元の記録は、置換えの前後とも統括が保管している。
 
 ### 測定の後の確認（READMEの限界で約束した2点）
 
-- probeの`trace.jsonl`に、作業directoryへの`Grep`・`Glob`は無かった。あったのは、目印のpathを読もうとした意図した操作だけだった（B・Sとも`Glob`1回・`Grep`1回）。
+- probeの`trace.jsonl`に、作業directoryへの`Grep`・`Glob`は無かった。あったのは、目印のpathを読もうとした意図した操作だけだった（B・Sとも`Glob`1回・`Grep`1回）。**この確認は、手元のprobeの`trace.jsonl`で行った。公開した`results/probes/`にはtoolの入力が無いので、公開した記録からは確かめられない。**
 - 公開した`results/probes/`は、測定の時点の記録を伏せた写しである。
 
 ### 限界
 
+- 新しいdescriptionと文例の「fileの作成など変更を伴う依頼」には「開発の」という限定が無い。ASCを入れたrepoで、開発でないfileの作成（メモ・まとめ等）の依頼でも、ASCの本文が読まれうる。該当しない依頼の測定は、アプリのrepoの3つ（翻訳・質問等）だけで、この種類の依頼は測っていない。測った文面を変えると採用の根拠が崩れるので、文面は変えず、限界として記録する。
 - 各依頼4回で、Aの差（手順の適用40/44と41/44）は偶然の範囲である。
 - 画面の依頼のフォルダはui03・ui04・ui07の3つで、どれも新しい画面を作る依頼。変更を伴わない依頼や、レビュー指摘の是正（新しいdescriptionの「修正」と重なる）は、この環境では測っていない。
 - 最初の3ターンで止めているので、Dで本文を読んだあとに作業の中身が変わったか、referenceに従ったかは分からない。

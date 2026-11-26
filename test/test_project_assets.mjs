@@ -578,7 +578,7 @@ test('legacy fixed ASC wrapper is recognized even when its entry is locally dele
  f.write(entry,old);assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
  const description=s=>s.match(/^description: .+$/m)[0],updated=fs.readFileSync(path.join(f.work,entry),'utf8');
  assert.equal(description(updated),description(fs.readFileSync(path.join(f.pkg,'skills','asc','SKILL.md'),'utf8')));assert.notEqual(description(updated),description(old));
- // #1820: the shipped asc description names change-bearing requests (the entry copies it; line 537 covers both Hosts).
+ // #1820: the shipped asc description names change-bearing requests (the entry copies it; the nearby description-equality check covers both Hosts).
  assert.match(description(updated),/実装・修正・画面やfileの作成など変更を伴う依頼/);
 });
 
