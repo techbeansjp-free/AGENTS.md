@@ -1,0 +1,6 @@
+{
+ "ownerConfirmed": true,
+ "at": "2026-11-26",
+ "reference": "https://github.com/techbeansjp-free/AGENTS.md/issues/1820#issuecomment-7171456193",
+ "note": "ownerが会話での質問に回答して、#1820でも目印fileによる隔離の確認を承認した（Bashの条件はClaude Codeのsandboxで隔離し、効かなければその条件を測らない）。統括が記録した。"
+}

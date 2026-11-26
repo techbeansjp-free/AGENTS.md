@@ -1,0 +1,2194 @@
+[
+ {
+  "condition": "RGA",
+  "run": 1,
+  "tools": "R",
+  "prompt": "G",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0328399,
+  "turns": 3,
+  "durationMs": 6003,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   },
+   {
+    "name": "Glob",
+    "target": "<outside>"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RGA",
+  "run": 2,
+  "tools": "R",
+  "prompt": "G",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0313299,
+  "turns": 3,
+  "durationMs": 4308,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   },
+   {
+    "name": "Glob",
+    "target": "{src,public,docs}/**/*"
+   },
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RGA",
+  "run": 3,
+  "tools": "R",
+  "prompt": "G",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0307599,
+  "turns": 3,
+  "durationMs": 5377,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   },
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RGA",
+  "run": 4,
+  "tools": "R",
+  "prompt": "G",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0311099,
+  "turns": 3,
+  "durationMs": 4676,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RGD",
+  "run": 1,
+  "tools": "R",
+  "prompt": "G",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0327794,
+  "turns": 3,
+  "durationMs": 4517,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RGD",
+  "run": 2,
+  "tools": "R",
+  "prompt": "G",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0327794,
+  "turns": 3,
+  "durationMs": 4441,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RGD",
+  "run": 3,
+  "tools": "R",
+  "prompt": "G",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0327794,
+  "turns": 3,
+  "durationMs": 4225,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RGD",
+  "run": 4,
+  "tools": "R",
+  "prompt": "G",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0327794,
+  "turns": 3,
+  "durationMs": 4343,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RSA",
+  "run": 1,
+  "tools": "R",
+  "prompt": "S",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0308849,
+  "turns": 3,
+  "durationMs": 4425,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RSA",
+  "run": 2,
+  "tools": "R",
+  "prompt": "S",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0307549,
+  "turns": 3,
+  "durationMs": 5007,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RSA",
+  "run": 3,
+  "tools": "R",
+  "prompt": "S",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.030744900000000002,
+  "turns": 3,
+  "durationMs": 4447,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RSA",
+  "run": 4,
+  "tools": "R",
+  "prompt": "S",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0308149,
+  "turns": 3,
+  "durationMs": 5666,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RSA",
+  "run": 1,
+  "tools": "R",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-1",
+  "kind": "negative",
+  "expect": null,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.023880199999999997,
+  "turns": 1,
+  "durationMs": 1110,
+  "firstTools": [],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "RSA",
+  "run": 2,
+  "tools": "R",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-1",
+  "kind": "negative",
+  "expect": null,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0238902,
+  "turns": 1,
+  "durationMs": 1176,
+  "firstTools": [],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "RSA",
+  "run": 1,
+  "tools": "R",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-2",
+  "kind": "negative",
+  "expect": null,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.027062199999999998,
+  "turns": 1,
+  "durationMs": 3441,
+  "firstTools": [],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "RSA",
+  "run": 2,
+  "tools": "R",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-2",
+  "kind": "negative",
+  "expect": null,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.027762199999999997,
+  "turns": 1,
+  "durationMs": 3697,
+  "firstTools": [],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "RSA",
+  "run": 1,
+  "tools": "R",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-3",
+  "kind": "negative",
+  "expect": null,
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.035144800000000004,
+  "turns": 2,
+  "durationMs": 7988,
+  "firstTools": [
+   {
+    "name": "Grep",
+    "target": "src/validate.ts"
+   }
+  ],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "RSA",
+  "run": 2,
+  "tools": "R",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-3",
+  "kind": "negative",
+  "expect": null,
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0355848,
+  "turns": 2,
+  "durationMs": 8028,
+  "firstTools": [
+   {
+    "name": "Grep",
+    "target": "src/validate.ts"
+   }
+  ],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "RSD",
+  "run": 1,
+  "tools": "R",
+  "prompt": "S",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0325864,
+  "turns": 3,
+  "durationMs": 4138,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RSD",
+  "run": 2,
+  "tools": "R",
+  "prompt": "S",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0325864,
+  "turns": 3,
+  "durationMs": 4368,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RSD",
+  "run": 3,
+  "tools": "R",
+  "prompt": "S",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0325864,
+  "turns": 3,
+  "durationMs": 3832,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "RSD",
+  "run": 4,
+  "tools": "R",
+  "prompt": "S",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill"
+  ],
+  "permissionMode": "default",
+  "costUsd": 0.0325864,
+  "turns": 3,
+  "durationMs": 4851,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WGA",
+  "run": 1,
+  "tools": "W",
+  "prompt": "G",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0313167,
+  "turns": 3,
+  "durationMs": 4353,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   },
+   {
+    "name": "Glob",
+    "target": "src/**/*"
+   },
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/README.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": true,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WGA",
+  "run": 2,
+  "tools": "W",
+  "prompt": "G",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0313767,
+  "turns": 3,
+  "durationMs": 4420,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   },
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Glob",
+    "target": "src/**/*"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WGA",
+  "run": 3,
+  "tools": "W",
+  "prompt": "G",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0313767,
+  "turns": 3,
+  "durationMs": 4646,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   },
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Glob",
+    "target": "src/**/*"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WGA",
+  "run": 4,
+  "tools": "W",
+  "prompt": "G",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0313767,
+  "turns": 3,
+  "durationMs": 5159,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   },
+   {
+    "name": "Glob",
+    "target": "src/**/*"
+   },
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WGD",
+  "run": 1,
+  "tools": "W",
+  "prompt": "G",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0329082,
+  "turns": 3,
+  "durationMs": 4506,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WGD",
+  "run": 2,
+  "tools": "W",
+  "prompt": "G",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0329082,
+  "turns": 3,
+  "durationMs": 4328,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WGD",
+  "run": 3,
+  "tools": "W",
+  "prompt": "G",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0329082,
+  "turns": 3,
+  "durationMs": 4058,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WGD",
+  "run": 4,
+  "tools": "W",
+  "prompt": "G",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0329082,
+  "turns": 3,
+  "durationMs": 4828,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WSA",
+  "run": 1,
+  "tools": "W",
+  "prompt": "S",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0310437,
+  "turns": 3,
+  "durationMs": 4736,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WSA",
+  "run": 2,
+  "tools": "W",
+  "prompt": "S",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.030893700000000003,
+  "turns": 3,
+  "durationMs": 4510,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WSA",
+  "run": 3,
+  "tools": "W",
+  "prompt": "S",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0310437,
+  "turns": 3,
+  "durationMs": 5121,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   },
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WSA",
+  "run": 4,
+  "tools": "W",
+  "prompt": "S",
+  "fixture": "A",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0798337,
+  "turns": 3,
+  "durationMs": 5980,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "docs/BRIEF.md"
+   },
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/SKILL.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": ".agent-skill-chain/skills/asc/references/workspace.md"
+   },
+   {
+    "name": "Read",
+    "target": "public/users.html"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": true,
+  "bodyRead2": true,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": true,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WSA",
+  "run": 1,
+  "tools": "W",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-1",
+  "kind": "negative",
+  "expect": null,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.023948599999999997,
+  "turns": 1,
+  "durationMs": 1046,
+  "firstTools": [],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "WSA",
+  "run": 2,
+  "tools": "W",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-1",
+  "kind": "negative",
+  "expect": null,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.023948599999999997,
+  "turns": 1,
+  "durationMs": 1215,
+  "firstTools": [],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "WSA",
+  "run": 1,
+  "tools": "W",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-2",
+  "kind": "negative",
+  "expect": null,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.027940599999999996,
+  "turns": 1,
+  "durationMs": 4029,
+  "firstTools": [],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "WSA",
+  "run": 2,
+  "tools": "W",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-2",
+  "kind": "negative",
+  "expect": null,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.027050599999999998,
+  "turns": 1,
+  "durationMs": 3358,
+  "firstTools": [],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "WSA",
+  "run": 1,
+  "tools": "W",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-3",
+  "kind": "negative",
+  "expect": null,
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.036107600000000004,
+  "turns": 2,
+  "durationMs": 9830,
+  "firstTools": [
+   {
+    "name": "Grep",
+    "target": "src/validate.ts"
+   }
+  ],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "WSA",
+  "run": 2,
+  "tools": "W",
+  "prompt": null,
+  "fixture": "A",
+  "case": "neg-3",
+  "kind": "negative",
+  "expect": null,
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0355776,
+  "turns": 2,
+  "durationMs": 8405,
+  "firstTools": [
+   {
+    "name": "Grep",
+    "target": "src/validate.ts"
+   }
+  ],
+  "secondTools": [],
+  "stopped": null,
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "overapplication": false,
+  "markers": true,
+  "counted": true
+ },
+ {
+  "condition": "WSD",
+  "run": 1,
+  "tools": "W",
+  "prompt": "S",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0327032,
+  "turns": 3,
+  "durationMs": 4389,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WSD",
+  "run": 2,
+  "tools": "W",
+  "prompt": "S",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0327032,
+  "turns": 3,
+  "durationMs": 4508,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WSD",
+  "run": 3,
+  "tools": "W",
+  "prompt": "S",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0327032,
+  "turns": 3,
+  "durationMs": 4854,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ },
+ {
+  "condition": "WSD",
+  "run": 4,
+  "tools": "W",
+  "prompt": "S",
+  "fixture": "D",
+  "case": "brief",
+  "kind": "positive",
+  "expect": "asc",
+  "messages": 2,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0327032,
+  "turns": 3,
+  "durationMs": 3915,
+  "firstTools": [
+   {
+    "name": "Read",
+    "target": "BRIEF.md"
+   }
+  ],
+  "secondTools": [
+   {
+    "name": "Read",
+    "target": "data.json"
+   },
+   {
+    "name": "Read",
+    "target": "FONTS.md"
+   }
+  ],
+  "stopped": "error_max_turns",
+  "bodyRead1": false,
+  "bodyRead2": false,
+  "bodyReadBash1": false,
+  "bodyReadBash2": false,
+  "skillAsc1": false,
+  "entryRead1": false,
+  "readmeRead1": false,
+  "skillAsc2": false,
+  "readmeRead2": false,
+  "reach2": false,
+  "resultMissing": false,
+  "counted": true
+ }
+]

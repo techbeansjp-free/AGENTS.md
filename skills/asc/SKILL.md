@@ -1,6 +1,6 @@
 ---
 name: asc
-description: Issue・タスクの開発の開始・再開、worktreeでの実装、PR提出、許可されたmergeで使う。
+description: Issue・タスクの開発の開始・再開、実装・修正・画面やfileの作成など変更を伴う依頼、PR提出、許可されたmergeで使う。
 ---
 
 # ASCの実行入口

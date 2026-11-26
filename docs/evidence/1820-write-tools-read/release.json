@@ -1,0 +1,14 @@
+{
+ "schema": "asc-1820-release/v1",
+ "note": "The tarball every cell installs: the latest release at fixation time. make-fixture.mjs and run-trial.mjs accept only this sha256 (dry-run.mjs --allow-unreleased builds stand-ins that run-trial refuses).",
+ "release": {
+  "kind": "release",
+  "tag": "v0.5.111",
+  "targetCommit": "82d13c49bc7991d1334803a5fd7bd2753fca3f91",
+  "asset": "agent-skill-chain-0.5.111.tgz",
+  "assetSha256": "e7df164a8c132d4d77db270cd8c3fe7ed196906484b0f51d52b4de57125d3be0",
+  "sha256sumsAssetSha256": "467f561ce8e8f6b7f696fe0f9f5aabae31aa0b1c4d7308c7fb57cb43a5b985b5",
+  "sourceCommitAssetSha256": "71446d948307286d6eb680618f6ef7e8bc94a82437629f8f5c0f67c2ac41cd48",
+  "note": "Latest release on 2026-11-26 (gh release view): not a draft, not a prerelease, published 2026-11-25T18:10:08Z. Its target commit is the merge of #1821 and contains the #1817 Skill edits (merged in #1819). The tarball sha256 matched SHA256SUMS and the GitHub release asset digest; source-commit.txt names the target commit. Kept under <scratch>/rel1820/release/."
+ }
+}
