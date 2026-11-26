@@ -1,0 +1,6 @@
+{
+ "ownerConfirmed": true,
+ "at": "2026-11-26",
+ "reference": "https://github.com/techbeansjp-free/AGENTS.md/issues/1820#issuecomment-7171456193",
+ "note": "Test config only: the #1820 approval copied so the tests can exercise approvalProblems. Never used for a probe."
+}

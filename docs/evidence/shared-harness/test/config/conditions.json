@@ -1,0 +1,221 @@
+{
+ "schema": "asc-eval-conditions/v1",
+ "issue": "1820",
+ "stage": "stage 2 (test config)",
+ "markerTag": "1820",
+ "note": "Test config of the shared harness: the #1820 stage-2 plan (docs/evidence/1820-write-tools-read/stage2) converted to the shared schema. Used only by test/harness.test.mjs; never for a paid run.",
+ "model": "sonnet",
+ "modelNote": "Same as #1814/#1815/#1817/#1820 stage 1 (the `sonnet` alias). The resolved model id (init event) is recorded per trial.",
+ "runs": 4,
+ "runsNote": "Planned repetitions per condition and case (all 17 cases, negatives included, as #1817). Only reps 1..runs are scored; a later rep counts only as the one mandatory replacement of a failed trial (decision-criteria.md rule 4).",
+ "maxTurnsByKind": {
+  "app": null,
+  "design": 3
+ },
+ "maxTurnsNote": "Fixture A cases run without --max-turns, as #1817 (the answer markers need the final answer; the per-trial budget bounds the cost). Fixture D cases (#1815 form: a design folder, a new page) run with --max-turns 3: stage 1 and the cause analysis showed that the decision to read the body is made in the first assistant message, and the reference reads follow in the next one (#1817 traces: [BRIEF, SKILL.md] then [workspace.md, implementation.md ...]); without ASC the #1815 traces wrote the page in message 3 ([BRIEF, Glob], [data.json, FONTS.md], [Write]). Three messages observe the body and the references without paying for the rest of the page generation (the #1815 trials ran about 10 turns, 0.215 USD). The probe runs with probeMaxTurns.",
+ "probeMaxTurns": 30,
+ "probeSteps": {
+  "W": 6
+ },
+ "adopt": "claude-md",
+ "toolLevels": {
+  "W": {
+   "label": "書込みあり（#1815と同じtool。browser MCPなし）",
+   "tools": "Read,Write,Edit,Glob,Grep,Skill",
+   "disallowed": "Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task",
+   "permissionMode": "acceptEdits",
+   "initPermissionMode": "acceptEdits"
+  }
+ },
+ "toolsNote": "Only the stage-1 level W (Read, Write, Edit, Glob, Grep, Skill; --permission-mode acceptEdits; no Bash), with the same --settings file as stage 1 (run-trial.mjs isolationSettings), the setting under which the stage-1 W probe passed.",
+ "settingsNote": "Every level gets the same --settings file (run-trial.mjs isolationSettings): permissions.blockReadsOutsideWorkingDirectories, and a sandbox for Bash (enabled, failIfUnavailable, no unsandboxed escape, auto-allow of sandboxed commands, no network domain, denyRead of /Users, the runs root, the fixture and the ledger directory with the trial's work/ re-allowed, denyWrite of the fixture and the ledger directory). Only X has Bash, so the sandbox acts only there; the same file in all levels keeps the levels apart only by their tools and permission mode.",
+ "conditions": {
+  "B": {
+   "label": "現状（release v0.5.111を導入し、project-assetsの提案からCLAUDE.mdへ読む契機を採用）",
+   "release": "B"
+  },
+  "S": {
+   "label": "改善案（Bと同じ手順で、案内文とascのdescriptionを直した候補のtarballを導入）",
+   "release": "S"
+  }
+ },
+ "cellsNote": "A cell is a condition (the trace names start with it). The fixture of a trial comes from its case (cases.json fixture).",
+ "probeCells": [
+  "B",
+  "S"
+ ],
+ "probeNote": "One isolation probe per condition on fixture A, as #1817 (the conditions differ in the tarball). probe-check.mjs judges each against level W; compare checks that they differ in no session fact (Skills other than ASC, plugins, git context, model).",
+ "fixtures": {
+  "A": {
+   "label": "アプリのrepo（#1814・#1817・段階1と同じ合成のTypeScript/Express repo。CLAUDE.mdにプロジェクトの説明1行＋案内文）",
+   "kind": "app",
+   "baseClaudeMd": "# ユーザー管理API\n\nTypeScript/Expressのユーザー管理API。`src/`にAPI、`public/`に管理画面、`docs/`に要件メモがある。\n",
+   "promptFiles": [
+    "docs/BRIEF.md",
+    "docs/requirements.md",
+    "src/validate.ts",
+    "src/users.ts",
+    "public/users.html"
+   ]
+  },
+  "D3": {
+   "label": "画面の依頼のフォルダ（ui03。段階1のDと同じ。CLAUDE.mdは案内文だけ）",
+   "kind": "design",
+   "baseClaudeMd": null,
+   "files": {
+    "BRIEF.md": {
+     "from": "1804-design-judgment/cases/ui03-dashboard/BRIEF.md",
+     "sha256": "d7523652a9dcf1070e910ad3a73ca2c51f00bb957bf00a8d6b791788bfed5a1b"
+    },
+    "data.json": {
+     "from": "1804-design-judgment/cases/ui03-dashboard/data.json",
+     "sha256": "8bfc52909e6107759f7388b4b66e407cf5cb124cb6347ba92867b21cbd6d7685"
+    },
+    "FONTS.md": {
+     "from": "1807-design-eval-browser/cases/FONTS.md",
+     "sha256": "5bbf686e1f397632ec853c3bc4f85139a8df4bbdd110414dbc96fd6e7d887cbb"
+    }
+   },
+   "emptyDirs": [
+    "out"
+   ]
+  },
+  "D4": {
+   "label": "画面の依頼のフォルダ（ui04。#1815と同じfile。CLAUDE.mdは案内文だけ）",
+   "kind": "design",
+   "baseClaudeMd": null,
+   "files": {
+    "BRIEF.md": {
+     "from": "1807-design-eval-browser/cases/ui04-parts-search/BRIEF.md",
+     "sha256": "6a9fbc156aad191f200979af7f8990972da15dc48fe80bfc2ae18678bcf1f291"
+    },
+    "data.json": {
+     "from": "1807-design-eval-browser/cases/ui04-parts-search/data.json",
+     "sha256": "c42b8d8d030eb6f1c30862fc38814b87377596bb893112934ce6b18b01a386a3"
+    },
+    "FONTS.md": {
+     "from": "1807-design-eval-browser/cases/FONTS.md",
+     "sha256": "5bbf686e1f397632ec853c3bc4f85139a8df4bbdd110414dbc96fd6e7d887cbb"
+    }
+   },
+   "emptyDirs": [
+    "out"
+   ]
+  },
+  "D7": {
+   "label": "画面の依頼のフォルダ（ui07。#1815と同じfile。CLAUDE.mdは案内文だけ）",
+   "kind": "design",
+   "baseClaudeMd": null,
+   "files": {
+    "BRIEF.md": {
+     "from": "1807-design-eval-browser/cases/ui07-bus-mobile/BRIEF.md",
+     "sha256": "bfbdd6c6bba286a4225c69621a538f948f50f77c9bc9346e65f12218117004a1"
+    },
+    "data.json": {
+     "from": "1807-design-eval-browser/cases/ui07-bus-mobile/data.json",
+     "sha256": "031287ba302eaa52553cc7e48c325888f9847d01e16535c7395eee186a592e8e"
+    },
+    "FONTS.md": {
+     "from": "1807-design-eval-browser/cases/FONTS.md",
+     "sha256": "5bbf686e1f397632ec853c3bc4f85139a8df4bbdd110414dbc96fd6e7d887cbb"
+    }
+   },
+   "emptyDirs": [
+    "out"
+   ]
+  }
+ },
+ "candidateText": {
+  "readTriggerFirstSentence": {
+   "B": "このプロジェクトでASCを使う開発の開始・再開・PR提出・許可されたmergeと後片付けでは、.agent-skill-chain/skills/asc/SKILL.mdを読み、依頼に必要なreferenceだけを参照する。",
+   "S": "このプロジェクトでASCを使う。実装・修正・画面やファイルの新規作成など変更を伴う依頼（依頼の中身がBRIEF.md等のfileにある場合を含む）と、開発の開始・再開・PR提出・許可されたmergeと後片付けでは、fileを探す・読む前に.agent-skill-chain/skills/asc/SKILL.mdを読み、依頼に必要なreferenceだけを参照する。"
+  },
+  "ascDescription": {
+   "B": "Issue・タスクの開発の開始・再開、worktreeでの実装、PR提出、許可されたmergeで使う。",
+   "S": "Issue・タスクの開発の開始・再開、実装・修正・画面やfileの作成など変更を伴う依頼、PR提出、許可されたmergeで使う。"
+  },
+  "note": "dry-run.mjs checks that the adopted CLAUDE.md blocks of B and S differ only in the first sentence (these texts; S has one more sentence boundary inside it: 「このプロジェクトでASCを使う。」), that the rest of the block is byte-identical, and that the installed .claude/skills/asc/SKILL.md descriptions are these texts."
+ },
+ "cells": {
+  "B": {
+   "tools": "W",
+   "release": "B",
+   "source": "release"
+  },
+  "S": {
+   "tools": "W",
+   "release": "S",
+   "source": "candidate"
+  }
+ },
+ "budget": {
+  "ownerCapUsd": 25,
+  "capUsd": 22.97,
+  "safetyMarginUsd": 1,
+  "perTrialUsd": 0.6,
+  "probeUsd": 0.6,
+  "priorSpend": {
+   "ledger": "../../../1820-write-tools-read/results/ledger.jsonl",
+   "ledgerSha256": "7adc3c16b4ba680a40f4896046b66a5e5236b9cb92a20cd714a2f928909b6ddc",
+   "spentUsd": 2.0281387
+  },
+  "plan": {
+   "perKindUsd": {
+    "asc": 0.12,
+    "purpose": 0.12,
+    "negative": 0.12,
+    "design": 0.15
+   },
+   "probeUsd": 0.15
+  },
+  "expect": {
+   "perKindUsd": {
+    "asc": 0.085,
+    "purpose": 0.085,
+    "negative": 0.085,
+    "design": 0.1
+   },
+   "probeUsd": 0.121
+  },
+  "note": "Owner cap 25 USD for stages 1 and 2 together (Issue #1820 owner decision 2026-11-26). Stage 1 spent 2.0281387 USD (its published ledger ../results/ledger.jsonl, sha256 pinned here; run-trial.mjs recomputes the total from that file and refuses when it differs). The stage-2 cap is the remainder rounded down to the cent, 22.97 USD; run-trial.mjs refuses a trial when the stage-2 ledger total + this trial's budget exceeds capUsd - safetyMarginUsd = 21.97 USD, so both stages together stay at or below 2.03 + 21.97 = 24.0 USD. perTrialUsd is the --max-budget-usd of every trial and its ledger reservation, the same as #1817 (0.6 USD; #1817 measured 0.085 mean and 0.141 max per full read-only trial). probeUsd: the stage-1 W probe cost 0.121 USD."
+ },
+ "probeFixture": "A",
+ "nonAdjacentKinds": [
+  "negative",
+  "design"
+ ],
+ "rule": {
+  "name": "#1820 stage 2 owner rule",
+  "minBodyRate": 0.8,
+  "bodyVsBaseline": "gt",
+  "negSlack": 1,
+  "maxFailureRate": 0.1
+ },
+ "subsets": {
+  "fixtureA": {
+   "fixtures": [
+    "A"
+   ]
+  },
+  "design": {
+   "kinds": [
+    "design"
+   ]
+  }
+ },
+ "dryRun": {
+  "installedDiffExpected": [
+   ".agent-skill-chain/distribution.json",
+   ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md",
+   ".agent-skill-chain/managed-runtime/v05/USAGE.md",
+   ".agent-skill-chain/skills/asc/SKILL.md",
+   ".agent-skill-chain/v05/USAGE.md",
+   ".claude/skills/asc/SKILL.md",
+   "CLAUDE.md"
+  ],
+  "requiredDiff": [
+   "CLAUDE.md",
+   ".claude/skills/asc/SKILL.md"
+  ]
+ }
+}
