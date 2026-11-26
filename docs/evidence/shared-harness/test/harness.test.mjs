@@ -459,21 +459,25 @@ const C23 = read23('conditions.json'), SPEC23 = read23('cases.json'), ORDER23 = 
 const k23 = (id) => SPEC23.cases.find((c) => c.id === id);
 const harnessCmd = (script, args, env = {}) => spawnSync(process.execPath, [path.join(H, script), ...args], {encoding: 'utf8', env: {PATH: process.env.PATH, HOME: os.homedir(), ...env}});
 
-test('#1823 config: the 17 stage-2 cases unchanged, 4 scenarios, order valid, 168 trials, S is a placeholder', () => {
+test('#1823 config: the 17 stage-2 cases unchanged, 4 scenarios, order valid, 168 trials, S pinned to the candidate', () => {
   const s2 = JSON.parse(read('cases.json', S2)).cases;
   assert.deepEqual(SPEC23.cases.slice(0, 17), s2);
   const sc = SPEC23.cases.filter((c) => c.kind === 'scenario');
   assert.deepEqual(sc.map((c) => [c.id, c.fixture]), [['m-grant', 'MG'], ['m-revoked', 'MG'], ['m-draft', 'MA'], ['m-release', 'MR']]);
-  for (const c of sc) { assert.deepEqual(referencesFor(c, 'B'), []); assert.deepEqual(referencesFor(c, 'S'), ['merge-permission.md']); assert.equal(c.markerNotes.length, c.answerGroups.length); }
+  const holder = {'m-grant': 'merge-grant.md', 'm-revoked': 'merge-grant.md', 'm-draft': 'merge-permission.md', 'm-release': 'merge-permission.md'};
+  for (const c of sc) { assert.deepEqual(referencesFor(c, 'B'), []); assert.deepEqual(referencesFor(c, 'S'), [holder[c.id]]); assert.equal(c.markerNotes.length, c.answerGroups.length); }
   assert.throws(() => referencesFor(sc[0], 'X'), /names no references for condition X/);
   assert.deepEqual(orderProblems(ORDER23, SPEC23, C23), []);
   assert.equal(plannedTrials(ORDER23, C23.runs).length, 168);
   assert.deepEqual(C23.toolLevels, CONDS.toolLevels, 'the stage-2 level W');
   assert.equal(pinned('B', REL23, C23).assetSha256, 'efd8bef5376e6c4a2fa838b24c390545d88e9e7abfc2284ca8a403a447256283');
-  assert.equal(pinned('S', REL23, C23), null);
-  assert.deepEqual(releasePlaceholders(REL23, C23), ['S (release.json S: placeholder)']);
+  assert.equal(pinned('S', REL23, C23).assetSha256, '69204d9a82d816a77c1b50b82d7254fe9b3c718b6d665b409b1edc647b12cc03');
+  assert.deepEqual(releasePlaceholders(REL23, C23), []);
   // The rule lines the scenarios cite are the current rules of skills/asc/SKILL.md.
-  const body = fs.readFileSync(path.join(REPO, 'skills/asc/SKILL.md'), 'utf8').split('\n');
+  // The cited lines are those of B (the release v0.5.112 = main 6e950366), read from git so that this check does not depend on the working tree.
+  let src = null; try { src = execFileSync('git', ['show', '6e9503664afb1b88eb7188ddff96144d9d6f5852:skills/asc/SKILL.md'], {cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']}); } catch { /* shallow clone: the base commit is not available */ }
+  if (src === null) return;
+  const body = src.split('\n');
   assert.match(body[24], /Draftのまま提出し/); assert.match(body[28], /release・本番反映を含めるか/);
   assert.match(body[90], /asc-merge-grant-revoked/); assert.match(body[92], /利用者が取り消した時点で既定の段階に戻り/); assert.match(body[94], /mergeせずに承認を求める/);
 });
@@ -498,19 +502,19 @@ test('#1823 scenario markers: a procedure that follows the rule passes, the comm
   assert.equal(markersOk(k23('m-grant'), '取り消しの定型行を探す必要があるが、ここでは検索を実行できない。マージはせず、許可が必要。'), true);
 });
 
-test('#1823 scenario scoring: B applies the rule from the body, S needs merge-permission.md; reads and bytes recorded', () => {
+test('#1823 scenario scoring: B applies the rule from the body, S needs merge-grant.md; reads and bytes recorded', () => {
   const k = k23('m-grant');
   const lines = (reads) => [{type: 'system', subtype: 'init', cwd: '/tmp/w', tools: W.tools.split(','), permissionMode: 'acceptEdits', mcp_servers: [], model: 'm'},
     ...reads.flatMap((p, i) => [{type: 'assistant', message: {id: `m${i}`, content: [{type: 'tool_use', id: `u${i}`, name: 'Read', input: {file_path: p}}]}}, {type: 'user', message: {content: [{type: 'tool_result', tool_use_id: `u${i}`, is_error: false, content: 'x'}]}}]),
     {type: 'result', subtype: 'success', is_error: false, result: '定型行 asc-merge-grant-revoked で検索する。できないので既定の段階とし、mergeしない。', total_cost_usd: 0.1, usage: {input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 20}}].map((l) => JSON.stringify(l)).join('\n');
-  const sizeOf = (rel) => ({[BODY]: 30000, [REF('merge-permission.md')]: 9000}[rel] ?? null);
+  const sizeOf = (rel) => ({[BODY]: 30000, [REF('merge-grant.md')]: 9000}[rel] ?? null);
   const bodyOnly = parseTrace(lines([BODY]));
   const b = scoreRun(SPEC23, k, bodyOnly, {level: W, condition: 'B', sizeOf});
   assert.deepEqual([b.bodyRead, b.referenceRead, b.markers, b.applied, b.markersWithoutReference, b.ascBytesRead, b.inputTokens], [true, true, true, true, false, 30000, 130]);
   const s = scoreRun(SPEC23, k, bodyOnly, {level: W, condition: 'S', sizeOf});
   assert.deepEqual([s.applied, s.markersWithoutReference], [false, true], 'S applied the rule without the reference');
-  const s2 = scoreRun(SPEC23, k, parseTrace(lines([BODY, REF('merge-permission.md')])), {level: W, condition: 'S', sizeOf});
-  assert.deepEqual([s2.applied, s2.ascReferencesRead, s2.ascBytesRead], [true, ['merge-permission.md'], 39000]);
+  const s2 = scoreRun(SPEC23, k, parseTrace(lines([BODY, REF('merge-grant.md')])), {level: W, condition: 'S', sizeOf});
+  assert.deepEqual([s2.applied, s2.ascReferencesRead, s2.ascBytesRead], [true, ['merge-grant.md'], 39000]);
 });
 
 test('#1823 rule: body share not lower (equal passes), per-scenario applied, efficiency not higher; any failing check is not a candidate', () => {
@@ -531,6 +535,7 @@ test('placeholder gate: a paid run and the fixation are refused while release.js
   const d = fs.realpathSync(tmp(t));
   const cfgDir = path.join(d, 'config');
   fs.cpSync(C1823, cfgDir, {recursive: true});
+  const relF = path.join(cfgDir, 'release.json'); const relJ = JSON.parse(fs.readFileSync(relF, 'utf8')); relJ.S = {...relJ.S, placeholder: true}; fs.writeFileSync(relF, JSON.stringify(relJ));
   const r = harnessCmd('run-trial.mjs', [path.join(d, 'runs'), 'B', 'asc-1', '1', '--fixture', path.join(d, 'fx'), '--ledger', path.join(d, 'l.jsonl'), '--run', '--config', cfgDir], {ASC_EVAL_ALLOW_PAID: '1'});
   assert.equal(r.status, 3, r.stderr);
   assert.match(r.stderr, /release\.json pins no tarball for S \(release\.json S: placeholder\)/);
