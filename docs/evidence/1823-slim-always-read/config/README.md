@@ -125,3 +125,21 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1823/runs --ledger $LEDGE
 - 読んだbyteは、読んだfileの大きさで数える（offset・limitで一部だけ読んだ場合もfile全体）。トークンと時間は試行ごとのばらつきが大きい。
 - Sの規則を持つreferenceは、場面ごとに`merge-permission.md`（m-draft・m-release）、`merge-grant.md`（m-grant・m-revoked）、`decision-handling.md`（m-decision）。`cases.json`の`referencesByCondition`で与える（測定の前に直した）。
 - 目印fileの使用は、#1823でownerが承認し、`results/probe-approval.json`に記録した。
+
+## 結果（2026-11-26、176試行、18.57 USD、固定した規則どおり）
+
+判定：**not-a-candidate**（固定した規則では採用候補にならない）。生の実行記録は公開していない。
+
+| 指標 | B（現状 v0.5.112） | S（縮めた案） |
+| --- | --- | --- |
+| 該当する依頼での本文の読込み | 75/76 | 74/76 |
+| 手順の適用 | 69/76 | 63/76 |
+| 該当しない依頼での過剰な読込み | 0/12 | 0/12 |
+| 1試行あたりの読んだASC byte（merge以外） | 21.3k | 18.1k |
+| 1試行あたりの入力トークン（merge以外） | 72.5k | 67.4k |
+| 1試行あたりの時間（merge以外） | 26.3秒 | 24.5秒 |
+
+- merge以外の17依頼：本文の読込みは同じ（56/56）。適用は53→51で、4回ずつの差としては有意でない。読む量・トークン・時間はSが少ない。
+- 場面ごとの確認で、固定した基準を満たさなかったもの：m-revoked（B 3/4、S 1/4）、m-release（B 4/4、S 2/4）。m-grant・m-draftは4/4で同じ。m-decisionは両方1/4。
+- m-revokedのSの不適用は、本文を読まずに答えた試行（U）が2件。Bにも1件ある。答えの中身（mergeしない・許可を推定しない）は規則どおりに見える。m-releaseのSは本文とreferenceを読んだが、release起動の判定の記述が目印に当たらなかった2件。
+- 解釈の限界：各4回、差の多くは偶然の範囲。ただし採用の条件は「少なくならない」で、場面ごとに満たしていない。
