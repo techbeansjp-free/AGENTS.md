@@ -90,6 +90,8 @@
     "skills/asc/references/coordination.md",
     "skills/asc/references/controller.md",
     "skills/asc/references/workspace.md",
+    "skills/asc/references/merge-permission.md",
+    "skills/asc/references/decision-handling.md",
     "skills/project-foundation/SKILL.md",
     "skills/project-foundation/agents/openai.yaml",
     "skills/project-foundation/references/containers-and-worktrees.md",
