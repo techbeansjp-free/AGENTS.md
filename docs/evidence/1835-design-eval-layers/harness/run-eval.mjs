@@ -70,35 +70,106 @@ export function fableArgs({prompt, cfg, method, budgetUsd}) {
   const ev = cfg.evaluators.fable, lim = cfg.limits.fable[method];
   // #1807/#1815 isolation (asc host-session --restricted): file tools Read/Glob/Grep only, closed to the cwd; no MCP, no hooks.
   return ['-p', prompt, '--model', ev.model, '--restricted', '--tools', ev.tools, '--permission-mode', 'dontAsk', '--strict-mcp-config',
-    '--settings', '{"disableAllHooks":true}', '--no-session-persistence', '--output-format', 'json', '--max-turns', String(lim.maxTurns),
+    '--settings', '{"disableAllHooks":true}', '--no-session-persistence', '--output-format', 'stream-json', '--verbose', '--max-turns', String(lim.maxTurns),
     '--max-budget-usd', budgetUsd.toFixed(4)];
 }
 export function codexArgs({prompt, cfg, cwd}) {
   return ['exec', '--ephemeral', '-s', 'read-only', '-C', cwd, '--skip-git-repo-check', '--json', '-m', cfg.evaluators.codex.model, '-c', 'project_doc_max_bytes=0', prompt];
 }
 
-// Parse the CLI output into {text, usd, tokens, error}.
+// ---- path helpers for the isolation / images-read checks ----
+const real = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+const within = (p, dir) => { const d = real(dir), r = real(p); return r === d || r.startsWith(d + path.sep); };
+export const listPngs = (dir) => (dir && fs.existsSync(dir) ? (function walkPng(d) { return fs.readdirSync(d, {withFileTypes: true}).flatMap((e) => (e.isDirectory() ? walkPng(path.join(d, e.name)) : e.name.endsWith('.png') ? [path.join(d, e.name)] : [])); })(dir) : []);
+
+// Parse the Fable CLI output (--output-format stream-json --verbose: one JSON event per line) into
+// {text, usd, tokens, error, toolCalls:[{name, path}], hasResult}. Tool calls are the tool_use blocks of assistant events;
+// the final result event carries result / total_cost_usd / usage / duration_ms. A plain single JSON object (the old
+// --output-format json shape) is still read as a result event with no tool calls.
 export function parseFable(stdout) {
-  let j; try { j = JSON.parse(stdout.trim()); } catch { return {text: null, usd: null, tokens: null, error: 'stdout is not JSON'}; }
+  const events = [];
+  for (const line of stdout.split('\n')) { if (!line.trim()) continue; try { events.push(JSON.parse(line)); } catch { /* not an event line */ } }
+  if (!events.length) return {text: null, usd: null, tokens: null, toolCalls: [], hasResult: false, error: 'stdout has no JSON event'};
+  const toolCalls = [];
+  for (const e of events) if (e.type === 'assistant' && Array.isArray(e.message?.content)) for (const c of e.message.content) {
+    if (c?.type === 'tool_use') toolCalls.push({name: c.name, path: c.input?.file_path ?? c.input?.path ?? null, pattern: c.input?.pattern ?? null});
+  }
+  const j = [...events].reverse().find((e) => e.type === 'result');
+  if (!j) return {text: null, usd: null, tokens: null, toolCalls, hasResult: false, error: 'no final result event'};
   const u = j.usage ?? {};
-  return {text: typeof j.result === 'string' ? j.result : null, usd: typeof j.total_cost_usd === 'number' ? j.total_cost_usd : null, numTurns: j.num_turns ?? null,
+  return {text: typeof j.result === 'string' ? j.result : null, usd: typeof j.total_cost_usd === 'number' ? j.total_cost_usd : null, numTurns: j.num_turns ?? null, durationMs: j.duration_ms ?? null,
     tokens: {input: u.input_tokens ?? null, cacheCreation: u.cache_creation_input_tokens ?? null, cacheRead: u.cache_read_input_tokens ?? null, output: u.output_tokens ?? null},
+    toolCalls, hasResult: true,
     error: j.is_error ? `is_error (${j.subtype ?? '?'})` : (j.subtype && j.subtype !== 'success' ? j.subtype : null)};
 }
-export function parseCodex(stdout) {
+// Missing reason images-not-read: any PNG handed over (in the call's packet) that no Read tool call targeted.
+export function checkImagesRead({toolCalls, images, cwd}) {
+  const read = new Set(toolCalls.filter((t) => t.name === 'Read' && typeof t.path === 'string').map((t) => real(path.resolve(cwd, t.path))));
+  const unread = images.filter((f) => !read.has(real(f)));
+  return {imagesExpected: images.length, imagesRead: images.length - unread.length, unread: unread.map((f) => path.relative(cwd, f)), reason: unread.length ? 'images-not-read' : null};
+}
+
+const SAFE_BIN = /^(\/bin|\/usr\/bin|\/usr\/local\/bin|\/opt\/homebrew\/bin|\/usr\/sbin|\/sbin)\/[\w.+-]+$|^\/dev\/(null|stdin|stdout|stderr)$/;
+// Paths named in one shell command string (a heuristic tokenizer; no shell is run). unconfirmed: the string uses shell
+// features this cannot resolve ($VAR, `...`, $(...), glob '..', 'cd'), so its paths cannot be judged.
+export function pathsInCommand(command, cwd) {
+  const unconfirmed = /\$|`|\bcd\b|\beval\b/.test(command);
+  const paths = [];
+  for (const tok of command.split(/[\s"'`;|&<>(){}=,:]+/)) {
+    if (!tok || tok.startsWith('-')) continue;
+    if (tok === '..' || tok.startsWith('../') || tok.startsWith('/') || tok.startsWith('~') || tok.includes('/../') || tok.endsWith('/..')) {
+      if (SAFE_BIN.test(tok)) continue;
+      paths.push(tok.startsWith('~') ? path.join(process.env.HOME ?? '/', tok.slice(1)) : path.resolve(cwd, tok));
+    }
+  }
+  return {paths, unconfirmed};
+}
+// Parse `codex exec --json` (JSONL). Command events are item.started/item.completed with item.type 'command_execution'
+// (item.command = the shell string). Other item types are not about files and are ignored, except file_change,
+// mcp_tool_call, web_search and unknown ones, which are recorded as shapes this cannot judge.
+const CODEX_QUIET = new Set(['agent_message', 'reasoning', 'error', 'todo_list']);
+export function parseCodex(stdout, cwd = null) {
   let text = null, tokens = null, error = null;
+  const commands = [], other = new Set();
+  let events = 0;
   for (const line of stdout.split('\n')) {
     if (!line.trim()) continue;
     let e; try { e = JSON.parse(line); } catch { continue; }
+    events++;
     if (e.type === 'item.completed' && e.item?.type === 'agent_message') text = e.item.text;
     if (e.type === 'turn.completed' && e.usage) tokens = {input: e.usage.input_tokens ?? null, cacheRead: e.usage.cached_input_tokens ?? null, output: e.usage.output_tokens ?? null};
     if (e.type === 'turn.failed' || e.type === 'error') error = e.error?.message ?? e.message ?? e.type;
+    if (e.type === 'item.completed' && e.item) {
+      if (e.item.type === 'command_execution') commands.push(typeof e.item.command === 'string' ? e.item.command : null);
+      else if (!CODEX_QUIET.has(e.item.type)) other.add(String(e.item.type));
+    }
   }
-  return {text, usd: null, tokens, error};
+  const out = {text, usd: null, tokens, error};
+  if (cwd) out.isolation = checkCodexIsolation({commands, other: [...other], events, cwd});
+  return out;
+}
+// Missing reason isolation-violation: a command touched a path outside the packet directory (-C).
+// isolation 'unconfirmed' (recorded, not missing): no event of a known shape, or a command/item that cannot be judged.
+export function checkCodexIsolation({commands, other, events, cwd}) {
+  const outside = [], why = [];
+  let judged = 0;
+  for (const c of commands) {
+    if (typeof c !== 'string') { why.push('command event without a command string'); continue; }
+    const r = pathsInCommand(c, cwd);
+    judged++;
+    for (const p of r.paths) if (!within(p, cwd)) outside.push({command: c.slice(0, 200), path: p});
+    if (r.unconfirmed) why.push(`command uses shell features that cannot be resolved: ${c.slice(0, 80)}`);
+  }
+  for (const o of other) why.push(`event item type ${o} cannot be judged`);
+  if (!events) why.push('no JSON events');
+  const reason = outside.length ? 'isolation-violation' : null;
+  return {commands: commands.length, judged, outside, state: reason ? 'violation' : why.length ? 'unconfirmed' : 'checked', why, reason};
 }
 
 // A fixed fake answer for --dry-run (same output format as the CLI).
-export function fakeOutput({evaluator, method, task, callId, attempt, cfg, invalid, budgetUsd = null}) {
+// trace (dry-run only): 'all' reads every image; 'skip-one' leaves the first image unread; 'outside' also touches a path outside cwd;
+// 'no-result' drops the final result event (Fable); 'odd' makes Codex emit only an item shape that cannot be judged.
+export function fakeOutput({evaluator, method, task, callId, attempt, cfg, invalid, budgetUsd = null, images = [], cwd = '/', trace = 'all'}) {
   const rnd = makeRng('dry-run', `${evaluator}:${callId}:${attempt}`);
   let ans;
   if (method === 'P') ans = {choice: ['A', 'B', '同等'][Math.floor(rnd() * 3)], reason: '偽の回答（dry-run）'};
@@ -107,8 +178,28 @@ export function fakeOutput({evaluator, method, task, callId, attempt, cfg, inval
   else ans = {score: 1 + Math.floor(rnd() * 5)};
   const text = invalid ? '画像を見られませんでした（dry-runの不正な回答）' : '偽の回答です。\n```json\n' + JSON.stringify(ans) + '\n```';
   const usd = budgetUsd === null ? cfg.dryRun.usdPerCall[method] : Math.min(cfg.dryRun.usdPerCall[method], budgetUsd); // --max-budget-usd caps a real call
-  if (evaluator === 'fable') return JSON.stringify({type: 'result', subtype: 'success', is_error: false, result: text, total_cost_usd: usd, num_turns: 1, duration_ms: 1, usage: {input_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 50}});
-  return [{type: 'thread.started', thread_id: 'dry'}, {type: 'turn.started'}, {type: 'item.completed', item: {id: 'i0', type: 'agent_message', text}}, {type: 'turn.completed', usage: {input_tokens: 100, cached_input_tokens: 0, output_tokens: 50}}].map((x) => JSON.stringify(x)).join('\n') + '\n';
+  const lines = [];
+  if (evaluator === 'fable') {
+    lines.push({type: 'system', subtype: 'init', cwd, tools: ['Read', 'Glob', 'Grep']});
+    const reads = trace === 'skip-one' ? images.slice(1) : images;
+    reads.forEach((f, i) => {
+      lines.push({type: 'assistant', message: {role: 'assistant', content: [{type: 'tool_use', id: `toolu_${i}`, name: 'Read', input: {file_path: f}}]}});
+      lines.push({type: 'user', message: {role: 'user', content: [{type: 'tool_result', tool_use_id: `toolu_${i}`, content: [{type: 'image'}]}]}});
+    });
+    if (trace === 'outside') lines.push({type: 'assistant', message: {role: 'assistant', content: [{type: 'tool_use', id: 'toolu_x', name: 'Read', input: {file_path: path.join(cwd, '..', 'TASK.json')}}]}});
+    lines.push({type: 'assistant', message: {role: 'assistant', content: [{type: 'text', text}]}});
+    if (trace !== 'no-result') lines.push({type: 'result', subtype: 'success', is_error: false, result: text, total_cost_usd: usd, num_turns: 1 + reads.length, duration_ms: 1, duration_api_ms: 1, usage: {input_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 50}});
+    return lines.map((x) => JSON.stringify(x)).join('\n') + '\n';
+  }
+  lines.push({type: 'thread.started', thread_id: 'dry'}, {type: 'turn.started'});
+  if (trace === 'odd') lines.push({type: 'item.completed', item: {id: 'i1', type: 'tool_call_of_unknown_shape'}});
+  else {
+    const reads = trace === 'skip-one' ? images.slice(1) : images;
+    reads.forEach((f, i) => lines.push({type: 'item.completed', item: {id: `c${i}`, type: 'command_execution', command: `/bin/zsh -lc "ls ${path.relative(cwd, f)}"`, aggregated_output: '', exit_code: 0, status: 'completed'}}));
+    if (trace === 'outside') lines.push({type: 'item.completed', item: {id: 'cx', type: 'command_execution', command: `/bin/zsh -lc "cat ${path.join(cwd, '..', 'TASK.json')}"`, aggregated_output: '', exit_code: 0, status: 'completed'}});
+  }
+  lines.push({type: 'item.completed', item: {id: 'i0', type: 'agent_message', text}}, {type: 'turn.completed', usage: {input_tokens: 100, cached_input_tokens: 0, output_tokens: 50}});
+  return lines.map((x) => JSON.stringify(x)).join('\n') + '\n';
 }
 
 // Ledger: header line {type:"header", dryRun}, then one line per attempt; a dry-run ledger and a paid ledger never mix.
@@ -120,7 +211,7 @@ export const spentUsd = (lines, evaluator = 'fable') => lines.filter((l) => l.ty
 
 export function runEvaluator(o) {
   const {cfg, packetsRoot, runs, evaluator, dryRun, methods = ORDER, rounds = cfg.rounds, only = null, skip = new Set(), retries = cfg.retries.default,
-    dryInvalidEvery = 0, capUsd = cfg.budget.capUsd, priorLedger = null, spawn = spawnSync, log = () => {}} = o;
+    dryInvalidEvery = 0, dryTrace = 'all', capUsd = cfg.budget.capUsd, priorLedger = null, spawn = spawnSync, log = () => {}} = o;
   if (!['fable', 'codex'].includes(evaluator)) throw new Error('evaluator must be fable or codex');
   if (!dryRun && process.env.ASC1835_ALLOW_PAID !== '1') throw new Error('paid run refused: set ASC1835_ALLOW_PAID=1 (or use --dry-run)');
   if (!dryRun && capUsd !== cfg.budget.capUsd) throw new Error('--cap-usd is only for --dry-run');
@@ -137,7 +228,7 @@ export function runEvaluator(o) {
   const spent = () => spentUsd(ledger, 'fable') + spentUsd(prior, 'fable');
   const index = readJson(path.join(packetsRoot, 'index.json'));
   const calls = planCalls({index, methods, rounds, only, skip, negPairs: readJson(path.join(ROOT, 'negation-pairs.json'))});
-  const summary = {evaluator, dryRun: !!dryRun, planned: calls.length, skippedDone: 0, valid: 0, invalid: 0, failed: 0, missingInput: 0, retried: 0, stopped: null};
+  const summary = {evaluator, dryRun: !!dryRun, planned: calls.length, skippedDone: 0, valid: 0, invalid: 0, failed: 0, missingInput: 0, retried: 0, stopped: null, missingByReason: {}, isolationUnconfirmed: 0};
   let n = 0;
   for (const call of calls) {
     const dir = path.join(runs, evaluator, `round${call.round}`, call.method, call.id);
@@ -170,7 +261,7 @@ export function runEvaluator(o) {
       let stdout, stderr = '', exit = 0, timedOut = false;
       if (dryRun) {
         n++;
-        stdout = fakeOutput({evaluator, method: call.method, task, callId: call.id, attempt, cfg, budgetUsd, invalid: dryInvalidEvery > 0 && n % dryInvalidEvery === 0});
+        stdout = fakeOutput({evaluator, method: call.method, task, callId: call.id, attempt, cfg, budgetUsd, invalid: dryInvalidEvery > 0 && n % dryInvalidEvery === 0, images: listPngs(call.packet ? cwd : null), cwd, trace: dryTrace});
       } else {
         const env = {...process.env};
         if (evaluator === 'fable') env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(lim.maxOutputTokens);
@@ -180,12 +271,18 @@ export function runEvaluator(o) {
       const durationMs = Date.now() - t0;
       fs.writeFileSync(path.join(dir, `attempt-${attempt}.stdout`), stdout);
       if (stderr) fs.writeFileSync(path.join(dir, `attempt-${attempt}.stderr`), stderr);
-      const p = evaluator === 'fable' ? parseFable(stdout) : parseCodex(stdout);
+      const p = evaluator === 'fable' ? parseFable(stdout) : parseCodex(stdout, cwd);
       // Fable: a missing cost is charged at the call's budget (conservative), and flagged
       const chargedUsd = evaluator === 'fable' ? (p.usd ?? budgetUsd) : 0;
       const parsed = extractJson(p.text);
-      const problem = timedOut ? 'timeout' : exit !== 0 ? `exit ${exit}` : p.error ? p.error : validate(call.method, parsed, task, cfg);
-      const a = {attempt, exit, timedOut, durationMs, usd: p.usd, chargedUsd, costMissing: evaluator === 'fable' && p.usd === null, tokens: p.tokens, numTurns: p.numTurns ?? null, problem};
+      // Trace checks: Fable must have Read every PNG of its packet; Codex must not have touched a path outside its packet (-C).
+      let trace = null, reason = null;
+      if (evaluator === 'fable' && p.hasResult) { trace = checkImagesRead({toolCalls: p.toolCalls, images: listPngs(call.packet ? cwd : null), cwd}); reason = trace.reason; }
+      if (evaluator === 'codex' && p.isolation) { trace = p.isolation; reason = trace.reason; }
+      const base = timedOut ? 'timeout' : exit !== 0 ? `exit ${exit}` : p.error ? p.error : null;
+      const problem = base ?? (reason ? reason : validate(call.method, parsed, task, cfg));
+      const a = {attempt, exit, timedOut, durationMs, usd: p.usd, chargedUsd, costMissing: evaluator === 'fable' && p.usd === null, tokens: p.tokens, numTurns: p.numTurns ?? null, problem, reason: base ? null : reason, trace,
+        ...(evaluator === 'fable' ? {toolCalls: p.toolCalls.length, resultEvent: p.hasResult} : {})};
       if (call.method === 'Fc' && !problem && parsed.critique.length > cfg.limits.critiqueMaxChars) a.overLength = parsed.critique.length;
       attempts.push(a);
       append({type: 'call', evaluator, round: call.round, method: call.method, callId: call.id, ...a, dryRun: !!dryRun, at: new Date().toISOString()});
@@ -194,8 +291,13 @@ export function runEvaluator(o) {
     }
     if (summary.stopped && !attempts.length) { append({type: 'stop', reason: summary.stopped, at: new Date().toISOString()}); log(summary.stopped); break; }
     if (attempts.length > 1) summary.retried++;
-    writeJson(path.join(dir, 'status.json'), {callId: call.id, evaluator, round: call.round, method: call.method, packet: call.packet ?? null, text: call.text ?? null, status, answer, attempts});
+    const last = attempts[attempts.length - 1];
+    const missingReason = status === 'valid' ? null : (last?.reason ?? (status === 'invalid' ? 'invalid-answer' : (last?.problem === 'no final result event' ? 'no-result-event' : 'failed')));
+    const isolation = evaluator === 'codex' ? (last?.trace?.state ?? 'unconfirmed') : null;
+    writeJson(path.join(dir, 'status.json'), {callId: call.id, evaluator, round: call.round, method: call.method, packet: call.packet ?? null, text: call.text ?? null, status, missingReason, isolation, answer, attempts});
     summary[status]++;
+    if (missingReason) summary.missingByReason[missingReason] = (summary.missingByReason[missingReason] ?? 0) + 1;
+    if (isolation === 'unconfirmed') summary.isolationUnconfirmed++;
     log(`${call.method} r${call.round} ${call.id} ${status}`);
     if (summary.stopped) { append({type: 'stop', reason: summary.stopped, at: new Date().toISOString()}); break; }
   }

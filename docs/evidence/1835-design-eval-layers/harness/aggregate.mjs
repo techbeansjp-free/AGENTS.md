@@ -202,6 +202,30 @@ export function computeAll({cfg, key, J, fNeg, layer1 = {}, owner = null, ssrNeg
     metrics, interEvaluator: inter, negation, ceiling, costs, budgetStopped, decisions};
 }
 
+// Counts of calls that gave no valid answer, per evaluator and per reason (missingReason of status.json:
+// images-not-read, isolation-violation, invalid-answer, no-result-event, failed, missing-input). isolationUnconfirmed counts
+// valid-or-not Codex calls whose isolation could not be judged from the event shapes (recorded, not missing).
+export function missingByReason(runs) {
+  const out = {};
+  for (const e of EVALUATORS) {
+    const o = {total: 0, valid: 0, byReason: {}, isolationUnconfirmed: 0};
+    const base = path.join(runs, e);
+    for (const rd of fs.existsSync(base) ? fs.readdirSync(base).filter((x) => /^round\d+$/.test(x)) : []) for (const m of fs.readdirSync(path.join(base, rd))) {
+      const md = path.join(base, rd, m);
+      for (const id of fs.statSync(md).isDirectory() ? fs.readdirSync(md) : []) {
+        const f = path.join(md, id, 'status.json'); if (!fs.existsSync(f)) continue;
+        const st = readJson(f); o.total++;
+        if (st.isolation === 'unconfirmed') o.isolationUnconfirmed++;
+        if (st.status === 'valid') { o.valid++; continue; }
+        const r = st.missingReason ?? (st.status === 'missing-input' ? 'missing-input' : st.status === 'invalid' ? 'invalid-answer' : 'failed');
+        o.byReason[r] = (o.byReason[r] ?? 0) + 1;
+      }
+    }
+    out[e] = o;
+  }
+  return out;
+}
+
 // ---- loaders ----
 export function loadLayer1(files) {
   const m = {}, records = [];
@@ -256,6 +280,7 @@ function main() {
   const owner = opt('--owner') ? loadOwner(path.resolve(opt('--owner')), path.resolve(opt('--owner-key'))) : null;
   const res = computeAll({cfg, key, J, fNeg, layer1: l1.map, owner, ssrNeg, ssrCoreFailed: !!ssr?.coreFailed || !ssr, costs: costsFromLedger(ledger), budgetStopped: ledger.some((l) => l.type === 'stop')});
   res.layer1 = layer1Summary(l1);
+  res.missingByReason = missingByReason(runs);
   res.dryRun = ledger.find((l) => l.type === 'header')?.dryRun ?? null;
   writeJson(path.resolve(opt('--out')), res);
   console.log(JSON.stringify({F: res.decisions.F.conclusion, S: res.decisions.S.conclusion, perEvaluator: Object.fromEntries(['F', 'S'].map((m) => [m, Object.fromEntries(EVALUATORS.map((e) => [e, res.decisions[m].perEvaluator[e].result]))]))}, null, 1));

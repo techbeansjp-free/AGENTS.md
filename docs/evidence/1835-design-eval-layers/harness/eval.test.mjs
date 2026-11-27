@@ -9,8 +9,8 @@ import zlib from 'node:zlib';
 import {spawnSync} from 'node:child_process';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS, pngChunks, PNG_KEEP, extractJson, readJson, parseScreen} from './eval-common.mjs';
 import {buildPackets} from './make-packets.mjs';
-import {runEvaluator, readLedger, spentUsd, budgetPlan} from './run-eval.mjs';
-import {computeAll, decideEvaluator} from './aggregate.mjs';
+import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex} from './run-eval.mjs';
+import {computeAll, decideEvaluator, missingByReason} from './aggregate.mjs';
 import {buildOwnerPage} from './owner-page.mjs';
 
 const cfg = loadConfig();
@@ -130,7 +130,7 @@ test('run-eval --dry-run: every path runs for both evaluators; invalid answers a
   assert.equal(fa.cwd, path.join(pkRoot, 'round1', pk));
   for (const x of ['--restricted', '--no-session-persistence', '--strict-mcp-config']) assert.ok(fa.args.includes(x));
   assert.equal(fa.args[fa.args.indexOf('--tools') + 1], 'Read,Glob,Grep');
-  assert.equal(fa.args[fa.args.indexOf('--output-format') + 1], 'json');
+  assert.equal(fa.args[fa.args.indexOf('--output-format') + 1], 'stream-json'); assert.ok(fa.args.includes('--verbose'));
   assert.ok(fa.args.includes('--max-turns') && fa.args.includes('--max-budget-usd'));
   const ca = readJson(path.join(runs, 'codex/round1/P', pk, 'argv.json'));
   assert.deepEqual(ca.args.slice(0, 7), ['exec', '--ephemeral', '-s', 'read-only', '-C', path.join(pkRoot, 'round1', pk), '--skip-git-repo-check']);
@@ -163,6 +163,43 @@ test('run-eval --dry-run: the Fable budget stops the run at the cap, and retries
   const st = fs.readdirSync(path.join(runs2, 'codex/round1/P')).map((d) => readJson(path.join(runs2, 'codex/round1/P', d, 'status.json')));
   assert.ok(st.every((x) => x.attempts.length <= 2));
   assert.ok(st.some((x) => x.attempts.length === 2 && x.status === 'valid'));
+});
+
+test('run-eval trace checks: all images read / one unread / a path outside the packet (dry-run fake output in the CLI event shapes)', () => {
+  const only = new Set([Object.entries(key.packets).find(([, p]) => p.round === 1 && p.method === 'P')[0]]);
+  const one = (evaluator, dryTrace) => {
+    const runs = tmp('asc1835-t-');
+    const s = runEvaluator({cfg, packetsRoot: pkRoot, runs, evaluator, dryRun: true, capUsd: 1000, methods: ['P'], rounds: [1], only, dryTrace});
+    const id = [...only][0], st = readJson(path.join(runs, evaluator, 'round1/P', id, 'status.json'));
+    return {s, st, runs, id};
+  };
+  // Fable
+  let r = one('fable', 'all');
+  assert.equal(r.st.status, 'valid'); assert.equal(r.st.missingReason, null);
+  assert.equal(r.st.attempts[0].trace.imagesExpected, 4); assert.equal(r.st.attempts[0].trace.imagesRead, 4);
+  r = one('fable', 'skip-one');
+  assert.equal(r.st.status, 'invalid'); assert.equal(r.st.missingReason, 'images-not-read'); assert.equal(r.st.attempts[0].trace.unread.length, 1);
+  assert.equal(r.s.missingByReason['images-not-read'], 1);
+  assert.ok(r.st.attempts[0].chargedUsd > 0, 'a call with a result is still charged');
+  const m = missingByReason(r.runs); assert.equal(m.fable.byReason['images-not-read'], 1); assert.equal(m.fable.valid, 0);
+  // no final result event: no answer, cost charged at the call's budget
+  r = one('fable', 'no-result');
+  assert.equal(r.st.status, 'failed'); assert.equal(r.st.attempts[0].costMissing, true); assert.equal(r.st.attempts[0].chargedUsd, cfg.limits.fable.P.maxBudgetUsd); assert.equal(r.st.missingReason, 'no-result-event');
+  // Codex
+  r = one('codex', 'all');
+  assert.equal(r.st.status, 'valid'); assert.equal(r.st.isolation, 'checked'); assert.equal(r.st.attempts[0].trace.commands, 4);
+  r = one('codex', 'outside');
+  assert.equal(r.st.status, 'invalid'); assert.equal(r.st.missingReason, 'isolation-violation'); assert.equal(r.st.attempts[0].trace.outside.length, 1);
+  r = one('codex', 'odd');
+  assert.equal(r.st.status, 'valid'); assert.equal(r.st.isolation, 'unconfirmed'); assert.equal(r.s.isolationUnconfirmed, 1);
+  assert.equal(missingByReason(r.runs).codex.isolationUnconfirmed, 1);
+  // parsers on hand-written events
+  const f = parseFable([{type: 'assistant', message: {content: [{type: 'tool_use', name: 'Read', input: {file_path: '/x/a.png'}}, {type: 'tool_use', name: 'Grep', input: {pattern: 'p', path: '/x'}}]}},
+    {type: 'result', subtype: 'success', is_error: false, result: 'ok', total_cost_usd: 0.5, duration_ms: 7, usage: {input_tokens: 1, output_tokens: 2}}].map((x) => JSON.stringify(x)).join('\n'));
+  assert.deepEqual(f.toolCalls.map((t) => t.name), ['Read', 'Grep']); assert.equal(f.usd, 0.5); assert.equal(f.durationMs, 7);
+  const c = parseCodex(JSON.stringify({type: 'item.completed', item: {type: 'command_execution', command: 'cat $HOME/x'}}), '/p');
+  assert.equal(c.isolation.state, 'unconfirmed');
+  assert.equal(parseCodex(JSON.stringify({type: 'item.completed', item: {type: 'command_execution', command: 'sed -n 1,5p /etc/passwd'}}), '/p').isolation.state, 'violation');
 });
 
 test('run-eval plan: the reduction order D -> contrast-strong -> stop', () => {

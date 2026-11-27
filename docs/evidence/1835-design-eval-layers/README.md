@@ -246,7 +246,7 @@ node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/
 - F採点（`Fs`）と否定の反例（`Neg`）は、講評・文を依頼文に埋め込み、画面を渡さない。cwdは空のdirectoryである。否定の反例は、各回に20文（10対の両側）を1文ずつ採点する。
 - 上限（`config/eval.json`の`limits`）：方式ごとのturn・出力token・1回の予算・時間。講評は800字以内と依頼し、超えたら`overLength`を記録する（欠測にはしない）。
 - 台帳：`<runs>/ledger.jsonl`に、試みごとの費用・token・時間を追記する。Fableの合計（`--prior-ledger`の試行分を含む）が上限20 USDに達したら止め、`stop`の行を書く。1回の予算は「残り」と方式の上限の小さい方なので、上限を大きくは超えない。Fableの費用が報告されなかった試みは、その回の予算の額で数える。
-- 回答は最後のJSONを読み、形が不正なら欠測（`invalid`）として記録する。再試行は既定で0回、`--retries 1`のときだけ1回まで行い、回数を`status.json`に残す。`status.json`のある呼出しは、再実行で呼ばない。
+- 回答は最後のJSONを読み、形が不正なら欠測（`invalid`、理由`invalid-answer`）として記録する。欠測の理由（`images-not-read`・`isolation-violation`・`invalid-answer`・`no-result-event`・`failed`・`missing-input`）は`status.json`の`missingReason`に残り、`aggregate.mjs decide`の結果の`missingByReason`が評価者ごとの理由別の件数を出す。再試行は既定で0回、`--retries 1`のときだけ1回まで行い、回数を`status.json`に残す。`status.json`のある呼出しは、再実行で呼ばない。
 - 有料の実行は`ASC1835_ALLOW_PAID=1`が無ければ拒否する。`--dry-run`はCLIを起動せず、同じcommand lineを記録し、CLIと同じ形式の偽の回答（seed付き。`--dry-invalid-every N`でN回ごとに不正な回答）で、読取り・台帳・予算の停止まで通す。dry-runの台帳と有料の台帳は混ぜられない。
 
 ### 基準文と否定の反例
@@ -277,5 +277,6 @@ node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/
 - **Codexの読取りの範囲**：`codex exec -s read-only`は書込みだけを防ぎ、読取りを限定しない（[host-session](../../../skills/asc/references/host-session.md)）。#1815は`asc host-session`の実行ごとのpermission profileで読取りを限定した。この道具は、指定どおり`codex exec`を使い、keyとownerの対応表を`--lock`（mode 000）で閉じる。束の他の回・他の束は読める状態のままである。Codexの出力の長さとturnには、CLIの上限の指定が無く、時間の上限だけを掛ける。
 - **Fableの文脈**：`--restricted`でも、user単位の`CLAUDE.md`やmemoryが読み込まれるかは確かめていない。束はrepositoryの外（scratch）にあるので、repositoryの`CLAUDE.md`は祖先に無い。
 - **Codexのmodel**：`gpt-6.2-sol`は#1815段階3でownerが答えたもので、#1835での使用は確かめていない。
-- **Fableで画像を見たか**：#1807の順位付けと同じく、評価者の自己申告とtoolの記録でしか分からない。`--output-format json`ではtool呼出しの列は残らない。
+- **Fableで画像を見たか**：`--output-format stream-json --verbose`（導入済みclaude 2.1.323の`--help`で確認）で、assistantのeventのtool_use（`Read`の`input.file_path`）と、最後のresult event（`result`・`total_cost_usd`・`usage`・`duration_ms`）を記録から取り出す。その呼出しの束のPNGのうち、Readされなかったものが1つでもあれば欠測（理由`images-not-read`）。result eventが無ければ欠測（`no-result-event`）で、費用は1回の予算の額で数える。**実機のstream-jsonの出力は、まだ見ていない**（有料の呼出しをしていない）。eventの形（`type: assistant`の`message.content[]`のtool_use、`type: result`）は、既知のSDKの形に合わせた偽の出力で試験している。Readのpathが相対・symlink経由の場合は、cwdとrealpathで解決して照合する。Readの結果が実際に画像として渡ったか（tool_resultの内容）までは見ない。
+- **Codexの隔離の判定**：`codex exec --json`（導入済みcodex-cli 0.171.0）のitem.completedのうち`command_execution`の`item.command`（shellの文字列）を取り、文字列を空白・引用符・記号で分けて、絶対path・`~`・`..`を含むものを束のdirectory（`-C`）に対して解決し、外に出れば欠測（理由`isolation-violation`）とする。`/bin`・`/usr/bin`等の実行file・`/dev/null`は除く。`$VAR`・バッククォート・`cd`・`eval`を含む命令、`command_execution`以外で既知でない種類のitem、event自体が無い呼出しは「未確認」（`status.json`の`isolation: unconfirmed`）として記録し、欠測にはしない（集計の`isolationUnconfirmed`）。**実機のeventの形（`command_execution`の項目名`command`、画像を見るtoolのitem種別）は未確認**である。文字列の分解は簡易で、`sed '/x/d'`のような`/`で始まる引数は束の外のpathと誤って判定し、不要な欠測を出し得る（その場合は`attempt-*.stdout`で確かめる）。
 - **束の大きさ**：実際の画面（3ケース×A-r1・D-r1・E-r1）で作ると約110MBである。
