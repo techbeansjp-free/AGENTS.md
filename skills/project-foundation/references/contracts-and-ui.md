@@ -4,7 +4,7 @@ APIや画面、永続化を伴う基盤で読む。製品固有の値を決め�
 
 ## 境界と型の正本
 
-- ディレクトリは責務と依存方向から決める。画面・API・IaCを持つ複数層のサービスでは、ルートの`src/frontend`（画面）・`src/backend`（API・業務・永続化）・`src/infra`（IaC：配備・基盤の定義）と、test/doc/generatedの分離を初期候補にし、既存構造と製品形態に合わせる。`src/infra`はIaC専用とし、DB・外部SDK等へ接続する実装（DDDのinfrastructure層・adapter）は`src/backend`内に置く。構成を変える場合も`infra`はIaCの意味で使う。`src/frontend`・`src/backend`から`src/infra`を参照せず、IaCはアプリのコードを直接参照せずbuild成果物・image等の配備物を扱うことを、依存方向の検査の対象に含める。domainにHTTP/DB/SDK、applicationに配備都合を持ち込まない。依存の接続はcomposition rootへ集める。
+- ディレクトリは責務と依存方向から決める。画面・API・IaCを持つ複数層のサービスでは、ルートの`src/frontend`（画面）・`src/backend`（API・業務・永続化）・`src/infra`（IaC：配備・基盤の定義）と、test/doc/generatedの分離を初期候補にし、既存構造と製品形態に合わせる。`src/infra`はIaC専用とし、DB・外部SDK等へ接続する実装（DDDのinfrastructure層・adapter）は`src/backend`内に置く。構成を変える場合も`infra`はIaCの意味で使う。`src/frontend`・`src/backend`は`src/infra`のmoduleをimportせず、配備時の値を環境変数・設定・生成物で受け取る。IaCはアプリのmoduleをimportせず、build成果物・image・handlerのentry path等の配備単位を指す。両者で共有する契約（設定schema等）は共通の場所か生成物を経由する。これらを依存方向の検査の対象に含める。domainにHTTP/DB/SDK、applicationに配備都合を持ち込まない。依存の接続はcomposition rootへ集める。
 - 型を持つ言語ではstrictを基準にし、手書き製品コードの無制限な`any`/`Any`相当、検証を飛ばす型assertionや抑制を禁止する。未信頼入力はunknown/object等で受け、境界schemaで絞る。動的言語も実行時schemaと静的検査の責任を定める。生成物/SDKの制約は対象・理由・再生成/解消条件を限定した例外にする。
 - API、イベント、設定ごとに正本schema、生成方向、生成先、互換性を決める。言語に適した実行時validatorを用い、生成DTOをdomainの正本へ直結しない。生成物の手編集を禁止し、再生成差分をCIで検出する。
 - 型のみ・再export・生成物・alias・package初期化を含め循環を検査する。実際の対象と未解析経路を明示し、動的importやService Locatorへ移して隠さない。再帰/event/retryの循環はimportグラフと別に、基底条件・進捗・上限・中断を確認する。
