@@ -11,11 +11,12 @@ import {LOCAL_GIT_TIMEOUT_MILLISECONDS,gitFailureMessage,GIT_NULL_DEVICE} from '
 const prefix='.agent-skill-chain/',record=prefix+'distribution.json';
 const hostNames=['.agents','.claude'];
 const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;
-// Sixteen registered Skills, two optional assets and the runtime files use 292 assets at v0.5.71; the count grows
-// with src/runtime-files.json (#1739), and what is left of the bound holds preimages of retained canonical/runtime
-// assets. Retired owned Host entries are removed. The bound stays at 305, the
-// v0.5.64-v0.5.66 value, so a record that also keeps the retired src/repository-facts.mjs stays valid (#1727).
-const maxAssets=305;
+// Seventeen registered Skills, two optional assets and the runtime files use 305 assets with warranty-scope (#1828);
+// the count grows with src/runtime-files.json (#1739), and what is left of the bound holds preimages of retained
+// canonical/runtime assets. Retired owned Host entries are removed. The bound rises by the 8 assets #1828 adds
+// (from 305, the v0.5.64-v0.5.66 value), keeping the 8-preimage reserve it had, so a record that also keeps the
+// retired src/repository-facts.mjs stays valid (#1727).
+const maxAssets=313;
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
 // Exact retired distribution paths, maintained by trusted package releases.
 // src/repository-facts.mjs was distributed by v0.5.64-v0.5.66 and removed by #1727.
@@ -137,7 +138,7 @@ function catalog(packageRoot,hosts){
   .replaceAll('../../bin/asc-v05.mjs','../../bin/asc.mjs')
   .replace('このSkillは配布パッケージ内の場所で使用する。','このSkillはプロジェクトで共有できる。入口はruntime.jsonの版と一致するローカルパッケージを使用する。標準は同梱の.agent-skill-chain/managed-runtime/で、ASC_CLIや別インストールは不要。明示的に別版の実行先を選ぶ場合だけ環境変数ASC_CLIを使う。共有ファイルに絶対パスを書かない。');
  assets.set(prefix+'skills/asc/SKILL.md',Buffer.from(skill));
- assets.set(prefix+'00_利用案内.md',Buffer.from(`# ASC v0.5 利用案内\n\n- [実行手順](v05/USAGE.md)\n- [移行手順](v05/MIGRATION_PLAN.md)\n- [実行Skill](skills/asc/SKILL.md)\n- [開発基盤・規約の構築Skill](skills/project-foundation/SKILL.md)\n- [目的別Skill一覧](skills/README.md)\n- [任意の仕様書雛形](templates/specs/00_利用案内.md)\n\nproject/と既存の固有ルールは利用者が所有し、ASC更新では変更しない。作成済み仕様書も利用者の成果物として保持する。Host用入口は初回に--register-skill（.agents）または--register-claude-skill（.claude）で選ぶ。登録したHostの入口は以後の通常更新で追加・更新し、配布からなくなった未編集の管理入口だけを削除する。ファイル配置だけで実際のHost認識を確認したことにはならない。\n`));
+ assets.set(prefix+'00_利用案内.md',Buffer.from(`# ASC v0.5 利用案内\n\n- [実行手順](v05/USAGE.md)\n- [移行手順](v05/MIGRATION_PLAN.md)\n- [実行Skill](skills/asc/SKILL.md)\n- [開発基盤・規約の構築Skill](skills/project-foundation/SKILL.md)\n- [受託開発の保証範囲の合意Skill](skills/warranty-scope/SKILL.md)\n- [目的別Skill一覧](skills/README.md)\n- [任意の仕様書雛形](templates/specs/00_利用案内.md)\n\nproject/と既存の固有ルールは利用者が所有し、ASC更新では変更しない。作成済み仕様書も利用者の成果物として保持する。Host用入口は初回に--register-skill（.agents）または--register-claude-skill（.claude）で選ぶ。登録したHostの入口は以後の通常更新で追加・更新し、配布からなくなった未編集の管理入口だけを削除する。ファイル配置だけで実際のHost認識を確認したことにはならない。\n`));
  const metadata=new Map();
  if(hosts.length)for(const name of skillNames){
   metadata.set(name,skillFrontmatter(assets.get(prefix+`skills/${name}/SKILL.md`),name));
