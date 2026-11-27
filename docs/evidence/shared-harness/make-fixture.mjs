@@ -98,6 +98,41 @@ export function workChanges(work) {
   return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
+// #1840 re-review High: the files of a sample project at its HEAD (the fixture as made, before the trial; the trial has
+// no Bash and cannot commit) and their texts, for the lines the markers leave out (score.mjs baseLinesFor). headReader
+// lists the files once and reads the texts in one `git cat-file --batch` per call of texts(); text() of a path that is
+// not at HEAD (a file the trial created) is null.
+export function headReader(work) {
+  const run = (args, input) => spawnSync('git', args, {cwd: work, env: gitEnv(work), input, maxBuffer: 1 << 30});
+  let files = null;
+  const cache = new Map();
+  const list = () => {
+    if (files) return files;
+    const r = run(['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
+    if (r.status !== 0) throw new Error(`git ls-tree failed in ${work}: ${r.stderr}`);
+    return (files = r.stdout.toString('utf8').split('\0').filter(Boolean));
+  };
+  const load = (rels) => {
+    const want = rels.filter((f) => !cache.has(f));
+    const at = new Set(list());
+    for (const f of want) if (!at.has(f)) cache.set(f, null);
+    const read = want.filter((f) => at.has(f));
+    if (!read.length) return;
+    const r = run(['cat-file', '--batch'], read.map((f) => `HEAD:${f}\n`).join(''));
+    if (r.status !== 0) throw new Error(`git cat-file failed in ${work}: ${r.stderr}`);
+    let pos = 0;
+    for (const f of read) {
+      const nl = r.stdout.indexOf(10, pos);
+      const head = r.stdout.subarray(pos, nl).toString('utf8').split(' ');
+      if (head[1] !== 'blob') throw new Error(`git cat-file: ${f} is not a blob at HEAD`);
+      const size = Number(head[2]);
+      cache.set(f, r.stdout.subarray(nl + 1, nl + 1 + size).toString('utf8'));
+      pos = nl + 1 + size + 1;
+    }
+  };
+  return {files: list, text: (rel) => { load([rel]); return cache.get(rel); }, texts: (rels) => { load(rels); return rels.map((f) => cache.get(f)); }};
+}
+
 export const loadRelease = () => cfgRelease();
 // The tarball pinned for a condition: the release.json entry cells[c].release, of kind cells[c].source (release or
 // candidate), with a filled-in sha256 and no placeholder mark.

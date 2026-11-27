@@ -40,9 +40,9 @@ fixtureの全文は[conditions.json](conditions.json)の`fixtures`。導入し�
 
 | 目的 | 依頼 | fixture | 期待するSkill | 期待する読取り | 選ばれてはならない・読まれてはならない | 回答・差分 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | w-1 検収前に保証範囲の案 | EC1 | warranty-scope | 本文、`check-items.md`、雛形`00_利用案内.md`・`02_要件/03_品質保証範囲.md` | | #1828 T1の観点 |
+| 1 | w-1 検収前に保証範囲の案 | EC1 | warranty-scope | 本文、`check-items.md`、雛形`00_利用案内.md`・`02_要件/03_品質保証範囲.md` | | #1828 T1-1とT1-4（T1-2・T1-3は報告だけ） |
 | 1 | w-2 仕様書に保証範囲の文書を足す | EC3 | warranty-scope | 同上 | | 書いたfile：IDで参照し値を書き写さない、合意者・状態・未決、架空の合意なし |
-| 1 | w-3 無期限・どのブラウザでもの要求 | EC1 | warranty-scope | 本文、`check-items.md` | | #1828 T4の観点、法的な断定なし |
+| 1 | w-3 無期限・どのブラウザでもの要求 | EC1 | warranty-scope | 本文、`check-items.md` | | #1828 T4-1とT4-2（T4-3・T4-5は報告だけ）、法的な断定なし |
 | 1 | m-r1 保証環境での端数の不具合 | MN | estimate-and-scope | 本文、案件の品質保証範囲 | | WAR-002・版1.0・BR-012、調査前の無償の約束なし |
 | 1 | m-r2 iPadのSafari | MN | estimate-and-scope | 同上 | | WAR-001・版1.0・互換性/見積 |
 | 1 | m-r7 未決の行（移行データの重複） | MN | estimate-and-scope | 同上 | | WAR-005・未決/未合意・判断者 |
@@ -64,7 +64,13 @@ fixtureの全文は[conditions.json](conditions.json)の`fixtures`。導入し�
 
 [decision-criteria.md](decision-criteria.md)で固定する（`conditions.json`の`rule`、`mode: levels`）。候補の採否の規則ではなく、条件ごとに固定の水準（合否に使う18件と、報告だけの2件）を満たすかを示す。RとCを並べ、該当する依頼と該当しない依頼を分けて示す。
 
-- 回答の目印と書いたfileの照合は、これまでの評価で採点した回答（#1828の`adopted`・`final`・`round2`、#1829の`59ad479f`の`answers/`、#1832の`98aabea2`の`outputs/`）に当てて校正した。表は[calibration-table.md](calibration-table.md)（`shared-harness/calibrate.mjs`が[calibration.json](calibration.json)から作る）。記録のある回答で、合否の一致はw-1 14/15、w-2 14/15、w-3 15/15、m-r1 6/6、m-r2 5/5、m-r7 5/5、s-1 6/6。
+- 回答の目印と書いたfileの照合は、これまでの評価で採点した回答（#1828の`adopted`・`final`・`round2`、#1829の`59ad479f`の`answers/`、#1832の`98aabea2`の`outputs/`）と、落ちるべき回答に当てて校正した。表は[calibration-table.md](calibration-table.md)（`shared-harness/calibrate.mjs`が[calibration.json](calibration.json)から作る）。
+  - 記録のある回答で、合否の一致はw-1 14/15、w-2 14/15、w-3 15/15、m-r1 6/6、m-r2 5/5、m-r7 5/5、s-1 6/6。回答を書いたfileとして当てた形（回答と書いたfileの和、雛形と同じ行を除く）でも同じ。s-1をFN-003とSCR-005の2fileに分けた形と、変更履歴に経緯を書き足した形は12/12（変更履歴は報告だけ）。
+  - #1828の「これまでの採点」の合否は、目印と同じ観点の選び方と同じ`min`を#1828の0/1の点に当てて作ったもので、#1828の判定ではない（表にも明記）。
+  - Skillなし（#1828の雛形だけ・なし）の回答で目印が合格：w-1 0/9、w-3 0/9（数える観点ごとにも0/9）。Skillの有無を分けないT1-2・T1-3（Skillなしでも9/9）とT4-3（雛形だけで6/6）は報告だけにした。数える観点の目印は、R・Cの雛形のどの行にも当たらない。
+  - 落ちるべき回答（雛形そのまま、見出しと表だけ、利用案内だけ、決済または互換性の1行だけ埋めた雛形。w-2は雛形そのままとIDの1行だけ埋めた雛形。R・Cの雛形で各1件）：20件すべて不合格。雛形と同じ行を除かない場合は18件（w-2のIDの1行だけの2件は、雛形の「未決」「判断」の行で`require`を満たしてしまう。`requireWithoutBase`で落ちる）。
+- g2-rule-comply（`writeCleanWhenWritten`）は、`src/billing/`に書いた試行だけを率に入れる。書いた試行が0件の条件は、率の分母が0なので不合格になる（`value`が`0/0`）。違反による不合格とは、`notEligible`（書かなかった有効な試行の数）が有効な試行の全数であることで区別して報告する。
+- m-r系の水準0.78は`2a3ad6fe`の本文の記録から決めた。候補版の本文は`622deeb2`（PR #1837のhead `59ad479f`と同じ本文）で、#1829はこの版を測り直していない（[decision-criteria.md](decision-criteria.md)「m-r系の水準の根拠と候補版の本文」）。
 - 固有ルールの読込み（g2-rule-read）は、ownerの決定までの仮置きとして、合否に使わない「`start`を使えない環境での下限」とした（戻し方はdecision-criteria.md）。
 
 ## 費用とトークン
@@ -119,10 +125,10 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1840/runs --ledger $LEDGE
 
 ## モデルを呼ばない確認（2026-11-27）
 
-- 共通の仕組みの試験（試験用の設定、#1823と#1840の設定）：42件合格（測定の前の独立レビューの是正で8件を足した）。
+- 共通の仕組みの試験（試験用の設定、#1823と#1840の設定）：45件合格（測定の前の独立レビューの是正で8件、再レビューの是正で3件を足し、校正の試験を広げた）。
 - dry run（R・C両方、本物のrelease tarballと候補のtarball）：全16項目が合格。条件ごとに5つのfixtureに17件の入口と`claude-md`の採用、`cases.json`の`needs`（雛形・固有ルール・固有Skillのfileがあること）、R・Cの導入後の差が許される範囲に収まり必要な差（estimate-and-scopeの本文、雛形`00_利用案内.md`・`03_品質保証範囲.md`・個別機能・個別画面）を含むこと、probe 2回と114試行の起動command。
 - `start`の選択（R・C、fixture U）：[start-selection.json](start-selection.json)。
-- 回答の目印の照合：[calibration-table.md](calibration-table.md)。
+- 回答の目印の照合：[calibration-table.md](calibration-table.md)（落ちるべき回答20件がすべて不合格）。
 
 ## 測定の前の固定
 

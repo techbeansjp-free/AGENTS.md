@@ -7,6 +7,10 @@
  "referencePattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/references/<ref>$",
  "markerText": "answer+writes",
  "markerTextNote": "#1840 review M1: the markers are matched on the answer and the text of every file the trial wrote (score.mjs scoreRun).",
+ "markerBase": {
+  "pathPattern": "^\\.agent-skill-chain/(managed-runtime/[^/]+/)?templates/"
+ },
+ "markerBaseNote": "#1840 re-review High: before the markers are matched, the lines of a written file equal to a line (trimmed) of a file that existed before the trial are left out: the installed templates (.agent-skill-chain/templates/ and its managed-runtime copy, at the fixture's HEAD) and the earlier text of the written file itself (score.mjs baseLinesFor). A copied template, or one with a row filled in, adds only the lines the trial wrote. w-2 writes.requireWithoutBase applies the same to its require patterns.",
  "report": {
   "reads": [
    {
@@ -61,40 +65,43 @@
     }
    ],
    "viewpoints": [
-    "T1-1",
-    "T1-2",
-    "T1-3",
-    "T1-4",
+    "T1-1（数える）",
+    "T1-4（数える）",
+    "T1-2（報告だけ：Skillなしの回答でも9件中9件が1点）",
+    "T1-3（報告だけ：同じく9件中9件）",
     "減点：法的な断定"
    ],
    "answerAll": [],
    "answerAny": [],
    "needs": [],
    "answerQuota": {
-    "min": 3,
+    "min": 2,
     "groups": [
      {
       "id": "T1-1",
       "viewpoint": "T1-1",
-      "pattern": "(ブラウザ|OS|端末|機種)[^\\n]{0,4}[・、とや/](ブラウザ|OS|端末|機種|画面)"
-     },
-     {
-      "id": "T1-2",
-      "viewpoint": "T1-2",
-      "pattern": "閾値|(応答|表示|処理)時間|秒|数値目標|測定"
-     },
-     {
-      "id": "T1-3",
-      "viewpoint": "T1-3",
-      "pattern": "決済[^\\n]{0,60}(障害|仕様変更|停止)|(障害|仕様変更)[^\\n]{0,30}決済|責任分界[^\\n]{0,20}決済"
+      "pattern": "画面(サイズ|幅)|(ブラウザ|OS|端末)[^\\n]{0,6}の版"
      },
      {
       "id": "T1-4",
       "viewpoint": "T1-4",
-      "pattern": "基準時点|検収時(点)?の(版|環境|リリース)|基準(となる|の)(版|環境|日)"
+      "pattern": "検収時(点)?の(版|環境|リリース)|基準(となる|の)(版|環境|日)|検収時点で固定"
+     },
+     {
+      "id": "T1-2",
+      "viewpoint": "T1-2",
+      "pattern": "閾値|(応答|表示|処理)時間|秒|数値目標|測定",
+      "report": true
+     },
+     {
+      "id": "T1-3",
+      "viewpoint": "T1-3",
+      "pattern": "決済[^\\n]{0,60}(障害|仕様変更|停止)|(障害|仕様変更)[^\\n]{0,30}決済|責任分界[^\\n]{0,20}決済",
+      "report": true
      }
     ]
-   }
+   },
+   "answerQuotaNote": "#1840 re-review High (b): the counted markers hit no line of the R or C templates (calibration-table.md, template lines) and separate the Skill answers of #1828 from those without the Skill; T1-2 and T1-3 are reported only."
   },
   {
    "id": "w-2",
@@ -175,7 +182,8 @@
       "pattern": "\\|\\s*合意済み\\s*\\|",
       "group": "fabricated"
      }
-    ]
+    ],
+    "requireWithoutBase": true
    },
    "viewpoints": [
     "T3-1（IDで参照し値を書き写さない）",
@@ -232,9 +240,9 @@
     }
    ],
    "viewpoints": [
-    "T4-1（断定しない）",
-    "T4-2",
-    "T4-3",
+    "T4-1（数える。断定しない）",
+    "T4-2（数える）",
+    "T4-3（報告だけ：雛形だけの回答でも6件中6件が1点）",
     "T4-5（報告だけ：Skillありで6回中5回0点）",
     "減点：法的な断定"
    ],
@@ -247,7 +255,7 @@
      {
       "id": "T4-1",
       "viewpoint": "T4-1",
-      "pattern": "断定(せず|しない|しません)|法務(の|で|が)?(確認|判断)|法務・契約",
+      "pattern": "断定(せず|しない|しません)|法務(の|で|が)?(確認|判断)",
       "unless": "無期限[^\\n]{0,40}(受けられない|受けません|お受けできません)|どちらも受けません"
      },
      {
@@ -261,7 +269,8 @@
       "all": [
        "(ブラウザ|環境)[^\\n]{0,8}版",
        "互換性|見積"
-      ]
+      ],
+      "report": true
      },
      {
       "id": "T4-5",
@@ -270,7 +279,8 @@
       "report": true
      }
     ]
-   }
+   },
+   "answerQuotaNote": "#1840 re-review High (b): 「法務・契約」(a template phrase) is no longer a T4-1 marker; T4-3 (環境と版、互換性・見積) is a template phrase and is reported only."
   },
   {
    "id": "m-r1",

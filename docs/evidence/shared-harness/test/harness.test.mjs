@@ -642,6 +642,8 @@ const C40DIR = path.join(EVROOT, '1840-user-environment/config');
 const C40 = JSON.parse(read('conditions.json', C40DIR));
 const SPEC40 = JSON.parse(read('cases.json', C40DIR));
 const k40 = (id) => SPEC40.cases.find((c) => c.id === id);
+// #1840 re-review High: a fixture without template files (cases.json markerBase needs the files before the trial).
+const NOBASE = {priorFiles: () => [], priorTexts: (rels) => rels.map(() => null)};
 const {ascSkillsOf, levelsVerdict, writtenFiles, caseChecks} = await import('../score.mjs');
 const {ascEntriesOf} = await import('../probe-check.mjs');
 
@@ -677,15 +679,16 @@ test('#1840 fixtures: appFiles false writes only the fixture\'s own files; the u
 
 test('#1840 markers: answers following the earlier viewpoints pass; a missing viewpoint or a deduction fails', () => {
   const good = {
-    'w-1': '対応ブラウザは、Chrome・Edge・Safariの版（最新版と1つ前など）とOS・端末を具体化し、値は未決として顧客と合意する。「快適に動作」は応答時間を測定条件（同時利用者数・回線）付きで決める。決済代行APIの仕様変更・障害は保証の対象外とし、責任分界を明記する。保証の基準時点は検収時の版・環境とする。',
+    'w-1': '対応ブラウザ・OS・端末の版と画面サイズを具体化し、値は未決として顧客と合意する。「快適に動作」は応答時間を測定条件（同時利用者数・回線）付きで決める。決済代行APIの仕様変更・障害は保証の対象外とし、責任分界を明記する。保証は検収時のリリースと環境を基準にする。',
     'w-3': '無期限かどうかは契約・法務の判断で、ここでは断定しない。責任の期間と、保証する範囲・条件は分けて決める。保証する環境を列挙し、対象外の環境は互換性対応として別途見積とする。用語は契約不適合責任を使う。',
     'm-r1': '根拠は品質保証範囲のWAR-002（合意の版1.0）。まずBR-012の切捨てとAC-021に照らして差異があるかを確かめる。差異があった場合に無償で直すかは契約担当（ACT-03）が判断する。',
     'm-r2': 'WAR-001（版1.0）で保証する環境はREQ-NF-010で、iPadのSafariはCON-003で対象外。合意に基づき互換性対応として見積のうえ対応する。',
     'm-r7': 'WAR-005は未決（OPEN-007）で、扱いは未合意。判断者は契約担当（ACT-03とACT-04）で、移行元データの内容と件数の確認が必要。',
   };
   for (const [id, text] of Object.entries(good)) assert.equal(markersOk(k40(id), text), true, id);
-  assert.equal(markersOk(k40('w-1'), good['w-1'].replace('保証の基準時点は検収時の版・環境とする。', '')), true, '3 of the 4 viewpoints are enough (answerQuota.min 3)');
-  assert.equal(markersOk(k40('w-1'), good['w-1'].replace('保証の基準時点は検収時の版・環境とする。', '').replace('対応ブラウザは、Chrome・Edge・Safariの版（最新版と1つ前など）とOS・端末', '対応する版')), false, '2 of 4 fail');
+  assert.equal(markersOk(k40('w-1'), good['w-1'].replace('保証は検収時のリリースと環境を基準にする。', '')), false, 'T1-1 and T1-4 are both counted (answerQuota.min 2); T1-2 and T1-3 are report-only');
+  assert.equal(markersOk(k40('w-1'), '保証の基準時点、応答時間の閾値と測定、決済代行の障害、対応環境（ブラウザ・OS・端末・runtimeと版）を決める。'), false, 'the template\'s own words are no markers (re-review High b)');
+  assert.equal(markersOk(k40('w-3'), '法務・契約が判断する。対応環境・版を明記し、対象外は互換性対応として見積する。'), false, 'T4-1 without 法務・契約, T4-3 report-only');
   assert.equal(markersOk(k40('w-3'), `${good['w-3']}無期限は無効です。`), false, 'a legal assertion fails');
   assert.equal(markersOk(k40('m-r1'), `${good['m-r1']}無償で修正いたします。`), false, 'a promise before the check fails');
   assert.equal(markersOk(k40('m-r1'), good['m-r1'].replace('（合意の版1.0）', '')), false, 'the version is required');
@@ -696,21 +699,21 @@ test('#1840 scoring: the user\'s Skill by its call, the rule read and obeyed in 
   const work = {'src/billing/invoice.ts': 'export const discount = (a: bigint, p: bigint) => a * p / 100n;\n'};
   const fileText = (rel) => work[rel] ?? null;
   const RULE = '.agent-skill-chain/project/rules/money.md';
-  const bill = scoreRun(SPEC40, k40('u-bill-1'), trace({messages: [[['Read', {file_path: BODY}]], [['Read', {file_path: RULE}]], [['Edit', {file_path: 'src/billing/invoice.ts', old_string: 'x', new_string: 'y'}]], []]}), {level: W, condition: 'R', fileText, skills: C40.ascSkills});
+  const bill = scoreRun(SPEC40, k40('u-bill-1'), trace({messages: [[['Read', {file_path: BODY}]], [['Read', {file_path: RULE}]], [['Edit', {file_path: 'src/billing/invoice.ts', old_string: 'x', new_string: 'y'}]], []]}), {level: W, condition: 'R', fileText, ...NOBASE, skills: C40.ascSkills});
   assert.deepEqual([bill.bodyRead, bill.expectReadsAll, bill.writeOk, bill.applied], [true, true, true, true], JSON.stringify(bill));
   work['src/billing/invoice.ts'] = 'export const discount = (a: bigint, r: number) => BigInt(Math.floor(Number(a) * r * 0.9));\n';
-  const bad = scoreRun(SPEC40, k40('u-bill-1'), trace({messages: [[['Read', {file_path: BODY}]], [['Edit', {file_path: 'src/billing/invoice.ts'}]], []]}), {level: W, condition: 'R', fileText, skills: C40.ascSkills});
+  const bad = scoreRun(SPEC40, k40('u-bill-1'), trace({messages: [[['Read', {file_path: BODY}]], [['Edit', {file_path: 'src/billing/invoice.ts'}]], []]}), {level: W, condition: 'R', fileText, ...NOBASE, skills: C40.ascSkills});
   assert.deepEqual([bad.expectReadsAll, bad.writeOk, bad.applied], [false, false, false]);
   assert.deepEqual(bad.writeViolations, ['decimal-literal', 'float-function', 'number-conversion']);
-  const noWrite = scoreRun(SPEC40, k40('u-bill-1'), trace({messages: [[['Read', {file_path: BODY}]], [['Read', {file_path: RULE}]], []]}), {level: W, condition: 'R', fileText, skills: C40.ascSkills});
+  const noWrite = scoreRun(SPEC40, k40('u-bill-1'), trace({messages: [[['Read', {file_path: BODY}]], [['Read', {file_path: RULE}]], []]}), {level: W, condition: 'R', fileText, ...NOBASE, skills: C40.ascSkills});
   assert.equal(noWrite.writeOk, false, 'mustWrite');
-  const users = scoreRun(SPEC40, k40('u-users'), trace({messages: [[['Read', {file_path: BODY}]], [['Read', {file_path: RULE}]], []]}), {level: W, condition: 'R', fileText, skills: C40.ascSkills});
+  const users = scoreRun(SPEC40, k40('u-users'), trace({messages: [[['Read', {file_path: BODY}]], [['Read', {file_path: RULE}]], []]}), {level: W, condition: 'R', fileText, ...NOBASE, skills: C40.ascSkills});
   assert.deepEqual(users.forbiddenReads, ['money-rule']);
   work['docs/invoices/INV-202611-001.md'] = '請求番号 INV-202611-001\nみなと商事 御中\n合計 187,000円\n振込先 さくら銀行 本店営業部\n';
-  const inv = scoreRun(SPEC40, k40('u-skill-1'), trace({messages: [[['Skill', {skill: 'invoice-format'}]], [['Write', {file_path: 'docs/invoices/INV-202611-001.md', content: 'x'}]], []]}), {level: W, condition: 'C', fileText, skills: C40.ascSkills});
+  const inv = scoreRun(SPEC40, k40('u-skill-1'), trace({messages: [[['Skill', {skill: 'invoice-format'}]], [['Write', {file_path: 'docs/invoices/INV-202611-001.md', content: 'x'}]], []]}), {level: W, condition: 'C', fileText, ...NOBASE, skills: C40.ascSkills});
   assert.deepEqual([inv.entryHop, inv.bodyRead, inv.writeOk, inv.forbidSkillsOk, inv.applied], [true, true, true, true, true]);
   assert.equal(inv.ascFilesRead, 0, 'the user\'s Skill is not an ASC file');
-  const mix = scoreRun(SPEC40, k40('u-skill-1'), trace({messages: [[['Read', {file_path: '.claude/skills/quote-format/SKILL.md'}]], []]}), {level: W, condition: 'C', fileText, skills: C40.ascSkills});
+  const mix = scoreRun(SPEC40, k40('u-skill-1'), trace({messages: [[['Read', {file_path: '.claude/skills/quote-format/SKILL.md'}]], []]}), {level: W, condition: 'C', fileText, ...NOBASE, skills: C40.ascSkills});
   assert.deepEqual([mix.bodyRead, mix.forbiddenSkills], [false, ['quote-format']]);
   const est = scoreRun(SPEC40, k40('n-1'), trace({messages: [[['Read', {file_path: '.agent-skill-chain/skills/estimate-and-scope/SKILL.md'}]], [['Read', {file_path: '.agent-skill-chain/skills/warranty-scope/SKILL.md'}]], []], text: '前提と調査'}), {level: W, condition: 'C', skills: C40.ascSkills});
   assert.deepEqual([est.bodyRead, est.forbiddenSkills, est.applied], [true, ['warranty-scope'], false]);
@@ -739,7 +742,7 @@ test('#1840 rule: fixed levels per condition; meets-levels only when every level
 test('#1840 written files: the spec without history and with the 7 facts passes; history, the old status or a copied value fails', () => {
   const FN = 'docs/specs/details/04_機能/FN-003_会員登録.md';
   const good = '# FN-003 会員登録\n\n状態: 提案（確認者: 未確認、根拠: 打合せ 2026-11-20）\n\n- 登録手段：メールアドレスまたは電話番号（E.164形式）。名前は任意。\n- 確認コード：6桁の数字、有効期限15分。\n- 5回続けて間違えると30分ロックする。\n- 画面：登録手段をタブで切り替える。期限切れのとき「確認コードの有効期限が切れました。もう一度送信してください」と表示し、再送信ボタンを出す。\n';
-  const run = (text, id = 's-1', file = FN) => scoreRun(SPEC40, k40(id), trace({messages: [[['Write', {file_path: file, content: 'x'}]], []]}), {level: W, condition: 'C', fileText: (r) => (r === file ? text : null), skills: C40.ascSkills});
+  const run = (text, id = 's-1', file = FN) => scoreRun(SPEC40, k40(id), trace({messages: [[['Write', {file_path: file, content: 'x'}]], []]}), {level: W, condition: 'C', fileText: (r) => (r === file ? text : null), ...NOBASE, skills: C40.ascSkills});
   assert.deepEqual([run(good).writeOk, run(good).writeViolations], [true, []]);
   assert.deepEqual(run(good.replace('有効期限15分。', '有効期限15分（以前は10分）。')).writeViolations, ['history-old-value', 'history-before']);
   assert.deepEqual(run(good.replace('状態: 提案', '状態：承認済み')).writeViolations, ['status-approved']);
@@ -765,6 +768,27 @@ test('#1840 calibration (H2): the committed table is the one calibrate.mjs build
   assert.equal(read('calibration-table.md', C40DIR), markdown(out), 'calibration-table.md is regenerated, not edited by hand');
   for (const [id, c] of Object.entries(out.byCase)) assert.ok(c.agree / c.judged >= 0.9, `${id}: ${c.agree}/${c.judged}`);
   assert.equal(out.byCase['s-1'].agree, 6);
+  // re-review High (c), Medium-1: every answer that must fail fails (a copied template, headings and tables, the guide
+  // only, one row filled in; R's and C's templates), also on answer + written files; the counted markers of w-1 and w-3
+  // hit no template line and no answer without the Skill; the written form agrees with the answer form.
+  const mf = out.rows.filter((r) => r.form === 'mustFail');
+  assert.ok(mf.length >= 20 && mf.every((r) => r.markerPass === false), mf.filter((r) => r.markerPass).map((r) => `${r.case} ${r.condition}`).join(', '));
+  for (const id of ['w-1', 'w-3']) {
+    assert.deepEqual([...new Set(mf.filter((r) => r.case === id).map((r) => r.condition.replace(/（雛形[RC]）$/, '')))].length, 4, `${id}: four kinds of answers that must fail`);
+    for (const v of out.viewpointRates[id].filter((x) => x.counted)) {
+      assert.deepEqual(Object.values(v.templateLines), [0, 0], `${id} ${v.id} hits a template line`);
+      assert.equal(v.noSkillMarker.hit, 0, `${id} ${v.id} hits an answer without the Skill`);
+    }
+    assert.deepEqual([out.byCaseWritten[id].agree, out.byCaseWritten[id].skillMarkerPass], [out.byCase[id].agree, out.byCase[id].skillMarkerPass], `${id}: answer and written forms agree`);
+  }
+  assert.ok(mf.filter((r) => r.case === 'w-2' && r.passWithoutBase === true).length >= 1, 'w-2 requireWithoutBase: an ID-only template passes only with the template lines');
+  // re-review Low: s-1 cut into FN-003 and SCR-005 files (with and without a change log) agrees with the recorded results.
+  const s1 = out.rows.filter((r) => r.case === 's-1' && r.form === 'written');
+  assert.equal(s1.length, 12);
+  assert.ok(s1.every((r) => r.agree === true), 'split files agree with the recorded results');
+  for (let i = 0; i < s1.length; i += 2) assert.equal(s1[i].markerPass, s1[i + 1].markerPass, 'the change log is not scored');
+  assert.ok(s1.filter((r) => r.report?.violations.length).length === 6, 'the change log history is reported');
+  assert.match(markdown(out), /#1828の「これまでの採点」の合否は、#1828の判定ではない/);
   assert.ok(out.rows.filter((r) => r.case === 'w-3').every((r) => r.groups['T4-5'] === undefined || typeof r.groups['T4-5'] === 'boolean'));
   assert.equal(sectionOf('## T1\na\n## T2\nb\n', 'T2'), 'b\n');
   assert.equal(sectionOf('x', null), 'x');
@@ -774,7 +798,7 @@ test('#1840 markers (H2, L2): k of n groups, unless, report-only groups; the ver
   assert.equal(groupOk({all: ['a', 'b']}, 'ab'), true);
   assert.equal(groupOk({all: ['a', 'b']}, 'a'), false);
   assert.equal(groupOk({pattern: '法務', unless: 'どちらも受けません'}, '法務が確認します。どちらも受けません'), false);
-  const w3 = '期間とは別に範囲を決める。法務が確認する。対応ブラウザと版を明記し、それ以外は互換性対応として見積する。';
+  const w3 = '期間とは別に範囲を決める。法務が確認する。対応ブラウザと版を明記し、それ以外は互換性対応として見積する。'; // T4-2, T4-1
   assert.equal(markersOk(k40('w-3'), w3), true, 'T4-5 (契約不適合) is report-only');
   assert.equal(markerGroupsOf(k40('w-3'), w3)['T4-5'], false);
   const r2 = 'WAR-001の対象外。互換性対応として見積のうえ対応します。';
@@ -789,22 +813,22 @@ test('#1840 written files (H1, H3, L3, M1): body only for s-1, groups of failure
   const files = {[FN]: body, [LOG]: '2026-11-20：有効期限を10分から15分に延ばした（問い合わせが多かったため）。\n'};
   const fileText = (r) => files[r] ?? null;
   const tr = (paths, text = 'ok') => trace({messages: [paths.map((f) => ['Write', {file_path: f, content: 'x'}]), []], text});
-  const s1 = scoreRun(SPEC40, k40('s-1'), tr([FN, LOG]), {level: W, condition: 'C', fileText, skills: C40.ascSkills});
+  const s1 = scoreRun(SPEC40, k40('s-1'), tr([FN, LOG]), {level: W, condition: 'C', fileText, ...NOBASE, skills: C40.ascSkills});
   assert.deepEqual([s1.writeOk, s1.written], [true, [FN]], 'the change log is not scored');
   assert.deepEqual(s1.writesReport.violations.sort(), ['history-change', 'history-old-value', 'history-reason']);
   files[FN] = body.replace('状態: 提案', '状態：承認済み').replace('E.164形式', '国際形式') + '以前は10分だった。\n';
-  const bad = scoreRun(SPEC40, k40('s-1'), tr([FN]), {level: W, condition: 'C', fileText, skills: C40.ascSkills});
+  const bad = scoreRun(SPEC40, k40('s-1'), tr([FN]), {level: W, condition: 'C', fileText, ...NOBASE, skills: C40.ascSkills});
   assert.deepEqual(bad.writeFailedGroups.sort(), ['facts', 'history', 'status']);
   const wt = '.worktrees/20261127_000000-1-x/src/billing/invoice.ts';
   files[wt] = 'export const d = (a: bigint, p: bigint) => a * p / 100n;\n';
-  assert.deepEqual(scoreRun(SPEC40, k40('u-bill-1'), tr([wt]), {level: W, condition: 'R', fileText, skills: C40.ascSkills}).written, [wt], 'the .worktrees/<name>/ prefix is accepted');
-  const none = scoreRun(SPEC40, k40('u-skill-1'), tr([], '請求番号 INV-202611-001、みなと商事 御中、合計 187,000円'), {level: W, condition: 'R', fileText, skills: C40.ascSkills});
+  assert.deepEqual(scoreRun(SPEC40, k40('u-bill-1'), tr([wt]), {level: W, condition: 'R', fileText, ...NOBASE, skills: C40.ascSkills}).written, [wt], 'the .worktrees/<name>/ prefix is accepted');
+  const none = scoreRun(SPEC40, k40('u-skill-1'), tr([], '請求番号 INV-202611-001、みなと商事 御中、合計 187,000円'), {level: W, condition: 'R', fileText, ...NOBASE, skills: C40.ascSkills});
   assert.deepEqual([none.writeOk, none.writeRequireInAnswer], [false, ['number', 'onchu', 'total']], 'no file written: the answer text is reported');
   files['docs/invoices/INV-202611-001.md'] = 'x';
   files['out/INV-202611-001.md'] = 'INV-202611-001 御中 さくら銀行 187,000円';
-  assert.deepEqual(scoreRun(SPEC40, k40('u-skill-1'), tr(['out/INV-202611-001.md']), {level: W, condition: 'R', fileText, skills: C40.ascSkills}).written, [], 'only docs/invoices/ counts (L3)');
+  assert.deepEqual(scoreRun(SPEC40, k40('u-skill-1'), tr(['out/INV-202611-001.md']), {level: W, condition: 'R', fileText, ...NOBASE, skills: C40.ascSkills}).written, [], 'only docs/invoices/ counts (L3)');
   files['docs/quality.md'] = 'WAR-001（合意版1.0）。互換性対応として見積。';
-  assert.equal(scoreRun(SPEC40, k40('m-r2'), tr(['docs/quality.md'], '回答はファイルに書きました'), {level: W, condition: 'C', fileText, skills: C40.ascSkills}).markers, true, 'markers on answer + written files');
+  assert.equal(scoreRun(SPEC40, k40('m-r2'), tr(['docs/quality.md'], '回答はファイルに書きました'), {level: W, condition: 'C', fileText, ...NOBASE, skills: C40.ascSkills}).markers, true, 'markers on answer + written files');
   assert.equal(scoreRun(SPEC23, k23(SPEC23.cases[0].id), tr(['docs/quality.md'], 'ok'), {level: W, condition: 'B', fileText}).markers, markersOk(SPEC23.cases[0], 'ok'), 'a config without markerText keeps the answer only');
   assert.deepEqual(writeChecks({require: [{id: 'a', pattern: 'a'}]}, ['f'], () => 'b'), {written: ['f'], writeMissingText: false, writeRequireMissing: ['a'], writeViolations: []}, 'no group field without groups');
 });
@@ -891,4 +915,62 @@ test('#1840 dry-run references (L1): without ascSkills only the asc cases, as be
   const cases = [{id: 'a', expect: 'asc', references: ['x.md']}, {id: 'b', expect: 'estimate-and-scope', references: ['y.md']}];
   assert.deepEqual(fixtureReferences(cases, 'B', CONDS), ['x.md']);
   assert.deepEqual(fixtureReferences(cases, 'R', C40), ['x.md', '../../estimate-and-scope/references/y.md']);
+});
+
+// #1840 re-review High (a): the lines of the files before the trial are left out of the written files' text.
+const {baseLinesOf, withoutBaseLines, markerTextOf, baseLinesFor} = await import('../score.mjs');
+const {headReader} = await import('../make-fixture.mjs');
+
+test('#1840 re-review High (a): a copied template line adds no marker; a new line does; require can ignore template lines', () => {
+  const TPL = '.agent-skill-chain/templates/specs/details/02_要件/03_品質保証範囲.md', OUT = 'docs/specs/details/02_要件/03_品質保証範囲.md';
+  const tpl = '# 品質保証範囲\n\n## 保証の基準時点\n\n| 項目 | 合意内容 |\n|---|---|\n| {外部API・外部サービスの仕様変更・障害} | {範囲} |\n';
+  const spec = {markerText: 'answer+writes', markerBase: {pathPattern: '^\\.agent-skill-chain/templates/'}};
+  const k = {id: 'x', answerQuota: {min: 2, groups: [{id: 'a', pattern: '基準時点'}, {id: 'b', pattern: '決済'}]}};
+  const prior = {[TPL]: tpl};
+  const opts = (files) => ({level: W, condition: 'C', fileText: (r) => files[r] ?? null, priorFiles: () => Object.keys(prior), priorTexts: (rels) => rels.map((r) => prior[r] ?? null)});
+  const tr = trace({messages: [[['Write', {file_path: OUT, content: 'x'}]], []], text: '書きました'});
+  const copy = scoreRun({...spec, cases: [k]}, k, tr, opts({[OUT]: tpl}));
+  assert.deepEqual([copy.markers, copy.markerGroups, copy.markerBaseExcludedLines], [false, {a: false, b: false}, 5], 'the copied template scores nothing');
+  const one = tpl.replace('| {外部API・外部サービスの仕様変更・障害} | {範囲} |', '| 決済代行APIの障害 | 提供側 |');
+  assert.deepEqual(scoreRun({...spec, cases: [k]}, k, tr, opts({[OUT]: one})).markerGroups, {a: false, b: true}, 'only the filled-in line counts');
+  assert.equal(scoreRun({...spec, cases: [k]}, k, tr, opts({[OUT]: `${one}基準時点は検収時点とする。\n`})).markers, true);
+  assert.equal(scoreRun({markerText: 'answer+writes', cases: [k]}, k, tr, {level: W, condition: 'C', fileText: () => one}).markers, true, 'without markerBase nothing is left out (as before)');
+  assert.throws(() => scoreRun({...spec, cases: [k]}, k, tr, {level: W, condition: 'C', fileText: () => tpl}), /markerBase needs/);
+  // the earlier text of the written file itself is part of the base
+  prior[OUT] = '保証の基準時点は未定。\n';
+  assert.deepEqual(baseLinesFor(spec, [OUT], {priorFiles: () => Object.keys(prior), priorTexts: (rels) => rels.map((r) => prior[r] ?? null)}).has('保証の基準時点は未定。'), true);
+  assert.equal(withoutBaseLines('  a  \nb\n', baseLinesOf(['a'])), 'b\n');
+  assert.deepEqual(markerTextOf({markerText: 'answer+writes'}, 'A', [{rel: 'f', text: 'a\nb'}], baseLinesOf(['a'])), {text: 'A\nb', excludedLines: 1});
+  assert.deepEqual(markerTextOf({}, 'A', [{rel: 'f', text: 'a'}], null), {text: 'A', excludedLines: 0}, 'no markerText: the answer only');
+  const w = {require: [{id: 'open', pattern: '未決'}], forbid: [{id: 'copy', pattern: '3秒'}], requireWithoutBase: true};
+  const base = baseLinesOf(['| 状態 | 未決（OPEN-...） |', '| 性能 | 3秒 |']);
+  assert.deepEqual(writeChecks(w, ['f'], () => '| 状態 | 未決（OPEN-...） |\n| 性能 | 3秒 |', {base}), {written: ['f'], writeMissingText: false, writeRequireMissing: ['open'], writeViolations: ['copy']}, 'require without the template lines, forbid on the whole text');
+  assert.deepEqual(writeChecks({...w, requireWithoutBase: false}, ['f'], () => '| 状態 | 未決（OPEN-...） |', {base}).writeRequireMissing, []);
+  assert.deepEqual([SPEC40.markerBase.pathPattern, k40('w-2').writes.requireWithoutBase, SPEC40.cases.filter((c) => c.writes?.requireWithoutBase).map((c) => c.id)], ['^\\.agent-skill-chain/(managed-runtime/[^/]+/)?templates/', true, ['w-2']]);
+  for (const p of ['.agent-skill-chain/templates/specs/00_利用案内.md', '.agent-skill-chain/managed-runtime/v05/templates/specs/00_利用案内.md']) assert.match(p, new RegExp(SPEC40.markerBase.pathPattern));
+});
+
+test('#1840 re-review High (a): collect reads the fixture before the trial from work/ at its HEAD', (t) => {
+  const work = path.join(fs.realpathSync(tmp(t)), 'work');
+  fs.mkdirSync(path.join(work, '.agent-skill-chain/templates/specs'), {recursive: true});
+  fs.writeFileSync(path.join(work, '.agent-skill-chain/templates/specs/00_利用案内.md'), '雛形の行\n');
+  fs.writeFileSync(path.join(work, 'a.md'), 'before\n');
+  spawnSync('git', ['init', '-q'], {cwd: work});
+  spawnSync('git', ['add', '-A'], {cwd: work});
+  spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', 'commit', '-q', '-m', 'i'], {cwd: work});
+  fs.writeFileSync(path.join(work, 'a.md'), 'after\n');
+  fs.writeFileSync(path.join(work, 'new.md'), 'new\n');
+  const h = headReader(work);
+  assert.deepEqual(h.files().sort(), ['.agent-skill-chain/templates/specs/00_利用案内.md', 'a.md']);
+  assert.deepEqual(h.texts(['a.md', 'new.md', '.agent-skill-chain/templates/specs/00_利用案内.md']), ['before\n', null, '雛形の行\n'], 'the HEAD text, null for a file the trial created');
+  assert.match(fs.readFileSync(path.join(H, 'collect.mjs'), 'utf8'), /priorFiles: head\.files, priorTexts: head\.texts/);
+});
+
+test('#1840 re-review Medium-2: the candidate estimate-and-scope body is 622deeb2, not the measured 2a3ad6fe', () => {
+  const body = (c) => execFileSync('git', ['show', `${c}:skills/estimate-and-scope/SKILL.md`], {cwd: REPO, encoding: 'utf8'});
+  assert.equal(body('59ad479f'), body('622deeb2'), 'the PR head body is the last body change 622deeb2');
+  assert.notEqual(body('59ad479f'), body('2a3ad6fe'), 'the level was derived from 2a3ad6fe');
+  const diff = execFileSync('git', ['diff', '--numstat', '2a3ad6fe', '622deeb2', '--', 'skills/estimate-and-scope/'], {cwd: REPO, encoding: 'utf8'}).trim();
+  assert.equal(diff, '1\t1\tskills/estimate-and-scope/SKILL.md', 'one paragraph rewritten');
+  assert.match(read('decision-criteria.md', C40DIR), /622deeb2[\s\S]*測り直していない/);
 });

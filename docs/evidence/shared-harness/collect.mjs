@@ -18,7 +18,7 @@ import {loadConditions} from './apply-condition.mjs';
 import {ledgerConsistency, settlements, settledFilesProblem, fileSha256, ledgerProblems, reservedNames} from './ledger.mjs';
 import {scoreTrials} from './score.mjs';
 import {loadSpec} from './config.mjs';
-import {workChanges} from './make-fixture.mjs';
+import {workChanges, headReader} from './make-fixture.mjs';
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 export const PUBLISHED = ['trials.json', 'runs.json', 'ledger.jsonl'];
@@ -63,7 +63,9 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
     maxTurns: meta.maxTurns ?? null, initTools: meta.initTools ?? null, initPermissionMode: meta.initPermissionMode ?? null, settingsSha256: meta.settingsSha256 ?? null, resultSubtype: meta.resultSubtype ?? null, numTurns: meta.numTurns ?? null,
     ledgerId: meta.ledgerId ?? null, ledgerSeq: meta.ledgerSeq ?? null, fixationSha256: meta.fixationSha256, fixedAtCommit: meta.fixedAtCommit, fixationStage: meta.fixationStage,
     exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: scrubSensitive(redact(text, dir)).hits, ...raw};
-  return {row, entry: {name, text, failure: null, sizeOf, fileText}, dir};
+  // #1840 re-review High: the fixture's files before the trial (work/ at its HEAD), for the lines the markers leave out.
+  const head = headReader(work);
+  return {row, entry: {name, text, failure: null, sizeOf, fileText, priorFiles: head.files, priorTexts: head.texts}, dir};
 }
 
 // #1840 review M2: a trial whose meta.json records workFiles (run-trial.mjs, the changed and created files with their

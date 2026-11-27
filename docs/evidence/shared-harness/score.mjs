@@ -83,11 +83,35 @@ export function markersOk(k, text) {
     markerDeductionsOf(k, text).length === 0;
 }
 
+// #1840 re-review High: the lines of the files that existed before the trial, trimmed (empty lines left out). The base of
+// a trial (baseLinesFor; priorFiles() lists the fixture's HEAD, priorTexts(rels) reads it, null for a new file) is every file at the fixture's HEAD whose path matches cases.json markerBase.pathPattern (the
+// installed templates) and the earlier text of every file the trial wrote. A written file's lines equal to a base line
+// (compared line by line after trimming) are left out before the markers are matched, so a copied template scores nothing.
+export const baseLinesOf = (texts) => new Set(texts.filter((x) => typeof x === 'string').flatMap((t) => t.split('\n').map((l) => l.trim()).filter(Boolean)));
+export const withoutBaseLines = (text, base) => (base && base.size ? text.split('\n').filter((l) => !base.has(l.trim())).join('\n') : text);
+export function baseLinesFor(spec, written, {priorTexts = null, priorFiles = null} = {}) {
+  if (!spec.markerBase) return null;
+  if (!priorTexts || !priorFiles) throw new Error('cases.json markerBase needs the files of the fixture before the trial (priorTexts, priorFiles)');
+  const re = new RegExp(spec.markerBase.pathPattern);
+  return baseLinesOf(priorTexts([...new Set([...priorFiles().filter((f) => re.test(f)), ...written])]));
+}
+// The text the answer markers are matched on: the answer, and with markerText "answer+writes" the written files' texts
+// ({rel, text}) without the base lines. Returns {text, excludedLines}.
+export function markerTextOf(spec, answer, written, base = null) {
+  if (spec.markerText !== 'answer+writes') return {text: answer, excludedLines: 0};
+  const texts = written.map((w) => w.text).filter((x) => typeof x === 'string');
+  const kept = texts.map((x) => withoutBaseLines(x, base));
+  const lines = (x) => x.split('\n').filter((l) => l.trim()).length;
+  return {text: [answer, ...kept].join('\n'), excludedLines: texts.reduce((a, x, i) => a + lines(x) - lines(kept[i]), 0)};
+}
+
 // #1840: the checks of a writes definition on the texts of the files under its pathPattern. Each require/forbid entry
 // {id, pattern, group?, viewpoint?}: the groups name what failed (e.g. facts, history, status) for the separate report.
-export function writeChecks(w, files, fileText) {
+// #1840 re-review High: with requireWithoutBase (and a base), the require patterns are matched on the texts without the
+// base lines (a copied template line does not satisfy them); the forbid patterns always see the whole text.
+export function writeChecks(w, files, fileText, {base = null} = {}) {
   const texts = files.map((f) => (fileText ? fileText(f) : null));
-  const all = texts.filter((x) => typeof x === 'string').join('\n');
+  const all = texts.filter((x) => typeof x === 'string').map((x) => (w.requireWithoutBase ? withoutBaseLines(x, base) : x)).join('\n');
   const out = {written: files, writeMissingText: texts.some((x) => typeof x !== 'string'),
     writeRequireMissing: (w.require ?? []).filter((e) => !new RegExp(e.pattern, 'i').test(all)).map((e) => e.id),
     writeViolations: (w.forbid ?? []).filter((e) => texts.some((x) => typeof x === 'string' && new RegExp(e.pattern, 'i').test(x))).map((e) => e.id)};
@@ -118,7 +142,7 @@ export function writtenFiles(t) {
 // - writes {pathPattern, mustWrite, require: [re], forbid: [{id, pattern}]}: the files written under pathPattern, read
 //   from the trial's work/ copy at the end (fileText), hold every require pattern (over all of them) and no forbid pattern
 //   (the diff must not break a rule); mustWrite needs at least one such file.
-export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS} = {}) {
+export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS, base = null} = {}) {
   const out = {};
   const hit = (p) => rel.some((r) => new RegExp(p).test(r));
   if (k.expectReads) { out.expectReads = Object.fromEntries(k.expectReads.map((e) => [e.id, hit(e.pattern)])); out.expectReadsAll = Object.values(out.expectReads).every(Boolean); }
@@ -130,7 +154,7 @@ export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS} = {
   if (k.writes) {
     const w = k.writes;
     const files = writtenFiles(t).filter((f) => new RegExp(w.pathPattern).test(f));
-    Object.assign(out, writeChecks(w, files, fileText));
+    Object.assign(out, writeChecks(w, files, fileText, {base}));
     out.writeOk = (!w.mustWrite || files.length > 0) && !out.writeMissingText && out.writeRequireMissing.length === 0 && out.writeViolations.length === 0;
     // #1840 review L3: a trial that wrote no file under pathPattern; its answer text against the require patterns (reported).
     if (!files.length && (w.require ?? []).length) out.writeRequireInAnswer = w.require.filter((e) => new RegExp(e.pattern, 'i').test(t.text)).map((e) => e.id);
@@ -198,7 +222,7 @@ export const inputTokensOf = (u) => (u ? (u.input ?? 0) + (u.cacheRead ?? 0) + (
 // .claude/skills/ is not an ASC file).
 const ascFile = (r, skills) => /^\.agent-skill-chain\//.test(r) || skills.some((s) => r.startsWith(`.claude/skills/${s}/`));
 
-export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = null, fileText = null, skills = ASC_SKILLS} = {}) {
+export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = null, fileText = null, priorTexts = null, priorFiles = null, skills = ASC_SKILLS} = {}) {
   const pat = (key, s, r = '') => new RegExp(spec[key].replace('<skill>', esc(s)).replace('<ref>', esc(r)));
   const reads = countedReads(k, t);
   const rel = reads.map((r) => r.path);
@@ -225,14 +249,18 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
   if (isDesign(k) && !t.messages.length) return {...row, failure: 'no assistant message'};
   row.markersApplicable = !isDesign(k);
   // #1840 review M1: with cases.json markerText "answer+writes" the markers are matched on the answer and the text of every
-  // file the trial wrote (read from its work/ copy at the end).
-  const markerText = spec.markerText === 'answer+writes' && fileText ? [t.text, ...writtenFiles(t).map((f) => fileText(f)).filter((x) => typeof x === 'string')].join('\n') : t.text;
+  // file the trial wrote (read from its work/ copy at the end). Re-review High: without the lines of the files that
+  // existed before the trial (markerBase; markerBaseExcludedLines counts the written lines left out).
+  const base = fileText ? baseLinesFor(spec, writtenFiles(t), {priorTexts, priorFiles}) : null;
+  const mt = markerTextOf(spec, t.text, fileText ? writtenFiles(t).map((f) => ({rel: f, text: fileText(f)})) : [], base);
+  const markerText = mt.text;
+  if (base) row.markerBaseExcludedLines = mt.excludedLines;
   row.markers = isDesign(k) ? true : markersOk(k, markerText);
   if (k.answerQuota) row.markerGroups = markerGroupsOf(k, markerText);
   if ((k.answerNone ?? []).length) row.markerDeductions = markerDeductionsOf(k, markerText);
   row.resultMissing = reads.some((r) => r.resultMissing);
   const touched = ascCalls.length > 0 || ascEntries.length > 0 || ascBodies.length > 0;
-  const extra = caseChecks(k, rel, t, {fileText, skills});
+  const extra = caseChecks(k, rel, t, {fileText, skills, base});
   Object.assign(row, extra);
   if (spec.report) row.report = reportOf(spec.report, rel, t);
   // #1840 review M3: whether the session's Skill list (init) holds the user's own Skills the case names.
@@ -305,7 +333,7 @@ export function scoreTrials(spec, entries, conds = loadConditions()) {
     if (e.failure || e.text === null || e.text === undefined) { runs.push({...base, failure: e.failure ?? 'missing trace'}); continue; }
     let t;
     try { t = parseTrace(e.text); } catch (err) { runs.push({...base, failure: `unreadable trace: ${err.message}`}); continue; }
-    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, skills: ascSkillsOf(conds)})});
+    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, priorTexts: e.priorTexts ?? null, priorFiles: e.priorFiles ?? null, skills: ascSkillsOf(conds)})});
   }
   return selectCounted(runs, conds.runs);
 }

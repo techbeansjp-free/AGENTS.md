@@ -1,6 +1,18 @@
 {
  "schema": "asc-eval-calibration/v1",
- "note": "#1840 review H2: answers that earlier evaluations scored (separate-Context graders), against the markers and written-file checks of cases.json (shared-harness/calibrate.mjs). #1828 (T1, T3, T4): the 0/1 viewpoint scores of scores.json; the earlier pass of a case is derived from the viewpoints the markers name (answerQuota.min of them for w-1/w-3, every one for w-2). #1829 (R1, R2, R7): the per-request results recorded in 00_評価.md of 59ad479f (null where not recorded; ff065b28 only had the first viewpoints). #1832: the result table of 00_比較.md of 98aabea2 (the outputs hold FN-003 and SCR-005 in one file, checked as the written text). The #1828 penalties are counted per answer, not per task, so they are not used for the earlier pass.",
+ "note": "#1840 review H2: answers that earlier evaluations scored (separate-Context graders), against the markers and written-file checks of cases.json (shared-harness/calibrate.mjs). #1828 (T1, T3, T4): the 0/1 viewpoint scores of scores.json; the earlier pass of a case is derived from the viewpoints the markers name (answerQuota.min of them for w-1/w-3, every one for w-2). #1829 (R1, R2, R7): the per-request results recorded in 00_評価.md of 59ad479f (null where not recorded; ff065b28 only had the first viewpoints). #1832: the result table of 00_比較.md of 98aabea2 (the outputs hold FN-003 and SCR-005 in one file, checked as the written text). The #1828 penalties are counted per answer, not per task, so they are not used for the earlier pass. #1840 re-review: the earlier pass of #1828 is derived (the markers' viewpoints and min applied to the 0/1 scores), not the #1828 judgement. bases are the templates R and C install; form \"written\" puts the answer in a written file (answer + written files, the template lines left out); mustFail answers (a copied template, its headings and tables, the guide only, one row filled in) must fail; s-1 is also cut into FN-003 and SCR-005 files, with and without a change log, to check the body-only pathPattern.",
+ "bases": {
+  "R": {
+   "commit": "c9288126",
+   "dir": "v05/templates/specs",
+   "as": ".agent-skill-chain/templates/specs"
+  },
+  "C": {
+   "commit": "98aabea2",
+   "dir": "v05/templates/specs",
+   "as": ".agent-skill-chain/templates/specs"
+  }
+ },
  "sources": [
   {
    "case": "w-1",
@@ -343,6 +355,647 @@
    "condition": "version f080c937",
    "earlierPass": true,
    "note": "変更後2-2：同上"
+  },
+  {
+   "case": "w-1",
+   "section": "T1",
+   "scored": [
+    {
+     "dir": "docs/evidence/1828-warranty-scope/adopted"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/final"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/round2"
+    }
+   ],
+   "form": "written",
+   "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。"
+  },
+  {
+   "case": "w-2",
+   "section": "T3",
+   "scored": [
+    {
+     "dir": "docs/evidence/1828-warranty-scope/adopted"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/final"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/round2"
+    }
+   ],
+   "form": "written",
+   "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。"
+  },
+  {
+   "case": "w-3",
+   "section": "T4",
+   "scored": [
+    {
+     "dir": "docs/evidence/1828-warranty-scope/adopted"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/final"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/round2"
+    }
+   ],
+   "form": "written",
+   "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。"
+  },
+  {
+   "case": "w-1",
+   "condition": "雛形そのまま（雛形R）",
+   "mustFail": true,
+   "note": "品質保証範囲の雛形を写しただけ",
+   "base": "R",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md"
+    }
+   ]
+  },
+  {
+   "case": "w-1",
+   "condition": "雛形そのまま（雛形C）",
+   "mustFail": true,
+   "note": "品質保証範囲の雛形を写しただけ",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md"
+    }
+   ]
+  },
+  {
+   "case": "w-1",
+   "condition": "見出しと表だけ（雛形R）",
+   "mustFail": true,
+   "note": "雛形の見出しと表の行だけ",
+   "base": "R",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md",
+     "keep": "headingsAndTables"
+    }
+   ]
+  },
+  {
+   "case": "w-1",
+   "condition": "見出しと表だけ（雛形C）",
+   "mustFail": true,
+   "note": "雛形の見出しと表の行だけ",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md",
+     "keep": "headingsAndTables"
+    }
+   ]
+  },
+  {
+   "case": "w-1",
+   "condition": "利用案内だけ（雛形R）",
+   "mustFail": true,
+   "note": "雛形の利用案内を写しただけ",
+   "base": "R",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/00_利用案内.md",
+     "fromBase": "00_利用案内.md"
+    }
+   ]
+  },
+  {
+   "case": "w-1",
+   "condition": "利用案内だけ（雛形C）",
+   "mustFail": true,
+   "note": "雛形の利用案内を写しただけ",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/00_利用案内.md",
+     "fromBase": "00_利用案内.md"
+    }
+   ]
+  },
+  {
+   "case": "w-3",
+   "condition": "雛形そのまま（雛形R）",
+   "mustFail": true,
+   "note": "品質保証範囲の雛形を写しただけ",
+   "base": "R",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md"
+    }
+   ]
+  },
+  {
+   "case": "w-3",
+   "condition": "雛形そのまま（雛形C）",
+   "mustFail": true,
+   "note": "品質保証範囲の雛形を写しただけ",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md"
+    }
+   ]
+  },
+  {
+   "case": "w-3",
+   "condition": "見出しと表だけ（雛形R）",
+   "mustFail": true,
+   "note": "雛形の見出しと表の行だけ",
+   "base": "R",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md",
+     "keep": "headingsAndTables"
+    }
+   ]
+  },
+  {
+   "case": "w-3",
+   "condition": "見出しと表だけ（雛形C）",
+   "mustFail": true,
+   "note": "雛形の見出しと表の行だけ",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md",
+     "keep": "headingsAndTables"
+    }
+   ]
+  },
+  {
+   "case": "w-3",
+   "condition": "利用案内だけ（雛形R）",
+   "mustFail": true,
+   "note": "雛形の利用案内を写しただけ",
+   "base": "R",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/00_利用案内.md",
+     "fromBase": "00_利用案内.md"
+    }
+   ]
+  },
+  {
+   "case": "w-3",
+   "condition": "利用案内だけ（雛形C）",
+   "mustFail": true,
+   "note": "雛形の利用案内を写しただけ",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/00_利用案内.md",
+     "fromBase": "00_利用案内.md"
+    }
+   ]
+  },
+  {
+   "case": "w-1",
+   "condition": "決済の1行だけ埋めた雛形（雛形R）",
+   "mustFail": true,
+   "note": "責任分界の外部APIの行だけを決済代行で埋めた雛形",
+   "base": "R",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md",
+     "replace": [
+      {
+       "from": "| {外部API・外部サービスの仕様変更・障害} | {範囲} | {範囲} | {範囲} | {版} |",
+       "to": "| 決済代行APIの仕様変更・障害 | 連携部分の修正 | 決済代行との契約・設定 | 決済代行会社の復旧 | 1.0 |"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "case": "w-1",
+   "condition": "決済の1行だけ埋めた雛形（雛形C）",
+   "mustFail": true,
+   "note": "責任分界の外部APIの行だけを決済代行で埋めた雛形",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md",
+     "replace": [
+      {
+       "from": "| {外部API・外部サービスの仕様変更・障害} | {範囲} | {範囲} | {範囲} | {版} |",
+       "to": "| 決済代行APIの仕様変更・障害 | 連携部分の修正 | 決済代行との契約・設定 | 決済代行会社の復旧 | 1.0 |"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "case": "w-3",
+   "condition": "互換性の1行だけ埋めた雛形（雛形R）",
+   "mustFail": true,
+   "note": "条件が変わったときの分類の互換性対応の行だけを埋めた雛形",
+   "base": "R",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md",
+     "replace": [
+      {
+       "from": "| {互換性対応} | {保証の対象外のブラウザ・OSのアップデート後に動かない} | {扱い} |",
+       "to": "| 互換性対応 | 保証の対象外のブラウザ・OSのアップデート後に動かない | 見積のうえ有償で対応する |"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "case": "w-3",
+   "condition": "互換性の1行だけ埋めた雛形（雛形C）",
+   "mustFail": true,
+   "note": "条件が変わったときの分類の互換性対応の行だけを埋めた雛形",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md",
+     "replace": [
+      {
+       "from": "| {互換性対応} | {保証の対象外のブラウザ・OSのアップデート後に動かない} | {扱い} |",
+       "to": "| 互換性対応 | 保証の対象外のブラウザ・OSのアップデート後に動かない | 見積のうえ有償で対応する |"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "case": "w-2",
+   "condition": "雛形そのまま（雛形R）",
+   "mustFail": true,
+   "note": "品質保証範囲の雛形を写しただけ",
+   "base": "R",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md"
+    }
+   ]
+  },
+  {
+   "case": "w-2",
+   "condition": "雛形そのまま（雛形C）",
+   "mustFail": true,
+   "note": "品質保証範囲の雛形を写しただけ",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md"
+    }
+   ]
+  },
+  {
+   "case": "w-2",
+   "condition": "IDの1行だけ埋めた雛形（雛形R）",
+   "mustFail": true,
+   "note": "WAR-001の行の正本の参照だけをREQ-PERF-001・CON-003で埋めた雛形（未決・判断者は雛形の行だけ）",
+   "base": "R",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md",
+     "replace": [
+      {
+       "from": "{REQ / AC / THR / BR / FN等のID、またはファイル・節・行}",
+       "to": "REQ-PERF-001、CON-003"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "case": "w-2",
+   "condition": "IDの1行だけ埋めた雛形（雛形C）",
+   "mustFail": true,
+   "note": "WAR-001の行の正本の参照だけをREQ-PERF-001・CON-003で埋めた雛形（未決・判断者は雛形の行だけ）",
+   "base": "C",
+   "answerText": "品質保証範囲の案を docs/specs/details/02_要件/03_品質保証範囲.md に書きました。",
+   "written": [
+    {
+     "as": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "fromBase": "details/02_要件/03_品質保証範囲.md",
+     "replace": [
+      {
+       "from": "{REQ / AC / THR / BR / FN等のID、またはファイル・節・行}",
+       "to": "REQ-PERF-001、CON-003"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "none (6b987fd1)",
+   "earlierPass": false,
+   "note": "before.mdをFN-003とSCR-005の2fileに分けた形",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/before.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "none (6b987fd1)",
+   "earlierPass": false,
+   "note": "before.mdを2fileに分け、変更履歴に経緯を書いた形（変更履歴は合否に使わない）",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/before.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/15_要件追跡/01_変更履歴.md",
+     "text": "| 2026-11-20 | FN-003・SCR-005 | 電話番号での登録を追加した。確認コードの有効期限を10分から15分に延ばした（問い合わせが多かったため） | 佐藤（業務責任者） |\n"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "none (6b987fd1)",
+   "earlierPass": false,
+   "note": "before2.mdをFN-003とSCR-005の2fileに分けた形",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/before2.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "none (6b987fd1)",
+   "earlierPass": false,
+   "note": "before2.mdを2fileに分け、変更履歴に経緯を書いた形（変更履歴は合否に使わない）",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/before2.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/15_要件追跡/01_変更履歴.md",
+     "text": "| 2026-11-20 | FN-003・SCR-005 | 電話番号での登録を追加した。確認コードの有効期限を10分から15分に延ばした（問い合わせが多かったため） | 佐藤（業務責任者） |\n"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "version 8177242c",
+   "earlierPass": false,
+   "note": "after.mdをFN-003とSCR-005の2fileに分けた形",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "version 8177242c",
+   "earlierPass": false,
+   "note": "after.mdを2fileに分け、変更履歴に経緯を書いた形（変更履歴は合否に使わない）",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/15_要件追跡/01_変更履歴.md",
+     "text": "| 2026-11-20 | FN-003・SCR-005 | 電話番号での登録を追加した。確認コードの有効期限を10分から15分に延ばした（問い合わせが多かったため） | 佐藤（業務責任者） |\n"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "version 8177242c",
+   "earlierPass": false,
+   "note": "after2.mdをFN-003とSCR-005の2fileに分けた形",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after2.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "version 8177242c",
+   "earlierPass": false,
+   "note": "after2.mdを2fileに分け、変更履歴に経緯を書いた形（変更履歴は合否に使わない）",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after2.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/15_要件追跡/01_変更履歴.md",
+     "text": "| 2026-11-20 | FN-003・SCR-005 | 電話番号での登録を追加した。確認コードの有効期限を10分から15分に延ばした（問い合わせが多かったため） | 佐藤（業務責任者） |\n"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "version f080c937",
+   "earlierPass": true,
+   "note": "after3.mdをFN-003とSCR-005の2fileに分けた形",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after3.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "version f080c937",
+   "earlierPass": true,
+   "note": "after3.mdを2fileに分け、変更履歴に経緯を書いた形（変更履歴は合否に使わない）",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after3.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/15_要件追跡/01_変更履歴.md",
+     "text": "| 2026-11-20 | FN-003・SCR-005 | 電話番号での登録を追加した。確認コードの有効期限を10分から15分に延ばした（問い合わせが多かったため） | 佐藤（業務責任者） |\n"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "version f080c937",
+   "earlierPass": true,
+   "note": "after4.mdをFN-003とSCR-005の2fileに分けた形",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after4.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    }
+   ]
+  },
+  {
+   "case": "s-1",
+   "condition": "version f080c937",
+   "earlierPass": true,
+   "note": "after4.mdを2fileに分け、変更履歴に経緯を書いた形（変更履歴は合否に使わない）",
+   "form": "written",
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after4.md",
+   "answerText": "書き直しました。",
+   "written": [
+    {
+     "as": "docs/specs/details/04_機能/FN-003_会員登録.md",
+     "untilLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/05_画面/SCR-005_会員登録.md",
+     "fromLine": "^# SCR-005"
+    },
+    {
+     "as": "docs/specs/details/15_要件追跡/01_変更履歴.md",
+     "text": "| 2026-11-20 | FN-003・SCR-005 | 電話番号での登録を追加した。確認コードの有効期限を10分から15分に延ばした（問い合わせが多かったため） | 佐藤（業務責任者） |\n"
+    }
+   ]
   }
  ]
 }

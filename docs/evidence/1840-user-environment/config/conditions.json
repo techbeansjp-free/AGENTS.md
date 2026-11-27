@@ -129,7 +129,7 @@
   "R",
   "C"
  ],
- "probeNote": "One isolation probe per condition on fixture EC1. probe-check.mjs judges each against level W; compare checks that they differ in no session fact.",
+ "probeNote": "One isolation probe per condition on fixture U (probeFixture). probe-check.mjs judges each against level W; compare checks that they differ in no session fact.",
  "nonAdjacentKinds": [
   "negative"
  ],

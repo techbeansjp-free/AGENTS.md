@@ -79,6 +79,14 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 - `dry-run.mjs`：referenceの計算は、`ascSkills`の無い設定では従来どおり`asc`の依頼だけ（`fixtureReferences`）。
 - `calibrate.mjs`（固定しないtool。`dry-run.mjs`と同じく固定の記録に含めない）：設定の`calibration.json`に挙げた、これまでの評価で採点した回答に目印と書いたfileの照合を当て、これまでの採点と比べた表を作る（`--md`）。
 
+## #1840の再レビューで加えたもの（2026-11-27）
+
+これもfieldの無い設定（試験用、#1823）の動きと公開する記録を変えない（試験で確かめる）。
+
+- `cases.json`の`markerBase` {`pathPattern`}：`markerText: "answer+writes"`で目印を当てる前に、書いたfileの文から、試行の前からあるfileと同じ行（前後の空白を除いて行単位で比べる）を除く（`score.mjs`の`baseLinesFor`・`markerTextOf`）。試行の前からあるfileは、fixtureのHEADのうち`pathPattern`に合うfile（導入した雛形）と、書いたfile自身の試行の前の版。除いた行の数を`markerBaseExcludedLines`に記録する。`collect.mjs`は`work/`のHEADを`make-fixture.mjs`の`headReader`（`git ls-tree`と`git cat-file --batch`）で読み、`priorFiles`・`priorTexts`として渡す。`markerBase`があるのにそれが無ければ採点を拒否する。
+- `writes.requireWithoutBase`：`require`の照合にも同じ除き方を使う（`forbid`は全文に当てる）。
+- `calibrate.mjs`：`bases`（条件ごとの雛形：commitとdirectory）、回答を書いたfileとして当てる形（`form: "written"`）、落ちるべき回答（`mustFail`：雛形そのまま・見出しと表だけ・利用案内だけ・1行だけ埋めた雛形等を、雛形のfileから作る）、1つの回答を複数のfileに分ける形（`fromLine`・`untilLine`）。表に、雛形と同じ行を除かない場合の結果、観点ごとのSkillあり・なしの当たる率と採点、各目印が当たる雛形の行の数、落ちるべき回答の結果を加えた。#1828の「これまでの採点」の合否は、目印と同じ観点と`min`を0/1の点に当てて作ったもので、#1828の判定ではないことを表に書く。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。
