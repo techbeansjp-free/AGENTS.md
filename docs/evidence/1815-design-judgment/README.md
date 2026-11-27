@@ -115,7 +115,7 @@ harnessの変更は最小で、記録の置き場所を選ぶ`harness/results-di
 
 結果の限界：各条件3回、ケース3つ、審美はモデルの順位で人の評価ではない。順位は固定した規則で「差なし」なので、効果の根拠にしない。比べたのは入口の文と候補の文の一式で、どちらの効果かは分けていない。
 
-順位のCodexの`--model`（上の手順の`<許可されたCodexモデル>`）：repositoryには許可されたモデルの一覧が記録されていない（[host-session](../../../skills/asc/references/host-session.md)は`'<許可されたCodexモデル>'`のまま、[subagent-model-selection](../../../skills/subagent-model-selection/SKILL.md)にもCodexのモデル名が無い）。#1807のCodexの順位は`gpt-5.6-sol`で実行された記録がある（[1807のstatus](../1807-design-eval-browser/results/run2/model-ranks/codex-status.json)）。段階3で使うモデルは、下のとおりownerの回答で`gpt-6.2-sol`とした。
+順位のCodexの`--model`（上の手順の`<許可されたCodexモデル>`）：repositoryには許可されたモデルの一覧が記録されていない（[host-session](../../../skills/asc/references/host-session.md)は`'<許可されたCodexモデル>'`のまま、[subagent-model-selection](../../../skills/subagent-model-selection/SKILL.md)にもCodexのモデル名が無い）。#1807のCodexの順位は`gpt-5.6-sol`で実行された記録がある（[1807のstatus](../1807-design-eval-browser/results/run2/model-ranks/codex-status.json)）。段階3で使うモデルは、上のとおりownerの回答で`gpt-6.2-sol`とした。
 
 ## 目的（計画）
 
