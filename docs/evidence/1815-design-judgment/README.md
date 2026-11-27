@@ -88,6 +88,12 @@ harnessの変更は最小で、記録の置き場所を選ぶ`harness/results-di
 
 **固定の前に固定のfileを変える**：この節・[decision-criteria.md](decision-criteria.md)の「段階3」・[release.json](release.json)の変更は、`ASC1815_RESULTS=results/stage3 node harness/fixation.mjs init …`（固定の記録の作成）より前に済ませる。段階3のcommandには全て`ASC1815_RESULTS=results/stage3`を付ける。台帳は`<scratch>/rel1815c/ledger/ledger-1815s3.jsonl`（新しく作る）。最初の記録のcommitは、固定の後にここへ書く。
 
+段階3の手順は、下の「実行の手順」を次の値に置き換えて行う：`export ASC1815_RESULTS=results/stage3`、`L=<scratch>/rel1815c/ledger/ledger-1815s3.jsonl`、tarballは`<scratch>/rel1815c/`のB・S、probeの承認は`results/stage3/probe-approval.json`、公開の記録は`collect.mjs … results/stage3/run`（`collect.mjs`は出力先を引数で決め、既にある出力先を拒否しないので、段階2の`results/stage2/run`へ書かない）。
+
+準備の確認の記録：試験は[results/stage3/harness-tests.txt](results/stage3/harness-tests.txt)（固定の前なので、固定に依存する2件は失敗）、dry runは[results/stage3/dry-run.json](results/stage3/dry-run.json)（10の確認すべて合格）。**固定の後に`ASC1815_RESULTS=results/stage3`で試験を流し直し、54件合格・skip 0を記録してから、probeに進む。** Sの導入先に入口の文が入ることは、dry runの導入先（3ケースのSの`.agent-skill-chain/skills/asc/SKILL.md`と`.agent-skill-chain/managed-runtime/skills/asc/SKILL.md`）を入口の文で検索して確かめた（6件に当たり、Bの導入先には0件）。
+
+入口の文の名前「画面の節」は、`implementation.md`の見出しの名前ではない。`SKILL.md`の既存の文（UIを変える場合に`implementation.md`を読む）とも一部重なる。測定する案としてはこのままにし、採る場合に文面を整える（測定前のレビューLow-3）。
+
 順位のCodexの`--model`（上の手順の`<許可されたCodexモデル>`）：repositoryには許可されたモデルの一覧が記録されていない（[host-session](../../../skills/asc/references/host-session.md)は`'<許可されたCodexモデル>'`のまま、[subagent-model-selection](../../../skills/subagent-model-selection/SKILL.md)にもCodexのモデル名が無い）。#1807のCodexの順位は`gpt-5.6-sol`で実行された記録がある（[1807のstatus](../1807-design-eval-browser/results/run2/model-ranks/codex-status.json)）。段階3で使うモデルは、順位の前にownerが決める（未決）。
 
 ## 目的（計画）
