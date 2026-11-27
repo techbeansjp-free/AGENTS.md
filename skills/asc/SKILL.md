@@ -68,6 +68,8 @@ ASCは作業場所・契約・レビュー・提出をつなぐ。基盤整備�
 
 UI・API・業務ルール・永続化・入力境界を変更する場合は、分担・実装前に[利用者操作と入力境界](references/implementation.md)を読む。機能の完了は画面単体でなく、元要求にある一連の操作と失敗時の回復で判断する。適用の有無が不明なら参照し、関連する品質条件を省略しない。誤字など、その振る舞いを変えない変更に詳細の再読込みを強制しない。
 
+画面を作る・変える依頼は、実装前に[画面の節](references/implementation.md)、完了の確認前に[journeys.md](../user-journey-acceptance/references/journeys.md)を読む。
+
 ## プロジェクト固有ルール
 
 `start`の`context`で対象projectの参照一覧とdigest、noticesを確認する。変更pathが分かる場合は`start <project-directory> --path src/example.ts`（複数指定可）で絞る。pathは予定範囲と実差分の両方を含め、仕様だけの変更も対象にする。未確定ならpathを省略してmanifestの全scopeを候補にする。この時点では入れ子のAGENTS.md/CLAUDE.mdは未探索なので、編集対象が決まったら実装前に全対象pathで再実行する。`appliesTo`は所有者が設定したpath prefixであり、リスクや意味的関連性の完全な判定ではない。関連が疑われる規約は追加で確認する。
