@@ -13,6 +13,7 @@ import {rate, combine} from './ssr.mjs';
 import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex, checkImagesRead} from './run-eval.mjs';
 import {computeAll, decideEvaluator, missingByReason, excludeSkipped, collectJudgments, negationFailures, loadLayer1, ssrNegation} from './aggregate.mjs';
 import {newFailures} from './layer1.mjs';
+import {layer1CommandFailures} from './run-layer1.mjs';
 import {buildOwnerPage} from './owner-page.mjs';
 
 const cfg = loadConfig();
@@ -341,6 +342,7 @@ test('codex: images-not-viewed from an image error or an answer that says the sc
   // remarks about what a screenshot shows are not "not seen"
   assert.equal(checkCodexImagesViewed({text: '画像から読み取れる範囲では、保存の失敗の表示は確認できない。'}), null);
   assert.equal(checkCodexImagesViewed({text: '狭幅の画像では、詳細の開閉の状態が分からない。'}), null);
+  assert.equal(checkCodexImagesViewed({text: '画像を見る限り、確認できない状態がある。'}), null);
   const cfg = JSON.parse(fs.readFileSync(path.join(here, '..', 'config', 'eval.json'), 'utf8'));
   assert.ok(buildPrompt('P', cfg, {evaluator: 'codex'}).includes('読取りだけのcommand'));
   assert.ok(!buildPrompt('P', cfg, {evaluator: 'fable'}).includes('読取りだけのcommand'));
@@ -405,4 +407,11 @@ test('layer1: a variant with measurement errors is unknown in the aggregate and 
   assert.deepEqual(newFailures({...w, errors: ['o missing']}, {checks: {a: false}, widths: {wide: {}, narrow: {}}, coverage: null, errors: []}), ['unmeasured original: o missing']);
   // S's negation result counts planned pairs absent from ssr-negation.json as missing
   assert.deepEqual(ssrNegation({failures: 0, pairs: [{id: 'n01'}]}, ['n01', 'n02']), {failures: 0, missing: 1, d: 2});
+});
+
+test('run-layer1: failed commands recorded in failed.txt stop the run (also with --skip-render)', () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1835-l1run-'));
+  assert.deepEqual(layer1CommandFailures(out), []);
+  fs.writeFileSync(path.join(out, 'failed.txt'), 'render\nui02__A-r1__original\n');
+  assert.deepEqual(layer1CommandFailures(out), ['render', 'ui02__A-r1__original']);
 });

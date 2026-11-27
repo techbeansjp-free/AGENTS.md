@@ -224,9 +224,10 @@ ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --packets $O/packets --runs $
 ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --packets $O/packets --runs $O/runs --evaluator codex --skip-packets $O/skip.txt --lock $O/key --lock $O/owner
 # 7. SSRと集計
 node harness/aggregate.mjs critiques --runs $O/runs --out $O/critiques.jsonl
-# ssr.py はrepositoryに置かない（下の「SSR」）。Git historyから取り出し、sha256を照合してscratchで実行した
-$V/venv/bin/python -I $V/ssr.py score --anchors anchors.json --in $O/critiques.jsonl --cache-dir $V/cache --out $O/ssr.json
-$V/venv/bin/python -I $V/ssr.py negation --anchors anchors.json --pairs negation-pairs.json --cache-dir $V/cache --out $O/ssr-negation.json
+# 本番では harness/ssr.py（3d4c31f7の版）として、このdirectoryで実行した。今はrepositoryに置かない（下の「SSR」）。
+# 再現するときは、Git historyから同じ配置（<写し>/harness/ssr.py と <写し>/config/eval.json）に取り出し、sha256を照合する
+$V/venv/bin/python -I <写し>/harness/ssr.py score --anchors anchors.json --in $O/critiques.jsonl --cache-dir $V/cache --out $O/ssr.json
+$V/venv/bin/python -I <写し>/harness/ssr.py negation --anchors anchors.json --pairs negation-pairs.json --cache-dir $V/cache --out $O/ssr-negation.json
 node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/result.json --layer1 $R/l1-<case>-<trial>/layer1.json ... \
   --owner <ownerのJSON> --owner-key $O/owner-key/owner-key.json --ssr $O/ssr.json --ssr-negation $O/ssr-negation.json --skip-packets $O/skip.txt
 ```
@@ -274,13 +275,15 @@ node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/
 
 `eval.test.mjs`（合成の1×1のPNGで実行。モデル・network・Dockerを使わない）：束にIDや条件の漏れが無いこと（file名・TASK.json・index・PNGのchunk・時刻）、IDの一意性、2回目でID・左右・表示順が変わること、左右の均衡、描画の無い画面の拒否と除外、有料の実行の拒否、dry-runで両評価者の全方式が通ること（不正な回答・再開・command line・台帳）、予算の停止と再試行の上限、予算の見込みの削り方、集計の合格・不合格・不採用・未判定（欠測・ownerの判断なし・費用・天井・SSRの欠如）と最低の基準の境界、SSRの式（既知のベクトル）、ownerのページ。
 
+本番の後に足した試験：`results/ssr.json`の96件を記録された類似度から再計算する照合、Fableの`tool_result`が誤りのRead、Codexの`images-not-viewed`の判定（誤検出しない例を含む）、計画した否定の反例の欠測（FとS）、層1の計測エラーの扱いと描画のcommandの失敗、予算で外した束の除外。
+
 ### 未確認事項（層2・層3の道具）
 
 - **予算の見込み**：#1807・#1815の実績から、Fableの1回の費用を見積ると、計画の全呼出し（2回×（D 3・P 27・F講評 27・F採点 27・否定の反例 20））で約24〜42 USDになり、Dとcontrast-strongを外しても約17〜32 USDである。計画5節の2では、本番の前の試行で18 USDを超えると見込まれれば「予算の見込みで未判定」として止まる可能性が高い。試行の実測で決める。**本番の後：** 試行の実測で見込みが26.4〜34.3 USDとなり、ownerが上限を30 USDに改めた（[EVAL_PLAN.md](EVAL_PLAN.md)5節）。
 - **Codexの読取りの範囲**：`codex exec -s read-only`は書込みだけを防ぎ、読取りを限定しない（[host-session](../../../skills/asc/references/host-session.md)）。#1815は`asc host-session`の実行ごとのpermission profileで読取りを限定した。この道具は、指定どおり`codex exec`を使い、keyとownerの対応表を`--lock`（mode 000）で閉じる。束の他の回・他の束は読める状態のままである。Codexの出力の長さとturnには、CLIの上限の指定が無く、時間の上限だけを掛ける。
 - **Fableの文脈**：`--restricted`でも、user単位の`CLAUDE.md`やmemoryが読み込まれるかは確かめていない。束はrepositoryの外（scratch）にあるので、repositoryの`CLAUDE.md`は祖先に無い。
 - **Codexのmodel**：`gpt-6.2-sol`は#1815段階3でownerが答えたもので、#1835での使用は確かめていない。
-- **Fableで画像を見たか**（本番の後に、`tool_result`が誤りのReadは読んだと数えないよう直した。中身が画像かまでは見ない。本番の184回では誤りの`tool_result`が0件）：`--output-format stream-json --verbose`（導入済みclaude 2.1.323の`--help`で確認）で、assistantのeventのtool_use（`Read`の`input.file_path`）と、最後のresult event（`result`・`total_cost_usd`・`usage`・`duration_ms`）を記録から取り出す。その呼出しの束のPNGのうち、Readされなかったものが1つでもあれば欠測（理由`images-not-read`）。result eventが無ければ欠測（`no-result-event`）で、費用は1回の予算の額で数える。**実機のstream-jsonの出力は、まだ見ていない**（有料の呼出しをしていない）。eventの形（`type: assistant`の`message.content[]`のtool_use、`type: result`）は、既知のSDKの形に合わせた偽の出力で試験している。Readのpathが相対・symlink経由の場合は、cwdとrealpathで解決して照合する。Readの結果が実際に画像として渡ったか（tool_resultの内容）までは見ない。**本番の後：** 実機のstream-jsonはこの形で読め、Fableの184回はすべて有効で、渡した画像をすべてReadしていた。
+- **Fableで画像を見たか**（本番の後に、`tool_result`が誤りのReadは読んだと数えないよう直した。中身が画像かまでは見ない。本番の184回では誤りの`tool_result`が0件）：`--output-format stream-json --verbose`（導入済みclaude 2.1.323の`--help`で確認）で、assistantのeventのtool_use（`Read`の`input.file_path`）と、最後のresult event（`result`・`total_cost_usd`・`usage`・`duration_ms`）を記録から取り出す。その呼出しの束のPNGのうち、Readされなかったものが1つでもあれば欠測（理由`images-not-read`）。result eventが無ければ欠測（`no-result-event`）で、費用は1回の予算の額で数える。**実機のstream-jsonの出力は、まだ見ていない**（有料の呼出しをしていない）。eventの形（`type: assistant`の`message.content[]`のtool_use、`type: result`）は、既知のSDKの形に合わせた偽の出力で試験している。Readのpathが相対・symlink経由の場合は、cwdとrealpathで解決して照合する。Readの`tool_result`の中身の種類（画像か）までは見ない。**本番の後：** 実機のstream-jsonはこの形で読め、Fableの184回はすべて有効で、渡した画像をすべてReadしていた。
 - **Codexの隔離の判定**：`codex exec --json`（導入済みcodex-cli 0.171.0）のitem.completedのうち`command_execution`の`item.command`（shellの文字列）を取り、文字列を空白・引用符・記号で分けて、絶対path・`~`・`..`を含むものを束のdirectory（`-C`）に対して解決し、外に出れば欠測（理由`isolation-violation`）とする。`/bin`・`/usr/bin`等の実行file・`/dev/null`は除く。`$VAR`・バッククォート・`cd`・`eval`を含む命令、`command_execution`以外で既知でない種類のitem、event自体が無い呼出しは「未確認」（`status.json`の`isolation: unconfirmed`）として記録し、欠測にはしない（集計の`isolationUnconfirmed`）。**実機のeventの形（`command_execution`の項目名`command`、画像を見るtoolのitem種別）は未確認**である。文字列の分解は簡易で、`sed '/x/d'`のような`/`で始まる引数は束の外のpathと誤って判定し、不要な欠測を出し得る（その場合は`attempt-*.stdout`で確かめる）。**本番の後：** 有効な3回目では、Pの全呼出しに`command_execution`のitemがあり、隔離の違反は0件、判定できなかった呼出しは1件だった。画像を見るtoolのitem種別は確かめていない（画像の読取りは、stderrと回答の文で判定した。[EVAL_PLAN.md](EVAL_PLAN.md)5節）。
 - **束の大きさ**：実際の画面（3ケース×A-r1・D-r1・E-r1）で作ると約110MBである。
 

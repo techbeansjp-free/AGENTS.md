@@ -22,6 +22,13 @@ const H1815 = path.join(EVIDENCE, '1815-design-judgment/harness');
 const H1835 = path.join(ROOT, 'harness');
 
 // The cases file read by first-view.mjs, probe.mjs and compare.mjs: config/cases.json, with ui03 taken from #1815.
+// Commands of the layer-1 run that failed (render, a first-view of a target, compare), written to <out>/failed.txt by the
+// Docker shell. Any entry stops the run before layer1.json is written; this is also checked with --skip-render.
+export function layer1CommandFailures(out) {
+  const f = path.join(out, 'failed.txt');
+  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean) : [];
+}
+
 export function mergedCases() {
   const out = {schema: 'asc-1835-cases-merged/v1', cases: {}};
   for (const [id, c] of Object.entries(CASES)) {
@@ -95,7 +102,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       docker(pagesDir, out, `node /opt/h/render.mjs /out/targets.json /out || echo render >> /out/failed.txt; ${fv}; node /opt/l/compare.mjs /out/cases.json /out/pairs.json > /out/compare.json || echo compare >> /out/failed.txt; true`);
     }
     {
-      const failed = fs.existsSync(path.join(out, 'failed.txt')) ? fs.readFileSync(path.join(out, 'failed.txt'), 'utf8').split('\n').filter(Boolean) : [];
+      const failed = layer1CommandFailures(out);
       if (failed.length) throw new Error(`layer 1 commands failed (not publishing layer1.json): ${failed.join(', ')}`);
     }
     const seconds = Math.round((Date.now() - t0) / 1000);
