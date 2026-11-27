@@ -743,3 +743,13 @@ test('recorded canonical and template edits equal to the next release remain who
   const saved=savedAssets(f.work),result=projectAssets(f.work,{...options,apply:true});assert.equal(result.applied,false);assert.deepEqual(result.conflicts,[target]);assertSaved(f.work,saved);
  }
 });
+
+test('every relative link of the installed asc Skill and its managed-runtime copy resolves, including the spec writing rules',t=>{
+ const f=fixture(t);projectAssets(f.work,{packageRoot:f.pkg,apply:true,registerClaudeSkill:true});
+ for(const dir of ['.agent-skill-chain/skills/asc','.agent-skill-chain/managed-runtime/skills/asc']){
+  const root=path.join(f.work,dir),text=fs.readFileSync(path.join(root,'SKILL.md'),'utf8');
+  for(const match of text.matchAll(/\]\(([^)#]+)(?:#[^)]*)?\)/g))assert(fs.existsSync(path.resolve(root,match[1])),`${dir}: ${match[1]}`);
+ }
+ const skill=fs.readFileSync(path.join(f.work,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8');
+ assert(skill.includes('](../../templates/specs/00_利用案内.md#書き方)'));assert(!skill.includes('../../v05/templates/specs/'));
+});
