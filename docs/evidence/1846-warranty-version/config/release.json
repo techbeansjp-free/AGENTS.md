@@ -1,0 +1,19 @@
+{
+  "schema": "asc-eval-release/v1",
+  "note": "The tarball the condition installs (conditions.json cells.C.release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here. C is a placeholder until the PR HEAD is final (after the independent review): every paid run, every fixture of C and the fixation are refused until it is filled in.",
+  "C": {
+    "kind": "candidate",
+    "placeholder": true,
+    "asset": "agent-skill-chain-0.5.121.tgz",
+    "assetSha256": null,
+    "packedFromCommit": null,
+    "packCommand": "git clone <origin> <scratch>/rel1846/cand-src; git -C <scratch>/rel1846/cand-src checkout <final HEAD of feature/1846-warranty-version-cite>; node scripts/pack-candidate.mjs <scratch>/rel1846/candidate --version=0.5.121 (as #1840 C; the version number stays that of the base release). Then fill in assetSha256 and packedFromCommit, remove placeholder, unpack and compare with the v0.5.121 asset (differsFromReleaseOnly).",
+    "note": "未mergeの#1846（estimate-and-scopeの版の書き方の例）を含む候補。公開しない。この測定だけに使う。",
+    "baseRelease": "v0.5.121 (GitHub Release, target commit 599a2b09184ef3d7bc0a0ca6704c435ecf581433 = the base of this branch)",
+    "differsFromReleaseOnly": [
+      "release-identity.json",
+      "skills/estimate-and-scope/SKILL.md"
+    ],
+    "differsNote": "Expected from the branch diff (only skills/estimate-and-scope/SKILL.md is distributed); to be confirmed on the packed tarball."
+  }
+}

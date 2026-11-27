@@ -1,0 +1,249 @@
+{
+  "schema": "asc-eval-cases/v1",
+  "note": "Fixed before any model run (decision-criteria.md). #1846: the maintenance cases m-r1, m-r2, m-r7 of #1840 (prompts, reads, deductions and quota unchanged) with the agreement-version marker relaxed by the owner decision of 2026-11-28 (Issue #1846): besides 版1.0 / 1.0版, a \"v1.0\" next to 品質保証範囲, a WAR ID or 合意 counts; the release tag v1.0.0 never counts. m-r7 gets the same version marker as a reported group (report: true; not counted, so its quota stays the #1840 one). n-2 of #1840 unchanged: the verdict needs a valid negative trial (score.mjs verdictOf).",
+  "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches.",
+  "entryPattern": "^\\.claude/skills/<skill>/SKILL\\.md$",
+  "bodyPattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
+  "referencePattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/references/<ref>$",
+  "markerText": "answer+writes",
+  "markerTextNote": "#1840 review M1: the markers are matched on the answer and the text of every file the trial wrote (score.mjs scoreRun).",
+  "markerBase": {
+    "pathPattern": "^\\.agent-skill-chain/(managed-runtime/[^/]+/)?templates/"
+  },
+  "markerBaseNote": "#1840 re-review High: before the markers are matched, the lines of a written file equal to a line (trimmed) of a file that existed before the trial are left out: the installed templates (.agent-skill-chain/templates/ and its managed-runtime copy, at the fixture's HEAD) and the earlier text of the written file itself (score.mjs baseLinesFor). A copied template, or one with a row filled in, adds only the lines the trial wrote. w-2 writes.requireWithoutBase applies the same to its require patterns.",
+  "cases": [
+    {
+      "id": "m-r1",
+      "goal": 1,
+      "origin": "1829 R1",
+      "kind": "maintenance",
+      "fixture": "MN",
+      "expect": "estimate-and-scope",
+      "references": [],
+      "expectReads": [
+        {
+          "id": "project-warranty",
+          "pattern": "^docs/specs/details/02_要件/03_品質保証範囲\\.md$"
+        }
+      ],
+      "prompt": "みなと商事の情報システム部長から次の依頼が届いた。どう扱うか判断して、返信の案を作って。\n\n「Windows 11 の Chrome 137 で受注登録をすると、一部の明細で税込金額が計算より1円多く表示されます。端数の扱いが違うのではないかと思います。無償で直してもらえますか。」",
+      "answerGroups": [],
+      "answerNone": [
+        {
+          "id": "free-before-check",
+          "pattern": "無償で(修補|修正|対応|直)(いた)?します|無償(修補|対応)の対象です"
+        },
+        {
+          "id": "free-direction",
+          "pattern": "無償(修補|対応)の方向"
+        },
+        {
+          "id": "legal-validity",
+          "pattern": "(法的に|法律上)(は)?(有効|無効)(です|となります)"
+        },
+        {
+          "id": "legal-nonconformity",
+          "pattern": "契約不適合(に|には)(当たりません|該当しません|当たります|該当します)"
+        }
+      ],
+      "viewpoints": [
+        "R1-1",
+        "R1-2",
+        "R1-3",
+        "減点：法的な断定"
+      ],
+      "answerAll": [],
+      "answerAny": [],
+      "needs": [
+        {
+          "file": "docs/specs/details/02_要件/03_品質保証範囲.md",
+          "includes": []
+        }
+      ],
+      "answerQuota": {
+        "min": 3,
+        "groups": [
+          {
+            "id": "R1-1-war",
+            "viewpoint": "R1-1",
+            "pattern": "WAR-002"
+          },
+          {
+            "id": "R1-1-version",
+            "viewpoint": "R1-1",
+            "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版|(品質保証範囲|WAR-\\d{3}|合意)[^\\n]{0,12}(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])|(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])[^\\n]{0,12}合意"
+          },
+          {
+            "id": "R1-2",
+            "viewpoint": "R1-2",
+            "pattern": "BR-012|明細ごと[^\\n]{0,20}切り?捨て|端数"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-r2",
+      "goal": 1,
+      "origin": "1829 R2",
+      "kind": "maintenance",
+      "fixture": "MN",
+      "expect": "estimate-and-scope",
+      "references": [],
+      "expectReads": [
+        {
+          "id": "project-warranty",
+          "pattern": "^docs/specs/details/02_要件/03_品質保証範囲\\.md$"
+        }
+      ],
+      "prompt": "みなと商事の情報システム部長から次の依頼が届いた。どう扱うか判断して、返信の案を作って。\n\n「営業担当がiPadのSafariで受注一覧を開くと、表が崩れて操作できません。現場で使いたいので対応してください。」",
+      "answerGroups": [],
+      "answerNone": [
+        {
+          "id": "free-promise",
+          "pattern": "無償で(対応|修正)(いた)?します"
+        },
+        {
+          "id": "legal-validity",
+          "pattern": "(法的に|法律上)(は)?(有効|無効)(です|となります)"
+        },
+        {
+          "id": "legal-nonconformity",
+          "pattern": "契約不適合(に|には)(当たりません|該当しません|当たります|該当します)"
+        }
+      ],
+      "viewpoints": [
+        "R2-1",
+        "R2-2",
+        "減点：法的な断定"
+      ],
+      "answerAll": [],
+      "answerAny": [],
+      "needs": [
+        {
+          "file": "docs/specs/details/02_要件/03_品質保証範囲.md",
+          "includes": []
+        }
+      ],
+      "answerQuota": {
+        "min": 3,
+        "groups": [
+          {
+            "id": "R2-1-war",
+            "viewpoint": "R2-1",
+            "pattern": "WAR-001"
+          },
+          {
+            "id": "R2-1-version",
+            "viewpoint": "R2-1",
+            "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版|(品質保証範囲|WAR-\\d{3}|合意)[^\\n]{0,12}(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])|(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])[^\\n]{0,12}合意"
+          },
+          {
+            "id": "R2-2",
+            "viewpoint": "R2-2",
+            "pattern": "互換性|見積"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-r7",
+      "goal": 1,
+      "origin": "1829 R7",
+      "kind": "maintenance",
+      "fixture": "MN",
+      "expect": "estimate-and-scope",
+      "references": [],
+      "expectReads": [
+        {
+          "id": "project-warranty",
+          "pattern": "^docs/specs/details/02_要件/03_品質保証範囲\\.md$"
+        }
+      ],
+      "prompt": "みなと商事の情報システム部長から次の依頼が届いた。どう扱うか判断して、返信の案を作って。\n\n「移行した取引先のうち3社で、旧システムのコードが重複していたため、請求書が二重に作られていました。移行の作業の不備なので、無償で直してください。」",
+      "answerGroups": [],
+      "answerNone": [
+        {
+          "id": "free-before-check",
+          "pattern": "無償で(修補|修正|対応|直)(いた)?します|無償(修補|対応)の対象です"
+        },
+        {
+          "id": "paid-fixed",
+          "pattern": "有償(になります|での対応となります|です)"
+        },
+        {
+          "id": "legal-validity",
+          "pattern": "(法的に|法律上)(は)?(有効|無効)(です|となります)"
+        },
+        {
+          "id": "legal-nonconformity",
+          "pattern": "契約不適合(に|には)(当たりません|該当しません|当たります|該当します)"
+        }
+      ],
+      "viewpoints": [
+        "R7-1",
+        "R7-2",
+        "R7-3",
+        "減点：法的な断定"
+      ],
+      "answerAll": [],
+      "answerAny": [],
+      "needs": [
+        {
+          "file": "docs/specs/details/02_要件/03_品質保証範囲.md",
+          "includes": []
+        }
+      ],
+      "answerQuota": {
+        "min": 3,
+        "groups": [
+          {
+            "id": "R7-1-war",
+            "viewpoint": "R7-1",
+            "pattern": "WAR-005"
+          },
+          {
+            "id": "R7-1-open",
+            "viewpoint": "R7-1",
+            "pattern": "未決|未合意"
+          },
+          {
+            "id": "R7-2",
+            "viewpoint": "R7-2",
+            "pattern": "OPEN-007|ACT-03|契約担当"
+          },
+          {
+            "id": "R7-1-version",
+            "viewpoint": "R7-1",
+            "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版|(品質保証範囲|WAR-\\d{3}|合意)[^\\n]{0,12}(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])|(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])[^\\n]{0,12}合意",
+            "report": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n-2",
+      "goal": 1,
+      "origin": "1828 N5",
+      "kind": "negative",
+      "fixture": "EC1",
+      "expect": null,
+      "references": [],
+      "forbidReads": [
+        {
+          "id": "templates",
+          "pattern": "^\\.agent-skill-chain/templates/specs/"
+        }
+      ],
+      "forbidSkills": [
+        "warranty-scope"
+      ],
+      "prompt": "「保証範囲を顧客と合意済みです」を英語に訳して。",
+      "answerAny": [
+        "agree|agreed"
+      ],
+      "answerAll": [],
+      "answerGroups": [],
+      "needs": []
+    }
+  ]
+}
