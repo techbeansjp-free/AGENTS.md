@@ -126,7 +126,7 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1840/runs --ledger $LEDGE
 
 ## 測定の前の固定
 
-- `results/fixation.json`の最初の記録のcommitは`bf65bb54c275fb5609957bc1d24fa828dc4b9dcb`。台帳idは`1a8cfa06-b3b2-4f36-be0f-ff018e8ca631`、台帳は`<scratch>/rel1840/ledger/ledger-1840.jsonl`（予約0件）。`run-trial.mjs`はこの記載を照合する。
+- `results/fixation.json`の最初の記録のcommitは`e0ccc50eb464d174c9d0ad2e3815bd68e7971602`。台帳idは`b33381fa-f3e5-492b-a3ae-7c7526327374`、台帳は`<scratch>/rel1840/ledger/ledger-1840b.jsonl`（予約0件）。`run-trial.mjs`はこの記載を照合する。
 - 固定の記録は、この設定の5file（`decision-criteria.md`・`cases.json`・`conditions.json`・`release.json`・`run-order.json`）と、共通の仕組みのmodule 16件のsha256を持つ。測定の終わりまで、共通の仕組みも変えない。
 - 測定の前の独立レビュー（H1〜H3、M1〜M4、L1〜L4）の是正のため、最初の固定（commit `bf65bb54`、台帳id `1a8cfa06-b3b2-4f36-be0f-ff018e8ca631`、予約0件）を消し、新しい台帳で`init`をやり直した。固定したfileを直す場合は、測定の前（台帳に予約が無い間）に限り、同じ手順でやり直し、このREADMEの記載を更新する（`refix`は`probe-check.mjs`の是正だけ）。
 
