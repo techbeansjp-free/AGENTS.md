@@ -53,7 +53,7 @@
 
 harnessの変更は最小で、記録の置き場所を選ぶ`harness/results-dir.mjs`（環境変数`ASC1815_RESULTS`。既定は`results`で段階1と同じ）だけ。段階2では全commandに`ASC1815_RESULTS=results/stage2`を付ける。固定の記録・probeの承認（`results/stage2/probe-approval.json`。ownerが段階2のために改めて確認する）・台帳がこの置き場所で見られ、段階1の記録や台帳では測定が始まらない。試行の公開の記録は`collect.mjs`の出力先を`results/stage2/run`にする。生のtrace・screenshot・tool logはcommitしない（[評価の記録の規約](../../../.agent-skill-chain/project/rules/evaluation-record.json)）。
 
-段階2の開始の手順（モデルを呼ぶのはこの後）：(1) 台帳をrepositoryの外に新しく作り、`ASC1815_RESULTS=results/stage2 node harness/fixation.mjs init results/stage2/fixation.json --ledger <新しい台帳>`、(2) 固定の記録をcommit、(3) この節に最初の記録のcommitを書く（`fixation.mjs`が検査する）、(4) ownerの確認をprobe-approval.jsonに記録してから、probe、生成、順位。最初の記録のcommit：（固定の時に記す）。
+段階2の開始の手順（モデルを呼ぶのはこの後）：(1) 台帳をrepositoryの外に新しく作り、`ASC1815_RESULTS=results/stage2 node harness/fixation.mjs init results/stage2/fixation.json --ledger <新しい台帳>`、(2) 固定の記録をcommit、(3) この節に最初の記録のcommitを書く（`fixation.mjs`が検査する）、(4) ownerの確認をprobe-approval.jsonに記録してから、probe、生成、順位。最初の記録のcommit：`a431ed7bfeadcdf56da28d51605b962b3db98518`。
 
 ## 目的（計画）
 
