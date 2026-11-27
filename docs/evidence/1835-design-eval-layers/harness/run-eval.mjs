@@ -155,7 +155,9 @@ export function parseCodex(stdout, cwd = null) {
 // screenshots could not be seen. Codex's --json has no event for viewing an image, so this is the available check.
 export function checkCodexImagesViewed({stderr = '', text = ''}) {
   if (/unable to process image/.test(stderr)) return 'image-error';
-  if (/(画像|スクリーンショット|screenshot)[^。\n]{0,30}(確認|閲覧|表示|読|見)[^。\n]{0,12}(できませんでした|できていません|できない|られません|られなかった)/i.test(text ?? '')) return 'answer-says-not-seen';
+  // Only the screenshots themselves as the object (画像を・画像は・画像がどちらも…), not "画像からは確認できない" (a legitimate remark
+  // that a state is not shown in the screenshot).
+  if (/(画像|スクリーンショット|screenshot)(を|は|が|も)?(どちらも|両方とも|いずれも|とも)?(確認|閲覧|表示|開|見|読)[^。\n]{0,8}(できませんでした|できていません|できない|られません|られなかった)/i.test(text ?? '')) return 'answer-says-not-seen';
   return null;
 }
 
