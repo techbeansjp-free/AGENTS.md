@@ -1,0 +1,1036 @@
+{
+ "schema": "asc-1835-result/v1",
+ "note": "件数と分母を併記する。探索的な小規模の評価で、統計的な差の証明ではない。Dは記録するが採否の対象にしない（計画7節）。",
+ "rounds": [
+  1,
+  2
+ ],
+ "items": 24,
+ "excludedItems": [
+  {
+   "id": "L2:ui02-exhibition:contrast-strong",
+   "why": "予算の削り方で本番から外した（計画5.2）"
+  },
+  {
+   "id": "L2:ui03-dashboard:contrast-strong",
+   "why": "予算の削り方で本番から外した（計画5.2）"
+  },
+  {
+   "id": "L2:ui08-existing-ds:contrast-strong",
+   "why": "予算の削り方で本番から外した（計画5.2）"
+  }
+ ],
+ "l2Undetermined": [],
+ "metrics": {
+  "fable": {
+   "D": {
+    "name": "D",
+    "expected": 42,
+    "missing": 42,
+    "sensitivity": {},
+    "strongPassedL1": {
+     "n": 0,
+     "d": 0,
+     "rate": null
+    },
+    "weakPassedL1": {
+     "n": 0,
+     "d": 0,
+     "rate": null
+    },
+    "byKind": {
+     "hierarchy": {
+      "strong": {
+       "n": 0,
+       "d": 0,
+       "rate": null
+      },
+      "weak": {
+       "n": 0,
+       "d": 0,
+       "rate": null
+      }
+     },
+     "spacing": {
+      "strong": {
+       "n": 0,
+       "d": 0,
+       "rate": null
+      },
+      "weak": {
+       "n": 0,
+       "d": 0,
+       "rate": null
+      }
+     }
+    },
+    "falsePositive": {
+     "n": null,
+     "d": null,
+     "rate": null,
+     "note": "Dは同順位が無いので測らない"
+    },
+    "reproducibility": {
+     "n": 0,
+     "d": 0,
+     "rate": null
+    },
+    "layer3": {
+     "n": 0,
+     "d": 0,
+     "rate": null,
+     "ownerDecidedPairs": 6
+    },
+    "l1Unknown": []
+   },
+   "P": {
+    "name": "P",
+    "expected": 48,
+    "missing": 0,
+    "sensitivity": {
+     "hierarchy-weak/pass": {
+      "n": 6,
+      "d": 6,
+      "rate": 1
+     },
+     "hierarchy-strong/pass": {
+      "n": 4,
+      "d": 4,
+      "rate": 1
+     },
+     "spacing-weak/pass": {
+      "n": 4,
+      "d": 6,
+      "rate": 0.6666666666666666
+     },
+     "spacing-strong/pass": {
+      "n": 6,
+      "d": 6,
+      "rate": 1
+     },
+     "hierarchy-strong/fail": {
+      "n": 2,
+      "d": 2,
+      "rate": 1
+     }
+    },
+    "strongPassedL1": {
+     "n": 10,
+     "d": 10,
+     "rate": 1
+    },
+    "weakPassedL1": {
+     "n": 10,
+     "d": 12,
+     "rate": 0.8333333333333334
+    },
+    "byKind": {
+     "hierarchy": {
+      "strong": {
+       "n": 4,
+       "d": 4,
+       "rate": 1
+      },
+      "weak": {
+       "n": 6,
+       "d": 6,
+       "rate": 1
+      }
+     },
+     "spacing": {
+      "strong": {
+       "n": 6,
+       "d": 6,
+       "rate": 1
+      },
+      "weak": {
+       "n": 4,
+       "d": 6,
+       "rate": 0.6666666666666666
+      }
+     }
+    },
+    "falsePositive": {
+     "n": 0,
+     "d": 6,
+     "rate": 0
+    },
+    "reproducibility": {
+     "n": 22,
+     "d": 24,
+     "rate": 0.9166666666666666
+    },
+    "layer3": {
+     "n": 9,
+     "d": 12,
+     "rate": 0.75,
+     "ownerDecidedPairs": 6
+    },
+    "l1Unknown": []
+   },
+   "F": {
+    "name": "F",
+    "expected": 48,
+    "missing": 0,
+    "sensitivity": {
+     "hierarchy-weak/pass": {
+      "n": 1,
+      "d": 6,
+      "rate": 0.16666666666666666
+     },
+     "hierarchy-strong/pass": {
+      "n": 0,
+      "d": 4,
+      "rate": 0
+     },
+     "spacing-weak/pass": {
+      "n": 1,
+      "d": 6,
+      "rate": 0.16666666666666666
+     },
+     "spacing-strong/pass": {
+      "n": 1,
+      "d": 6,
+      "rate": 0.16666666666666666
+     },
+     "hierarchy-strong/fail": {
+      "n": 1,
+      "d": 2,
+      "rate": 0.5
+     }
+    },
+    "strongPassedL1": {
+     "n": 1,
+     "d": 10,
+     "rate": 0.1
+    },
+    "weakPassedL1": {
+     "n": 2,
+     "d": 12,
+     "rate": 0.16666666666666666
+    },
+    "byKind": {
+     "hierarchy": {
+      "strong": {
+       "n": 0,
+       "d": 4,
+       "rate": 0
+      },
+      "weak": {
+       "n": 1,
+       "d": 6,
+       "rate": 0.16666666666666666
+      }
+     },
+     "spacing": {
+      "strong": {
+       "n": 1,
+       "d": 6,
+       "rate": 0.16666666666666666
+      },
+      "weak": {
+       "n": 1,
+       "d": 6,
+       "rate": 0.16666666666666666
+      }
+     }
+    },
+    "falsePositive": {
+     "n": 1,
+     "d": 6,
+     "rate": 0.16666666666666666
+    },
+    "reproducibility": {
+     "n": 15,
+     "d": 24,
+     "rate": 0.625
+    },
+    "layer3": {
+     "n": 5,
+     "d": 12,
+     "rate": 0.4166666666666667,
+     "ownerDecidedPairs": 6
+    },
+    "l1Unknown": []
+   },
+   "S": {
+    "name": "S",
+    "expected": 48,
+    "missing": 0,
+    "sensitivity": {
+     "hierarchy-weak/pass": {
+      "n": 2,
+      "d": 6,
+      "rate": 0.3333333333333333
+     },
+     "hierarchy-strong/pass": {
+      "n": 0,
+      "d": 4,
+      "rate": 0
+     },
+     "spacing-weak/pass": {
+      "n": 3,
+      "d": 6,
+      "rate": 0.5
+     },
+     "spacing-strong/pass": {
+      "n": 2,
+      "d": 6,
+      "rate": 0.3333333333333333
+     },
+     "hierarchy-strong/fail": {
+      "n": 2,
+      "d": 2,
+      "rate": 1
+     }
+    },
+    "strongPassedL1": {
+     "n": 2,
+     "d": 10,
+     "rate": 0.2
+    },
+    "weakPassedL1": {
+     "n": 5,
+     "d": 12,
+     "rate": 0.4166666666666667
+    },
+    "byKind": {
+     "hierarchy": {
+      "strong": {
+       "n": 0,
+       "d": 4,
+       "rate": 0
+      },
+      "weak": {
+       "n": 2,
+       "d": 6,
+       "rate": 0.3333333333333333
+      }
+     },
+     "spacing": {
+      "strong": {
+       "n": 2,
+       "d": 6,
+       "rate": 0.3333333333333333
+      },
+      "weak": {
+       "n": 3,
+       "d": 6,
+       "rate": 0.5
+      }
+     }
+    },
+    "falsePositive": {
+     "n": 5,
+     "d": 6,
+     "rate": 0.8333333333333334
+    },
+    "reproducibility": {
+     "n": 11,
+     "d": 24,
+     "rate": 0.4583333333333333
+    },
+    "layer3": {
+     "n": 6,
+     "d": 12,
+     "rate": 0.5,
+     "ownerDecidedPairs": 6
+    },
+    "l1Unknown": []
+   }
+  },
+  "codex": {
+   "D": {
+    "name": "D",
+    "expected": 42,
+    "missing": 42,
+    "sensitivity": {},
+    "strongPassedL1": {
+     "n": 0,
+     "d": 0,
+     "rate": null
+    },
+    "weakPassedL1": {
+     "n": 0,
+     "d": 0,
+     "rate": null
+    },
+    "byKind": {
+     "hierarchy": {
+      "strong": {
+       "n": 0,
+       "d": 0,
+       "rate": null
+      },
+      "weak": {
+       "n": 0,
+       "d": 0,
+       "rate": null
+      }
+     },
+     "spacing": {
+      "strong": {
+       "n": 0,
+       "d": 0,
+       "rate": null
+      },
+      "weak": {
+       "n": 0,
+       "d": 0,
+       "rate": null
+      }
+     }
+    },
+    "falsePositive": {
+     "n": null,
+     "d": null,
+     "rate": null,
+     "note": "Dは同順位が無いので測らない"
+    },
+    "reproducibility": {
+     "n": 0,
+     "d": 0,
+     "rate": null
+    },
+    "layer3": {
+     "n": 0,
+     "d": 0,
+     "rate": null,
+     "ownerDecidedPairs": 6
+    },
+    "l1Unknown": []
+   },
+   "P": {
+    "name": "P",
+    "expected": 48,
+    "missing": 0,
+    "sensitivity": {
+     "hierarchy-weak/pass": {
+      "n": 6,
+      "d": 6,
+      "rate": 1
+     },
+     "hierarchy-strong/pass": {
+      "n": 4,
+      "d": 4,
+      "rate": 1
+     },
+     "spacing-weak/pass": {
+      "n": 5,
+      "d": 6,
+      "rate": 0.8333333333333334
+     },
+     "spacing-strong/pass": {
+      "n": 6,
+      "d": 6,
+      "rate": 1
+     },
+     "hierarchy-strong/fail": {
+      "n": 2,
+      "d": 2,
+      "rate": 1
+     }
+    },
+    "strongPassedL1": {
+     "n": 10,
+     "d": 10,
+     "rate": 1
+    },
+    "weakPassedL1": {
+     "n": 11,
+     "d": 12,
+     "rate": 0.9166666666666666
+    },
+    "byKind": {
+     "hierarchy": {
+      "strong": {
+       "n": 4,
+       "d": 4,
+       "rate": 1
+      },
+      "weak": {
+       "n": 6,
+       "d": 6,
+       "rate": 1
+      }
+     },
+     "spacing": {
+      "strong": {
+       "n": 6,
+       "d": 6,
+       "rate": 1
+      },
+      "weak": {
+       "n": 5,
+       "d": 6,
+       "rate": 0.8333333333333334
+      }
+     }
+    },
+    "falsePositive": {
+     "n": 0,
+     "d": 6,
+     "rate": 0
+    },
+    "reproducibility": {
+     "n": 23,
+     "d": 24,
+     "rate": 0.9583333333333334
+    },
+    "layer3": {
+     "n": 8,
+     "d": 12,
+     "rate": 0.6666666666666666,
+     "ownerDecidedPairs": 6
+    },
+    "l1Unknown": []
+   },
+   "F": {
+    "name": "F",
+    "expected": 48,
+    "missing": 0,
+    "sensitivity": {
+     "hierarchy-weak/pass": {
+      "n": 0,
+      "d": 6,
+      "rate": 0
+     },
+     "hierarchy-strong/pass": {
+      "n": 0,
+      "d": 4,
+      "rate": 0
+     },
+     "spacing-weak/pass": {
+      "n": 0,
+      "d": 6,
+      "rate": 0
+     },
+     "spacing-strong/pass": {
+      "n": 0,
+      "d": 6,
+      "rate": 0
+     },
+     "hierarchy-strong/fail": {
+      "n": 0,
+      "d": 2,
+      "rate": 0
+     }
+    },
+    "strongPassedL1": {
+     "n": 0,
+     "d": 10,
+     "rate": 0
+    },
+    "weakPassedL1": {
+     "n": 0,
+     "d": 12,
+     "rate": 0
+    },
+    "byKind": {
+     "hierarchy": {
+      "strong": {
+       "n": 0,
+       "d": 4,
+       "rate": 0
+      },
+      "weak": {
+       "n": 0,
+       "d": 6,
+       "rate": 0
+      }
+     },
+     "spacing": {
+      "strong": {
+       "n": 0,
+       "d": 6,
+       "rate": 0
+      },
+      "weak": {
+       "n": 0,
+       "d": 6,
+       "rate": 0
+      }
+     }
+    },
+    "falsePositive": {
+     "n": 0,
+     "d": 6,
+     "rate": 0
+    },
+    "reproducibility": {
+     "n": 17,
+     "d": 24,
+     "rate": 0.7083333333333334
+    },
+    "layer3": {
+     "n": 3,
+     "d": 12,
+     "rate": 0.25,
+     "ownerDecidedPairs": 6
+    },
+    "l1Unknown": []
+   },
+   "S": {
+    "name": "S",
+    "expected": 48,
+    "missing": 0,
+    "sensitivity": {
+     "hierarchy-weak/pass": {
+      "n": 0,
+      "d": 6,
+      "rate": 0
+     },
+     "hierarchy-strong/pass": {
+      "n": 2,
+      "d": 4,
+      "rate": 0.5
+     },
+     "spacing-weak/pass": {
+      "n": 2,
+      "d": 6,
+      "rate": 0.3333333333333333
+     },
+     "spacing-strong/pass": {
+      "n": 1,
+      "d": 6,
+      "rate": 0.16666666666666666
+     },
+     "hierarchy-strong/fail": {
+      "n": 0,
+      "d": 2,
+      "rate": 0
+     }
+    },
+    "strongPassedL1": {
+     "n": 3,
+     "d": 10,
+     "rate": 0.3
+    },
+    "weakPassedL1": {
+     "n": 2,
+     "d": 12,
+     "rate": 0.16666666666666666
+    },
+    "byKind": {
+     "hierarchy": {
+      "strong": {
+       "n": 2,
+       "d": 4,
+       "rate": 0.5
+      },
+      "weak": {
+       "n": 0,
+       "d": 6,
+       "rate": 0
+      }
+     },
+     "spacing": {
+      "strong": {
+       "n": 1,
+       "d": 6,
+       "rate": 0.16666666666666666
+      },
+      "weak": {
+       "n": 2,
+       "d": 6,
+       "rate": 0.3333333333333333
+      }
+     }
+    },
+    "falsePositive": {
+     "n": 5,
+     "d": 6,
+     "rate": 0.8333333333333334
+    },
+    "reproducibility": {
+     "n": 11,
+     "d": 24,
+     "rate": 0.4583333333333333
+    },
+    "layer3": {
+     "n": 4,
+     "d": 12,
+     "rate": 0.3333333333333333,
+     "ownerDecidedPairs": 6
+    },
+    "l1Unknown": []
+   }
+  }
+ },
+ "interEvaluator": {
+  "D": {
+   "n": 0,
+   "d": 0,
+   "rate": null
+  },
+  "P": {
+   "n": 45,
+   "d": 48,
+   "rate": 0.9375
+  },
+  "F": {
+   "n": 34,
+   "d": 48,
+   "rate": 0.7083333333333334
+  },
+  "S": {
+   "n": 12,
+   "d": 48,
+   "rate": 0.25
+  }
+ },
+ "negation": {
+  "F": {
+   "fable": {
+    "failures": 0,
+    "missing": 0,
+    "d": 20
+   },
+   "codex": {
+    "failures": 0,
+    "missing": 0,
+    "d": 20
+   }
+  },
+  "S": {
+   "failures": 0,
+   "missing": 0,
+   "d": 10
+  }
+ },
+ "ceiling": [],
+ "costs": {
+  "fable": {
+   "P": {
+    "calls": 48,
+    "usd": 9.931854199999998,
+    "costMissing": 0,
+    "durationMs": 949459,
+    "tokens": {
+     "input": 288,
+     "cacheCreation": 450248,
+     "cacheRead": 1061952,
+     "output": 62618
+    }
+   },
+   "Fc": {
+    "calls": 48,
+    "usd": 7.5901163999999985,
+    "costMissing": 0,
+    "durationMs": 1098978,
+    "tokens": {
+     "input": 288,
+     "cacheCreation": 277186,
+     "cacheRead": 1058116,
+     "output": 73323
+    }
+   },
+   "Fs": {
+    "calls": 48,
+    "usd": 2.2371160000000008,
+    "costMissing": 0,
+    "durationMs": 181680,
+    "tokens": {
+     "input": 96,
+     "cacheCreation": 134258,
+     "cacheRead": 272664,
+     "output": 672
+    }
+   },
+   "Neg": {
+    "calls": 40,
+    "usd": 1.1472884,
+    "costMissing": 0,
+    "durationMs": 187949,
+    "tokens": {
+     "input": 80,
+     "cacheCreation": 59354,
+     "cacheRead": 249790,
+     "output": 3520
+    }
+   }
+  },
+  "codex": {
+   "P": {
+    "calls": 98,
+    "usd": 0,
+    "costMissing": 0,
+    "durationMs": 2010389,
+    "tokens": {
+     "input": 8148143,
+     "cacheCreation": 0,
+     "cacheRead": 6642176,
+     "output": 44508
+    }
+   },
+   "Fc": {
+    "calls": 96,
+    "usd": 0,
+    "costMissing": 0,
+    "durationMs": 2248952,
+    "tokens": {
+     "input": 7745820,
+     "cacheCreation": 0,
+     "cacheRead": 6575104,
+     "output": 59013
+    }
+   },
+   "Fs": {
+    "calls": 94,
+    "usd": 0,
+    "costMissing": 0,
+    "durationMs": 702232,
+    "tokens": {
+     "input": 1935578,
+     "cacheCreation": 0,
+     "cacheRead": 1661696,
+     "output": 5598
+    }
+   },
+   "Neg": {
+    "calls": 40,
+    "usd": 0,
+    "costMissing": 0,
+    "durationMs": 315517,
+    "tokens": {
+     "input": 815942,
+     "cacheCreation": 0,
+     "cacheRead": 705536,
+     "output": 3351
+    }
+   }
+  }
+ },
+ "budgetStopped": false,
+ "decisions": {
+  "F": {
+   "perEvaluator": {
+    "fable": {
+     "result": "不採用",
+     "minimum": {
+      "strong": false,
+      "reproducibility": true
+     },
+     "reasons": [
+      "最低の基準を満たさない"
+     ]
+    },
+    "codex": {
+     "result": "不採用",
+     "minimum": {
+      "strong": false,
+      "reproducibility": true
+     },
+     "reasons": [
+      "最低の基準を満たさない"
+     ]
+    }
+   },
+   "cost": {
+    "ok": true,
+    "P": 9.931854199999998,
+    "method": 9.8272324,
+    "ratio": 0.9894660354558972
+   },
+   "conclusion": "不採用"
+  },
+  "S": {
+   "perEvaluator": {
+    "fable": {
+     "result": "不採用",
+     "minimum": {
+      "strong": false,
+      "reproducibility": false
+     },
+     "reasons": [
+      "最低の基準を満たさない"
+     ]
+    },
+    "codex": {
+     "result": "不採用",
+     "minimum": {
+      "strong": false,
+      "reproducibility": false
+     },
+     "reasons": [
+      "最低の基準を満たさない"
+     ]
+    }
+   },
+   "cost": {
+    "ok": true,
+    "P": 9.931854199999998,
+    "method": 7.5901163999999985,
+    "ratio": 0.7642194747482298
+   },
+   "conclusion": "不採用"
+  }
+ },
+ "layer1": {
+  "screens": 108,
+  "passed": 76,
+  "results": {
+   "ui02-exhibition/A-r1/original": true,
+   "ui02-exhibition/A-r1/contrast-strong": false,
+   "ui02-exhibition/A-r1/contrast-weak": false,
+   "ui02-exhibition/A-r1/pushout": false,
+   "ui02-exhibition/A-r1/hierarchy-strong": true,
+   "ui02-exhibition/A-r1/hierarchy-weak": true,
+   "ui02-exhibition/A-r1/spacing-strong": true,
+   "ui02-exhibition/A-r1/spacing-weak": true,
+   "ui02-exhibition/A-r1/inconsistency-strong": true,
+   "ui02-exhibition/A-r1/inconsistency-weak": true,
+   "ui02-exhibition/A-r1/control-attr-order": true,
+   "ui02-exhibition/A-r1/control-whitespace": true,
+   "ui02-exhibition/D-r1/original": true,
+   "ui02-exhibition/D-r1/contrast-strong": false,
+   "ui02-exhibition/D-r1/contrast-weak": false,
+   "ui02-exhibition/D-r1/pushout": false,
+   "ui02-exhibition/D-r1/hierarchy-strong": false,
+   "ui02-exhibition/D-r1/hierarchy-weak": true,
+   "ui02-exhibition/D-r1/spacing-strong": true,
+   "ui02-exhibition/D-r1/spacing-weak": true,
+   "ui02-exhibition/D-r1/inconsistency-strong": true,
+   "ui02-exhibition/D-r1/inconsistency-weak": true,
+   "ui02-exhibition/D-r1/control-attr-order": true,
+   "ui02-exhibition/D-r1/control-whitespace": true,
+   "ui02-exhibition/E-r1/original": true,
+   "ui02-exhibition/E-r1/contrast-strong": false,
+   "ui02-exhibition/E-r1/contrast-weak": false,
+   "ui02-exhibition/E-r1/pushout": false,
+   "ui02-exhibition/E-r1/hierarchy-strong": false,
+   "ui02-exhibition/E-r1/hierarchy-weak": false,
+   "ui02-exhibition/E-r1/spacing-strong": true,
+   "ui02-exhibition/E-r1/spacing-weak": true,
+   "ui02-exhibition/E-r1/inconsistency-strong": true,
+   "ui02-exhibition/E-r1/inconsistency-weak": true,
+   "ui02-exhibition/E-r1/control-attr-order": true,
+   "ui02-exhibition/E-r1/control-whitespace": true,
+   "ui03-dashboard/A-r1/original": true,
+   "ui03-dashboard/A-r1/contrast-strong": false,
+   "ui03-dashboard/A-r1/contrast-weak": false,
+   "ui03-dashboard/A-r1/pushout": false,
+   "ui03-dashboard/A-r1/hierarchy-strong": true,
+   "ui03-dashboard/A-r1/hierarchy-weak": true,
+   "ui03-dashboard/A-r1/spacing-strong": true,
+   "ui03-dashboard/A-r1/spacing-weak": true,
+   "ui03-dashboard/A-r1/inconsistency-strong": true,
+   "ui03-dashboard/A-r1/inconsistency-weak": true,
+   "ui03-dashboard/A-r1/control-attr-order": true,
+   "ui03-dashboard/A-r1/control-whitespace": true,
+   "ui03-dashboard/D-r1/original": true,
+   "ui03-dashboard/D-r1/contrast-strong": false,
+   "ui03-dashboard/D-r1/contrast-weak": false,
+   "ui03-dashboard/D-r1/pushout": false,
+   "ui03-dashboard/D-r1/hierarchy-strong": true,
+   "ui03-dashboard/D-r1/hierarchy-weak": true,
+   "ui03-dashboard/D-r1/spacing-strong": true,
+   "ui03-dashboard/D-r1/spacing-weak": true,
+   "ui03-dashboard/D-r1/inconsistency-strong": true,
+   "ui03-dashboard/D-r1/inconsistency-weak": true,
+   "ui03-dashboard/D-r1/control-attr-order": true,
+   "ui03-dashboard/D-r1/control-whitespace": true,
+   "ui03-dashboard/E-r1/original": true,
+   "ui03-dashboard/E-r1/contrast-strong": false,
+   "ui03-dashboard/E-r1/contrast-weak": false,
+   "ui03-dashboard/E-r1/pushout": false,
+   "ui03-dashboard/E-r1/hierarchy-strong": true,
+   "ui03-dashboard/E-r1/hierarchy-weak": true,
+   "ui03-dashboard/E-r1/spacing-strong": true,
+   "ui03-dashboard/E-r1/spacing-weak": true,
+   "ui03-dashboard/E-r1/inconsistency-strong": true,
+   "ui03-dashboard/E-r1/inconsistency-weak": true,
+   "ui03-dashboard/E-r1/control-attr-order": true,
+   "ui03-dashboard/E-r1/control-whitespace": true,
+   "ui08-existing-ds/A-r1/original": true,
+   "ui08-existing-ds/A-r1/contrast-strong": false,
+   "ui08-existing-ds/A-r1/contrast-weak": false,
+   "ui08-existing-ds/A-r1/pushout": false,
+   "ui08-existing-ds/A-r1/hierarchy-strong": false,
+   "ui08-existing-ds/A-r1/hierarchy-weak": true,
+   "ui08-existing-ds/A-r1/spacing-strong": true,
+   "ui08-existing-ds/A-r1/spacing-weak": true,
+   "ui08-existing-ds/A-r1/inconsistency-strong": true,
+   "ui08-existing-ds/A-r1/inconsistency-weak": true,
+   "ui08-existing-ds/A-r1/control-attr-order": true,
+   "ui08-existing-ds/A-r1/control-whitespace": true,
+   "ui08-existing-ds/D-r1/original": true,
+   "ui08-existing-ds/D-r1/contrast-strong": false,
+   "ui08-existing-ds/D-r1/contrast-weak": false,
+   "ui08-existing-ds/D-r1/pushout": false,
+   "ui08-existing-ds/D-r1/hierarchy-strong": false,
+   "ui08-existing-ds/D-r1/hierarchy-weak": true,
+   "ui08-existing-ds/D-r1/spacing-strong": true,
+   "ui08-existing-ds/D-r1/spacing-weak": true,
+   "ui08-existing-ds/D-r1/inconsistency-strong": true,
+   "ui08-existing-ds/D-r1/inconsistency-weak": true,
+   "ui08-existing-ds/D-r1/control-attr-order": true,
+   "ui08-existing-ds/D-r1/control-whitespace": true,
+   "ui08-existing-ds/E-r1/original": true,
+   "ui08-existing-ds/E-r1/contrast-strong": false,
+   "ui08-existing-ds/E-r1/contrast-weak": false,
+   "ui08-existing-ds/E-r1/pushout": false,
+   "ui08-existing-ds/E-r1/hierarchy-strong": true,
+   "ui08-existing-ds/E-r1/hierarchy-weak": true,
+   "ui08-existing-ds/E-r1/spacing-strong": true,
+   "ui08-existing-ds/E-r1/spacing-weak": true,
+   "ui08-existing-ds/E-r1/inconsistency-strong": true,
+   "ui08-existing-ds/E-r1/inconsistency-weak": true,
+   "ui08-existing-ds/E-r1/control-attr-order": true,
+   "ui08-existing-ds/E-r1/control-whitespace": true
+  },
+  "controlSameAsOriginal": [
+   {
+    "screen": "ui02-exhibition/A-r1/control-attr-order",
+    "sameAsOriginal": true
+   },
+   {
+    "screen": "ui02-exhibition/D-r1/control-attr-order",
+    "sameAsOriginal": true
+   },
+   {
+    "screen": "ui02-exhibition/E-r1/control-attr-order",
+    "sameAsOriginal": true
+   },
+   {
+    "screen": "ui03-dashboard/A-r1/control-attr-order",
+    "sameAsOriginal": true
+   },
+   {
+    "screen": "ui03-dashboard/D-r1/control-attr-order",
+    "sameAsOriginal": true
+   },
+   {
+    "screen": "ui03-dashboard/E-r1/control-attr-order",
+    "sameAsOriginal": true
+   },
+   {
+    "screen": "ui08-existing-ds/A-r1/control-attr-order",
+    "sameAsOriginal": true
+   },
+   {
+    "screen": "ui08-existing-ds/D-r1/control-attr-order",
+    "sameAsOriginal": true
+   },
+   {
+    "screen": "ui08-existing-ds/E-r1/control-attr-order",
+    "sameAsOriginal": true
+   }
+  ]
+ },
+ "missingByReason": {
+  "fable": {
+   "total": 184,
+   "valid": 184,
+   "byReason": {},
+   "isolationUnconfirmed": 0
+  },
+  "codex": {
+   "total": 184,
+   "valid": 184,
+   "byReason": {},
+   "isolationUnconfirmed": 1
+  }
+ },
+ "dryRun": false
+}

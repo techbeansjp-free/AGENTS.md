@@ -10,7 +10,7 @@ import {spawnSync} from 'node:child_process';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS, pngChunks, PNG_KEEP, extractJson, readJson, parseScreen} from './eval-common.mjs';
 import {buildPackets} from './make-packets.mjs';
 import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex} from './run-eval.mjs';
-import {computeAll, decideEvaluator, missingByReason} from './aggregate.mjs';
+import {computeAll, decideEvaluator, missingByReason, excludeVariants} from './aggregate.mjs';
 import {buildOwnerPage} from './owner-page.mjs';
 
 const cfg = loadConfig();
@@ -332,4 +332,11 @@ test('codex: images-not-viewed from an image error or an answer that says the sc
   const cfg = JSON.parse(fs.readFileSync(path.join(here, '..', 'config', 'eval.json'), 'utf8'));
   assert.ok(buildPrompt('P', cfg, {evaluator: 'codex'}).includes('読取りだけのcommand'));
   assert.ok(!buildPrompt('P', cfg, {evaluator: 'fable'}).includes('読取りだけのcommand'));
+});
+
+test('aggregate: --exclude-variant marks only layer-2 items of that variant, with a reason', () => {
+  const key = {items: [{id: 'a', layer: 2, variant: 'contrast-strong'}, {id: 'b', layer: 2, variant: 'spacing-weak'}, {id: 'c', layer: 3, variant: 'contrast-strong'}, {id: 'd', layer: 2, variant: 'contrast-strong', excluded: 'earlier'}]};
+  const k = excludeVariants(key, ['contrast-strong']);
+  assert.deepEqual(k.items.map((i) => i.excluded ?? null), ['予算の削り方で本番から外した（計画5.2）', null, null, 'earlier']);
+  assert.equal(key.items[0].excluded, undefined); // the input is not changed
 });

@@ -3,7 +3,9 @@
 //   node harness/aggregate.mjs critiques --runs <runs> --out <texts.jsonl>     (input of ssr.py score)
 //   node harness/aggregate.mjs decide --key <key.json> --runs <runs> --out <result.json>
 //        [--layer1 <layer1.json>]... [--owner <owner-answers.json> --owner-key <owner-key.json>]
-//        [--ssr <ssr.json>] [--ssr-negation <ssr-negation.json>]
+//        [--ssr <ssr.json>] [--ssr-negation <ssr-negation.json>] [--exclude-variant <variant>]...
+// --exclude-variant marks the layer-2 items of that variant as excluded (plan 5.2: the pairs dropped by the budget
+// reduction before the main run, recorded in EVAL_PLAN.md), so they are reported as excluded, not as missing.
 // Pair judgments are in the item's orientation: "first" (layer 2: the original), "second", "same", or null (missing).
 // Counts are pooled over the two rounds (each pair x round is one judgment), except reproducibility (one per pair).
 // Every rate is reported as {n, d, rate}. D is recorded with the same metrics but is not decided; D has no ties, so its
@@ -243,6 +245,10 @@ export function layer1Summary({map, records}) {
   }
   return {screens: records.length, passed: records.filter((r) => r.pass).length, results: Object.fromEntries(Object.entries(map)), controlSameAsOriginal: control};
 }
+export function excludeVariants(key, variants, why = '予算の削り方で本番から外した（計画5.2）') {
+  const v = new Set(variants);
+  return {...key, items: key.items.map((i) => (i.layer === 2 && v.has(i.variant) && !i.excluded ? {...i, excluded: why} : i))};
+}
 export function loadOwner(answersFile, keyFile) {
   const ans = readJson(answersFile), k = readJson(keyFile), o = {};
   for (const [pid, choice] of Object.entries(ans.answers ?? {})) {
@@ -270,7 +276,7 @@ function main() {
     return;
   }
   if (a[0] !== 'decide') { console.error('usage: aggregate.mjs critiques|decide ... (see the header)'); process.exit(2); }
-  const cfg = loadConfig(), key = readJson(path.resolve(opt('--key')));
+  const cfg = loadConfig(), key = excludeVariants(readJson(path.resolve(opt('--key'))), all('--exclude-variant'));
   const ssr = opt('--ssr') ? readJson(path.resolve(opt('--ssr'))) : null;
   const ssrNeg = opt('--ssr-negation') ? readJson(path.resolve(opt('--ssr-negation'))) : null;
   const {J, fNeg} = collectJudgments({key, runs, cfg, ssr});
