@@ -720,6 +720,29 @@
           "afterSha256": "59e19706d51d39f66711c2653cd7eb1291c94d9b55eb14bda74ce4dc636d015a"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-WARRANTY-SCOPE-DISTRIBUTION-001",
+      "status": "staged",
+      "fromVersion": 28,
+      "toVersion": 29,
+      "owner": "repository maintainer (owner request to proceed with Issue #1828, 2026-11-27)",
+      "rationale": "Issue #1828: 受託開発で瑕疵対応が無制限に発生しないよう、保証範囲を顧客と合意して仕様書に残すため、Skill warranty-scope（skills/warranty-scope/SKILL.md、skills/warranty-scope/references/check-items.md）と品質保証範囲の雛形 v05/templates/specs/details/02_要件/03_品質保証範囲.md を配布する（適用は Issue #1828 の配布PR）。package.json の変更は files への3行の追加と qualityContractVersion だけで、scripts・dependencies・devDependencies・engines・type・validator・権限境界は変更しない。src/runtime-files.json にも同じ3行を加える。",
+      "rollback": "適用前は有効化しない。適用後に戻す場合は次versionのproposalを先行登録して適用し、登録済みproposalの削除や品質保護の解除は行わない。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "package.json",
+          "beforeSha256": "5356e871db203a9a2179658df97283e7a92bdc5922005e336fbff7d3f8f35d73",
+          "afterSha256": "37689e50b73ddb2b42bf6587db8abdc8f05bc46faf85d390ac6fe61ed5e6ddec"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "59e19706d51d39f66711c2653cd7eb1291c94d9b55eb14bda74ce4dc636d015a",
+          "afterSha256": "35135aaa6cc23891b40cb3f378c53a17a1127210ce60e125ccf03efcfdaec458"
+        }
+      ]
     }
   ]
 }
