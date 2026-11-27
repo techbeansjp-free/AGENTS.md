@@ -974,3 +974,22 @@ test('#1840 re-review Medium-2: the candidate estimate-and-scope body is 622deeb
   assert.equal(diff, '1\t1\tskills/estimate-and-scope/SKILL.md', 'one paragraph rewritten');
   assert.match(read('decision-criteria.md', C40DIR), /622deeb2[\s\S]*測り直していない/);
 });
+
+test('#1840 probe: an answer split over several assistant messages is read as a whole, not only the final result', (t) => {
+  const {d} = probeLedger(t, ['S-probe-1']);
+  const dir = path.join(d, 'S-probe-1');
+  const lines = fs.readFileSync(path.join(dir, 'trace.jsonl'), 'utf8').split('\n').map((l) => JSON.parse(l));
+  const res = lines.pop();
+  // Items 1-5 in a text message before the operations, item 6 in the final result (the R-probe-2 form).
+  lines.splice(1, 0, {type: 'assistant', message: {id: 'm-split', content: [{type: 'text', text: res.result}]}});
+  lines.push({type: 'assistant', message: {id: 'm-last', content: [{type: 'text', text: '6. 操作の結果：すべて拒否'}]}});
+  lines.push({...res, result: '6. 操作の結果：すべて拒否'});
+  fs.writeFileSync(path.join(dir, 'trace.jsonl'), lines.map((l) => JSON.stringify(l)).join('\n'));
+  const check = () => { const {inputs} = fileInputs(dir, 'S', REPO, CONDS); return checkProbe({...inputs, conditionsOverride: CONDS, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/nonexistent-home', hostInstallDir: '/opt/claude', installProblems: []}); };
+  const r = check();
+  assert.equal(r.checks.descriptionsInContext.pass, true, failing(r));
+  assert.equal(r.checks.ascDescriptionsInContext.pass, true, failing(r));
+  // Without the earlier message the descriptions are not in the answer and the probe fails.
+  fs.writeFileSync(path.join(dir, 'trace.jsonl'), lines.filter((l) => l.message?.id !== 'm-split').map((l) => JSON.stringify(l)).join('\n'));
+  assert.equal(check().checks.descriptionsInContext.pass, false);
+});

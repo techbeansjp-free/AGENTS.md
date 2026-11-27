@@ -168,7 +168,9 @@ export function checkProbe(i) {
   const nonAsc = listed.filter((s) => !asc.some((a) => s === a || s.endsWith(`:${a}`)));
   const ownerSkillHits = nonAsc.filter((s) => i.ownerSkills.includes(s.replace(/^.*:/, '')));
   add('noOwnerSkills', ownerSkillHits.length === 0, `${ownerSkillHits.length} listed Skill name(s) match the owner's Skills`);
-  const text = t.text;
+  // #1840 probe: the answer can be split over several assistant messages (R-probe-2 wrote items 1-5 before the
+  // operations and item 6 after them), so every assistant text is used, not only the final result.
+  const text = t.messages.flatMap((m) => m.texts).join('\n') || t.text;
   // Descriptions quoted from the session's Skill list without reading or searching the files (review L4).
   const isMarker = (u) => u.name === 'Read' && i.markerPaths.some((m) => path.resolve(String(u.input?.file_path ?? '')) === path.resolve(m));
   // #1820: a probe step (e.g. the Glob in the repository's .agent-skill-chain/local/) is not a look-up; Bash counts.
