@@ -1,6 +1,6 @@
 // Metrics and decisions of EVAL_PLAN.md sections 6 and 7, matched through the key after scoring.
 // Usage:
-//   node harness/aggregate.mjs critiques --runs <runs> --out <texts.jsonl>     (input of ssr.py score)
+//   node harness/aggregate.mjs critiques --runs <runs> --out <texts.jsonl>     (input of ssr.py score; see SSR_SOURCE.md)
 //   node harness/aggregate.mjs decide --key <key.json> --runs <runs> --out <result.json>
 //        [--layer1 <layer1.json>]... [--owner <owner-answers.json> --owner-key <owner-key.json>]
 //        [--ssr <ssr.json>] [--ssr-negation <ssr-negation.json>] [--skip-packets <skip.txt>]

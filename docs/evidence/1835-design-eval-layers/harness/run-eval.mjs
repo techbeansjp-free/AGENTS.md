@@ -105,7 +105,7 @@ export function parseFable(stdout) {
     toolCalls, hasResult: true,
     error: j.is_error ? `is_error (${j.subtype ?? '?'})` : (j.subtype && j.subtype !== 'success' ? j.subtype : null)};
 }
-// Missing reason images-not-read: any PNG handed over (in the call's packet) that no Read tool call targeted.
+// Missing reason images-not-read: one or more PNGs handed over (in the call's packet) that no Read tool call targeted.
 export function checkImagesRead({toolCalls, images, cwd}) {
   const read = new Set(toolCalls.filter((t) => t.name === 'Read' && typeof t.path === 'string').map((t) => real(path.resolve(cwd, t.path))));
   const unread = images.filter((f) => !read.has(real(f)));

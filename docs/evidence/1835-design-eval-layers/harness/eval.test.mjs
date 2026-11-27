@@ -9,6 +9,7 @@ import zlib from 'node:zlib';
 import {spawnSync} from 'node:child_process';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS, pngChunks, PNG_KEEP, extractJson, readJson, parseScreen} from './eval-common.mjs';
 import {buildPackets} from './make-packets.mjs';
+import {ssrSource} from './ssr-source.mjs';
 import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex} from './run-eval.mjs';
 import {computeAll, decideEvaluator, missingByReason, excludeSkipped} from './aggregate.mjs';
 import {buildOwnerPage} from './owner-page.mjs';
@@ -292,12 +293,13 @@ test('aggregate: 不合格, 不採用 (minimum), 未判定 (missing, owner absen
   assert.equal(decideEvaluator({m: m(1), P: m(2), neg: {failures: 0, missing: 0, d: 1}}).result, '不採用');
 });
 
-test('ssr.py: the formula on known vectors (no model)', () => {
+test('ssr.py: the source recorded in SSR_SOURCE.md matches the run hash, and the formula on known vectors (no model)', () => {
   const dir = tmp('asc1835-ssr-');
+  fs.writeFileSync(path.join(dir, 'ssr.py'), ssrSource());
   const e = (k) => Array.from({length: 6}, (_, i) => (i === k ? 1 : 0));
   const anchors = [[0, 1, 2, 3, 4].map(e), [0, 1, 2, 3, 4].map(e)];
   fs.writeFileSync(path.join(dir, 'v.json'), JSON.stringify({responses: {a: [1, 2, 3, 4, 5, 0], flat: [0, 0, 0, 0, 0, 1], top: [0, 0, 0, 0, 1, 0]}, anchors}));
-  const r = spawnSync('python3', ['-I', path.join(here, 'ssr.py'), 'formula', '--vectors', path.join(dir, 'v.json'), '--out', path.join(dir, 'o.json')], {encoding: 'utf8'});
+  const r = spawnSync('python3', ['-I', path.join(dir, 'ssr.py'), 'formula', '--vectors', path.join(dir, 'v.json'), '--out', path.join(dir, 'o.json')], {encoding: 'utf8'});
   assert.equal(r.status, 0, r.stderr);
   const o = readJson(path.join(dir, 'o.json')).results;
   // s_r = r/sqrt(55); p_r = (r-1)/10; E = sum r(r-1)/10 = 4

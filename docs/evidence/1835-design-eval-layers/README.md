@@ -25,7 +25,7 @@
 | `harness/eval-common.mjs` | 層2・層3の道具の共通部分（設定、seed付きの乱数、PNGのmetadataの除去、組の一覧） |
 | `harness/make-packets.mjs` | 評価者に渡す盲検の束と、対応表（key）を作る |
 | `harness/run-eval.mjs` | 評価者（Fable・Codex）の呼出し、台帳、予算の停止、`--dry-run`、予算の見込み（`plan`） |
-| `harness/ssr.py` | SSR（講評→5段階の確率→期待値）と、否定の反例のSSRでの判定 |
+| `harness/SSR_SOURCE.md`・`harness/ssr-source.mjs` | SSR（講評→5段階の確率→期待値）と、否定の反例のSSRでの判定。repositoryは`.py`を置けないので、本番で実行した`ssr.py`の本文を記録し、`ssr-source.mjs`でsha256を確かめてscratchへ書き出す |
 | `harness/owner-page.mjs` | 層3でownerが比べる1枚のローカルHTMLと、その対応表 |
 | `harness/aggregate.mjs` | 計画6・7節の指標と採否 |
 | `harness/eval.test.mjs` | 上の道具の`node --test`の試験 |
@@ -224,8 +224,9 @@ ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --packets $O/packets --runs $
 ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --packets $O/packets --runs $O/runs --evaluator codex --skip-packets $O/skip.txt --lock $O/key --lock $O/owner
 # 7. SSRと集計
 node harness/aggregate.mjs critiques --runs $O/runs --out $O/critiques.jsonl
-$V/venv/bin/python -I harness/ssr.py score --anchors anchors.json --in $O/critiques.jsonl --cache-dir $V/cache --out $O/ssr.json
-$V/venv/bin/python -I harness/ssr.py negation --anchors anchors.json --pairs negation-pairs.json --cache-dir $V/cache --out $O/ssr-negation.json
+node harness/ssr-source.mjs $V/ssr.py   # SSR_SOURCE.mdから書き出す（sha256を照合）
+$V/venv/bin/python -I $V/ssr.py score --anchors anchors.json --in $O/critiques.jsonl --cache-dir $V/cache --out $O/ssr.json
+$V/venv/bin/python -I $V/ssr.py negation --anchors anchors.json --pairs negation-pairs.json --cache-dir $V/cache --out $O/ssr-negation.json
 node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/result.json --layer1 $R/l1-<case>-<trial>/layer1.json ... \
   --owner <ownerのJSON> --owner-key $O/owner-key/owner-key.json --ssr $O/ssr.json --ssr-negation $O/ssr-negation.json --skip-packets $O/skip.txt
 ```
@@ -255,7 +256,7 @@ node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/
 - `negation-pairs.json`は、3ケースの依頼の必須事項から、否定だけが違う10対を書いた（9・10は肯定側が否定の形）。
 - SSRの否定の反例は、モデルを呼ばずに実行できるので、道具の確認として1回実行した（2026-11-27、`multilingual-e5-large` snapshot `ac6781cd1cf88b8306a536d7c9d18a5bd57cc14b`、両側とも接頭辞`query: `）。失敗は0件だった（期待値は肯定側2.9〜4.1、否定側2.0〜2.3。対のcos類似度は0.948〜0.983）。この結果を見た後に、基準文と否定の文は変えていない。
 
-### SSR（`ssr.py`）
+### SSR（`ssr.py`。本文は[SSR_SOURCE.md](harness/SSR_SOURCE.md)）
 
 基準文の組ごとに s_r=cos(講評, 基準文r)、p_r=(s_r−min s)/Σ(s_j−min s)、3組のpmfの平均から期待値Σr·p_rを出す。組の5つの類似度がすべて等しいときは一様分布にして`degenerate`を記録する。embeddingは`HF_HUB_OFFLINE=1`で、取得済みのfileだけを使う。e5の接頭辞は、対称な類似度の用途として講評・基準文とも`query: `にした（`config/eval.json`の`ssr.prefix`）。embeddingを読めなければ`coreFailed`を書き、Sはその評価者について未判定になる。
 

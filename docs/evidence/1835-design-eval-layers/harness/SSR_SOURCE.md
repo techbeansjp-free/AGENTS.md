@@ -1,3 +1,11 @@
+# SSRの道具のsource（`ssr.py`）
+
+このrepositoryは実装言語をTypeScript（`.ts`・`.mjs`）に集約しており、`.py`のfileを置けない（`scripts/check_source_quality.ts`）。SSRのembedding（`fastembed`）はPythonでしか動かせなかったので、本番で実行した`ssr.py`の本文を、ここに記録として残す。repositoryの中では実行しない。
+
+- 本番で実行したfileのsha256：`af4d175da3c06b4514aa319d0f2910a08a55080d9b4908cf00e1c5d2e4af2855`
+- 書き出し：`node harness/ssr-source.mjs <出力先のfile>`。下の本文を書き出し、sha256が上と一致しなければ失敗する。出力先は、repositoryの外（scratch）にする。
+
+```python
 """SSR (semantic similarity rating) of the F critiques against the fixed anchors (EVAL_PLAN.md 3 and 4). #1835.
 
 Run with the scratch venv and -I:  <venv>/bin/python -I harness/ssr.py <command> ...
@@ -132,3 +140,4 @@ def main(argv):
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
+```
