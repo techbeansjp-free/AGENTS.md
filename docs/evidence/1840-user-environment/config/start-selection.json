@@ -1,0 +1,113 @@
+{
+ "schema": "asc-1840-start-selection/v1",
+ "note": "#1840 review H3: the ASC CLI start of the installed ASC (fixture U of each condition, built by dry-run.mjs from the pinned tarballs), run without a model in a dedicated worktree created by worktree-create on a copy of the fixture: node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs start <worktree> --path <path>. It shows what a user environment with Bash selects; the measurement (tools level W, no Bash) cannot run start. Local paths are left out.",
+ "at": "2026-11-27",
+ "tarballSha256": {
+  "R": "ecc7afd0d6595824bb6362618af973e7b66e8a3aa64fee1c3fbdb4043bf61c13",
+  "C": "e212e3a89bf9ac24fd63423d759dae7280fdc925b12508e8ae527b1fa6b7887c"
+ },
+ "runtimeVersion": {
+  "R": "0.5.119",
+  "C": "0.5.119"
+ },
+ "rows": [
+  {
+   "condition": "R",
+   "path": "src/billing/invoice.ts",
+   "selection": "path-prefix",
+   "manifestSha256": "de1e65f587cabeb167638dc8645f1db16b714dc26b8d827eabc68f7acb8cdccd",
+   "references": [
+    {
+     "path": "CLAUDE.md",
+     "sha256": "cbd4cdcb8cf8e7a089880a1ec920b04c2849c4fe087d918ab302ebb8bc4adae7"
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/money.md",
+     "sha256": "7e3de1249388121c520c73873c921308e7df83c03d0b0d4a63e16ccd42eb2ca0"
+    }
+   ],
+   "notices": [],
+   "moneyRuleSelected": true,
+   "providerLaunch": false
+  },
+  {
+   "condition": "R",
+   "path": "src/users/store.ts",
+   "selection": "path-prefix",
+   "manifestSha256": "de1e65f587cabeb167638dc8645f1db16b714dc26b8d827eabc68f7acb8cdccd",
+   "references": [
+    {
+     "path": "CLAUDE.md",
+     "sha256": "cbd4cdcb8cf8e7a089880a1ec920b04c2849c4fe087d918ab302ebb8bc4adae7"
+    }
+   ],
+   "notices": [],
+   "moneyRuleSelected": false,
+   "providerLaunch": false
+  },
+  {
+   "condition": "R",
+   "path": "docs/開発の始め方.md",
+   "selection": "path-prefix",
+   "manifestSha256": "de1e65f587cabeb167638dc8645f1db16b714dc26b8d827eabc68f7acb8cdccd",
+   "references": [
+    {
+     "path": "CLAUDE.md",
+     "sha256": "cbd4cdcb8cf8e7a089880a1ec920b04c2849c4fe087d918ab302ebb8bc4adae7"
+    }
+   ],
+   "notices": [],
+   "moneyRuleSelected": false,
+   "providerLaunch": false
+  },
+  {
+   "condition": "C",
+   "path": "src/billing/invoice.ts",
+   "selection": "path-prefix",
+   "manifestSha256": "de1e65f587cabeb167638dc8645f1db16b714dc26b8d827eabc68f7acb8cdccd",
+   "references": [
+    {
+     "path": "CLAUDE.md",
+     "sha256": "cbd4cdcb8cf8e7a089880a1ec920b04c2849c4fe087d918ab302ebb8bc4adae7"
+    },
+    {
+     "path": ".agent-skill-chain/project/rules/money.md",
+     "sha256": "7e3de1249388121c520c73873c921308e7df83c03d0b0d4a63e16ccd42eb2ca0"
+    }
+   ],
+   "notices": [],
+   "moneyRuleSelected": true,
+   "providerLaunch": false
+  },
+  {
+   "condition": "C",
+   "path": "src/users/store.ts",
+   "selection": "path-prefix",
+   "manifestSha256": "de1e65f587cabeb167638dc8645f1db16b714dc26b8d827eabc68f7acb8cdccd",
+   "references": [
+    {
+     "path": "CLAUDE.md",
+     "sha256": "cbd4cdcb8cf8e7a089880a1ec920b04c2849c4fe087d918ab302ebb8bc4adae7"
+    }
+   ],
+   "notices": [],
+   "moneyRuleSelected": false,
+   "providerLaunch": false
+  },
+  {
+   "condition": "C",
+   "path": "docs/開発の始め方.md",
+   "selection": "path-prefix",
+   "manifestSha256": "de1e65f587cabeb167638dc8645f1db16b714dc26b8d827eabc68f7acb8cdccd",
+   "references": [
+    {
+     "path": "CLAUDE.md",
+     "sha256": "cbd4cdcb8cf8e7a089880a1ec920b04c2849c4fe087d918ab302ebb8bc4adae7"
+    }
+   ],
+   "notices": [],
+   "moneyRuleSelected": false,
+   "providerLaunch": false
+  }
+ ]
+}

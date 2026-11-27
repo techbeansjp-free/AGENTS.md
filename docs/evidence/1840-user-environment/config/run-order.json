@@ -1,0 +1,29 @@
+{
+ "schema": "asc-eval-run-order/v1",
+ "note": "Fixed before any model run. Reps outermost (1..conditions.json runs); within a rep the 19 cases in caseOrder (goal 1 and goal 2 interleaved; negative cases never adjacent and never last); within a case R (release) then C (candidate).",
+ "caseOrder": [
+  "w-1",
+  "u-bill-1",
+  "n-2",
+  "m-r1",
+  "u-skill-1",
+  "s-1",
+  "u-users",
+  "w-2",
+  "n-3",
+  "m-r2",
+  "u-skill-2",
+  "n-1",
+  "u-bill-2",
+  "w-3",
+  "u-neg",
+  "m-r7",
+  "u-est",
+  "u-skill-3",
+  "u-docs"
+ ],
+ "conditionOrder": [
+  "R",
+  "C"
+ ]
+}

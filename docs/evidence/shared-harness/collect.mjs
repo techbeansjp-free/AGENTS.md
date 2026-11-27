@@ -18,6 +18,7 @@ import {loadConditions} from './apply-condition.mjs';
 import {ledgerConsistency, settlements, settledFilesProblem, fileSha256, ledgerProblems, reservedNames} from './ledger.mjs';
 import {scoreTrials} from './score.mjs';
 import {loadSpec} from './config.mjs';
+import {workChanges, headReader} from './make-fixture.mjs';
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 export const PUBLISHED = ['trials.json', 'runs.json', 'ledger.jsonl'];
@@ -55,12 +56,33 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
   const cell = conds.cells[m[1]] ?? {};
   const work = path.join(dir, 'work');
   const sizeOf = (rel) => { const f = path.join(work, rel); try { return fs.statSync(f).isFile() ? fs.statSync(f).size : null; } catch { return null; } };
+  // #1840: the text of a file in the trial's work/ copy at the end (cases.json writes), or null.
+  const fileText = (rel) => { const p = path.join(work, rel); try { return fs.statSync(p).isFile() ? fs.readFileSync(p, 'utf8') : null; } catch { return null; } };
   const row = {trial: name, condition: m[1], tools: cell.tools ?? null, case: meta.case ?? null, kind: meta.kind ?? null, fixture: meta.fixture ?? null, model: meta.model, resolvedModel: meta.resolvedModel, claudeVersion: meta.claudeVersion, ascRuntimeVersion: meta.ascRuntimeVersion,
     tarballSha256: meta.tarballSha256, installSource: meta.installSource ?? null, released: meta.released, installCondition: meta.installCondition ?? null, installFixture: meta.installFixture ?? null, adopted: meta.adopted, claudeMdSha256: meta.claudeMdSha256 ?? null, sampleHead: meta.sampleHead, applied: meta.applied,
     maxTurns: meta.maxTurns ?? null, initTools: meta.initTools ?? null, initPermissionMode: meta.initPermissionMode ?? null, settingsSha256: meta.settingsSha256 ?? null, resultSubtype: meta.resultSubtype ?? null, numTurns: meta.numTurns ?? null,
     ledgerId: meta.ledgerId ?? null, ledgerSeq: meta.ledgerSeq ?? null, fixationSha256: meta.fixationSha256, fixedAtCommit: meta.fixedAtCommit, fixationStage: meta.fixationStage,
     exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: scrubSensitive(redact(text, dir)).hits, ...raw};
-  return {row, entry: {name, text, failure: null, sizeOf}, dir};
+  // #1840 re-review High: the fixture's files before the trial (work/ at its HEAD), for the lines the markers leave out.
+  const head = headReader(work);
+  return {row, entry: {name, text, failure: null, sizeOf, fileText, priorFiles: head.files, priorTexts: head.texts}, dir};
+}
+
+// #1840 review M2: a trial whose meta.json records workFiles (run-trial.mjs, the changed and created files with their
+// sha256) against its work/ copy now: the same paths and digests, or a problem text. A trial without the field (earlier
+// configs) or without meta.json or work/ gives none (those are reported elsewhere).
+export function workFilesProblem(dir) {
+  const mf = path.join(dir, 'meta.json');
+  if (!fs.existsSync(mf) || !fs.existsSync(path.join(dir, 'work'))) return null;
+  let meta;
+  try { meta = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch { return null; }
+  if (meta.workFilesError) return `trial ${path.basename(dir)}: the changed files were not recorded (${meta.workFilesError})`;
+  if (!meta.workFiles) return null;
+  let now;
+  try { now = workChanges(path.join(dir, 'work')); } catch (e) { return `trial ${path.basename(dir)}: ${e.message}`; }
+  const keys = [...new Set([...Object.keys(meta.workFiles), ...Object.keys(now)])].sort();
+  const differ = keys.filter((k) => meta.workFiles[k] !== now[k]);
+  return differ.length ? `trial ${path.basename(dir)}: work/ differs from the files recorded at the end of the trial (${differ.slice(0, 3).join(', ')}${differ.length > 3 ? ', …' : ''})` : null;
 }
 
 // A JSON text with the trial directory and local paths redacted and sensitive strings scrubbed.
@@ -79,6 +101,9 @@ export function buildCollection(runsRoot, {ledger = null, conds = loadConditions
     const tampered = fs.readdirSync(runsRoot).filter((n) => settled.has(n)).map((n) => settledFilesProblem(path.join(runsRoot, n), settled.get(n))).filter(Boolean);
     if (tampered.length) throw new Error(tampered.join('; '));
   }
+  // #1840 review M2: the work/ copy of every trial whose meta.json records workFiles must still hold exactly those files.
+  const workChanged = fs.readdirSync(runsRoot).filter((n) => /^[A-Z]+-.+-\d+$/.test(n) && !/-probe-\d+$/.test(n)).map((n) => workFilesProblem(path.join(runsRoot, n))).filter(Boolean);
+  if (workChanged.length) throw new Error(workChanged.join('; '));
   const rows = [], entries = [], dirs = new Map();
   for (const name of fs.readdirSync(runsRoot).sort()) {
     const t = collectTrial(runsRoot, name, {conds, settled});

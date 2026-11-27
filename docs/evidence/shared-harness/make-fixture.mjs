@@ -47,14 +47,15 @@ export function writeSources(dir, fixtureId, conds = loadConditions()) {
   if (!f) throw new Error(`unknown fixture ${fixtureId}`);
   const written = [];
   if (f.kind === 'app') {
-    for (const [name, text] of Object.entries(files)) {
+    // #1840: appFiles false leaves out the fixture A files (a project of its own, made of extraFiles only).
+    for (const [name, text] of Object.entries(f.appFiles === false ? {} : files)) {
       const p = path.join(dir, name);
       fs.mkdirSync(path.dirname(p), {recursive: true});
       fs.writeFileSync(p, text);
       written.push(name);
     }
     for (const [name, text] of Object.entries(f.extraFiles ?? {})) {
-      if (name in files) throw new Error(`extraFiles may not replace the fixture A file ${name}`);
+      if (f.appFiles !== false && name in files) throw new Error(`extraFiles may not replace the fixture A file ${name}`);
       const p = path.join(dir, name);
       fs.mkdirSync(path.dirname(p), {recursive: true});
       fs.writeFileSync(p, text);
@@ -78,6 +79,58 @@ export const gitEnv = (home) => ({PATH: process.env.PATH, HOME: home, GIT_CONFIG
 export function git(args, cwd) {
   const r = spawnSync('git', args, {cwd, env: gitEnv(cwd), encoding: 'utf8'});
   if (r.status !== 0) throw new Error(`git ${args[0]} failed: ${r.stderr || r.stdout}`);
+}
+
+// #1840 review M2: the files of a sample project that differ from its HEAD (changed, added, ignored or deleted), each with
+// its sha256 (null: deleted), sorted by path. run-trial.mjs records it in meta.json at the end of a trial; collect.mjs
+// compares it with the work/ copy again, so a file changed after the trial is detected.
+export function workChanges(work) {
+  const r = spawnSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored=matching', '--no-renames'], {cwd: work, env: gitEnv(work), encoding: 'utf8'});
+  if (r.status !== 0) throw new Error(`git status failed in ${work}: ${r.stderr}`);
+  const out = {};
+  const add = (rel) => {
+    const f = path.join(work, rel);
+    const st = fs.existsSync(f) ? fs.statSync(f) : null;
+    if (st?.isDirectory()) { for (const e of fs.readdirSync(f)) add(path.posix.join(rel, e)); return; }
+    out[rel.replace(/\/$/, '')] = st?.isFile() ? sha(fs.readFileSync(f)) : null;
+  };
+  for (const e of r.stdout.split('\0').filter(Boolean)) add(e.slice(3));
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+// #1840 re-review High: the files of a sample project at its HEAD (the fixture as made, before the trial; the trial has
+// no Bash and cannot commit) and their texts, for the lines the markers leave out (score.mjs baseLinesFor). headReader
+// lists the files once and reads the texts in one `git cat-file --batch` per call of texts(); text() of a path that is
+// not at HEAD (a file the trial created) is null.
+export function headReader(work) {
+  const run = (args, input) => spawnSync('git', args, {cwd: work, env: gitEnv(work), input, maxBuffer: 1 << 30});
+  let files = null;
+  const cache = new Map();
+  const list = () => {
+    if (files) return files;
+    const r = run(['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
+    if (r.status !== 0) throw new Error(`git ls-tree failed in ${work}: ${r.stderr}`);
+    return (files = r.stdout.toString('utf8').split('\0').filter(Boolean));
+  };
+  const load = (rels) => {
+    const want = rels.filter((f) => !cache.has(f));
+    const at = new Set(list());
+    for (const f of want) if (!at.has(f)) cache.set(f, null);
+    const read = want.filter((f) => at.has(f));
+    if (!read.length) return;
+    const r = run(['cat-file', '--batch'], read.map((f) => `HEAD:${f}\n`).join(''));
+    if (r.status !== 0) throw new Error(`git cat-file failed in ${work}: ${r.stderr}`);
+    let pos = 0;
+    for (const f of read) {
+      const nl = r.stdout.indexOf(10, pos);
+      const head = r.stdout.subarray(pos, nl).toString('utf8').split(' ');
+      if (head[1] !== 'blob') throw new Error(`git cat-file: ${f} is not a blob at HEAD`);
+      const size = Number(head[2]);
+      cache.set(f, r.stdout.subarray(nl + 1, nl + 1 + size).toString('utf8'));
+      pos = nl + 1 + size + 1;
+    }
+  };
+  return {files: list, text: (rel) => { load([rel]); return cache.get(rel); }, texts: (rels) => { load(rels); return rels.map((f) => cache.get(f)); }};
 }
 
 export const loadRelease = () => cfgRelease();
@@ -111,6 +164,17 @@ export function makeFixture(condition, fixtureId, tarball, digest, dir, tempPare
   const wt = path.join(dir, '.worktrees', '20261101_000000-1-install-asc');
   git(['worktree', 'add', '-q', '-b', 'chore/1-install-asc', wt, 'main'], dir);
   const install = installAsc(tarball, digest, wt, tempParent, {adopt: conds.adopt});
+  // #1840: what the user adds after installing ASC (afterInstallFiles: inline text, e.g. their own rules registered in
+  // .agent-skill-chain/project/context.json and their own Skill in .claude/skills/<name>/), in the same commit so every
+  // fixture keeps the same commit subjects. A file ASC installed is never replaced.
+  const after = [];
+  for (const [name, text] of Object.entries(f.afterInstallFiles ?? {})) {
+    const p = path.join(wt, name);
+    if (fs.existsSync(p)) throw new Error(`afterInstallFiles may not replace an existing file ${name}`);
+    fs.mkdirSync(path.dirname(p), {recursive: true});
+    fs.writeFileSync(p, text);
+    after.push(name);
+  }
   git(['add', '-A'], wt);
   git(['commit', '-q', '-m', 'Install ASC'], wt);
   git(['merge', '-q', '--ff-only', 'chore/1-install-asc'], dir);
@@ -120,7 +184,7 @@ export function makeFixture(condition, fixtureId, tarball, digest, dir, tempPare
   for (const d of f.emptyDirs ?? []) fs.mkdirSync(path.join(dir, d)); // #1815: an empty out/ (not tracked by Git)
   const head = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: dir, env: gitEnv(dir), encoding: 'utf8'}).stdout.trim();
   const ok = !allowUnreleased && install.tarballSha256 === pin.assetSha256;
-  const record = {condition, fixture: fixtureId, kind: f.kind, sources, source: ok ? pin.kind : 'unpinned', pinned: ok, released: ok && pin.kind === 'release', sampleHead: head,
+  const record = {condition, fixture: fixtureId, kind: f.kind, sources, afterInstall: after.sort(), source: ok ? pin.kind : 'unpinned', pinned: ok, released: ok && pin.kind === 'release', sampleHead: head,
     claudeMdSha256: sha(fs.readFileSync(path.join(dir, 'CLAUDE.md'))), install};
   fs.writeFileSync(`${dir}.install.json`, JSON.stringify(record, null, 1) + '\n');
   return record;

@@ -1,0 +1,1061 @@
+{
+ "schema": "asc-eval-cases/v1",
+ "note": "Fixed before any model run (decision-criteria.md). #1840: 10 cases for purpose 1 (the improvements of #1828, #1829 and #1832 reach the user; goal 1) and 9 for purpose 2 (the user's own rule registered in .agent-skill-chain/project/context.json and their own Skills under .claude/skills/; goal 2). Prompts are natural sentences without Skill names or file paths. Expected Skill (expect), the references (references), the files that must be read (expectReads) or must not be read (forbidReads), the Skills that must not be selected (forbidSkills), the checks on the written files (writes) and the answer markers (answerGroups/answerAny, and answerNone: the deductions of the earlier evaluations) are fixed here; viewpoints names the earlier viewpoints each case takes over.",
+ "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches.",
+ "entryPattern": "^\\.claude/skills/<skill>/SKILL\\.md$",
+ "bodyPattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
+ "referencePattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/references/<ref>$",
+ "markerText": "answer+writes",
+ "markerTextNote": "#1840 review M1: the markers are matched on the answer and the text of every file the trial wrote (score.mjs scoreRun).",
+ "markerBase": {
+  "pathPattern": "^\\.agent-skill-chain/(managed-runtime/[^/]+/)?templates/"
+ },
+ "markerBaseNote": "#1840 re-review High: before the markers are matched, the lines of a written file equal to a line (trimmed) of a file that existed before the trial are left out: the installed templates (.agent-skill-chain/templates/ and its managed-runtime copy, at the fixture's HEAD) and the earlier text of the written file itself (score.mjs baseLinesFor). A copied template, or one with a row filled in, adds only the lines the trial wrote. w-2 writes.requireWithoutBase applies the same to its require patterns.",
+ "report": {
+  "reads": [
+   {
+    "id": "context-json",
+    "pattern": "^\\.agent-skill-chain/project/context\\.json$"
+   },
+   {
+    "id": "money-rule",
+    "pattern": "^\\.agent-skill-chain/project/rules/money\\.md$"
+   }
+  ],
+  "answer": [
+   {
+    "id": "start-or-bash",
+    "pattern": "asc-v05|\\bstart\\b|\\bBash\\b"
+   }
+  ],
+  "writtenFiles": true
+ },
+ "reportNote": "#1840 review H3: reported per trial, never used for a level: whether context.json and the rule file were read, whether the answer mentions the ASC CLI start or Bash, and every file written (with its place).",
+ "cases": [
+  {
+   "id": "w-1",
+   "goal": 1,
+   "origin": "1828 T1",
+   "kind": "warranty",
+   "fixture": "EC1",
+   "expect": "warranty-scope",
+   "references": [
+    "check-items.md"
+   ],
+   "expectReads": [
+    {
+     "id": "template-guide",
+     "pattern": "^\\.agent-skill-chain/templates/specs/00_利用案内\\.md$"
+    },
+    {
+     "id": "template-warranty",
+     "pattern": "^\\.agent-skill-chain/templates/specs/details/02_要件/03_品質保証範囲\\.md$"
+    }
+   ],
+   "prompt": "検収の前に、どこまで品質を保証するかを顧客と決めておきたい。要件には「最新のブラウザで動作すること」「快適に動作すること」としか書いていない。顧客と合意する案をまとめて。",
+   "answerGroups": [],
+   "answerNone": [
+    {
+     "id": "legal-validity",
+     "pattern": "(法的に|法律上)(は)?(有効|無効)(です|となります)"
+    },
+    {
+     "id": "legal-nonconformity",
+     "pattern": "契約不適合(に|には)(当たりません|該当しません|当たります|該当します)"
+    }
+   ],
+   "viewpoints": [
+    "T1-1（数える）",
+    "T1-4（数える）",
+    "T1-2（報告だけ：Skillなしの回答でも9件中9件が1点）",
+    "T1-3（報告だけ：同じく9件中9件）",
+    "減点：法的な断定"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "needs": [],
+   "answerQuota": {
+    "min": 2,
+    "groups": [
+     {
+      "id": "T1-1",
+      "viewpoint": "T1-1",
+      "pattern": "画面(サイズ|幅)|(ブラウザ|OS|端末)[^\\n]{0,6}の版"
+     },
+     {
+      "id": "T1-4",
+      "viewpoint": "T1-4",
+      "pattern": "検収時(点)?の(版|環境|リリース)|基準(となる|の)(版|環境|日)|検収時点で固定"
+     },
+     {
+      "id": "T1-2",
+      "viewpoint": "T1-2",
+      "pattern": "閾値|(応答|表示|処理)時間|秒|数値目標|測定",
+      "report": true
+     },
+     {
+      "id": "T1-3",
+      "viewpoint": "T1-3",
+      "pattern": "決済[^\\n]{0,60}(障害|仕様変更|停止)|(障害|仕様変更)[^\\n]{0,30}決済|責任分界[^\\n]{0,20}決済",
+      "report": true
+     }
+    ]
+   },
+   "answerQuotaNote": "#1840 re-review High (b): the counted markers hit no line of the R or C templates (calibration-table.md, template lines) and separate the Skill answers of #1828 from those without the Skill; T1-2 and T1-3 are reported only."
+  },
+  {
+   "id": "w-2",
+   "goal": 1,
+   "origin": "1828 T3",
+   "kind": "warranty",
+   "fixture": "EC3",
+   "expect": "warranty-scope",
+   "references": [
+    "check-items.md"
+   ],
+   "expectReads": [
+    {
+     "id": "template-guide",
+     "pattern": "^\\.agent-skill-chain/templates/specs/00_利用案内\\.md$"
+    },
+    {
+     "id": "template-warranty",
+     "pattern": "^\\.agent-skill-chain/templates/specs/details/02_要件/03_品質保証範囲\\.md$"
+    }
+   ],
+   "prompt": "この案件の仕様書は一部できている。顧客と合意する品質の保証範囲の文書を、仕様書に足して。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/.*(品質保証|保証範囲|warranty)",
+    "mustWrite": true,
+    "require": [
+     {
+      "id": "ref-REQ-PERF-001",
+      "pattern": "REQ-PERF-001",
+      "viewpoint": "T3-1",
+      "group": "refs"
+     },
+     {
+      "id": "ref-CON-003",
+      "pattern": "CON-003",
+      "viewpoint": "T3-1",
+      "group": "refs"
+     },
+     {
+      "id": "open-items",
+      "pattern": "未決",
+      "viewpoint": "T3-4",
+      "group": "open"
+     },
+     {
+      "id": "open-decider",
+      "pattern": "判断者|(法務|契約担当|技術担当|営業)[^\\n]{0,6}(が|の)?(判断|決め)|(値|範囲|費用|期間)は(技術|契約|法務|営業)",
+      "viewpoint": "T3-4",
+      "group": "open"
+     }
+    ],
+    "forbid": [
+     {
+      "id": "copy-3s",
+      "pattern": "3\\s*秒",
+      "viewpoint": "T3-1",
+      "group": "copy"
+     },
+     {
+      "id": "copy-100",
+      "pattern": "同時\\s*100|100\\s*(人|利用者|ユーザー)",
+      "viewpoint": "T3-1",
+      "group": "copy"
+     },
+     {
+      "id": "copy-ie11",
+      "pattern": "IE\\s*11",
+      "viewpoint": "T3-1",
+      "group": "copy"
+     },
+     {
+      "id": "fabricated-status",
+      "pattern": "(^|\\n)\\s*状態\\s*[:：]\\s*\\**\\s*(合意済み|承認済み)",
+      "group": "fabricated"
+     },
+     {
+      "id": "fabricated-row",
+      "pattern": "\\|\\s*合意済み\\s*\\|",
+      "group": "fabricated"
+     }
+    ],
+    "requireWithoutBase": true
+   },
+   "viewpoints": [
+    "T3-1（IDで参照し値を書き写さない）",
+    "T3-4（未決と判断者）",
+    "減点：書き写し・架空の合意",
+    "T3-3（合意者・合意日・状態）は報告だけ：Skillありで6回中5回0点"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [],
+   "writesReport": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/.*(品質保証|保証範囲|warranty)",
+    "require": [
+     {
+      "id": "agreed-by",
+      "pattern": "合意者|合意日"
+     },
+     {
+      "id": "status",
+      "pattern": "状態"
+     }
+    ]
+   }
+  },
+  {
+   "id": "w-3",
+   "goal": 1,
+   "origin": "1828 T4",
+   "kind": "warranty",
+   "fixture": "EC1",
+   "expect": "warranty-scope",
+   "references": [
+    "check-items.md"
+   ],
+   "prompt": "顧客から「瑕疵担保の期間は無期限にしてほしい。また、どのブラウザでも動くことを保証してほしい」と要求された。どう返せばよいか、返答の方針と、顧客に送る説明の案を作って。",
+   "answerGroups": [],
+   "answerNone": [
+    {
+     "id": "legal-validity",
+     "pattern": "(法的に|法律上)(は)?(有効|無効)(です|となります)"
+    },
+    {
+     "id": "legal-nonconformity",
+     "pattern": "契約不適合(に|には)(当たりません|該当しません|当たります|該当します)"
+    },
+    {
+     "id": "indefinite-invalid",
+     "pattern": "無期限は(無効|認められません|できません)"
+    },
+    {
+     "id": "limit-one-year",
+     "pattern": "(1|一)年に(制限|限定)できます"
+    }
+   ],
+   "viewpoints": [
+    "T4-1（数える。断定しない）",
+    "T4-2（数える）",
+    "T4-3（報告だけ：雛形だけの回答でも6件中6件が1点）",
+    "T4-5（報告だけ：Skillありで6回中5回0点）",
+    "減点：法的な断定"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "needs": [],
+   "answerQuota": {
+    "min": 2,
+    "groups": [
+     {
+      "id": "T4-1",
+      "viewpoint": "T4-1",
+      "pattern": "断定(せず|しない|しません)|法務(の|で|が)?(確認|判断)",
+      "unless": "無期限[^\\n]{0,40}(受けられない|受けません|お受けできません)|どちらも受けません"
+     },
+     {
+      "id": "T4-2",
+      "viewpoint": "T4-2",
+      "pattern": "(期間|責任期間)(の長さ)?と[^\\n]{0,20}(範囲|対象)[^\\n]{0,20}(分け|別)|期間(が長くても|の長さに関わらず|を延ばす場合も|とは別)"
+     },
+     {
+      "id": "T4-3",
+      "viewpoint": "T4-3",
+      "all": [
+       "(ブラウザ|環境)[^\\n]{0,8}版",
+       "互換性|見積"
+      ],
+      "report": true
+     },
+     {
+      "id": "T4-5",
+      "viewpoint": "T4-5",
+      "pattern": "契約不適合",
+      "report": true
+     }
+    ]
+   },
+   "answerQuotaNote": "#1840 re-review High (b): 「法務・契約」(a template phrase) is no longer a T4-1 marker; T4-3 (環境と版、互換性・見積) is a template phrase and is reported only."
+  },
+  {
+   "id": "m-r1",
+   "goal": 1,
+   "origin": "1829 R1",
+   "kind": "maintenance",
+   "fixture": "MN",
+   "expect": "estimate-and-scope",
+   "references": [],
+   "expectReads": [
+    {
+     "id": "project-warranty",
+     "pattern": "^docs/specs/details/02_要件/03_品質保証範囲\\.md$"
+    }
+   ],
+   "prompt": "みなと商事の情報システム部長から次の依頼が届いた。どう扱うか判断して、返信の案を作って。\n\n「Windows 11 の Chrome 137 で受注登録をすると、一部の明細で税込金額が計算より1円多く表示されます。端数の扱いが違うのではないかと思います。無償で直してもらえますか。」",
+   "answerGroups": [],
+   "answerNone": [
+    {
+     "id": "free-before-check",
+     "pattern": "無償で(修補|修正|対応|直)(いた)?します|無償(修補|対応)の対象です"
+    },
+    {
+     "id": "free-direction",
+     "pattern": "無償(修補|対応)の方向"
+    },
+    {
+     "id": "legal-validity",
+     "pattern": "(法的に|法律上)(は)?(有効|無効)(です|となります)"
+    },
+    {
+     "id": "legal-nonconformity",
+     "pattern": "契約不適合(に|には)(当たりません|該当しません|当たります|該当します)"
+    }
+   ],
+   "viewpoints": [
+    "R1-1",
+    "R1-2",
+    "R1-3",
+    "減点：法的な断定"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "needs": [
+    {
+     "file": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "includes": []
+    }
+   ],
+   "answerQuota": {
+    "min": 3,
+    "groups": [
+     {
+      "id": "R1-1-war",
+      "viewpoint": "R1-1",
+      "pattern": "WAR-002"
+     },
+     {
+      "id": "R1-1-version",
+      "viewpoint": "R1-1",
+      "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版"
+     },
+     {
+      "id": "R1-2",
+      "viewpoint": "R1-2",
+      "pattern": "BR-012|明細ごと[^\\n]{0,20}切り?捨て|端数"
+     }
+    ]
+   }
+  },
+  {
+   "id": "m-r2",
+   "goal": 1,
+   "origin": "1829 R2",
+   "kind": "maintenance",
+   "fixture": "MN",
+   "expect": "estimate-and-scope",
+   "references": [],
+   "expectReads": [
+    {
+     "id": "project-warranty",
+     "pattern": "^docs/specs/details/02_要件/03_品質保証範囲\\.md$"
+    }
+   ],
+   "prompt": "みなと商事の情報システム部長から次の依頼が届いた。どう扱うか判断して、返信の案を作って。\n\n「営業担当がiPadのSafariで受注一覧を開くと、表が崩れて操作できません。現場で使いたいので対応してください。」",
+   "answerGroups": [],
+   "answerNone": [
+    {
+     "id": "free-promise",
+     "pattern": "無償で(対応|修正)(いた)?します"
+    },
+    {
+     "id": "legal-validity",
+     "pattern": "(法的に|法律上)(は)?(有効|無効)(です|となります)"
+    },
+    {
+     "id": "legal-nonconformity",
+     "pattern": "契約不適合(に|には)(当たりません|該当しません|当たります|該当します)"
+    }
+   ],
+   "viewpoints": [
+    "R2-1",
+    "R2-2",
+    "減点：法的な断定"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "needs": [
+    {
+     "file": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "includes": []
+    }
+   ],
+   "answerQuota": {
+    "min": 3,
+    "groups": [
+     {
+      "id": "R2-1-war",
+      "viewpoint": "R2-1",
+      "pattern": "WAR-001"
+     },
+     {
+      "id": "R2-1-version",
+      "viewpoint": "R2-1",
+      "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版"
+     },
+     {
+      "id": "R2-2",
+      "viewpoint": "R2-2",
+      "pattern": "互換性|見積"
+     }
+    ]
+   }
+  },
+  {
+   "id": "m-r7",
+   "goal": 1,
+   "origin": "1829 R7",
+   "kind": "maintenance",
+   "fixture": "MN",
+   "expect": "estimate-and-scope",
+   "references": [],
+   "expectReads": [
+    {
+     "id": "project-warranty",
+     "pattern": "^docs/specs/details/02_要件/03_品質保証範囲\\.md$"
+    }
+   ],
+   "prompt": "みなと商事の情報システム部長から次の依頼が届いた。どう扱うか判断して、返信の案を作って。\n\n「移行した取引先のうち3社で、旧システムのコードが重複していたため、請求書が二重に作られていました。移行の作業の不備なので、無償で直してください。」",
+   "answerGroups": [],
+   "answerNone": [
+    {
+     "id": "free-before-check",
+     "pattern": "無償で(修補|修正|対応|直)(いた)?します|無償(修補|対応)の対象です"
+    },
+    {
+     "id": "paid-fixed",
+     "pattern": "有償(になります|での対応となります|です)"
+    },
+    {
+     "id": "legal-validity",
+     "pattern": "(法的に|法律上)(は)?(有効|無効)(です|となります)"
+    },
+    {
+     "id": "legal-nonconformity",
+     "pattern": "契約不適合(に|には)(当たりません|該当しません|当たります|該当します)"
+    }
+   ],
+   "viewpoints": [
+    "R7-1",
+    "R7-2",
+    "R7-3",
+    "減点：法的な断定"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "needs": [
+    {
+     "file": "docs/specs/details/02_要件/03_品質保証範囲.md",
+     "includes": []
+    }
+   ],
+   "answerQuota": {
+    "min": 3,
+    "groups": [
+     {
+      "id": "R7-1-war",
+      "viewpoint": "R7-1",
+      "pattern": "WAR-005"
+     },
+     {
+      "id": "R7-1-open",
+      "viewpoint": "R7-1",
+      "pattern": "未決|未合意"
+     },
+     {
+      "id": "R7-2",
+      "viewpoint": "R7-2",
+      "pattern": "OPEN-007|ACT-03|契約担当"
+     }
+    ]
+   }
+  },
+  {
+   "id": "s-1",
+   "goal": 1,
+   "origin": "1832",
+   "kind": "spec",
+   "fixture": "SP",
+   "expect": "asc",
+   "references": [],
+   "expectReads": [
+    {
+     "id": "template-guide",
+     "pattern": "^\\.agent-skill-chain/templates/specs/00_利用案内\\.md$"
+    },
+    {
+     "id": "template-feature-or-screen",
+     "pattern": "^\\.agent-skill-chain/templates/specs/details/(04_機能/01_個別機能|05_画面/02_個別画面)テンプレート\\.md$"
+    }
+   ],
+   "prompt": "会員登録機能（FN-003）と会員登録画面（SCR-005）の仕様書を、次の変更に合わせて書き直してほしい。\n\n- これまで会員登録はメールアドレスだけだったが、今回から電話番号でも登録できるようにした。\n- 登録時に送る確認コードは6桁の数字。有効期限は以前は10分だったが、問い合わせが多かったので15分に延ばした。\n- 確認コードを5回続けて間違えると、その登録手続きを30分ロックする（これは前から変わらない）。\n- 電話番号はE.164形式で受け付ける。\n- 画面では、登録手段を「メールアドレス」「電話番号」のタブで切り替える。前はメールアドレスの入力欄だけだった。\n- 確認コードが期限切れのときは「確認コードの有効期限が切れました。もう一度送信してください」と表示し、再送信ボタンを出す。\n- この変更は2026-11-20の打合せで顧客の佐藤さん（役割：業務責任者）が決めた。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/specs/details/(04_機能|05_画面)/",
+    "mustWrite": true,
+    "require": [
+     {
+      "id": "F1",
+      "pattern": "電話番号",
+      "group": "facts"
+     },
+     {
+      "id": "F2",
+      "pattern": "6\\s*桁",
+      "group": "facts"
+     },
+     {
+      "id": "F3",
+      "pattern": "15\\s*分",
+      "group": "facts"
+     },
+     {
+      "id": "F4",
+      "pattern": "30\\s*分",
+      "group": "facts"
+     },
+     {
+      "id": "F5",
+      "pattern": "E\\.164",
+      "group": "facts"
+     },
+     {
+      "id": "F6",
+      "pattern": "タブ",
+      "group": "facts"
+     },
+     {
+      "id": "F7",
+      "pattern": "有効期限が切れました",
+      "group": "facts"
+     },
+     {
+      "id": "F7-resend",
+      "pattern": "再送信",
+      "group": "facts"
+     }
+    ],
+    "forbid": [
+     {
+      "id": "history-old-value",
+      "pattern": "10\\s*分",
+      "group": "history"
+     },
+     {
+      "id": "history-before",
+      "pattern": "以前は|(?<![名手建午])前(は|から)|変更前|これまで",
+      "group": "history"
+     },
+     {
+      "id": "history-change",
+      "pattern": "延ば|延長し|追加した|今回(から|の変更)|変更なし",
+      "group": "history"
+     },
+     {
+      "id": "history-reason",
+      "pattern": "問い合わせが多",
+      "group": "history"
+     },
+     {
+      "id": "history-only",
+      "pattern": "入力欄だけ|メールアドレスだけ",
+      "group": "history"
+     },
+     {
+      "id": "status-approved",
+      "pattern": "(^|\\n)\\s*状態\\s*[:：]\\s*\\**\\s*承認済み",
+      "group": "status"
+     }
+    ]
+   },
+   "viewpoints": [
+    "7つの事実（F1〜F7）：本文（個別機能・個別画面）",
+    "経緯の文0件：本文",
+    "状態を承認済みと書かない",
+    "本文の外（変更履歴等）の経緯：報告だけ"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [],
+   "writesReport": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/specs/(?!details/(04_機能|05_画面)/)",
+    "forbid": [
+     {
+      "id": "history-old-value",
+      "pattern": "10\\s*分",
+      "group": "history"
+     },
+     {
+      "id": "history-before",
+      "pattern": "以前は|(?<![名手建午])前(は|から)|変更前|これまで",
+      "group": "history"
+     },
+     {
+      "id": "history-change",
+      "pattern": "延ば|延長し|追加した|今回(から|の変更)|変更なし",
+      "group": "history"
+     },
+     {
+      "id": "history-reason",
+      "pattern": "問い合わせが多",
+      "group": "history"
+     },
+     {
+      "id": "history-only",
+      "pattern": "入力欄だけ|メールアドレスだけ",
+      "group": "history"
+     }
+    ]
+   }
+  },
+  {
+   "id": "n-1",
+   "goal": 1,
+   "origin": "1828 N2",
+   "kind": "estimate",
+   "fixture": "MN",
+   "expect": "estimate-and-scope",
+   "references": [],
+   "forbidSkills": [
+    "warranty-scope"
+   ],
+   "prompt": "受注一覧の画面に、取引先名で絞り込む条件を追加してほしいと顧客から言われた。工数と納期を見積もって。",
+   "answerGroups": [
+    "前提|仮定|仮置き",
+    "調査|確認"
+   ],
+   "viewpoints": [
+    "隣接：保証範囲の合意Skillを選ばない"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "needs": []
+  },
+  {
+   "id": "n-2",
+   "goal": 1,
+   "origin": "1828 N5",
+   "kind": "negative",
+   "fixture": "EC1",
+   "expect": null,
+   "references": [],
+   "forbidReads": [
+    {
+     "id": "templates",
+     "pattern": "^\\.agent-skill-chain/templates/specs/"
+    }
+   ],
+   "forbidSkills": [
+    "warranty-scope"
+   ],
+   "prompt": "「保証範囲を顧客と合意済みです」を英語に訳して。",
+   "answerAny": [
+    "agree|agreed"
+   ],
+   "answerAll": [],
+   "answerGroups": [],
+   "needs": []
+  },
+  {
+   "id": "n-3",
+   "goal": 1,
+   "origin": "new",
+   "kind": "negative",
+   "fixture": "SP",
+   "expect": null,
+   "references": [],
+   "forbidReads": [
+    {
+     "id": "templates",
+     "pattern": "^\\.agent-skill-chain/templates/specs/"
+    }
+   ],
+   "prompt": "会員登録の確認コードの有効期限は、今の仕様書では何分になっている？",
+   "answerAny": [
+    "10\\s*分"
+   ],
+   "answerAll": [],
+   "answerGroups": [],
+   "needs": []
+  },
+  {
+   "id": "u-bill-1",
+   "goal": 2,
+   "origin": "new",
+   "kind": "change",
+   "fixture": "U",
+   "expect": "asc",
+   "references": [],
+   "expectReads": [
+    {
+     "id": "money-rule",
+     "pattern": "^\\.agent-skill-chain/project/rules/money\\.md$"
+    }
+   ],
+   "prompt": "請求書の金額計算で、得意先ごとの割引率（例：10%）を小計に適用できるようにして。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?src/billing/",
+    "mustWrite": true,
+    "forbid": [
+     {
+      "id": "decimal-literal",
+      "pattern": "\\b\\d+\\.\\d+\\b"
+     },
+     {
+      "id": "float-function",
+      "pattern": "parseFloat|toFixed|Math\\.(round|floor|ceil|trunc)"
+     },
+     {
+      "id": "number-conversion",
+      "pattern": "\\bNumber\\("
+     }
+    ]
+   },
+   "viewpoints": [
+    "規則が読まれる",
+    "差分が規則に違反しない"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": ".agent-skill-chain/project/rules/money.md",
+     "includes": []
+    }
+   ]
+  },
+  {
+   "id": "u-bill-2",
+   "goal": 2,
+   "origin": "new",
+   "kind": "change",
+   "fixture": "U",
+   "expect": "asc",
+   "references": [],
+   "expectReads": [
+    {
+     "id": "money-rule",
+     "pattern": "^\\.agent-skill-chain/project/rules/money\\.md$"
+    }
+   ],
+   "prompt": "請求書の小計に消費税（10%、1円未満は切り捨て）を加えて、税込の合計を返す関数を追加して。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?src/billing/",
+    "mustWrite": true,
+    "forbid": [
+     {
+      "id": "decimal-literal",
+      "pattern": "\\b\\d+\\.\\d+\\b"
+     },
+     {
+      "id": "float-function",
+      "pattern": "parseFloat|toFixed|Math\\.(round|floor|ceil|trunc)"
+     },
+     {
+      "id": "number-conversion",
+      "pattern": "\\bNumber\\("
+     }
+    ]
+   },
+   "viewpoints": [
+    "規則が読まれる",
+    "差分が規則に違反しない"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": ".agent-skill-chain/project/rules/money.md",
+     "includes": []
+    }
+   ]
+  },
+  {
+   "id": "u-users",
+   "goal": 2,
+   "origin": "new",
+   "kind": "change",
+   "fixture": "U",
+   "expect": "asc",
+   "references": [],
+   "forbidReads": [
+    {
+     "id": "money-rule",
+     "pattern": "^\\.agent-skill-chain/project/rules/money\\.md$"
+    }
+   ],
+   "forbidSkills": [
+    "invoice-format",
+    "quote-format"
+   ],
+   "prompt": "利用者一覧の名前検索で、大文字と小文字を区別しないようにして。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?src/users/",
+    "mustWrite": true
+   },
+   "viewpoints": [
+    "該当しない規則を読まない"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": ".agent-skill-chain/project/rules/money.md",
+     "includes": []
+    }
+   ]
+  },
+  {
+   "id": "u-docs",
+   "goal": 2,
+   "origin": "new",
+   "kind": "change",
+   "fixture": "U",
+   "expect": "asc",
+   "references": [],
+   "forbidReads": [
+    {
+     "id": "money-rule",
+     "pattern": "^\\.agent-skill-chain/project/rules/money\\.md$"
+    }
+   ],
+   "forbidSkills": [
+    "invoice-format",
+    "quote-format"
+   ],
+   "prompt": "開発の始め方の手順書に、テストの実行方法（npm test）を書き足して。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/",
+    "mustWrite": true,
+    "require": [
+     {
+      "id": "npm-test",
+      "pattern": "npm test"
+     }
+    ]
+   },
+   "viewpoints": [
+    "該当しない規則を読まない"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": ".agent-skill-chain/project/rules/money.md",
+     "includes": []
+    }
+   ]
+  },
+  {
+   "id": "u-skill-1",
+   "goal": 2,
+   "origin": "new",
+   "kind": "userskill",
+   "fixture": "U",
+   "expect": "invoice-format",
+   "userSkill": true,
+   "references": [],
+   "forbidSkills": [
+    "quote-format"
+   ],
+   "prompt": "みなと商事あてに、2026年11月分の請求書を作って。明細は保守費 50,000円と追加開発 120,000円。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/invoices/",
+    "mustWrite": true,
+    "require": [
+     {
+      "id": "number",
+      "pattern": "INV-202611-\\d{3}"
+     },
+     {
+      "id": "onchu",
+      "pattern": "御中"
+     },
+     {
+      "id": "bank",
+      "pattern": "さくら銀行"
+     },
+     {
+      "id": "total",
+      "pattern": "187,000\\s*円"
+     }
+    ]
+   },
+   "viewpoints": [
+    "利用者のSkillが選ばれ読まれる",
+    "Skillの書式（番号・御中・振込先）と合計"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": []
+  },
+  {
+   "id": "u-skill-2",
+   "goal": 2,
+   "origin": "new",
+   "kind": "userskill",
+   "fixture": "U",
+   "expect": "quote-format",
+   "userSkill": true,
+   "references": [],
+   "forbidSkills": [
+    "invoice-format"
+   ],
+   "prompt": "みなと商事に出す見積書を作って。項目は請求一覧画面の改修で3人日、単価は1人日80,000円。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/quotes/",
+    "mustWrite": true,
+    "require": [
+     {
+      "id": "number",
+      "pattern": "Q-\\d{6}-\\d{3}"
+     },
+     {
+      "id": "onchu",
+      "pattern": "御中"
+     },
+     {
+      "id": "valid",
+      "pattern": "30\\s*日"
+     },
+     {
+      "id": "total",
+      "pattern": "264,000\\s*円"
+     }
+    ]
+   },
+   "viewpoints": [
+    "ASCの見積Skillと説明が近い利用者のSkillが選ばれ読まれる",
+    "Skillの書式（番号・御中・有効期限）と合計"
+   ],
+   "secondary": [
+    "estimate-and-scope"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": []
+  },
+  {
+   "id": "u-skill-3",
+   "goal": 2,
+   "origin": "new",
+   "kind": "userskill",
+   "fixture": "U",
+   "expect": "invoice-format",
+   "userSkill": true,
+   "references": [],
+   "forbidSkills": [
+    "quote-format"
+   ],
+   "prompt": "先月みなと商事に出した見積（請求一覧画面の改修、3人日、単価は1人日80,000円）がそのまま受注になって、作業も終わった。この内容で2026年12月分の請求書を作って。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/invoices/",
+    "mustWrite": true,
+    "require": [
+     {
+      "id": "number",
+      "pattern": "INV-202612-\\d{3}"
+     },
+     {
+      "id": "onchu",
+      "pattern": "御中"
+     },
+     {
+      "id": "bank",
+      "pattern": "さくら銀行"
+     },
+     {
+      "id": "total",
+      "pattern": "264,000\\s*円"
+     }
+    ]
+   },
+   "viewpoints": [
+    "利用者のSkillどうしの選び分け（見積の語を含む請求書の依頼で、見積書のSkillでなく請求書のSkill）",
+    "Skillの書式（番号・御中・振込先）と合計"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [],
+   "secondary": [
+    "estimate-and-scope"
+   ]
+  },
+  {
+   "id": "u-est",
+   "goal": 2,
+   "origin": "new",
+   "kind": "estimate",
+   "fixture": "U",
+   "expect": "estimate-and-scope",
+   "references": [],
+   "forbidSkills": [
+    "quote-format",
+    "invoice-format"
+   ],
+   "prompt": "請求一覧の画面にCSV出力を追加したい。工数と納期を見積もって。",
+   "answerGroups": [
+    "前提|仮定|仮置き",
+    "調査|確認"
+   ],
+   "viewpoints": [
+    "説明の近い利用者のSkillでなくASCの見積Skillが選ばれる"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "needs": []
+  },
+  {
+   "id": "u-neg",
+   "goal": 2,
+   "origin": "new",
+   "kind": "negative",
+   "fixture": "U",
+   "expect": null,
+   "references": [],
+   "forbidReads": [
+    {
+     "id": "money-rule",
+     "pattern": "^\\.agent-skill-chain/project/rules/money\\.md$"
+    }
+   ],
+   "forbidSkills": [
+    "invoice-format",
+    "quote-format"
+   ],
+   "prompt": "「請求書を送付しました」を英語に訳して。",
+   "answerAny": [
+    "invoice"
+   ],
+   "answerAll": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": ".agent-skill-chain/project/rules/money.md",
+     "includes": []
+    }
+   ]
+  }
+ ]
+}
