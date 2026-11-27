@@ -48,7 +48,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
-import {parseTrace} from './score.mjs';
+import {parseTrace, ascSkillsOf} from './score.mjs';
 import {loadRawConditions, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {pointerHeadI} from './condition-i.mjs';
 import {INSIDE_FILE, probeSteps} from './run-trial.mjs';
@@ -68,6 +68,8 @@ const stripHeading = (s) => s.replace(/^\s*#+\s*/, '').trim();
 const inside = (child, parent) => { const r = path.relative(parent, child); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
 // Review M1 (stage 2): the number of ASC entries whose descriptions must all be in the context, and the debug-log line.
 export const ASC_ENTRIES = 16;
+// #1840: the number expected for a config (conditions.json ascSkills; else ASC_ENTRIES).
+export const ascEntriesOf = (conds) => (conds?.ascSkills ? conds.ascSkills.length : ASC_ENTRIES);
 const OVER_BUDGET_RE = /Skill listing over budget:\s*(\d+) skills, (\d+) chars > (\d+) budget/;
 // The Skill-listing state of one probe from its debug log (null when there is no debug log).
 export function skillListingOf(debug) {
@@ -179,7 +181,7 @@ export function checkProbe(i) {
   add('descriptionsInContext', looked.length === 0 && Object.values(desc).every(Boolean), {desc, lookedUp: looked.length});
   // Review M1 (b): every ASC description is quoted verbatim from the Skill list, with no look-up of the Skill files.
   const ascOmitted = asc.filter((s) => !norm(text).includes(norm(i.ascSkills[s] || '\u0000'))).sort();
-  add('ascDescriptionsInContext', asc.length === ASC_ENTRIES && looked.length === 0 && ascOmitted.length === 0, {entries: asc.length, expected: ASC_ENTRIES, omitted: ascOmitted, lookedUp: looked.length});
+  add('ascDescriptionsInContext', asc.length === ascEntriesOf(conds) && looked.length === 0 && ascOmitted.length === 0, {entries: asc.length, expected: ascEntriesOf(conds), omitted: ascOmitted, lookedUp: looked.length});
   // Review M1 (a): the debug log is needed for the listing state; `compare` checks the state across the conditions.
   const skillListing = skillListingOf(i.debug);
   add('skillListingRecorded', skillListing !== null && skillListing.unparsed === 0, skillListing ?? 'no debug log');

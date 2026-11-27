@@ -47,14 +47,15 @@ export function writeSources(dir, fixtureId, conds = loadConditions()) {
   if (!f) throw new Error(`unknown fixture ${fixtureId}`);
   const written = [];
   if (f.kind === 'app') {
-    for (const [name, text] of Object.entries(files)) {
+    // #1840: appFiles false leaves out the fixture A files (a project of its own, made of extraFiles only).
+    for (const [name, text] of Object.entries(f.appFiles === false ? {} : files)) {
       const p = path.join(dir, name);
       fs.mkdirSync(path.dirname(p), {recursive: true});
       fs.writeFileSync(p, text);
       written.push(name);
     }
     for (const [name, text] of Object.entries(f.extraFiles ?? {})) {
-      if (name in files) throw new Error(`extraFiles may not replace the fixture A file ${name}`);
+      if (f.appFiles !== false && name in files) throw new Error(`extraFiles may not replace the fixture A file ${name}`);
       const p = path.join(dir, name);
       fs.mkdirSync(path.dirname(p), {recursive: true});
       fs.writeFileSync(p, text);
@@ -111,6 +112,17 @@ export function makeFixture(condition, fixtureId, tarball, digest, dir, tempPare
   const wt = path.join(dir, '.worktrees', '20261101_000000-1-install-asc');
   git(['worktree', 'add', '-q', '-b', 'chore/1-install-asc', wt, 'main'], dir);
   const install = installAsc(tarball, digest, wt, tempParent, {adopt: conds.adopt});
+  // #1840: what the user adds after installing ASC (afterInstallFiles: inline text, e.g. their own rules registered in
+  // .agent-skill-chain/project/context.json and their own Skill in .claude/skills/<name>/), in the same commit so every
+  // fixture keeps the same commit subjects. A file ASC installed is never replaced.
+  const after = [];
+  for (const [name, text] of Object.entries(f.afterInstallFiles ?? {})) {
+    const p = path.join(wt, name);
+    if (fs.existsSync(p)) throw new Error(`afterInstallFiles may not replace an existing file ${name}`);
+    fs.mkdirSync(path.dirname(p), {recursive: true});
+    fs.writeFileSync(p, text);
+    after.push(name);
+  }
   git(['add', '-A'], wt);
   git(['commit', '-q', '-m', 'Install ASC'], wt);
   git(['merge', '-q', '--ff-only', 'chore/1-install-asc'], dir);
@@ -120,7 +132,7 @@ export function makeFixture(condition, fixtureId, tarball, digest, dir, tempPare
   for (const d of f.emptyDirs ?? []) fs.mkdirSync(path.join(dir, d)); // #1815: an empty out/ (not tracked by Git)
   const head = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: dir, env: gitEnv(dir), encoding: 'utf8'}).stdout.trim();
   const ok = !allowUnreleased && install.tarballSha256 === pin.assetSha256;
-  const record = {condition, fixture: fixtureId, kind: f.kind, sources, source: ok ? pin.kind : 'unpinned', pinned: ok, released: ok && pin.kind === 'release', sampleHead: head,
+  const record = {condition, fixture: fixtureId, kind: f.kind, sources, afterInstall: after.sort(), source: ok ? pin.kind : 'unpinned', pinned: ok, released: ok && pin.kind === 'release', sampleHead: head,
     claudeMdSha256: sha(fs.readFileSync(path.join(dir, 'CLAUDE.md'))), install};
   fs.writeFileSync(`${dir}.install.json`, JSON.stringify(record, null, 1) + '\n');
   return record;

@@ -57,6 +57,15 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 - 設定の例（#1823）：7file、約1,050行（大半は`cases.json`）。
 - 過去の写し：`docs/evidence/`の他の`.mjs`は240件、23,346行（#1820の段階2の写しは17件、2,735行）。
 
+## #1840で加えたもの（2026-11-27）
+
+どれも設定のfieldで働き、そのfieldの無い設定（試験用の設定、#1823）の動きと公開する記録は変えない（試験で確かめる）。#1823の測定は終わっている。
+
+- `conditions.json`の`ascSkills`：配布Skillの名前の一覧（`warranty-scope`を含む17件）。採点（`score.mjs`の`ascSkillsOf`）、probeの期待するdescriptionの件数（`probe-check.mjs`の`ascEntriesOf`）、dry runの入口の数が使う。無ければ従来の16件。
+- fixture：`appFiles: false`（fixture Aのfileを入れず、`extraFiles`だけの別のproject）、`afterInstallFiles`（ASCの導入の後に利用者が置くfile。固有ルールの`context.json`や固有Skill。導入のcommitに含め、commitの件名を他のfixtureと揃える。導入したfileは置き換えない）。
+- `cases.json`の依頼のfield：`expectReads`・`forbidReads`（読むべき・読んではならないfileのpathの正規表現）、`forbidSkills`（選ばれてはならないSkill）、`writes`（書いたfileを試行の終わりの`work/`の写しで読み、`require`・`forbid`を照合する。`collect.mjs`の`fileText`）、`answerNone`（回答に現れてはならない目印）、`userSkill`（利用者のSkill：Skill tool呼出しか`.claude/skills/<name>/SKILL.md`のReadを本文とし、ASCのbyteに数えない）。
+- 判定：`rule.mode: levels`（`score.mjs`の`levelsVerdict`）。候補と基準の比較ではなく、条件ごとに固定の水準（依頼の集合・指標・min）を満たすかを示す。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。
