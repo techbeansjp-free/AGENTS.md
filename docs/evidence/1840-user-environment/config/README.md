@@ -88,7 +88,7 @@ fixtureの全文は[conditions.json](conditions.json)の`fixtures`。導入し�
 ```text
 H=docs/evidence/shared-harness
 EV=docs/evidence/1840-user-environment/config
-LEDGER=<scratch>/rel1840/ledger/ledger-1840b.jsonl
+LEDGER=<scratch>/rel1840/ledger/ledger-1840c.jsonl
 TGZ_R=<scratch>/rel1840/release/agent-skill-chain-0.5.119.tgz
 TGZ_C=<scratch>/rel1840/candidate/agent-skill-chain-0.5.119.tgz
 # 0. ownerの目印fileの承認をresults/probe-approval.jsonに記録してcommitする
@@ -132,9 +132,9 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1840/runs --ledger $LEDGE
 
 ## 測定の前の固定
 
-- `results/fixation.json`の最初の記録のcommitは`e0ccc50eb464d174c9d0ad2e3815bd68e7971602`。台帳idは`b33381fa-f3e5-492b-a3ae-7c7526327374`、台帳は`<scratch>/rel1840/ledger/ledger-1840b.jsonl`（予約0件）。`run-trial.mjs`はこの記載を照合する。
+- `results/fixation.json`の最初の記録のcommitは`5f868050726804a12b01bdd7271c0f16297a0e07`。台帳idは`d1d5eb2c-d2db-4afd-bffd-3662449efb6e`、台帳は`<scratch>/rel1840/ledger/ledger-1840c.jsonl`（予約0件）。`run-trial.mjs`はこの記載を照合する。
 - 固定の記録は、この設定の5file（`decision-criteria.md`・`cases.json`・`conditions.json`・`release.json`・`run-order.json`）と、共通の仕組みのmodule 16件のsha256を持つ。測定の終わりまで、共通の仕組みも変えない。
-- 測定の前の独立レビュー（H1〜H3、M1〜M4、L1〜L4）の是正のため、最初の固定（commit `bf65bb54`、台帳id `1a8cfa06-b3b2-4f36-be0f-ff018e8ca631`、予約0件）を消し、新しい台帳で`init`をやり直した。固定したfileを直す場合は、測定の前（台帳に予約が無い間）に限り、同じ手順でやり直し、このREADMEの記載を更新する（`refix`は`probe-check.mjs`の是正だけ）。
+- 測定の前の独立レビュー（H1〜H3、M1〜M4、L1〜L4）の是正のため、最初の固定（commit `bf65bb54`、台帳id `1a8cfa06-b3b2-4f36-be0f-ff018e8ca631`、予約0件）を消し、新しい台帳で`init`をやり直した。再レビュー（High、Medium-1・2、Low）の是正のため、2回目の固定（commit `e0ccc50e`、台帳id `b33381fa-f3e5-492b-a3ae-7c7526327374`、予約0件）も消し、新しい台帳で`init`をやり直した。固定したfileを直す場合は、測定の前（台帳に予約が無い間）に限り、同じ手順でやり直し、このREADMEの記載を更新する（`refix`は`probe-check.mjs`の是正だけ）。
 
 ## 限界
 
