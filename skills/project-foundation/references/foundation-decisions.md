@@ -11,7 +11,7 @@
 | 観点 | 先に決める内容と確認する失敗経路 |
 | --- | --- |
 | 範囲と出口 | 開発環境、製品機能、商用配備の範囲。対応OS/CPU、チームと稼働、権限・外部接続。ローカルと共有CIの完了を分け、未確認の対象環境を支持済みとしない |
-| 構造と責務 | source/test/infra/doc/generatedの所在、bounded context、domain/application/adapter等の依存方向、composition root、公開境界。単なるfolder名でDDDを満たしたとしない |
+| 構造と責務 | source/test/infra/doc/generatedの所在（infraをIaCとDDDのinfrastructure層のどちらに使うかを含む）、bounded context、domain/application/adapter等の依存方向、composition root、公開境界。単なるfolder名でDDDを満たしたとしない |
 | 循環と停止 | module解決、型参照、再export、package初期化、生成物、alias/dynamic importの検査範囲。event/retry/state遷移の進捗・上限・中断。graph内の業務上の循環とは区別する |
 | ツールと供給網 | runtime/compiler/managerの固定、lockとchecksum/digest、install script許可、licenseと配布条件、更新/廃止手順。必要なhost前提・proxy/通信先・権限を明示する |
 | 共通コマンド | Makefile等の短い共通入口とhelp、READMEの前提/初回構築/起動先/停止/復旧。CLIとCIが同じ正本を使うbootstrap/doctor/check/test/build/audit。初回に未導入のツールを要求しないこと、入口から既存タスクへ委譲して失敗終了値を保持することを検証する。IDE独自設定や個人のPATHだけで成功しない。設定の欠落や破損を明示的に拒否する |

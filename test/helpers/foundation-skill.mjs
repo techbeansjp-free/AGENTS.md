@@ -6,8 +6,8 @@ import path from 'node:path';
 // Reviewed distribution bytes, including the subsequently requested scope refinements.
 export const foundationHashes={
  'SKILL.md':'034a77e91be7492b20d420bbafd6c50cb53798d5133a971ec99878bb41a87745',
- 'references/foundation-decisions.md':'cfe26357d3579c1803f922ea90fad47625523d996ff8f8544cbd5ddf850c6941',
- 'references/contracts-and-ui.md':'e2cf251ba71e829d84f52ccd80f3817240b3c4734f882d20e1f22b2a473c58be',
+ 'references/foundation-decisions.md':'2aad8ea38f6c5ac294e2a6ca53807013deb937daa2a0e0bbee14988744607b16',
+ 'references/contracts-and-ui.md':'a1b883cdc9ace6dd87f6b3cfc9306ca08d79be8b6ae2620a7f5f9e6a83225909',
  'references/containers-and-worktrees.md':'039ca0ed4dc4ee741b5652b190706787ca07fcdb018206b2cb6fc3d915dd68d4',
  'references/verification-and-security.md':'c06644aecd521e4ed68a7e43148bebd9d79262c11fc82320c28424b7a1388327',
  'agents/openai.yaml':'e6f37911eb5101ba3b446133beadaa4ad5bf7afc452d7958afa61d53e7312ea1'
