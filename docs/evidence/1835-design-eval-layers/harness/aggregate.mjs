@@ -3,9 +3,10 @@
 //   node harness/aggregate.mjs critiques --runs <runs> --out <texts.jsonl>     (input of ssr.py score)
 //   node harness/aggregate.mjs decide --key <key.json> --runs <runs> --out <result.json>
 //        [--layer1 <layer1.json>]... [--owner <owner-answers.json> --owner-key <owner-key.json>]
-//        [--ssr <ssr.json>] [--ssr-negation <ssr-negation.json>] [--exclude-variant <variant>]...
-// --exclude-variant marks the layer-2 items of that variant as excluded (plan 5.2: the pairs dropped by the budget
-// reduction before the main run, recorded in EVAL_PLAN.md), so they are reported as excluded, not as missing.
+//        [--ssr <ssr.json>] [--ssr-negation <ssr-negation.json>] [--skip-packets <skip.txt>]
+// --skip-packets is the list that run-eval.mjs plan wrote and run used (plan 5.2: pairs dropped by the budget reduction
+// before the main run). A layer-2 item is excluded (not missing) only when every P and F packet showing its degraded
+// screen is in the list; a list that covers only part of an item's packets, or a listed packet with a run record, is refused.
 // Pair judgments are in the item's orientation: "first" (layer 2: the original), "second", "same", or null (missing).
 // Counts are pooled over the two rounds (each pair x round is one judgment), except reproducibility (one per pair).
 // Every rate is reported as {n, d, rate}. D is recorded with the same metrics but is not decided; D has no ties, so its
@@ -245,9 +246,20 @@ export function layer1Summary({map, records}) {
   }
   return {screens: records.length, passed: records.filter((r) => r.pass).length, results: Object.fromEntries(Object.entries(map)), controlSameAsOriginal: control};
 }
-export function excludeVariants(key, variants, why = '予算の削り方で本番から外した（計画5.2）') {
-  const v = new Set(variants);
-  return {...key, items: key.items.map((i) => (i.layer === 2 && v.has(i.variant) && !i.excluded ? {...i, excluded: why} : i))};
+export function excludeSkipped(key, skip, runs = null, why = '予算の削り方で本番から外した（計画5.2）') {
+  const S = new Set(skip);
+  if (runs) for (const e of EVALUATORS) for (const pk of S) {
+    const p = key.packets[pk]; if (!p) throw new Error(`skip list names an unknown packet ${pk}`);
+    for (const m of p.method === 'F' ? ['Fc', 'Fs'] : [p.method]) if (statusOf(runs, e, p.round, m, pk)) throw new Error(`skipped packet ${pk} has a run record (${e}/${m})`);
+  }
+  const items = key.items.map((i) => {
+    if (i.layer !== 2 || i.excluded) return i;
+    const pks = Object.entries(key.packets).filter(([, p]) => (p.method === 'P' || p.method === 'F') && Object.values(p.ids).includes(i.second)).map(([pk]) => pk);
+    const n = pks.filter((pk) => S.has(pk)).length;
+    if (n && n < pks.length) throw new Error(`skip list covers ${n}/${pks.length} packets of ${i.id}`);
+    return n ? {...i, excluded: why} : i;
+  });
+  return {...key, items};
 }
 export function loadOwner(answersFile, keyFile) {
   const ans = readJson(answersFile), k = readJson(keyFile), o = {};
@@ -276,7 +288,8 @@ function main() {
     return;
   }
   if (a[0] !== 'decide') { console.error('usage: aggregate.mjs critiques|decide ... (see the header)'); process.exit(2); }
-  const cfg = loadConfig(), key = excludeVariants(readJson(path.resolve(opt('--key'))), all('--exclude-variant'));
+  const skipFile = opt('--skip-packets'), skip = skipFile ? fs.readFileSync(path.resolve(skipFile), 'utf8').split('\n').filter(Boolean) : [];
+  const cfg = loadConfig(), key = excludeSkipped(readJson(path.resolve(opt('--key'))), skip, runs);
   const ssr = opt('--ssr') ? readJson(path.resolve(opt('--ssr'))) : null;
   const ssrNeg = opt('--ssr-negation') ? readJson(path.resolve(opt('--ssr-negation'))) : null;
   const {J, fNeg} = collectJudgments({key, runs, cfg, ssr});

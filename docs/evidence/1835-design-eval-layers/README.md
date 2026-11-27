@@ -4,7 +4,7 @@
 
 [Issue #1835](https://github.com/techbeansjp-free/AGENTS.md/issues/1835)の「手段の案」のうち、層1（適合性の下限の機械判定）と層2（評価者の校正）の材料を、新たな生成なしで作る道具である。対象は#1804の生成物（`docs/evidence/1804-design-judgment/results/outputs/`のui02・ui03・ui08、4条件×3試行＝36件）。
 
-この段階では、モデルを呼ばない。外部へも送信しない。評価の軸・層3の件数・SSRの扱いは、ownerの未決として残す。計画の固定（Issueの完了の基準の1つ目）は、まだ行っていない。下の変換・判定の項目は、固定の前の案である。
+（本番の前に書いた節。本番の結果は末尾の「本番の結果（2026-11-28）」にある。）この節の段階では、モデルを呼ばず、外部へも送信しなかった。評価の軸・層3の件数・SSRの扱いは、その後ownerが決め、計画は[EVAL_PLAN.md](EVAL_PLAN.md)に固定した（`91e8cbd0`、上限の変更は`b9b66638`）。
 
 ## 道具
 
@@ -200,7 +200,7 @@ axeの括弧は（広幅・狭幅）のcolor-contrastのnodeの増加。描画�
 
 ## 層2・層3の評価の道具
 
-[EVAL_PLAN.md](EVAL_PLAN.md)の3〜8節を実行する道具である。ここまでに行ったのは、`--dry-run`（モデルを呼ばない）と試験だけで、有料の呼出しは0回である。
+[EVAL_PLAN.md](EVAL_PLAN.md)の3〜8節を実行する道具である。この節は本番の前に書いた。本番で使った値（上限30 USD・見込みの線28 USD）と結果は、末尾の「本番の結果（2026-11-28）」にある。
 
 ### 使い方
 
@@ -217,7 +217,7 @@ node harness/owner-page.mjs --render-root $R --out $O/owner --seed <別のseed>
 node harness/run-eval.mjs run --packets $O/packets --runs $O/dry --evaluator fable --dry-run
 # 4. 本番の前の試行（計画5節の1）：Fableで P 1組、F 1画面（講評と採点）、D 1ケース。--onlyに束のIDを並べる
 ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --packets $O/packets --runs $O/trial --evaluator fable --methods D,P,Fc,Fs --rounds 1 --only <D束>,<P束>,<F束>
-# 5. 予算の見込みと削り方（計画5節の2）。18 USDを超えれば、Dを外す→contrast-strongを外す→止める、の順に決める
+# 5. 予算の見込みと削り方（計画5節の2）。見込みの線（config/eval.jsonのprojectionLimitUsd。本番は28 USD）を超えれば、Dを外す→contrast-strongを外す→止める、の順に決める
 node harness/run-eval.mjs plan --packets $O/packets --key $O/key/key.json --per-call D=..,P=..,Fc=..,Fs=..,Neg=.. --prior-ledger $O/trial/ledger.jsonl --skip-out $O/skip.txt
 # 6. 本番（評価者ごと。Dを外すなら --methods P,Fc,Fs,Neg）。Codexは読取りを限定しないので、keyとownerの対応表を--lockで閉じる
 ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --packets $O/packets --runs $O/runs --evaluator fable --skip-packets $O/skip.txt --prior-ledger $O/trial/ledger.jsonl --lock $O/key --lock $O/owner
@@ -227,7 +227,7 @@ node harness/aggregate.mjs critiques --runs $O/runs --out $O/critiques.jsonl
 $V/venv/bin/python -I harness/ssr.py score --anchors anchors.json --in $O/critiques.jsonl --cache-dir $V/cache --out $O/ssr.json
 $V/venv/bin/python -I harness/ssr.py negation --anchors anchors.json --pairs negation-pairs.json --cache-dir $V/cache --out $O/ssr-negation.json
 node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/result.json --layer1 $R/l1-<case>-<trial>/layer1.json ... \
-  --owner <ownerのJSON> --owner-key $O/owner/owner-key.json --ssr $O/ssr.json --ssr-negation $O/ssr-negation.json
+  --owner <ownerのJSON> --owner-key $O/owner-key/owner-key.json --ssr $O/ssr.json --ssr-negation $O/ssr-negation.json --skip-packets $O/skip.txt
 ```
 
 ### 束（`make-packets.mjs`）
@@ -241,11 +241,11 @@ node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/
 
 ### 評価者の呼出し（`run-eval.mjs`）
 
-- Fable：`claude -p --model fable --restricted --tools Read,Glob,Grep --permission-mode dontAsk --strict-mcp-config --settings '{"disableAllHooks":true}' --no-session-persistence --output-format json --max-turns <n> --max-budget-usd <b>`、cwdは束のdirectory。#1815の`asc host-session`の読取り専用の起動（[host-session](../../../skills/asc/references/host-session.md)）と同じ限定で、`--restricted`がfile toolをcwdに閉じる。出力の長さは`CLAUDE_CODE_MAX_OUTPUT_TOKENS`で限る。費用は`total_cost_usd`、tokenは`usage`から取る。
+- Fable：`claude -p --model fable --restricted --tools Read,Glob,Grep --permission-mode dontAsk --strict-mcp-config --settings '{"disableAllHooks":true}' --no-session-persistence --output-format stream-json --verbose --max-turns <n> --max-budget-usd <b>`、cwdは束のdirectory。#1815の`asc host-session`の読取り専用の起動（[host-session](../../../skills/asc/references/host-session.md)）と同じ限定で、`--restricted`がfile toolをcwdに閉じる。出力の長さは`CLAUDE_CODE_MAX_OUTPUT_TOKENS`で限る。費用は`total_cost_usd`、tokenは`usage`から取る。
 - Codex：`codex exec --ephemeral -s read-only -C <束> --skip-git-repo-check --json -m <model> -c project_doc_max_bytes=0`。費用は報告されないので、tokenと時間だけを記録する。
 - F採点（`Fs`）と否定の反例（`Neg`）は、講評・文を依頼文に埋め込み、画面を渡さない。cwdは空のdirectoryである。否定の反例は、各回に20文（10対の両側）を1文ずつ採点する。
 - 上限（`config/eval.json`の`limits`）：方式ごとのturn・出力token・1回の予算・時間。講評は800字以内と依頼し、超えたら`overLength`を記録する（欠測にはしない）。
-- 台帳：`<runs>/ledger.jsonl`に、試みごとの費用・token・時間を追記する。Fableの合計（`--prior-ledger`の試行分を含む）が上限20 USDに達したら止め、`stop`の行を書く。1回の予算は「残り」と方式の上限の小さい方なので、上限を大きくは超えない。Fableの費用が報告されなかった試みは、その回の予算の額で数える。
+- 台帳：`<runs>/ledger.jsonl`に、試みごとの費用・token・時間を追記する。Fableの合計（`--prior-ledger`の試行分を含む）が上限（`config/eval.json`の`capUsd`。本番は30 USD）に達したら止め、`stop`の行を書く。1回の予算は「残り」と方式の上限の小さい方なので、上限を大きくは超えない。Fableの費用が報告されなかった試みは、その回の予算の額で数える。
 - 回答は最後のJSONを読み、形が不正なら欠測（`invalid`、理由`invalid-answer`）として記録する。欠測の理由（`images-not-read`・`isolation-violation`・`invalid-answer`・`no-result-event`・`failed`・`missing-input`）は`status.json`の`missingReason`に残り、`aggregate.mjs decide`の結果の`missingByReason`が評価者ごとの理由別の件数を出す。再試行は既定で0回、`--retries 1`のときだけ1回まで行い、回数を`status.json`に残す。`status.json`のある呼出しは、再実行で呼ばない。
 - 有料の実行は`ASC1835_ALLOW_PAID=1`が無ければ拒否する。`--dry-run`はCLIを起動せず、同じcommand lineを記録し、CLIと同じ形式の偽の回答（seed付き。`--dry-invalid-every N`でN回ごとに不正な回答）で、読取り・台帳・予算の停止まで通す。dry-runの台帳と有料の台帳は混ぜられない。
 
@@ -273,25 +273,27 @@ node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/
 
 ### 未確認事項（層2・層3の道具）
 
-- **予算の見込み**：#1807・#1815の実績から、Fableの1回の費用を見積ると、計画の全呼出し（2回×（D 3・P 27・F講評 27・F採点 27・否定の反例 20））で約24〜42 USDになり、Dとcontrast-strongを外しても約17〜32 USDである。計画5節の2では、本番の前の試行で18 USDを超えると見込まれれば「予算の見込みで未判定」として止まる可能性が高い。試行の実測で決める。
+- **予算の見込み**：#1807・#1815の実績から、Fableの1回の費用を見積ると、計画の全呼出し（2回×（D 3・P 27・F講評 27・F採点 27・否定の反例 20））で約24〜42 USDになり、Dとcontrast-strongを外しても約17〜32 USDである。計画5節の2では、本番の前の試行で18 USDを超えると見込まれれば「予算の見込みで未判定」として止まる可能性が高い。試行の実測で決める。**本番の後：** 試行の実測で見込みが26.4〜34.3 USDとなり、ownerが上限を30 USDに改めた（[EVAL_PLAN.md](EVAL_PLAN.md)5節）。
 - **Codexの読取りの範囲**：`codex exec -s read-only`は書込みだけを防ぎ、読取りを限定しない（[host-session](../../../skills/asc/references/host-session.md)）。#1815は`asc host-session`の実行ごとのpermission profileで読取りを限定した。この道具は、指定どおり`codex exec`を使い、keyとownerの対応表を`--lock`（mode 000）で閉じる。束の他の回・他の束は読める状態のままである。Codexの出力の長さとturnには、CLIの上限の指定が無く、時間の上限だけを掛ける。
 - **Fableの文脈**：`--restricted`でも、user単位の`CLAUDE.md`やmemoryが読み込まれるかは確かめていない。束はrepositoryの外（scratch）にあるので、repositoryの`CLAUDE.md`は祖先に無い。
 - **Codexのmodel**：`gpt-6.2-sol`は#1815段階3でownerが答えたもので、#1835での使用は確かめていない。
-- **Fableで画像を見たか**：`--output-format stream-json --verbose`（導入済みclaude 2.1.323の`--help`で確認）で、assistantのeventのtool_use（`Read`の`input.file_path`）と、最後のresult event（`result`・`total_cost_usd`・`usage`・`duration_ms`）を記録から取り出す。その呼出しの束のPNGのうち、Readされなかったものが1つでもあれば欠測（理由`images-not-read`）。result eventが無ければ欠測（`no-result-event`）で、費用は1回の予算の額で数える。**実機のstream-jsonの出力は、まだ見ていない**（有料の呼出しをしていない）。eventの形（`type: assistant`の`message.content[]`のtool_use、`type: result`）は、既知のSDKの形に合わせた偽の出力で試験している。Readのpathが相対・symlink経由の場合は、cwdとrealpathで解決して照合する。Readの結果が実際に画像として渡ったか（tool_resultの内容）までは見ない。
-- **Codexの隔離の判定**：`codex exec --json`（導入済みcodex-cli 0.171.0）のitem.completedのうち`command_execution`の`item.command`（shellの文字列）を取り、文字列を空白・引用符・記号で分けて、絶対path・`~`・`..`を含むものを束のdirectory（`-C`）に対して解決し、外に出れば欠測（理由`isolation-violation`）とする。`/bin`・`/usr/bin`等の実行file・`/dev/null`は除く。`$VAR`・バッククォート・`cd`・`eval`を含む命令、`command_execution`以外で既知でない種類のitem、event自体が無い呼出しは「未確認」（`status.json`の`isolation: unconfirmed`）として記録し、欠測にはしない（集計の`isolationUnconfirmed`）。**実機のeventの形（`command_execution`の項目名`command`、画像を見るtoolのitem種別）は未確認**である。文字列の分解は簡易で、`sed '/x/d'`のような`/`で始まる引数は束の外のpathと誤って判定し、不要な欠測を出し得る（その場合は`attempt-*.stdout`で確かめる）。
+- **Fableで画像を見たか**：`--output-format stream-json --verbose`（導入済みclaude 2.1.323の`--help`で確認）で、assistantのeventのtool_use（`Read`の`input.file_path`）と、最後のresult event（`result`・`total_cost_usd`・`usage`・`duration_ms`）を記録から取り出す。その呼出しの束のPNGのうち、Readされなかったものが1つでもあれば欠測（理由`images-not-read`）。result eventが無ければ欠測（`no-result-event`）で、費用は1回の予算の額で数える。**実機のstream-jsonの出力は、まだ見ていない**（有料の呼出しをしていない）。eventの形（`type: assistant`の`message.content[]`のtool_use、`type: result`）は、既知のSDKの形に合わせた偽の出力で試験している。Readのpathが相対・symlink経由の場合は、cwdとrealpathで解決して照合する。Readの結果が実際に画像として渡ったか（tool_resultの内容）までは見ない。**本番の後：** 実機のstream-jsonはこの形で読め、Fableの184回はすべて有効で、渡した画像をすべてReadしていた。
+- **Codexの隔離の判定**：`codex exec --json`（導入済みcodex-cli 0.171.0）のitem.completedのうち`command_execution`の`item.command`（shellの文字列）を取り、文字列を空白・引用符・記号で分けて、絶対path・`~`・`..`を含むものを束のdirectory（`-C`）に対して解決し、外に出れば欠測（理由`isolation-violation`）とする。`/bin`・`/usr/bin`等の実行file・`/dev/null`は除く。`$VAR`・バッククォート・`cd`・`eval`を含む命令、`command_execution`以外で既知でない種類のitem、event自体が無い呼出しは「未確認」（`status.json`の`isolation: unconfirmed`）として記録し、欠測にはしない（集計の`isolationUnconfirmed`）。**実機のeventの形（`command_execution`の項目名`command`、画像を見るtoolのitem種別）は未確認**である。文字列の分解は簡易で、`sed '/x/d'`のような`/`で始まる引数は束の外のpathと誤って判定し、不要な欠測を出し得る（その場合は`attempt-*.stdout`で確かめる）。**本番の後：** 有効な3回目では、Pの全呼出しに`command_execution`のitemがあり、隔離の違反は0件、判定できなかった呼出しは1件だった。画像を見るtoolのitem種別は確かめていない（画像の読取りは、stderrと回答の文で判定した。[EVAL_PLAN.md](EVAL_PLAN.md)5節）。
 - **束の大きさ**：実際の画面（3ケース×A-r1・D-r1・E-r1）で作ると約110MBである。
 
 ## 本番の結果（2026-11-28）
 
-記録は`results/`にある：`result.json`（集計）・`owner-answers.json`（層3のownerの選択。2026-11-27T19:42Z。評価者の結果を見る前に記録）・`owner-key.json`・`key.json`（束の対応表）・`ssr.json`・`ssr-negation.json`。講評の本文・screenshot・生の実行記録は公開しない（scratchの台帳`ledger.jsonl`のsha256は`07a53fe9…c6bc`、講評`critiques.jsonl`は`db4b4209…b5e0`）。
+記録は`results/`にある：`result.json`（集計）・`owner-answers.json`（層3のownerの選択。2026-11-27T19:42Z。評価者の結果を見る前に記録）・`owner-key.json`・`key.json`（束の対応表）・`ssr.json`・`ssr-negation.json`・`skip-packets.txt`（予算で外した束のID）。講評の本文・screenshot・生の実行記録は公開しない（scratchの台帳`ledger.jsonl`のsha256は`07a53fe9…c6bc`、講評`critiques.jsonl`は`db4b4209…b5e0`）。
 
 ```sh
 node harness/aggregate.mjs decide --key key/key.json --runs runs --out result.json \
   --layer1 <9画面のlayer1.json>... --owner owner-answers.json --owner-key owner-key/owner-key.json \
-  --ssr ssr.json --ssr-negation ssr-negation.json --exclude-variant contrast-strong
+  --ssr ssr.json --ssr-negation ssr-negation.json --skip-packets skip.txt
 ```
 
-`--exclude-variant contrast-strong`は、本番の前に計画5節の2で外した組（3ケース×2回）を、欠測ではなく除外として数えるためのものである（集計の道具に後から加えた。外す決定は本番の前で、結果を見て決めたものではない）。Dも同じ理由で実行していない（欠測48件として記録され、採否の対象外）。
+`--skip-packets`は、本番の前に計画5節の2で外した束の一覧（`run-eval.mjs plan`が書き、`run`が使ったもの）を読み、その束だけで示すはずだった層2の組（contrast-strong、3ケース）を欠測ではなく除外として数える（集計の道具に後から加えた。外す決定は本番の前で、結果を見て決めたものではない）。組の束の一部だけが一覧にある場合と、一覧の束に実行の記録がある場合は拒否する。contrast-strongは9画面とも層1で不合格なので、外しても最低の基準と条件3の分母は変わらない。変わるのは再現性・評価者間の一致の分母（27組→24組）だけである。Dも同じ理由で実行していない（評価者ごとに欠測42件＝陰性対照を除く21組×2回。採否の対象外）。
+
+Codexの P・F講評・F採点は、呼出しの手順を直して全件やり直した結果である。経緯と、やり直さなければ結論が未判定だったことは[EVAL_PLAN.md](EVAL_PLAN.md)5節の「Codexの本番のやり直し」にある。
 
 ### 結論（計画7節）
 
@@ -315,12 +317,12 @@ node harness/aggregate.mjs decide --key key/key.json --runs runs --out result.js
 
 Sの否定の反例はembeddingだけで計算するので、評価者に依らず同じ値（10対）である。
 
-- 種類別（P）：階層は弱・強とも両評価者で全件検出。余白の弱はFable 4/6・Codex 5/6。ui08の`hierarchy-strong`は層1で不合格（2画面×2回）で、Pは全件検出。
+- 種類別（P）：階層は弱・強とも両評価者で全件検出。余白の弱はFable 4/6・Codex 5/6。ui08の`hierarchy-strong`は層1で不合格（1組×2回）で、Pは2件とも検出。
 - 評価者間の一致：P 45/48・F 34/48・S 12/48。
-- Fが劣化を見分けない主な理由は同点である：層2の組でFの点が同じだった割合はFable 20/24・Codex 21/24。5段階の基準文で講評を別々に採点すると、1か所だけの劣化では点が変わらない。
-- Sは同点が少ない代わりに向きがほぼ偶然である（層2の判断が先・後で Fable 9・10、Codex 5・12）。陰性対照（描画がpixelで同一）でも5/6で差を付けた。講評を書き直すだけで期待値が0.1以上動き、劣化の有無より講評の揺れが大きい。事前に観測した否定の区別の弱さ（cos 0.948〜0.983）も、否定の反例の失敗は0件だったが、差は小さい。
+- Fが劣化を見分けない主な理由は同点である（以下の同点・向きの件数は、scratchの判断から親が数えたもので、`result.json`には無い）：層2の組でFの点が同じだった割合はFable 20/24・Codex 21/24。`anchors.json`の5段階の基準文で講評を画面ごとに採点すると、1か所だけの劣化では点が変わらない。
+- Sは同点が少ない代わりに、向きが劣化の有無に沿わない（層2の判断が先・後で、Fable 9・10とほぼ半々、Codex 5・12と劣化した側に偏る）。陰性対照（描画がpixelで同一）でも5/6で差を付けた。講評を書き直すだけで期待値が0.1以上動き、劣化の有無より講評の揺れが大きい。否定の反例は、期待値では10対とも否定側が低く（失敗0件、差0.88〜2.10）、区別できた。ただし肯定側と否定側のcos類似度は0.948〜0.983と近い。
 - 層1：108画面（9画面×各版）のうち76が合格。陰性対照9件はすべて元の画面と同じ結果だった。
-- 層3：ownerは9組のうち依頼1（ui02）の3組を「同等」とし、残る6組で優劣を付けた。
+- 層3：ownerは9組のうちui03（ダッシュボード）の3組を「同等」とし、残る6組で優劣を付けた。
 
 ### 費用・時間
 
@@ -330,11 +332,11 @@ Sの否定の反例はembeddingだけで計算するので、評価者に依ら�
 | Fable | F講評 | 48 | 7.59 | 18.3分 | 288・277,186/1,058,116・73,323 |
 | Fable | F採点 | 48 | 2.24 | 3.0分 | 96・134,258/272,664・672 |
 | Fable | 否定の反例 | 40 | 1.15 | 3.1分 | 80・59,354/249,790・3,520 |
-| Codex | P・F講評・F採点（有効な再実行） | 144 | — | 41.2分 | 入力8,068,260（うちcache読込み6,723,840）・出力59,046 |
+| Codex | P・F講評・F採点（有効な3回目。scratchの台帳から親が計算） | 144 | — | 41.2分 | 入力8,068,260（うちcache読込み6,723,840）・出力59,046 |
 | Codex | 否定の反例 | 40 | — | 5.3分 | 入力815,942（うちcache読込み705,536）・出力3,351 |
 
-- Fableの合計は本番20.91 USD・試行1.32 USDで22.22 USD（上限30 USD）。予算での停止は無い。
-- Codexは、無効にした1回目（画像を開けなかった）と途中の3件を含めると、P・F講評・F採点で計288回・入力17.8M token・約83分を使った。
+- Fableの合計は本番20.906 USD（`result.json`）・試行1.317 USD（scratchの`trial/ledger.jsonl`、4回）で22.22 USD（上限30 USD）。予算での停止は無い。
+- `result.json`の`costs.codex`は、無効にした1回目（画像を開けなかった）と2回目（途中で止めた回。終わっていたPの3件と、止めた時点の呼出し）を含む値で、P・F講評・F採点で計288回・入力17,829,541 token・約82.7分である。
 - 費用の条件（Fableの、Pの2倍以内）：Fは0.99倍、Sは0.76倍（Fの講評を含む）で満たすが、上の最低の基準で不採用になる。
 - 欠測は両評価者とも0件（各184回が有効）。Codexの隔離を判定できなかった呼出しが1件ある（欠測にしない規則）。
 
@@ -344,5 +346,6 @@ Sの否定の反例はembeddingだけで計算するので、評価者に依ら�
 
 この結果から言えることと言えないこと：
 
-- 言える：この3ケース・2種類の劣化では、画面を並べて見せる一対比較（P）が、画面ごとの講評を点にする方式（F・S）より、既知の劣化をよく見分け、再現性も高い。講評を点にする方式は、ASCの評価実験の補助に使わない。
+- 言える：この3ケース・2種類の劣化では、画面を並べて見せる一対比較（P）が、画面ごとの講評を`anchors.json`の5段階で点にする今回の設計（F・S）より、既知の劣化をよく見分け、再現性も高い。この設計のF・Sは、ASCの評価実験の補助に使わない。
+- 言えない：誤検出の差が方式の能力の差だけによること。Pの陰性対照は、pixelが同じ2画面を並べて見せるので、画面を1つずつ見るF・Sより易しい課題である。
 - 言えない：Pが「ASCとしての基準」と一致すること（層3の一致は Fable 9/12・Codex 8/12 で、組は6組だけ）。良い案どうしの優劣の判定にPを使えるかは、組を増やして確かめる必要がある。

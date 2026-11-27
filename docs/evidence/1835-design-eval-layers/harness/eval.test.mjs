@@ -10,7 +10,7 @@ import {spawnSync} from 'node:child_process';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS, pngChunks, PNG_KEEP, extractJson, readJson, parseScreen} from './eval-common.mjs';
 import {buildPackets} from './make-packets.mjs';
 import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex} from './run-eval.mjs';
-import {computeAll, decideEvaluator, missingByReason, excludeVariants} from './aggregate.mjs';
+import {computeAll, decideEvaluator, missingByReason, excludeSkipped} from './aggregate.mjs';
 import {buildOwnerPage} from './owner-page.mjs';
 
 const cfg = loadConfig();
@@ -334,9 +334,28 @@ test('codex: images-not-viewed from an image error or an answer that says the sc
   assert.ok(!buildPrompt('P', cfg, {evaluator: 'fable'}).includes('読取りだけのcommand'));
 });
 
-test('aggregate: --exclude-variant marks only layer-2 items of that variant, with a reason', () => {
-  const key = {items: [{id: 'a', layer: 2, variant: 'contrast-strong'}, {id: 'b', layer: 2, variant: 'spacing-weak'}, {id: 'c', layer: 3, variant: 'contrast-strong'}, {id: 'd', layer: 2, variant: 'contrast-strong', excluded: 'earlier'}]};
-  const k = excludeVariants(key, ['contrast-strong']);
-  assert.deepEqual(k.items.map((i) => i.excluded ?? null), ['予算の削り方で本番から外した（計画5.2）', null, null, 'earlier']);
+test('aggregate: --skip-packets excludes a layer-2 item only when all its P and F packets are skipped', () => {
+  const sec = 'c/A-r1/contrast-strong', org = 'c/A-r1/original';
+  const key = {rounds: [1], items: [{id: 'a', layer: 2, second: sec}, {id: 'b', layer: 2, second: 'c/A-r1/spacing-weak'}, {id: 'd', layer: 2, second: sec, excluded: 'earlier'}],
+    packets: {p1: {round: 1, method: 'P', ids: {x: org, y: sec}}, f1: {round: 1, method: 'F', ids: {y: sec}}, f2: {round: 1, method: 'F', ids: {z: org}}}};
+  assert.deepEqual(excludeSkipped(key, ['p1', 'f1']).items.map((i) => i.excluded ?? null), ['予算の削り方で本番から外した（計画5.2）', null, 'earlier']);
   assert.equal(key.items[0].excluded, undefined); // the input is not changed
+  assert.throws(() => excludeSkipped(key, ['p1']), /covers 1\/2 packets/);
+  assert.deepEqual(excludeSkipped(key, []).items.map((i) => i.excluded ?? null), [null, null, 'earlier']);
+  const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1835-skip-'));
+  fs.mkdirSync(path.join(runs, 'codex', 'round1', 'Fc', 'f1'), {recursive: true});
+  fs.writeFileSync(path.join(runs, 'codex', 'round1', 'Fc', 'f1', 'status.json'), '{"status":"valid"}');
+  assert.throws(() => excludeSkipped(key, ['p1', 'f1'], runs), /has a run record \(codex\/Fc\)/);
+  assert.throws(() => excludeSkipped(key, ['nope'], runs), /unknown packet/);
+});
+
+test('aggregate: excluded items are reported as excluded, not counted as missing', () => {
+  const ex = items.find((i) => i.variant === 'contrast-strong');
+  const key = {...smallKey, items: items.map((i) => (i.variant === 'contrast-strong' ? {...i, excluded: 'budget'} : i))};
+  const drop = (j) => Object.fromEntries(Object.entries(j).map(([r, x]) => [r, {...x, [ex.id]: null}]));
+  const J = {fable: {P: drop(Pj), F: drop(good), S: drop(good), D: good}, codex: {P: drop(Pj), F: drop(good), S: drop(good), D: good}};
+  const r = computeAll({cfg, key, J, fNeg: {fable: fNegOk, codex: fNegOk}, layer1, owner, ssrNeg, costs});
+  assert.equal(r.metrics.fable.P.missing, 0);
+  assert.ok(r.excludedItems.some((x) => x.id === ex.id && x.why === 'budget'));
+  assert.equal(r.items, items.length - items.filter((i) => i.variant === 'contrast-strong').length);
 });
