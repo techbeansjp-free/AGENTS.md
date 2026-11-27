@@ -1,0 +1,56 @@
+{
+ "case": "ui07-bus-mobile",
+ "condition": "S",
+ "rep": 1,
+ "schema": "asc-1807-core-steps/v1",
+ "parseErrors": 0,
+ "events": 34,
+ "toolCalls": {
+  "fetch_page": {
+   "calls": 0,
+   "ok": 0,
+   "failed": 0,
+   "noResult": 0
+  },
+  "view_page": {
+   "calls": 0,
+   "ok": 0,
+   "failed": 0,
+   "noResult": 0
+  },
+  "screenshot": {
+   "calls": 1,
+   "ok": 1,
+   "failed": 0,
+   "noResult": 0
+  }
+ },
+ "otherBrowserTools": [],
+ "viewedUrls": [],
+ "viewPageWidths": [],
+ "renderedFiles": [
+  "out/index.html"
+ ],
+ "screenshotWidths": [
+  390
+ ],
+ "renderedVersions": {
+  "out/index.html": 1
+ },
+ "exemplarViewed": false,
+ "alternativesCompared": false,
+ "narrowChecked": true,
+ "wideChecked": false,
+ "finalBothWidths": false,
+ "widths": {
+  "narrow": 390,
+  "wide": 1440
+ },
+ "coreSteps": false,
+ "proxy": {
+  "allowed": 0,
+  "denied": 0,
+  "deniedReasons": {}
+ },
+ "proxyCorroborates": true
+}

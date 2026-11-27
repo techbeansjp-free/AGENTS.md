@@ -1,0 +1,89 @@
+{
+ "note": "Isolation probes of #1815 stage 3 (harness/probe.mjs), one per condition, before the measurement. Derived from probe-check.json; the raw trace and debug log stay in scratch.",
+ "probes": {
+  "B": {
+   "pass": true,
+   "checks": {
+    "init": true,
+    "cwd": true,
+    "tools": true,
+    "browserConnected": true,
+    "noPlugins": true,
+    "programDirectory": true,
+    "ascListed": true,
+    "noOwnerSkills": true,
+    "onlyMarkerReads": true,
+    "descriptionsInContext": true,
+    "readTriggerInContext": true,
+    "noRepoInstructions": true,
+    "noOwnerInstructionsOrMemory": true,
+    "gitContextSample": true,
+    "markersAttempted": true,
+    "markersRefused": true,
+    "markerTokensAbsent": true,
+    "debugPathsInsideTrial": true,
+    "noRealHomeOrRepoInDebug": true,
+    "noHooks": true
+   },
+   "tools": [
+    "Edit",
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "Write",
+    "mcp__browser__fetch_page",
+    "mcp__browser__screenshot",
+    "mcp__browser__view_page"
+   ],
+   "model": "claude-sonnet-5-5",
+   "claudeCodeVersion": "2.1.323",
+   "gitLine": "Install ASC | initial",
+   "costUsd": 0.0742218
+  },
+  "S": {
+   "pass": true,
+   "checks": {
+    "init": true,
+    "cwd": true,
+    "tools": true,
+    "browserConnected": true,
+    "noPlugins": true,
+    "programDirectory": true,
+    "ascListed": true,
+    "noOwnerSkills": true,
+    "onlyMarkerReads": true,
+    "descriptionsInContext": true,
+    "readTriggerInContext": true,
+    "noRepoInstructions": true,
+    "noOwnerInstructionsOrMemory": true,
+    "gitContextSample": true,
+    "markersAttempted": true,
+    "markersRefused": true,
+    "markerTokensAbsent": true,
+    "debugPathsInsideTrial": true,
+    "noRealHomeOrRepoInDebug": true,
+    "noHooks": true
+   },
+   "tools": [
+    "Edit",
+    "Glob",
+    "Grep",
+    "Read",
+    "Skill",
+    "Write",
+    "mcp__browser__fetch_page",
+    "mcp__browser__screenshot",
+    "mcp__browser__view_page"
+   ],
+   "model": "claude-sonnet-5-5",
+   "claudeCodeVersion": "2.1.323",
+   "gitLine": "Install ASC | initial",
+   "costUsd": 0.0745777
+  }
+ },
+ "compare": {
+  "pass": true,
+  "differ": []
+ }
+}
