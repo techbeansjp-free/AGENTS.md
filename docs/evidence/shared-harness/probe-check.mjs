@@ -185,6 +185,14 @@ export function checkProbe(i) {
   // Review M1 (a): the debug log is needed for the listing state; `compare` checks the state across the conditions.
   const skillListing = skillListingOf(i.debug);
   add('skillListingRecorded', skillListing !== null && skillListing.unparsed === 0, skillListing ?? 'no debug log');
+  // #1840 review M3: the user's own Skills of the fixture (fileInputs userSkills) are in the session's Skill list and their
+  // descriptions are quoted from it (no check when the fixture has none).
+  const user = Object.keys(i.userSkills ?? {});
+  if (user.length) {
+    const notListed = user.filter((s) => !listed.some((x) => x === s || x.endsWith(`:${s}`)));
+    const notQuoted = user.filter((s) => !norm(text).includes(norm(i.userSkills[s] || '\u0000')));
+    add('userSkillsListed', notListed.length === 0 && notQuoted.length === 0 && looked.length === 0, {userSkills: user.sort(), notListed, notQuoted, lookedUp: looked.length});
+  }
   add('descriptionsVerbatimCount', true, `${asc.filter((s) => norm(text).includes(norm(i.ascSkills[s]))).length}/${asc.length} (informational)`);
   // Instruction files: the sample project's CLAUDE.md, the pointer only when the condition adds it, nothing from elsewhere.
   add('projectClaudeMd', text.replace(/#/g, '').includes(stripHeading(i.baseFirstLine)), 'heading marks ignored (review L3)');
@@ -374,7 +382,12 @@ export const checkValues = (checks) => Object.fromEntries(Object.entries(checks 
 export function fileInputs(dirArg, condition, repoRoot, conds = loadRawConditions()) {
   const dir = path.resolve(dirArg), work = fs.realpathSync(path.join(dir, 'work'));
   const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
-  const ascSkills = Object.fromEntries(fs.readdirSync(path.join(work, '.claude/skills')).map((s) => [s, description(read(path.join(work, '.claude/skills', s, 'SKILL.md')) ?? '')]));
+  const entries = Object.fromEntries(fs.readdirSync(path.join(work, '.claude/skills')).map((s) => [s, description(read(path.join(work, '.claude/skills', s, 'SKILL.md')) ?? '')]));
+  // #1840 review M3: with conditions.json ascSkills, an entry not named there is the user's own Skill (userSkills), checked
+  // on its own; without it every entry is an ASC Skill (as before).
+  const isAsc = (s) => !conds.ascSkills || conds.ascSkills.includes(s);
+  const ascSkills = Object.fromEntries(Object.entries(entries).filter(([s]) => isAsc(s)));
+  const userSkills = Object.fromEntries(Object.entries(entries).filter(([s]) => !isAsc(s)));
   const base = conds.fixtures[conds.probeFixture ?? 'A'].baseClaudeMd ?? '';
   const meta = JSON.parse(read(path.join(dir, 'meta.json')) ?? '{}');
   const sentinels = meta.probeSentinels ?? {};
@@ -383,7 +396,7 @@ export function fileInputs(dirArg, condition, repoRoot, conds = loadRawCondition
   const fileSha = (f) => (fs.existsSync(f) ? sha256(fs.readFileSync(f)) : null);
   const repoFirst = (f) => stripHeading((read(path.join(repoRoot, f)) ?? '').split('\n')[0]);
   return {meta, ctx, inputs: {trace: read(path.join(dir, 'trace.jsonl')) ?? '', debug: read(path.join(dir, 'debug.log')), stderr: read(path.join(dir, 'stderr.txt')),
-    hookLog: read(path.join(dir, 'hook.jsonl')), work, trialDir: dir, condition, ascSkills, baseFirstLine: base.split('\n')[0],
+    hookLog: read(path.join(dir, 'hook.jsonl')), work, trialDir: dir, condition, ascSkills, userSkills, baseFirstLine: base.split('\n')[0],
     pointerHead: 'このプロジェクトでASCを使う', forbiddenTexts: [repoFirst('CLAUDE.md'), repoFirst('AGENTS.md')].filter(Boolean),
     markerPaths: ctx ? [ctx.homeMarker, ctx.repoMarker] : [], repoRoot: path.resolve(repoRoot),
     sentinels, sentinelExists: {trial: Boolean(sentinels.trial && fs.existsSync(sentinels.trial)), repo: Boolean(sentinels.repo && fs.existsSync(sentinels.repo))},

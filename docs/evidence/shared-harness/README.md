@@ -66,6 +66,19 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 - `cases.json`の依頼のfield：`expectReads`・`forbidReads`（読むべき・読んではならないfileのpathの正規表現）、`forbidSkills`（選ばれてはならないSkill）、`writes`（書いたfileを試行の終わりの`work/`の写しで読み、`require`・`forbid`を照合する。`collect.mjs`の`fileText`）、`answerNone`（回答に現れてはならない目印）、`userSkill`（利用者のSkill：Skill tool呼出しか`.claude/skills/<name>/SKILL.md`のReadを本文とし、ASCのbyteに数えない）。
 - 判定：`rule.mode: levels`（`score.mjs`の`levelsVerdict`）。候補と基準の比較ではなく、条件ごとに固定の水準（依頼の集合・指標・min）を満たすかを示す。
 
+## #1840の測定前の独立レビューで加えたもの（2026-11-27）
+
+これもfieldの無い設定（試験用、#1823）の動きと公開する記録を変えない（試験で確かめる）。
+
+- `cases.json`の`answerQuota`（観点ごとの目印{`id`・`viewpoint`・`pattern`か`all`・`unless`・`report`}のうち`min`件以上。`report: true`は数えず`markerGroups`で示す）、`answerNone`の`{id, pattern}`（`markerDeductions`）、`markerText: "answer+writes"`（目印を回答と書いたfileの文の和に当てる）。
+- `writes`の`require`・`forbid`の`group`（落ちた理由を`writeFailedGroups`で示す）、`writesReport`（合否に使わない照合）、書かなかった試行の`writeRequireInAnswer`。
+- `cases.json`の`report`（試行ごとに、指定したfileのRead・回答の語・書いたfileの全部を`report`に記録する。合否に使わない）。利用者のSkillが試行のSkill一覧に載ったか（`userSkillsListed`）。
+- 水準の`use: "report"`（計算して`perCondition.reported`に示し、合否に使わない）と`label`、指標`writeCleanWhenWritten`（書いた試行だけを率に入れ、書かなかった試行は`notEligible`）。
+- `run-trial.mjs`が試行の終わりに変更・作成したfileのsha256を`meta.json`の`workFiles`に記録し（`make-fixture.mjs`の`workChanges`）、`collect.mjs`（と、それを呼ぶ`judge.mjs`）は`work/`がそれと違えば拒否する。
+- `probe-check.mjs`：`conditions.json`の`ascSkills`があれば、それ以外の`.claude/skills/`の入口を利用者のSkillとして分け、Skill一覧に載りdescriptionが原文で示されることを`userSkillsListed`で確かめる。
+- `dry-run.mjs`：referenceの計算は、`ascSkills`の無い設定では従来どおり`asc`の依頼だけ（`fixtureReferences`）。
+- `calibrate.mjs`（固定しないtool。`dry-run.mjs`と同じく固定の記録に含めない）：設定の`calibration.json`に挙げた、これまでの評価で採点した回答に目印と書いたfileの照合を当て、これまでの採点と比べた表を作る（`--md`）。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。

@@ -26,13 +26,13 @@
 
 | fixture | 内容 | 使う依頼 |
 | --- | --- | --- |
-| EC1 | ECサイトの受託案件。要件定義書の非機能は「最新のブラウザで動作すること」「快適に動作すること」だけ（#1828 T1・T4） | w-1、w-3、n-2、probe |
+| EC1 | ECサイトの受託案件。要件定義書の非機能は「最新のブラウザで動作すること」「快適に動作すること」だけ（#1828 T1・T4） | w-1、w-3、n-2 |
 | EC3 | EC1に、仕様書の一部（REQ-PERF-001、CON-003、対応環境）を足したもの（#1828 T3） | w-2 |
 | MN | 納品済みの受発注管理システム。#1829の案件の資料を、仕様書（品質保証範囲は合意済み、版1.0）と契約書の要約のfileに分けたもの | m-r1、m-r2、m-r7、n-1 |
 | SP | 会員サイト。既存の仕様FN-003・SCR-005（変更前：メールアドレスだけ、有効期限10分）（#1832） | s-1、n-3 |
-| U | 利用者の社内の請求管理（TypeScript）。導入の後に、利用者が`.agent-skill-chain/project/context.json`で`.agent-skill-chain/project/rules/money.md`（金額は整数の円で扱い浮動小数点を使わない）を`src/billing`に`appliesTo`で登録し、固有Skill `invoice-format`（請求書の書式）と`quote-format`（見積書の書式。ASCの`estimate-and-scope`と説明が近い）を`.claude/skills/`に置いた | u-* |
+| U | 利用者の社内の請求管理（TypeScript）。導入の後に、利用者が`.agent-skill-chain/project/context.json`で`.agent-skill-chain/project/rules/money.md`（金額は整数の円で扱い浮動小数点を使わない）を`src/billing`に`appliesTo`で登録し、固有Skill `invoice-format`（請求書の書式）と`quote-format`（見積書の書式。ASCの`estimate-and-scope`と説明が近い）を`.claude/skills/`に置いた | u-*、probe |
 
-fixtureの全文は[conditions.json](conditions.json)の`fixtures`。導入したASCの`start`の選択（`projectContext`）で、`src/billing/invoice.ts`の変更では`money.md`が選ばれ、`src/users/store.ts`では選ばれないことを確かめた（モデルを呼ばない確認）。
+fixtureの全文は[conditions.json](conditions.json)の`fixtures`。導入したASCの`start`の選択で、`src/billing/invoice.ts`の変更では`money.md`が選ばれ、`src/users/store.ts`・`docs/開発の始め方.md`では選ばれないことを、R・Cとも確かめた（モデルを呼ばない確認。記録は[start-selection.json](start-selection.json)）。
 
 ## 依頼
 
@@ -46,7 +46,7 @@ fixtureの全文は[conditions.json](conditions.json)の`fixtures`。導入し�
 | 1 | m-r1 保証環境での端数の不具合 | MN | estimate-and-scope | 本文、案件の品質保証範囲 | | WAR-002・版1.0・BR-012、調査前の無償の約束なし |
 | 1 | m-r2 iPadのSafari | MN | estimate-and-scope | 同上 | | WAR-001・版1.0・互換性/見積 |
 | 1 | m-r7 未決の行（移行データの重複） | MN | estimate-and-scope | 同上 | | WAR-005・未決/未合意・判断者 |
-| 1 | s-1 FN-003・SCR-005を変更に合わせて書き直す | SP | asc | 本文、雛形`00_利用案内.md`と個別機能・個別画面の雛形 | | 書いたfile：7つの事実、経緯0、状態を承認済みにしない |
+| 1 | s-1 FN-003・SCR-005を変更に合わせて書き直す | SP | asc | 本文、雛形`00_利用案内.md`と個別機能・個別画面の雛形 | | 書いた本文（個別機能・個別画面）：7つの事実、経緯0、状態を承認済みにしない。本文の外の経緯は報告だけ |
 | 1 | n-1 絞り込み条件の追加の見積（隣接） | MN | estimate-and-scope | 本文 | warranty-scope | 前提・調査 |
 | 1 | n-2 「保証範囲を顧客と合意済みです」の英訳 | EC1 | なし | | 雛形、warranty-scope | |
 | 1 | n-3 今の仕様の有効期限を聞く | SP | なし | | 雛形 | 10分 |
@@ -54,22 +54,26 @@ fixtureの全文は[conditions.json](conditions.json)の`fixtures`。導入し�
 | 2 | u-bill-2 消費税を加えた合計 | U | asc | 同上 | | 同上 |
 | 2 | u-users 名前検索の大文字小文字 | U | asc | 本文 | `money.md`、利用者のSkill | `src/users/`を書く |
 | 2 | u-docs 開発手順にテストの方法 | U | asc | 本文 | `money.md`、利用者のSkill | `npm test`を書く |
-| 2 | u-skill-1 請求書を作る | U | invoice-format（利用者） | 利用者のSkill | quote-format | 書いたfile：`INV-202611-NNN`・御中・振込先・合計187,000円 |
+| 2 | u-skill-1 請求書を作る | U | invoice-format（利用者） | 利用者のSkill | quote-format | 書いたfile（`docs/invoices/`）：`INV-202611-NNN`・御中・振込先・合計187,000円 |
 | 2 | u-skill-2 見積書を作る（説明が近い） | U | quote-format（利用者） | 利用者のSkill | invoice-format | 書いたfile：`Q-YYYYMM-NNN`・御中・30日・合計264,000円 |
+| 2 | u-skill-3 受注した見積の内容で請求書を作る（利用者のSkillどうし） | U | invoice-format（利用者） | 利用者のSkill | quote-format | 書いたfile（`docs/invoices/`）：`INV-202612-NNN`・御中・振込先・合計264,000円 |
 | 2 | u-est 工数と納期の見積（説明が近い） | U | estimate-and-scope | 本文 | quote-format、invoice-format | 前提・調査 |
 | 2 | u-neg 「請求書を送付しました」の英訳 | U | なし | | `money.md`、利用者のSkill | |
 
 ## 指標と規則
 
-[decision-criteria.md](decision-criteria.md)で固定する（`conditions.json`の`rule`、`mode: levels`）。候補の採否の規則ではなく、条件ごとに固定の水準（20件）を満たすかを示す。RとCを並べ、該当する依頼と該当しない依頼を分けて示す。
+[decision-criteria.md](decision-criteria.md)で固定する（`conditions.json`の`rule`、`mode: levels`）。候補の採否の規則ではなく、条件ごとに固定の水準（合否に使う18件と、報告だけの2件）を満たすかを示す。RとCを並べ、該当する依頼と該当しない依頼を分けて示す。
+
+- 回答の目印と書いたfileの照合は、これまでの評価で採点した回答（#1828の`adopted`・`final`・`round2`、#1829の`59ad479f`の`answers/`、#1832の`98aabea2`の`outputs/`）に当てて校正した。表は[calibration-table.md](calibration-table.md)（`shared-harness/calibrate.mjs`が[calibration.json](calibration.json)から作る）。記録のある回答で、合否の一致はw-1 14/15、w-2 14/15、w-3 15/15、m-r1 6/6、m-r2 5/5、m-r7 5/5、s-1 6/6。
+- 固有ルールの読込み（g2-rule-read）は、ownerの決定までの仮置きとして、合否に使わない「`start`を使えない環境での下限」とした（戻し方はdecision-criteria.md）。
 
 ## 費用とトークン
 
-- 18依頼×各3回×2条件＝108試行と、probe 2回。
+- 19依頼×各3回×2条件＝114試行と、probe 2回（fixture U）。
 - 上限30 USD（owner）、余裕1 USD、停止の線29 USD。1試行の予算（`--max-budget-usd`と台帳の予約）0.5 USD、probe 0.35 USD。
-- 見込み（#1823・#1820の段階2の平均から、読む・書くfileの量で見積もった種類ごとの単価）：保証範囲0.16、保守の判定0.12、仕様書0.22、見積0.10、該当しない0.03、変更0.18、利用者のSkill 0.10、probe 0.13 USD。計 **約13.9 USD**（計画の単価で18.1 USD）、入力（入力＋cache）約**1,017万**トークン、出力約**32万**トークン。損益分岐（線までに使える1試行の平均）0.264 USD。
+- 見込み（#1823・#1820の段階2の平均から、読む・書くfileの量で見積もった種類ごとの単価）：保証範囲0.16、保守の判定0.12、仕様書0.22、見積0.10、該当しない0.03、変更0.18、利用者のSkill 0.10、probe 0.13 USD。計 **約14.5 USD**（計画の単価で18.8 USD）、入力（入力＋cache）約**1,059万**トークン、出力約**33万**トークン。損益分岐（線までに使える1試行の平均）0.25 USD。
 - 採点はモデルを使わない（目印と書いたfileの文字列の照合）ので、採点のトークンはかからない。
-- 減らす案（必要なら）：各2回にすると72試行、見込み約9.3 USD。
+- 減らす案（必要なら）：各2回にすると76試行、見込み約9.7 USD。
 
 ## 手順（統括が行う）
 
@@ -78,7 +82,7 @@ fixtureの全文は[conditions.json](conditions.json)の`fixtures`。導入し�
 ```text
 H=docs/evidence/shared-harness
 EV=docs/evidence/1840-user-environment/config
-LEDGER=<scratch>/rel1840/ledger/ledger-1840.jsonl
+LEDGER=<scratch>/rel1840/ledger/ledger-1840b.jsonl
 TGZ_R=<scratch>/rel1840/release/agent-skill-chain-0.5.119.tgz
 TGZ_C=<scratch>/rel1840/candidate/agent-skill-chain-0.5.119.tgz
 # 0. ownerの目印fileの承認をresults/probe-approval.jsonに記録してcommitする
@@ -92,16 +96,16 @@ for C in R C; do for F in EC1 EC3 MN SP U; do
   TGZ=$([ $C = R ] && echo $TGZ_R || echo $TGZ_C); SHA=$(shasum -a 256 $TGZ | cut -d' ' -f1); mkdir -p <scratch>/run1840/tmp/$C-$F
   node $H/make-fixture.mjs $C $F $TGZ $SHA $FX/fixture-$C-$F <scratch>/run1840/tmp/$C-$F --config $EV
 done; done
-# 4. 隔離の確認（R・C各1回、fixture EC1）。目印fileは確認の後に消す
+# 4. 隔離の確認（R・C各1回、fixture U）。目印fileは確認の後に消す
 node $H/markers.mjs create <repo-root> --config $EV
-CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC_EVAL_ALLOW_PAID=1 node $H/run-trial.mjs <scratch>/run1840/runs R probe 1 --fixture $FX/fixture-R-EC1 --ledger $LEDGER --home-marker <home marker> --repo-marker <repo marker> --run --config $EV
+CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC_EVAL_ALLOW_PAID=1 node $H/run-trial.mjs <scratch>/run1840/runs R probe 1 --fixture $FX/fixture-R-U --ledger $LEDGER --home-marker <home marker> --repo-marker <repo marker> --run --config $EV
 node $H/probe-check.mjs <scratch>/run1840/runs/R-probe-1 R <home marker> <repo marker> <repo-root> --config $EV > <scratch>/run1840/probe-R.json
-CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC_EVAL_ALLOW_PAID=1 node $H/run-trial.mjs <scratch>/run1840/runs C probe 1 --fixture $FX/fixture-C-EC1 --ledger $LEDGER --home-marker <home marker> --repo-marker <repo marker> --run --config $EV
+CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC_EVAL_ALLOW_PAID=1 node $H/run-trial.mjs <scratch>/run1840/runs C probe 1 --fixture $FX/fixture-C-U --ledger $LEDGER --home-marker <home marker> --repo-marker <repo marker> --run --config $EV
 node $H/probe-check.mjs <scratch>/run1840/runs/C-probe-1 C <home marker> <repo marker> <repo-root> --config $EV > <scratch>/run1840/probe-C.json
 node $H/probe-check.mjs compare <scratch>/run1840/probe-R.json <scratch>/run1840/probe-C.json --out <scratch>/run1840/runs/probe-compare.json --config $EV
 node $H/probe-check.mjs publish $EV/results/probes <scratch>/run1840/probe-*.json <scratch>/run1840/runs/probe-compare.json --home-marker <home marker> --repo-marker <repo marker> --repo-root <repo-root> --runs-root <scratch>/run1840/runs --config $EV
 node $H/markers.mjs remove <repo-root> --config $EV
-# 5. 測定：固定した順の108試行（止まれば同じcommandで次から続く）、その後に必須の置き換え
+# 5. 測定：固定した順の114試行（止まれば同じcommandで次から続く）、その後に必須の置き換え
 CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC_EVAL_ALLOW_PAID=1 node $H/run-all.mjs planned <scratch>/run1840/runs --fixtures $FX --ledger $LEDGER --run --config $EV
 CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC_EVAL_ALLOW_PAID=1 node $H/run-all.mjs replacements <scratch>/run1840/runs --fixtures $FX --ledger $LEDGER --run --config $EV
 # 6. 固定の照合、公開する記録の作成（生の実行記録は公開しない）、判定
@@ -115,17 +119,20 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1840/runs --ledger $LEDGE
 
 ## モデルを呼ばない確認（2026-11-27）
 
-- 共通の仕組みの試験（試験用の設定、#1823と#1840の設定）：34件合格。
-- dry run（R・C両方、本物のrelease tarballと候補のtarball）：全16項目が合格。条件ごとに5つのfixtureに17件の入口と`claude-md`の採用、`cases.json`の`needs`（雛形・固有ルール・固有Skillのfileがあること）、R・Cの導入後の差が許される範囲に収まり必要な差（estimate-and-scopeの本文、雛形`00_利用案内.md`・`03_品質保証範囲.md`・個別機能・個別画面）を含むこと、probe 2回と108試行の起動command。
+- 共通の仕組みの試験（試験用の設定、#1823と#1840の設定）：42件合格（測定の前の独立レビューの是正で8件を足した）。
+- dry run（R・C両方、本物のrelease tarballと候補のtarball）：全16項目が合格。条件ごとに5つのfixtureに17件の入口と`claude-md`の採用、`cases.json`の`needs`（雛形・固有ルール・固有Skillのfileがあること）、R・Cの導入後の差が許される範囲に収まり必要な差（estimate-and-scopeの本文、雛形`00_利用案内.md`・`03_品質保証範囲.md`・個別機能・個別画面）を含むこと、probe 2回と114試行の起動command。
+- `start`の選択（R・C、fixture U）：[start-selection.json](start-selection.json)。
+- 回答の目印の照合：[calibration-table.md](calibration-table.md)。
 
 ## 測定の前の固定
 
 - `results/fixation.json`の最初の記録のcommitは`bf65bb54c275fb5609957bc1d24fa828dc4b9dcb`。台帳idは`1a8cfa06-b3b2-4f36-be0f-ff018e8ca631`、台帳は`<scratch>/rel1840/ledger/ledger-1840.jsonl`（予約0件）。`run-trial.mjs`はこの記載を照合する。
 - 固定の記録は、この設定の5file（`decision-criteria.md`・`cases.json`・`conditions.json`・`release.json`・`run-order.json`）と、共通の仕組みのmodule 16件のsha256を持つ。測定の終わりまで、共通の仕組みも変えない。
-- 測定の前の独立レビューはまだ行っていない。レビューで固定したfileを直す場合は、測定の前（台帳に予約が無い間）に限り、`results/fixation.json`を消して新しい台帳で`init`をやり直し、このREADMEの記載を更新する（`refix`は`probe-check.mjs`の是正だけ）。
+- 測定の前の独立レビュー（H1〜H3、M1〜M4、L1〜L4）の是正のため、最初の固定（commit `bf65bb54`、台帳id `1a8cfa06-b3b2-4f36-be0f-ff018e8ca631`、予約0件）を消し、新しい台帳で`init`をやり直した。固定したfileを直す場合は、測定の前（台帳に予約が無い間）に限り、同じ手順でやり直し、このREADMEの記載を更新する（`refix`は`probe-check.mjs`の是正だけ）。
 
 ## 限界
 
-- Bashが無いので`start`を実行できない。固有ルールは、Agentが`context.json`かルールのfileを自分で読んだ場合だけ読まれる。利用者の環境より読まれにくい側に偏る。
+- Bashが無いので`start`を実行できない。固有ルールは、Agentが`context.json`かルールのfileを自分で読んだ場合だけ読まれる。利用者の環境より読まれにくい側に偏るので、読込みの結果は「`start`を使えない環境での下限」と書き、利用者の環境での結果とは書かない。試行ごとに、`context.json`を読んだか、`start`やBashに回答で触れたか、書いたfileとその場所を、合否に使わない報告として記録する。
+- 利用者のSkillどうしの選び分けはu-skill-3の1件（各3回）だけである。
 - 回答の観点は、これまでの評価の観点のうち文字列で確かめられる部分を目印にしたもの。これまでの評価の採点（別Contextの採点者）とは同じではない。
 - 各依頼3回。数試行の差は偶然の範囲を出ない。

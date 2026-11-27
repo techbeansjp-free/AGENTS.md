@@ -18,6 +18,7 @@ import {loadConditions} from './apply-condition.mjs';
 import {ledgerConsistency, settlements, settledFilesProblem, fileSha256, ledgerProblems, reservedNames} from './ledger.mjs';
 import {scoreTrials} from './score.mjs';
 import {loadSpec} from './config.mjs';
+import {workChanges} from './make-fixture.mjs';
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 export const PUBLISHED = ['trials.json', 'runs.json', 'ledger.jsonl'];
@@ -65,6 +66,23 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
   return {row, entry: {name, text, failure: null, sizeOf, fileText}, dir};
 }
 
+// #1840 review M2: a trial whose meta.json records workFiles (run-trial.mjs, the changed and created files with their
+// sha256) against its work/ copy now: the same paths and digests, or a problem text. A trial without the field (earlier
+// configs) or without meta.json or work/ gives none (those are reported elsewhere).
+export function workFilesProblem(dir) {
+  const mf = path.join(dir, 'meta.json');
+  if (!fs.existsSync(mf) || !fs.existsSync(path.join(dir, 'work'))) return null;
+  let meta;
+  try { meta = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch { return null; }
+  if (meta.workFilesError) return `trial ${path.basename(dir)}: the changed files were not recorded (${meta.workFilesError})`;
+  if (!meta.workFiles) return null;
+  let now;
+  try { now = workChanges(path.join(dir, 'work')); } catch (e) { return `trial ${path.basename(dir)}: ${e.message}`; }
+  const keys = [...new Set([...Object.keys(meta.workFiles), ...Object.keys(now)])].sort();
+  const differ = keys.filter((k) => meta.workFiles[k] !== now[k]);
+  return differ.length ? `trial ${path.basename(dir)}: work/ differs from the files recorded at the end of the trial (${differ.slice(0, 3).join(', ')}${differ.length > 3 ? ', …' : ''})` : null;
+}
+
 // A JSON text with the trial directory and local paths redacted and sensitive strings scrubbed.
 const publicJson = (value, dir) => scrubSensitive(dir ? redact(JSON.stringify(value), dir) : redact(JSON.stringify(value), '\u0000')).text;
 
@@ -81,6 +99,9 @@ export function buildCollection(runsRoot, {ledger = null, conds = loadConditions
     const tampered = fs.readdirSync(runsRoot).filter((n) => settled.has(n)).map((n) => settledFilesProblem(path.join(runsRoot, n), settled.get(n))).filter(Boolean);
     if (tampered.length) throw new Error(tampered.join('; '));
   }
+  // #1840 review M2: the work/ copy of every trial whose meta.json records workFiles must still hold exactly those files.
+  const workChanged = fs.readdirSync(runsRoot).filter((n) => /^[A-Z]+-.+-\d+$/.test(n) && !/-probe-\d+$/.test(n)).map((n) => workFilesProblem(path.join(runsRoot, n))).filter(Boolean);
+  if (workChanged.length) throw new Error(workChanged.join('; '));
   const rows = [], entries = [], dirs = new Map();
   for (const name of fs.readdirSync(runsRoot).sort()) {
     const t = collectTrial(runsRoot, name, {conds, settled});

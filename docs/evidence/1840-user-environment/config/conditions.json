@@ -7,7 +7,7 @@
  "model": "sonnet",
  "modelNote": "Same alias as #1814-#1823. The resolved model id (init event) is recorded per trial.",
  "runs": 3,
- "runsNote": "Planned repetitions per condition and case (all 18 cases). Only reps 1..runs are scored; a later rep counts only as the one mandatory replacement of a failed trial.",
+ "runsNote": "Planned repetitions per condition and case (all 19 cases). Only reps 1..runs are scored; a later rep counts only as the one mandatory replacement of a failed trial.",
  "ascSkills": [
   "asc",
   "contract-enforcement",
@@ -36,8 +36,8 @@
  "probeSteps": {
   "W": 6
  },
- "probeFixture": "EC1",
- "probeFixtureNote": "The probe runs on a fixture without the user's own Skills (the probe counts every entry under .claude/skills as an ASC Skill).",
+ "probeFixture": "U",
+ "probeFixtureNote": "#1840 review M3: the probe runs on fixture U, which holds the user's own Skills next to the 17 ASC entries: probe-check.mjs counts only the conditions.json ascSkills as ASC entries and checks that the user's Skills (invoice-format, quote-format) are in the Skill list with their descriptions quoted (userSkillsListed). The isolation steps do not depend on the fixture.",
  "budget": {
   "ownerCapUsd": 30,
   "capUsd": 30,
@@ -330,7 +330,7 @@
      "m-r7"
     ],
     "metric": "markers",
-    "min": 0.85
+    "min": 0.78
    },
    {
     "id": "g1-spec-templates",
@@ -389,7 +389,9 @@
      "u-bill-2"
     ],
     "metric": "expectReadsAll",
-    "min": 0.8
+    "min": 0.8,
+    "use": "report",
+    "label": "startを使えない環境での下限（ownerの決定までの仮置き：合否に使わない）"
    },
    {
     "id": "g2-rule-comply",
@@ -398,7 +400,7 @@
      "u-bill-1",
      "u-bill-2"
     ],
-    "metric": "writeOk",
+    "metric": "writeCleanWhenWritten",
     "min": 1
    },
    {
@@ -410,14 +412,17 @@
      "u-neg"
     ],
     "metric": "forbidReadsOk",
-    "min": 0.8
+    "min": 0.8,
+    "use": "report",
+    "label": "合否に使わない報告"
    },
    {
     "id": "g2-skill-select",
     "goal": 2,
     "cases": [
      "u-skill-1",
-     "u-skill-2"
+     "u-skill-2",
+     "u-skill-3"
     ],
     "metric": "bodyRead",
     "min": 0.8
@@ -427,7 +432,8 @@
     "goal": 2,
     "cases": [
      "u-skill-1",
-     "u-skill-2"
+     "u-skill-2",
+     "u-skill-3"
     ],
     "metric": "writeOk",
     "min": 0.67
@@ -438,6 +444,7 @@
     "cases": [
      "u-skill-1",
      "u-skill-2",
+     "u-skill-3",
      "u-est",
      "u-users",
      "u-docs",
@@ -455,7 +462,8 @@
     "metric": "negativeOk",
     "min": 0.67
    }
-  ]
+  ],
+  "note": "#1840 review: the levels with use \"report\" are computed and shown (perCondition.reported) but do not enter meets-levels; g2-rule-comply rates only the trials that wrote under src/billing (writeCleanWhenWritten; notEligible counts the others). The mins of the answer and written-file levels come from calibration-table.md (decision-criteria.md)."
  },
  "subsets": {
   "goal1": {

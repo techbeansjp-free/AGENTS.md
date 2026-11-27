@@ -1,0 +1,348 @@
+{
+ "schema": "asc-eval-calibration/v1",
+ "note": "#1840 review H2: answers that earlier evaluations scored (separate-Context graders), against the markers and written-file checks of cases.json (shared-harness/calibrate.mjs). #1828 (T1, T3, T4): the 0/1 viewpoint scores of scores.json; the earlier pass of a case is derived from the viewpoints the markers name (answerQuota.min of them for w-1/w-3, every one for w-2). #1829 (R1, R2, R7): the per-request results recorded in 00_評価.md of 59ad479f (null where not recorded; ff065b28 only had the first viewpoints). #1832: the result table of 00_比較.md of 98aabea2 (the outputs hold FN-003 and SCR-005 in one file, checked as the written text). The #1828 penalties are counted per answer, not per task, so they are not used for the earlier pass.",
+ "sources": [
+  {
+   "case": "w-1",
+   "section": "T1",
+   "scored": [
+    {
+     "dir": "docs/evidence/1828-warranty-scope/adopted"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/final"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/round2"
+    }
+   ]
+  },
+  {
+   "case": "w-2",
+   "section": "T3",
+   "scored": [
+    {
+     "dir": "docs/evidence/1828-warranty-scope/adopted"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/final"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/round2"
+    }
+   ]
+  },
+  {
+   "case": "w-3",
+   "section": "T4",
+   "scored": [
+    {
+     "dir": "docs/evidence/1828-warranty-scope/adopted"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/final"
+    },
+    {
+     "dir": "docs/evidence/1828-warranty-scope/round2"
+    }
+   ]
+  },
+  {
+   "case": "m-r1",
+   "section": "R1",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/before.md",
+   "condition": "none (6b987fd1)",
+   "earlierPass": false,
+   "note": "変更前：0/7（00_評価.md）"
+  },
+  {
+   "case": "m-r1",
+   "section": "R1",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/db1e623d-1.md",
+   "condition": "version db1e623d",
+   "earlierPass": false,
+   "note": "5/7。R1（調査前の「無償対応の対象です」）とR6が不合格（00_評価.md）"
+  },
+  {
+   "case": "m-r1",
+   "section": "R1",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/db1e623d-2.md",
+   "condition": "version db1e623d",
+   "earlierPass": true,
+   "note": "7/7（00_評価.md）"
+  },
+  {
+   "case": "m-r1",
+   "section": "R1",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/59b1c4b2-1.md",
+   "condition": "version 59b1c4b2",
+   "earlierPass": null,
+   "note": "6/7。どの依頼が落ちたかは記録されていない"
+  },
+  {
+   "case": "m-r1",
+   "section": "R1",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/59b1c4b2-2.md",
+   "condition": "version 59b1c4b2",
+   "earlierPass": false,
+   "note": "1/7。R1は差異の後の無償の修補を約束して不合格。R2・R7の個別の結果は記録されていない（00_評価.md）"
+  },
+  {
+   "case": "m-r1",
+   "section": "R1",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/2a3ad6fe-1.md",
+   "condition": "version 2a3ad6fe",
+   "earlierPass": true,
+   "note": "7/7（00_評価.md）"
+  },
+  {
+   "case": "m-r1",
+   "section": "R1",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/2a3ad6fe-2.md",
+   "condition": "version 2a3ad6fe",
+   "earlierPass": false,
+   "note": "6/7。R1は「無償修補の方向で」で境界例として0点（00_評価.md 限界）"
+  },
+  {
+   "case": "m-r1",
+   "section": "R1",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/ff065b28-1.md",
+   "condition": "version ff065b28",
+   "earlierPass": null,
+   "note": "初版の観点だけで採点（改訂版の観点の結果は記録されていない）"
+  },
+  {
+   "case": "m-r1",
+   "section": "R1",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/ff065b28-2.md",
+   "condition": "version ff065b28",
+   "earlierPass": null,
+   "note": "同上"
+  },
+  {
+   "case": "m-r2",
+   "section": "R2",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/before.md",
+   "condition": "none (6b987fd1)",
+   "earlierPass": false,
+   "note": "変更前：0/7（00_評価.md）"
+  },
+  {
+   "case": "m-r2",
+   "section": "R2",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/db1e623d-1.md",
+   "condition": "version db1e623d",
+   "earlierPass": true,
+   "note": "5/7。R1（調査前の「無償対応の対象です」）とR6が不合格（00_評価.md）"
+  },
+  {
+   "case": "m-r2",
+   "section": "R2",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/db1e623d-2.md",
+   "condition": "version db1e623d",
+   "earlierPass": true,
+   "note": "7/7（00_評価.md）"
+  },
+  {
+   "case": "m-r2",
+   "section": "R2",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/59b1c4b2-1.md",
+   "condition": "version 59b1c4b2",
+   "earlierPass": null,
+   "note": "6/7。どの依頼が落ちたかは記録されていない"
+  },
+  {
+   "case": "m-r2",
+   "section": "R2",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/59b1c4b2-2.md",
+   "condition": "version 59b1c4b2",
+   "earlierPass": null,
+   "note": "1/7。R1は差異の後の無償の修補を約束して不合格。R2・R7の個別の結果は記録されていない（00_評価.md）"
+  },
+  {
+   "case": "m-r2",
+   "section": "R2",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/2a3ad6fe-1.md",
+   "condition": "version 2a3ad6fe",
+   "earlierPass": true,
+   "note": "7/7（00_評価.md）"
+  },
+  {
+   "case": "m-r2",
+   "section": "R2",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/2a3ad6fe-2.md",
+   "condition": "version 2a3ad6fe",
+   "earlierPass": true,
+   "note": "6/7。R1は「無償修補の方向で」で境界例として0点（00_評価.md 限界）"
+  },
+  {
+   "case": "m-r2",
+   "section": "R2",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/ff065b28-1.md",
+   "condition": "version ff065b28",
+   "earlierPass": null,
+   "note": "初版の観点だけで採点（改訂版の観点の結果は記録されていない）"
+  },
+  {
+   "case": "m-r2",
+   "section": "R2",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/ff065b28-2.md",
+   "condition": "version ff065b28",
+   "earlierPass": null,
+   "note": "同上"
+  },
+  {
+   "case": "m-r7",
+   "section": "R7",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/before.md",
+   "condition": "none (6b987fd1)",
+   "earlierPass": false,
+   "note": "変更前：0/7（00_評価.md）"
+  },
+  {
+   "case": "m-r7",
+   "section": "R7",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/db1e623d-1.md",
+   "condition": "version db1e623d",
+   "earlierPass": true,
+   "note": "5/7。R1（調査前の「無償対応の対象です」）とR6が不合格（00_評価.md）"
+  },
+  {
+   "case": "m-r7",
+   "section": "R7",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/db1e623d-2.md",
+   "condition": "version db1e623d",
+   "earlierPass": true,
+   "note": "7/7（00_評価.md）"
+  },
+  {
+   "case": "m-r7",
+   "section": "R7",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/59b1c4b2-1.md",
+   "condition": "version 59b1c4b2",
+   "earlierPass": null,
+   "note": "6/7。どの依頼が落ちたかは記録されていない"
+  },
+  {
+   "case": "m-r7",
+   "section": "R7",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/59b1c4b2-2.md",
+   "condition": "version 59b1c4b2",
+   "earlierPass": null,
+   "note": "1/7。R1は差異の後の無償の修補を約束して不合格。R2・R7の個別の結果は記録されていない（00_評価.md）"
+  },
+  {
+   "case": "m-r7",
+   "section": "R7",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/2a3ad6fe-1.md",
+   "condition": "version 2a3ad6fe",
+   "earlierPass": true,
+   "note": "7/7（00_評価.md）"
+  },
+  {
+   "case": "m-r7",
+   "section": "R7",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/2a3ad6fe-2.md",
+   "condition": "version 2a3ad6fe",
+   "earlierPass": true,
+   "note": "6/7。R1は「無償修補の方向で」で境界例として0点（00_評価.md 限界）"
+  },
+  {
+   "case": "m-r7",
+   "section": "R7",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/ff065b28-1.md",
+   "condition": "version ff065b28",
+   "earlierPass": null,
+   "note": "初版の観点だけで採点（改訂版の観点の結果は記録されていない）"
+  },
+  {
+   "case": "m-r7",
+   "section": "R7",
+   "commit": "59ad479f",
+   "path": "docs/evidence/1829-estimate-warranty/answers/ff065b28-2.md",
+   "condition": "version ff065b28",
+   "earlierPass": null,
+   "note": "同上"
+  },
+  {
+   "case": "s-1",
+   "section": null,
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/before.md",
+   "condition": "none (6b987fd1)",
+   "earlierPass": false,
+   "note": "変更前1：経緯の文13"
+  },
+  {
+   "case": "s-1",
+   "section": null,
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/before2.md",
+   "condition": "none (6b987fd1)",
+   "earlierPass": false,
+   "note": "変更前2：経緯の文6"
+  },
+  {
+   "case": "s-1",
+   "section": null,
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after.md",
+   "condition": "version 8177242c",
+   "earlierPass": false,
+   "note": "変更後1-1：経緯0・事実あり、状態「承認済み」（#1832で直した欠陥）"
+  },
+  {
+   "case": "s-1",
+   "section": null,
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after2.md",
+   "condition": "version 8177242c",
+   "earlierPass": false,
+   "note": "変更後1-2：同上"
+  },
+  {
+   "case": "s-1",
+   "section": null,
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after3.md",
+   "condition": "version f080c937",
+   "earlierPass": true,
+   "note": "変更後2-1：経緯0・事実あり・状態「提案」"
+  },
+  {
+   "case": "s-1",
+   "section": null,
+   "commit": "98aabea2",
+   "path": "docs/evidence/1832-spec-writing-rules/outputs/after4.md",
+   "condition": "version f080c937",
+   "earlierPass": true,
+   "note": "変更後2-2：同上"
+  }
+ ]
+}

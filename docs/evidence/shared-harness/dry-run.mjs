@@ -91,6 +91,15 @@ export function trialPlan(conds = loadConditions(), spec = loadSpec()) {
     breakEvenPerTrialUsd: Number(((STOP_LINE_USD - BUDGET.perTrialUsd - probes.length * plan.probeUsd) / (planned.length - 1)).toFixed(3))};
 }
 
+// #1840: with conditions.json ascSkills, the references of every case whose expected Skill is one of them (relative to
+// .agent-skill-chain/skills/asc/references, so another Skill's as ../../<skill>/references/<ref>); without the field (the
+// test config, #1823) only the asc cases, as before (review L1).
+export function fixtureReferences(cases, condition, conds) {
+  const skills = ascSkillsOf(conds);
+  const refCases = conds.ascSkills ? cases.filter((k) => skills.includes(k.expect)) : cases.filter((k) => k.expect === 'asc');
+  return [...new Set(refCases.flatMap((k) => referencesFor(k, condition).map((r) => (k.expect === 'asc' ? r : `../../${k.expect}/references/${r}`))))];
+}
+
 // An installed file that may differ between the conditions: listed, or matching a listed entry that starts with ^.
 export const diffAllowed = (p, list) => list.some((e) => (e.startsWith('^') ? new RegExp(e).test(p) : e === p));
 // The files a fixture must hold for its prompts: fixtures.<id>.promptFiles, or the design files and empty directories.
@@ -134,9 +143,8 @@ function main() {
     const md = fs.readFileSync(path.join(dir, 'CLAUDE.md'), 'utf8');
     const def = conds.fixtures[f];
     const cases = spec.cases.filter((k) => (k.fixture ?? 'A') === f);
-    // #1840: the references of every case whose expected Skill is an ASC Skill, under that Skill (not only asc).
     const skills = ascSkillsOf(conds);
-    const refs = [...new Set(cases.filter((k) => skills.includes(k.expect)).flatMap((k) => referencesFor(k, c).map((r) => (k.expect === 'asc' ? r : `../../${k.expect}/references/${r}`))))];
+    const refs = fixtureReferences(cases, c, conds);
     const row = {condition: c, fixture: f, kind: def.kind, source: made.source, pinned: made.pinned, tarballSha256: made.install.tarballSha256, packageVersion: made.install.packageVersion,
       runtimeVersion: made.install.runtimeVersion, sources: made.sources, entries: made.install.entries.length, entryProblems: made.install.problems, adopted: made.install.adopted?.id ?? null,
       adoptedAction: made.install.adopted?.action ?? null, blockSha256: made.install.adopted?.blockSha256 ?? null, claudeMdSha256: sha(md), claudeMdProblems: claudeMdProblems(md, def.baseClaudeMd),

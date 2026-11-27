@@ -52,7 +52,7 @@ test('shared harness: no Issue file in the harness directory, Issue files only t
     assert.doesNotMatch(src, /ASC1820S2_ALLOW_PAID/, f);
   }
   for (const f of ['guard', 'ledger', 'install-asc']) assert.ok(fs.readFileSync(path.join(H, `${f}.mjs`)).equals(fs.readFileSync(path.join(S2, 'harness', `${f}.mjs`))), `${f} is the #1820 copy`);
-  const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && f !== 'dry-run.mjs').map((f) => f.replace(/\.mjs$/, '')).sort();
+  const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && f !== 'dry-run.mjs' && f !== 'calibrate.mjs').map((f) => f.replace(/\.mjs$/, '')).sort();
   assert.deepEqual(modules, [...HARNESS_MODULES].sort());
   assert.deepEqual(FIXED.filter((f) => f.startsWith('config/')), cfg.CONFIG_FIXED.map((f) => `config/${f}`));
   assert.equal(cfg.configDir(), EV);
@@ -645,17 +645,17 @@ const k40 = (id) => SPEC40.cases.find((c) => c.id === id);
 const {ascSkillsOf, levelsVerdict, writtenFiles, caseChecks} = await import('../score.mjs');
 const {ascEntriesOf} = await import('../probe-check.mjs');
 
-test('#1840 config: 18 cases (10 goal 1, 8 goal 2), natural prompts without Skill names or paths, order valid, 108 trials, 17 ASC Skills', () => {
-  assert.equal(SPEC40.cases.length, 18);
+test('#1840 config: 19 cases (10 goal 1, 9 goal 2), natural prompts without Skill names or paths, order valid, 114 trials, 17 ASC Skills', () => {
+  assert.equal(SPEC40.cases.length, 19);
   assert.equal(SPEC40.cases.filter((c) => c.goal === 1).length, 10);
-  assert.equal(SPEC40.cases.filter((c) => c.goal === 2).length, 8);
+  assert.equal(SPEC40.cases.filter((c) => c.goal === 2).length, 9);
   const names = [...C40.ascSkills, 'invoice-format', 'quote-format'];
   for (const c of SPEC40.cases) {
     for (const n of names) assert.ok(!c.prompt.includes(n), `${c.id} names ${n}`);
     assert.doesNotMatch(c.prompt, /[\w.-]+\/[\w.-]+|\.(md|ts|json)\b/, `${c.id} names a path`);
   }
   assert.deepEqual(orderProblems(JSON.parse(read('run-order.json', C40DIR)), SPEC40, C40), []);
-  assert.equal(plannedTrials(JSON.parse(read('run-order.json', C40DIR)), C40.runs).length, 108);
+  assert.equal(plannedTrials(JSON.parse(read('run-order.json', C40DIR)), C40.runs).length, 114);
   assert.equal(ascSkillsOf(C40).length, 17);
   assert.ok(ascSkillsOf(C40).includes('warranty-scope'));
   assert.equal(ascEntriesOf(C40), 17);
@@ -684,7 +684,8 @@ test('#1840 markers: answers following the earlier viewpoints pass; a missing vi
     'm-r7': 'WAR-005は未決（OPEN-007）で、扱いは未合意。判断者は契約担当（ACT-03とACT-04）で、移行元データの内容と件数の確認が必要。',
   };
   for (const [id, text] of Object.entries(good)) assert.equal(markersOk(k40(id), text), true, id);
-  assert.equal(markersOk(k40('w-1'), good['w-1'].replace('保証の基準時点は検収時の版・環境とする。', '')), false, 'T1-4 required');
+  assert.equal(markersOk(k40('w-1'), good['w-1'].replace('保証の基準時点は検収時の版・環境とする。', '')), true, '3 of the 4 viewpoints are enough (answerQuota.min 3)');
+  assert.equal(markersOk(k40('w-1'), good['w-1'].replace('保証の基準時点は検収時の版・環境とする。', '').replace('対応ブラウザは、Chrome・Edge・Safariの版（最新版と1つ前など）とOS・端末', '対応する版')), false, '2 of 4 fail');
   assert.equal(markersOk(k40('w-3'), `${good['w-3']}無期限は無効です。`), false, 'a legal assertion fails');
   assert.equal(markersOk(k40('m-r1'), `${good['m-r1']}無償で修正いたします。`), false, 'a promise before the check fails');
   assert.equal(markersOk(k40('m-r1'), good['m-r1'].replace('（合意の版1.0）', '')), false, 'the version is required');
@@ -744,8 +745,150 @@ test('#1840 written files: the spec without history and with the 7 facts passes;
   assert.deepEqual(run(good.replace('状態: 提案', '状態：承認済み')).writeViolations, ['status-approved']);
   assert.deepEqual(run(good.replace('E.164形式', '国際形式')).writeRequireMissing, ['F5']);
   const W2 = 'docs/specs/details/02_要件/03_品質保証範囲.md';
-  const war = '# 品質保証範囲\n\n状態: 提案（確認者: 未確認）\n\n| 版 | 合意日 | 合意者 |\n|---|---|---|\n\n| ID | 正本の参照 | 対象外 | 状態 |\n|---|---|---|---|\n| WAR-001 | REQ-PERF-001 | CON-003 | 未決 |\n';
+  const war = '# 品質保証範囲\n\n状態: 提案（確認者: 未確認）\n\n| 版 | 合意日 | 合意者 |\n|---|---|---|\n\n| ID | 正本の参照 | 対象外 | 状態 |\n|---|---|---|---|\n| WAR-001 | REQ-PERF-001 | CON-003 | 未決 |\n\n| 未決 | 判断者 |\n|---|---|\n| OPEN-001 | 顧客の業務責任者 |\n';
   assert.equal(run(war, 'w-2', W2).writeOk, true);
   assert.deepEqual(run(war.replace('REQ-PERF-001', 'REQ-PERF-001（3秒以内）'), 'w-2', W2).writeViolations, ['copy-3s']);
   assert.deepEqual(run(war.replace('| 未決 |', '| 合意済み |'), 'w-2', W2).writeViolations, ['fabricated-row']);
+});
+
+// #1840 review (pre-measurement): calibration, the k-of-n markers, the written-file groups and reports, the trial
+// reports, the report-only levels, the written-file digests, the user's Skills in the probe, the dry-run references.
+const {groupOk, markerGroupsOf, writeChecks, reportOf, levelChecks} = await import('../score.mjs');
+const {calibrate, markdown, sectionOf} = await import('../calibrate.mjs');
+const {workChanges} = await import('../make-fixture.mjs');
+const {workFilesProblem} = await import('../collect.mjs');
+const {fixtureReferences} = await import('../dry-run.mjs');
+
+test('#1840 calibration (H2): the committed table is the one calibrate.mjs builds; earlier scoring and markers agree', () => {
+  const cal = JSON.parse(read('calibration.json', C40DIR));
+  const out = calibrate(cal, SPEC40);
+  assert.equal(read('calibration-table.md', C40DIR), markdown(out), 'calibration-table.md is regenerated, not edited by hand');
+  for (const [id, c] of Object.entries(out.byCase)) assert.ok(c.agree / c.judged >= 0.9, `${id}: ${c.agree}/${c.judged}`);
+  assert.equal(out.byCase['s-1'].agree, 6);
+  assert.ok(out.rows.filter((r) => r.case === 'w-3').every((r) => r.groups['T4-5'] === undefined || typeof r.groups['T4-5'] === 'boolean'));
+  assert.equal(sectionOf('## T1\na\n## T2\nb\n', 'T2'), 'b\n');
+  assert.equal(sectionOf('x', null), 'x');
+});
+
+test('#1840 markers (H2, L2): k of n groups, unless, report-only groups; the version marker ignores v1.0.0', () => {
+  assert.equal(groupOk({all: ['a', 'b']}, 'ab'), true);
+  assert.equal(groupOk({all: ['a', 'b']}, 'a'), false);
+  assert.equal(groupOk({pattern: '法務', unless: 'どちらも受けません'}, '法務が確認します。どちらも受けません'), false);
+  const w3 = '期間とは別に範囲を決める。法務が確認する。対応ブラウザと版を明記し、それ以外は互換性対応として見積する。';
+  assert.equal(markersOk(k40('w-3'), w3), true, 'T4-5 (契約不適合) is report-only');
+  assert.equal(markerGroupsOf(k40('w-3'), w3)['T4-5'], false);
+  const r2 = 'WAR-001の対象外。互換性対応として見積のうえ対応します。';
+  assert.equal(markersOk(k40('m-r2'), `${r2}v1.0.0で納品しました。`), false, 'v1.0.0 is not the agreed version');
+  for (const v of ['合意版1.0', '版1.0', '合意の版 1.0', '1.0版', '版: 1.0']) assert.equal(markersOk(k40('m-r2'), `${r2}${v}`), true, v);
+  assert.equal(markersOk(k40('m-r1'), 'WAR-002（合意版1.0）。BR-012に照らして確認する。差異があれば無償修補の方向で検討します。'), false, 'a promise of the direction is a deduction');
+});
+
+test('#1840 written files (H1, H3, L3, M1): body only for s-1, groups of failures, change-log report, worktree prefix, markers on written text', () => {
+  const FN = 'docs/specs/details/04_機能/FN-003_会員登録.md', LOG = 'docs/specs/details/15_要件追跡/01_変更履歴.md';
+  const body = '状態: 提案\n電話番号（E.164形式）。確認コードは6桁、有効期限15分。5回で30分ロック。タブで切り替える。「確認コードの有効期限が切れました。もう一度送信してください」と再送信ボタン。\n';
+  const files = {[FN]: body, [LOG]: '2026-11-20：有効期限を10分から15分に延ばした（問い合わせが多かったため）。\n'};
+  const fileText = (r) => files[r] ?? null;
+  const tr = (paths, text = 'ok') => trace({messages: [paths.map((f) => ['Write', {file_path: f, content: 'x'}]), []], text});
+  const s1 = scoreRun(SPEC40, k40('s-1'), tr([FN, LOG]), {level: W, condition: 'C', fileText, skills: C40.ascSkills});
+  assert.deepEqual([s1.writeOk, s1.written], [true, [FN]], 'the change log is not scored');
+  assert.deepEqual(s1.writesReport.violations.sort(), ['history-change', 'history-old-value', 'history-reason']);
+  files[FN] = body.replace('状態: 提案', '状態：承認済み').replace('E.164形式', '国際形式') + '以前は10分だった。\n';
+  const bad = scoreRun(SPEC40, k40('s-1'), tr([FN]), {level: W, condition: 'C', fileText, skills: C40.ascSkills});
+  assert.deepEqual(bad.writeFailedGroups.sort(), ['facts', 'history', 'status']);
+  const wt = '.worktrees/20261127_000000-1-x/src/billing/invoice.ts';
+  files[wt] = 'export const d = (a: bigint, p: bigint) => a * p / 100n;\n';
+  assert.deepEqual(scoreRun(SPEC40, k40('u-bill-1'), tr([wt]), {level: W, condition: 'R', fileText, skills: C40.ascSkills}).written, [wt], 'the .worktrees/<name>/ prefix is accepted');
+  const none = scoreRun(SPEC40, k40('u-skill-1'), tr([], '請求番号 INV-202611-001、みなと商事 御中、合計 187,000円'), {level: W, condition: 'R', fileText, skills: C40.ascSkills});
+  assert.deepEqual([none.writeOk, none.writeRequireInAnswer], [false, ['number', 'onchu', 'total']], 'no file written: the answer text is reported');
+  files['docs/invoices/INV-202611-001.md'] = 'x';
+  files['out/INV-202611-001.md'] = 'INV-202611-001 御中 さくら銀行 187,000円';
+  assert.deepEqual(scoreRun(SPEC40, k40('u-skill-1'), tr(['out/INV-202611-001.md']), {level: W, condition: 'R', fileText, skills: C40.ascSkills}).written, [], 'only docs/invoices/ counts (L3)');
+  files['docs/quality.md'] = 'WAR-001（合意版1.0）。互換性対応として見積。';
+  assert.equal(scoreRun(SPEC40, k40('m-r2'), tr(['docs/quality.md'], '回答はファイルに書きました'), {level: W, condition: 'C', fileText, skills: C40.ascSkills}).markers, true, 'markers on answer + written files');
+  assert.equal(scoreRun(SPEC23, k23(SPEC23.cases[0].id), tr(['docs/quality.md'], 'ok'), {level: W, condition: 'B', fileText}).markers, markersOk(SPEC23.cases[0], 'ok'), 'a config without markerText keeps the answer only');
+  assert.deepEqual(writeChecks({require: [{id: 'a', pattern: 'a'}]}, ['f'], () => 'b'), {written: ['f'], writeMissingText: false, writeRequireMissing: ['a'], writeViolations: []}, 'no group field without groups');
+});
+
+test('#1840 trial reports (H3, M3): context.json read, start/Bash in the answer, every written file, user Skills in the Skill list', () => {
+  const tr = trace({messages: [[['Read', {file_path: '.agent-skill-chain/project/context.json'}]], [['Write', {file_path: 'notes.md', content: 'x'}]], []], text: 'Bashが無いのでstartは使えません'});
+  assert.deepEqual(reportOf(SPEC40.report, ['.agent-skill-chain/project/context.json'], tr), {reads: {'context-json': true, 'money-rule': false}, answer: {'start-or-bash': true}, writtenFiles: ['notes.md']});
+  const row = scoreRun(SPEC40, k40('u-neg'), tr, {level: W, condition: 'R', skills: C40.ascSkills});
+  assert.deepEqual(row.report.writtenFiles, ['notes.md']);
+  assert.deepEqual(row.userSkillsListed, {'invoice-format': false, 'quote-format': false}, 'the init event of the trace lists no Skill');
+  assert.equal('report' in scoreRun(SPEC, k('asc-1'), trace({messages: [[]]}), {level: W, condition: 'B'}), false, 'a config without report gets no field');
+});
+
+test('#1840 levels (H3, M4): report-only levels stay out of the verdict; writeCleanWhenWritten rates only the trials that wrote', () => {
+  const r = (run, written, viol, extra = {}) => ({condition: 'R', case: 'b', run, counted: true, expect: 'asc', written, writeViolations: viol, writeOk: written.length > 0 && !viol.length, expectReadsAll: false, ...extra});
+  const runs = [r(1, ['src/billing/a.ts'], []), r(2, [], []), r(3, ['src/billing/a.ts'], [])];
+  const c = levelChecks(runs, 'R', [{id: 'comply', cases: ['b'], metric: 'writeCleanWhenWritten', min: 1}, {id: 'old', cases: ['b'], metric: 'writeOk', min: 1}])
+  assert.deepEqual([c.comply.value, c.comply.notEligible, c.comply.pass, c.old.pass], ['2/2 >= 1', 1, true, false]);
+  runs.push(r(4, ['src/billing/a.ts'], ['decimal-literal']));
+  assert.equal(levelChecks(runs, 'R', [{id: 'comply', cases: ['b'], metric: 'writeCleanWhenWritten', min: 1}]).comply.pass, false);
+  const s = (cond) => ({condition: cond, runs: 4, positives: 4, failures: 0, negatives: 1, casesWithoutValidTrial: [], replacementsMissing: 0, bodyRead: 4, applied: 4, overapplication: 0});
+  const rule = {mode: 'levels', levels: [{id: 'comply', cases: ['b'], metric: 'writeCleanWhenWritten', min: 0.5}, {id: 'read', cases: ['b'], metric: 'expectReadsAll', min: 0.8, use: 'report', label: 'startを使えない環境での下限'}]};
+  const v = levelsVerdict({R: s('R'), C: s('C')}, runs, {completion: done, rule});
+  assert.equal(v.perCondition.R.verdict, 'meets-levels', 'the failing report-only level does not count');
+  assert.deepEqual([v.perCondition.R.reported.read.pass, v.perCondition.R.reported.read.label], [false, 'startを使えない環境での下限']);
+  const L = Object.fromEntries(C40.rule.levels.map((l) => [l.id, l]));
+  assert.deepEqual([L['g2-rule-read'].use, L['g2-rule-not-read'].use, L['g2-rule-comply'].metric], ['report', 'report', 'writeCleanWhenWritten']);
+  for (const id of ['g1-spec-write', 'g2-rule-comply']) assert.equal(L[id].min, 1, `${id}: min 1 stated in decision-criteria.md`);
+  assert.match(read('decision-criteria.md', C40DIR), /仮置き[\s\S]*戻し方/);
+});
+
+test('#1840 written-file digests (M2): run-trial records the changed files; collect refuses a work/ copy changed afterwards', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  const work = path.join(d, 'T-x-1', 'work');
+  fs.mkdirSync(work, {recursive: true});
+  fs.writeFileSync(path.join(work, 'a.md'), 'a');
+  fs.writeFileSync(path.join(work, '.gitignore'), 'local/\n');
+  spawnSync('git', ['init', '-q'], {cwd: work});
+  spawnSync('git', ['add', '-A'], {cwd: work});
+  spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', 'commit', '-q', '-m', 'i'], {cwd: work});
+  assert.deepEqual(workChanges(work), {});
+  fs.writeFileSync(path.join(work, 'a.md'), 'b');
+  fs.mkdirSync(path.join(work, 'docs/q'), {recursive: true});
+  fs.writeFileSync(path.join(work, 'docs/q/Q.md'), 'q');
+  fs.mkdirSync(path.join(work, 'local'));
+  fs.writeFileSync(path.join(work, 'local/x.txt'), 'x');
+  const rec = workChanges(work);
+  assert.deepEqual(Object.keys(rec), ['a.md', 'docs/q/Q.md', 'local/x.txt'], 'changed, added and ignored files');
+  const dir = path.dirname(work);
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({workFiles: rec}));
+  assert.equal(workFilesProblem(dir), null);
+  fs.writeFileSync(path.join(work, 'docs/q/Q.md'), 'changed later');
+  assert.match(workFilesProblem(dir), /work\/ differs .*docs\/q\/Q\.md/);
+  fs.writeFileSync(path.join(work, 'docs/q/Q.md'), 'q');
+  fs.writeFileSync(path.join(work, 'extra.md'), 'added later');
+  assert.match(workFilesProblem(dir), /extra\.md/);
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({}));
+  assert.equal(workFilesProblem(dir), null, 'a meta.json without workFiles (earlier configs) is not checked');
+  assert.match(fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8'), /meta\.workFiles = workChanges\(work\)/);
+});
+
+test('#1840 probe on the user\'s fixture (M3): only ascSkills count as ASC entries; the user\'s Skills must be listed and quoted', (t) => {
+  const conds = {...CONDS, ascSkills: ASC};
+  const {d} = probeLedger(t, ['B-probe-1']);
+  const dir = path.join(d, 'B-probe-1'), work = path.join(dir, 'work');
+  fs.mkdirSync(path.join(work, '.claude/skills/invoice-format'), {recursive: true});
+  fs.writeFileSync(path.join(work, '.claude/skills/invoice-format/SKILL.md'), '---\nname: invoice-format\ndescription: 社内の請求書の書式を案内する。\n---\n');
+  const run = () => { const {inputs} = fileInputs(dir, 'B', REPO, conds); return {inputs, r: checkProbe({...inputs, conditionsOverride: conds, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/nonexistent-home', hostInstallDir: '/opt/claude', installProblems: []})}; };
+  let {inputs, r} = run();
+  assert.deepEqual([Object.keys(inputs.ascSkills).length, Object.keys(inputs.userSkills)], [16, ['invoice-format']]);
+  assert.equal(r.checks.ascDescriptionsInContext.pass, true, 'the user\'s Skill is not an ASC entry');
+  assert.deepEqual([r.checks.userSkillsListed.pass, r.checks.userSkillsListed.detail.notListed], [false, ['invoice-format']]);
+  const lines = fs.readFileSync(path.join(dir, 'trace.jsonl'), 'utf8').split('\n').map((l) => JSON.parse(l));
+  lines[0].skills.push('invoice-format');
+  lines.at(-1).result += '\n- invoice-format: 社内の請求書の書式を案内する。';
+  fs.writeFileSync(path.join(dir, 'trace.jsonl'), lines.map((l) => JSON.stringify(l)).join('\n'));
+  ({r} = run());
+  assert.equal(r.checks.userSkillsListed.pass, true, failing(r));
+  assert.equal(fileInputs(dir, 'B', REPO, CONDS).inputs.userSkills && Object.keys(fileInputs(dir, 'B', REPO, CONDS).inputs.userSkills).length, 0, 'without ascSkills every entry is ASC (as before)');
+  assert.equal(C40.probeFixture, 'U');
+});
+
+test('#1840 dry-run references (L1): without ascSkills only the asc cases, as before', () => {
+  const cases = [{id: 'a', expect: 'asc', references: ['x.md']}, {id: 'b', expect: 'estimate-and-scope', references: ['y.md']}];
+  assert.deepEqual(fixtureReferences(cases, 'B', CONDS), ['x.md']);
+  assert.deepEqual(fixtureReferences(cases, 'R', C40), ['x.md', '../../estimate-and-scope/references/y.md']);
 });

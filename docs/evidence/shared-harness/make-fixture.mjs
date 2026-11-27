@@ -81,6 +81,23 @@ export function git(args, cwd) {
   if (r.status !== 0) throw new Error(`git ${args[0]} failed: ${r.stderr || r.stdout}`);
 }
 
+// #1840 review M2: the files of a sample project that differ from its HEAD (changed, added, ignored or deleted), each with
+// its sha256 (null: deleted), sorted by path. run-trial.mjs records it in meta.json at the end of a trial; collect.mjs
+// compares it with the work/ copy again, so a file changed after the trial is detected.
+export function workChanges(work) {
+  const r = spawnSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored=matching', '--no-renames'], {cwd: work, env: gitEnv(work), encoding: 'utf8'});
+  if (r.status !== 0) throw new Error(`git status failed in ${work}: ${r.stderr}`);
+  const out = {};
+  const add = (rel) => {
+    const f = path.join(work, rel);
+    const st = fs.existsSync(f) ? fs.statSync(f) : null;
+    if (st?.isDirectory()) { for (const e of fs.readdirSync(f)) add(path.posix.join(rel, e)); return; }
+    out[rel.replace(/\/$/, '')] = st?.isFile() ? sha(fs.readFileSync(f)) : null;
+  };
+  for (const e of r.stdout.split('\0').filter(Boolean)) add(e.slice(3));
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
 export const loadRelease = () => cfgRelease();
 // The tarball pinned for a condition: the release.json entry cells[c].release, of kind cells[c].source (release or
 // candidate), with a filled-in sha256 and no placeholder mark.
