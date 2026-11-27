@@ -2,6 +2,10 @@
 
 以下はownerがControllerによる自動実行を選択した場合の入口であり、通常作業に追加Agent起動を強制するものではない。
 
+Controllerの単一model指定は自動ルーティングではない。[モデル選択のSkill](../../subagent-model-selection/SKILL.md)を追加したことを自動選択機能の実装済みと説明しない。
+
+snapshot方式はユーザーが明示的に選ぶ場合だけ使用する。`run` 系CLIには `--snapshot` が必要であり、通常の開発依頼だけをその選択と解釈しない。現在のHostからsnapshotへの自動fallbackはしない。
+
 `capabilities`で実際の入口・対応Host・release状態を確認する。これは実行の承認や隔離成功の証明ではない。ownerが指定した入力と作業を使い、利用可能な能力から必要な操作だけを選ぶ。
 
 - 単一変更は`run`、owner作成済み候補の検分だけなら`review`。
