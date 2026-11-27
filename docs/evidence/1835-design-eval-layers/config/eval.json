@@ -23,7 +23,7 @@
  "layer3": {"trials": ["A-r1", "D-r1", "E-r1"]},
  "rounds": [1, 2],
  "methods": ["D", "P", "Fc", "Fs", "Neg"],
- "budget": {"capUsd": 20, "projectionLimitUsd": 18, "evaluator": "fable"},
+ "budget": {"capUsd": 30, "projectionLimitUsd": 28, "evaluator": "fable"},
  "retries": {"default": 0, "max": 1},
  "limits": {
   "critiqueMaxChars": 800,
