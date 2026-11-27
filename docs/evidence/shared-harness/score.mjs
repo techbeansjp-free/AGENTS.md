@@ -18,6 +18,9 @@ import path from 'node:path';
 import {loadConditions} from './apply-condition.mjs';
 
 export const ASC_SKILLS = ['asc', 'contract-enforcement', 'decision-ownership', 'engineering-judgment', 'estimate-and-scope', 'execution-recovery', 'migration-assurance', 'project-foundation', 'research-to-implementation', 'review-and-remediation', 'security-evidence', 'subagent-model-selection', 'tracker-issue-writing', 'user-journey-acceptance', 'verification-optimization', 'work-coordination'];
+// #1840: the distributed Skill names of the releases measured (conditions.json ascSkills, e.g. 17 with warranty-scope);
+// without it the 16 names above.
+export const ascSkillsOf = (conds) => conds?.ascSkills ?? ASC_SKILLS;
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const same = (called, s) => called === s || called.endsWith(`:${s}`);
 
@@ -60,11 +63,121 @@ export function parseTrace(text) {
     text: typeof result?.result === 'string' && result.result ? result.result : texts.join('\n')};
 }
 
+// #1840: a named check on a text: {pattern} or {all: [patterns]} must match, and {unless} (optional) must not.
+export const groupOk = (g, text) => (g.all ?? [g.pattern]).every((p) => new RegExp(p, 'i').test(text)) && !(g.unless && new RegExp(g.unless, 'i').test(text));
+const patternOf = (x) => (typeof x === 'string' ? x : x.pattern);
+// #1840: answerQuota {min, groups: [{id, viewpoint, pattern | all, unless}]}: the groups that pass, by id.
+export const markerGroupsOf = (k, text) => Object.fromEntries((k.answerQuota?.groups ?? []).map((g) => [g.id, groupOk(g, text)]));
+// #1840: the deductions (answerNone: a pattern or {id, pattern}) found in a text, by id (or pattern).
+export const markerDeductionsOf = (k, text) => (k.answerNone ?? []).filter((g) => new RegExp(patternOf(g), 'i').test(text)).map((g) => (typeof g === 'string' ? g : g.id));
+
 export function markersOk(k, text) {
   const low = text.toLowerCase();
   return (k.answerAll ?? []).every((a) => low.includes(a.toLowerCase())) &&
     ((k.answerAny ?? []).length === 0 || k.answerAny.some((a) => new RegExp(a, 'i').test(text))) &&
-    (k.answerGroups ?? []).every((g) => new RegExp(g, 'i').test(text));
+    (k.answerGroups ?? []).every((g) => new RegExp(g, 'i').test(text)) &&
+    // #1840: at least min of the named groups (calibrated against the earlier scoring, "k of n").
+    // A group with report: true is shown in markerGroups but not counted (e.g. a viewpoint the Skill answers scored 0 on).
+    (!k.answerQuota || k.answerQuota.groups.filter((g) => !g.report && groupOk(g, text)).length >= k.answerQuota.min) &&
+    // #1840: a deduction of an earlier evaluation (e.g. a legal assertion) is a pattern that must not appear.
+    markerDeductionsOf(k, text).length === 0;
+}
+
+// #1840 re-review High: the lines of the files that existed before the trial, trimmed (empty lines left out). The base of
+// a trial (baseLinesFor; priorFiles() lists the fixture's HEAD, priorTexts(rels) reads it, null for a new file) is every file at the fixture's HEAD whose path matches cases.json markerBase.pathPattern (the
+// installed templates) and the earlier text of every file the trial wrote. A written file's lines equal to a base line
+// (compared line by line after trimming) are left out before the markers are matched, so a copied template scores nothing.
+export const baseLinesOf = (texts) => new Set(texts.filter((x) => typeof x === 'string').flatMap((t) => t.split('\n').map((l) => l.trim()).filter(Boolean)));
+export const withoutBaseLines = (text, base) => (base && base.size ? text.split('\n').filter((l) => !base.has(l.trim())).join('\n') : text);
+export function baseLinesFor(spec, written, {priorTexts = null, priorFiles = null} = {}) {
+  if (!spec.markerBase) return null;
+  if (!priorTexts || !priorFiles) throw new Error('cases.json markerBase needs the files of the fixture before the trial (priorTexts, priorFiles)');
+  const re = new RegExp(spec.markerBase.pathPattern);
+  return baseLinesOf(priorTexts([...new Set([...priorFiles().filter((f) => re.test(f)), ...written])]));
+}
+// The text the answer markers are matched on: the answer, and with markerText "answer+writes" the written files' texts
+// ({rel, text}) without the base lines. Returns {text, excludedLines}.
+export function markerTextOf(spec, answer, written, base = null) {
+  if (spec.markerText !== 'answer+writes') return {text: answer, excludedLines: 0};
+  const texts = written.map((w) => w.text).filter((x) => typeof x === 'string');
+  const kept = texts.map((x) => withoutBaseLines(x, base));
+  const lines = (x) => x.split('\n').filter((l) => l.trim()).length;
+  return {text: [answer, ...kept].join('\n'), excludedLines: texts.reduce((a, x, i) => a + lines(x) - lines(kept[i]), 0)};
+}
+
+// #1840: the checks of a writes definition on the texts of the files under its pathPattern. Each require/forbid entry
+// {id, pattern, group?, viewpoint?}: the groups name what failed (e.g. facts, history, status) for the separate report.
+// #1840 re-review High: with requireWithoutBase (and a base), the require patterns are matched on the texts without the
+// base lines (a copied template line does not satisfy them); the forbid patterns always see the whole text.
+export function writeChecks(w, files, fileText, {base = null} = {}) {
+  const texts = files.map((f) => (fileText ? fileText(f) : null));
+  const all = texts.filter((x) => typeof x === 'string').map((x) => (w.requireWithoutBase ? withoutBaseLines(x, base) : x)).join('\n');
+  const out = {written: files, writeMissingText: texts.some((x) => typeof x !== 'string'),
+    writeRequireMissing: (w.require ?? []).filter((e) => !new RegExp(e.pattern, 'i').test(all)).map((e) => e.id),
+    writeViolations: (w.forbid ?? []).filter((e) => texts.some((x) => typeof x === 'string' && new RegExp(e.pattern, 'i').test(x))).map((e) => e.id)};
+  const entries = [...(w.require ?? []), ...(w.forbid ?? [])];
+  if (entries.some((e) => e.group)) {
+    const failed = new Set([...out.writeRequireMissing, ...out.writeViolations]);
+    out.writeFailedGroups = [...new Set(entries.filter((e) => failed.has(e.id)).map((e) => e.group ?? 'other'))];
+  }
+  return out;
+}
+
+// #1840: the files a trial wrote (a Write, Edit or MultiEdit with a non-error result), project-relative, in order.
+export function writtenFiles(t) {
+  const out = [];
+  for (const u of t.uses) {
+    if (!['Write', 'Edit', 'MultiEdit'].includes(u.name)) continue;
+    const r = t.results.get(u.id);
+    const rel = r && !r.is_error ? projectRelative(String(u.input?.file_path ?? ''), t.cwd) : null;
+    if (rel && !out.includes(rel)) out.push(rel);
+  }
+  return out;
+}
+
+// #1840: the case-level checks beyond the Skill body (all optional; a case without them gets none of these fields):
+// - expectReads [{id, pattern}]: each pattern (a regular expression on the project-relative path) matched by a counted Read;
+// - forbidReads [{id, pattern}]: no counted Read matches (a rule that does not apply, a template that is not needed);
+// - forbidSkills [name]: no Skill call, Claude Code entry or body Read of these Skills (ASC or the user's own);
+// - writes {pathPattern, mustWrite, require: [re], forbid: [{id, pattern}]}: the files written under pathPattern, read
+//   from the trial's work/ copy at the end (fileText), hold every require pattern (over all of them) and no forbid pattern
+//   (the diff must not break a rule); mustWrite needs at least one such file.
+export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS, base = null} = {}) {
+  const out = {};
+  const hit = (p) => rel.some((r) => new RegExp(p).test(r));
+  if (k.expectReads) { out.expectReads = Object.fromEntries(k.expectReads.map((e) => [e.id, hit(e.pattern)])); out.expectReadsAll = Object.values(out.expectReads).every(Boolean); }
+  if (k.forbidReads) { out.forbiddenReads = k.forbidReads.filter((e) => hit(e.pattern)).map((e) => e.id); out.forbidReadsOk = out.forbiddenReads.length === 0; }
+  if (k.forbidSkills) {
+    out.forbiddenSkills = k.forbidSkills.filter((s) => t.skills.some((c) => same(c, s)) || rel.some((r) => r === `.claude/skills/${s}/SKILL.md` || (skills.includes(s) && new RegExp(`^\\.agent-skill-chain/(managed-runtime/)?skills/${esc(s)}/SKILL\\.md$`).test(r))));
+    out.forbidSkillsOk = out.forbiddenSkills.length === 0;
+  }
+  if (k.writes) {
+    const w = k.writes;
+    const files = writtenFiles(t).filter((f) => new RegExp(w.pathPattern).test(f));
+    Object.assign(out, writeChecks(w, files, fileText, {base}));
+    out.writeOk = (!w.mustWrite || files.length > 0) && !out.writeMissingText && out.writeRequireMissing.length === 0 && out.writeViolations.length === 0;
+    // #1840 review L3: a trial that wrote no file under pathPattern; its answer text against the require patterns (reported).
+    if (!files.length && (w.require ?? []).length) out.writeRequireInAnswer = w.require.filter((e) => new RegExp(e.pattern, 'i').test(t.text)).map((e) => e.id);
+  }
+  // A case without these fields gets no field at all (so the rows of earlier configs are byte-identical).
+  if (Object.keys(out).length) out.caseChecksOk = [out.expectReadsAll, out.forbidReadsOk, out.forbidSkillsOk, out.writeOk].every((x) => x !== false);
+  // #1840 review H1: writesReport {pathPattern, require, forbid} is reported only (e.g. history in the change log), never in
+  // caseChecksOk or a level.
+  if (k.writesReport) {
+    const r = writeChecks(k.writesReport, writtenFiles(t).filter((f) => new RegExp(k.writesReport.pathPattern).test(f)), fileText);
+    out.writesReport = {written: r.written, requireMissing: r.writeRequireMissing, violations: r.writeViolations};
+  }
+  return out;
+}
+
+// #1840 review H3: per-trial facts reported, never used for a level (cases.json report: {reads: [{id, pattern}], answer:
+// [{id, pattern}], writtenFiles: true}): which of those files were read, what the answer mentions, every file written.
+export function reportOf(report, rel, t) {
+  const out = {};
+  if (report.reads) out.reads = Object.fromEntries(report.reads.map((e) => [e.id, rel.some((r) => new RegExp(e.pattern).test(r))]));
+  if (report.answer) out.answer = Object.fromEntries(report.answer.map((e) => [e.id, new RegExp(e.pattern, 'i').test(t.text)]));
+  if (report.writtenFiles) out.writtenFiles = writtenFiles(t);
+  return out;
 }
 
 // The init event against level W (stage 1 rule): same tools (ToolSearch tolerated), same permission mode, no MCP server.
@@ -105,21 +218,23 @@ export function referencesFor(k, condition) {
   return r;
 }
 export const inputTokensOf = (u) => (u ? (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0) : null);
-const ASC_FILE = /^\.agent-skill-chain\/|^\.claude\/skills\//;
+// ASC files: .agent-skill-chain/ and the Claude Code entries of the ASC Skills (#1840: a user's own Skill under
+// .claude/skills/ is not an ASC file).
+const ascFile = (r, skills) => /^\.agent-skill-chain\//.test(r) || skills.some((s) => r.startsWith(`.claude/skills/${s}/`));
 
-export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = null} = {}) {
+export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = null, fileText = null, priorTexts = null, priorFiles = null, skills = ASC_SKILLS} = {}) {
   const pat = (key, s, r = '') => new RegExp(spec[key].replace('<skill>', esc(s)).replace('<ref>', esc(r)));
   const reads = countedReads(k, t);
   const rel = reads.map((r) => r.path);
-  const ascBodies = ASC_SKILLS.filter((s) => rel.some((r) => pat('bodyPattern', s).test(r)));
-  const ascEntries = ASC_SKILLS.filter((s) => rel.some((r) => pat('entryPattern', s).test(r)));
-  const ascCalls = t.skills.filter((c) => ASC_SKILLS.some((s) => same(c, s)));
+  const ascBodies = skills.filter((s) => rel.some((r) => pat('bodyPattern', s).test(r)));
+  const ascEntries = skills.filter((s) => rel.some((r) => pat('entryPattern', s).test(r)));
+  const ascCalls = t.skills.filter((c) => skills.some((s) => same(c, s)));
   const row = {case: k.id, kind: k.kind, fixture: k.fixture ?? 'A', expect: k.expect, skills: t.skills, ascEntries, ascBodies, readAttempts: t.readAttempts, toolUses: t.uses.length,
     messages: t.messages.length, model: t.init?.model ?? null, initTools: t.init?.tools ?? null, permissionMode: t.init?.permissionMode ?? null,
     costUsd: t.result?.total_cost_usd ?? null, turns: t.result?.num_turns ?? null, durationMs: t.result?.duration_ms ?? null,
     usage: t.result?.usage ? {input: t.result.usage.input_tokens, output: t.result.usage.output_tokens, cacheRead: t.result.usage.cache_read_input_tokens, cacheWrite: t.result.usage.cache_creation_input_tokens} : null};
   row.inputTokens = inputTokensOf(row.usage);
-  const ascFiles = [...new Set(rel.filter((r) => ASC_FILE.test(r)))].sort();
+  const ascFiles = [...new Set(rel.filter((r) => ascFile(r, skills)))].sort();
   row.ascFilesRead = ascFiles.length;
   row.ascBytesRead = sizeOf ? ascFiles.reduce((a, r) => a + (sizeOf(r) ?? 0), 0) : null;
   if (!t.init) return {...row, failure: 'no init event'};
@@ -133,19 +248,37 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
   if (t.result.is_error && !row.stopped) return {...row, failure: `result error: ${String(t.result.result ?? sub).slice(0, 120)}`};
   if (isDesign(k) && !t.messages.length) return {...row, failure: 'no assistant message'};
   row.markersApplicable = !isDesign(k);
-  row.markers = isDesign(k) ? true : markersOk(k, t.text);
+  // #1840 review M1: with cases.json markerText "answer+writes" the markers are matched on the answer and the text of every
+  // file the trial wrote (read from its work/ copy at the end). Re-review High: without the lines of the files that
+  // existed before the trial (markerBase; markerBaseExcludedLines counts the written lines left out).
+  const base = fileText ? baseLinesFor(spec, writtenFiles(t), {priorTexts, priorFiles}) : null;
+  const mt = markerTextOf(spec, t.text, fileText ? writtenFiles(t).map((f) => ({rel: f, text: fileText(f)})) : [], base);
+  const markerText = mt.text;
+  if (base) row.markerBaseExcludedLines = mt.excludedLines;
+  row.markers = isDesign(k) ? true : markersOk(k, markerText);
+  if (k.answerQuota) row.markerGroups = markerGroupsOf(k, markerText);
+  if ((k.answerNone ?? []).length) row.markerDeductions = markerDeductionsOf(k, markerText);
   row.resultMissing = reads.some((r) => r.resultMissing);
   const touched = ascCalls.length > 0 || ascEntries.length > 0 || ascBodies.length > 0;
+  const extra = caseChecks(k, rel, t, {fileText, skills, base});
+  Object.assign(row, extra);
+  if (spec.report) row.report = reportOf(spec.report, rel, t);
+  // #1840 review M3: whether the session's Skill list (init) holds the user's own Skills the case names.
+  const userNames = [...new Set([...(k.userSkill ? [k.expect] : []), ...(k.forbidSkills ?? [])])].filter((s) => s && !skills.includes(s));
+  if (userNames.length) row.userSkillsListed = Object.fromEntries(userNames.map((n) => [n, (t.init?.skills ?? []).some((x) => same(String(x), n))]));
   if (k.expect) {
     const e = k.expect;
+    // #1840: a user's own Skill (userSkill: true) has its whole body in .claude/skills/<name>/SKILL.md, which the Skill
+    // tool loads; its Skill call or a Read of that file is the body.
+    const ownBody = k.userSkill === true && (t.skills.some((s) => same(s, e)) || rel.includes(`.claude/skills/${e}/SKILL.md`));
     row.entryHop = t.skills.some((s) => same(s, e)) || ascEntries.includes(e);
-    row.bodyRead = ascBodies.includes(e);
+    row.bodyRead = k.userSkill === true ? ownBody : ascBodies.includes(e);
     row.reach = row.entryHop || row.bodyRead;
     const refs = referencesFor(k, condition);
     row.references = refs;
     row.ascReferencesRead = [...new Set(rel.map((p) => new RegExp(spec.referencePattern.replace('<skill>', esc(e)).replace('<ref>', '(.+)')).exec(p)?.at(-1)).filter(Boolean))].sort();
     row.referenceRead = refs.length === 0 || refs.some((r) => rel.some((p) => pat('referencePattern', e, r).test(p)));
-    row.applied = row.bodyRead && row.referenceRead && row.markers;
+    row.applied = row.bodyRead && row.referenceRead && row.markers && extra.caseChecksOk !== false;
     row.markersWithoutReference = row.markersApplicable && row.markers && refs.length > 0 && !row.referenceRead;
     row.misselect = !row.reach && (t.skills.length > 0 || ascEntries.length > 0 || ascBodies.length > 0);
     row.unselected = !row.reach && t.skills.length === 0 && ascEntries.length === 0 && ascBodies.length === 0;
@@ -160,6 +293,8 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
     }
   } else {
     row.overapplication = touched;
+    // #1840: a negative case may also forbid a user's Skill or a rule file; negativeOk = none of it touched.
+    if ('caseChecksOk' in extra) row.negativeOk = !touched && extra.caseChecksOk;
     row.otherSkillCalls = t.skills.filter((c) => !ascCalls.includes(c));
   }
   return row;
@@ -198,9 +333,17 @@ export function scoreTrials(spec, entries, conds = loadConditions()) {
     if (e.failure || e.text === null || e.text === undefined) { runs.push({...base, failure: e.failure ?? 'missing trace'}); continue; }
     let t;
     try { t = parseTrace(e.text); } catch (err) { runs.push({...base, failure: `unreadable trace: ${err.message}`}); continue; }
-    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null})});
+    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, priorTexts: e.priorTexts ?? null, priorFiles: e.priorFiles ?? null, skills: ascSkillsOf(conds)})});
   }
   return selectCounted(runs, conds.runs);
+}
+
+// #1840: per check, the trials that have it and those that passed it ({n, ok}); negatives: negativeOk.
+export function caseCounts(pos, neg) {
+  const c = (xs, key, ok) => { const has = xs.filter((r) => key in r); return has.length ? {n: has.length, ok: has.filter(ok).length} : null; };
+  const out = {expectReadsAll: c(pos, 'expectReadsAll', (r) => r.expectReadsAll), forbidReadsOk: c([...pos, ...neg], 'forbidReadsOk', (r) => r.forbidReadsOk), forbidSkillsOk: c([...pos, ...neg], 'forbidSkillsOk', (r) => r.forbidSkillsOk),
+    writeOk: c(pos, 'writeOk', (r) => r.writeOk), negativeOk: c(neg, 'negativeOk', (r) => r.negativeOk)};
+  return Object.fromEntries(Object.entries(out).filter(([, v]) => v));
 }
 
 const mean = (xs) => (xs.length ? Number((xs.reduce((a, x) => a + x, 0) / xs.length).toFixed(1)) : null);
@@ -222,6 +365,8 @@ export function summarize(spec, runs, condition, {only = null} = {}) {
     markersWithoutReference: n(pos, (r) => r.markersWithoutReference === true),
     negatives: neg.length, overapplication: n(neg, (r) => r.overapplication), negMarkers: n(neg, (r) => r.markers),
     designWriteBeforeBody: n(pos, (r) => r.writeBeforeBody === true),
+    // #1840 (cases.json expectReads, forbidReads, forbidSkills, writes, answerNone): counts over the cases that have them.
+    ...caseCounts(pos, neg),
     replacementsMissing: n(rs, (r) => r.replacementMissing), casesWithoutValidTrial: ids.filter((id) => !ok.some((r) => r.case === id)),
     perCase: Object.fromEntries(spec.cases.filter((k) => ids.includes(k.id)).map((k) => [k.id, ok.filter((r) => r.case === k.id).sort((a, b) => a.run - b.run).map((r) => (k.expect ? (r.applied ? 'A' : r.bodyRead ? 'B' : r.entryHop ? 'E' : r.misselect ? 'M' : 'U') : (r.overapplication ? 'O' : '-'))).join('')])),
     referenceReads: Object.fromEntries(Object.entries(refReads).sort()),
@@ -288,3 +433,46 @@ const pick = (s) => ({positives: s.positives, bodyRead: s.bodyRead, applied: s.a
 
 // A case filter from a subset definition of conditions.json subsets: {fixtures: [...]} and/or {kinds: [...]}.
 export const subsetFilter = (def) => (k) => (!def.fixtures || def.fixtures.includes(k.fixture ?? 'A')) && (!def.kinds || def.kinds.includes(k.kind));
+
+// #1840: the rule of a measurement that does not compare a candidate with a baseline but checks fixed levels in each
+// condition (conditions.json rule.mode "levels"). rule.levels: [{id, cases: [case ids], metric, min}]; the rate of a
+// level is the share of the counted valid trials of those cases that pass the metric, and it passes when there is at
+// least one such trial and the rate is at least min. Metrics: positives reach (the expected Skill selected: its call,
+// entry or body), bodyRead, referenceRead, expectReadsAll, markers, writeOk, applied; any case forbidReadsOk,
+// forbidSkillsOk; negatives negativeOk, notOverapplied. The not-judged reasons are those of verdictOf. Each condition
+// gets meets-levels when every level passes, else below-levels; the decision stays with the owner.
+export const LEVEL_METRICS = {
+  reach: (r) => r.expect && r.reach, bodyRead: (r) => r.expect && r.bodyRead, referenceRead: (r) => r.expect && r.reach && r.referenceRead,
+  expectReadsAll: (r) => r.expectReadsAll === true, markers: (r) => r.markers === true, writeOk: (r) => r.writeOk === true, applied: (r) => r.expect && r.applied,
+  forbidReadsOk: (r) => r.forbidReadsOk === true, forbidSkillsOk: (r) => r.forbidSkillsOk === true,
+  negativeOk: (r) => !r.expect && (r.negativeOk ?? !r.overapplication), notOverapplied: (r) => !r.expect && !r.overapplication,
+  // #1840 review H3: among the trials that wrote a file under the case's pathPattern, no rule violation (the trials that
+  // wrote nothing are left out of the rate and counted as notEligible).
+  writeCleanWhenWritten: (r) => (r.written ?? []).length > 0 && !r.writeMissingText && (r.writeViolations ?? []).length === 0,
+};
+// The trials a metric is rated on (all by default).
+export const LEVEL_ELIGIBLE = {writeCleanWhenWritten: (r) => (r.written ?? []).length > 0};
+export function levelChecks(runs, condition, levels) {
+  return Object.fromEntries(levels.map((l) => {
+    const f = LEVEL_METRICS[l.metric];
+    if (!f) throw new Error(`unknown level metric ${l.metric}`);
+    const all = runs.filter((r) => r.condition === condition && r.counted !== false && !r.failure && l.cases.includes(r.case));
+    const rs = all.filter(LEVEL_ELIGIBLE[l.metric] ?? (() => true));
+    const ok = rs.filter(f).length;
+    return [l.id, {metric: l.metric, cases: l.cases, value: `${ok}/${rs.length} >= ${l.min}`, ok, n: rs.length, pass: rs.length > 0 && ok / rs.length >= l.min,
+      ...(rs.length !== all.length ? {notEligible: all.length - rs.length} : {}), ...(l.use ? {use: l.use} : {}), ...(l.label ? {label: l.label} : {})}];
+  }));
+}
+// #1840 review H3: a level with use "report" is computed and shown but does not enter the verdict of the condition.
+export function levelsVerdict(sums, runs, {completion = null, rule = {}, subsets = {}} = {}) {
+  const conds = Object.keys(sums);
+  const pre = verdictOf(sums[conds[0]], sums[conds[1] ?? conds[0]], {completion, subsets, rule});
+  const used = (rule.levels ?? []).filter((l) => l.use !== 'report'), reported = (rule.levels ?? []).filter((l) => l.use === 'report');
+  const perCondition = Object.fromEntries(conds.map((c) => {
+    const checks = levelChecks(runs, c, used);
+    return [c, {verdict: Object.values(checks).every((x) => x.pass) ? 'meets-levels' : 'below-levels', checks, ...(reported.length ? {reported: levelChecks(runs, c, reported)} : {})}];
+  }));
+  if (pre.verdict === 'not-judged') return {verdict: 'not-judged', reason: pre.reason, completion, perCondition, separate: pre.separate};
+  return {verdict: 'levels', basis: completion.basis, completion, perCondition, separate: pre.separate,
+    note: 'Fixed levels per condition (release and candidate are reported side by side, not as a candidate test). Few runs per case; the decisions (merge of the candidate PRs, what to fix) are the owner\'s.'};
+}
