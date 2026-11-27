@@ -87,6 +87,27 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 - `writes.requireWithoutBase`：`require`の照合にも同じ除き方を使う（`forbid`は全文に当てる）。
 - `calibrate.mjs`：`bases`（条件ごとの雛形：commitとdirectory）、回答を書いたfileとして当てる形（`form: "written"`）、落ちるべき回答（`mustFail`：雛形そのまま・見出しと表だけ・利用案内だけ・1行だけ埋めた雛形等を、雛形のfileから作る）、1つの回答を複数のfileに分ける形（`fromLine`・`untilLine`）。表に、雛形と同じ行を除かない場合の結果、観点ごとのSkillあり・なしの当たる率と採点、各目印が当たる雛形の行の数、落ちるべき回答の結果を加えた。#1828の「これまでの採点」の合否は、目印と同じ観点と`min`を0/1の点に当てて作ったもので、#1828の判定ではないことを表に書く。
 
+## #1845で加えたもの（2026-11-28）
+
+#1840の測定の後に、金額の規則の照合と、PR #1842のレビューの指摘を直した。照合の直しと`requireFiles`・分数の水準は設定のfieldで働き、そのfieldの無い設定（試験用、#1823、#1840）の採点は変えない。残りの直し（`work/`の照合・すべての`GIT:`の行・利用者のSkillの成功）は拒否と判定を厳しくするもので、#1840の記録では結果が変わらない。#1840の生の記録から作り直した`trials.json`・`runs.json`は、公開したものとbyteで一致する（#1845のPRの記録）。#1840の設定のfile（`cases.json`・`conditions.json`・`decision-criteria.md`等）は変えていない。共通の仕組みのmoduleが変わるので、#1840と#1823の`fixation.mjs check`はmoduleの差を示す（下の「変更するとき」のとおり、測定の後の変更である）。
+
+- `writes.forbid`の`scope: "code"`：JavaScript・TypeScriptのfile（`.js`・`.ts`等）では、コメントと文字列（template literalの文字の部分）を空白にしたコードだけに照合する（`score.mjs`の`codeText`）。`// 税10.9 → 10`や`1bp = 0.01%`は数えず、`price * 1.1`や`Number(subtotal) * rate`は数える。他のfileとscopeの無い項目は全文に照合する（従来どおり）。
+- `writes.requireFiles` [{`id`, `pattern`, `group`}]：書いたfileのpathに、項目ごとに合うものが要る（例：FN-003とSCR-005の両方）。足りない項目は`writeFilesMissing`。
+- 水準の`min`を分数の文字列（例：`"2/3"`）で書くと、整数で比べる（`ok * 3 >= 2 * n`。4/6・7/9が届く）。数の`min`は従来どおり率で比べる。
+- `collect.mjs`：`workFiles`（か`workFilesError`）を記録した試行は、`work/`が無ければ拒否し、`work/`のHEADが`meta.json`の`sampleHead`と違えば拒否する（何も書く前に）。
+- `probe-check.mjs`：`gitContextNeutral`は、回答のすべての`GIT:`の行を見る（記録の`gitLine`は最後の行のまま）。
+- 利用者のSkill（`userSkill`）の本文の読込みは、結果がerrorでない`Skill`の呼出しか、成功したReadだけを数える。
+
+### 次の設定を書くときの注意（#1842のレビューの指摘のうち、設定で直すもの）
+
+次の指摘は設定の値の問題なので、仕組みではなく次の測定の設定で直す（#1840の設定は固定したので直さない）。
+
+- 雛形の読取りの照合（`forbidReads`・`expectReads`）は、配布の写し`managed-runtime/v05/templates/specs/`も含める（`cases.json`の値の例：`^\\.agent-skill-chain/(managed-runtime/v05/)?templates/specs/`）。
+- 複数のfileを書く依頼（#1840のs-1）は、`writes.requireFiles`でfileごとに求める。
+- 水準の`min`は、試行の数で割り切れない値（0.67・0.78）ではなく分数の文字列で書く。
+- 金額の規則のような、コードについての禁止は`scope: "code"`にする。
+- `decision-criteria.md`に、観点が求めないもの（#1840のm-r7は合意の版を求めない）と、水準の分子が数えるもの（#1840のg2-rule-readは`money.md`の読取りだけ）を書く。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。

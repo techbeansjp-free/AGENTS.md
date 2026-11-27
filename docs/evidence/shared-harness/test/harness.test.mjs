@@ -993,3 +993,102 @@ test('#1840 probe: an answer split over several assistant messages is read as a 
   fs.writeFileSync(path.join(dir, 'trace.jsonl'), lines.filter((l) => l.message?.id !== 'm-split').map((l) => JSON.stringify(l)).join('\n'));
   assert.equal(check().checks.descriptionsInContext.pass, false);
 });
+
+// #1845: the money rule on the code only (comments and string literals left out), and the follow-ups of the #1842 review.
+const {codeText, levelMet} = await import('../score.mjs');
+const BILL = 'src/billing/invoice.ts';
+const codeForbid = {pathPattern: '^src/billing/', mustWrite: true, forbid: [
+  {id: 'decimal-literal', pattern: '\\b\\d+\\.\\d+\\b', scope: 'code'}, {id: 'float-function', pattern: 'parseFloat|toFixed|Math\\.(round|floor|ceil|trunc)', scope: 'code'},
+  {id: 'number-conversion', pattern: '\\bNumber\\(', scope: 'code'}]};
+const violationsOf = (w, text, rel = BILL) => writeChecks(w, [rel], (r) => (r === rel ? text : null)).writeViolations;
+
+test('#1845 money rule: decimals in comments and string literals are not violations with scope "code"', () => {
+  const text = [
+    '/** 割引率の単位はbp（1bp = 0.01%）。10% = 1000n。 */',
+    'export const discount = (subtotal: bigint, rateBp: bigint): bigint => subtotal * rateBp / 10000n; // 例：10.9 → 10',
+    "const label = '税率 0.1 は使わない';",
+    'const note = "Math.round(1.5) と Number(x) は書かない";',
+    'const msg = `合計 ${subtotal}円（0.5円は切り捨て）`;',
+    "assert.equal(totalWithTax(invoice(109n)), 119n); // 税10.9 → 10",
+    '/* parseFloat("2.5") は禁止 */',
+  ].join('\n');
+  assert.deepEqual(violationsOf(codeForbid, text), [], 'the #1840 failures (1bp = 0.01%, 税10.9 → 10) and strings pass');
+  // Without scope (the #1840 fixed config) the same text still fails: the fixed check is unchanged.
+  const fixed = {...codeForbid, forbid: codeForbid.forbid.map(({scope, ...e}) => e)};
+  assert.deepEqual(violationsOf(fixed, text), ['decimal-literal', 'float-function', 'number-conversion']);
+  // A file that is not JavaScript/TypeScript is matched on the whole text, as before.
+  assert.deepEqual(violationsOf(codeForbid, '1bp = 0.01%\n', 'src/billing/README.md'), ['decimal-literal']);
+  // The scanner keeps the line breaks and the code; a quote in a regular expression does not open a string.
+  const src = "const re = /'/g; const x = 1.1; // 2.2\nconst y = a / 2 / 'b';";
+  const code = codeText(src);
+  assert.equal(code.split('\n').length, 2);
+  assert.match(code, /x = 1\.1/);
+  assert.doesNotMatch(code, /2\.2|'b'/);
+});
+
+test('#1845 money rule: decimal literals and Number money arithmetic in the code are violations with scope "code"', () => {
+  const cases = [
+    ['export const withTax = (price: number) => price * 1.1;', ['decimal-literal']],
+    ['export const total = (subtotal: bigint) => BigInt(Math.floor(Number(subtotal) * 1.1));', ['decimal-literal', 'float-function', 'number-conversion']],
+    ['export const discounted = (a: string) => Number(a) * 90 / 100; // 円', ['number-conversion']],
+    ['const msg = `合計 ${(Number(subtotal) * 0.9).toFixed(0)}円`;', ['decimal-literal', 'float-function', 'number-conversion']],
+    ['const r = parseFloat(rate); /* 0.1 */', ['float-function']],
+  ];
+  for (const [text, want] of cases) assert.deepEqual(violationsOf(codeForbid, text), want, text);
+  // The code of every #1840 u-bill case: the same forbid entries with scope "code" fail a decimal in the code.
+  for (const id of ['u-bill-1', 'u-bill-2']) {
+    const w = {...k40(id).writes, forbid: k40(id).writes.forbid.map((e) => ({...e, scope: 'code'}))};
+    assert.deepEqual(violationsOf(w, 'export const tax = (s: bigint) => s * 10n / 100n; // 0.1\n'), [], id);
+    assert.deepEqual(violationsOf(w, 'export const tax = (s: number) => s * 0.1;\n'), ['decimal-literal'], id);
+  }
+});
+
+test('#1845 review follow-ups: requireFiles, levels as fractions, Skill body only on success, every GIT line', (t) => {
+  // s-1: both FN-003 and SCR-005 must be written (writes.requireFiles).
+  const w = {pathPattern: '^docs/', requireFiles: [{id: 'FN-003', pattern: '/FN-003[^/]*\\.md$', group: 'files'}, {id: 'SCR-005', pattern: '/SCR-005[^/]*\\.md$', group: 'files'}], require: [{id: 'r', pattern: 'x', group: 'facts'}]};
+  const one = writeChecks(w, ['docs/04/FN-003_会員登録.md'], () => 'x');
+  assert.deepEqual([one.writeFilesMissing, one.writeFailedGroups], [['SCR-005'], ['files']]);
+  assert.deepEqual(writeChecks(w, ['docs/04/FN-003_a.md', 'docs/05/SCR-005_b.md'], () => 'x').writeFilesMissing, []);
+  assert.equal('writeFilesMissing' in writeChecks({pathPattern: '^docs/'}, ['docs/a.md'], () => 'x'), false, 'no field without requireFiles');
+  // Levels: a fraction text is compared in integers; a number min is a rate, as in #1840.
+  assert.deepEqual([levelMet(4, 6, '2/3'), levelMet(2, 3, '2/3'), levelMet(7, 9, '7/9'), levelMet(3, 6, '2/3')], [true, true, true, false]);
+  assert.deepEqual([levelMet(4, 6, 0.67), levelMet(7, 9, 0.78)], [false, false], 'the #1840 numbers keep their meaning');
+  assert.throws(() => levelMet(1, 2, '2/0'), /neither a number nor a fraction/);
+  const rows = [true, true, true, true, false, false].map((ok, i) => ({condition: 'R', case: 'a', run: i + 1, counted: true, expect: 'asc', markers: ok}));
+  assert.equal(levelChecks(rows, 'R', [{id: 'm', cases: ['a'], metric: 'markers', min: '2/3'}]).m.pass, true);
+  // The user's Skill: a failed Skill call is not its body; a successful one or a successful Read is.
+  const run = (uses) => scoreRun(SPEC40, k40('u-skill-1'), trace({messages: [uses, []]}), {level: W, condition: 'C', fileText: () => null, ...NOBASE, skills: C40.ascSkills});
+  assert.equal(run([['Skill', {skill: 'invoice-format'}, true]]).bodyRead, false, 'failed Skill call');
+  assert.equal(run([['Skill', {skill: 'invoice-format'}]]).bodyRead, true);
+  assert.equal(run([['Read', {file_path: '.claude/skills/invoice-format/SKILL.md'}, true]]).bodyRead, false, 'failed Read');
+  assert.equal(run([['Skill', {skill: 'invoice-format'}, true], ['Read', {file_path: '.claude/skills/invoice-format/SKILL.md'}]]).bodyRead, true);
+  // Probe: every GIT: line must be neutral, not only the last one.
+  const {d, results} = probeLedger(t, ['B-probe-1']);
+  assert.equal(results['B-probe-1'].checks.gitContextNeutral.pass, true, failing(results['B-probe-1']));
+  const dir = path.join(d, 'B-probe-1'), tf = path.join(dir, 'trace.jsonl');
+  fs.writeFileSync(tf, fs.readFileSync(tf, 'utf8').replace('GIT: Update project files', 'GIT: adopt the read trigger\\nGIT: Update project files'));
+  const {inputs} = fileInputs(dir, 'B', REPO, CONDS);
+  const r = checkProbe({...inputs, conditionsOverride: CONDS, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/nonexistent-home', hostInstallDir: '/opt/claude', installProblems: []});
+  assert.deepEqual([r.checks.gitContextNeutral.pass, r.checks.gitContextNeutral.detail], [false, 'checked 2 GIT lines']);
+});
+
+test('#1845 collect: work/ must exist and be at meta.json sampleHead for a trial that records workFiles', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  const dir = path.join(d, 'T-x-1'), work = path.join(dir, 'work');
+  fs.mkdirSync(work, {recursive: true});
+  fs.writeFileSync(path.join(work, 'a.md'), 'a');
+  spawnSync('git', ['init', '-q'], {cwd: work});
+  spawnSync('git', ['add', '-A'], {cwd: work});
+  spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', 'commit', '-q', '-m', 'i'], {cwd: work});
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, encoding: 'utf8'}).stdout.trim();
+  const meta = (m) => fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(m));
+  meta({workFiles: {}, sampleHead: head});
+  assert.equal(workFilesProblem(dir), null);
+  meta({workFiles: {}, sampleHead: 'f'.repeat(40)});
+  assert.match(workFilesProblem(dir), /HEAD of work\/ .* is not meta\.json sampleHead/);
+  meta({workFiles: {}, sampleHead: head});
+  fs.rmSync(work, {recursive: true});
+  assert.match(workFilesProblem(dir), /work\/ is missing/);
+  meta({});
+  assert.equal(workFilesProblem(dir), null, 'a trial without workFiles (earlier configs) is not checked');
+});

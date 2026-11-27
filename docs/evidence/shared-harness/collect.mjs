@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 import {loadConditions} from './apply-condition.mjs';
 import {ledgerConsistency, settlements, settledFilesProblem, fileSha256, ledgerProblems, reservedNames} from './ledger.mjs';
 import {scoreTrials} from './score.mjs';
@@ -70,14 +71,22 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
 
 // #1840 review M2: a trial whose meta.json records workFiles (run-trial.mjs, the changed and created files with their
 // sha256) against its work/ copy now: the same paths and digests, or a problem text. A trial without the field (earlier
-// configs) or without meta.json or work/ gives none (those are reported elsewhere).
+// configs) or without meta.json gives none (reported elsewhere).
+// #1845: a trial that records workFiles (or workFilesError) must still have its work/ copy, and the HEAD of work/ must be
+// the meta.json sampleHead (the fixture the trial started from), checked before anything is collected.
 export function workFilesProblem(dir) {
   const mf = path.join(dir, 'meta.json');
-  if (!fs.existsSync(mf) || !fs.existsSync(path.join(dir, 'work'))) return null;
+  if (!fs.existsSync(mf)) return null;
   let meta;
   try { meta = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch { return null; }
+  const work = path.join(dir, 'work');
+  if (!meta.workFiles && !meta.workFilesError) return null;
+  if (!fs.existsSync(work)) return `trial ${path.basename(dir)}: work/ is missing although meta.json records the changed files`;
   if (meta.workFilesError) return `trial ${path.basename(dir)}: the changed files were not recorded (${meta.workFilesError})`;
-  if (!meta.workFiles) return null;
+  if (meta.sampleHead) {
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, encoding: 'utf8'});
+    if (head.status !== 0 || head.stdout.trim() !== meta.sampleHead) return `trial ${path.basename(dir)}: the HEAD of work/ (${head.stdout.trim() || 'none'}) is not meta.json sampleHead ${meta.sampleHead}`;
+  }
   let now;
   try { now = workChanges(path.join(dir, 'work')); } catch (e) { return `trial ${path.basename(dir)}: ${e.message}`; }
   const keys = [...new Set([...Object.keys(meta.workFiles), ...Object.keys(now)])].sort();
