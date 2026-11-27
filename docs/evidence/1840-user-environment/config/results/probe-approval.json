@@ -1,6 +1,6 @@
 {
- "ownerConfirmed": false,
- "at": null,
- "reference": null,
- "note": "未承認。ownerが#1840で目印file（実HOMEとこのrepositoryに置く、probeが読めないことを確かめるfile）の使用を承認したら、統括がownerConfirmed true・日付・承認のcommentのURLを記録してcommitする。それまでmarkers.mjs createとprobeは拒否される。"
+ "ownerConfirmed": true,
+ "at": "2026-11-28",
+ "reference": "https://github.com/techbeansjp-free/AGENTS.md/issues/1840#issuecomment-7222968791",
+ "note": "ownerが会話での質問に「両方承認して開始」と回答し、#1840で目印fileによる隔離の確認と、#1814〜#1823と同じtoken fileの使用を承認した。統括が記録した。"
 }
