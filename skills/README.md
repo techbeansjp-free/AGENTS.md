@@ -9,6 +9,7 @@
 | 機能設計の案を比較する、提案前に前提や過剰設計を問い直す | [engineering-judgment](engineering-judgment/SKILL.md) | 要求・単純さ・利用者負担に基づく判断。誤字修正や決定済みの機械的変更には使わない |
 | 見積・納期・保守範囲・継続費用と管理責任を判断する | [estimate-and-scope](estimate-and-scope/SKILL.md) | 契約と調査に基づく見積・回答案。過去案件の商慣行を一律に適用しない |
 | 依頼・議事録・チケットの未決事項と判断者を整理する、進めてよいか・誰が決めるかを確かめる | [decision-ownership](decision-ownership/SKILL.md) | 判断者・先出しのリスク・仮置き案を示し、判断は判断者に残す。設計案の比較や見積そのものには使わない |
+| 受託開発で、保証範囲・検収基準・瑕疵対応の条件を顧客と合意する前に揃える | [warranty-scope](warranty-scope/SKILL.md) | 保証範囲の案・未決事項と判断者・説明文の案を仕様書の品質保証範囲に沿って作る。合意後に来た依頼の判定、契約書の条文、法的判断、受託以外の案件には使わない |
 | CIが重い、CIの費用（GitHub Actionsの課金額等）が増える、runnerの種類（hosted・外部サービス・self-hosted）を選ぶ、重複検査・並列化・結果再利用を見直す、CIのテスト構成（仕事量の削減・影響範囲での絞り込み・shard・後段への移設）を設計する | [verification-optimization](verification-optimization/SKILL.md) | 保証を維持した同等性確認と計測。単なるテスト実行や、契約上の費用負担の判断（estimate-and-scope）とは分ける |
 | 言語・DB・基盤を段階移行・置換する、併存や移行完了を点検する | [migration-assurance](migration-assurance/SKILL.md) | 受入・データ・構築・運用経路の継承。製品本体だけで完了にしない |
 | 利用者が画面から一連の操作を完了できるか確かめる、デモを見せる | [user-journey-acceptance](user-journey-acceptance/SKILL.md) | 実操作・実接続・保存・失敗回復。見た目の確認だけとは分ける |
@@ -27,6 +28,8 @@
 `engineering-judgment`は設計案を選ぶ基準と自己反証を扱い、採用理由・見直し条件を示す。開発思想の全項目を毎回実行するチェックリストではなく、判断が未決の場面に限定する。個人用Skillが持つ会話の好み・本人への助言・個別契約の慣行を、そのままチーム共通の規則にするものではない。基盤の網羅点検は`project-foundation`、技術調査・実証から実装への接続は`research-to-implementation`、変更の独立レビューと是正管理は`review-and-remediation`が扱う。共通の権限・品質契約を追加定義せず、判断に必要なときだけ組み合わせる。
 
 `decision-ownership`は、技術の設計案ではなく、依頼や記録に含まれる業務・優先度・受入の判断を誰が持つかを扱う。判断者・判断材料・仮置き案を出し、判断を代わりに確定しない。確認事項の回答と反映の追跡は`work-coordination`、見積と対応範囲は`estimate-and-scope`が扱う。
+
+`warranty-scope`は、顧客と合意する前に、保証する範囲と瑕疵対応の始まりと終わりの条件を揃える。合意の後に来た依頼をその合意と照らして判定し見積るのは`estimate-and-scope`、保証範囲に限らない未決事項と判断者の整理は`decision-ownership`、開発基盤の先行決定は`project-foundation`が扱う。`project-foundation`は、顧客に納品し合意が必要な案件でだけ`warranty-scope`へ分岐する。自動起動はしない。
 
 配布パッケージにはこの一覧と各Skillの全ファイルを含める。`project-assets --apply`でプロジェクトの`.agent-skill-chain/skills/`へ配置し、Codex用の`--register-skill`で`.agents/skills/`へ、Claude Code用の`--register-claude-skill`で`.claude/skills/`へ全配布Skillの薄い入口を配置する。両方指定できる。入口のdescriptionで選択され、入口の指示に従って共有本文と必要なreferencesを読む。隔離環境にも入口・本文・referencesを一緒に配置する。既存の同名fileや利用者編集は競合として保護する。配置はHostでの認識・実行の証明ではなく、外部操作の許可も与えない。
 
