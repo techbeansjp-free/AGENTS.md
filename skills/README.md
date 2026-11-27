@@ -5,7 +5,7 @@
 | 依頼・状況 | Skill | 成果と適用境界 |
 | --- | --- | --- |
 | Issueの開発を始める・再開する、PR提出・許可されたmergeと後片付けまで進める | [asc](asc/SKILL.md) | Goal・権限・Evidenceに沿った実行。通常開発へASCを強制しない |
-| 新規基盤を整える、既存基盤の考慮漏れを点検する | [project-foundation](project-foundation/SKILL.md) | 先行決定・機械検査・再現性。通常の局所修正では使わない |
+| 新規基盤を整える、既存基盤の考慮漏れを点検する、ASCで変更するpathの構成・規約が未整備と分かった | [project-foundation](project-foundation/SKILL.md) | 先行決定・機械検査・再現性。未整備の場合は今回の変更に必要な項目だけを決める。規約が整ったプロジェクトの通常変更や局所修正では使わない |
 | 機能設計の案を比較する、提案前に前提や過剰設計を問い直す | [engineering-judgment](engineering-judgment/SKILL.md) | 要求・単純さ・利用者負担に基づく判断。誤字修正や決定済みの機械的変更には使わない |
 | 見積・納期・保守範囲・継続費用と管理責任を判断する | [estimate-and-scope](estimate-and-scope/SKILL.md) | 契約と調査に基づく見積・回答案。過去案件の商慣行を一律に適用しない |
 | 依頼・議事録・チケットの未決事項と判断者を整理する、進めてよいか・誰が決めるかを確かめる | [decision-ownership](decision-ownership/SKILL.md) | 判断者・先出しのリスク・仮置き案を示し、判断は判断者に残す。設計案の比較や見積そのものには使わない |
