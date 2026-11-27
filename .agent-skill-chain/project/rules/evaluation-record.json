@@ -8,7 +8,7 @@
   "owner": "repository maintainer",
   "targetLayer": "project",
   "evidence": "PRの記録に、公開した記録の一覧（判定・採点・台帳・設定）と、skills/asc/SKILL.mdの毎回読む部分のbyte数の前後が書かれていること",
-  "remediation": "生の実行記録（trace・画面・tool log）をcommitから除き、判定・採点・台帳だけを公開する。測定はdocs/evidence/shared-harnessと、Issueごとの小さい設定で行い、harnessをIssueごとにコピーしない。毎回読む部分に規則を足す場合は、増えたbyteを示して上限を決め、条件付きの規則はreferenceへ置く",
+  "remediation": "生の実行記録（trace・画面・tool log）をcommitから除き、判定・採点・台帳・試行の要約・固定の記録・probeの記録だけを公開する。測定はdocs/evidence/shared-harnessと、Issueごとの小さい設定で行い、harnessをIssueごとにコピーしない。毎回読む部分に規則を足す場合は、増えたbyteを示して上限を決め、条件付きの規則はreferenceへ置く",
   "overridePolicy": "bound",
   "rollback": "この規則を削除し、評価の記録の方針をIssueごとに決める",
   "packageDefault": "汎用packageは評価の記録の置き方を定めない",

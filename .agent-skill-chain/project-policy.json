@@ -54,6 +54,7 @@
     "project/rules/distribution-impact.json",
     "project/rules/docs.json",
     "project/rules/dogfooding.json",
+    "project/rules/evaluation-record.json",
     "project/rules/japanese-docs.json",
     "project/rules/lockfile.json",
     "project/rules/naming-exception.json",

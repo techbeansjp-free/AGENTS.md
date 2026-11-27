@@ -70,9 +70,9 @@
     "plugin-authoring"
    ],
    "builtinPlugins": [
-    "cc-plugin-agents-md",
-    "cc-plugin-plugin-authoring",
-    "cc-plugin-privacy"
+    "<bundled-skill>",
+    "<bundled-skill>",
+    "<bundled-skill>"
    ],
    "gitLine": "Update project files | Install ASC | initial",
    "model": "claude-sonnet-5-5",
@@ -149,9 +149,9 @@
     "plugin-authoring"
    ],
    "builtinPlugins": [
-    "cc-plugin-agents-md",
-    "cc-plugin-plugin-authoring",
-    "cc-plugin-privacy"
+    "<bundled-skill>",
+    "<bundled-skill>",
+    "<bundled-skill>"
    ],
    "gitLine": "Update project files | Install ASC | initial",
    "model": "claude-sonnet-5-5",

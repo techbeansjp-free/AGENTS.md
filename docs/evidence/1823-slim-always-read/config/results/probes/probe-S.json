@@ -50,9 +50,9 @@
    "pass": true,
    "detail": {
     "builtin": [
-     "cc-plugin-agents-md",
-     "cc-plugin-privacy",
-     "cc-plugin-plugin-authoring"
+     "<bundled-skill>",
+     "<bundled-skill>",
+     "<bundled-skill>"
     ],
     "other": 0
    }
@@ -232,9 +232,9 @@
  },
  "ascOmitted": [],
  "builtinPlugins": [
-  "cc-plugin-agents-md",
-  "cc-plugin-plugin-authoring",
-  "cc-plugin-privacy"
+  "<bundled-skill>",
+  "<bundled-skill>",
+  "<bundled-skill>"
  ],
  "managedPolicyPresent": [],
  "tools": [
