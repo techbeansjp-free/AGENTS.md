@@ -87,9 +87,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     fs.writeFileSync(path.join(out, 'targets.json'), JSON.stringify(targets, null, 1));
     fs.writeFileSync(path.join(out, 'pairs.json'), JSON.stringify(pages.map((p) => ({key: `${p.case}/${p.trial}`, case: p.case, original: `${sel(p)}/original/index.html`,
       variants: Object.fromEntries(made(p).filter((v) => v !== 'original').map((v) => [v, `${sel(p)}/${v}/index.html`]))})), null, 1));
-    const fv = pages.flatMap((p) => made(p).map((v) => `mkdir -p /out/${tid(p, v)} && node /opt/fv/first-view.mjs /out/cases.json ${p.case} ${sel(p)}/${v}/index.html /opt/g/gold.json > /out/${tid(p, v)}/first-view.json`)).join('; ');
+    const fv = pages.flatMap((p) => made(p).map((v) => `mkdir -p /out/${tid(p, v)} && node /opt/fv/first-view.mjs /out/cases.json ${p.case} ${sel(p)}/${v}/index.html /opt/g/gold.json > /out/${tid(p, v)}/first-view.json || echo ${tid(p, v)} >> /out/failed.txt`)).join('; ');
     const t0 = Date.now();
-    if (!args.includes('--skip-render')) docker(pagesDir, out, `node /opt/h/render.mjs /out/targets.json /out; ${fv}; node /opt/l/compare.mjs /out/cases.json /out/pairs.json > /out/compare.json; true`);
+    if (!args.includes('--skip-render')) {
+      fs.rmSync(path.join(out, 'failed.txt'), {force: true});
+      docker(pagesDir, out, `node /opt/h/render.mjs /out/targets.json /out || echo render >> /out/failed.txt; ${fv}; node /opt/l/compare.mjs /out/cases.json /out/pairs.json > /out/compare.json || echo compare >> /out/failed.txt; true`);
+      const failed = fs.existsSync(path.join(out, 'failed.txt')) ? fs.readFileSync(path.join(out, 'failed.txt'), 'utf8').split('\n').filter(Boolean) : [];
+      if (failed.length) throw new Error(`layer 1 commands failed (not publishing layer1.json): ${failed.join(', ')}`);
+    }
     const seconds = Math.round((Date.now() - t0) / 1000);
     const render = Object.fromEntries(JSON.parse(fs.readFileSync(path.join(out, 'render.json'), 'utf8')).map((r) => [r.id, r]));
     const cmp = JSON.parse(fs.readFileSync(path.join(out, 'compare.json'), 'utf8')).pages;

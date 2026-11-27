@@ -23,7 +23,8 @@ const geq = (a, b) => (a.d && b.d ? a.n * b.d >= b.n * a.d : null); // a.rate >=
 const statusOf = (runs, e, r, m, id) => { const f = path.join(runs, e, `round${r}`, m, id, 'status.json'); return fs.existsSync(f) ? readJson(f) : null; };
 const cmp = (a, b, tie = 0) => (a === null || b === null || a === undefined || b === undefined ? null : Math.abs(a - b) < tie || a === b ? 'same' : a > b ? 'first' : 'second');
 
-export function collectJudgments({key, runs, cfg, ssr = null}) {
+// negIds: the planned negation pair ids (negation-pairs.json). A planned pair with no record in a round is kept as missing.
+export function collectJudgments({key, runs, cfg, ssr = null, negIds = []}) {
   const J = {}, fNeg = {};
   const items = key.items.filter((i) => !i.excluded);
   const pk = Object.entries(key.packets);
@@ -64,7 +65,7 @@ export function collectJudgments({key, runs, cfg, ssr = null}) {
         }
       }
       // F scores of the negation sentences
-      const negPairs = new Set();
+      const negPairs = new Set(negIds);
       const dir = path.join(runs, e, `round${r}`, 'Neg');
       for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) { const m = /^neg-(.+)-(positive|negative)$/.exec(f); if (m) negPairs.add(m[1]); }
       fNeg[e][r] = {};
@@ -233,7 +234,8 @@ export function missingByReason(runs) {
 export function loadLayer1(files) {
   const m = {}, records = [];
   for (const f of files) for (const p of readJson(f).pages) for (const v of p.variants) {
-    m[`${p.case}/${p.trial}/${v.variant}`] = v.pass;
+    // A variant whose measurement had errors is unknown (not a measured failure), so it does not silently leave a denominator.
+    m[`${p.case}/${p.trial}/${v.variant}`] = (v.layer1?.errors ?? []).length ? undefined : v.pass;
     records.push({screen: `${p.case}/${p.trial}/${v.variant}`, pass: v.pass, checks: v.checks});
   }
   return {map: m, records};
@@ -292,7 +294,8 @@ function main() {
   const cfg = loadConfig(), key = excludeSkipped(readJson(path.resolve(opt('--key'))), skip, runs);
   const ssr = opt('--ssr') ? readJson(path.resolve(opt('--ssr'))) : null;
   const ssrNeg = opt('--ssr-negation') ? readJson(path.resolve(opt('--ssr-negation'))) : null;
-  const {J, fNeg} = collectJudgments({key, runs, cfg, ssr});
+  const negIds = readJson(path.join(path.dirname(path.dirname(new URL(import.meta.url).pathname)), 'negation-pairs.json')).pairs.map((p) => p.id);
+  const {J, fNeg} = collectJudgments({key, runs, cfg, ssr, negIds});
   const ledgerFile = path.join(runs, 'ledger.jsonl');
   const ledger = fs.existsSync(ledgerFile) ? fs.readFileSync(ledgerFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
   const l1 = loadLayer1(all('--layer1').map((f) => path.resolve(f)));

@@ -93,9 +93,10 @@ export function parseFable(stdout) {
   const events = [];
   for (const line of stdout.split('\n')) { if (!line.trim()) continue; try { events.push(JSON.parse(line)); } catch { /* not an event line */ } }
   if (!events.length) return {text: null, usd: null, tokens: null, toolCalls: [], hasResult: false, error: 'stdout has no JSON event'};
-  const toolCalls = [];
+  const toolCalls = [], failedIds = new Set();
+  for (const e of events) if (e.type === 'user' && Array.isArray(e.message?.content)) for (const c of e.message.content) if (c?.type === 'tool_result' && c.is_error) failedIds.add(c.tool_use_id);
   for (const e of events) if (e.type === 'assistant' && Array.isArray(e.message?.content)) for (const c of e.message.content) {
-    if (c?.type === 'tool_use') toolCalls.push({name: c.name, path: c.input?.file_path ?? c.input?.path ?? null, pattern: c.input?.pattern ?? null});
+    if (c?.type === 'tool_use') toolCalls.push({name: c.name, path: c.input?.file_path ?? c.input?.path ?? null, pattern: c.input?.pattern ?? null, ok: !failedIds.has(c.id)});
   }
   const j = [...events].reverse().find((e) => e.type === 'result');
   if (!j) return {text: null, usd: null, tokens: null, toolCalls, hasResult: false, error: 'no final result event'};
@@ -105,9 +106,10 @@ export function parseFable(stdout) {
     toolCalls, hasResult: true,
     error: j.is_error ? `is_error (${j.subtype ?? '?'})` : (j.subtype && j.subtype !== 'success' ? j.subtype : null)};
 }
-// Missing reason images-not-read: one or more PNGs handed over (in the call's packet) that no Read tool call targeted.
+// Missing reason images-not-read: one or more PNGs handed over (in the call's packet) that no successful Read tool call
+// targeted (a Read whose tool_result is an error does not count).
 export function checkImagesRead({toolCalls, images, cwd}) {
-  const read = new Set(toolCalls.filter((t) => t.name === 'Read' && typeof t.path === 'string').map((t) => real(path.resolve(cwd, t.path))));
+  const read = new Set(toolCalls.filter((t) => t.name === 'Read' && t.ok !== false && typeof t.path === 'string').map((t) => real(path.resolve(cwd, t.path))));
   const unread = images.filter((f) => !read.has(real(f)));
   return {imagesExpected: images.length, imagesRead: images.length - unread.length, unread: unread.map((f) => path.relative(cwd, f)), reason: unread.length ? 'images-not-read' : null};
 }
@@ -157,7 +159,7 @@ export function checkCodexImagesViewed({stderr = '', text = ''}) {
   if (/unable to process image/.test(stderr)) return 'image-error';
   // Only the screenshots themselves as the object (画像を・画像は・画像がどちらも…), not "画像からは確認できない" (a legitimate remark
   // that a state is not shown in the screenshot).
-  if (/(画像|スクリーンショット|screenshot)(を|は|が|も)?(どちらも|両方とも|いずれも|とも)?(確認|閲覧|表示|開|見|読)[^。\n]{0,8}(できませんでした|できていません|できない|られません|られなかった)/i.test(text ?? '')) return 'answer-says-not-seen';
+  if (/(画像|スクリーンショット|screenshot)(を|は|が|も)?(どちらも|両方とも|いずれも|とも)?(確認|閲覧|表示|開|見|読)[^。\n]{0,8}(できませんでした|できていません|できない|られません|られなかった|けませんでした|けません|けなかった|めませんでした|めません|めなかった)/i.test(text ?? '')) return 'answer-says-not-seen';
   return null;
 }
 

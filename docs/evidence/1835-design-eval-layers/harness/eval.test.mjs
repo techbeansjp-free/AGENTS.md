@@ -10,8 +10,9 @@ import {spawnSync} from 'node:child_process';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS, pngChunks, PNG_KEEP, extractJson, readJson, parseScreen} from './eval-common.mjs';
 import {buildPackets} from './make-packets.mjs';
 import {ssrSource} from './ssr-source.mjs';
-import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex} from './run-eval.mjs';
-import {computeAll, decideEvaluator, missingByReason, excludeSkipped} from './aggregate.mjs';
+import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex, checkImagesRead} from './run-eval.mjs';
+import {computeAll, decideEvaluator, missingByReason, excludeSkipped, collectJudgments, negationFailures, loadLayer1} from './aggregate.mjs';
+import {newFailures} from './layer1.mjs';
 import {buildOwnerPage} from './owner-page.mjs';
 
 const cfg = loadConfig();
@@ -331,6 +332,8 @@ test('codex: images-not-viewed from an image error or an answer that says the sc
   assert.equal(checkCodexImagesViewed({text: '狭幅・広幅のスクリーンショットはどちらも閲覧できていません。'}), 'answer-says-not-seen');
   assert.equal(checkCodexImagesViewed({text: 'Aは要約が最上部にあり、対処が必要な項目がすぐ見える。'}), null);
   assert.equal(checkCodexImagesViewed({text: '保存中のボタンの状態は、画像からは確認できませんでした。'}), null);
+  assert.equal(checkCodexImagesViewed({text: '画像を開けませんでした。'}), 'answer-says-not-seen');
+  assert.equal(checkCodexImagesViewed({text: 'スクリーンショットを読めませんでした。'}), 'answer-says-not-seen');
   const cfg = JSON.parse(fs.readFileSync(path.join(here, '..', 'config', 'eval.json'), 'utf8'));
   assert.ok(buildPrompt('P', cfg, {evaluator: 'codex'}).includes('読取りだけのcommand'));
   assert.ok(!buildPrompt('P', cfg, {evaluator: 'fable'}).includes('読取りだけのcommand'));
@@ -360,4 +363,36 @@ test('aggregate: excluded items are reported as excluded, not counted as missing
   assert.equal(r.metrics.fable.P.missing, 0);
   assert.ok(r.excludedItems.some((x) => x.id === ex.id && x.why === 'budget'));
   assert.equal(r.items, items.length - items.filter((i) => i.variant === 'contrast-strong').length);
+});
+
+test('fable: a Read whose tool_result is an error does not count as reading the image', () => {
+  const ev = [{type: 'assistant', message: {content: [{type: 'tool_use', id: 't1', name: 'Read', input: {file_path: '/x/a.png'}}, {type: 'tool_use', id: 't2', name: 'Read', input: {file_path: '/x/b.png'}}]}},
+    {type: 'user', message: {content: [{type: 'tool_result', tool_use_id: 't1', is_error: true, content: 'error'}, {type: 'tool_result', tool_use_id: 't2', content: [{type: 'image'}]}]}},
+    {type: 'result', subtype: 'success', is_error: false, result: 'ok', total_cost_usd: 0.1, usage: {}}];
+  const f = parseFable(ev.map((x) => JSON.stringify(x)).join('\n'));
+  assert.deepEqual(f.toolCalls.map((t) => t.ok), [false, true]);
+  const r = checkImagesRead({toolCalls: f.toolCalls, images: ['/x/a.png', '/x/b.png'], cwd: '/x'});
+  assert.equal(r.reason, 'images-not-read'); assert.deepEqual(r.unread, ['a.png']);
+});
+
+test('aggregate: a planned negation pair with no record in a round is missing', () => {
+  const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1835-neg-'));
+  for (const side of ['positive', 'negative']) {
+    const d = path.join(runs, 'fable', 'round1', 'Neg', `neg-n01-${side}`); fs.mkdirSync(d, {recursive: true});
+    fs.writeFileSync(path.join(d, 'status.json'), JSON.stringify({status: 'valid', answer: {score: side === 'positive' ? 4 : 2}}));
+  }
+  const key = {rounds: [1, 2], items: [], packets: {}};
+  const {fNeg} = collectJudgments({key, runs, cfg, negIds: ['n01']});
+  assert.deepEqual(negationFailures(fNeg.fable), {failures: 0, missing: 1, d: 2});
+});
+
+test('layer1: a variant with measurement errors is unknown in the aggregate and adds no failure evidence', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1835-l1-'));
+  const ok = {pass: true, checks: {a: true}, layer1: {errors: []}};
+  fs.writeFileSync(path.join(dir, 'l.json'), JSON.stringify({pages: [{case: 'c', trial: 't', variants: [{variant: 'original', ...ok}, {variant: 'v', pass: false, checks: {a: false}, layer1: {errors: ['first-view.json missing']}}, {variant: 'w', pass: false, checks: {a: false}, layer1: {errors: []}}]}]}));
+  const {map} = loadLayer1([path.join(dir, 'l.json')]);
+  assert.equal(map['c/t/v'], undefined); assert.equal(map['c/t/w'], false); assert.equal(map['c/t/original'], true);
+  const w = {checks: {a: true}, widths: {wide: {}, narrow: {}}, coverage: null};
+  assert.deepEqual(newFailures(w, {checks: {a: false}, widths: {wide: {}, narrow: {}}, coverage: null, errors: ['x missing']}), ['unmeasured: x missing']);
+  assert.deepEqual(newFailures(w, {checks: {a: false}, widths: {wide: {}, narrow: {}}, coverage: null, errors: []}), ['a']);
 });
