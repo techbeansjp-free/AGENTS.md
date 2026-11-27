@@ -1,0 +1,14 @@
+[
+ {"id":"P1","expect":"warranty-scope","forbid":[],"prompt":"受託で作っているWebシステムの検収の前に、どこまで品質を保証するかを顧客と決めておきたい。何を決めればいいか整理して。"},
+ {"id":"P2","expect":"warranty-scope","forbid":[],"prompt":"納品後に瑕疵対応が際限なく続かないように、契約の前に顧客と取り決めておくことを整理して。"},
+ {"id":"P3","expect":"warranty-scope","forbid":[],"prompt":"顧客が「どのブラウザでも動くことを保証してほしい」と言ってきた。保証の範囲をどう提案すればいいか考えて。"},
+ {"id":"P4","expect":"warranty-scope","forbid":[],"prompt":"システムを納める前に、こちらが責任を持つ条件と持たない条件をお客さんとすり合わせておきたい。何から決める？"},
+ {"id":"P5","expect":"warranty-scope","forbid":[],"prompt":"来月納品する受託案件で、検収基準と保守範囲を顧客と合意したい。合意しておくべきことを整理して。"},
+ {"id":"P6","expect":"warranty-scope","forbid":[],"prompt":"受託のシステムの仕様書に、どの環境・どの条件で動作を保証するかを書いておきたい。どう書けばいい？"},
+ {"id":"N1","expect":"estimate-and-scope","forbid":["warranty-scope"],"prompt":"納品済みのシステムに帳票を1つ追加してほしいと顧客から言われた。保守の範囲で受けるべきか、追加費用にすべきか判断して。"},
+ {"id":"N2","expect":"estimate-and-scope","forbid":["warranty-scope"],"prompt":"顧客から検索画面に絞り込み条件を3つ追加したいと依頼された。工数と納期を見積もって。"},
+ {"id":"N3","expect":"decision-ownership","forbid":["warranty-scope"],"prompt":"次の議事録から、未決事項と誰が決めるかを整理して。「・ログイン方式はSSOにしたい（先方情シスに確認中）・リリース日は未定・帳票のレイアウトは来週決める」"},
+ {"id":"N4","expect":"project-foundation","forbid":["warranty-scope"],"prompt":"新しいWebアプリの開発を始める。開発環境、ディレクトリ構成、CIの基盤を整えたい。"},
+ {"id":"N5","expect":"none","forbid":["warranty-scope"],"prompt":"「保証範囲を顧客と合意済みです」を英語に訳して。"},
+ {"id":"N6","expect":"none","forbid":["warranty-scope"],"prompt":"次の文の誤字を直して：「検収後の瑕庇対応について確認しました」"}
+]

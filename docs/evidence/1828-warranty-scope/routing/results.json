@@ -1,0 +1,310 @@
+{
+ "final_2c7fd416": [
+  {
+   "id": "P1",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0,
+   "sec": 28,
+   "cost": 0.35443369999999996
+  },
+  {
+   "id": "P2",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0,
+   "sec": 28,
+   "cost": 0.4185198
+  },
+  {
+   "id": "P3",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0,
+   "sec": 38,
+   "cost": 0.4814094
+  },
+  {
+   "id": "P4",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0,
+   "sec": 23,
+   "cost": 0.4004821
+  },
+  {
+   "id": "P5",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0,
+   "sec": 36,
+   "cost": 0.4871984
+  },
+  {
+   "id": "P6",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0,
+   "sec": 29,
+   "cost": 0.4164916
+  },
+  {
+   "id": "N1",
+   "expect": "estimate-and-scope",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [
+    "estimate-and-scope"
+   ],
+   "readBody": "estimate-and-scope",
+   "readRef": false,
+   "status": 0,
+   "sec": 20,
+   "cost": 0.3470832
+  },
+  {
+   "id": "N2",
+   "expect": "estimate-and-scope",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [
+    "estimate-and-scope"
+   ],
+   "readBody": "estimate-and-scope",
+   "readRef": false,
+   "status": 0,
+   "sec": 27,
+   "cost": 0.3787736
+  },
+  {
+   "id": "N3",
+   "expect": "decision-ownership",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [
+    "decision-ownership"
+   ],
+   "readBody": "decision-ownership",
+   "readRef": false,
+   "status": 0,
+   "sec": 19,
+   "cost": 0.333016
+  },
+  {
+   "id": "N4",
+   "expect": "project-foundation",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [
+    "project-foundation"
+   ],
+   "readBody": "project-foundation",
+   "readRef": "verification-and-security.md",
+   "status": 0,
+   "sec": 32,
+   "cost": 0.42235090000000003
+  },
+  {
+   "id": "N5",
+   "expect": "none",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [],
+   "readBody": false,
+   "readRef": false,
+   "status": 0,
+   "sec": 6,
+   "cost": 0.0203574
+  },
+  {
+   "id": "N6",
+   "expect": "none",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [],
+   "readBody": false,
+   "readRef": false,
+   "status": 0,
+   "sec": 4,
+   "cost": 0.0194938
+  }
+ ],
+ "candidate_1b3e5b03": [
+  {
+   "id": "P1",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0
+  },
+  {
+   "id": "P2",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0
+  },
+  {
+   "id": "P3",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0
+  },
+  {
+   "id": "P4",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0
+  },
+  {
+   "id": "P5",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0
+  },
+  {
+   "id": "P6",
+   "expect": "warranty-scope",
+   "forbid": [],
+   "skills": [
+    "warranty-scope"
+   ],
+   "readBody": "warranty-scope",
+   "readRef": "check-items.md",
+   "status": 0
+  },
+  {
+   "id": "N1",
+   "expect": "estimate-and-scope",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [
+    "estimate-and-scope"
+   ],
+   "readBody": "estimate-and-scope",
+   "readRef": false,
+   "status": 0
+  },
+  {
+   "id": "N2",
+   "expect": "estimate-and-scope",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [
+    "estimate-and-scope"
+   ],
+   "readBody": "estimate-and-scope",
+   "readRef": false,
+   "status": 0
+  },
+  {
+   "id": "N3",
+   "expect": "decision-ownership",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [
+    "decision-ownership"
+   ],
+   "readBody": "decision-ownership",
+   "readRef": false,
+   "status": 0
+  },
+  {
+   "id": "N4",
+   "expect": "project-foundation",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [
+    "project-foundation"
+   ],
+   "readBody": "project-foundation",
+   "readRef": "contracts-and-ui.md",
+   "status": 0
+  },
+  {
+   "id": "N5",
+   "expect": "none",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [],
+   "readBody": false,
+   "readRef": false,
+   "status": 0
+  },
+  {
+   "id": "N6",
+   "expect": "none",
+   "forbid": [
+    "warranty-scope"
+   ],
+   "skills": [],
+   "readBody": false,
+   "readRef": false,
+   "status": 0
+  }
+ ]
+}
