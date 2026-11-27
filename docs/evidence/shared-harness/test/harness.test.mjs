@@ -757,7 +757,7 @@ test('#1840 written files: the spec without history and with the 7 facts passes;
 // #1840 review (pre-measurement): calibration, the k-of-n markers, the written-file groups and reports, the trial
 // reports, the report-only levels, the written-file digests, the user's Skills in the probe, the dry-run references.
 const {groupOk, markerGroupsOf, writeChecks, reportOf, levelChecks} = await import('../score.mjs');
-const {calibrate, markdown, sectionOf} = await import('../calibrate.mjs');
+const {calibrate, markdown, sectionOf, evaluate} = await import('../calibrate.mjs');
 const {workChanges} = await import('../make-fixture.mjs');
 const {workFilesProblem} = await import('../collect.mjs');
 const {fixtureReferences} = await import('../dry-run.mjs');
@@ -878,7 +878,8 @@ test('#1840 written-file digests (M2): run-trial records the changed files; coll
   const rec = workChanges(work);
   assert.deepEqual(Object.keys(rec), ['a.md', 'docs/q/Q.md', 'local/x.txt'], 'changed, added and ignored files');
   const dir = path.dirname(work);
-  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({workFiles: rec}));
+  const sampleHead = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, encoding: 'utf8'}).stdout.trim();
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({workFiles: rec, sampleHead}));
   assert.equal(workFilesProblem(dir), null);
   fs.writeFileSync(path.join(work, 'docs/q/Q.md'), 'changed later');
   assert.match(workFilesProblem(dir), /work\/ differs .*docs\/q\/Q\.md/);
@@ -1014,7 +1015,7 @@ test('#1845 money rule: decimals in comments and string literals are not violati
   ].join('\n');
   assert.deepEqual(violationsOf(codeForbid, text), [], 'the #1840 failures (1bp = 0.01%, 税10.9 → 10) and strings pass');
   // Without scope (the #1840 fixed config) the same text still fails: the fixed check is unchanged.
-  const fixed = {...codeForbid, forbid: codeForbid.forbid.map(({scope, ...e}) => e)};
+  const fixed = {...codeForbid, forbid: codeForbid.forbid.map((e) => { const x = {...e}; delete x.scope; return x; })};
   assert.deepEqual(violationsOf(fixed, text), ['decimal-literal', 'float-function', 'number-conversion']);
   // A file that is not JavaScript/TypeScript is matched on the whole text, as before.
   assert.deepEqual(violationsOf(codeForbid, '1bp = 0.01%\n', 'src/billing/README.md'), ['decimal-literal']);
@@ -1091,4 +1092,54 @@ test('#1845 collect: work/ must exist and be at meta.json sampleHead for a trial
   assert.match(workFilesProblem(dir), /work\/ is missing/);
   meta({});
   assert.equal(workFilesProblem(dir), null, 'a trial without workFiles (earlier configs) is not checked');
+  // Review L5: workFiles without sampleHead is refused; HEAD is read without the caller's GIT_DIR.
+  fs.mkdirSync(work, {recursive: true});
+  fs.writeFileSync(path.join(work, 'a.md'), 'a');
+  spawnSync('git', ['init', '-q'], {cwd: work});
+  spawnSync('git', ['add', '-A'], {cwd: work});
+  spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', 'commit', '-q', '-m', 'i'], {cwd: work});
+  const head2 = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, encoding: 'utf8'}).stdout.trim();
+  meta({workFiles: {}, sampleHead: ''});
+  assert.match(workFilesProblem(dir), /no sampleHead/);
+  meta({workFiles: {}});
+  assert.match(workFilesProblem(dir), /no sampleHead/);
+  meta({workFiles: {}, sampleHead: head2});
+  const saved = process.env.GIT_DIR;
+  process.env.GIT_DIR = path.join(REPO, '.git');
+  try { assert.equal(workFilesProblem(dir), null, 'an exported GIT_DIR does not change the HEAD read'); } finally { if (saved === undefined) delete process.env.GIT_DIR; else process.env.GIT_DIR = saved; }
+});
+
+test('#1845 review: codeText regressions (++/-- then division, nested templates, regular expressions, // in strings)', () => {
+  const dec = (src) => violationsOf(codeForbid, src).includes('decimal-literal');
+  // L1: a / after ++ or -- is a division, so the comment after it is left out.
+  assert.equal(dec('const h = n++ / 2; // 0.5'), false);
+  assert.equal(dec('const h = n-- / 2; // 0.5'), false);
+  assert.equal(dec('const h = n++ / 2 * 1.1;'), true);
+  // L4: nested template literals, an object literal inside ${}, a / in a character class, a regular expression after a
+  // keyword, // inside a string.
+  assert.equal(dec('const s = `a ${`x ${y} 0.5`} b 1.5`; const p = q * 1.1;'), true);
+  assert.equal(dec('const s = `a ${`x ${y} 0.5`} b 1.5`;'), false);
+  assert.equal(dec('const s = `a ${f({k: 1n, m: {n: 2n}})} 0.5`; const t = `${y}`;'), false);
+  assert.equal(dec('const s = `a ${f({k: 1n})} 0.5`; const p = q * 1.1;'), true);
+  assert.equal(dec("const re = /[/]1.5/; const s = '2.5';"), true, 'the regular expression stays code');
+  assert.equal(dec("const re = /[/]x/; const s = '2.5'; // 3.5"), false, 'a / in a class does not end the regular expression');
+  assert.equal(dec("function f() { return /x/.test(s) ? 'a' : '0.5'; } // 1.5"), false);
+  assert.equal(dec("const u = 'https://a/1.5'; const p = q * 1.1;"), true);
+  assert.equal(dec("const u = 'https://a/1.5'; const p = q * 11n / 10n;"), false);
+});
+
+test('#1845 review M1: calibrate.mjs counts requireFiles and applies scope as score.mjs does', () => {
+  const k = {id: 'x', writes: {pathPattern: '^(docs|src)/', mustWrite: true, requireFiles: [{id: 'FN-003', pattern: '/FN-003[^/]*\\.md$'}, {id: 'SCR-005', pattern: '/SCR-005[^/]*\\.md$'}], require: [{id: 'r', pattern: 'x'}]}};
+  const one = evaluate(k, {}, {answer: '', written: [{rel: 'docs/04/FN-003_a.md', text: 'x'}]});
+  assert.deepEqual([one.pass, one.filesMissing], [false, ['SCR-005']]);
+  assert.equal(caseChecks(k, [], {uses: [{name: 'Write', id: 'w', input: {file_path: '/w/docs/04/FN-003_a.md'}}], results: new Map([['w', {is_error: false}]]), cwd: '/w', skills: [], text: ''}, {fileText: () => 'x'}).writeOk, false, 'scoring agrees');
+  assert.equal(evaluate(k, {}, {answer: '', written: [{rel: 'docs/04/FN-003_a.md', text: 'x'}, {rel: 'docs/05/SCR-005_b.md', text: 'x'}]}).pass, true);
+  // scope "code": the answer named by `as` is checked as scoring does; without it the row says scope is not applied.
+  const c = {id: 'y', writes: codeForbid};
+  const named = evaluate(c, {}, {answer: '// 1bp = 0.01%\nexport const f = (s: bigint) => s * 10n / 100n;', answerAs: BILL});
+  assert.deepEqual([named.pass, named.violations, 'scopeNotApplied' in named], [true, [], false]);
+  const unnamed = evaluate(c, {}, {answer: '// 1bp = 0.01%'});
+  assert.deepEqual([unnamed.pass, unnamed.violations, unnamed.scopeNotApplied], [false, ['decimal-literal'], true]);
+  const cal = {sources: [{case: 'y', condition: 'skill', path: 'docs/evidence/shared-harness/score.mjs', earlierPass: true, note: 'n'}]};
+  assert.match(markdown(calibrate(cal, {cases: [{...c, id: 'y'}]})), /scopeは当てない/);
 });

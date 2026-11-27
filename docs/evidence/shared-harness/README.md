@@ -89,12 +89,12 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 
 ## #1845で加えたもの（2026-11-28）
 
-#1840の測定の後に、金額の規則の照合と、PR #1842のレビューの指摘を直した。照合の直しと`requireFiles`・分数の水準は設定のfieldで働き、そのfieldの無い設定（試験用、#1823、#1840）の採点は変えない。残りの直し（`work/`の照合・すべての`GIT:`の行・利用者のSkillの成功）は拒否と判定を厳しくするもので、#1840の記録では結果が変わらない。#1840の生の記録から作り直した`trials.json`・`runs.json`は、公開したものとbyteで一致する（#1845のPRの記録）。#1840の設定のfile（`cases.json`・`conditions.json`・`decision-criteria.md`等）は変えていない。共通の仕組みのmoduleが変わるので、#1840と#1823の`fixation.mjs check`はmoduleの差を示す（下の「変更するとき」のとおり、測定の後の変更である）。
+#1840の測定の後に、金額の規則の照合と、PR #1842のレビューの指摘を直した。照合の直しと`requireFiles`・分数の水準は設定のfieldで働き、そのfieldの無い設定（試験用、#1823、#1840）の採点は変えない。残りの直し（`work/`の照合・すべての`GIT:`の行・利用者のSkillの成功）は拒否と判定を厳しくするもので、#1840の記録では結果が変わらない。#1840の生の記録から作り直した`trials.json`・`runs.json`は、公開したものとbyteで一致する（#1845のPRの記録）。#1840の設定のfile（`cases.json`・`conditions.json`・`decision-criteria.md`等）は変えていない。共通の仕組みのmoduleが変わるので、#1840と#1823の`fixation.mjs check`はmoduleの差を示す（下の「変更するとき」のとおり、測定の後の変更である）。#1840・#1823の記録の照合と判定（`fixation.mjs check`・`judge.mjs`）は、それぞれの`results/fixation.json`の`fixedAtCommit`の共通の仕組みで行う（例：`git worktree add <dir> <fixedAtCommit>`で取り出したものを使う）。#1840の`decision-criteria.md`の「共通の仕組みのmoduleを変えない」は、その測定の判定までを指す。
 
-- `writes.forbid`の`scope: "code"`：JavaScript・TypeScriptのfile（`.js`・`.ts`等）では、コメントと文字列（template literalの文字の部分）を空白にしたコードだけに照合する（`score.mjs`の`codeText`）。`// 税10.9 → 10`や`1bp = 0.01%`は数えず、`price * 1.1`や`Number(subtotal) * rate`は数える。他のfileとscopeの無い項目は全文に照合する（従来どおり）。
-- `writes.requireFiles` [{`id`, `pattern`, `group`}]：書いたfileのpathに、項目ごとに合うものが要る（例：FN-003とSCR-005の両方）。足りない項目は`writeFilesMissing`。
+- `writes.forbid`の`scope: "code"`：JavaScript・TypeScriptのfile（`.js`・`.ts`等）では、コメントと文字列（template literalの文字の部分）を空白にしたコードだけに照合する（`score.mjs`の`codeText`）。`// 税10.9 → 10`や`1bp = 0.01%`は数えず、`price * 1.1`や`Number(subtotal) * rate`は数える。他のfileとscopeの無い項目は全文に照合する（従来どおり）。JSX（`.jsx`・`.tsx`）の文の部分はコードとして照合する（`<p>1bp = 0.01%</p>`は数える）。小さなscannerでparserではなく、`)`の直後の正規表現（`if (ok) /x/.test(s)`）は除算と読む。
+- `writes.requireFiles` [{`id`, `pattern`, `group`}]：書いたfileのpathに、項目ごとに合うものが要る（例：FN-003とSCR-005の両方）。足りない項目は`writeFilesMissing`。`calibrate.mjs`も`writeFilesMissing`を不合格に数える。`calibrate.mjs`で回答を1つの書いたfileとして当てる形では、sourceの`as`（`pathPattern`に合うpath）がそのfileの名前になり、`scope`が採点と同じに効く。`as`が無ければ名前は`<answer>`で、`scope`は当てず全文に照合し、表の「落ちた点」にそう書く。
 - 水準の`min`を分数の文字列（例：`"2/3"`）で書くと、整数で比べる（`ok * 3 >= 2 * n`。4/6・7/9が届く）。数の`min`は従来どおり率で比べる。
-- `collect.mjs`：`workFiles`（か`workFilesError`）を記録した試行は、`work/`が無ければ拒否し、`work/`のHEADが`meta.json`の`sampleHead`と違えば拒否する（何も書く前に）。
+- `collect.mjs`：`workFiles`（か`workFilesError`）を記録した試行は、`work/`が無ければ拒否し、`work/`のHEADが`meta.json`の`sampleHead`と違うか、`sampleHead`が記録されていなければ拒否する（何も書く前に。HEADは`gitEnv`の環境で読む）。
 - `probe-check.mjs`：`gitContextNeutral`は、回答のすべての`GIT:`の行を見る（記録の`gitLine`は最後の行のまま）。
 - 利用者のSkill（`userSkill`）の本文の読込みは、結果がerrorでない`Skill`の呼出しか、成功したReadだけを数える。
 

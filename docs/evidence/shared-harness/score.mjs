@@ -110,9 +110,10 @@ export function markerTextOf(spec, answer, written, base = null) {
 // #1845: the code of a JavaScript/TypeScript text, with the comments and the string literals (and the literal parts of
 // template literals; their ${...} expressions stay code) replaced by spaces, the line breaks kept. A regular expression
 // literal stays code but is skipped as one token, so a quote inside it does not open a string. A small scanner, not a
-// parser: `/` is a regular expression after an operator, an opening bracket, a comma, a keyword or the start, else a
-// division. Used by a writes forbid entry with scope "code" (e.g. a decimal literal is a violation in `price * 1.1`, not
-// in `// 1bp = 0.01%` or in `'10.9'`).
+// parser: `/` is a regular expression after an operator (not `++`/`--`), an opening bracket, a comma, a keyword or the
+// start, else a division (also after `)`: `if (x) /re/` is misread, a known limit). JSX text is code (not left out).
+// Used by a writes forbid entry with scope "code" (e.g. a decimal literal is a violation in `price * 1.1`, not in
+// `// 1bp = 0.01%` or in `'10.9'`).
 export const CODE_FILE = /\.(c|m)?(j|t)sx?$/i;
 export function codeText(src) {
   const out = src.split('');
@@ -140,7 +141,8 @@ export function codeText(src) {
     if (c === '{') { braces.push(false); prev = '{'; i++; continue; }
     if (c === '}') { if (braces.pop()) { i = template(i + 1); continue; } prev = '}'; i++; continue; }
     if (c === '/') {
-      const regexStart = prev === '' || /[(,=:[!&|?{};+\-*%<>~^]/.test(prev) || KEYWORDS.has(prev);
+      // #1845 review L1: after `++` or `--` (prev '++'/'--') a `/` is a division (`n++ / 2`).
+      const regexStart = prev === '' || /^[(,=:[!&|?{};+\-*%<>~^]$/.test(prev) || KEYWORDS.has(prev);
       if (regexStart) {
         let j = i + 1, cls = false;
         while (j < src.length && src[j] !== '\n' && (cls || src[j] !== '/')) { if (src[j] === '\\') j++; else if (src[j] === '[') cls = true; else if (src[j] === ']') cls = false; j++; }
@@ -153,6 +155,7 @@ export function codeText(src) {
     if (/\s/.test(c)) { i++; continue; }
     if (/[A-Za-z_$]/.test(c)) { let j = i; while (j < src.length && /[\w$]/.test(src[j])) j++; prev = src.slice(i, j); i = j; continue; }
     if (/[0-9]/.test(c)) { let j = i; while (j < src.length && /[\w.]/.test(src[j])) j++; prev = 'x'; i = j; continue; }
+    if ((c === '+' || c === '-') && d === c) { prev = c + c; i += 2; continue; }
     prev = c; i++;
   }
   return out.join('');
