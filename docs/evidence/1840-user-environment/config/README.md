@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。通常のASC実行時に読み込ませない。測定の仕組みは共通のもの（[../../shared-harness/](../../shared-harness/)）を使い、このdirectoryには設定だけを置く。
 
-**状態：固定済み、測定前（有料の実行は未実施）。** probeの前に、ownerによる目印fileの承認（`results/probe-approval.json`）が要る。
+**状態：固定済み（下の「測定の前の固定」）、測定前（有料の実行は未実施）。** probeの前に、ownerによる目印fileの承認（`results/probe-approval.json`）が要る。
 
 ## 目的
 
@@ -120,7 +120,9 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1840/runs --ledger $LEDGE
 
 ## 測定の前の固定
 
-（`fixation.mjs init`の後に記入する）
+- `results/fixation.json`の最初の記録のcommitは`bf65bb54c275fb5609957bc1d24fa828dc4b9dcb`。台帳idは`1a8cfa06-b3b2-4f36-be0f-ff018e8ca631`、台帳は`<scratch>/rel1840/ledger/ledger-1840.jsonl`（予約0件）。`run-trial.mjs`はこの記載を照合する。
+- 固定の記録は、この設定の5file（`decision-criteria.md`・`cases.json`・`conditions.json`・`release.json`・`run-order.json`）と、共通の仕組みのmodule 16件のsha256を持つ。測定の終わりまで、共通の仕組みも変えない。
+- 測定の前の独立レビューはまだ行っていない。レビューで固定したfileを直す場合は、測定の前（台帳に予約が無い間）に限り、`results/fixation.json`を消して新しい台帳で`init`をやり直し、このREADMEの記載を更新する（`refix`は`probe-check.mjs`の是正だけ）。
 
 ## 限界
 
