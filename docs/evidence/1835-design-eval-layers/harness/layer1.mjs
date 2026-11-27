@@ -55,6 +55,7 @@ export function layer1Record({render, firstView, gold, wideText, spec}) {
 // A variant with measurement errors adds no failure evidence from its checks (a missing file is not a degradation).
 export function newFailures(orig, v) {
   if ((v.errors ?? []).length) return [`unmeasured: ${v.errors.join('; ')}`];
+  if ((orig.errors ?? []).length) return [`unmeasured original: ${orig.errors.join('; ')}`];
   const out = Object.keys(v.checks).filter((k) => orig.checks[k] && !v.checks[k]);
   for (const s of ['wide', 'narrow']) {
     const a = orig.widths[s].axeColorContrastNodes, b = v.widths[s].axeColorContrastNodes;

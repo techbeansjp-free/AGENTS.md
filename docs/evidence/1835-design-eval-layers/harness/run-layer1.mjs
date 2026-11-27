@@ -89,9 +89,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       variants: Object.fromEntries(made(p).filter((v) => v !== 'original').map((v) => [v, `${sel(p)}/${v}/index.html`]))})), null, 1));
     const fv = pages.flatMap((p) => made(p).map((v) => `mkdir -p /out/${tid(p, v)} && node /opt/fv/first-view.mjs /out/cases.json ${p.case} ${sel(p)}/${v}/index.html /opt/g/gold.json > /out/${tid(p, v)}/first-view.json || echo ${tid(p, v)} >> /out/failed.txt`)).join('; ');
     const t0 = Date.now();
+    fs.rmSync(path.join(out, 'layer1.json'), {force: true}); // never leave an older record behind a failed run
     if (!args.includes('--skip-render')) {
       fs.rmSync(path.join(out, 'failed.txt'), {force: true});
       docker(pagesDir, out, `node /opt/h/render.mjs /out/targets.json /out || echo render >> /out/failed.txt; ${fv}; node /opt/l/compare.mjs /out/cases.json /out/pairs.json > /out/compare.json || echo compare >> /out/failed.txt; true`);
+    }
+    {
       const failed = fs.existsSync(path.join(out, 'failed.txt')) ? fs.readFileSync(path.join(out, 'failed.txt'), 'utf8').split('\n').filter(Boolean) : [];
       if (failed.length) throw new Error(`layer 1 commands failed (not publishing layer1.json): ${failed.join(', ')}`);
     }

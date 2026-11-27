@@ -9,9 +9,9 @@ import zlib from 'node:zlib';
 import {spawnSync} from 'node:child_process';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS, pngChunks, PNG_KEEP, extractJson, readJson, parseScreen} from './eval-common.mjs';
 import {buildPackets} from './make-packets.mjs';
-import {ssrSource} from './ssr-source.mjs';
+import {rate, combine} from './ssr.mjs';
 import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex, checkImagesRead} from './run-eval.mjs';
-import {computeAll, decideEvaluator, missingByReason, excludeSkipped, collectJudgments, negationFailures, loadLayer1} from './aggregate.mjs';
+import {computeAll, decideEvaluator, missingByReason, excludeSkipped, collectJudgments, negationFailures, loadLayer1, ssrNegation} from './aggregate.mjs';
 import {newFailures} from './layer1.mjs';
 import {buildOwnerPage} from './owner-page.mjs';
 
@@ -294,20 +294,24 @@ test('aggregate: 不合格, 不採用 (minimum), 未判定 (missing, owner absen
   assert.equal(decideEvaluator({m: m(1), P: m(2), neg: {failures: 0, missing: 0, d: 1}}).result, '不採用');
 });
 
-test('ssr.py: the source recorded in SSR_SOURCE.md matches the run hash, and the formula on known vectors (no model)', () => {
-  const dir = tmp('asc1835-ssr-');
-  fs.writeFileSync(path.join(dir, 'ssr.py'), ssrSource());
+test('ssr: the formula on known vectors, and the recorded results/ssr.json recomputed from its similarities', () => {
   const e = (k) => Array.from({length: 6}, (_, i) => (i === k ? 1 : 0));
   const anchors = [[0, 1, 2, 3, 4].map(e), [0, 1, 2, 3, 4].map(e)];
-  fs.writeFileSync(path.join(dir, 'v.json'), JSON.stringify({responses: {a: [1, 2, 3, 4, 5, 0], flat: [0, 0, 0, 0, 0, 1], top: [0, 0, 0, 0, 1, 0]}, anchors}));
-  const r = spawnSync('python3', ['-I', path.join(dir, 'ssr.py'), 'formula', '--vectors', path.join(dir, 'v.json'), '--out', path.join(dir, 'o.json')], {encoding: 'utf8'});
-  assert.equal(r.status, 0, r.stderr);
-  const o = readJson(path.join(dir, 'o.json')).results;
+  const a = rate([1, 2, 3, 4, 5, 0], anchors), flat = rate([0, 0, 0, 0, 0, 1], anchors), top = rate([0, 0, 0, 0, 1, 0], anchors);
   // s_r = r/sqrt(55); p_r = (r-1)/10; E = sum r(r-1)/10 = 4
-  o.a.pmf.forEach((p, i) => assert.ok(Math.abs(p - i / 10) < 1e-12));
-  assert.ok(Math.abs(o.a.expected - 4) < 1e-12);
-  assert.equal(o.flat.degenerate, true); assert.ok(Math.abs(o.flat.expected - 3) < 1e-12);
-  assert.ok(Math.abs(o.top.expected - 5) < 1e-12);
+  a.pmf.forEach((p, i) => assert.ok(Math.abs(p - i / 10) < 1e-12));
+  assert.ok(Math.abs(a.expected - 4) < 1e-12);
+  assert.equal(flat.degenerate, true); assert.ok(Math.abs(flat.expected - 3) < 1e-12);
+  assert.ok(Math.abs(top.expected - 5) < 1e-12);
+  // the main run (ssr.py): every pmf and expected value follows from the recorded similarities by this formula
+  const rec = readJson(path.join(here, '..', 'results', 'ssr.json')).results;
+  assert.equal(Object.keys(rec).length, 96);
+  for (const [id, r] of Object.entries(rec)) {
+    const c = combine(r.sets.map((s) => s.similarities));
+    assert.ok(Math.abs(c.expected - r.expected) < 1e-9, id);
+    c.pmf.forEach((p, k) => assert.ok(Math.abs(p - r.pmf[k]) < 1e-9, id));
+    assert.equal(c.degenerate, !!r.degenerate, id);
+  }
 });
 
 test('owner page: 9 pairs, embedded images only, no condition names, key kept apart', () => {
@@ -334,6 +338,9 @@ test('codex: images-not-viewed from an image error or an answer that says the sc
   assert.equal(checkCodexImagesViewed({text: '保存中のボタンの状態は、画像からは確認できませんでした。'}), null);
   assert.equal(checkCodexImagesViewed({text: '画像を開けませんでした。'}), 'answer-says-not-seen');
   assert.equal(checkCodexImagesViewed({text: 'スクリーンショットを読めませんでした。'}), 'answer-says-not-seen');
+  // remarks about what a screenshot shows are not "not seen"
+  assert.equal(checkCodexImagesViewed({text: '画像から読み取れる範囲では、保存の失敗の表示は確認できない。'}), null);
+  assert.equal(checkCodexImagesViewed({text: '狭幅の画像では、詳細の開閉の状態が分からない。'}), null);
   const cfg = JSON.parse(fs.readFileSync(path.join(here, '..', 'config', 'eval.json'), 'utf8'));
   assert.ok(buildPrompt('P', cfg, {evaluator: 'codex'}).includes('読取りだけのcommand'));
   assert.ok(!buildPrompt('P', cfg, {evaluator: 'fable'}).includes('読取りだけのcommand'));
@@ -395,4 +402,7 @@ test('layer1: a variant with measurement errors is unknown in the aggregate and 
   const w = {checks: {a: true}, widths: {wide: {}, narrow: {}}, coverage: null};
   assert.deepEqual(newFailures(w, {checks: {a: false}, widths: {wide: {}, narrow: {}}, coverage: null, errors: ['x missing']}), ['unmeasured: x missing']);
   assert.deepEqual(newFailures(w, {checks: {a: false}, widths: {wide: {}, narrow: {}}, coverage: null, errors: []}), ['a']);
+  assert.deepEqual(newFailures({...w, errors: ['o missing']}, {checks: {a: false}, widths: {wide: {}, narrow: {}}, coverage: null, errors: []}), ['unmeasured original: o missing']);
+  // S's negation result counts planned pairs absent from ssr-negation.json as missing
+  assert.deepEqual(ssrNegation({failures: 0, pairs: [{id: 'n01'}]}, ['n01', 'n02']), {failures: 0, missing: 1, d: 2});
 });

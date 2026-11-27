@@ -25,7 +25,7 @@
 | `harness/eval-common.mjs` | 層2・層3の道具の共通部分（設定、seed付きの乱数、PNGのmetadataの除去、組の一覧） |
 | `harness/make-packets.mjs` | 評価者に渡す盲検の束と、対応表（key）を作る |
 | `harness/run-eval.mjs` | 評価者（Fable・Codex）の呼出し、台帳、予算の停止、`--dry-run`、予算の見込み（`plan`） |
-| `harness/SSR_SOURCE.md`・`harness/ssr-source.mjs` | SSR（講評→5段階の確率→期待値）と、否定の反例のSSRでの判定。repositoryは`.py`を置けないので、本番で実行した`ssr.py`の本文を記録し、`ssr-source.mjs`でsha256を確かめてscratchへ書き出す |
+| `harness/ssr.mjs` | SSRの式（講評と基準文の類似度→5段階の確率→期待値）。本番で実行した`ssr.py`（embeddingを含む）から式だけを移した。下の「SSR」 |
 | `harness/owner-page.mjs` | 層3でownerが比べる1枚のローカルHTMLと、その対応表 |
 | `harness/aggregate.mjs` | 計画6・7節の指標と採否 |
 | `harness/eval.test.mjs` | 上の道具の`node --test`の試験 |
@@ -224,7 +224,7 @@ ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --packets $O/packets --runs $
 ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --packets $O/packets --runs $O/runs --evaluator codex --skip-packets $O/skip.txt --lock $O/key --lock $O/owner
 # 7. SSRと集計
 node harness/aggregate.mjs critiques --runs $O/runs --out $O/critiques.jsonl
-node harness/ssr-source.mjs $V/ssr.py   # SSR_SOURCE.mdから書き出す（sha256を照合）
+# ssr.py はrepositoryに置かない（下の「SSR」）。Git historyから取り出し、sha256を照合してscratchで実行した
 $V/venv/bin/python -I $V/ssr.py score --anchors anchors.json --in $O/critiques.jsonl --cache-dir $V/cache --out $O/ssr.json
 $V/venv/bin/python -I $V/ssr.py negation --anchors anchors.json --pairs negation-pairs.json --cache-dir $V/cache --out $O/ssr-negation.json
 node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/result.json --layer1 $R/l1-<case>-<trial>/layer1.json ... \
@@ -247,7 +247,7 @@ node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/
 - F採点（`Fs`）と否定の反例（`Neg`）は、講評・文を依頼文に埋め込み、画面を渡さない。cwdは空のdirectoryである。否定の反例は、各回に20文（10対の両側）を1文ずつ採点する。
 - 上限（`config/eval.json`の`limits`）：方式ごとのturn・出力token・1回の予算・時間。講評は800字以内と依頼し、超えたら`overLength`を記録する（欠測にはしない）。
 - 台帳：`<runs>/ledger.jsonl`に、試みごとの費用・token・時間を追記する。Fableの合計（`--prior-ledger`の試行分を含む）が上限（`config/eval.json`の`capUsd`。本番は30 USD）に達したら止め、`stop`の行を書く。1回の予算は「残り」と方式の上限の小さい方なので、上限を大きくは超えない。Fableの費用が報告されなかった試みは、その回の予算の額で数える。
-- 回答は最後のJSONを読み、形が不正なら欠測（`invalid`、理由`invalid-answer`）として記録する。欠測の理由（`images-not-read`・`isolation-violation`・`invalid-answer`・`no-result-event`・`failed`・`missing-input`）は`status.json`の`missingReason`に残り、`aggregate.mjs decide`の結果の`missingByReason`が評価者ごとの理由別の件数を出す。再試行は既定で0回、`--retries 1`のときだけ1回まで行い、回数を`status.json`に残す。`status.json`のある呼出しは、再実行で呼ばない。
+- 回答は最後のJSONを読み、形が不正なら欠測（`invalid`、理由`invalid-answer`）として記録する。欠測の理由（`images-not-read`・`isolation-violation`・`invalid-answer`・`no-result-event`・`failed`・`missing-input`、Codexの`images-not-viewed`）は`status.json`の`missingReason`に残り、`aggregate.mjs decide`の結果の`missingByReason`が評価者ごとの理由別の件数を出す。再試行は既定で0回、`--retries 1`のときだけ1回まで行い、回数を`status.json`に残す。`status.json`のある呼出しは、再実行で呼ばない。
 - 有料の実行は`ASC1835_ALLOW_PAID=1`が無ければ拒否する。`--dry-run`はCLIを起動せず、同じcommand lineを記録し、CLIと同じ形式の偽の回答（seed付き。`--dry-invalid-every N`でN回ごとに不正な回答）で、読取り・台帳・予算の停止まで通す。dry-runの台帳と有料の台帳は混ぜられない。
 
 ### 基準文と否定の反例
@@ -256,7 +256,9 @@ node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/
 - `negation-pairs.json`は、3ケースの依頼の必須事項から、否定だけが違う10対を書いた（9・10は肯定側が否定の形）。
 - SSRの否定の反例は、モデルを呼ばずに実行できるので、道具の確認として1回実行した（2026-11-27、`multilingual-e5-large` snapshot `ac6781cd1cf88b8306a536d7c9d18a5bd57cc14b`、両側とも接頭辞`query: `）。失敗は0件だった（期待値は肯定側2.9〜4.1、否定側2.0〜2.3。対のcos類似度は0.948〜0.983）。この結果を見た後に、基準文と否定の文は変えていない。
 
-### SSR（`ssr.py`。本文は[SSR_SOURCE.md](harness/SSR_SOURCE.md)）
+### SSR（`ssr.py`と`harness/ssr.mjs`）
+
+このrepositoryは実装言語をTypeScript（`.ts`・`.mjs`）に集約し、`.py`を置かない（`scripts/check_source_quality.ts`、`development.json`の`auxiliaryLanguages.python`）。本番のembeddingは`fastembed`（Python）でしか動かせなかったので、本番で実行した`ssr.py`は、Git historyの`3d4c31f7:docs/evidence/1835-design-eval-layers/harness/ssr.py`（sha256 `af4d175da3c06b4514aa319d0f2910a08a55080d9b4908cf00e1c5d2e4af2855`）として参照するだけにし、repositoryからは実行しない。式は`harness/ssr.mjs`へ移し、試験は`results/ssr.json`の96件のpmfと期待値を、記録された類似度から計算し直して照合する（Pythonもembeddingも使わない）。embeddingの部分（類似度そのもの）は、この試験では確かめられない。`ssr.py`は`__file__`から`../config/eval.json`を読むので、取り出すときはこのdirectoryと同じ配置にする。
 
 基準文の組ごとに s_r=cos(講評, 基準文r)、p_r=(s_r−min s)/Σ(s_j−min s)、3組のpmfの平均から期待値Σr·p_rを出す。組の5つの類似度がすべて等しいときは一様分布にして`degenerate`を記録する。embeddingは`HF_HUB_OFFLINE=1`で、取得済みのfileだけを使う。e5の接頭辞は、対称な類似度の用途として講評・基準文とも`query: `にした（`config/eval.json`の`ssr.prefix`）。embeddingを読めなければ`coreFailed`を書き、Sはその評価者について未判定になる。
 
@@ -278,7 +280,7 @@ node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/
 - **Codexの読取りの範囲**：`codex exec -s read-only`は書込みだけを防ぎ、読取りを限定しない（[host-session](../../../skills/asc/references/host-session.md)）。#1815は`asc host-session`の実行ごとのpermission profileで読取りを限定した。この道具は、指定どおり`codex exec`を使い、keyとownerの対応表を`--lock`（mode 000）で閉じる。束の他の回・他の束は読める状態のままである。Codexの出力の長さとturnには、CLIの上限の指定が無く、時間の上限だけを掛ける。
 - **Fableの文脈**：`--restricted`でも、user単位の`CLAUDE.md`やmemoryが読み込まれるかは確かめていない。束はrepositoryの外（scratch）にあるので、repositoryの`CLAUDE.md`は祖先に無い。
 - **Codexのmodel**：`gpt-6.2-sol`は#1815段階3でownerが答えたもので、#1835での使用は確かめていない。
-- **Fableで画像を見たか**：`--output-format stream-json --verbose`（導入済みclaude 2.1.323の`--help`で確認）で、assistantのeventのtool_use（`Read`の`input.file_path`）と、最後のresult event（`result`・`total_cost_usd`・`usage`・`duration_ms`）を記録から取り出す。その呼出しの束のPNGのうち、Readされなかったものが1つでもあれば欠測（理由`images-not-read`）。result eventが無ければ欠測（`no-result-event`）で、費用は1回の予算の額で数える。**実機のstream-jsonの出力は、まだ見ていない**（有料の呼出しをしていない）。eventの形（`type: assistant`の`message.content[]`のtool_use、`type: result`）は、既知のSDKの形に合わせた偽の出力で試験している。Readのpathが相対・symlink経由の場合は、cwdとrealpathで解決して照合する。Readの結果が実際に画像として渡ったか（tool_resultの内容）までは見ない。**本番の後：** 実機のstream-jsonはこの形で読め、Fableの184回はすべて有効で、渡した画像をすべてReadしていた。
+- **Fableで画像を見たか**（本番の後に、`tool_result`が誤りのReadは読んだと数えないよう直した。中身が画像かまでは見ない。本番の184回では誤りの`tool_result`が0件）：`--output-format stream-json --verbose`（導入済みclaude 2.1.323の`--help`で確認）で、assistantのeventのtool_use（`Read`の`input.file_path`）と、最後のresult event（`result`・`total_cost_usd`・`usage`・`duration_ms`）を記録から取り出す。その呼出しの束のPNGのうち、Readされなかったものが1つでもあれば欠測（理由`images-not-read`）。result eventが無ければ欠測（`no-result-event`）で、費用は1回の予算の額で数える。**実機のstream-jsonの出力は、まだ見ていない**（有料の呼出しをしていない）。eventの形（`type: assistant`の`message.content[]`のtool_use、`type: result`）は、既知のSDKの形に合わせた偽の出力で試験している。Readのpathが相対・symlink経由の場合は、cwdとrealpathで解決して照合する。Readの結果が実際に画像として渡ったか（tool_resultの内容）までは見ない。**本番の後：** 実機のstream-jsonはこの形で読め、Fableの184回はすべて有効で、渡した画像をすべてReadしていた。
 - **Codexの隔離の判定**：`codex exec --json`（導入済みcodex-cli 0.171.0）のitem.completedのうち`command_execution`の`item.command`（shellの文字列）を取り、文字列を空白・引用符・記号で分けて、絶対path・`~`・`..`を含むものを束のdirectory（`-C`）に対して解決し、外に出れば欠測（理由`isolation-violation`）とする。`/bin`・`/usr/bin`等の実行file・`/dev/null`は除く。`$VAR`・バッククォート・`cd`・`eval`を含む命令、`command_execution`以外で既知でない種類のitem、event自体が無い呼出しは「未確認」（`status.json`の`isolation: unconfirmed`）として記録し、欠測にはしない（集計の`isolationUnconfirmed`）。**実機のeventの形（`command_execution`の項目名`command`、画像を見るtoolのitem種別）は未確認**である。文字列の分解は簡易で、`sed '/x/d'`のような`/`で始まる引数は束の外のpathと誤って判定し、不要な欠測を出し得る（その場合は`attempt-*.stdout`で確かめる）。**本番の後：** 有効な3回目では、Pの全呼出しに`command_execution`のitemがあり、隔離の違反は0件、判定できなかった呼出しは1件だった。画像を見るtoolのitem種別は確かめていない（画像の読取りは、stderrと回答の文で判定した。[EVAL_PLAN.md](EVAL_PLAN.md)5節）。
 - **束の大きさ**：実際の画面（3ケース×A-r1・D-r1・E-r1）で作ると約110MBである。
 
@@ -337,7 +339,7 @@ Sの否定の反例はembeddingだけで計算するので、評価者に依ら�
 | Codex | 否定の反例 | 40 | — | 5.3分 | 入力815,942（うちcache読込み705,536）・出力3,351 |
 
 - Fableの合計は本番20.906 USD（`result.json`）・試行1.317 USD（scratchの`trial/ledger.jsonl`、4回）で22.22 USD（上限30 USD）。予算での停止は無い。
-- `result.json`の`costs.codex`は、無効にした1回目（画像を開けなかった）と1回目（P 48・F講評 48・F採点 46回）と2回目（途中で止めた回。台帳にはPの2回）を含む値で、P・F講評・F採点で計288回・入力17,829,541 token・約82.7分である。
+- `result.json`の`costs.codex`は、無効にした1回目（画像を開けなかった。P 48・F講評 48・F採点 46回）、2回目（途中で止めた回。台帳にはPの2回）、有効な3回目（144回）を合わせた値で、P・F講評・F採点で計288回・入力17,829,541 token・約82.7分である。
 - 費用の条件（Fableの、Pの2倍以内）：Fは0.99倍、Sは0.76倍（Fの講評を含む）で満たすが、上の最低の基準で不採用になる。
 - Codexの否定の反例（40回）は1回目の結果で、古い冒頭文で動いた（[EVAL_PLAN.md](EVAL_PLAN.md)5節）。
 - 欠測は両評価者とも0件（各184回が有効）。Codexの隔離を判定できなかった呼出しが1件ある（欠測にしない規則）。
@@ -352,9 +354,9 @@ Sの否定の反例はembeddingだけで計算するので、評価者に依ら�
 - 言えない：誤検出の差が方式の能力の差だけによること。Pの陰性対照は、pixelが同じ2画面を並べて見せるので、画面を1つずつ見るF・Sより易しい課題である。
 - 言えない：Pが「ASCとしての基準」と一致すること（層3の一致は Fable 9/12・Codex 8/12 で、組は6組だけ）。良い案どうしの優劣の判定にPを使えるかは、組を増やして確かめる必要がある。
 
-見直しの条件（次のどれかで、続けるかを見直す）：
+見直しの条件（次のどれかに当たれば、続けるかをownerが決め、その評価のIssueに記録する）：
 
 1. 層2で、全方式・全評価者が弱い劣化まで全件を見分け（天井）、差が出なくなったとき。劣化の種類と強さを作り直す。
-2. 評価者のmodel・版・起動方法が変わったとき。層2の校正をやり直してから使う。
-3. 層3の組を増やしても、Pとownerの一致が偶然（同等を除いて5割）と区別できないとき。Pを良い案どうしの比較に使わない。
-4. Fableの費用が、この規模（本番約21 USD）を大きく超える計画になったとき。
+2. 評価者のmodel・版・起動方法、または層1の道具（Docker image・`render.mjs`・`first-view.mjs`）や劣化の定義が変わったとき。層1・層2の校正をやり直してから使う。
+3. 層3：今の6組（9/12・8/12、2回は独立でない）では、Pとownerの一致を偶然と区別できない。それまでは、Pを良い案どうしの比較に使わない。組を増やすときは、組の数と判定の方法（例：組ごとの多数で、片側の二項検定）を実行の前に計画へ固定する。
+4. Fableの費用の見込みが、ownerの決めた上限（今回は30 USD）を超えるとき。

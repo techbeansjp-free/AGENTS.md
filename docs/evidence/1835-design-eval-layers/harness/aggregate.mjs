@@ -1,6 +1,6 @@
 // Metrics and decisions of EVAL_PLAN.md sections 6 and 7, matched through the key after scoring.
 // Usage:
-//   node harness/aggregate.mjs critiques --runs <runs> --out <texts.jsonl>     (input of ssr.py score; see SSR_SOURCE.md)
+//   node harness/aggregate.mjs critiques --runs <runs> --out <texts.jsonl>     (input of ssr.py score; see README "SSR")
 //   node harness/aggregate.mjs decide --key <key.json> --runs <runs> --out <result.json>
 //        [--layer1 <layer1.json>]... [--owner <owner-answers.json> --owner-key <owner-key.json>]
 //        [--ssr <ssr.json>] [--ssr-negation <ssr-negation.json>] [--skip-packets <skip.txt>]
@@ -125,6 +125,11 @@ export function interEvaluator({items, J, rounds, method}) {
   return frac(xs.filter(([a, b]) => a === b).length, xs.length);
 }
 
+export function ssrNegation(ssrNeg, negIds = null) {
+  const have = new Set(ssrNeg.pairs.map((p) => p.id));
+  const missing = negIds ? negIds.filter((id) => !have.has(id)).length : 0;
+  return {failures: ssrNeg.failures, missing, d: negIds ? negIds.length : ssrNeg.pairs.length};
+}
 export function negationFailures(fNegRounds) {
   let fail = 0, missing = 0, d = 0;
   for (const r of Object.values(fNegRounds ?? {})) for (const v of Object.values(r)) { d++; if (v.positive === null || v.negative === null) missing++; else if (v.negative >= v.positive) fail++; }
@@ -178,7 +183,8 @@ export function conclude({perEvaluator, cost, ceiling, ownerPresent}) {
   return {conclusion: '未判定', reasons};
 }
 
-export function computeAll({cfg, key, J, fNeg, layer1 = {}, owner = null, ssrNeg = null, ssrCoreFailed = false, costs = {}, budgetStopped = false}) {
+// negIds (optional): the planned negation pair ids; S's negation result then counts planned pairs absent from ssrNeg as missing.
+export function computeAll({cfg, key, J, fNeg, layer1 = {}, owner = null, ssrNeg = null, ssrCoreFailed = false, costs = {}, budgetStopped = false, negIds = null}) {
   const und = new Set(key.l2Undetermined ?? []);
   const items = key.items.filter((i) => !i.excluded && !(i.layer === 2 && und.has(i.case)));
   const rounds = key.rounds;
@@ -188,7 +194,7 @@ export function computeAll({cfg, key, J, fNeg, layer1 = {}, owner = null, ssrNeg
     for (const m of ['D', 'P', 'F', 'S']) metrics[e][m] = {name: m, ...methodMetrics({items, J: J[e]?.[m] ?? {}, rounds, layer1, owner, method: m})};
   }
   const negation = {F: Object.fromEntries(EVALUATORS.map((e) => [e, negationFailures(fNeg?.[e])])),
-    S: ssrNeg && !ssrNeg.coreFailed ? {failures: ssrNeg.failures, missing: 0, d: ssrNeg.pairs.length} : null};
+    S: ssrNeg && !ssrNeg.coreFailed ? ssrNegation(ssrNeg, negIds) : null};
   const ceiling = EVALUATORS.filter((e) => ['P', 'F', 'S'].every((m) => { const w = metrics[e][m].weakPassedL1; return w.d > 0 && w.n === w.d; }));
   const decisions = {};
   for (const m of ['F', 'S']) {
@@ -300,7 +306,7 @@ function main() {
   const ledger = fs.existsSync(ledgerFile) ? fs.readFileSync(ledgerFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
   const l1 = loadLayer1(all('--layer1').map((f) => path.resolve(f)));
   const owner = opt('--owner') ? loadOwner(path.resolve(opt('--owner')), path.resolve(opt('--owner-key'))) : null;
-  const res = computeAll({cfg, key, J, fNeg, layer1: l1.map, owner, ssrNeg, ssrCoreFailed: !!ssr?.coreFailed || !ssr, costs: costsFromLedger(ledger), budgetStopped: ledger.some((l) => l.type === 'stop')});
+  const res = computeAll({cfg, key, J, fNeg, layer1: l1.map, owner, ssrNeg, ssrCoreFailed: !!ssr?.coreFailed || !ssr, costs: costsFromLedger(ledger), budgetStopped: ledger.some((l) => l.type === 'stop'), negIds});
   res.layer1 = layer1Summary(l1);
   res.missingByReason = missingByReason(runs);
   res.dryRun = ledger.find((l) => l.type === 'header')?.dryRun ?? null;
