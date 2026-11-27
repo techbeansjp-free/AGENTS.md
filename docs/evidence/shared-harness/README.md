@@ -49,7 +49,7 @@
 node --test docs/evidence/shared-harness/test/harness.test.mjs
 ```
 
-試験用の設定（`test/config/`：#1820の段階2の計画をこの形にしたもの。有料の実行には使わない）と、#1823の設定を使う。#1820の段階2の試験を移したものに、設定の解決、仮の値の拒否、merge場面の目印と採点、条件ごとのreference、#1823の規則、生のtraceを公開しない`collect`と作り直しの照合の試験を加えた。`test/config/results/probe-approval.json`がcommitされていないと、承認の試験は失敗する。
+試験用の設定（`test/config/`：#1820の段階2の計画をこの形にしたもの。有料の実行には使わない）と、#1823の設定を使う。#1820の段階2の試験を移したものに、設定の解決、仮の値の拒否、merge場面の目印と採点、条件ごとのreference、#1823の規則、生のtraceを公開しない`collect`と作り直しの照合の試験を加えた。`test/config/results/probe-approval.json`がcommitされていないと、承認の試験は失敗する。#1823の段階2で、判定の規則の許容（`conditions.json`の`rule.tolerance`：`bodyRead`・`applied`・`perScenarioApplied`・`overapplication`、試行の数。`score.mjs`の`toleranceOf`。無ければ0で、それまでの判定は変わらない。`overapplication`が無ければ`negSlack`を使う）と、その試験・段階2の設定の試験を加えた（31件）。
 
 ## 大きさ（2026-11-26）
 

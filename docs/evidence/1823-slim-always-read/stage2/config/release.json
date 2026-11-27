@@ -1,0 +1,29 @@
+{
+ "schema": "asc-eval-release/v1",
+ "note": "The tarball each condition installs (conditions.json cells[c].release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition.",
+ "B": {
+  "kind": "release",
+  "tag": "v0.5.113",
+  "targetCommit": "72d6524c6499ed00ada47679d88afa06529324cd",
+  "asset": "agent-skill-chain-0.5.113.tgz",
+  "assetSha256": "750e0e7336c442908ca1cc3a133b6ecec3a4197440be5ff9ce1e8cef17fe2fe7",
+  "note": "The latest release (main 72d6524c, after the stage-1 record PR #1824). Kept under <scratch>/rel1823s2/release/ with its SHA256SUMS and source-commit.txt: SHA256SUMS verified, and the sha256 equals the GitHub asset digest (checked 2026-11-27). Its skills/asc/SKILL.md is byte-identical to main at 72d6524c and to v0.5.112 of stage 1."
+ },
+ "S": {
+  "kind": "candidate",
+  "asset": "agent-skill-chain-0.5.113.tgz",
+  "assetSha256": "e9e577a67bf6076e27483c073b3ea83fb43238e0f723e614cad06b301ad51487",
+  "packedFromCommit": "1704d347738499138001a43f3e257fd85e4fe7b1",
+  "packCommand": "node scripts/pack-candidate.mjs <scratch>/rel1823s2/candidate/ --version=0.5.113",
+  "baseRelease": "B",
+  "differsFromReleaseOnly": [
+   "release-identity.json",
+   "skills/asc/SKILL.md",
+   "skills/asc/references/controller.md",
+   "skills/asc/references/coordination.md",
+   "skills/asc/references/review.md",
+   "skills/asc/references/workspace.md"
+  ],
+  "note": "The S2 candidate (stage2/rule-move-map.md): merge-related and decision-ownership rules unchanged, non-merge duplicates and wording shortened, SKILL.md 32,764 -> 30,687 byte. Packed twice into new directories with the same sha256; unpacked, it differs from the B asset only in the files listed (checked 2026-11-27)."
+ }
+}

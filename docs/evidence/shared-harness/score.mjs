@@ -229,27 +229,45 @@ export function summarize(spec, runs, condition, {only = null} = {}) {
     costUsd: Number(sum(all, (r) => r.costUsd).toFixed(4)), turns: sum(ok, (r) => r.turns), durationSec: Math.round(sum(ok, (r) => r.durationMs) / 1000)};
 }
 
+// The tolerance of the rule (conditions.json rule.tolerance), in trials: the candidate may be that many trials below the
+// baseline in bodyRead and applied (over the positives), in applied per scenario case (perScenarioApplied), and that many
+// above it in overapplication (overapplication; when absent, negSlack). Every field defaults to 0, so a rule without
+// tolerance keeps the stage-1 comparisons. Shares are compared by cross-multiplication: c/pc >= (b - tol)/pb.
+export const TOLERANCE_KEYS = ['bodyRead', 'applied', 'perScenarioApplied', 'overapplication'];
+export function toleranceOf(rule = {}) {
+  const t = rule.tolerance ?? {};
+  if (typeof t !== 'object' || Array.isArray(t)) throw new Error('rule.tolerance must be an object');
+  for (const [k, v] of Object.entries(t)) {
+    if (!TOLERANCE_KEYS.includes(k)) throw new Error(`rule.tolerance has an unknown field ${k}`);
+    if (!Number.isInteger(v) || v < 0) throw new Error(`rule.tolerance.${k} must be a non-negative integer`);
+  }
+  return Object.fromEntries(TOLERANCE_KEYS.map((k) => [k, t[k] ?? 0]));
+}
+// candidate share (cn/cd) against the baseline share (bn/bd) lowered by tol trials of the baseline: ge or gt.
+const shareCmp = (cn, cd, bn, bd, tol, op) => (cd > 0 && bd > 0 ? (op === 'gt' ? cn * bd > (bn - tol) * cd : cn * bd >= (bn - tol) * cd) : false);
+const minus = (tol) => (tol ? ` - ${tol}` : '');
+
 // The quality checks of the rule (conditions.json rule): (a) body share >= minBodyRate and against the baseline
-// (bodyVsBaseline gt: higher, ge: not lower); (b) applied share not lower; (c) overapplication count at most baseline +
-// negSlack. Shares, not counts, so a condition with fewer valid trials is compared fairly.
-export function ruleChecks(baseline, candidate, {minBodyRate = 0.8, negSlack = 1, bodyVsBaseline = 'gt'} = {}) {
+// (bodyVsBaseline gt: higher, ge: not lower), less tolerance.bodyRead trials; (b) applied share not lower, less
+// tolerance.applied trials; (c) overapplication count at most baseline + tolerance.overapplication (else negSlack).
+// Shares, not counts, so a condition with fewer valid trials is compared fairly.
+export function ruleChecks(baseline, candidate, {minBodyRate = 0.8, negSlack = 1, bodyVsBaseline = 'gt', tolerance = {}} = {}) {
+  const tol = {bodyRead: 0, applied: 0, ...tolerance};
   const rate = (s, k) => (s.positives ? s[k] / s.positives : null);
-  const cmp = (a, b, op) => a !== null && b !== null && (op === 'gt' ? a > b : a >= b);
+  const slack = tolerance.overapplication ?? negSlack;
   const c = {
     bodyReadLevel: {value: `${candidate.bodyRead}/${candidate.positives} >= ${minBodyRate}`, pass: rate(candidate, 'bodyRead') !== null && rate(candidate, 'bodyRead') >= minBodyRate},
-    [bodyVsBaseline === 'gt' ? 'bodyReadAboveBaseline' : 'bodyReadNotLower']: {value: `${candidate.bodyRead}/${candidate.positives} vs ${baseline.bodyRead}/${baseline.positives}`, pass: cmp(rate(candidate, 'bodyRead'), rate(baseline, 'bodyRead'), bodyVsBaseline)},
-    appliedNotLower: {value: `${candidate.applied}/${candidate.positives} vs ${baseline.applied}/${baseline.positives}`, pass: cmp(rate(candidate, 'applied'), rate(baseline, 'applied'), 'ge')},
+    [bodyVsBaseline === 'gt' ? 'bodyReadAboveBaseline' : 'bodyReadNotLower']: {value: `${candidate.bodyRead}/${candidate.positives} vs ${baseline.bodyRead}/${baseline.positives}${minus(tol.bodyRead)}`, pass: shareCmp(candidate.bodyRead, candidate.positives, baseline.bodyRead, baseline.positives, tol.bodyRead, bodyVsBaseline)},
+    appliedNotLower: {value: `${candidate.applied}/${candidate.positives} vs ${baseline.applied}/${baseline.positives}${minus(tol.applied)}`, pass: shareCmp(candidate.applied, candidate.positives, baseline.applied, baseline.positives, tol.applied, 'ge')},
   };
-  if (baseline.negatives !== undefined && candidate.negatives) c.overapplication = {value: `${candidate.overapplication}/${candidate.negatives} vs ${baseline.overapplication}/${baseline.negatives} + ${negSlack}`, pass: candidate.overapplication <= baseline.overapplication + negSlack};
+  if (baseline.negatives !== undefined && candidate.negatives) c.overapplication = {value: `${candidate.overapplication}/${candidate.negatives} vs ${baseline.overapplication}/${baseline.negatives} + ${slack}`, pass: candidate.overapplication <= baseline.overapplication + slack};
   return c;
 }
 
-// Per case (the scenario kinds): applied share of the candidate not lower than the baseline's, each case on its own.
-export function perCaseAppliedChecks(perCase) {
-  return Object.fromEntries(Object.entries(perCase).map(([id, [b, c]]) => {
-    const rb = b.positives ? b.applied / b.positives : null, rc = c.positives ? c.applied / c.positives : null;
-    return [id, {value: `${c.applied}/${c.positives} vs ${b.applied}/${b.positives}`, pass: rb !== null && rc !== null && rc >= rb}];
-  }));
+// Per case (the scenario kinds): applied share of the candidate not lower than the baseline's, less tol trials, each
+// case on its own.
+export function perCaseAppliedChecks(perCase, tol = 0) {
+  return Object.fromEntries(Object.entries(perCase).map(([id, [b, c]]) => [id, {value: `${c.applied}/${c.positives} vs ${b.applied}/${b.positives}${minus(tol)}`, pass: shareCmp(c.applied, c.positives, b.applied, b.positives, tol, 'ge')}]));
 }
 
 // Efficiency on the common kinds: each per-trial mean of the candidate not higher than the baseline's.
@@ -260,7 +278,7 @@ export function efficiencyChecks(b, c, metrics) {
 // The decision. Not judged (rule of #1817): a run neither complete nor stopped at the cap, a condition without a valid
 // positive or negative trial, a planned case without a valid trial, a missing mandatory replacement, failures above
 // maxFailureRate of a condition's counted trials. The subsets are reported, not used, unless the rule names them
-// (perCaseKinds, efficiency).
+// (perCaseKinds, efficiency). rule.tolerance (toleranceOf) lowers the baseline in the checks by whole trials.
 export function verdictOf(baseline, candidate, {completion = null, subsets = {}, perCase = null, efficiency = null, rule = {}} = {}) {
   const maxFailureRate = rule.maxFailureRate ?? 0.1;
   const reasons = [];
@@ -272,9 +290,10 @@ export function verdictOf(baseline, candidate, {completion = null, subsets = {},
     if ((s.casesWithoutValidTrial ?? []).length) reasons.push(`${s.condition}: no valid trial for ${s.casesWithoutValidTrial.join(',')}`);
     if (s.replacementsMissing) reasons.push(`${s.condition}: ${s.replacementsMissing} failed trial(s) without the mandatory replacement`);
   }
-  const opts = {minBodyRate: rule.minBodyRate ?? 0.8, negSlack: rule.negSlack ?? 1, bodyVsBaseline: rule.bodyVsBaseline ?? 'gt'};
+  const tolerance = toleranceOf(rule);
+  const opts = {minBodyRate: rule.minBodyRate ?? 0.8, negSlack: rule.negSlack ?? 1, bodyVsBaseline: rule.bodyVsBaseline ?? 'gt', tolerance: rule.tolerance ?? {}};
   const separate = Object.fromEntries(Object.entries(subsets).map(([name, [b, c]]) => [name, {[b.condition]: pick(b), [c.condition]: pick(c), checks: ruleChecks(b, c, opts)}]));
-  const perCaseChecks = perCase ? perCaseAppliedChecks(perCase) : null;
+  const perCaseChecks = perCase ? perCaseAppliedChecks(perCase, tolerance.perScenarioApplied) : null;
   const efficiencyResult = efficiency ? {kinds: efficiency.kinds, [efficiency.b.condition]: efficiency.b.perTrial, [efficiency.c.condition]: efficiency.c.perTrial, checks: efficiencyChecks(efficiency.b, efficiency.c, efficiency.metrics)} : null;
   if (reasons.length) return {verdict: 'not-judged', reason: reasons.join('; '), completion, separate, perCase: perCaseChecks, efficiency: efficiencyResult};
   const checks = ruleChecks(baseline, candidate, opts);

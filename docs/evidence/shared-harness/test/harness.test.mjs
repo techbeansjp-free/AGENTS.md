@@ -636,3 +636,66 @@ test('#1823 dry-run helpers: case needs are checked on the built fixture sources
   assert.equal(writeSources(d, 'MA', C23).includes('.mergify.yml'), true);
   assert.deepEqual(needsProblems(d, k23('m-draft')), []);
 });
+
+// #1823 stage 2 (S2): the same 22 cases with no reference for the scenarios, and the rule with a tolerance in trials.
+const C1823S2 = path.join(EVROOT, '1823-slim-always-read/stage2/config');
+const readS2 = (f) => JSON.parse(fs.readFileSync(path.join(C1823S2, f), 'utf8'));
+const {toleranceOf, perCaseAppliedChecks} = await import('../score.mjs');
+
+test('#1823 stage-2 config: the stage-1 cases and order unchanged but the scenario references, both conditions pinned', () => {
+  const [c2, s2, o2, r2] = ['conditions.json', 'cases.json', 'run-order.json', 'release.json'].map(readS2);
+  const strip = (s) => s.cases.map((k) => Object.fromEntries(Object.entries(k).filter(([f]) => f !== 'references' && f !== 'referencesByCondition')));
+  assert.deepEqual(strip(s2), strip(SPEC23));
+  for (const c of s2.cases.filter((k) => k.kind === 'scenario')) { assert.deepEqual(referencesFor(c, 'B'), []); assert.deepEqual(referencesFor(c, 'S'), []); }
+  for (const c of s2.cases.filter((k) => k.kind !== 'scenario')) assert.deepEqual(c.references, k23(c.id).references);
+  assert.deepEqual(o2, ORDER23);
+  assert.deepEqual(orderProblems(o2, s2, c2), []);
+  assert.equal(plannedTrials(o2, c2.runs).length, 176);
+  assert.deepEqual(Object.keys(c2.cells), ['B', 'S']);
+  assert.equal(c2.budget.ownerCapUsd, 40); assert.equal(c2.budget.priorSpend, undefined);
+  for (const c of ['B', 'S']) assert.match(r2[c].assetSha256, /^[0-9a-f]{64}$/);
+  assert.equal(r2.B.tag, 'v0.5.113'); assert.match(r2.S.packedFromCommit, /^[0-9a-f]{40}$/);
+  assert.deepEqual(toleranceOf(c2.rule), {bodyRead: 2, applied: 2, perScenarioApplied: 1, overapplication: 1});
+  assert.deepEqual(c2.rule.efficiency.kinds.sort(), ['asc', 'design', 'negative', 'purpose', 'scenario']);
+});
+
+test('rule tolerance: absent is 0 (stage-1 checks unchanged); invalid fields are refused', () => {
+  assert.deepEqual(toleranceOf({}), {bodyRead: 0, applied: 0, perScenarioApplied: 0, overapplication: 0});
+  assert.deepEqual(toleranceOf(C23.rule), {bodyRead: 0, applied: 0, perScenarioApplied: 0, overapplication: 0});
+  for (const t of [{bodyread: 1}, {applied: -1}, {applied: 1.5}, {applied: '2'}, [1]]) assert.throws(() => toleranceOf({tolerance: t}), /rule\.tolerance/);
+  // Stage 1 (no tolerance): its published counts give the same checks as before.
+  const B = sum('B', {positives: 76, bodyRead: 75, applied: 69}), S = sum('S', {positives: 76, bodyRead: 74, applied: 63});
+  const r = verdictOf(B, S, {completion: done, rule: C23.rule});
+  assert.equal(r.checks.bodyReadNotLower.pass, false); assert.equal(r.checks.appliedNotLower.pass, false);
+  assert.equal(r.checks.bodyReadNotLower.value, '74/76 vs 75/76');
+  assert.equal(perCaseAppliedChecks({'m-revoked': [sum('B', {positives: 4, applied: 3}), sum('S', {positives: 4, applied: 2})]})['m-revoked'].pass, false);
+});
+
+test('#1823 stage-2 rule: B - 2 in body and applied, B - 1 per scenario, overapplication B + 1, efficiency over all kinds', () => {
+  const rule = readS2('conditions.json').rule;
+  const B = sum('B', {positives: 76, bodyRead: 75, applied: 69, overapplication: 0});
+  const S = (o) => sum('S', {positives: 76, bodyRead: 73, applied: 67, overapplication: 1, ...o});
+  const sc = (b, c) => [sum('B', {positives: 4, applied: b}), sum('S', {positives: 4, applied: c})];
+  const eff = (b, c) => ({b: {condition: 'B', perTrial: b}, c: {condition: 'S', perTrial: c}, kinds: rule.efficiency.kinds, metrics: rule.efficiency.metrics});
+  const pt = (x) => ({ascBytesRead: x, inputTokens: x, durationMs: x});
+  const run = (s, perCase = {'m-revoked': sc(3, 2)}, e = eff(pt(10), pt(10))) => verdictOf(B, s, {completion: done, rule, perCase, efficiency: e});
+  const ok = run(S());
+  assert.equal(ok.verdict, 'adoption-candidate', JSON.stringify(ok.checks));
+  assert.equal(ok.checks.bodyReadNotLower.value, '73/76 vs 75/76 - 2');
+  assert.equal(ok.checks.overapplication.value, '1/12 vs 0/12 + 1');
+  assert.equal(ok.perCase['m-revoked'].value, '2/4 vs 3/4 - 1');
+  assert.equal(run(S({bodyRead: 72})).checks.bodyReadNotLower.pass, false, 'B - 3');
+  assert.equal(run(S({applied: 66})).checks.appliedNotLower.pass, false, 'B - 3');
+  assert.equal(run(S({overapplication: 2})).checks.overapplication.pass, false, 'B + 2');
+  assert.equal(run(S(), {'m-revoked': sc(3, 1)}).verdict, 'not-a-candidate', 'B - 2 in a scenario');
+  assert.equal(run(S(), {'m-release': sc(4, 3)}).verdict, 'adoption-candidate');
+  assert.equal(run(S(), undefined, eff(pt(10), {...pt(10), durationMs: 11})).verdict, 'not-a-candidate', 'no tolerance in efficiency');
+  // Shares when the valid trials differ: 72/75 against (75 - 2)/76.
+  assert.equal(run(S({positives: 75, bodyRead: 72})).checks.bodyReadNotLower.pass, false);
+  assert.equal(run(S({positives: 75, bodyRead: 73})).checks.bodyReadNotLower.pass, true);
+  // No absolute body floor in stage 2 (minBodyRate 0).
+  assert.equal(run(S()).checks.bodyReadLevel.pass, true);
+  // A tolerance without overapplication keeps negSlack.
+  assert.equal(verdictOf(B, S({overapplication: 1}), {completion: done, rule: {bodyVsBaseline: 'ge', negSlack: 1, tolerance: {applied: 2}}}).checks.overapplication.pass, true);
+  assert.equal(verdictOf(B, S({overapplication: 1}), {completion: done, rule: {bodyVsBaseline: 'ge', negSlack: 1, tolerance: {overapplication: 0}}}).checks.overapplication.pass, false);
+});
