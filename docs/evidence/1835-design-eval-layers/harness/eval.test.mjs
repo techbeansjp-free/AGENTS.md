@@ -204,7 +204,9 @@ test('run-eval trace checks: all images read / one unread / a path outside the p
 
 test('run-eval plan: the reduction order D -> contrast-strong -> stop', () => {
   const index = readJson(path.join(pkRoot, 'index.json')), negPairs = readJson(path.join(here, '..', 'negation-pairs.json'));
-  const p = (perCall) => budgetPlan({index, key, perCall, cfg, negPairs});
+  // The thresholds below assume a projection line of 18 USD (the original plan), independent of config/eval.json.
+  const cfg18 = {...cfg, budget: {...cfg.budget, projectionLimitUsd: 18}};
+  const p = (perCall) => budgetPlan({index, key, perCall, cfg: cfg18, negPairs});
   assert.equal(p({D: 0.1, P: 0.05, Fc: 0.05, Fs: 0.01, Neg: 0.01}).decision, 'all');
   assert.equal(p({D: 2, P: 0.1, Fc: 0.1, Fs: 0.02, Neg: 0.02}).decision, 'without D');
   const c = p({D: 2, P: 0.15, Fc: 0.14, Fs: 0.03, Neg: 0.02});
