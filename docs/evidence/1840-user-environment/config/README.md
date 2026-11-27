@@ -149,3 +149,11 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1840/runs --ledger $LEDGE
 - 行を除く対象は雛形だけで、Skillの文書（`skills/warranty-scope/SKILL.md`、`references/check-items.md`）は含まない。Skillの文をそのまま写した回答は、w-1・w-3の目印に当たりうる。Skillを読んで中身を出すこと自体は測りたい効果に近いが、具体化していない回答も通る可能性がある。次の設定では`markerBase`にSkillのfileを加える。
 - collectの時点で、`work/`のHEADが`meta.sampleHead`と同じかは確かめていない（moduleを固定しているため、次の版で塞ぐ）。
 - 雛形から作った正しい書き方の回答は、校正に入っていない（校正の書いたfileの形は#1828の回答から作った）。
+
+### 隔離の確認の経過（2026-11-28）
+
+- ownerの承認は[#1840のcomment](https://github.com/techbeansjp-free/AGENTS.md/issues/1840#issuecomment-7222968791)。
+- 1回目（R・C）：統括が`<repo-root>`に本体のcheckoutを渡したため、不合格になった。正しくはこのworktreeで、`run-trial.mjs`と照合が使うrepositoryと同じ。試行からの書込みは拒否されていた。
+- 2回目（R・C、規則で許される1回の再実行）：Cは合格した。Rは、隔離の項目はすべて合格したが、説明の原文の項目で不合格になった。Rは1〜5の回答を操作の前のmessageに書いていたが、`probe-check.mjs`は最後のresultだけを照合していた。
+- `probe-check.mjs`を直した（`5c5d7008`、`93b200e8`）。すべてのassistantの本文で照合し、DESC・GITの行は最後に一致した行を使う。新しいContextのレビューでHigh・Mediumはなかった。`refix`で固定に加えた（固定の2件目、commit `93b200e8`）。同じ記録を照合し直し、R・Cとも合格した。
+- 限界：測定の採点（`score.mjs`）は、最後のresultだけを回答として見る。固定の対象なので、この測定では変えない。回答が複数のmessageに分かれた試行の数は、結果で別に報告する。
