@@ -86,7 +86,7 @@ harnessの変更は最小で、記録の置き場所を選ぶ`harness/results-di
 
 候補の文と入口の文は、これまでと同じく、packした後に取り消すcommitを続けた（配布物はmainのまま。採るのは判定の後）。harnessは、SKILL.mdがBと違ってよいように`release.json`の`S.differsOnly`と`installedReferences`（`.agent-skill-chain/skills/`と`.agent-skill-chain/managed-runtime/skills/`の両方の`asc/SKILL.md`を加えた）を更新しただけで、コードは変えていない。`run-trial.mjs`は導入後に`installedReferences`のsha256と照合するので、SKILL.mdの内容がSの一式と一致することも同じ検査で確かめられる（dry runでは、B・Sの導入先の差が`installedReferences.B`のfile一覧と一致することで確かめる）。導入後の`asc/SKILL.md`はproject共有用に実行場所の1文が書換えられるので、導入先のsha256は配布物のsha256と違う（BとSの両方で同じ書換え。Sの導入先に入口の文が入ることを確認した）。`.claude/skills/asc/SKILL.md`は本文へのリンクだけの入口で、条件間で同じ。
 
-**固定の前に固定のfileを変える**：この節・[decision-criteria.md](decision-criteria.md)の「段階3」・[release.json](release.json)の変更は、`ASC1815_RESULTS=results/stage3 node harness/fixation.mjs init …`（固定の記録の作成）より前に済ませる。段階3のcommandには全て`ASC1815_RESULTS=results/stage3`を付ける。台帳は`<scratch>/rel1815c/ledger/ledger-1815s3.jsonl`（新しく作る）。最初の記録のcommitは、固定の後にここへ書く。
+**固定の前に固定のfileを変える**：この節・[decision-criteria.md](decision-criteria.md)の「段階3」・[release.json](release.json)の変更は、`ASC1815_RESULTS=results/stage3 node harness/fixation.mjs init …`（固定の記録の作成）より前に済ませる。段階3のcommandには全て`ASC1815_RESULTS=results/stage3`を付ける。台帳は`<scratch>/rel1815c/ledger/ledger-1815s3.jsonl`（新しく作る）。最初の記録のcommit：`21e92116a7f52f390a8d6c0f2157527614d7135a`。
 
 段階3の手順は、下の「実行の手順」を次の値に置き換えて行う：`export ASC1815_RESULTS=results/stage3`、`L=<scratch>/rel1815c/ledger/ledger-1815s3.jsonl`、tarballは`<scratch>/rel1815c/`のB・S、probeの承認は`results/stage3/probe-approval.json`、公開の記録は`collect.mjs … results/stage3/run`（`collect.mjs`は出力先を引数で決め、既にある出力先を拒否しないので、段階2の`results/stage2/run`へ書かない）。
 
