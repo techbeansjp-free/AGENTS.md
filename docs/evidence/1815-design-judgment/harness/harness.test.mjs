@@ -327,8 +327,9 @@ test('decide: not judged when the run stopped early (unless the cap was reached)
 });
 
 test('decide: scoring is refused when a trial ran under another fixation record', () => {
-  const fx = JSON.parse(fs.readFileSync(path.join(ev, 'results/fixation.json'), 'utf8'));
-  const sha = sha256(fs.readFileSync(path.join(ev, 'results/fixation.json')));
+  const fxFile = path.join(ev, RESULTS, 'fixation.json');
+  const fx = JSON.parse(fs.readFileSync(fxFile, 'utf8'));
+  const sha = sha256(fs.readFileSync(fxFile));
   const ok = {trial: 't', fixationSha256: sha, fixedAtCommit: fx.records.at(-1).fixedAtCommit};
   const mine = (p) => p.filter((x) => x.startsWith('t:'));
   assert.deepEqual(mine(fixationProblemsForScoring([ok])), []);
@@ -747,9 +748,11 @@ test('make-blind (L-1, third review): SVG comments, title, desc and metadata are
 // ---- fourth review (Low-1): the budget.mjs CLI seals a settled output, and a reserve is refused once it is unsealed ----
 // This test drives the real CLI, which accepts only files equal to the active fixation record (RESULTS). Before the plan of a
 // stage is fixed (fixation.mjs init/refix) the record does not match the files, so the test is skipped with that reason and
-// runs once the stage's fixation is committed.
+// runs once the stage's fixation is committed. When ASC1815_RESULTS is set (a stage run), a stale record is a failure, not a skip.
+const stageRun = Boolean(process.env.ASC1815_RESULTS);
 const activeFixation = (() => { const f = path.join(ev, RESULTS, 'fixation.json'); if (!fs.existsSync(f)) return {file: f, fx: null, stale: 'no fixation record yet'}; const fx = JSON.parse(fs.readFileSync(f, 'utf8')); const d = differences(fx.records.at(-1)); return {file: f, fx, stale: d.length ? `fixed files differ from the record: ${d.join(', ')}` : null}; })();
-test('budget CLI: reserve fable -> settle seals the output (mode 000) -> a manual chmod 700 makes the next reserve fail', {skip: activeFixation.stale ? `plan not fixed for ${RESULTS}: ${activeFixation.stale}` : false}, () => {
+test('budget CLI: reserve fable -> settle seals the output (mode 000) -> a manual chmod 700 makes the next reserve fail', {skip: activeFixation.stale && !stageRun ? `plan not fixed for ${RESULTS}: ${activeFixation.stale}` : false}, () => {
+  assert.equal(activeFixation.stale, null, `plan not fixed for ${RESULTS}`);
   const fx = activeFixation.fx;
   const base = fs.realpathSync(tmp());
   const ledger = path.join(base, 'ledger.jsonl');

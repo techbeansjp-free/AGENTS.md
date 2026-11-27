@@ -24,7 +24,7 @@
 - **採点での失敗**：数える試行のうち、生成の失敗に加えて、描画・goldの判定・初期表示の判定のどれかが失敗した試行（`decide.mjs`の`failed`）。描画の失敗は生成物の性質なので置き換えず、指標ではSに最悪、Bに最良の値を入れる。
 - **採点に使う試行の公開**：公開する記録は派生の記録だけ（`collect.mjs`）。traceとtool logはscratchに残す。
 - **名前の一致**：採点と盲検の作成の前に、台帳の測定の予約（probe・順位以外）の名前、runsの下にある試行のdirectoryの名前、採点が数える試行と置き換えられた・使わない試行の名前の3つの集合が一致することを確かめ、違えば拒否する（`decide.mjs`の`runConsistency`）。予約した試行のdirectoryを消した場合も、予約しない試行のdirectoryがある場合も拒否される。
-- **固定の確認**：採点と盲検の作成の前に、固定したfileが`results/fixation.json`の最後の記録と同じで、数える全試行の`meta.json`の`fixationSha256`・`fixedAtCommit`がその記録と一致することを確かめ、違えば拒否する。
+- **固定の確認**：採点と盲検の作成の前に、固定したfileが`results/fixation.json`の最後の記録と同じで（記録の場所は環境変数`ASC1815_RESULTS`で決まる。未設定なら`results`、段階2は`results/stage2`）、数える全試行の`meta.json`の`fixationSha256`・`fixedAtCommit`がその記録と一致することを確かめ、違えば拒否する。
 - **読まれたか**：試行ごとに、ASCの本文（`.agent-skill-chain/skills/asc/SKILL.md`）、`implementation.md`、`user-journey-acceptance`の本文、`journeys.md`を、エラーなしの`Read`で読んだかを記録する（`reads.mjs`。導入された2つの写し`skills/`・`managed-runtime/skills/`のどちらでもよい。Skill toolの呼出し・Grepは読込みに数えない）。
 - **候補の文が届いた試行**：Sの試行で、本文と、`implementation.md`または`journeys.md`の少なくとも一方を読んだもの。届かなかった試行（本文を読まない、本文だけ読んでreferenceを読まない）は、条件・ケースごとに件数を分けて報告する。Bでも同じ記録を取る。
 
@@ -51,7 +51,7 @@
 
 ## 隔離の確認（probe）
 
-測定の前に、各条件1回、測定と同じ起動（同じsample projectの作り方・HOME・config・tool・MCP・model）に、debugの記録を加えて、[harness/probe.mjs](harness/probe.mjs)の依頼文で行う。生成Agentの文脈に、祖先の`CLAUDE.md`・ownerのmemory・ownerの設定・ownerのSkill・repositoryの指示が無いこと、案内文のblockとASCのSkillの一覧があること、実HOMEとこのrepositoryに置いた目印fileのReadが拒否され、目印の文字列がどの記録にも無いこと、debugの記録の指示・memory・設定のpathが試行のdirectoryかprogramの場所だけであること、hookが無いこと、組込みtoolとMCPが測定と同じことを確かめる。B・Sの結果を比べ、tool・Skillの一覧・gitの件名・modelが同じことを確かめる。どれかが不合格なら測定しない。probeは各条件1回（番号1）。その条件の1回目が判定済みで不合格の場合に限り、再試行を1回（番号2）だけ行える。それ以外のprobe、および測定の試行（probe・順位以外の予約）が台帳に1件でもある後のprobeは、`run-trial.mjs`と`probe.mjs markers create`が拒否する（`probe.mjs`の`probeRefusal`）。目印fileの作成はownerの確認が要るので、統括がownerの確認を`results/probe-approval.json`に記録してcommitするまで、`probe.mjs markers create`とprobeの起動は拒否される。probeの後の是正は、`harness/probe.mjs`だけを、独立レビューを通して`fixation.mjs refix`で直せる。
+測定の前に、各条件1回、測定と同じ起動（同じsample projectの作り方・HOME・config・tool・MCP・model）に、debugの記録を加えて、[harness/probe.mjs](harness/probe.mjs)の依頼文で行う。生成Agentの文脈に、祖先の`CLAUDE.md`・ownerのmemory・ownerの設定・ownerのSkill・repositoryの指示が無いこと、案内文のblockとASCのSkillの一覧があること、実HOMEとこのrepositoryに置いた目印fileのReadが拒否され、目印の文字列がどの記録にも無いこと、debugの記録の指示・memory・設定のpathが試行のdirectoryかprogramの場所だけであること、hookが無いこと、組込みtoolとMCPが測定と同じことを確かめる。B・Sの結果を比べ、tool・Skillの一覧・gitの件名・modelが同じことを確かめる。どれかが不合格なら測定しない。probeは各条件1回（番号1）。その条件の1回目が判定済みで不合格の場合に限り、再試行を1回（番号2）だけ行える。それ以外のprobe、および測定の試行（probe・順位以外の予約）が台帳に1件でもある後のprobeは、`run-trial.mjs`と`probe.mjs markers create`が拒否する（`probe.mjs`の`probeRefusal`）。目印fileの作成はownerの確認が要るので、統括がownerの確認を`probe-approval.json`（場所は`ASC1815_RESULTS`で決まる。段階1は`results/`、段階2は`results/stage2/`）に記録してcommitするまで、`probe.mjs markers create`とprobeの起動は拒否される。probeの後の是正は、`harness/probe.mjs`だけを、独立レビューを通して`fixation.mjs refix`で直せる。
 
 ## 判定の規則
 

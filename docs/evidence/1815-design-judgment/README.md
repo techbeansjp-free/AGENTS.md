@@ -145,14 +145,15 @@ harnessの変更は最小で、記録の置き場所を選ぶ`harness/results-di
 
 ## 実行の手順
 
-`<W>`はこのworktree、`<scratch>`はrepositoryとHOMEの外のdirectory。固定の記録：[results/fixation.json](results/fixation.json)。最初の記録のcommitは`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`、今の記録（測定に使う最後の記録）のcommitは下の「固定」に書く。台帳：`<scratch>/rel1815/ledger/ledger.jsonl`（予約なし）。
+`<W>`はこのworktree、`<scratch>`はrepositoryとHOMEの外のdirectory。固定の記録：段階1は[results/fixation.json](results/fixation.json)（最初の記録のcommitは`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`、今の記録のcommitは下の「固定」に書く）。段階2は`results/stage2/fixation.json`（最初の記録のcommitは上の「段階2（再評価）」に書く）で、下のcommandは全て`ASC1815_RESULTS=results/stage2`を付けて実行する。台帳：段階2は`<scratch>/rel1815b/ledger/ledger-1815s2.jsonl`（新しく作り、予約なし。段階1の台帳は使わない）。
 
 ```sh
 cd <W>/docs/evidence/1815-design-judgment
+export ASC1815_RESULTS=results/stage2   # 段階2。段階1の記録を読み直すときだけ外す
 node --test harness/harness.test.mjs
 node harness/dry-run.mjs <B.tgz> <S.tgz> <scratch>/run1815-dry --out <scratch>/dry-run.json   # モデルを呼ばない
-L=<scratch>/rel1815/ledger/ledger.jsonl
-# 0. 隔離の確認（results/probe-approval.jsonのcommitの後）
+L=<scratch>/rel1815b/ledger/ledger-1815s2.jsonl
+# 0. 隔離の確認（results/stage2/probe-approval.jsonのcommitの後）
 node harness/probe.mjs markers create <W> --ledger $L
 for c in B S; do
   ASC1815_ALLOW_PAID=1 CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" node harness/run-trial.mjs <scratch>/runs probe $c 1 \
@@ -188,7 +189,7 @@ node harness/rank-guard.mjs unlock $G --record <scratch>/rank-guard.jsonl
 # 5. 判定と公開する記録（#1815の測定では、ownerの判断で順位付け（4）と順位を入れたdecideは行っていない。順位なしのdecideだけを実行した：上の「結果」）
 node harness/decide.mjs <scratch>/runs <scratch>/render <scratch>/ranks <scratch>/decision.json --ledger $L --keys <scratch>/keys \
   --blind <scratch>/blind --guard-record <scratch>/rank-guard.jsonl
-node harness/collect.mjs <scratch>/runs <scratch>/render results/run
+node harness/collect.mjs <scratch>/runs <scratch>/render results/stage2/run
 ```
 
 ### 中断からの再開
