@@ -177,7 +177,7 @@ export function checkProbe(i) {
   const isStep = (u) => (i.steps ?? []).some((st) => stepMatches(st, u));
   const looked = t.uses.filter((u) => ['Read', 'Grep', 'Glob', 'Bash'].includes(u.name) && !isMarker(u) && !isStep(u) && /\.claude\/skills|\.agent-skill-chain|SKILL\.md/.test(JSON.stringify(u.input ?? {})));
   const desc = Object.fromEntries(['asc', 'user-journey-acceptance'].map((s) => {
-    const line = text.split('\n').find((l) => l.includes(`DESC ${s}:`)) ?? '';
+    const line = text.split('\n').findLast((l) => l.includes(`DESC ${s}:`)) ?? '';
     return [s, norm(line).includes(norm(i.ascSkills[s] ?? '\u0000'))];
   }));
   add('descriptionsInContext', looked.length === 0 && Object.values(desc).every(Boolean), {desc, lookedUp: looked.length});
@@ -207,7 +207,7 @@ export function checkProbe(i) {
   const ownerLeaks = i.ownerLines.filter((s) => [text, i.debug ?? ''].some((x) => x.includes(s)));
   add('noOwnerInstructionsOrMemory', ownerLeaks.length === 0, `${ownerLeaks.length}/${i.ownerLines.length} owner line(s) found`);
   // Git context: if shown, only neutral subjects; nothing condition-specific (review M1).
-  const gitLine = text.split('\n').find((l) => l.includes('GIT:')) ?? '';
+  const gitLine = text.split('\n').findLast((l) => l.includes('GIT:')) ?? '';
   add('gitContextNeutral', !/read trigger|adopt/i.test(gitLine) && (!/GIT:\s*なし/.test(gitLine) ? gitLine.includes(NEUTRAL_SUBJECT) || !gitLine.trim() : true), gitLine ? 'checked' : 'no GIT line');
   // Markers in the real HOME and in the ASC repository: each attempted by its full path, refused, never in any record.
   const full = (u) => path.resolve(String(u.input?.file_path ?? ''));
