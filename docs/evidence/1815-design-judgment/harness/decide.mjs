@@ -23,6 +23,7 @@ import {rankRounds, unsealOutputs, guardChainProblems} from './budget.mjs';
 import {lockHeldProblems} from './rank-guard.mjs';
 import {treeSha256, ledgerBlindRecords} from './make-blind.mjs';
 import {differences, lastRecord} from './fixation.mjs';
+import {RESULTS} from './results-dir.mjs';
 
 export const EVALUATORS = ['fable', 'codex'];
 export const ROUNDS = [1, 2];
@@ -61,8 +62,8 @@ export function selectCounted(names, caseId, runsRoot, runs) {
 // trial was run under that record (meta.fixationSha256 = sha256 of the current results/fixation.json, fixedAtCommit =
 // the last record's commit).
 export function fixationProblemsForScoring(metas, root = ev) {
-  const file = path.join(root, 'results/fixation.json');
-  if (!fs.existsSync(file)) return ['results/fixation.json is missing'];
+  const file = path.join(root, RESULTS, 'fixation.json');
+  if (!fs.existsSync(file)) return [`${RESULTS}/fixation.json is missing`];
   const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
   const p = differences(lastRecord(fx), root).map((f) => `fixed file differs: ${f}`);
   const sha = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');

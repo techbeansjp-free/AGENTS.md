@@ -3,10 +3,10 @@
  "note": "Each condition installs exactly one pinned tarball. run-trial.mjs computes the sha256 of the tarball it is given and refuses a tarball that is not pinned here or is pinned for the other condition; after the install it refuses when the installed reference files differ from installedReferences of the condition. differsOnly was checked by unpacking both tarballs (README「条件の作り方」). installedReferences lists both installed copies of each reference (.agent-skill-chain/skills/ and .agent-skill-chain/managed-runtime/skills/), as project-assets installs them.",
  "B": {
   "kind": "release",
-  "tag": "v0.5.109",
-  "targetCommit": "af2ab12e2d871f9f229f25ae9d31f0f3aae9c819",
-  "asset": "agent-skill-chain-0.5.109.tgz",
-  "assetSha256": "05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f",
+  "tag": "v0.5.113",
+  "targetCommit": "72d6524c6499ed00ada47679d88afa06529324cd",
+  "asset": "agent-skill-chain-0.5.113.tgz",
+  "assetSha256": "750e0e7336c442908ca1cc3a133b6ecec3a4197440be5ff9ce1e8cef17fe2fe7",
   "verifiedAgainst": [
    "SHA256SUMS of the release",
    "GitHub release asset digest"
@@ -14,18 +14,18 @@
  },
  "S": {
   "kind": "candidate",
-  "packedFromCommit": "bb1d188638344da0cc0def2e37fbf77aa785a344",
-  "packCommand": "node scripts/pack-candidate.mjs <absolute new dir> --version=0.5.109",
-  "asset": "agent-skill-chain-0.5.109.tgz",
-  "assetSha256": "5fad22932c953c253f14db51643c33c1ef182343f1dc32a7afd279629fc709af",
-  "reproduced": "A second pack from the same commit into another new directory gave the same sha256.",
+  "packedFromCommit": "a72a314886eee65feb1c38e0cea97694411d12fd",
+  "packCommand": "node scripts/pack-candidate.mjs <absolute new dir> --version=0.5.113",
+  "asset": "agent-skill-chain-0.5.113.tgz",
+  "assetSha256": "6d55b3f9ce0942f8fe86b4ee92acf5e048c69560dcb1824ae77eeb6c44909dc0",
+  "reproduced": "Packs from the same commit into three different new directories gave the same sha256.",
   "baseCondition": "B",
   "differsOnly": [
    "package/release-identity.json",
    "package/skills/asc/references/implementation.md",
    "package/skills/user-journey-acceptance/references/journeys.md"
   ],
-  "history": "The first candidate (packed from c997f274, sha256 12c6e2c9…32ba) was replaced before any run: the independent review (L-1) added one sentence to implementation.md (unchosen comparison drafts are not left in the deliverable), commit bb1d1886. Packed into a new directory (candidate2)."
+  "history": "Stage 2: the stage-1 candidate paragraphs (diff af2ab12e..bb1d1886 of the two reference files) applied cleanly onto main 72d6524c (no drift: the two files are unchanged between af2ab12e and 72d6524c), committed, packed, then reverted in the next commit."
  },
  "installedReferences": {
   "B": {
@@ -40,5 +40,17 @@
    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md": "98c36ffba76613fcf4f4466376761a5f4154dcae4a7483be7a12bb274c25b3df",
    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md": "98c36ffba76613fcf4f4466376761a5f4154dcae4a7483be7a12bb274c25b3df"
   }
+ },
+ "stage1": {
+  "B": {
+   "tag": "v0.5.109",
+   "targetCommit": "af2ab12e2d871f9f229f25ae9d31f0f3aae9c819",
+   "assetSha256": "05901c4bbc0de3805ec2895328cfdf370afdd23aa4cf0536197f0c6ba9789a4f"
+  },
+  "S": {
+   "packedFromCommit": "bb1d188638344da0cc0def2e37fbf77aa785a344",
+   "assetSha256": "5fad22932c953c253f14db51643c33c1ef182343f1dc32a7afd279629fc709af"
+  },
+  "note": "Stage 1 (v0.5.109) ended 未判定 because ASC was almost never read; the pins above are kept only as history. See README「段階2（再評価）」."
  }
 }

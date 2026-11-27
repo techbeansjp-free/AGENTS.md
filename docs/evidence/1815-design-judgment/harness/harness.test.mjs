@@ -15,6 +15,7 @@ import {positions, meanPositions, pairsSAboveB, spearman, direction, evaluatorCa
 import {plannedTrials, orderRefusal, replacementPlan, countedTrials, generationFailure, orderProblems, loadOrder} from './order.mjs';
 import {checkProbe, compareProbes, probeProblems, approvalProblems, probePrompt, probeRefusal} from './probe.mjs';
 import {refixViolations} from './fixation.mjs';
+import {RESULTS} from './results-dir.mjs';
 import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
 import {blindIds, makeRound, referencedAssets, copyDeliverable, blindPlacementProblems, stripCues, treeSha256, stripSvg} from './make-blind.mjs';
 import {guardProblems, setModes, lockHeldProblems} from './rank-guard.mjs';
@@ -744,8 +745,12 @@ test('make-blind (L-1, third review): SVG comments, title, desc and metadata are
 });
 
 // ---- fourth review (Low-1): the budget.mjs CLI seals a settled output, and a reserve is refused once it is unsealed ----
-test('budget CLI: reserve fable -> settle seals the output (mode 000) -> a manual chmod 700 makes the next reserve fail', () => {
-  const fx = JSON.parse(fs.readFileSync(path.join(ev, 'results/fixation.json'), 'utf8'));
+// This test drives the real CLI, which accepts only files equal to the active fixation record (RESULTS). Before the plan of a
+// stage is fixed (fixation.mjs init/refix) the record does not match the files, so the test is skipped with that reason and
+// runs once the stage's fixation is committed.
+const activeFixation = (() => { const f = path.join(ev, RESULTS, 'fixation.json'); if (!fs.existsSync(f)) return {file: f, fx: null, stale: 'no fixation record yet'}; const fx = JSON.parse(fs.readFileSync(f, 'utf8')); const d = differences(fx.records.at(-1)); return {file: f, fx, stale: d.length ? `fixed files differ from the record: ${d.join(', ')}` : null}; })();
+test('budget CLI: reserve fable -> settle seals the output (mode 000) -> a manual chmod 700 makes the next reserve fail', {skip: activeFixation.stale ? `plan not fixed for ${RESULTS}: ${activeFixation.stale}` : false}, () => {
+  const fx = activeFixation.fx;
   const base = fs.realpathSync(tmp());
   const ledger = path.join(base, 'ledger.jsonl');
   // A temporary ledger carrying the recorded ledger id (the CLI accepts only that ledger); never the real one.
@@ -780,4 +785,17 @@ test('budget CLI: reserve fable -> settle seals the output (mode 000) -> a manua
   } finally {
     for (const d of [...locked, out]) if (fs.existsSync(d)) fs.chmodSync(d, 0o700);
   }
+});
+
+// ---- stage 2: the results directory is chosen by ASC1815_RESULTS (fresh fixation and ledger, stage-1 records untouched) ----
+test('results-dir: default is results; ASC1815_RESULTS moves the fixation and probe-approval lookups', () => {
+  const run = (env) => spawnSync(process.execPath, ['--input-type=module', '-e',
+    `import {RESULTS} from ${JSON.stringify(path.join(here, 'results-dir.mjs'))}; import {paidStepProblems} from ${JSON.stringify(path.join(here, 'fixation.mjs'))}; import {approvalProblems} from ${JSON.stringify(path.join(here, 'probe.mjs'))}; console.log(JSON.stringify({RESULTS, paid: paidStepProblems(null)[0], approval: approvalProblems(${JSON.stringify(ev)})[0]}))`],
+  {encoding: 'utf8', env: {...process.env, ASC1815_RESULTS: '', ...env}});
+  const a = JSON.parse(run({}).stdout);
+  assert.equal(a.RESULTS, 'results');
+  const b = JSON.parse(run({ASC1815_RESULTS: 'results/stage-x/'}).stdout);
+  assert.equal(b.RESULTS, 'results/stage-x');
+  assert.match(b.paid, /^results\/stage-x\/fixation\.json is missing/);
+  assert.match(b.approval, /^results\/stage-x\/probe-approval\.json is missing/);
 });

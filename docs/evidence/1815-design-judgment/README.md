@@ -39,6 +39,22 @@
 
 結果の限界：各条件3回で、候補の文がほぼ読まれなかったので、候補の文そのものの効果については何も言えない。読まれない原因（書込みのtoolの有無か、依頼の形か、browserのtoolか）は、この測定では分けていない。
 
+## 段階2（再評価）
+
+段階1（release v0.5.109）は、書込みtoolのある環境でASCがほとんど読まれず、未判定で終わった。#1820でCLAUDE.mdの案内文を直してreleaseしたので、#1815の評価をやり直す。**変えるのは版と候補の元だけ**で、判定の規則（[decision-criteria.md](decision-criteria.md)。上限40 USD、Fableとcodexの盲検の順位、8/9の規則、未判定の規則）、ケース・指標・run-order・harnessの規則は変えない。測定の時点で最新のreleaseを測定の前に固定し、両条件をその同じ版で新しく測る（#1815のownerの判断）。
+
+| 項目 | 段階1 | 段階2 |
+| --- | --- | --- |
+| B | release v0.5.109 | release v0.5.113（target `72d6524c`、sha256 `750e0e73…2fe7`。SHA256SUMSとGitHubのasset digestに一致） |
+| S | `bb1d1886`でpack（sha256 `5fad2293…09af`） | 同じ候補の文を、現在のmain（`72d6524c`）へ当てた`a72a3148`でpack（sha256 `6d55b3f9…9dc0`、3つの別directoryへのpackが同じsha256）。当てるときのずれは無かった（2つのreferenceは`af2ab12e`と`72d6524c`の間で変わっていない）。違うのは`release-identity.json`と2つのreferenceだけで、2つのreferenceの内容は段階1のSと同じ（[release.json](release.json)の`installedReferences`が一致） |
+| 台帳・固定の記録 | `results/`（`fixation.json`、台帳はscratch） | **新しい台帳と新しい固定の記録**。`results/stage2/`（段階1の記録は上書きしない） |
+
+候補の文は、段階1と同じく、packした後に取り消したcommitを続けた（配布物はmainのまま。採るのは判定の後）。
+
+harnessの変更は最小で、記録の置き場所を選ぶ`harness/results-dir.mjs`（環境変数`ASC1815_RESULTS`。既定は`results`で段階1と同じ）だけ。段階2では全commandに`ASC1815_RESULTS=results/stage2`を付ける。固定の記録・probeの承認（`results/stage2/probe-approval.json`。ownerが段階2のために改めて確認する）・台帳がこの置き場所で見られ、段階1の記録や台帳では測定が始まらない。試行の公開の記録は`collect.mjs`の出力先を`results/stage2/run`にする。生のtrace・screenshot・tool logはcommitしない（[評価の記録の規約](../../../.agent-skill-chain/project/rules/evaluation-record.json)）。
+
+段階2の開始の手順（モデルを呼ぶのはこの後）：(1) 台帳をrepositoryの外に新しく作り、`ASC1815_RESULTS=results/stage2 node harness/fixation.mjs init results/stage2/fixation.json --ledger <新しい台帳>`、(2) 固定の記録をcommit、(3) この節に最初の記録のcommitを書く（`fixation.mjs`が検査する）、(4) ownerの確認をprobe-approval.jsonに記録してから、probe、生成、順位。最初の記録のcommit：（固定の時に記す）。
+
 ## 目的（計画）
 
 外部のデザイン判断Skillから選んだ上位3案（両幅の初期表示の確認、判断の一文から情報の優先順位と密度を決める、意匠が未定のときだけ2案を描画して比べる）を、ASCの既存のSkillへ追記した版（S）が、現状のASC（B）より、題材と利用目的に合った画面を作らせるかを測る。ASCのSkillが読まれる状態（#1814の条件I）で比べる。効果が無ければ取り込まない。

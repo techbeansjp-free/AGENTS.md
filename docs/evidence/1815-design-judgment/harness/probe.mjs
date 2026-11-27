@@ -20,6 +20,7 @@ import {description, installDirProblems, isMarkerPermissionSuggestion, otherAbso
 import {parseStream} from '../../1807-design-eval-browser/harness/core-steps.mjs';
 import {ev} from './pairing.mjs';
 import {EXPECTED_INIT_TOOLS} from './run-trial.mjs';
+import {RESULTS} from './results-dir.mjs';
 
 export const POINTER_HEAD = 'このプロジェクトでASCを使う';
 export const SAMPLE_SUBJECTS = ['Install ASC', 'initial'];
@@ -28,13 +29,13 @@ const inside = (child, parent) => { const r = path.relative(parent, child); retu
 const norm = (s) => String(s).replace(/\s+/g, ' ').trim();
 
 export function approvalProblems(root = ev) {
-  const f = path.join(root, 'results/probe-approval.json');
-  if (!fs.existsSync(f)) return ['results/probe-approval.json is missing (the owner has not confirmed the probe)'];
+  const f = path.join(root, RESULTS, 'probe-approval.json');
+  if (!fs.existsSync(f)) return [`${RESULTS}/probe-approval.json is missing (the owner has not confirmed the probe)`];
   const a = JSON.parse(fs.readFileSync(f, 'utf8'));
   const p = [];
-  if (a.ownerConfirmed !== true || !a.at || !a.reference) p.push('results/probe-approval.json lacks ownerConfirmed/at/reference');
-  const st = spawnSync('git', ['status', '--porcelain', '--', 'results/probe-approval.json'], {cwd: root, encoding: 'utf8'});
-  if (st.status !== 0 || st.stdout.trim()) p.push('results/probe-approval.json is not committed');
+  if (a.ownerConfirmed !== true || !a.at || !a.reference) p.push(`${RESULTS}/probe-approval.json lacks ownerConfirmed/at/reference`);
+  const st = spawnSync('git', ['status', '--porcelain', '--', `${RESULTS}/probe-approval.json`], {cwd: root, encoding: 'utf8'});
+  if (st.status !== 0 || st.stdout.trim()) p.push(`${RESULTS}/probe-approval.json is not committed`);
   return p;
 }
 

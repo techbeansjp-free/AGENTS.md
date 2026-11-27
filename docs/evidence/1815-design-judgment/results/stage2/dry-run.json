@@ -1,0 +1,830 @@
+{
+ "label": "dry run (no model call, generator not started)",
+ "checks": {
+  "pairingAccepted": {
+   "pass": true,
+   "detail": null
+  },
+  "pairingRefused": {
+   "pass": true,
+   "detail": null
+  },
+  "packageDiffersOnly": {
+   "pass": true,
+   "detail": [
+    "package/release-identity.json",
+    "package/skills/asc/references/implementation.md",
+    "package/skills/user-journey-acceptance/references/journeys.md"
+   ]
+  },
+  "samplesBuilt": {
+   "pass": true,
+   "detail": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md",
+    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md",
+    ".agent-skill-chain/skills/asc/references/implementation.md",
+    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md"
+   ]
+  },
+  "imagesPinned": {
+   "pass": true,
+   "detail": []
+  },
+  "dockerCliWithEmptyHome": {
+   "pass": true,
+   "detail": null
+  },
+  "dockerNetworksCreateRemove": {
+   "pass": true,
+   "detail": {
+    "created": [
+     0,
+     0
+    ],
+    "removed": 0
+   }
+  },
+  "imageChecks": {
+   "pass": true,
+   "detail": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  "runAllFollowsOrder": {
+   "pass": true,
+   "detail": null
+  },
+  "orderValid": {
+   "pass": true,
+   "detail": []
+  }
+ },
+ "samples": {
+  "ui03-dashboard": {
+   "B": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "b4cd605e454cd8f85bacfa8e0b37124fd81cf94c",
+    "clean": true,
+    "runtimeVersion": "0.5.113",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+     "diffSha256": "de31c0687e1448c08610f03fb481842f7dc1624e13b5ab19ddbfa12962161d1e",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "S": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "f199d600daf92ef38ebbe026ac0764a9c069c964",
+    "clean": true,
+    "runtimeVersion": "0.5.113",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+     "diffSha256": "de31c0687e1448c08610f03fb481842f7dc1624e13b5ab19ddbfa12962161d1e",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "diffBS": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md",
+    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md",
+    ".agent-skill-chain/skills/asc/references/implementation.md",
+    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md"
+   ],
+   "sameClaudeMd": true,
+   "ok": true
+  },
+  "ui07-bus-mobile": {
+   "B": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "9ac0aca975ec2ac52916f83af7a586884371d1b4",
+    "clean": true,
+    "runtimeVersion": "0.5.113",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+     "diffSha256": "de31c0687e1448c08610f03fb481842f7dc1624e13b5ab19ddbfa12962161d1e",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "S": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "99f2bbb4804254499f5ef42bc153608caba1b6b9",
+    "clean": true,
+    "runtimeVersion": "0.5.113",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+     "diffSha256": "de31c0687e1448c08610f03fb481842f7dc1624e13b5ab19ddbfa12962161d1e",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "diffBS": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md",
+    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md",
+    ".agent-skill-chain/skills/asc/references/implementation.md",
+    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md"
+   ],
+   "sameClaudeMd": true,
+   "ok": true
+  },
+  "ui04-parts-search": {
+   "B": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "25de1568668abd182d5b50678a5e783799e4b3ea",
+    "clean": true,
+    "runtimeVersion": "0.5.113",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+     "diffSha256": "de31c0687e1448c08610f03fb481842f7dc1624e13b5ab19ddbfa12962161d1e",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "S": {
+    "caseFiles": [
+     "BRIEF.md",
+     "data.json",
+     "FONTS.md"
+    ],
+    "sampleHead": "a969fff4a0b85e168ac3e68a24e177a8bf0c4cbc",
+    "clean": true,
+    "runtimeVersion": "0.5.113",
+    "adopted": {
+     "id": "claude-md",
+     "path": "CLAUDE.md",
+     "action": "create",
+     "beforeSha256": "absent",
+     "blockSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+     "diffSha256": "de31c0687e1448c08610f03fb481842f7dc1624e13b5ab19ddbfa12962161d1e",
+     "default": "claude-md"
+    },
+    "installProblems": [],
+    "claudeMdHasBlock": true,
+    "claudeMdSha256": "9a1de39feec0eba164b814b1a70b4e365b62b42c673b706eec13efacb42eb634",
+    "projectSettings": null,
+    "entries": 16,
+    "outDir": true,
+    "placement": []
+   },
+   "diffBS": [
+    ".agent-skill-chain/distribution.json",
+    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md",
+    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md",
+    ".agent-skill-chain/skills/asc/references/implementation.md",
+    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md"
+   ],
+   "sameClaudeMd": true,
+   "ok": true
+  }
+ },
+ "tarballs": {
+  "B": "750e0e7336c442908ca1cc3a133b6ecec3a4197440be5ff9ce1e8cef17fe2fe7",
+  "S": "6d55b3f9ce0942f8fe86b4ee92acf5e048c69560dcb1824ae77eeb6c44909dc0"
+ },
+ "refusals": [
+  {
+   "condition": "B",
+   "tarball": "S",
+   "exit": 3,
+   "message": "refused: tarball is pinned for condition S, not B"
+  },
+  {
+   "condition": "S",
+   "tarball": "B",
+   "exit": 3,
+   "message": "refused: tarball is pinned for condition B, not S"
+  },
+  {
+   "condition": "B",
+   "tarball": "unpinned",
+   "exit": 3,
+   "message": "refused: tarball sha256 is not pinned in release.json"
+  },
+  {
+   "condition": "S",
+   "tarball": "unpinned",
+   "exit": 3,
+   "message": "refused: tarball sha256 is not pinned in release.json"
+  }
+ ],
+ "packageDiff": [
+  "package/release-identity.json",
+  "package/skills/asc/references/implementation.md",
+  "package/skills/user-journey-acceptance/references/journeys.md"
+ ],
+ "images": {
+  "asc-1807-tools:1": {
+   "local": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8",
+   "pinned": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8"
+  },
+  "node:22-alpine": {
+   "local": "sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603",
+   "pinned": "sha256:8049382e2048cff27289992d304206b4208b5b4f5110a19a5dbe21c18a0b8603"
+  }
+ },
+ "dockerWithEmptyHome": {
+  "exit": 0,
+  "serverVersion": "29.8.0",
+  "dockerHostResolved": true
+ },
+ "networks": {
+  "created": [
+   0,
+   0
+  ],
+  "removed": 0
+ },
+ "imageChecks": {
+  "ui03-dashboard": {
+   "exit": 0,
+   "pages": {
+    "ui03-good": {
+     "gold": {
+      "coverage": 1,
+      "missing": [],
+      "narrowOverflow": false,
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "tablet"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       0,
+       0
+      ]
+     }
+    },
+    "ui03-bad": {
+     "gold": {
+      "coverage": 1,
+      "missing": [],
+      "narrowOverflow": false,
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": false,
+       "missing": [
+        "出荷遅延率",
+        "LANE-B01",
+        "LANE-C02",
+        "温度センサー"
+       ],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": false,
+       "missing": [
+        "出荷遅延率",
+        "LANE-B01",
+        "LANE-C02",
+        "温度センサー"
+       ],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "tablet"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       0,
+       0
+      ]
+     }
+    }
+   }
+  },
+  "ui07-bus-mobile": {
+   "exit": 0,
+   "pages": {
+    "ui07-good": {
+     "gold": {
+      "coverage": 1,
+      "missing": [],
+      "narrowOverflow": false,
+      "firstViewportMissing": [],
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "mobile"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       1,
+       1
+      ]
+     }
+    },
+    "ui07-bad": {
+     "gold": {
+      "coverage": 0.846,
+      "missing": [
+       "07:41",
+       "200円",
+       "100円",
+       "0120-000-000"
+      ],
+      "narrowOverflow": true,
+      "firstViewportMissing": [
+       "中央通り"
+      ],
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": false,
+       "missing": [
+        "中央通り",
+        "07:48",
+        "07:52",
+        "12分",
+        "運休",
+        "のりば1",
+        "のりば2"
+       ],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": false,
+       "missing": [
+        "中央通り",
+        "07:48",
+        "07:52",
+        "12分",
+        "運休",
+        "のりば1",
+        "のりば2"
+       ],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "mobile"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       6,
+       6
+      ]
+     }
+    },
+    "ui07-hidden": {
+     "gold": {
+      "coverage": 0.269,
+      "missing": [
+       "循環A",
+       "循環B",
+       "急行",
+       "駅前・市役所行",
+       "市民病院・図書館行",
+       "08:08",
+       "08:15",
+       "08:22",
+       "08:00",
+       "08:14",
+       "6分",
+       "遅れ",
+       "定刻",
+       "中央通り",
+       "07:41",
+       "200円",
+       "100円",
+       "0120-000-000",
+       "低床"
+      ],
+      "narrowOverflow": false,
+      "firstViewportMissing": [],
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": false,
+       "missing": [
+        "中央通り",
+        "07:48",
+        "07:52"
+       ],
+       "hiddenRequired": [
+        "中央通り",
+        "200円",
+        "100円"
+       ]
+      },
+      "wide": {
+       "answerAll": false,
+       "missing": [
+        "中央通り",
+        "07:48",
+        "07:52"
+       ],
+       "hiddenRequired": [
+        "中央通り",
+        "200円",
+        "100円"
+       ]
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "mobile"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       1,
+       1
+      ]
+     }
+    }
+   }
+  },
+  "ui04-parts-search": {
+   "exit": 0,
+   "pages": {
+    "ui04-good": {
+     "gold": {
+      "coverage": 1,
+      "missing": [],
+      "narrowOverflow": false,
+      "interactions": [
+       true,
+       true
+      ],
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": true,
+       "missing": [],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "mobile"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       1,
+       1
+      ]
+     }
+    },
+    "ui04-bad": {
+     "gold": {
+      "coverage": 0.292,
+      "missing": [
+       "BS-1605-C7-L0450-FIXEDEND",
+       "SP-CMP-0.8X6X20-SUS304",
+       "SP-EXT-1.0X8X35-SWPB-HOOK",
+       "PL-HB-M8-POM-WHITE-KNOB",
+       "SN-PRX-M12-NPN-NO-2M-CABLE",
+       "SN-PRX-M18-PNP-NC-M12CONN",
+       "12件",
+       "在庫あり",
+       "残少",
+       "取寄せ",
+       "生産終了",
+       "PL-HB-M8-PA66-GRAY-KNOB",
+       "即日出荷",
+       "2027-02-14",
+       "寸法図",
+       "取扱説明書",
+       "48"
+      ],
+      "narrowOverflow": true,
+      "interactions": [
+       false,
+       false
+      ],
+      "error": null
+     },
+     "firstView": {
+      "error": null,
+      "narrow": {
+       "answerAll": false,
+       "missing": [
+        "12件",
+        "在庫あり"
+       ],
+       "hiddenRequired": []
+      },
+      "wide": {
+       "answerAll": false,
+       "missing": [
+        "12件",
+        "在庫あり",
+        "48",
+        "即日出荷",
+        "2027-02-14"
+       ],
+       "hiddenRequired": []
+      }
+     },
+     "render": {
+      "viewports": [
+       "desktop",
+       "mobile"
+      ],
+      "renderErrors": 0,
+      "axeSeriousCritical": [
+       2,
+       2
+      ]
+     }
+    }
+   }
+  },
+  "expectations": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ "runAll": {
+  "exit": 0,
+  "trials": [
+   "ui03-dashboard/B-r1",
+   "ui03-dashboard/S-r1",
+   "ui07-bus-mobile/B-r1",
+   "ui07-bus-mobile/S-r1",
+   "ui04-parts-search/B-r1",
+   "ui04-parts-search/S-r1",
+   "ui03-dashboard/S-r2",
+   "ui03-dashboard/B-r2",
+   "ui07-bus-mobile/S-r2",
+   "ui07-bus-mobile/B-r2",
+   "ui04-parts-search/S-r2",
+   "ui04-parts-search/B-r2",
+   "ui03-dashboard/B-r3",
+   "ui03-dashboard/S-r3",
+   "ui07-bus-mobile/B-r3",
+   "ui07-bus-mobile/S-r3",
+   "ui04-parts-search/B-r3",
+   "ui04-parts-search/S-r3"
+  ]
+ },
+ "plan": {
+  "order": [
+   "ui03-dashboard/B-r1",
+   "ui03-dashboard/S-r1",
+   "ui07-bus-mobile/B-r1",
+   "ui07-bus-mobile/S-r1",
+   "ui04-parts-search/B-r1",
+   "ui04-parts-search/S-r1",
+   "ui03-dashboard/S-r2",
+   "ui03-dashboard/B-r2",
+   "ui07-bus-mobile/S-r2",
+   "ui07-bus-mobile/B-r2",
+   "ui04-parts-search/S-r2",
+   "ui04-parts-search/B-r2",
+   "ui03-dashboard/B-r3",
+   "ui03-dashboard/S-r3",
+   "ui07-bus-mobile/B-r3",
+   "ui07-bus-mobile/S-r3",
+   "ui04-parts-search/B-r3",
+   "ui04-parts-search/S-r3"
+  ],
+  "trials": 18,
+  "probes": 2,
+  "perTrialBudgetUsd": 1.5,
+  "worstCaseWithoutReplacementsUsd": 36,
+  "planningUsd": {
+   "low": 8.8,
+   "high": 17.4
+  },
+  "capUsd": 40,
+  "stopAboveUsd": 38,
+  "codexCost": "not Host-computed (missing, as #1807)"
+ },
+ "example": {
+  "trial": "ui03-dashboard/B-r1",
+  "docker": [
+   "docker network create --internal --label asc.evidence=1815 asc1815-ui03-b-r1-gen",
+   "docker network create --label asc.evidence=1815 asc1815-ui03-b-r1-egress",
+   "docker run -d --name asc1815-ui03-b-r1-proxy --read-only --cap-drop ALL --security-opt no-new-privileges --label asc.evidence=1815 --pull never --pids-limit 128 --memory 256m --cpus 0.5 --user node --network asc1815-ui03-b-r1-egress -v <scratch>/runs/ui03-dashboard/B-r1/env:/opt/env:ro node:22-alpine node /opt/env/proxy.mjs /opt/env/allowlist.json",
+   "docker network connect --alias proxy asc1815-ui03-b-r1-gen asc1815-ui03-b-r1-proxy"
+  ],
+  "mcpConfig": {
+   "mcpServers": {
+    "browser": {
+     "type": "stdio",
+     "command": "docker",
+     "args": [
+      "run",
+      "-i",
+      "--rm",
+      "--name",
+      "asc1815-ui03-b-r1-mcp",
+      "--read-only",
+      "--cap-drop",
+      "ALL",
+      "--security-opt",
+      "no-new-privileges",
+      "--label",
+      "asc.evidence=1815",
+      "--pull",
+      "never",
+      "--pids-limit",
+      "512",
+      "--memory",
+      "3g",
+      "--cpus",
+      "2",
+      "--shm-size",
+      "1g",
+      "--tmpfs",
+      "/tmp:rw,size=512m",
+      "--user",
+      "pwuser",
+      "--network",
+      "asc1815-ui03-b-r1-gen",
+      "-v",
+      "<scratch>/runs/ui03-dashboard/B-r1/fixture:/work:ro",
+      "-v",
+      "<scratch>/runs/ui03-dashboard/B-r1/env:/opt/env:ro",
+      "-v",
+      "<scratch>/runs/ui03-dashboard/B-r1/env/allowlist.json:/config/allowlist.json:ro",
+      "-v",
+      "<scratch>/runs/ui03-dashboard/B-r1/env/allowlist-catalog.json:/config/allowlist-catalog.json:ro",
+      "-v",
+      "<scratch>/runs/ui03-dashboard/B-r1/log:/log",
+      "-e",
+      "HOME=/tmp",
+      "-e",
+      "BROWSE_PROXY=http://proxy:3129",
+      "-e",
+      "ALLOWLIST=/config/allowlist.json",
+      "-e",
+      "ALLOWLIST_CATALOG=/config/allowlist-catalog.json",
+      "-e",
+      "WORK_DIR=/work",
+      "-e",
+      "TOOL_LOG=/log/tools.jsonl",
+      "-e",
+      "SHOT_DIR=/log/shots",
+      "asc-1807-tools:1",
+      "node",
+      "/opt/env/mcp-server.mjs"
+     ]
+    }
+   }
+  },
+  "claude": "claude -p <prompt> --model sonnet --permission-mode acceptEdits --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --allowedTools mcp__browser__fetch_page,mcp__browser__view_page,mcp__browser__screenshot --mcp-config <scratch>/runs/ui03-dashboard/B-r1/mcp.json --strict-mcp-config --no-session-persistence --max-budget-usd 1.5 --output-format stream-json --verbose --include-hook-events",
+  "cleanup": [
+   "docker rm -f -v asc1815-ui03-b-r1-mcp asc1815-ui03-b-r1-proxy",
+   "docker network rm asc1815-ui03-b-r1-gen asc1815-ui03-b-r1-egress"
+  ],
+  "cwd": "fixture/",
+  "env": [
+   "PATH",
+   "HOME",
+   "CLAUDE_CONFIG_DIR",
+   "LANG",
+   "CLAUDE_CODE_OAUTH_TOKEN",
+   "DISABLE_AUTOUPDATER",
+   "DISABLE_TELEMETRY",
+   "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+   "DOCKER_HOST"
+  ],
+  "probe": {
+   "trial": "probe/B-r1",
+   "sampleCase": "ui03-dashboard",
+   "claude": "claude -p <prompt> --model sonnet --permission-mode acceptEdits --tools Read,Write,Edit,Glob,Grep,Skill --disallowedTools Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task --allowedTools mcp__browser__fetch_page,mcp__browser__view_page,mcp__browser__screenshot --mcp-config <scratch>/runs/probe/B-r1/mcp.json --strict-mcp-config --no-session-persistence --max-budget-usd 0.5 --output-format stream-json --verbose --include-hook-events --debug-file <scratch>/runs/probe/B-r1/debug.log",
+   "budgetUsd": 0.5
+  }
+ },
+ "pass": true
+}
