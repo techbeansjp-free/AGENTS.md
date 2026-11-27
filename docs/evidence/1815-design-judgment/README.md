@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。
 
-**結果：未判定（取り込まない）**。生成の18試行のうち、ASCの本文が読まれたのは2試行、候補の文を置いた`implementation.md`・`journeys.md`は一度も読まれなかった。固定した規則（候補の文がSの3試行中2以上で読まれなければ未判定）により、3ケースとも未判定である。順位付けはownerの判断で行わなかった。候補のSkill本文（S）は取り消し、配布しない。
+**結果（最新、段階3）：効果なし（取り込まない）**（下の「段階3の結果」）。以下は段階1の結果：**未判定（取り込まない）**。生成の18試行のうち、ASCの本文が読まれたのは2試行、候補の文を置いた`implementation.md`・`journeys.md`は一度も読まれなかった。固定した規則（候補の文がSの3試行中2以上で読まれなければ未判定）により、3ケースとも未判定である。順位付けはownerの判断で行わなかった。候補のSkill本文（S）は取り消し、配布しない。
 
 ## 結果
 
@@ -90,17 +90,17 @@ harnessの変更は最小で、記録の置き場所を選ぶ`harness/results-di
 
 段階3の手順は、下の「実行の手順」を次の値に置き換えて行う：`export ASC1815_RESULTS=results/stage3`、`L=<scratch>/rel1815c/ledger/ledger-1815s3.jsonl`、tarballは`<scratch>/rel1815c/`のB・S、probeの承認は`results/stage3/probe-approval.json`、公開の記録は`collect.mjs … results/stage3/run`（`collect.mjs`は出力先を引数で決め、既にある出力先を拒否しないので、段階2の`results/stage2/run`へ書かない）。
 
-準備の確認の記録：試験は[results/stage3/harness-tests.txt](results/stage3/harness-tests.txt)（固定の前なので、固定に依存する2件は失敗）、dry runは[results/stage3/dry-run.json](results/stage3/dry-run.json)（10の確認すべて合格）。**固定の後に`ASC1815_RESULTS=results/stage3`で試験を流し直し、54件合格・skip 0を記録してから、probeに進む。** Sの導入先に入口の文が入ることは、dry runの導入先（3ケースのSの`.agent-skill-chain/skills/asc/SKILL.md`と`.agent-skill-chain/managed-runtime/skills/asc/SKILL.md`）を入口の文で検索して確かめた（6件に当たり、Bの導入先には0件）。
+準備の確認の記録：試験は[results/stage3/harness-tests.txt](results/stage3/harness-tests.txt)（固定の後に流し直した結果。54件合格・skip 0）、dry runは[results/stage3/dry-run.json](results/stage3/dry-run.json)（10の確認すべて合格）。**固定の後に`ASC1815_RESULTS=results/stage3`で試験を流し直し、54件合格・skip 0を記録してから、probeに進む。** Sの導入先に入口の文が入ることは、dry runの導入先（3ケースのSの`.agent-skill-chain/skills/asc/SKILL.md`と`.agent-skill-chain/managed-runtime/skills/asc/SKILL.md`）を入口の文で検索して確かめた（6件に当たり、Bの導入先には0件）。
 
 入口の文の名前「画面の節」は、`implementation.md`の見出しの名前ではない。`SKILL.md`の既存の文（UIを変える場合に`implementation.md`を読む）とも一部重なる。測定する案としてはこのままにし、採る場合に文面を整える（測定前のレビューLow-3）。
 
-順位のCodexのモデルは、ownerの回答（「gpt-6.2-sol 使えるはずでしょ？」、2026-11-27）により`gpt-6.2-sol`とした。順位の前に、短い呼出しで使えることを確かめた。
+順位のCodexのモデルは、ownerの回答（「gpt-6.2-sol 使えるはずでしょ？」、2026-11-27）により`gpt-6.2-sol`とした。順位の前に、短い呼出しで使えることを確かめた。2回の順位のhost-sessionの記録（公開しない）でも、modelは`gpt-6.2-sol`だった。
 
 ### 段階3の結果（2026-11-27）
 
 - 隔離の確認：B・Sとも回1で合格、比較の差なし（0.15 USD、[probes.json](results/stage3/run/probes.json)）。目印は確認の後に消した。
 - 生成：計画の18試行がすべて成功、置換え0（生成4.76 USD）。順位：Fable 2回（3.35 USD）、Codex 2回（費用の報告なし）。台帳の合計8.26 USD（上限40 USD）。公開の記録は[results/stage3/run/](results/stage3/run/)（試行の要約・読込み・指標・tool呼出しの順、判定。生のtrace・screenshot・評価者の出力の本文は含めない）。
-- 読込み：ASCの本文はB・Sとも18/18。**候補の文のreferenceの読込み（readS）は、ui03・ui04で3/3**（段階2は1/3）、ui07は1/3。入口の文で、2ケースでは候補の文が読まれるようになった。
+- 読込み：ASCの本文はB・Sとも18/18。**候補の文のreferenceの読込み（readS）は、ui03・ui04で3/3**（段階2は1/3）、ui07は1/3。段階3では、ui03・ui04で候補の文が読まれた（段階2とは版も違うので、段階をまたぐ比較で原因は決めない）。
 - 判定（[decision.json](results/stage3/run/decision.json)、固定した規則）：**全体は「効果なし（取り込まない）」**。判定できたのはui03・ui04の2ケースで、どちらも「効果なし」。ui07は「未判定（候補の文が読まれていない）」。
 
 | ケース | readS | Fable（SがBより上の組、9組中。回1・回2、再現性） | Codex（同じ） | 指標（答えが見える幅） | 判定 |
@@ -109,13 +109,13 @@ harnessの変更は最小で、記録の置き場所を選ぶ`harness/results-di
 | ui04 | 3/3 | 7（7・7、1.00） | 6.5（7・6、0.94） | 6対6 | 効果なし |
 | ui07 | 1/3 | 5（5・5、1.00） | 7（7・7、1.00） | 6対6 | 未判定 |
 
-- 順位は、3ケースとも2つの評価者でSが上に寄った（9組中5〜7）。ただし、固定した「改善」の水準（9組中8以上）には、どのケース・評価者も届かなかった。
+- 順位は、どのケースも両評価者とも「差なし」（SがBより上の組は9組中5〜7、改善の水準は8、劣化の水準は1）。回ごとに8に達したのは、ui03のFableの回2だけ。
 - ui03の非劣化の失敗：S-r1でaxeの重大・深刻な違反が9件あった（ほかの試行は0件）。規則5の害のケースに当たる。
-- 費用：Sの生成はBの約1.11倍（候補の文と入口の文のreferenceを読む分）。
+- 費用：Sの生成はBの約1.11倍（原因は測っていない）。
 
-結果の限界：各条件3回、ケース3つ、審美はモデルの順位で人の評価ではない。順位がSに寄った傾向は、固定した水準に届かないので、効果の根拠にしない。比べたのは入口の文と候補の文の一式で、どちらの効果かは分けていない。
+結果の限界：各条件3回、ケース3つ、審美はモデルの順位で人の評価ではない。順位は固定した規則で「差なし」なので、効果の根拠にしない。比べたのは入口の文と候補の文の一式で、どちらの効果かは分けていない。
 
-順位のCodexの`--model`（上の手順の`<許可されたCodexモデル>`）：repositoryには許可されたモデルの一覧が記録されていない（[host-session](../../../skills/asc/references/host-session.md)は`'<許可されたCodexモデル>'`のまま、[subagent-model-selection](../../../skills/subagent-model-selection/SKILL.md)にもCodexのモデル名が無い）。#1807のCodexの順位は`gpt-5.6-sol`で実行された記録がある（[1807のstatus](../1807-design-eval-browser/results/run2/model-ranks/codex-status.json)）。段階3で使うモデルは、順位の前にownerが決める（未決）。
+順位のCodexの`--model`（上の手順の`<許可されたCodexモデル>`）：repositoryには許可されたモデルの一覧が記録されていない（[host-session](../../../skills/asc/references/host-session.md)は`'<許可されたCodexモデル>'`のまま、[subagent-model-selection](../../../skills/subagent-model-selection/SKILL.md)にもCodexのモデル名が無い）。#1807のCodexの順位は`gpt-5.6-sol`で実行された記録がある（[1807のstatus](../1807-design-eval-browser/results/run2/model-ranks/codex-status.json)）。段階3で使うモデルは、下のとおりownerの回答で`gpt-6.2-sol`とした。
 
 ## 目的（計画）
 
