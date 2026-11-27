@@ -1,0 +1,266 @@
+{
+ "condition": "C",
+ "trial": "C-probe-2",
+ "traceSha256": "3897cab748381ca1a9f9d056a83342f3d7d04694edeb65fd6b593f31140dc1e4",
+ "metaSha256": "475f92498ed57e94569d853887008276a44839f4d426f4665fa97f43512fb409",
+ "markerTokenSha256": [
+  "21e506862d82c4b0b941a1c4f226b560828773c20b88f9dcc216b742972721fb",
+  "af7e51d51d1ae463a9d6eb74f3583d82fee8cd4f57e9713e241c1cea57b0523b"
+ ],
+ "pass": true,
+ "checks": {
+  "init": {
+   "pass": true,
+   "detail": "init event present"
+  },
+  "cwd": {
+   "pass": true,
+   "detail": "compared"
+  },
+  "tools": {
+   "pass": true,
+   "detail": {
+    "tools": [
+     "Edit",
+     "Glob",
+     "Grep",
+     "Read",
+     "Skill",
+     "Write"
+    ],
+    "want": [
+     "Edit",
+     "Glob",
+     "Grep",
+     "Read",
+     "Skill",
+     "Write"
+    ]
+   }
+  },
+  "permissionMode": {
+   "pass": true,
+   "detail": "acceptEdits"
+  },
+  "noMcp": {
+   "pass": true,
+   "detail": 0
+  },
+  "noPlugins": {
+   "pass": true,
+   "detail": {
+    "builtin": [
+     "cc-plugin-agents-md",
+     "cc-plugin-privacy",
+     "cc-plugin-plugin-authoring"
+    ],
+    "other": 0
+   }
+  },
+  "programDirectory": {
+   "pass": true,
+   "detail": []
+  },
+  "ascListed": {
+   "pass": true,
+   "detail": {
+    "missing": []
+   }
+  },
+  "noOwnerSkills": {
+   "pass": true,
+   "detail": "0 listed Skill name(s) match the owner's Skills"
+  },
+  "descriptionsInContext": {
+   "pass": true,
+   "detail": {
+    "desc": {
+     "asc": true,
+     "user-journey-acceptance": true
+    },
+    "lookedUp": 0
+   }
+  },
+  "ascDescriptionsInContext": {
+   "pass": true,
+   "detail": {
+    "entries": 17,
+    "expected": 17,
+    "omitted": [],
+    "lookedUp": 0
+   }
+  },
+  "skillListingRecorded": {
+   "pass": true,
+   "detail": {
+    "overBudget": false,
+    "lines": 0,
+    "unparsed": 0,
+    "skills": null,
+    "budget": null,
+    "chars": null
+   }
+  },
+  "userSkillsListed": {
+   "pass": true,
+   "detail": {
+    "userSkills": [
+     "invoice-format",
+     "quote-format"
+    ],
+    "notListed": [],
+    "notQuoted": [],
+    "lookedUp": 0
+   }
+  },
+  "descriptionsVerbatimCount": {
+   "pass": true,
+   "detail": "17/17 (informational)"
+  },
+  "projectClaudeMd": {
+   "pass": true,
+   "detail": "heading marks ignored (review L3)"
+  },
+  "pointerMatchesCondition": {
+   "pass": true,
+   "detail": {
+    "expectPointer": true
+   }
+  },
+  "noRepoInstructions": {
+   "pass": true,
+   "detail": "0 repository instruction line(s) found"
+  },
+  "noOwnerInstructionsOrMemory": {
+   "pass": true,
+   "detail": "0/7 owner line(s) found"
+  },
+  "gitContextNeutral": {
+   "pass": true,
+   "detail": "checked"
+  },
+  "markersAttempted": {
+   "pass": true,
+   "detail": [
+    1,
+    1
+   ]
+  },
+  "markersRefused": {
+   "pass": true,
+   "detail": 0
+  },
+  "markerTokensAbsent": {
+   "pass": true,
+   "detail": "2 plain token(s) checked (review L2: both required); 0 string(s) of the token form in the records"
+  },
+  "debugPathsInsideTrial": {
+   "pass": true,
+   "detail": "0 outside path(s)"
+  },
+  "noRealHomeOrRepoInDebug": {
+   "pass": true,
+   "detail": "0 found"
+  },
+  "hookMatchesCondition": {
+   "pass": true,
+   "detail": {
+    "logged": 0,
+    "responses": 0
+   }
+  },
+  "noForeignHooks": {
+   "pass": true,
+   "detail": "0 hook event(s), 0 non-SessionStart, 0 foreign command(s)"
+  },
+  "probeStepsDefined": {
+   "pass": true,
+   "detail": {
+    "steps": 6,
+    "expected": 6
+   }
+  },
+  "probeStepsAttempted": {
+   "pass": true,
+   "detail": {
+    "missing": []
+   }
+  },
+  "probeStepResults": {
+   "pass": true,
+   "detail": {
+    "withoutResult": []
+   }
+  },
+  "probeStepsRefused": {
+   "pass": true,
+   "detail": {
+    "withoutRefusalEvidence": []
+   }
+  },
+  "probeStepsSucceeded": {
+   "pass": true,
+   "detail": {
+    "failed": []
+   }
+  },
+  "sentinelsAbsent": {
+   "pass": true,
+   "detail": {
+    "trial": false,
+    "repo": false
+   }
+  }
+ },
+ "info": {},
+ "steps": 6,
+ "listedSkills": 36,
+ "nonAscSkills": [
+  "invoice-format",
+  "quote-format",
+  "deep-research",
+  "dataviz",
+  "update-config",
+  "verify",
+  "debug",
+  "code-review",
+  "simplify",
+  "batch",
+  "fewer-permission-prompts",
+  "doctor",
+  "loop",
+  "schedule",
+  "claude-api",
+  "workflow-authoring",
+  "run",
+  "run-skill-generator",
+  "plugin-authoring"
+ ],
+ "skillListing": {
+  "overBudget": false,
+  "lines": 0,
+  "unparsed": 0,
+  "skills": null,
+  "budget": null,
+  "chars": null
+ },
+ "ascOmitted": [],
+ "builtinPlugins": [
+  "cc-plugin-agents-md",
+  "cc-plugin-plugin-authoring",
+  "cc-plugin-privacy"
+ ],
+ "managedPolicyPresent": [],
+ "tools": [
+  "Edit",
+  "Glob",
+  "Grep",
+  "Read",
+  "Skill",
+  "Write"
+ ],
+ "gitLine": "Update project files | Install ASC | initial",
+ "model": "claude-sonnet-5-5",
+ "claudeCodeVersion": "2.1.323",
+ "costUsd": 0.1122084
+}

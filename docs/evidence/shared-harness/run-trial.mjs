@@ -22,7 +22,7 @@ import {applyCondition, loadConditions} from './apply-condition.mjs';
 import {assertPlacement} from './guard.mjs';
 import * as ledgerOps from './ledger.mjs';
 import {differences, lastRecord, refixAfterMeasurement} from './fixation.mjs';
-import {pinned, gitEnv, releasePlaceholders} from './make-fixture.mjs';
+import {pinned, gitEnv, releasePlaceholders, workChanges} from './make-fixture.mjs';
 import {orderRefusal, probeCompareProblems} from './order.mjs';
 import {approvalProblems, markerTag} from './markers.mjs';
 import {REPO_ROOT, configDir, loadSpec} from './config.mjs';
@@ -304,6 +304,8 @@ function main() {
       resultSubtype: last?.subtype ?? null, numTurns: last?.num_turns ?? null, budget,
       ...(probe ? {probeContext: ctx, probeSentinels: ctx.sentinels, probeInsideFile: INSIDE_FILE, probeStepCount: probeSteps(cell.tools, ctx).length} : {})};
     meta.credentialInChildFiles = filesContaining(home, secret) + filesContaining(config, secret);
+    // #1840 review M2: the files the trial changed or created (sha256), pinned through the meta.json sha256 of the settlement.
+    if (!probe) { try { meta.workFiles = workChanges(work); } catch (e) { meta.workFilesError = String(e.message ?? e); } }
     fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 1));
     ledgerOps.settle(ledger, reservation.id, name, meta.costUsd, {exit: r.status, traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))});
     console.log(JSON.stringify({trial: name, exit: r.status, subtype: meta.resultSubtype, costUsd: meta.costUsd, resolvedModel: meta.resolvedModel}));

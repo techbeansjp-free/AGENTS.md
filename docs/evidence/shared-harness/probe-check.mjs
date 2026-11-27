@@ -48,7 +48,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
-import {parseTrace} from './score.mjs';
+import {parseTrace, ascSkillsOf} from './score.mjs';
 import {loadRawConditions, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {pointerHeadI} from './condition-i.mjs';
 import {INSIDE_FILE, probeSteps} from './run-trial.mjs';
@@ -68,6 +68,8 @@ const stripHeading = (s) => s.replace(/^\s*#+\s*/, '').trim();
 const inside = (child, parent) => { const r = path.relative(parent, child); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
 // Review M1 (stage 2): the number of ASC entries whose descriptions must all be in the context, and the debug-log line.
 export const ASC_ENTRIES = 16;
+// #1840: the number expected for a config (conditions.json ascSkills; else ASC_ENTRIES).
+export const ascEntriesOf = (conds) => (conds?.ascSkills ? conds.ascSkills.length : ASC_ENTRIES);
 const OVER_BUDGET_RE = /Skill listing over budget:\s*(\d+) skills, (\d+) chars > (\d+) budget/;
 // The Skill-listing state of one probe from its debug log (null when there is no debug log).
 export function skillListingOf(debug) {
@@ -166,23 +168,33 @@ export function checkProbe(i) {
   const nonAsc = listed.filter((s) => !asc.some((a) => s === a || s.endsWith(`:${a}`)));
   const ownerSkillHits = nonAsc.filter((s) => i.ownerSkills.includes(s.replace(/^.*:/, '')));
   add('noOwnerSkills', ownerSkillHits.length === 0, `${ownerSkillHits.length} listed Skill name(s) match the owner's Skills`);
-  const text = t.text;
+  // #1840 probe: the answer can be split over several assistant messages (R-probe-2 wrote items 1-5 before the
+  // operations and item 6 after them), so every assistant text is used, not only the final result.
+  const text = t.messages.flatMap((m) => m.texts).join('\n') || t.text;
   // Descriptions quoted from the session's Skill list without reading or searching the files (review L4).
   const isMarker = (u) => u.name === 'Read' && i.markerPaths.some((m) => path.resolve(String(u.input?.file_path ?? '')) === path.resolve(m));
   // #1820: a probe step (e.g. the Glob in the repository's .agent-skill-chain/local/) is not a look-up; Bash counts.
   const isStep = (u) => (i.steps ?? []).some((st) => stepMatches(st, u));
   const looked = t.uses.filter((u) => ['Read', 'Grep', 'Glob', 'Bash'].includes(u.name) && !isMarker(u) && !isStep(u) && /\.claude\/skills|\.agent-skill-chain|SKILL\.md/.test(JSON.stringify(u.input ?? {})));
   const desc = Object.fromEntries(['asc', 'user-journey-acceptance'].map((s) => {
-    const line = text.split('\n').find((l) => l.includes(`DESC ${s}:`)) ?? '';
+    const line = text.split('\n').findLast((l) => l.includes(`DESC ${s}:`)) ?? '';
     return [s, norm(line).includes(norm(i.ascSkills[s] ?? '\u0000'))];
   }));
   add('descriptionsInContext', looked.length === 0 && Object.values(desc).every(Boolean), {desc, lookedUp: looked.length});
   // Review M1 (b): every ASC description is quoted verbatim from the Skill list, with no look-up of the Skill files.
   const ascOmitted = asc.filter((s) => !norm(text).includes(norm(i.ascSkills[s] || '\u0000'))).sort();
-  add('ascDescriptionsInContext', asc.length === ASC_ENTRIES && looked.length === 0 && ascOmitted.length === 0, {entries: asc.length, expected: ASC_ENTRIES, omitted: ascOmitted, lookedUp: looked.length});
+  add('ascDescriptionsInContext', asc.length === ascEntriesOf(conds) && looked.length === 0 && ascOmitted.length === 0, {entries: asc.length, expected: ascEntriesOf(conds), omitted: ascOmitted, lookedUp: looked.length});
   // Review M1 (a): the debug log is needed for the listing state; `compare` checks the state across the conditions.
   const skillListing = skillListingOf(i.debug);
   add('skillListingRecorded', skillListing !== null && skillListing.unparsed === 0, skillListing ?? 'no debug log');
+  // #1840 review M3: the user's own Skills of the fixture (fileInputs userSkills) are in the session's Skill list and their
+  // descriptions are quoted from it (no check when the fixture has none).
+  const user = Object.keys(i.userSkills ?? {});
+  if (user.length) {
+    const notListed = user.filter((s) => !listed.some((x) => x === s || x.endsWith(`:${s}`)));
+    const notQuoted = user.filter((s) => !norm(text).includes(norm(i.userSkills[s] || '\u0000')));
+    add('userSkillsListed', notListed.length === 0 && notQuoted.length === 0 && looked.length === 0, {userSkills: user.sort(), notListed, notQuoted, lookedUp: looked.length});
+  }
   add('descriptionsVerbatimCount', true, `${asc.filter((s) => norm(text).includes(norm(i.ascSkills[s]))).length}/${asc.length} (informational)`);
   // Instruction files: the sample project's CLAUDE.md, the pointer only when the condition adds it, nothing from elsewhere.
   add('projectClaudeMd', text.replace(/#/g, '').includes(stripHeading(i.baseFirstLine)), 'heading marks ignored (review L3)');
@@ -195,7 +207,7 @@ export function checkProbe(i) {
   const ownerLeaks = i.ownerLines.filter((s) => [text, i.debug ?? ''].some((x) => x.includes(s)));
   add('noOwnerInstructionsOrMemory', ownerLeaks.length === 0, `${ownerLeaks.length}/${i.ownerLines.length} owner line(s) found`);
   // Git context: if shown, only neutral subjects; nothing condition-specific (review M1).
-  const gitLine = text.split('\n').find((l) => l.includes('GIT:')) ?? '';
+  const gitLine = text.split('\n').findLast((l) => l.includes('GIT:')) ?? '';
   add('gitContextNeutral', !/read trigger|adopt/i.test(gitLine) && (!/GIT:\s*なし/.test(gitLine) ? gitLine.includes(NEUTRAL_SUBJECT) || !gitLine.trim() : true), gitLine ? 'checked' : 'no GIT line');
   // Markers in the real HOME and in the ASC repository: each attempted by its full path, refused, never in any record.
   const full = (u) => path.resolve(String(u.input?.file_path ?? ''));
@@ -372,7 +384,12 @@ export const checkValues = (checks) => Object.fromEntries(Object.entries(checks 
 export function fileInputs(dirArg, condition, repoRoot, conds = loadRawConditions()) {
   const dir = path.resolve(dirArg), work = fs.realpathSync(path.join(dir, 'work'));
   const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
-  const ascSkills = Object.fromEntries(fs.readdirSync(path.join(work, '.claude/skills')).map((s) => [s, description(read(path.join(work, '.claude/skills', s, 'SKILL.md')) ?? '')]));
+  const entries = Object.fromEntries(fs.readdirSync(path.join(work, '.claude/skills')).map((s) => [s, description(read(path.join(work, '.claude/skills', s, 'SKILL.md')) ?? '')]));
+  // #1840 review M3: with conditions.json ascSkills, an entry not named there is the user's own Skill (userSkills), checked
+  // on its own; without it every entry is an ASC Skill (as before).
+  const isAsc = (s) => !conds.ascSkills || conds.ascSkills.includes(s);
+  const ascSkills = Object.fromEntries(Object.entries(entries).filter(([s]) => isAsc(s)));
+  const userSkills = Object.fromEntries(Object.entries(entries).filter(([s]) => !isAsc(s)));
   const base = conds.fixtures[conds.probeFixture ?? 'A'].baseClaudeMd ?? '';
   const meta = JSON.parse(read(path.join(dir, 'meta.json')) ?? '{}');
   const sentinels = meta.probeSentinels ?? {};
@@ -381,7 +398,7 @@ export function fileInputs(dirArg, condition, repoRoot, conds = loadRawCondition
   const fileSha = (f) => (fs.existsSync(f) ? sha256(fs.readFileSync(f)) : null);
   const repoFirst = (f) => stripHeading((read(path.join(repoRoot, f)) ?? '').split('\n')[0]);
   return {meta, ctx, inputs: {trace: read(path.join(dir, 'trace.jsonl')) ?? '', debug: read(path.join(dir, 'debug.log')), stderr: read(path.join(dir, 'stderr.txt')),
-    hookLog: read(path.join(dir, 'hook.jsonl')), work, trialDir: dir, condition, ascSkills, baseFirstLine: base.split('\n')[0],
+    hookLog: read(path.join(dir, 'hook.jsonl')), work, trialDir: dir, condition, ascSkills, userSkills, baseFirstLine: base.split('\n')[0],
     pointerHead: 'このプロジェクトでASCを使う', forbiddenTexts: [repoFirst('CLAUDE.md'), repoFirst('AGENTS.md')].filter(Boolean),
     markerPaths: ctx ? [ctx.homeMarker, ctx.repoMarker] : [], repoRoot: path.resolve(repoRoot),
     sentinels, sentinelExists: {trial: Boolean(sentinels.trial && fs.existsSync(sentinels.trial)), repo: Boolean(sentinels.repo && fs.existsSync(sentinels.repo))},

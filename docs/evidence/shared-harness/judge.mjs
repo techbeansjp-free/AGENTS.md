@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {summarize, verdictOf, subsetFilter} from './score.mjs';
+import {summarize, verdictOf, subsetFilter, levelsVerdict} from './score.mjs';
 import {completionStatus} from './order.mjs';
 import {differences, lastRecord} from './fixation.mjs';
 import {fixationFileProblems} from './run-trial.mjs';
@@ -106,6 +106,8 @@ export function judgeRun({spec, runs, ledger, conds = loadConditions()}) {
   const perCase = rule.perCaseKinds ? Object.fromEntries(spec.cases.filter((k) => rule.perCaseKinds.includes(k.kind)).map((k) => [k.id, [b, c].map((x) => summarize(spec, runs, x, {only: (q) => q.id === k.id}))])) : null;
   const eff = rule.efficiency ? (() => { const [eb, ec] = [b, c].map((x) => summarize(spec, runs, x, {only: (k) => rule.efficiency.kinds.includes(k.kind)})); return {b: eb, c: ec, kinds: rule.efficiency.kinds, metrics: rule.efficiency.metrics}; })() : null;
   const completion = completionStatus({runs, reserved: ledgerOps.reservedNames(ledger), reservations: ledgerOps.reservations(ledger), spentUsd: ledgerOps.spent(ledger), budget: conds.budget});
+  // #1840: rule.mode levels checks fixed levels in each condition instead of comparing a candidate with a baseline.
+  if (rule.mode === 'levels') return {sums, completion, judgement: levelsVerdict(sums, runs, {completion, rule, subsets})};
   return {sums, completion, judgement: verdictOf(sums[b], sums[c], {completion, subsets, perCase, efficiency: eff, rule})};
 }
 

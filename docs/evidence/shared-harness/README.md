@@ -61,6 +61,36 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 - 設定の例（#1823）：7file、約1,050行（大半は`cases.json`）。
 - 過去の写し：`docs/evidence/`の他の`.mjs`は240件、23,346行（#1820の段階2の写しは17件、2,735行）。
 
+## #1840で加えたもの（2026-11-27）
+
+どれも設定のfieldで働き、そのfieldの無い設定（試験用の設定、#1823）の動きと公開する記録は変えない（試験で確かめる）。#1823の測定は終わっている。
+
+- `conditions.json`の`ascSkills`：配布Skillの名前の一覧（`warranty-scope`を含む17件）。採点（`score.mjs`の`ascSkillsOf`）、probeの期待するdescriptionの件数（`probe-check.mjs`の`ascEntriesOf`）、dry runの入口の数が使う。無ければ従来の16件。
+- fixture：`appFiles: false`（fixture Aのfileを入れず、`extraFiles`だけの別のproject）、`afterInstallFiles`（ASCの導入の後に利用者が置くfile。固有ルールの`context.json`や固有Skill。導入のcommitに含め、commitの件名を他のfixtureと揃える。導入したfileは置き換えない）。
+- `cases.json`の依頼のfield：`expectReads`・`forbidReads`（読むべき・読んではならないfileのpathの正規表現）、`forbidSkills`（選ばれてはならないSkill）、`writes`（書いたfileを試行の終わりの`work/`の写しで読み、`require`・`forbid`を照合する。`collect.mjs`の`fileText`）、`answerNone`（回答に現れてはならない目印）、`userSkill`（利用者のSkill：Skill tool呼出しか`.claude/skills/<name>/SKILL.md`のReadを本文とし、ASCのbyteに数えない）。
+- 判定：`rule.mode: levels`（`score.mjs`の`levelsVerdict`）。候補と基準の比較ではなく、条件ごとに固定の水準（依頼の集合・指標・min）を満たすかを示す。
+
+## #1840の測定前の独立レビューで加えたもの（2026-11-27）
+
+これもfieldの無い設定（試験用、#1823）の動きと公開する記録を変えない（試験で確かめる）。
+
+- `cases.json`の`answerQuota`（観点ごとの目印{`id`・`viewpoint`・`pattern`か`all`・`unless`・`report`}のうち`min`件以上。`report: true`は数えず`markerGroups`で示す）、`answerNone`の`{id, pattern}`（`markerDeductions`）、`markerText: "answer+writes"`（目印を回答と書いたfileの文の和に当てる）。
+- `writes`の`require`・`forbid`の`group`（落ちた理由を`writeFailedGroups`で示す）、`writesReport`（合否に使わない照合）、書かなかった試行の`writeRequireInAnswer`。
+- `cases.json`の`report`（試行ごとに、指定したfileのRead・回答の語・書いたfileの全部を`report`に記録する。合否に使わない）。利用者のSkillが試行のSkill一覧に載ったか（`userSkillsListed`）。
+- 水準の`use: "report"`（計算して`perCondition.reported`に示し、合否に使わない）と`label`、指標`writeCleanWhenWritten`（書いた試行だけを率に入れ、書かなかった試行は`notEligible`）。
+- `run-trial.mjs`が試行の終わりに変更・作成したfileのsha256を`meta.json`の`workFiles`に記録し（`make-fixture.mjs`の`workChanges`）、`collect.mjs`（と、それを呼ぶ`judge.mjs`）は`work/`がそれと違えば拒否する。
+- `probe-check.mjs`：`conditions.json`の`ascSkills`があれば、それ以外の`.claude/skills/`の入口を利用者のSkillとして分け、Skill一覧に載りdescriptionが原文で示されることを`userSkillsListed`で確かめる。
+- `dry-run.mjs`：referenceの計算は、`ascSkills`の無い設定では従来どおり`asc`の依頼だけ（`fixtureReferences`）。
+- `calibrate.mjs`（固定しないtool。`dry-run.mjs`と同じく固定の記録に含めない）：設定の`calibration.json`に挙げた、これまでの評価で採点した回答に目印と書いたfileの照合を当て、これまでの採点と比べた表を作る（`--md`）。
+
+## #1840の再レビューで加えたもの（2026-11-27）
+
+これもfieldの無い設定（試験用、#1823）の動きと公開する記録を変えない（試験で確かめる）。
+
+- `cases.json`の`markerBase` {`pathPattern`}：`markerText: "answer+writes"`で目印を当てる前に、書いたfileの文から、試行の前からあるfileと同じ行（前後の空白を除いて行単位で比べる）を除く（`score.mjs`の`baseLinesFor`・`markerTextOf`）。試行の前からあるfileは、fixtureのHEADのうち`pathPattern`に合うfile（導入した雛形）と、書いたfile自身の試行の前の版。除いた行の数を`markerBaseExcludedLines`に記録する。`collect.mjs`は`work/`のHEADを`make-fixture.mjs`の`headReader`（`git ls-tree`と`git cat-file --batch`）で読み、`priorFiles`・`priorTexts`として渡す。`markerBase`があるのにそれが無ければ採点を拒否する。
+- `writes.requireWithoutBase`：`require`の照合にも同じ除き方を使う（`forbid`は全文に当てる）。
+- `calibrate.mjs`：`bases`（条件ごとの雛形：commitとdirectory）、回答を書いたfileとして当てる形（`form: "written"`）、落ちるべき回答（`mustFail`：雛形そのまま・見出しと表だけ・利用案内だけ・1行だけ埋めた雛形等を、雛形のfileから作る）、1つの回答を複数のfileに分ける形（`fromLine`・`untilLine`）。表に、雛形と同じ行を除かない場合の結果、観点ごとのSkillあり・なしの当たる率と採点、各目印が当たる雛形の行の数、落ちるべき回答の結果を加えた。#1828の「これまでの採点」の合否は、目印と同じ観点と`min`を0/1の点に当てて作ったもので、#1828の判定ではないことを表に書く。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。

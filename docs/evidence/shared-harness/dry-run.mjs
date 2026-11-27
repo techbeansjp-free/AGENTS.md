@@ -18,7 +18,7 @@ import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {makeFixture, pinned, loadConditions, releasePlaceholders} from './make-fixture.mjs';
 import {applyCondition, NEUTRAL_SUBJECT} from './apply-condition.mjs';
-import {ASC_SKILLS, referencesFor} from './score.mjs';
+import {ascSkillsOf, referencesFor} from './score.mjs';
 import {placementProblems} from './guard.mjs';
 import {flags, BUDGET, STOP_LINE_USD, cellOf, promptFor, maxTurnsFor, isolationSettings, probeContext, probeSteps, priorSpendProblems, priorSpentUsd, fixtureOf} from './run-trial.mjs';
 import {plannedTrials, orderProblems, loadOrder} from './order.mjs';
@@ -91,6 +91,15 @@ export function trialPlan(conds = loadConditions(), spec = loadSpec()) {
     breakEvenPerTrialUsd: Number(((STOP_LINE_USD - BUDGET.perTrialUsd - probes.length * plan.probeUsd) / (planned.length - 1)).toFixed(3))};
 }
 
+// #1840: with conditions.json ascSkills, the references of every case whose expected Skill is one of them (relative to
+// .agent-skill-chain/skills/asc/references, so another Skill's as ../../<skill>/references/<ref>); without the field (the
+// test config, #1823) only the asc cases, as before (review L1).
+export function fixtureReferences(cases, condition, conds) {
+  const skills = ascSkillsOf(conds);
+  const refCases = conds.ascSkills ? cases.filter((k) => skills.includes(k.expect)) : cases.filter((k) => k.expect === 'asc');
+  return [...new Set(refCases.flatMap((k) => referencesFor(k, condition).map((r) => (k.expect === 'asc' ? r : `../../${k.expect}/references/${r}`))))];
+}
+
 // An installed file that may differ between the conditions: listed, or matching a listed entry that starts with ^.
 export const diffAllowed = (p, list) => list.some((e) => (e.startsWith('^') ? new RegExp(e).test(p) : e === p));
 // The files a fixture must hold for its prompts: fixtures.<id>.promptFiles, or the design files and empty directories.
@@ -134,16 +143,17 @@ function main() {
     const md = fs.readFileSync(path.join(dir, 'CLAUDE.md'), 'utf8');
     const def = conds.fixtures[f];
     const cases = spec.cases.filter((k) => (k.fixture ?? 'A') === f);
-    const refs = [...new Set(cases.filter((k) => k.expect === 'asc').flatMap((k) => referencesFor(k, c)))];
+    const skills = ascSkillsOf(conds);
+    const refs = fixtureReferences(cases, c, conds);
     const row = {condition: c, fixture: f, kind: def.kind, source: made.source, pinned: made.pinned, tarballSha256: made.install.tarballSha256, packageVersion: made.install.packageVersion,
       runtimeVersion: made.install.runtimeVersion, sources: made.sources, entries: made.install.entries.length, entryProblems: made.install.problems, adopted: made.install.adopted?.id ?? null,
       adoptedAction: made.install.adopted?.action ?? null, blockSha256: made.install.adopted?.blockSha256 ?? null, claudeMdSha256: sha(md), claudeMdProblems: claudeMdProblems(md, def.baseClaudeMd),
-      scorerSkillsMatchRelease: JSON.stringify([...ASC_SKILLS].sort()) === JSON.stringify(made.install.distributed),
+      scorerSkillsMatchRelease: JSON.stringify([...skills].sort()) === JSON.stringify(made.install.distributed),
       ascBodyPresent: fs.existsSync(path.join(dir, '.agent-skill-chain/skills/asc/SKILL.md')), references: refs,
       referencesPresent: refs.every((r) => fs.existsSync(path.join(dir, '.agent-skill-chain/skills/asc/references', r))),
       promptFilesExist: namedFiles(def).every((n) => fs.existsSync(path.join(dir, n))), needs: cases.flatMap((k) => needsProblems(dir, k)), placement: placementProblems(dir, {repoRoot})};
     const wantSource = allowUnreleased ? 'unpinned' : pinned(c).kind;
-    row.ok = row.source === wantSource && row.entries === ASC_SKILLS.length && row.entryProblems.length === 0 && row.adopted === conds.adopt
+    row.ok = row.source === wantSource && row.entries === skills.length && row.entryProblems.length === 0 && row.adopted === conds.adopt
       && row.claudeMdProblems.length === 0 && row.scorerSkillsMatchRelease && row.ascBodyPresent && row.referencesPresent && row.promptFilesExist && row.needs.length === 0 && row.placement.length === 0;
     report.fixtures[id] = row;
     const copy = path.join(root, 'copies', id, 'work');
@@ -168,7 +178,7 @@ function main() {
       const b = dirs[`${cb}-${f}`], s = dirs[`${cs}-${f}`];
       const md = (d) => fs.readFileSync(path.join(d, 'CLAUDE.md'), 'utf8');
       const entry = (d, n) => fs.readFileSync(path.join(d, '.claude/skills', n, 'SKILL.md'), 'utf8');
-      const x = {installedDiff: installedDiff(b, s), otherEntriesDiffer: ASC_SKILLS.filter((n) => n !== 'asc' && entry(b, n) !== entry(s, n))};
+      const x = {installedDiff: installedDiff(b, s), otherEntriesDiffer: ascSkillsOf(conds).filter((n) => n !== 'asc' && entry(b, n) !== entry(s, n))};
       if (texts) {
         const descB = description(entry(b, 'asc')), descS = description(entry(s, 'asc'));
         const ascRest = entry(b, 'asc').replace(/^description: .*$/m, '') === entry(s, 'asc').replace(/^description: .*$/m, '');
