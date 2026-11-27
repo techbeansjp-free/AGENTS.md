@@ -7,10 +7,11 @@ import path from 'node:path';
  *    canonical document of that ID kind: as the first cell of a table row or the first word of a heading.
  * 2. The same value written in two documents for the same ID (a table row naming the ID repeats a cell of another
  *    document's row naming that ID) is reported, unless every such document is a canonical document of the ID kind.
- * Prose, code blocks, cells that hold an ID, a link, a code span or a {placeholder}, and values shorter than
- * MIN_VALUE characters are not compared. Nothing is written; the user decides what to change.
+ * Prose, code blocks and cells that hold an ID, a link, a code span or a {placeholder} are not compared. A value is a
+ * cell with a digit (versions, thresholds, periods) or of at least MIN_TEXT characters: the short labels the templates
+ * offer as choices (分類・品質特性・状態, e.g. セキュリティ) repeat across documents without copying a value. Nothing is written; the user decides what to change.
  */
-const MAX_FILES=2000,MAX_BYTES=1000000,MIN_VALUE=3;
+const MAX_FILES=2000,MAX_BYTES=1000000,MIN_DIGIT=2,MIN_TEXT=10;
 const HEADER=['情報の種類','正本','ID','参照だけにする文書'];
 
 function readText(file){
@@ -101,7 +102,8 @@ function idPattern(prefixes){
 function normalizeValue(cell){return cell.normalize('NFKC').replace(/\s+/g,' ').trim();}
 function isValue(cell,pattern){
  const value=normalizeValue(cell);
- if([...value.replace(/\s/g,'')].length<MIN_VALUE)return false;
+ const length=[...value.replace(/\s/g,'')].length;
+ if(length<(/\d/.test(value)?MIN_DIGIT:MIN_TEXT))return false;
  pattern.lastIndex=0;if(pattern.test(value))return false;
  return !/\{[^}]*\}|\[[^\]]*\]\([^)]*\)|`/.test(value);
 }
@@ -147,7 +149,7 @@ export function checkSpecs(specsDirectory,{table}={}){
    for(const id of rowIds){
     const key=JSON.stringify([id,normalizeValue(cell)]);
     if(!occurrences.has(key))occurrences.set(key,[]);
-    occurrences.get(key).push({file,line:row.number});
+    const places=occurrences.get(key);if(!places.some(place=>place.file===file&&place.line===row.number))places.push({file,line:row.number});
    }
   }
  }
