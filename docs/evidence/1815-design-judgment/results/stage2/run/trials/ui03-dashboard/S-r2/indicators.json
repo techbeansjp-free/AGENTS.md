@@ -1,0 +1,228 @@
+{
+ "gold": {
+  "schema": "asc-1807-gold-check/v1",
+  "case": "ui03-dashboard",
+  "missing": [],
+  "coverage": 1,
+  "wideOverflow": false,
+  "narrowOverflow": false,
+  "externalRequests": 0
+ },
+ "firstView": {
+  "schema": "asc-1815-first-view/v2",
+  "case": "ui03-dashboard",
+  "widths": {
+   "narrow": {
+    "width": 800,
+    "height": 1280,
+    "answerFound": [
+     "出荷遅延率",
+     "LANE-B01",
+     "LANE-C02",
+     "温度センサー"
+    ],
+    "answerMissing": [],
+    "selectorsInView": {},
+    "answerAll": true,
+    "screensToAnswer": {
+     "出荷遅延率": 1,
+     "LANE-B01": 1,
+     "LANE-C02": 1,
+     "温度センサー": 1
+    },
+    "hiddenRequired": []
+   },
+   "wide": {
+    "width": 1440,
+    "height": 900,
+    "answerFound": [
+     "出荷遅延率",
+     "LANE-B01",
+     "LANE-C02",
+     "温度センサー"
+    ],
+    "answerMissing": [],
+    "selectorsInView": {},
+    "answerAll": true,
+    "screensToAnswer": {
+     "出荷遅延率": 1,
+     "LANE-B01": 1,
+     "LANE-C02": 1,
+     "温度センサー": 1
+    },
+    "hiddenRequired": []
+   }
+  },
+  "fixedNow": "2027-03-08T14:32:00+09:00",
+  "externalRequests": 0
+ },
+ "render": {
+  "id": "S-r2",
+  "case": "ui03",
+  "exists": true,
+  "viewports": {
+   "desktop": {
+    "externalRequests": [],
+    "consoleErrors": [],
+    "pageErrors": [],
+    "scrollWidth": 1440,
+    "innerWidth": 1440,
+    "overflowX": false,
+    "docHeight": 1184,
+    "textLen": 1449,
+    "lcp": 181.9000000001397,
+    "cls": 0,
+    "fontBody": "\"Noto Sans CJK JP\", \"Liberation Sans\", sans-serif",
+    "fontH1": "\"Noto Sans CJK JP\", \"Liberation Sans\", sans-serif",
+    "fontH2": "\"Noto Sans CJK JP\", \"Liberation Sans\", sans-serif",
+    "bodyBg": "rgb(243, 244, 246)",
+    "htmlBg": "rgba(0, 0, 0, 0)",
+    "topColors": [
+     [
+      "rgb(27, 31, 36)",
+      143
+     ],
+     [
+      "rgb(77, 85, 96)",
+      61
+     ],
+     [
+      "rgb(253, 236, 234)",
+      14
+     ],
+     [
+      "rgb(180, 35, 24)",
+      8
+     ],
+     [
+      "rgb(255, 255, 255)",
+      8
+     ],
+     [
+      "rgb(227, 231, 236)",
+      8
+     ],
+     [
+      "rgb(138, 75, 0)",
+      7
+     ],
+     [
+      "rgb(213, 217, 222)",
+      6
+     ],
+     [
+      "rgb(59, 91, 125)",
+      6
+     ],
+     [
+      "rgb(255, 244, 224)",
+      1
+     ]
+    ],
+    "animations": 0,
+    "hasReducedMotionQuery": false,
+    "firstY": {
+     "出荷遅延率": 97,
+     "温度センサー": 171,
+     "LANE-B01": 97,
+     "汐見台三丁目": null,
+     "中央通り": null,
+     "在庫あり": null,
+     "LG-2040-SS-HT-0500-JISB1192": null
+    },
+    "landmarks": {
+     "main": 0,
+     "h1": 1,
+     "nav": 0
+    },
+    "lang": "ja",
+    "axe": [],
+    "axeSeriousCritical": 0,
+    "tabStops": 1,
+    "tabStopsWithIndicator": 1,
+    "tabsToRetry": 1,
+    "tabsToSearch": null,
+    "animationsReduced": 0
+   },
+   "tablet": {
+    "externalRequests": [],
+    "consoleErrors": [],
+    "pageErrors": [],
+    "scrollWidth": 800,
+    "innerWidth": 800,
+    "overflowX": false,
+    "docHeight": 1538,
+    "textLen": 1449,
+    "lcp": 177.4000000001397,
+    "cls": 0,
+    "fontBody": "\"Noto Sans CJK JP\", \"Liberation Sans\", sans-serif",
+    "fontH1": "\"Noto Sans CJK JP\", \"Liberation Sans\", sans-serif",
+    "fontH2": "\"Noto Sans CJK JP\", \"Liberation Sans\", sans-serif",
+    "bodyBg": "rgb(243, 244, 246)",
+    "htmlBg": "rgba(0, 0, 0, 0)",
+    "topColors": [
+     [
+      "rgb(27, 31, 36)",
+      143
+     ],
+     [
+      "rgb(77, 85, 96)",
+      61
+     ],
+     [
+      "rgb(253, 236, 234)",
+      14
+     ],
+     [
+      "rgb(180, 35, 24)",
+      8
+     ],
+     [
+      "rgb(255, 255, 255)",
+      8
+     ],
+     [
+      "rgb(227, 231, 236)",
+      8
+     ],
+     [
+      "rgb(138, 75, 0)",
+      7
+     ],
+     [
+      "rgb(213, 217, 222)",
+      6
+     ],
+     [
+      "rgb(59, 91, 125)",
+      6
+     ],
+     [
+      "rgb(255, 244, 224)",
+      1
+     ]
+    ],
+    "animations": 0,
+    "hasReducedMotionQuery": false,
+    "firstY": {
+     "出荷遅延率": 93,
+     "温度センサー": 207,
+     "LANE-B01": 120,
+     "汐見台三丁目": null,
+     "中央通り": null,
+     "在庫あり": null,
+     "LG-2040-SS-HT-0500-JISB1192": null
+    },
+    "landmarks": {
+     "main": 0,
+     "h1": 1,
+     "nav": 0
+    },
+    "lang": "ja",
+    "axe": [],
+    "axeSeriousCritical": 0,
+    "animationsReduced": 0
+   }
+  }
+ }
+}

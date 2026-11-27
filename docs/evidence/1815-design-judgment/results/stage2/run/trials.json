@@ -1,0 +1,380 @@
+[
+ {
+  "trial": "ui03-dashboard/B-r1",
+  "costUsd": 0.29385929999999993,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": true,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 2
+ },
+ {
+  "trial": "ui03-dashboard/B-r2",
+  "costUsd": 0.2655802,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 9
+ },
+ {
+  "trial": "ui03-dashboard/B-r3",
+  "costUsd": 0.29640500000000003,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": true,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 14
+ },
+ {
+  "trial": "ui03-dashboard/S-r1",
+  "costUsd": 0.2921553,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 3
+ },
+ {
+  "trial": "ui03-dashboard/S-r2",
+  "costUsd": 0.2821497,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": true,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 8
+ },
+ {
+  "trial": "ui03-dashboard/S-r3",
+  "costUsd": 0.3121802,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 15
+ },
+ {
+  "trial": "ui04-parts-search/B-r1",
+  "costUsd": 0.2741446,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 6
+ },
+ {
+  "trial": "ui04-parts-search/B-r2",
+  "costUsd": 0.2737506,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": true,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 13
+ },
+ {
+  "trial": "ui04-parts-search/B-r3",
+  "costUsd": 0.2647174,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 18
+ },
+ {
+  "trial": "ui04-parts-search/S-r1",
+  "costUsd": 0.26662830000000004,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": true,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 7
+ },
+ {
+  "trial": "ui04-parts-search/S-r2",
+  "costUsd": 0.2602136,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 12
+ },
+ {
+  "trial": "ui04-parts-search/S-r3",
+  "costUsd": 0.2654055,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 19
+ },
+ {
+  "trial": "ui07-bus-mobile/B-r1",
+  "costUsd": 0.2094361,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": false,
+   "finalBothWidths": false,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 4
+ },
+ {
+  "trial": "ui07-bus-mobile/B-r2",
+  "costUsd": 0.2027545,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": false,
+   "finalBothWidths": false,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 11
+ },
+ {
+  "trial": "ui07-bus-mobile/B-r3",
+  "costUsd": 0.2140982,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": false,
+   "finalBothWidths": false,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 16
+ },
+ {
+  "trial": "ui07-bus-mobile/S-r1",
+  "costUsd": 0.21650250000000001,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": true,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": false,
+   "finalBothWidths": false,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 5
+ },
+ {
+  "trial": "ui07-bus-mobile/S-r2",
+  "costUsd": 0.22991889999999998,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": false,
+   "finalBothWidths": false,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 10
+ },
+ {
+  "trial": "ui07-bus-mobile/S-r3",
+  "costUsd": 0.23277920000000002,
+  "exit": 0,
+  "subtype": "success",
+  "reads": {
+   "ascBody": true,
+   "implementation": false,
+   "ujaBody": false,
+   "journeys": false,
+   "skillCalls": []
+  },
+  "coreSteps": {
+   "alternativesCompared": false,
+   "narrowChecked": true,
+   "wideChecked": true,
+   "finalBothWidths": true,
+   "exemplarViewed": false
+  },
+  "ledgerSeq": 17
+ }
+]

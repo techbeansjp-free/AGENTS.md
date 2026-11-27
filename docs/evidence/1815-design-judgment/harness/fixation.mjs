@@ -17,10 +17,11 @@ import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import * as ledgerOps from '../../1814-skill-invocation/harness/ledger.mjs';
+import {RESULTS} from './results-dir.mjs';
 
 const ev = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OWN = ['cases.json', 'conditions.json', 'release.json', 'run-order.json', 'decision-criteria.md', 'harness/rank-prompt.txt',
-  ...['budget', 'clock', 'collect', 'decide', 'first-view', 'fixation', 'make-blind', 'make-sample', 'order', 'pairing', 'probe', 'rank-guard', 'reads', 'run-all', 'run-indicators', 'run-trial'].map((n) => `harness/${n}.mjs`)];
+  ...['budget', 'clock', 'collect', 'decide', 'first-view', 'fixation', 'make-blind', 'make-sample', 'order', 'pairing', 'probe', 'rank-guard', 'reads', 'results-dir', 'run-all', 'run-indicators', 'run-trial'].map((n) => `harness/${n}.mjs`)];
 const E1807 = ['harness/core-steps.mjs', 'harness/gold-check.mjs', 'harness/render.mjs', 'harness/run-render.mjs', 'gold.json',
   'env/gen-prompt.txt', 'env/mcp-server.mjs', 'env/proxy.mjs', 'env/allowlist.json', 'env/allowlist-catalog.json', 'env/Dockerfile',
   'cases/FONTS.md', 'cases/ui04-parts-search/BRIEF.md', 'cases/ui04-parts-search/data.json', 'cases/ui07-bus-mobile/BRIEF.md', 'cases/ui07-bus-mobile/data.json'].map((f) => `../1807-design-eval-browser/${f}`);
@@ -37,8 +38,8 @@ export const lastRecord = (fx) => fx.records.at(-1);
 export function fixationFileProblems(fx, root = ev) {
   const g = (a) => spawnSync('git', a, {cwd: root, encoding: 'utf8'});
   const p = [];
-  const st = g(['status', '--porcelain', '--', 'results/fixation.json']);
-  if (st.status !== 0 || st.stdout.trim()) p.push('results/fixation.json is not committed or has local changes');
+  const st = g(['status', '--porcelain', '--', `${RESULTS}/fixation.json`]);
+  if (st.status !== 0 || st.stdout.trim()) p.push(`${RESULTS}/fixation.json is not committed or has local changes`);
   for (const r of fx.records) if (g(['merge-base', '--is-ancestor', r.fixedAtCommit, 'HEAD']).status !== 0) p.push(`fixation record commit ${r.fixedAtCommit} is not in HEAD's history`);
   const readme = fs.existsSync(path.join(root, 'README.md')) ? fs.readFileSync(path.join(root, 'README.md'), 'utf8') : '';
   if (!readme.includes(fx.records[0].fixedAtCommit)) p.push('README.md does not name the first fixation commit');
@@ -47,15 +48,15 @@ export function fixationFileProblems(fx, root = ev) {
 
 // Everything a paid step needs before it may start (run-trial --run, budget reserve).
 export function paidStepProblems(ledgerFile, root = ev) {
-  const file = path.join(root, 'results/fixation.json');
-  if (!fs.existsSync(file)) return ['results/fixation.json is missing (fix the plan before running)'];
+  const file = path.join(root, RESULTS, 'fixation.json');
+  if (!fs.existsSync(file)) return [`${RESULTS}/fixation.json is missing (fix the plan before running)`];
   const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
   const p = [];
   const diff = differences(lastRecord(fx), root);
-  if (diff.length) p.push(`fixed files differ from results/fixation.json: ${diff.join(', ')}`);
+  if (diff.length) p.push(`fixed files differ from ${RESULTS}/fixation.json: ${diff.join(', ')}`);
   p.push(...fixationFileProblems(fx, root));
   if (!ledgerFile || !fs.existsSync(ledgerFile)) p.push('the ledger file does not exist (create it with fixation.mjs init --ledger)');
-  else if (ledgerOps.ledgerId(ledgerFile) !== fx.records[0].ledgerId) p.push('the ledger is not the one recorded in results/fixation.json');
+  else if (ledgerOps.ledgerId(ledgerFile) !== fx.records[0].ledgerId) p.push(`the ledger is not the one recorded in ${RESULTS}/fixation.json`);
   return p;
 }
 

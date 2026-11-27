@@ -44,6 +44,7 @@ import {makeSample} from './make-sample.mjs';
 import {ev, evidenceRoot, loadJson, fileSha256, tarballProblems, installedProblems} from './pairing.mjs';
 import {readRecord} from './reads.mjs';
 import {paidStepProblems, lastRecord} from './fixation.mjs';
+import {RESULTS} from './results-dir.mjs';
 import {loadOrder, trialName, probeName, orderRefusal} from './order.mjs';
 import {approvalProblems, probePrompt, probeProblems, probeRefusal} from './probe.mjs';
 
@@ -207,7 +208,7 @@ function main() {
     if (a.length) fail(a.join('; '));
     for (const m of [homeMarker, repoMarker]) if (!fs.existsSync(m)) fail('marker file missing (node probe.mjs markers create <repo>)');
   }
-  const fixationFile = path.join(ev, 'results/fixation.json');
+  const fixationFile = path.join(ev, RESULTS, 'fixation.json');
   const fx = JSON.parse(fs.readFileSync(fixationFile, 'utf8'));
   if (fs.existsSync(p.dir)) fail(`exists: ${p.dir}`);
   const im = imageProblems();

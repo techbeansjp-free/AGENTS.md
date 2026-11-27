@@ -39,6 +39,34 @@
 
 結果の限界：各条件3回で、候補の文がほぼ読まれなかったので、候補の文そのものの効果については何も言えない。読まれない原因（書込みのtoolの有無か、依頼の形か、browserのtoolか）は、この測定では分けていない。
 
+## 段階2（再評価）
+
+段階1（release v0.5.109）は、書込みtoolのある環境でASCがほとんど読まれず、未判定で終わった。#1820でCLAUDE.mdの案内文を直してreleaseしたので、#1815の評価をやり直す。**変えるのは版と候補の元だけ**で、判定の規則（[decision-criteria.md](decision-criteria.md)。上限40 USD、Fableとcodexの盲検の順位、8/9の規則、未判定の規則）、ケース・指標・run-order・harnessの規則は変えない。測定の時点で最新のreleaseを測定の前に固定し、両条件をその同じ版で新しく測る（#1815のownerの判断）。
+
+| 項目 | 段階1 | 段階2 |
+| --- | --- | --- |
+| B | release v0.5.109 | release v0.5.113（target `72d6524c`、sha256 `750e0e73…2fe7`。SHA256SUMSとGitHubのasset digestに一致） |
+| S | `bb1d1886`でpack（sha256 `5fad2293…09af`） | 同じ候補の文を、現在のmain（`72d6524c`）へ当てた`a72a3148`でpack（sha256 `6d55b3f9…9dc0`、3つの別directoryへのpackが同じsha256）。当てるときのずれは無かった（2つのreferenceは`af2ab12e`と`72d6524c`の間で変わっていない）。違うのは`release-identity.json`と2つのreferenceだけで、2つのreferenceの内容は段階1のSと同じ（[release.json](release.json)の`installedReferences`が一致） |
+| 台帳・固定の記録 | `results/`（`fixation.json`、台帳はscratch） | **新しい台帳と新しい固定の記録**。`results/stage2/`（段階1の記録は上書きしない） |
+
+候補の文は、段階1と同じく、packした後に取り消したcommitを続けた（配布物はmainのまま。採るのは判定の後）。
+
+harnessの変更は最小で、記録の置き場所を選ぶ`harness/results-dir.mjs`（環境変数`ASC1815_RESULTS`。既定は`results`で段階1と同じ）だけ。段階2では全commandに`ASC1815_RESULTS=results/stage2`を付ける。固定の記録・probeの承認（`results/stage2/probe-approval.json`。ownerが段階2のために改めて確認する）・台帳がこの置き場所で見られ、段階1の記録や台帳では測定が始まらない。試行の公開の記録は`collect.mjs`の出力先を`results/stage2/run`にする。生のtrace・screenshot・tool logはcommitしない（[評価の記録の規約](../../../.agent-skill-chain/project/rules/evaluation-record.json)）。
+
+段階2の開始の手順（モデルを呼ぶのはこの後）：(1) 台帳をrepositoryの外に新しく作り、`ASC1815_RESULTS=results/stage2 node harness/fixation.mjs init results/stage2/fixation.json --ledger <新しい台帳>`、(2) 固定の記録をcommit、(3) この節に最初の記録のcommitを書く（`fixation.mjs`が検査する）、(4) ownerの確認をprobe-approval.jsonに記録してから、probe、生成、順位。最初の記録のcommit：`a431ed7bfeadcdf56da28d51605b962b3db98518`。
+
+### 段階2の結果（2026-11-27）
+
+- 隔離の確認：B・Sとも回1で合格し、比較の差は無かった（費用0.17 USD。[results/stage2/run/probes.json](results/stage2/run/probes.json)）。目印は確認の後に消した。
+- 生成：計画の18試行がすべて成功し、置換えは0（生成4.65 USD、probeとの合計4.82 USD）。公開の記録は[results/stage2/run/](results/stage2/run/)（試行の要約・読込み・指標・tool呼出しの順。生のtrace・screenshotは含めない）。
+- **ASCの本文の読込み：18/18**（段階1では2/18）。v0.5.113では、書込みのtoolがある環境でも本文が読まれた（段階1から版が変わっており、原因はこの測定では分けていない。#1820の案内文の修正が一因と考えられる）。
+- **候補の文のreferenceの読込み（readS）：3ケースとも1/3**（`implementation.md`。`journeys.md`はB・Sとも0/18）。Bでも`implementation.md`は3/9。本文は読まれるが、候補の文を置いたreferenceは多くの試行で読まれない。
+- 指標：最初の表示で答えが見える幅の数は、ui03とui04で同じ（6対6）、ui07はSが4対3で上。非劣化の検査では、ui07のS-r2で必須の項目の被覆が0.923（ui07のほかの試行は1）で、ui07が「非劣化の失敗」になった。規則5では害のケース（`harmCases`）に当たるが、全体は規則7で未判定になる。
+- 判定（[decision-no-ranks.json](results/stage2/run/decision-no-ranks.json)、順位なし）：固定した読込みの門（Sの3試行のうち2試行以上で候補の文が届くこと）を3ケースとも満たさないので、**3ケースとも「未判定（候補の文が読まれていない）」、判定できるケースは0、全体は未判定（取り込まない）**。`decide.mjs`の表示は「順位待ち」だが、これは順位の有無を読込みの門より先に調べる作りのためである（段階1と同じ）。
+- 順位付け（Fable・Codex）は行っていない。固定した規則では、順位がどうでも判定は変わらない（効果ありには、判定できるケースが要る）ので、費用（Fableの予約最大8 USD）を使わないと統括が判断し、ownerへ報告した。ownerはその報告を受けて、取り込まずに閉じると決めた（2026-11-27、会話）。
+
+結果の限界：各条件3回。候補の文が読まれない原因は分けていないが、referenceを開く条件（SKILL.mdの入口の文）が一因と考えられる。候補の文そのものの効果については、段階1と同じく何も言えない。
+
 ## 目的（計画）
 
 外部のデザイン判断Skillから選んだ上位3案（両幅の初期表示の確認、判断の一文から情報の優先順位と密度を決める、意匠が未定のときだけ2案を描画して比べる）を、ASCの既存のSkillへ追記した版（S）が、現状のASC（B）より、題材と利用目的に合った画面を作らせるかを測る。ASCのSkillが読まれる状態（#1814の条件I）で比べる。効果が無ければ取り込まない。
@@ -129,14 +157,15 @@
 
 ## 実行の手順
 
-`<W>`はこのworktree、`<scratch>`はrepositoryとHOMEの外のdirectory。固定の記録：[results/fixation.json](results/fixation.json)。最初の記録のcommitは`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`、今の記録（測定に使う最後の記録）のcommitは下の「固定」に書く。台帳：`<scratch>/rel1815/ledger/ledger.jsonl`（予約なし）。
+`<W>`はこのworktree、`<scratch>`はrepositoryとHOMEの外のdirectory。固定の記録：段階1は[results/fixation.json](results/fixation.json)（最初の記録のcommitは`877f83728b29c7f622cad97a16e5fec0b2f2d3ff`、今の記録のcommitは下の「固定」に書く）。段階2は`results/stage2/fixation.json`（最初の記録のcommitは上の「段階2（再評価）」に書く）で、下のcommandは全て`ASC1815_RESULTS=results/stage2`を付けて実行する。台帳：段階2は`<scratch>/rel1815b/ledger/ledger-1815s2.jsonl`（新しく作り、予約なし。段階1の台帳は使わない）。
 
 ```sh
 cd <W>/docs/evidence/1815-design-judgment
+export ASC1815_RESULTS=results/stage2   # 段階2。段階1の記録を読み直すときだけ外す
 node --test harness/harness.test.mjs
 node harness/dry-run.mjs <B.tgz> <S.tgz> <scratch>/run1815-dry --out <scratch>/dry-run.json   # モデルを呼ばない
-L=<scratch>/rel1815/ledger/ledger.jsonl
-# 0. 隔離の確認（results/probe-approval.jsonのcommitの後）
+L=<scratch>/rel1815b/ledger/ledger-1815s2.jsonl
+# 0. 隔離の確認（results/stage2/probe-approval.jsonのcommitの後）
 node harness/probe.mjs markers create <W> --ledger $L
 for c in B S; do
   ASC1815_ALLOW_PAID=1 CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" node harness/run-trial.mjs <scratch>/runs probe $c 1 \
@@ -172,7 +201,7 @@ node harness/rank-guard.mjs unlock $G --record <scratch>/rank-guard.jsonl
 # 5. 判定と公開する記録（#1815の測定では、ownerの判断で順位付け（4）と順位を入れたdecideは行っていない。順位なしのdecideだけを実行した：上の「結果」）
 node harness/decide.mjs <scratch>/runs <scratch>/render <scratch>/ranks <scratch>/decision.json --ledger $L --keys <scratch>/keys \
   --blind <scratch>/blind --guard-record <scratch>/rank-guard.jsonl
-node harness/collect.mjs <scratch>/runs <scratch>/render results/run
+node harness/collect.mjs <scratch>/runs <scratch>/render results/stage2/run
 ```
 
 ### 中断からの再開

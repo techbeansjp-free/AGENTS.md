@@ -1,0 +1,27 @@
+{
+ "ascBodyRead": true,
+ "implementationRead": true,
+ "ujaBodyRead": false,
+ "journeysRead": false,
+ "firstReadOrder": [
+  "ascBody",
+  "implementation"
+ ],
+ "relevantReferenceRead": true,
+ "skillCalls": [],
+ "ascFilesRead": [
+  ".agent-skill-chain/skills/asc/SKILL.md",
+  ".agent-skill-chain/skills/asc/references/implementation.md",
+  ".agent-skill-chain/skills/asc/references/workspace.md"
+ ],
+ "readsOutsideProject": 0,
+ "readAttempts": 6,
+ "toolCounts": {
+  "Read": 6,
+  "Grep": 2,
+  "Write": 2,
+  "Edit": 1,
+  "mcp__browser__screenshot": 2
+ },
+ "cwd": "<runs>/ui03-dashboard/B-r1/fixture"
+}

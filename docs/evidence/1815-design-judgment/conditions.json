@@ -17,7 +17,7 @@
  "promptNote": "#1807の手順を指示しない依頼文（docs/evidence/からの相対path）。両条件・全ケースで同じ。",
  "conditions": {
   "B": {
-   "label": "現行ASC（release v0.5.109、利用者の手順で導入し、CLAUDE.mdの案内文を採用）",
+   "label": "現行ASC（release。版はrelease.jsonのB。利用者の手順で導入し、CLAUDE.mdの案内文を採用）",
    "release": "B"
   },
   "S": {

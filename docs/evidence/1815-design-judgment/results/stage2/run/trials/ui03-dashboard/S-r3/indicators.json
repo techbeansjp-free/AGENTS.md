@@ -1,0 +1,216 @@
+{
+ "gold": {
+  "schema": "asc-1807-gold-check/v1",
+  "case": "ui03-dashboard",
+  "missing": [],
+  "coverage": 1,
+  "wideOverflow": false,
+  "narrowOverflow": false,
+  "externalRequests": 0
+ },
+ "firstView": {
+  "schema": "asc-1815-first-view/v2",
+  "case": "ui03-dashboard",
+  "widths": {
+   "narrow": {
+    "width": 800,
+    "height": 1280,
+    "answerFound": [
+     "出荷遅延率",
+     "LANE-B01",
+     "LANE-C02",
+     "温度センサー"
+    ],
+    "answerMissing": [],
+    "selectorsInView": {},
+    "answerAll": true,
+    "screensToAnswer": {
+     "出荷遅延率": 1,
+     "LANE-B01": 1,
+     "LANE-C02": 1,
+     "温度センサー": 1
+    },
+    "hiddenRequired": []
+   },
+   "wide": {
+    "width": 1440,
+    "height": 900,
+    "answerFound": [
+     "出荷遅延率",
+     "LANE-B01",
+     "LANE-C02",
+     "温度センサー"
+    ],
+    "answerMissing": [],
+    "selectorsInView": {},
+    "answerAll": true,
+    "screensToAnswer": {
+     "出荷遅延率": 1,
+     "LANE-B01": 1,
+     "LANE-C02": 1,
+     "温度センサー": 1
+    },
+    "hiddenRequired": []
+   }
+  },
+  "fixedNow": "2027-03-08T14:32:00+09:00",
+  "externalRequests": 0
+ },
+ "render": {
+  "id": "S-r3",
+  "case": "ui03",
+  "exists": true,
+  "viewports": {
+   "desktop": {
+    "externalRequests": [],
+    "consoleErrors": [],
+    "pageErrors": [],
+    "scrollWidth": 1440,
+    "innerWidth": 1440,
+    "overflowX": false,
+    "docHeight": 1065,
+    "textLen": 1188,
+    "lcp": 166.39999999990687,
+    "cls": 0,
+    "fontBody": "\"Noto Sans CJK JP\", \"Noto Sans JP\", sans-serif",
+    "fontH1": "\"Noto Sans CJK JP\", \"Noto Sans JP\", sans-serif",
+    "fontH2": "\"Noto Sans CJK JP\", \"Noto Sans JP\", sans-serif",
+    "bodyBg": "rgb(243, 244, 246)",
+    "htmlBg": "rgba(0, 0, 0, 0)",
+    "topColors": [
+     [
+      "rgb(26, 29, 33)",
+      105
+     ],
+     [
+      "rgb(75, 85, 99)",
+      60
+     ],
+     [
+      "rgb(180, 35, 24)",
+      11
+     ],
+     [
+      "rgb(255, 255, 255)",
+      11
+     ],
+     [
+      "rgb(227, 230, 234)",
+      8
+     ],
+     [
+      "rgb(91, 107, 127)",
+      8
+     ],
+     [
+      "rgb(213, 217, 223)",
+      6
+     ],
+     [
+      "rgb(253, 236, 234)",
+      4
+     ],
+     [
+      "rgb(248, 249, 250)",
+      1
+     ]
+    ],
+    "animations": 0,
+    "hasReducedMotionQuery": false,
+    "firstY": {
+     "出荷遅延率": 95,
+     "温度センサー": 169,
+     "LANE-B01": 545,
+     "汐見台三丁目": null,
+     "中央通り": null,
+     "在庫あり": null,
+     "LG-2040-SS-HT-0500-JISB1192": null
+    },
+    "landmarks": {
+     "main": 0,
+     "h1": 1,
+     "nav": 0
+    },
+    "lang": "ja",
+    "axe": [],
+    "axeSeriousCritical": 0,
+    "tabStops": 1,
+    "tabStopsWithIndicator": 1,
+    "tabsToRetry": 1,
+    "tabsToSearch": null,
+    "animationsReduced": 0
+   },
+   "tablet": {
+    "externalRequests": [],
+    "consoleErrors": [],
+    "pageErrors": [],
+    "scrollWidth": 800,
+    "innerWidth": 800,
+    "overflowX": false,
+    "docHeight": 1723,
+    "textLen": 1266,
+    "lcp": 170.20000000018626,
+    "cls": 0,
+    "fontBody": "\"Noto Sans CJK JP\", \"Noto Sans JP\", sans-serif",
+    "fontH1": "\"Noto Sans CJK JP\", \"Noto Sans JP\", sans-serif",
+    "fontH2": "\"Noto Sans CJK JP\", \"Noto Sans JP\", sans-serif",
+    "bodyBg": "rgb(243, 244, 246)",
+    "htmlBg": "rgba(0, 0, 0, 0)",
+    "topColors": [
+     [
+      "rgb(26, 29, 33)",
+      105
+     ],
+     [
+      "rgb(75, 85, 99)",
+      91
+     ],
+     [
+      "rgb(180, 35, 24)",
+      11
+     ],
+     [
+      "rgb(255, 255, 255)",
+      11
+     ],
+     [
+      "rgb(227, 230, 234)",
+      8
+     ],
+     [
+      "rgb(91, 107, 127)",
+      8
+     ],
+     [
+      "rgb(213, 217, 223)",
+      6
+     ],
+     [
+      "rgb(253, 236, 234)",
+      4
+     ]
+    ],
+    "animations": 0,
+    "hasReducedMotionQuery": false,
+    "firstY": {
+     "出荷遅延率": 135,
+     "温度センサー": 193,
+     "LANE-B01": 727,
+     "汐見台三丁目": null,
+     "中央通り": null,
+     "在庫あり": null,
+     "LG-2040-SS-HT-0500-JISB1192": null
+    },
+    "landmarks": {
+     "main": 0,
+     "h1": 1,
+     "nav": 0
+    },
+    "lang": "ja",
+    "axe": [],
+    "axeSeriousCritical": 0,
+    "animationsReduced": 0
+   }
+  }
+ }
+}

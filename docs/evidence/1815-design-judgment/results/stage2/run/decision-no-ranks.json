@@ -1,0 +1,922 @@
+{
+ "schema": "asc-1815-decision/v2",
+ "rules": {
+  "improvedFraction": 0.8888888888888888,
+  "minValidPerCondition": 2,
+  "reproducibleAtLeast": 0.5,
+  "readMajority": 2,
+  "minEffectCases": 2,
+  "maxCostRatio": 3,
+  "maxFailedPerCondition": 1
+ },
+ "cases": {
+  "ui03-dashboard": {
+   "status": "順位待ち",
+   "harm": false,
+   "judgeable": false,
+   "readS": "1/3",
+   "failures": {
+    "S": 0,
+    "B": 0
+   },
+   "indicators": {
+    "answerWidths": {
+     "S": 6,
+     "B": 6
+    },
+    "hiddenRequiredWide": {
+     "S": 0,
+     "B": 0
+    },
+    "direction": "equal",
+    "nonDegradation": {
+     "coverage": true,
+     "axe": true,
+     "overflow": true,
+     "externalRequests": true
+    },
+    "nonDegradationFailed": false
+   },
+   "ranking": {
+    "fable": null,
+    "codex": null
+   }
+  },
+  "ui07-bus-mobile": {
+   "status": "順位待ち",
+   "harm": true,
+   "judgeable": false,
+   "readS": "1/3",
+   "failures": {
+    "S": 0,
+    "B": 0
+   },
+   "indicators": {
+    "answerWidths": {
+     "S": 4,
+     "B": 3
+    },
+    "hiddenRequiredWide": {
+     "S": 0,
+     "B": 0
+    },
+    "direction": "better",
+    "nonDegradation": {
+     "coverage": false,
+     "axe": true,
+     "overflow": true,
+     "externalRequests": true
+    },
+    "nonDegradationFailed": true
+   },
+   "ranking": {
+    "fable": null,
+    "codex": null
+   }
+  },
+  "ui04-parts-search": {
+   "status": "順位待ち",
+   "harm": false,
+   "judgeable": false,
+   "readS": "1/3",
+   "failures": {
+    "S": 0,
+    "B": 0
+   },
+   "indicators": {
+    "answerWidths": {
+     "S": 6,
+     "B": 6
+    },
+    "hiddenRequiredWide": {
+     "S": 0,
+     "B": 0
+    },
+    "direction": "equal",
+    "nonDegradation": {
+     "coverage": true,
+     "axe": true,
+     "overflow": true,
+     "externalRequests": true
+    },
+    "nonDegradationFailed": false
+   },
+   "ranking": {
+    "fable": null,
+    "codex": null
+   }
+  }
+ },
+ "trials": {
+  "ui03-dashboard": {
+   "counted": {
+    "B": [
+     "B-r1",
+     "B-r2",
+     "B-r3"
+    ],
+    "S": [
+     "S-r1",
+     "S-r2",
+     "S-r3"
+    ]
+   },
+   "missing": [],
+   "notUsed": [],
+   "rows": [
+    {
+     "trial": "B-r1",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": true,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody",
+       "implementation"
+      ],
+      "relevantReferenceRead": true,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/implementation.md",
+       ".agent-skill-chain/skills/asc/references/workspace.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 6,
+      "toolCounts": {
+       "Read": 6,
+       "Grep": 2,
+       "Write": 2,
+       "Edit": 1,
+       "mcp__browser__screenshot": 2
+      },
+      "cwd": "<runs>/ui03-dashboard/B-r1/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 8,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.29385929999999993
+    },
+    {
+     "trial": "B-r2",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 4,
+      "toolCounts": {
+       "Read": 4,
+       "Write": 2,
+       "mcp__browser__screenshot": 2,
+       "Edit": 1
+      },
+      "cwd": "<runs>/ui03-dashboard/B-r2/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 8,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.2655802
+    },
+    {
+     "trial": "B-r3",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": true,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody",
+       "implementation"
+      ],
+      "relevantReferenceRead": true,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/implementation.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Grep": 1,
+       "Write": 2,
+       "mcp__browser__screenshot": 2
+      },
+      "cwd": "<runs>/ui03-dashboard/B-r3/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 8,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.29640500000000003
+    },
+    {
+     "trial": "S-r1",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/workspace.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Write": 2,
+       "mcp__browser__screenshot": 2,
+       "Edit": 2
+      },
+      "cwd": "<runs>/ui03-dashboard/S-r1/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 8,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.2921553
+    },
+    {
+     "trial": "S-r2",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": true,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody",
+       "implementation"
+      ],
+      "relevantReferenceRead": true,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/implementation.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Write": 2,
+       "mcp__browser__screenshot": 2,
+       "Edit": 1
+      },
+      "cwd": "<runs>/ui03-dashboard/S-r2/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 8,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.2821497
+    },
+    {
+     "trial": "S-r3",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 4,
+      "toolCounts": {
+       "Read": 4,
+       "Glob": 1,
+       "Write": 2,
+       "Edit": 2,
+       "mcp__browser__screenshot": 2
+      },
+      "cwd": "<runs>/ui03-dashboard/S-r3/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 8,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.3121802
+    }
+   ]
+  },
+  "ui07-bus-mobile": {
+   "counted": {
+    "B": [
+     "B-r1",
+     "B-r2",
+     "B-r3"
+    ],
+    "S": [
+     "S-r1",
+     "S-r2",
+     "S-r3"
+    ]
+   },
+   "missing": [],
+   "notUsed": [],
+   "rows": [
+    {
+     "trial": "B-r1",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/workspace.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Write": 2,
+       "mcp__browser__screenshot": 1
+      },
+      "cwd": "<runs>/ui07-bus-mobile/B-r1/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 16,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "twoDesignsRendered": false,
+     "screenshots": 1,
+     "costUsd": 0.2094361
+    },
+    {
+     "trial": "B-r2",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/workspace.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Write": 2,
+       "mcp__browser__screenshot": 1,
+       "Edit": 1
+      },
+      "cwd": "<runs>/ui07-bus-mobile/B-r2/fixture"
+     },
+     "answerWidths": 1,
+     "answerItemsFound": 15,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "twoDesignsRendered": false,
+     "screenshots": 1,
+     "costUsd": 0.2027545
+    },
+    {
+     "trial": "B-r3",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/workspace.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Write": 2,
+       "Edit": 1,
+       "mcp__browser__screenshot": 1
+      },
+      "cwd": "<runs>/ui07-bus-mobile/B-r3/fixture"
+     },
+     "answerWidths": 0,
+     "answerItemsFound": 14,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "twoDesignsRendered": false,
+     "screenshots": 1,
+     "costUsd": 0.2140982
+    },
+    {
+     "trial": "S-r1",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": true,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody",
+       "implementation"
+      ],
+      "relevantReferenceRead": true,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/implementation.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Write": 2,
+       "mcp__browser__screenshot": 1
+      },
+      "cwd": "<runs>/ui07-bus-mobile/S-r1/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 16,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "twoDesignsRendered": false,
+     "screenshots": 1,
+     "costUsd": 0.21650250000000001
+    },
+    {
+     "trial": "S-r2",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 4,
+      "toolCounts": {
+       "Read": 4,
+       "Glob": 1,
+       "Write": 2,
+       "mcp__browser__screenshot": 1
+      },
+      "cwd": "<runs>/ui07-bus-mobile/S-r2/fixture"
+     },
+     "answerWidths": 0,
+     "answerItemsFound": 10,
+     "hiddenRequiredWide": 0,
+     "coverage": 0.923,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": false,
+     "narrowChecked": true,
+     "wideChecked": false,
+     "twoDesignsRendered": false,
+     "screenshots": 1,
+     "costUsd": 0.22991889999999998
+    },
+    {
+     "trial": "S-r3",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/workspace.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Glob": 1,
+       "Write": 2,
+       "mcp__browser__screenshot": 2,
+       "Edit": 1
+      },
+      "cwd": "<runs>/ui07-bus-mobile/S-r3/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 16,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.23277920000000002
+    }
+   ]
+  },
+  "ui04-parts-search": {
+   "counted": {
+    "B": [
+     "B-r1",
+     "B-r2",
+     "B-r3"
+    ],
+    "S": [
+     "S-r1",
+     "S-r2",
+     "S-r3"
+    ]
+   },
+   "missing": [],
+   "notUsed": [],
+   "rows": [
+    {
+     "trial": "B-r1",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 4,
+      "toolCounts": {
+       "Read": 4,
+       "Glob": 1,
+       "Write": 2,
+       "mcp__browser__screenshot": 2
+      },
+      "cwd": "<runs>/ui04-parts-search/B-r1/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 9,
+     "hiddenRequiredWide": 0,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.2741446
+    },
+    {
+     "trial": "B-r2",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": true,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody",
+       "implementation"
+      ],
+      "relevantReferenceRead": true,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/implementation.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Write": 2,
+       "mcp__browser__screenshot": 2
+      },
+      "cwd": "<runs>/ui04-parts-search/B-r2/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 9,
+     "hiddenRequiredWide": 0,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.2737506
+    },
+    {
+     "trial": "B-r3",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 4,
+      "toolCounts": {
+       "Read": 4,
+       "Bash": 1,
+       "Write": 2,
+       "mcp__browser__screenshot": 2
+      },
+      "cwd": "<runs>/ui04-parts-search/B-r3/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 9,
+     "hiddenRequiredWide": 0,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.2647174
+    },
+    {
+     "trial": "S-r1",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": true,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody",
+       "implementation"
+      ],
+      "relevantReferenceRead": true,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/implementation.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Write": 2,
+       "mcp__browser__screenshot": 2
+      },
+      "cwd": "<runs>/ui04-parts-search/S-r1/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 9,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.26662830000000004
+    },
+    {
+     "trial": "S-r2",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md",
+       ".agent-skill-chain/skills/asc/references/workspace.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 5,
+      "toolCounts": {
+       "Read": 5,
+       "Write": 2,
+       "mcp__browser__screenshot": 2
+      },
+      "cwd": "<runs>/ui04-parts-search/S-r2/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 9,
+     "hiddenRequiredWide": 0,
+     "coverage": 0.958,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.2602136
+    },
+    {
+     "trial": "S-r3",
+     "failed": false,
+     "reads": {
+      "ascBodyRead": true,
+      "implementationRead": false,
+      "ujaBodyRead": false,
+      "journeysRead": false,
+      "firstReadOrder": [
+       "ascBody"
+      ],
+      "relevantReferenceRead": false,
+      "skillCalls": [],
+      "ascFilesRead": [
+       ".agent-skill-chain/skills/asc/SKILL.md"
+      ],
+      "readsOutsideProject": 0,
+      "readAttempts": 4,
+      "toolCounts": {
+       "Read": 4,
+       "Write": 2,
+       "mcp__browser__screenshot": 2
+      },
+      "cwd": "<runs>/ui04-parts-search/S-r3/fixture"
+     },
+     "answerWidths": 2,
+     "answerItemsFound": 9,
+     "hiddenRequiredWide": 0,
+     "coverage": 1,
+     "axeSeriousCritical": 0,
+     "overflow": false,
+     "externalRequests": 0,
+     "bothWidthsRendered": true,
+     "narrowChecked": true,
+     "wideChecked": true,
+     "twoDesignsRendered": false,
+     "screenshots": 2,
+     "costUsd": 0.2654055
+    }
+   ]
+  }
+ },
+ "overall": {
+  "decision": "順位待ち",
+  "effectCases": [],
+  "harmCases": [
+   "ui07-bus-mobile"
+  ],
+  "judgeableCases": [],
+  "costRatio": 0.9993421949377251,
+  "run": {
+   "missing": [],
+   "capReached": false,
+   "complete": true,
+   "lateProbes": [],
+   "emptyCells": []
+  }
+ },
+ "cost": {
+  "medianB": 0.2655802,
+  "medianS": 0.2654055
+ }
+}
