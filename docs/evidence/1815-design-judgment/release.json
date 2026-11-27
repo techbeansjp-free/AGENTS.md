@@ -3,10 +3,10 @@
  "note": "Each condition installs exactly one pinned tarball. run-trial.mjs computes the sha256 of the tarball it is given and refuses a tarball that is not pinned here or is pinned for the other condition; after the install it refuses when the installed reference files differ from installedReferences of the condition. differsOnly was checked by unpacking both tarballs (README「条件の作り方」). installedReferences lists both installed copies of each reference (.agent-skill-chain/skills/ and .agent-skill-chain/managed-runtime/skills/), as project-assets installs them.",
  "B": {
   "kind": "release",
-  "tag": "v0.5.113",
-  "targetCommit": "72d6524c6499ed00ada47679d88afa06529324cd",
-  "asset": "agent-skill-chain-0.5.113.tgz",
-  "assetSha256": "750e0e7336c442908ca1cc3a133b6ecec3a4197440be5ff9ce1e8cef17fe2fe7",
+  "tag": "v0.5.114",
+  "targetCommit": "cbc1d0061c0a4d2c59b952ae594da41f713d09be",
+  "asset": "agent-skill-chain-0.5.114.tgz",
+  "assetSha256": "30eaa420526ea65737b9d934492310199da5960b9ba19be072c9588148741a5e",
   "verifiedAgainst": [
    "SHA256SUMS of the release",
    "GitHub release asset digest"
@@ -14,32 +14,46 @@
  },
  "S": {
   "kind": "candidate",
-  "packedFromCommit": "a72a314886eee65feb1c38e0cea97694411d12fd",
-  "packCommand": "node scripts/pack-candidate.mjs <absolute new dir> --version=0.5.113",
-  "asset": "agent-skill-chain-0.5.113.tgz",
-  "assetSha256": "6d55b3f9ce0942f8fe86b4ee92acf5e048c69560dcb1824ae77eeb6c44909dc0",
-  "reproduced": "Packs from the same commit into three different new directories gave the same sha256.",
+  "packedFromCommit": "235520a505c901338f4548cfc18bd4687f297778",
+  "packCommand": "node scripts/pack-candidate.mjs <absolute new dir> --version=0.5.114",
+  "asset": "agent-skill-chain-0.5.114.tgz",
+  "assetSha256": "8a7a86c496baad6a247dfaa7ab253b7428b1116d87d0ede7b551bc8c469d2aa6",
+  "reproduced": "Packs from the same commit into two different new directories gave the same sha256.",
   "baseCondition": "B",
   "differsOnly": [
    "package/release-identity.json",
+   "package/skills/asc/SKILL.md",
    "package/skills/asc/references/implementation.md",
    "package/skills/user-journey-acceptance/references/journeys.md"
   ],
-  "history": "Stage 2: the stage-1 candidate paragraphs (diff af2ab12e..bb1d1886 of the two reference files) applied cleanly onto main 72d6524c (no drift: the two files are unchanged between af2ab12e and 72d6524c), committed, packed, then reverted in the next commit."
+  "entrySentence": "画面を作る・変える依頼は、実装前に[画面の節](references/implementation.md)、完了の確認前に[journeys.md](../user-journey-acceptance/references/journeys.md)を読む。",
+  "entrySentenceBytes": 195,
+  "skillMdBytes": {
+   "B": 32764,
+   "S": 32961,
+   "increase": 197,
+   "note": "increase includes the blank line and newline that carry the sentence"
+  },
+  "history": "Stage 3: the stage-1/2 candidate paragraphs (diff af2ab12e..bb1d1886 of the two reference files) plus one entry sentence in skills/asc/SKILL.md, applied onto main cbc1d006 (v0.5.114), committed, packed, then reverted in the next commit. The comparison is the whole package (entry sentence + candidate paragraphs) against the release."
  },
  "installedReferences": {
   "B": {
+   ".agent-skill-chain/skills/asc/SKILL.md": "7a236e3cfb51578b2bdc4bb6829cd4e94ef3e8df907ed057e842c981642954e1",
+   ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md": "a587aede0ce25969928c4f7578a23a2d463c3e6f497d1cb7c6e365a7fca29ee9",
    ".agent-skill-chain/skills/asc/references/implementation.md": "1c708b35dcf4ebced58c6caf3c4c051bd04b1a732a6ed47489327150922d0ac6",
    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md": "1c708b35dcf4ebced58c6caf3c4c051bd04b1a732a6ed47489327150922d0ac6",
    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md": "9e77c5d88722f2aeb96ad7c353de2d3e5805929085eca59da6943f9275e54fd0",
    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md": "9e77c5d88722f2aeb96ad7c353de2d3e5805929085eca59da6943f9275e54fd0"
   },
   "S": {
+   ".agent-skill-chain/skills/asc/SKILL.md": "1a0f13acc6c56231ac3498fb882e7faffb98a67a23d19312a506da7c1fdf1292",
+   ".agent-skill-chain/managed-runtime/skills/asc/SKILL.md": "8513a0286c4b849b72be9b517f3b675052117e6efa1a2243940fc2dea4293b99",
    ".agent-skill-chain/skills/asc/references/implementation.md": "90f38be2a498feb16bbc0c8a842b0b7f90d8b4a5dc6ea376793945c9236c1479",
    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md": "90f38be2a498feb16bbc0c8a842b0b7f90d8b4a5dc6ea376793945c9236c1479",
    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md": "98c36ffba76613fcf4f4466376761a5f4154dcae4a7483be7a12bb274c25b3df",
    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md": "98c36ffba76613fcf4f4466376761a5f4154dcae4a7483be7a12bb274c25b3df"
-  }
+  },
+  "note": "asc/SKILL.md is installed as the project-shared variant (project-assets rewrites the runtime-location sentence), so its installed sha256 differs from the packed one; both variants carry the same changes."
  },
  "stage1": {
   "B": {
@@ -52,5 +66,36 @@
    "assetSha256": "5fad22932c953c253f14db51643c33c1ef182343f1dc32a7afd279629fc709af"
   },
   "note": "Stage 1 (v0.5.109) ended 未判定 because ASC was almost never read; the pins above are kept only as history. See README「段階2（再評価）」."
+ },
+ "stage2": {
+  "B": {
+   "tag": "v0.5.113",
+   "targetCommit": "72d6524c6499ed00ada47679d88afa06529324cd",
+   "assetSha256": "750e0e7336c442908ca1cc3a133b6ecec3a4197440be5ff9ce1e8cef17fe2fe7"
+  },
+  "S": {
+   "packedFromCommit": "a72a314886eee65feb1c38e0cea97694411d12fd",
+   "assetSha256": "6d55b3f9ce0942f8fe86b4ee92acf5e048c69560dcb1824ae77eeb6c44909dc0"
+  },
+  "installedReferences": {
+   "B": {
+    ".agent-skill-chain/skills/asc/references/implementation.md": "1c708b35dcf4ebced58c6caf3c4c051bd04b1a732a6ed47489327150922d0ac6",
+    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md": "1c708b35dcf4ebced58c6caf3c4c051bd04b1a732a6ed47489327150922d0ac6",
+    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md": "9e77c5d88722f2aeb96ad7c353de2d3e5805929085eca59da6943f9275e54fd0",
+    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md": "9e77c5d88722f2aeb96ad7c353de2d3e5805929085eca59da6943f9275e54fd0"
+   },
+   "S": {
+    ".agent-skill-chain/skills/asc/references/implementation.md": "90f38be2a498feb16bbc0c8a842b0b7f90d8b4a5dc6ea376793945c9236c1479",
+    ".agent-skill-chain/managed-runtime/skills/asc/references/implementation.md": "90f38be2a498feb16bbc0c8a842b0b7f90d8b4a5dc6ea376793945c9236c1479",
+    ".agent-skill-chain/skills/user-journey-acceptance/references/journeys.md": "98c36ffba76613fcf4f4466376761a5f4154dcae4a7483be7a12bb274c25b3df",
+    ".agent-skill-chain/managed-runtime/skills/user-journey-acceptance/references/journeys.md": "98c36ffba76613fcf4f4466376761a5f4154dcae4a7483be7a12bb274c25b3df"
+   }
+  },
+  "differsOnly": [
+   "package/release-identity.json",
+   "package/skills/asc/references/implementation.md",
+   "package/skills/user-journey-acceptance/references/journeys.md"
+  ],
+  "note": "Stage 2 (v0.5.113, candidate paragraphs only). Kept as history. See README「段階2（再評価）」."
  }
 }

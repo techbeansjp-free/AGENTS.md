@@ -1,0 +1,228 @@
+{
+ "gold": {
+  "schema": "asc-1807-gold-check/v1",
+  "case": "ui03-dashboard",
+  "missing": [],
+  "coverage": 1,
+  "wideOverflow": false,
+  "narrowOverflow": false,
+  "externalRequests": 0
+ },
+ "firstView": {
+  "schema": "asc-1815-first-view/v2",
+  "case": "ui03-dashboard",
+  "widths": {
+   "narrow": {
+    "width": 800,
+    "height": 1280,
+    "answerFound": [
+     "出荷遅延率",
+     "LANE-B01",
+     "LANE-C02",
+     "温度センサー"
+    ],
+    "answerMissing": [],
+    "selectorsInView": {},
+    "answerAll": true,
+    "screensToAnswer": {
+     "出荷遅延率": 1,
+     "LANE-B01": 1,
+     "LANE-C02": 1,
+     "温度センサー": 1
+    },
+    "hiddenRequired": []
+   },
+   "wide": {
+    "width": 1440,
+    "height": 900,
+    "answerFound": [
+     "出荷遅延率",
+     "LANE-B01",
+     "LANE-C02",
+     "温度センサー"
+    ],
+    "answerMissing": [],
+    "selectorsInView": {},
+    "answerAll": true,
+    "screensToAnswer": {
+     "出荷遅延率": 1,
+     "LANE-B01": 1,
+     "LANE-C02": 1,
+     "温度センサー": 1
+    },
+    "hiddenRequired": []
+   }
+  },
+  "fixedNow": "2027-03-08T14:32:00+09:00",
+  "externalRequests": 0
+ },
+ "render": {
+  "id": "B-r2",
+  "case": "ui03",
+  "exists": true,
+  "viewports": {
+   "desktop": {
+    "externalRequests": [],
+    "consoleErrors": [],
+    "pageErrors": [],
+    "scrollWidth": 1440,
+    "innerWidth": 1440,
+    "overflowX": false,
+    "docHeight": 1034,
+    "textLen": 1297,
+    "lcp": 550.1000000000931,
+    "cls": 0,
+    "fontBody": "\"Noto Sans CJK JP\", sans-serif",
+    "fontH1": "\"Noto Sans CJK JP\", sans-serif",
+    "fontH2": "\"Noto Sans CJK JP\", sans-serif",
+    "bodyBg": "rgb(243, 244, 246)",
+    "htmlBg": "rgba(0, 0, 0, 0)",
+    "topColors": [
+     [
+      "rgb(27, 36, 48)",
+      138
+     ],
+     [
+      "rgb(75, 85, 99)",
+      37
+     ],
+     [
+      "rgb(253, 236, 234)",
+      16
+     ],
+     [
+      "rgb(255, 255, 255)",
+      9
+     ],
+     [
+      "rgb(180, 35, 24)",
+      8
+     ],
+     [
+      "rgb(31, 107, 69)",
+      8
+     ],
+     [
+      "rgb(227, 230, 236)",
+      8
+     ],
+     [
+      "rgb(59, 110, 165)",
+      8
+     ],
+     [
+      "rgb(212, 216, 223)",
+      7
+     ],
+     [
+      "rgb(248, 249, 251)",
+      7
+     ]
+    ],
+    "animations": 0,
+    "hasReducedMotionQuery": false,
+    "firstY": {
+     "出荷遅延率": 78,
+     "温度センサー": 140,
+     "LANE-B01": 575,
+     "汐見台三丁目": null,
+     "中央通り": null,
+     "在庫あり": null,
+     "LG-2040-SS-HT-0500-JISB1192": null
+    },
+    "landmarks": {
+     "main": 0,
+     "h1": 1,
+     "nav": 0
+    },
+    "lang": "ja",
+    "axe": [],
+    "axeSeriousCritical": 0,
+    "tabStops": 1,
+    "tabStopsWithIndicator": 1,
+    "tabsToRetry": 1,
+    "tabsToSearch": null,
+    "animationsReduced": 0
+   },
+   "tablet": {
+    "externalRequests": [],
+    "consoleErrors": [],
+    "pageErrors": [],
+    "scrollWidth": 800,
+    "innerWidth": 800,
+    "overflowX": false,
+    "docHeight": 1294,
+    "textLen": 1297,
+    "lcp": 568.1999999999534,
+    "cls": 0,
+    "fontBody": "\"Noto Sans CJK JP\", sans-serif",
+    "fontH1": "\"Noto Sans CJK JP\", sans-serif",
+    "fontH2": "\"Noto Sans CJK JP\", sans-serif",
+    "bodyBg": "rgb(243, 244, 246)",
+    "htmlBg": "rgba(0, 0, 0, 0)",
+    "topColors": [
+     [
+      "rgb(27, 36, 48)",
+      138
+     ],
+     [
+      "rgb(75, 85, 99)",
+      37
+     ],
+     [
+      "rgb(253, 236, 234)",
+      16
+     ],
+     [
+      "rgb(255, 255, 255)",
+      9
+     ],
+     [
+      "rgb(180, 35, 24)",
+      8
+     ],
+     [
+      "rgb(31, 107, 69)",
+      8
+     ],
+     [
+      "rgb(227, 230, 236)",
+      8
+     ],
+     [
+      "rgb(59, 110, 165)",
+      8
+     ],
+     [
+      "rgb(212, 216, 223)",
+      7
+     ],
+     [
+      "rgb(248, 249, 251)",
+      7
+     ]
+    ],
+    "animations": 0,
+    "hasReducedMotionQuery": false,
+    "firstY": {
+     "出荷遅延率": 113,
+     "温度センサー": 204,
+     "LANE-B01": 806,
+     "汐見台三丁目": null,
+     "中央通り": null,
+     "在庫あり": null,
+     "LG-2040-SS-HT-0500-JISB1192": null
+    },
+    "landmarks": {
+     "main": 0,
+     "h1": 1,
+     "nav": 0
+    },
+    "lang": "ja",
+    "axe": [],
+    "axeSeriousCritical": 0,
+    "animationsReduced": 0
+   }
+  }
+ }
+}
