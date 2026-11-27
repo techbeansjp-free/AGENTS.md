@@ -1,0 +1,24 @@
+{
+ "ascBodyRead": true,
+ "implementationRead": true,
+ "ujaBodyRead": false,
+ "journeysRead": false,
+ "firstReadOrder": [
+  "ascBody",
+  "implementation"
+ ],
+ "relevantReferenceRead": true,
+ "skillCalls": [],
+ "ascFilesRead": [
+  ".agent-skill-chain/skills/asc/SKILL.md",
+  ".agent-skill-chain/skills/asc/references/implementation.md"
+ ],
+ "readsOutsideProject": 0,
+ "readAttempts": 5,
+ "toolCounts": {
+  "Read": 5,
+  "Write": 2,
+  "mcp__browser__screenshot": 2
+ },
+ "cwd": "<runs>/ui04-parts-search/S-r1/fixture"
+}
