@@ -30,7 +30,8 @@ export function cells(line){
 function structural(text){
  const out=[];let fence=null;
  text.split(/\r?\n/).forEach((line,index)=>{
-  const marker=/^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+  // An opening fence may carry an info string; a closing fence is the marker alone (CommonMark).
+  const marker=(fence?/^\s*(`{3,}|~{3,})\s*$/:/^\s*(`{3,}|~{3,})/).exec(line)?.[1];
   if(marker&&(!fence||marker[0]===fence[0]&&marker.length>=fence.length)){fence=fence?null:marker;return;}
   if(!fence)out.push({line,number:index+1});
  });
@@ -128,8 +129,8 @@ export function checkSpecs(specsDirectory,{table}={}){
   const candidates=[...tableRows.map(row=>row.cells[0]??''),...headings.map(heading=>heading.text.split(/\s+/)[0])];
   for(const candidate of candidates){const id=ids(candidate);if(id.length===1&&id[0]===candidate&&isCanonical(idPrefix(candidate),file))defined.add(candidate);}
  }
- const warrantyPrefix=rows.find(row=>/品質保証範囲/.test(row.kind)&&row.prefixes.length)?.prefixes[0];
- const warranty=warrantyPrefix===undefined?[]:docs.filter(doc=>isCanonical(warrantyPrefix,doc.file));
+ // The quality-warranty documents are the canonical documents of the WAR kind (#1828); none means nothing to check.
+ const warranty=prefixes.has('WAR')?docs.filter(doc=>isCanonical('WAR',doc.file)):[];
  const brokenReferences=[];
  for(const doc of warranty){
   for(const {line,number} of structural(doc.text))for(const id of ids(line)){
@@ -150,11 +151,16 @@ export function checkSpecs(specsDirectory,{table}={}){
    }
   }
  }
- const duplicates=[];
+ // One finding per value and set of places, listing every ID the rows share (a row naming REQ and AC is one finding).
+ const findings=new Map();
  for(const [key,places] of occurrences){
   const [id,value]=JSON.parse(key),files=new Set(places.map(place=>place.file));
   if(files.size<2||[...files].every(file=>isCanonical(idPrefix(id),file)))continue;
-  duplicates.push({id,value,locations:places.map(place=>({file:shown(place.file),line:place.line})),canonical:canonicalOf(idPrefix(id)).map(shown)});
+  const locations=places.map(place=>({file:shown(place.file),line:place.line})),group=JSON.stringify([value,locations]);
+  if(!findings.has(group))findings.set(group,{ids:[],value,locations,canonical:[]});
+  const finding=findings.get(group);finding.ids.push(id);
+  for(const canonical of canonicalOf(idPrefix(id)).map(shown))if(!finding.canonical.includes(canonical))finding.canonical.push(canonical);
  }
+ const duplicates=[...findings.values()];
  return {schema:'asc-spec-check/v1',specs,table:tableFile,warranty:warranty.map(doc=>shown(doc.file)),passed:!brokenReferences.length&&!duplicates.length,brokenReferences,duplicates,writes:false};
 }
