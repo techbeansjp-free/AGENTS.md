@@ -25,9 +25,12 @@ const PACKET_METHOD = {D: 'D', P: 'P', Fc: 'F'};
 export function anchorsText(anchors) {
   return [1, 2, 3, 4, 5].map((r) => `${r}：\n` + anchors.sets.map((s) => `  - ${s.levels[r - 1]}`).join('\n')).join('\n');
 }
-export function buildPrompt(method, cfg, {critique} = {}) {
+// Codex reads files only through shell commands, so its head allows read-only commands inside work (#1835: the first Codex
+// run used the shared head, which forbade commands, and Codex could not open the screenshots; that run is void).
+export function buildPrompt(method, cfg, {critique, evaluator = 'fable'} = {}) {
   const t = fs.readFileSync(path.join(ROOT, 'prompts', PROMPT[method]), 'utf8');
-  return t.replaceAll('{{HEAD}}', fs.readFileSync(path.join(ROOT, 'prompts/common-head.txt'), 'utf8').trim())
+  const head = evaluator === 'codex' ? 'prompts/common-head-codex.txt' : 'prompts/common-head.txt';
+  return t.replaceAll('{{HEAD}}', fs.readFileSync(path.join(ROOT, head), 'utf8').trim())
     .replaceAll('{{REASON_MAX}}', String(cfg.limits.reasonMaxChars)).replaceAll('{{CRITIQUE_MAX}}', String(cfg.limits.critiqueMaxChars))
     .replaceAll('{{ANCHORS}}', anchorsText(readJson(path.join(ROOT, 'anchors.json')))).replaceAll('{{CRITIQUE}}', critique ?? '');
 }
@@ -148,6 +151,14 @@ export function parseCodex(stdout, cwd = null) {
   if (cwd) out.isolation = checkCodexIsolation({commands, other: [...other], events, cwd});
   return out;
 }
+// Missing reason images-not-viewed (Codex): the CLI reported an image it could not process, or the answer says the
+// screenshots could not be seen. Codex's --json has no event for viewing an image, so this is the available check.
+export function checkCodexImagesViewed({stderr = '', text = ''}) {
+  if (/unable to process image/.test(stderr)) return 'image-error';
+  if (/(画像|スクリーンショット|screenshot)[^。\n]{0,30}(確認|閲覧|表示|読|見)[^。\n]{0,12}(できませんでした|できていません|できない|られません|られなかった)/i.test(text ?? '')) return 'answer-says-not-seen';
+  return null;
+}
+
 // Missing reason isolation-violation: a command touched a path outside the packet directory (-C).
 // isolation 'unconfirmed' (recorded, not missing): no event of a known shape, or a command/item that cannot be judged.
 export function checkCodexIsolation({commands, other, events, cwd}) {
@@ -242,7 +253,7 @@ export function runEvaluator(o) {
       if (st?.status !== 'valid') { writeJson(path.join(dir, 'status.json'), {callId: call.id, evaluator, round: call.round, method: call.method, packet: call.packet, status: 'missing-input', why: 'critique missing or invalid'}); summary.missingInput++; continue; }
       prompt = buildPrompt('Fs', cfg, {critique: st.answer.critique});
     } else if (call.method === 'Neg') prompt = buildPrompt('Neg', cfg, {critique: call.text});
-    else { task = readJson(path.join(cwd, 'TASK.json')); prompt = buildPrompt(call.method, cfg); }
+    else { task = readJson(path.join(cwd, 'TASK.json')); prompt = buildPrompt(call.method, cfg, {evaluator}); }
     if (call.method === 'Fs' || call.method === 'Neg') { cwd = path.join(runs, evaluator, '_cwd', `round${call.round}`, call.id); fs.mkdirSync(cwd, {recursive: true}); }
     fs.writeFileSync(path.join(dir, 'prompt.txt'), prompt);
     const attempts = []; let answer = null, status = 'failed';
@@ -279,6 +290,7 @@ export function runEvaluator(o) {
       let trace = null, reason = null;
       if (evaluator === 'fable' && p.hasResult) { trace = checkImagesRead({toolCalls: p.toolCalls, images: listPngs(call.packet ? cwd : null), cwd}); reason = trace.reason; }
       if (evaluator === 'codex' && p.isolation) { trace = p.isolation; reason = trace.reason; }
+      if (evaluator === 'codex' && call.packet && !reason) { const v = checkCodexImagesViewed({stderr, text: p.text}); if (v) { trace = {...(trace ?? {}), imageView: v}; reason = 'images-not-viewed'; } }
       const base = timedOut ? 'timeout' : exit !== 0 ? `exit ${exit}` : p.error ? p.error : null;
       const problem = base ?? (reason ? reason : validate(call.method, parsed, task, cfg));
       const a = {attempt, exit, timedOut, durationMs, usd: p.usd, chargedUsd, costMissing: evaluator === 'fable' && p.usd === null, tokens: p.tokens, numTurns: p.numTurns ?? null, problem, reason: base ? null : reason, trace,

@@ -321,3 +321,14 @@ test('owner page: 9 pairs, embedded images only, no condition names, key kept ap
   assert.deepEqual(Object.values(k.pairs).map((p) => p.item).sort(), items.filter((i) => i.layer === 3).map((i) => i.id).sort());
   assert.ok(Object.values(k.pairs).every((p) => parseScreen(p.A).case === parseScreen(p.B).case));
 });
+
+test('codex: images-not-viewed from an image error or an answer that says the screenshots could not be seen', async () => {
+  const {checkCodexImagesViewed, buildPrompt} = await import('./run-eval.mjs');
+  assert.equal(checkCodexImagesViewed({stderr: 'ERROR codex_core::tools::router: error=unable to process image: invalid', text: ''}), 'image-error');
+  assert.equal(checkCodexImagesViewed({text: 'A・Bともに画像を確認できませんでした。'}), 'answer-says-not-seen');
+  assert.equal(checkCodexImagesViewed({text: '狭幅・広幅のスクリーンショットはどちらも閲覧できていません。'}), 'answer-says-not-seen');
+  assert.equal(checkCodexImagesViewed({text: 'Aは要約が最上部にあり、対処が必要な項目がすぐ見える。'}), null);
+  const cfg = JSON.parse(fs.readFileSync(path.join(here, '..', 'config', 'eval.json'), 'utf8'));
+  assert.ok(buildPrompt('P', cfg, {evaluator: 'codex'}).includes('読取りだけのcommand'));
+  assert.ok(!buildPrompt('P', cfg, {evaluator: 'fable'}).includes('読取りだけのcommand'));
+});
