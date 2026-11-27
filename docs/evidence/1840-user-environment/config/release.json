@@ -1,0 +1,32 @@
+{
+ "schema": "asc-eval-release/v1",
+ "note": "The tarball each condition installs (conditions.json cells[c].release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition.",
+ "R": {
+  "kind": "release",
+  "tag": "v0.5.119",
+  "targetCommit": "c9288126dd1dd03adfa3ed0cafdf6cbfca99d2af",
+  "asset": "agent-skill-chain-0.5.119.tgz",
+  "assetSha256": "ecc7afd0d6595824bb6362618af973e7b66e8a3aa64fee1c3fbdb4043bf61c13",
+  "verified": "2026-11-27: gh release download v0.5.119; the sha256 equals the asset digest of the release, its SHA256SUMS and the Package SHA256 of the release notes; node scripts/pack-candidate.mjs <dir> --version=0.5.119 at c9288126 gives the same sha256.",
+  "note": "GitHub Releaseの最新（gh release list、2026-11-27）。<scratch>/rel1840/release/にSHA256SUMSとともに置く。"
+ },
+ "C": {
+  "kind": "candidate",
+  "asset": "agent-skill-chain-0.5.119.tgz",
+  "assetSha256": "e212e3a89bf9ac24fd63423d759dae7280fdc925b12508e8ae527b1fa6b7887c",
+  "packedFromCommit": "0c43eccb6942055bc64408194c1a298384804ea3",
+  "mergeOf": {
+   "base": "origin/main c9288126dd1dd03adfa3ed0cafdf6cbfca99d2af",
+   "pr1837": "feature/1829-estimate-warranty 59ad479f26b28ec97a8b7ce5240dc49e2f7f71db",
+   "pr1838": "docs/1832-spec-writing-rules 98aabea22f57e26aa68ed508ae040821ab6ca1b0"
+  },
+  "packCommand": "git clone <origin> <scratch>/rel1840/cand-src; git checkout -b cand/1840 origin/main; git fetch origin feature/1829-estimate-warranty docs/1832-spec-writing-rules; GIT_AUTHOR_DATE=GIT_COMMITTER_DATE=2026-11-27T12:00:00Z git -c user.name=eval -c user.email=eval@example.invalid merge --no-edit FETCH_HEAD (main fast-forwarded to 59ad479f, then merged 98aabea2: commit 0c43eccb with parents 59ad479f and 98aabea2); node scripts/pack-candidate.mjs <scratch>/rel1840/candidate --version=0.5.119",
+  "baseRelease": "R",
+  "differsFromReleaseOnly": [
+   "release-identity.json",
+   "skills/estimate-and-scope/SKILL.md",
+   "v05/templates/specs/ (00_利用案内.md, 01-06 and the 50 details/ templates: 57 files)"
+  ],
+  "note": "未mergeの#1837（#1829 estimate-and-scopeの判定）と#1838（#1832 仕様書の書き方の規則）を含む候補。版の番号はリリースと同じ0.5.119（#1823と同じく版の番号は変えない）。公開しない。"
+ }
+}

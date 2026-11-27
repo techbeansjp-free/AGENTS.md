@@ -1,0 +1,495 @@
+{
+ "schema": "asc-eval-conditions/v1",
+ "issue": "1840",
+ "stage": "user environment",
+ "markerTag": "1840",
+ "note": "Fixed before any model run (decision-criteria.md). #1840: ASC installed the way it reaches a user (project-assets --register-claude-skill --apply in a dedicated worktree, the read trigger claude-md adopted, as #1823), in the isolated write-tools environment of #1820 stage 2 / #1823 (tools level W, same --settings). R = the latest GitHub Release v0.5.119; C = a candidate packed from origin/main (c9288126) with PR #1837 (#1829) and PR #1838 (#1832) merged. The conditions differ only in the tarball. The rule is fixed levels per condition (rule.mode levels), not a candidate test: release and candidate are reported side by side.",
+ "model": "sonnet",
+ "modelNote": "Same alias as #1814-#1823. The resolved model id (init event) is recorded per trial.",
+ "runs": 3,
+ "runsNote": "Planned repetitions per condition and case (all 18 cases). Only reps 1..runs are scored; a later rep counts only as the one mandatory replacement of a failed trial.",
+ "ascSkills": [
+  "asc",
+  "contract-enforcement",
+  "decision-ownership",
+  "engineering-judgment",
+  "estimate-and-scope",
+  "execution-recovery",
+  "migration-assurance",
+  "project-foundation",
+  "research-to-implementation",
+  "review-and-remediation",
+  "security-evidence",
+  "subagent-model-selection",
+  "tracker-issue-writing",
+  "user-journey-acceptance",
+  "verification-optimization",
+  "warranty-scope",
+  "work-coordination"
+ ],
+ "ascSkillsNote": "The 17 Skills both tarballs distribute (warranty-scope since v0.5.117). The scorer, the probe (all 17 descriptions quoted) and the dry run use this list.",
+ "maxTurnsByKind": {
+  "app": null
+ },
+ "maxTurnsNote": "Every fixture is an app fixture: no --max-turns (the markers and the written files need the final state); the per-trial budget bounds the cost.",
+ "probeMaxTurns": 30,
+ "probeSteps": {
+  "W": 6
+ },
+ "probeFixture": "EC1",
+ "probeFixtureNote": "The probe runs on a fixture without the user's own Skills (the probe counts every entry under .claude/skills as an ASC Skill).",
+ "budget": {
+  "ownerCapUsd": 30,
+  "capUsd": 30,
+  "safetyMarginUsd": 1,
+  "perTrialUsd": 0.5,
+  "probeUsd": 0.35,
+  "plan": {
+   "perKindUsd": {
+    "warranty": 0.21,
+    "maintenance": 0.16,
+    "spec": 0.29,
+    "estimate": 0.13,
+    "negative": 0.04,
+    "change": 0.23,
+    "userskill": 0.13
+   },
+   "probeUsd": 0.15
+  },
+  "expect": {
+   "perKindUsd": {
+    "warranty": 0.16,
+    "maintenance": 0.12,
+    "spec": 0.22,
+    "estimate": 0.1,
+    "negative": 0.03,
+    "change": 0.18,
+    "userskill": 0.1
+   },
+   "probeUsd": 0.13,
+   "perKindInputTokens": {
+    "warranty": 120000,
+    "maintenance": 90000,
+    "spec": 150000,
+    "estimate": 70000,
+    "negative": 14000,
+    "change": 140000,
+    "userskill": 70000
+   },
+   "probeInputTokens": 100000,
+   "perKindOutputTokens": {
+    "warranty": 4000,
+    "maintenance": 3000,
+    "spec": 5000,
+    "estimate": 3000,
+    "negative": 500,
+    "change": 3000,
+    "userskill": 3000
+   },
+   "probeOutputTokens": 3000
+  },
+  "note": "Owner cap 30 USD (Issue #1840, owner 2026-11-27). Stop line = 30 - 1 = 29 USD: run-trial.mjs refuses a trial when the ledger total + its budget (0.5 USD) exceeds it. perTrialUsd is the --max-budget-usd of every trial (above the #1823 maximum per trial; the writing cases read more). expect per kind is estimated from the #1823 / #1820 stage-2 means (asc 0.136, purpose 0.098, negative 0.029, design 0.168) scaled by the files each kind reads and writes; plan = expect x about 1.3."
+ },
+ "adopt": "claude-md",
+ "toolLevels": {
+  "W": {
+   "label": "書込みあり（#1815と同じtool。browser MCPなし）",
+   "tools": "Read,Write,Edit,Glob,Grep,Skill",
+   "disallowed": "Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task",
+   "permissionMode": "acceptEdits",
+   "initPermissionMode": "acceptEdits"
+  }
+ },
+ "toolsNote": "Only level W as #1820 stage 2 and #1823 (no Bash: level X failed its isolation probe in #1820 stage 1). Without Bash the Agent cannot run the ASC CLI start, so a rule registered in context.json is reached only by reading files (decision-criteria.md limits).",
+ "settingsNote": "Every trial gets the same --settings file (run-trial.mjs isolationSettings), as #1823.",
+ "conditions": {
+  "R": {
+   "label": "リリース版（GitHub Releaseの最新 v0.5.119を導入）",
+   "release": "R"
+  },
+  "C": {
+   "label": "候補版（origin/mainにPR #1837・#1838をmergeしてnpm packしたtarballを導入）",
+   "release": "C"
+  }
+ },
+ "cells": {
+  "R": {
+   "tools": "W",
+   "release": "R",
+   "source": "release"
+  },
+  "C": {
+   "tools": "W",
+   "release": "C",
+   "source": "candidate"
+  }
+ },
+ "cellsNote": "A cell is a condition (the trace names start with it). The fixture of a trial comes from its case.",
+ "probeCells": [
+  "R",
+  "C"
+ ],
+ "probeNote": "One isolation probe per condition on fixture EC1. probe-check.mjs judges each against level W; compare checks that they differ in no session fact.",
+ "nonAdjacentKinds": [
+  "negative"
+ ],
+ "fixtures": {
+  "EC1": {
+   "label": "ECサイトの受託案件（検収前。要件定義書の非機能は「最新のブラウザ」「快適に動作」だけ。#1828のT1・T4の場面）",
+   "kind": "app",
+   "appFiles": false,
+   "baseClaudeMd": "# ECサイト（受託開発）\n\n中小の小売業者向けに受託で開発しているECサイト。`docs/`に要件定義書がある。\n",
+   "extraFiles": {
+    "README.md": "# shop-front\n\n中小の小売業者向けECサイト（受託開発）。PC・スマートフォン対応。\n",
+    "docs/要件定義書.md": "# 要件定義書（ECサイト）\n\n状態：顧客確認済み（検収前）\n\n## 概要\n\n- 中小の小売業者向けのECサイト。PC・スマートフォンに対応する。\n- 決済は外部の決済代行APIを使う。\n- 在庫は顧客の基幹システムからCSVで日次に取り込む。\n\n## 非機能要件\n\n- 最新のブラウザで動作すること。\n- 快適に動作すること。\n"
+   },
+   "promptFiles": [
+    "docs/要件定義書.md"
+   ]
+  },
+  "EC3": {
+   "label": "ECサイトの受託案件（仕様書が一部ある：REQ-PERF-001、CON-003、対応環境。#1828のT3の場面）",
+   "kind": "app",
+   "appFiles": false,
+   "baseClaudeMd": "# ECサイト（受託開発）\n\n中小の小売業者向けに受託で開発しているECサイト。`docs/`に要件定義書と仕様書がある。\n",
+   "extraFiles": {
+    "README.md": "# shop-front\n\n中小の小売業者向けECサイト（受託開発）。PC・スマートフォン対応。\n",
+    "docs/要件定義書.md": "# 要件定義書（ECサイト）\n\n状態：顧客確認済み（検収前）\n\n## 概要\n\n- 中小の小売業者向けのECサイト。PC・スマートフォンに対応する。\n- 決済は外部の決済代行APIを使う。\n- 在庫は顧客の基幹システムからCSVで日次に取り込む。\n\n## 非機能要件\n\n- 最新のブラウザで動作すること。\n- 快適に動作すること。\n",
+    "docs/specs/details/11_非機能/00_非機能要件一覧.md": "# 非機能要件一覧\n\n| ID | 要件 | 目標 | 測定条件 |\n|---|---|---|---|\n| REQ-PERF-001 | 商品検索の応答時間 | 3秒以内 | 同時100利用者 |\n",
+    "docs/specs/details/02_要件/02_制約・前提・対象外.md": "# 制約・前提・対象外\n\n| ID | 種別 | 内容 |\n|---|---|---|\n| CON-003 | 対象外 | IE11は対象外 |\n",
+    "docs/specs/details/11_非機能/02_利用性・互換性・保守性.md": "# 利用性・互換性・保守性\n\n## 対応環境\n\n| 対象 | 版 |\n|---|---|\n| Chrome・Edge・Safari | 最新版と1つ前の版 |\n"
+   },
+   "promptFiles": [
+    "docs/specs/details/11_非機能/00_非機能要件一覧.md",
+    "docs/specs/details/02_要件/02_制約・前提・対象外.md"
+   ]
+  },
+  "MN": {
+   "label": "納品済みの受託案件（品質保証範囲が合意済み、版1.0。#1829の案件の資料を、案件の仕様書・契約書の要約のfileに分けたもの）",
+   "kind": "app",
+   "appFiles": false,
+   "baseClaudeMd": "# 受発注管理システム（受託・納品済み）\n\n株式会社みなと商事（顧客）向けに受託で開発し、v1.0.0で納品した受発注管理システム。`docs/specs/`に仕様書、`docs/contract/`に契約書の要約がある。\n",
+   "extraFiles": {
+    "README.md": "# order-admin\n\n株式会社みなと商事向けの受発注管理システム（受託開発、v1.0.0で納品済み、検収合格 2026-08-31）。\n\n- 仕様書：`docs/specs/`\n- 契約書の要約：`docs/contract/`\n",
+    "docs/specs/details/02_要件/03_品質保証範囲.md": "# 品質保証範囲\n\n状態: 承認済み（確認者: 顧客 情報システム部長・提供側 PM、根拠: 議事録 MTG-2026-07-15）\n\n顧客との合意案と合意記録の正本。契約書が仕様書に優先する。法的な有効性と契約上の分類は法務・契約が判断する。\n\n## 合意の記録\n\n| 版 | 合意日 | 合意者（顧客側） | 合意者（提供側） | 合意の根拠 | 変更の参照 |\n|---|---|---|---|---|---|\n| 1.0 | 2026-07-15 | ACT-01・情報システム部長 | ACT-02・PM | 議事録 MTG-2026-07-15 | 初版 |\n\n## 保証の基準時点\n\n| 項目 | 合意内容 |\n|---|---|\n| 保証する納品物のリリース・commit | `v1.0.0`（commit `3f9a2c1`） |\n| 保証する利用・実行環境 | REQ-NF-010 |\n| 適用する基準とその版・基準日（セキュリティ基準・法令等） | CON-004 |\n| 検収の合格条件 | AC-001 |\n| 検収合格の扱い（検収後に判明した差異を含む） | 契約書 第12条 |\n| 検収が引き延ばされた場合の扱い（みなし検収等） | 契約書 第11条 |\n| 無償で対応する期間と保守契約への切替え | 契約書 第12条・第14条 |\n| 文書の間で食い違うときの優先順位・定めのない事項の判断方法 | 契約書が仕様書に優先する。仕様書の間は品質保証範囲が他の仕様書に優先し、判断する者は ACT-02 と ACT-01 の協議 |\n| 契約上の責任期間・通知期間 | 契約書 第12条 |\n\n## 項目ごとの保証範囲\n\n| ID | 分類 | 保証する値と測定条件（正本の参照） | 対象外（CON ID） | 条件が変わったときの分類 | 証跡 | 合意の版 | 状態 |\n|---|---|---|---|---|---|---|---|\n| WAR-001 | 動作環境 | REQ-NF-010 | CON-003 | 互換性対応 | 追跡表 TR-010、検収記録 ACC-2026-08 | 1.0 | 合意済み |\n| WAR-002 | 機能・業務 | BR-012、AC-021 | CON-004 | 仕様変更 | 追跡表 TR-021、検収記録 ACC-2026-08 | 1.0 | 合意済み |\n| WAR-003 | 性能・拡張性 | `details/11_非機能/01_性能・容量・可用性.md`「性能目標」節の1・2行目 | CON-007 | 改善 | 追跡表 TR-031、性能試験記録 PT-2026-08 | 1.0 | 合意済み |\n| WAR-004 | 構成・実行環境 | FN-030、AC-030 | CON-005 | 保守・改修 | 追跡表 TR-030、検収記録 ACC-2026-08 | 1.0 | 合意済み |\n| WAR-005 | データ | BR-020、AC-040 | — | — | 追跡表 TR-040 | 1.0 | 未決（OPEN-007） |\n| WAR-006 | セキュリティ | — | — | — | — | 1.0 | 適用外（社内ネットワークだけで使い外部へ公開しない。脆弱性診断は別契約で扱う） |\n| WAR-007 | 運用・保守 | OPS-002 | CON-006 | 原因の調査が必要 | 追跡表 TR-050 | 1.0 | 合意済み |\n\n## 責任分界\n\n| 対象 | 提供側の責任 | 顧客側の責任 | 第三者の責任（外部サービス等） | 合意の版 |\n|---|---|---|---|---|\n| 外部API（配送料API）の仕様変更・障害 | 連携部分がFN-030どおりに動くこと（基準時点のAPIの版） | 配送料APIの契約と、仕様変更の通知の受領・共有 | 配送料APIの提供と仕様変更の告知 | 1.0 |\n| インフラ・ネットワークの設定変更 | OPS-002の手順書の提供 | OPS-002の手順に沿った設定変更と、変更の記録 | — | 1.0 |\n| 移行元のデータの正確性 | BR-020に沿った変換 | 移行元データの内容 | — | 1.0 |\n\n## 条件が変わったときの分類\n\n社内の対応区分であり、法的な結論ではない。契約上の分類は、判定の流れの2で権限者（顧客側 ACT-01 と協議のうえ、提供側の契約担当 ACT-03）が決める。\n\n| 区分 | 該当する状況 | 扱い |\n|---|---|---|\n| 瑕疵対応 | 判定の流れの2で、権限者が瑕疵対応と分類したもの | 契約書 第12条に従う |\n| 互換性対応 | 保証の対象外のブラウザ・OSのアップデート後に動かない | 見積のうえ有償 |\n| 保守・改修 | 外部APIの仕様変更、OSSのサポート終了 | 保守契約の範囲、未締結なら見積のうえ有償 |\n| 仕様変更 | 法改正・税率の変更・業務フローの変更 | 見積のうえ有償 |\n| 改善 | 想定を超えたデータ量・利用者数 | 見積のうえ有償 |\n| 原因の調査が必要 | 顧客側のインフラ・設定の変更後に動かない | 調査の結果で区分を決める。調査費用は下の表 |\n| 権限者の判断が必要 | 検収後に、合意した仕様・条件との差異が判明した | ACT-03 が判断する |\n\n## 調査を始める条件と修正の完了条件\n\n| 項目 | 合意内容 |\n|---|---|\n| 報告の形式 | 再現手順・環境と版・発生日時・期待した結果と実際の結果・影響 |\n| 報告の窓口 | OPS-001 |\n| 原因調査の範囲と費用の扱い | 差異があった場合は提供側の負担。なかった場合は1件あたり8時間までは提供側、超過分は顧客側。判定できない場合は ACT-01 と ACT-02 の協議 |\n| 判定する者 | ACT-02（技術的な事実）、ACT-03（契約上の分類） |\n| 修正の完了条件 | 修正・該当ACの再テスト・顧客環境への反映を ACT-01 が確認する |\n| 同種の不具合が再発した場合の扱い | 同じBR・ACに対する同じ原因の差異は同じ件として扱う |\n\n判定の流れ（二段）：\n\n```text\n1. 技術的な事実（判定する者）：保証の基準時点の環境・条件で、合意した仕様・条件（この文書と参照先の正本）と差異があるか\n   ある / ない / 判定できない（原因調査。費用は上の表の扱い）\n2. 契約上の分類（法務・契約の権限者）：1の事実と「条件が変わったときの分類」をもとに決める。検収済みであることだけで決めない\n```\n",
+    "docs/specs/details/11_非機能/02_利用性・互換性・保守性.md": "# 利用性・互換性・保守性\n\n## 対応環境・版\n\n| ID | 対象 | 版 | 基準日 |\n|---|---|---|---|\n| REQ-NF-010 | Windows 11 23H2 の Google Chrome と Microsoft Edge | 基準日時点の安定版（Chrome 137、Edge 137） | 2026-06-01 |\n",
+    "docs/specs/details/11_非機能/01_性能・容量・可用性.md": "# 性能・容量・可用性\n\n## 性能目標\n\n1. 受注一覧の表示は、受注データ10万件まで、社内LANで3秒以内（95パーセンタイル）。\n2. 受注データの件数の想定は、5年間で累計10万件。\n3. 同時に利用する人数は30人まで。\n",
+    "docs/specs/details/02_要件/01_受け入れ条件.md": "# 業務ルール・受け入れ条件\n\n| ID | 内容 |\n|---|---|\n| BR-012 | 税込金額は、明細ごとに税抜金額へ税率（CON-004の基準日時点の値）を掛け、1円未満を切り捨てる |\n| AC-021 | 受注登録で、税込金額がBR-012の計算と一致する（テストデータ TD-021 の50件） |\n| BR-020 | 旧システムの取引先コードを新しい取引先コードへ一対一で変換する |\n| AC-040 | 移行後の取引先の件数と金額の合計が、移行元と一致する |\n| FN-030 | 受注登録時に、配送料API（v1）から配送料を取得して表示する |\n| AC-030 | 配送料APIの試験環境で、FN-030の取得と、取得失敗時のエラー表示を確認する |\n| AC-001 | AC-021・AC-030・AC-040を含む受入テスト一覧のすべてに合格する |\n",
+    "docs/specs/details/12_運用保守/00_運用設計.md": "# 運用設計\n\n| ID | 内容 |\n|---|---|\n| OPS-001 | 不具合の報告窓口：提供側のサポート窓口（メール） |\n| OPS-002 | プロキシ・ファイアウォールの許可リストと、変更時の手順書（納品物に含む） |\n",
+    "docs/specs/details/02_要件/02_制約・前提・対象外.md": "# 制約・前提・対象外\n\n| ID | 内容 |\n|---|---|\n| CON-003 | REQ-NF-010 以外のOS・ブラウザ（Safari、iPad、スマートフォン等）は保証の対象外 |\n| CON-004 | 税率・法令は2026-06-01時点のものを適用する。その後の改正への追随は保証の対象外 |\n| CON-005 | 配送料APIの提供者による仕様変更・版の廃止への追随は保証の対象外 |\n| CON-006 | 顧客側によるインフラ・ネットワークの設定変更に起因する事象は保証の対象外 |\n| CON-007 | 性能目標の想定（件数・人数）を超えた利用での性能は保証の対象外 |\n",
+    "docs/specs/details/01_システム概要/00_概要.md": "# 概要\n\n## 未決事項\n\n| ID | 論点 | 判断者 | 期限 |\n|---|---|---|---|\n| OPEN-007 | 移行元データの不備（重複・欠落）が移行後に見つかった場合の扱いと費用負担（WAR-005） | 契約担当（提供側 ACT-03）と顧客の契約担当（ACT-04） | 未定（検収時に持ち越し） |\n\n## 体制\n\n| ID | 役割 |\n|---|---|\n| ACT-01 | 顧客 情報システム部長 |\n| ACT-02 | 提供側 PM |\n| ACT-03 | 提供側 契約担当 |\n| ACT-04 | 顧客 契約担当 |\n",
+    "docs/contract/K-2026-031_要約.md": "# 請負契約 K-2026-031（関係する条項の要約）\n\n- 第11条（検収）：納品後14日以内に検収し、期間内に通知がなければ合格とみなす。\n- 第12条（契約不適合）：検収合格後1年以内に通知された、仕様書との不適合は、提供側が無償で修補する。仕様書の定めのない事項、顧客の指示・環境の変更に起因するものは除く。\n- 第13条（優先順位）：契約書と仕様書が食い違う場合は契約書を優先する。\n- 第14条（保守）：納品後の保守・改修・機能追加は別途の保守契約または個別の見積による。\n"
+   },
+   "promptFiles": [
+    "docs/specs/details/02_要件/03_品質保証範囲.md",
+    "docs/contract/K-2026-031_要約.md"
+   ]
+  },
+  "SP": {
+   "label": "会員サイトの受託案件（既存の仕様：FN-003会員登録、SCR-005会員登録画面。#1832の場面）",
+   "kind": "app",
+   "appFiles": false,
+   "baseClaudeMd": "# 会員サイト（受託開発）\n\n会員サイトの受託開発。`docs/specs/`に仕様書（機能・画面）がある。\n",
+   "extraFiles": {
+    "README.md": "# member-site\n\n会員サイト（受託開発）。仕様書は`docs/specs/`にある。\n",
+    "docs/specs/details/04_機能/FN-003_会員登録.md": "# FN-003 会員登録\n\n状態：承認済み\n\n## 概要\n\n利用者がメールアドレスで会員登録する。\n\n## 処理\n\n1. 利用者がメールアドレスを入力する。\n2. 確認コード（6桁の数字）をメールで送る。有効期限は10分。\n3. 利用者が確認コードを入力し、一致すれば登録を完了する。\n\n## 規則\n\n- 確認コードを5回続けて間違えると、その登録手続きを30分ロックする。\n",
+    "docs/specs/details/05_画面/SCR-005_会員登録.md": "# SCR-005 会員登録画面\n\n状態：承認済み\n\n## 項目\n\n| 項目 | 種類 | 必須 |\n|---|---|---|\n| メールアドレス | 入力欄 | 必須 |\n| 確認コード | 入力欄（6桁） | 必須 |\n\n## 表示\n\n- 確認コードが違うとき：「確認コードが正しくありません」\n"
+   },
+   "promptFiles": [
+    "docs/specs/details/04_機能/FN-003_会員登録.md",
+    "docs/specs/details/05_画面/SCR-005_会員登録.md"
+   ]
+  },
+  "U": {
+   "label": "利用者のproject（社内の請求管理。ASCの導入の後に、利用者が固有ルール（context.jsonでsrc/billingに登録した金額の規則）と固有Skill2件（請求書・見積書の書式）を置いた）",
+   "kind": "app",
+   "appFiles": false,
+   "baseClaudeMd": "# 請求管理（社内）\n\n社内の請求管理システム（TypeScript/Express）。`src/billing/`に請求、`src/users/`に利用者管理、`docs/`に開発の手順がある。\n",
+   "extraFiles": {
+    "README.md": "# billing-admin\n\n社内の請求管理システム（TypeScript/Express）。\n\n- `npm run dev`：開発サーバー\n",
+    "package.json": "{\n  \"name\": \"billing-admin\",\n  \"version\": \"0.4.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"dev\": \"tsx src/app.ts\",\n    \"build\": \"tsc\",\n    \"test\": \"node --test\"\n  },\n  \"dependencies\": {\n    \"express\": \"^4.19.2\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5.4.0\",\n    \"tsx\": \"^4.7.0\",\n    \"@types/express\": \"^4.17.21\"\n  }\n}\n",
+    "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"strict\": true,\n    \"outDir\": \"dist\"\n  },\n  \"include\": [\n    \"src\"\n  ]\n}\n",
+    "src/app.ts": "import express from 'express';\nimport {users} from './users/routes.js';\nimport {invoices} from './billing/routes.js';\n\nconst app = express();\napp.use(express.json());\napp.use('/users', users);\napp.use('/invoices', invoices);\napp.listen(Number(process.env.PORT ?? 3000));\n",
+    "src/billing/invoice.ts": "export type Line = {item: string; quantity: bigint; unitPriceYen: bigint};\nexport type Invoice = {id: string; customer: string; lines: Line[]};\n\nexport function lineAmount(line: Line): bigint {\n  return line.quantity * line.unitPriceYen;\n}\n\nexport function subtotal(invoice: Invoice): bigint {\n  return invoice.lines.reduce((sum, line) => sum + lineAmount(line), 0n);\n}\n",
+    "src/billing/routes.ts": "import {Router} from 'express';\nimport {subtotal, type Invoice} from './invoice.js';\n\nconst rows = new Map<string, Invoice>();\nexport const invoices = Router();\n\ninvoices.get('/:id', (req, res) => {\n  const inv = rows.get(req.params.id);\n  if (!inv) return res.status(404).end();\n  res.json({...inv, lines: inv.lines.map((l) => ({...l, quantity: String(l.quantity), unitPriceYen: String(l.unitPriceYen)})), subtotalYen: String(subtotal(inv))});\n});\n",
+    "src/users/store.ts": "export type User = {id: string; name: string; email: string};\nconst rows = new Map<string, User>();\nexport const store = {\n  list: (q?: string) => [...rows.values()].filter((u) => !q || u.name.includes(q)),\n  put: (u: User) => { rows.set(u.id, u); return u; },\n};\n",
+    "src/users/routes.ts": "import {Router} from 'express';\nimport {store} from './store.js';\n\nexport const users = Router();\nusers.get('/', (req, res) => {\n  res.json(store.list(typeof req.query.q === 'string' ? req.query.q : undefined));\n});\n",
+    "docs/開発の始め方.md": "# 開発の始め方\n\n1. Node.js 22を入れる。\n2. `npm install`で依存を入れる。\n3. `npm run dev`で開発サーバーを起動する（http://localhost:3000）。\n"
+   },
+   "afterInstallFiles": {
+    ".agent-skill-chain/project/context.json": "{\n  \"schema\": \"asc-project-context/v1\",\n  \"rules\": [\n    {\n      \"path\": \".agent-skill-chain/project/rules/money.md\",\n      \"appliesTo\": [\n        \"src/billing\"\n      ]\n    }\n  ]\n}\n",
+    ".agent-skill-chain/project/rules/money.md": "# 金額の扱い（請求）\n\n- 金額は整数の円で扱い、浮動小数点を使わない。TypeScriptでは`bigint`（例：`1200n`）で持つ。\n- 率（割引率・税率）は百分率の整数（`bigint`。10%は`10n`）で持ち、`金額 * 率 / 100n`で計算する。端数は切り捨て（`bigint`の除算）とする。\n- 金額の計算に、小数のリテラル、`Number()`・`parseFloat`・`toFixed`・`Math.round`等を使わない。\n",
+    ".claude/skills/invoice-format/SKILL.md": "---\nname: invoice-format\ndescription: 社内の請求書の書式（番号の付け方・記載項目・表記）を案内する。請求書を作る・直すときに使う。\n---\n\n# 請求書の書式（社内）\n\n請求書は`docs/invoices/<請求番号>.md`にMarkdownで作る。\n\n- 請求番号：`INV-<発行年月YYYYMM>-<3桁の連番>`（その月の最初は`001`）。\n- 宛名：会社名に「御中」を付ける。\n- 記載項目（この順）：請求番号、発行日、宛名、件名、明細（品目・数量・単価・金額の表）、小計、消費税（10%、1円未満切り捨て）、合計、支払期限（発行月の翌月末日）、振込先。\n- 振込先：「さくら銀行 本店営業部 普通 1234567 カ）テックサンプル」。\n- 金額は3桁ごとにカンマで区切り、末尾に「円」を付ける。\n",
+    ".claude/skills/quote-format/SKILL.md": "---\nname: quote-format\ndescription: 社内の見積書の書式（番号・記載項目・有効期限・端数）を案内する。顧客に出す見積書を作るときに使う。\n---\n\n# 見積書の書式（社内）\n\n見積書は`docs/quotes/<見積番号>.md`にMarkdownで作る。\n\n- 見積番号：`Q-<発行年月YYYYMM>-<3桁の連番>`（その月の最初は`001`）。\n- 宛名：会社名に「御中」を付ける。\n- 記載項目（この順）：見積番号、発行日、宛名、件名、明細（作業・人日・単価・金額の表）、小計、消費税（10%、1円未満切り捨て）、合計、有効期限（発行日から30日）、前提条件。\n- 前提条件には、見積に含めない作業を1行以上書く。\n- 金額は3桁ごとにカンマで区切り、末尾に「円」を付ける。\n"
+   },
+   "promptFiles": [
+    "src/billing/invoice.ts",
+    "src/users/store.ts",
+    "docs/開発の始め方.md",
+    ".agent-skill-chain/project/context.json",
+    ".agent-skill-chain/project/rules/money.md",
+    ".claude/skills/invoice-format/SKILL.md",
+    ".claude/skills/quote-format/SKILL.md"
+   ]
+  }
+ },
+ "rule": {
+  "name": "#1840 fixed levels",
+  "mode": "levels",
+  "maxFailureRate": 0.1,
+  "levels": [
+   {
+    "id": "g1-select",
+    "goal": 1,
+    "cases": [
+     "w-1",
+     "w-2",
+     "w-3",
+     "m-r1",
+     "m-r2",
+     "m-r7",
+     "s-1",
+     "n-1"
+    ],
+    "metric": "reach",
+    "min": 0.8
+   },
+   {
+    "id": "g1-body",
+    "goal": 1,
+    "cases": [
+     "w-1",
+     "w-2",
+     "w-3",
+     "m-r1",
+     "m-r2",
+     "m-r7",
+     "s-1",
+     "n-1"
+    ],
+    "metric": "bodyRead",
+    "min": 0.8
+   },
+   {
+    "id": "g1-warranty-reference",
+    "goal": 1,
+    "cases": [
+     "w-1",
+     "w-2",
+     "w-3"
+    ],
+    "metric": "referenceRead",
+    "min": 0.8
+   },
+   {
+    "id": "g1-warranty-templates",
+    "goal": 1,
+    "cases": [
+     "w-1",
+     "w-2"
+    ],
+    "metric": "expectReadsAll",
+    "min": 0.8
+   },
+   {
+    "id": "g1-warranty-answer",
+    "goal": 1,
+    "cases": [
+     "w-1",
+     "w-3"
+    ],
+    "metric": "markers",
+    "min": 0.67
+   },
+   {
+    "id": "g1-warranty-write",
+    "goal": 1,
+    "cases": [
+     "w-2"
+    ],
+    "metric": "writeOk",
+    "min": 0.67
+   },
+   {
+    "id": "g1-maintenance-reads",
+    "goal": 1,
+    "cases": [
+     "m-r1",
+     "m-r2",
+     "m-r7"
+    ],
+    "metric": "expectReadsAll",
+    "min": 0.8
+   },
+   {
+    "id": "g1-maintenance-answer",
+    "goal": 1,
+    "cases": [
+     "m-r1",
+     "m-r2",
+     "m-r7"
+    ],
+    "metric": "markers",
+    "min": 0.85
+   },
+   {
+    "id": "g1-spec-templates",
+    "goal": 1,
+    "cases": [
+     "s-1"
+    ],
+    "metric": "expectReadsAll",
+    "min": 0.67
+   },
+   {
+    "id": "g1-spec-write",
+    "goal": 1,
+    "cases": [
+     "s-1"
+    ],
+    "metric": "writeOk",
+    "min": 1
+   },
+   {
+    "id": "g1-adjacent-skill",
+    "goal": 1,
+    "cases": [
+     "n-1"
+    ],
+    "metric": "forbidSkillsOk",
+    "min": 0.67
+   },
+   {
+    "id": "g1-negative",
+    "goal": 1,
+    "cases": [
+     "n-2",
+     "n-3"
+    ],
+    "metric": "negativeOk",
+    "min": 0.8
+   },
+   {
+    "id": "g2-asc-select",
+    "goal": 2,
+    "cases": [
+     "u-bill-1",
+     "u-bill-2",
+     "u-users",
+     "u-docs"
+    ],
+    "metric": "reach",
+    "min": 0.8
+   },
+   {
+    "id": "g2-rule-read",
+    "goal": 2,
+    "cases": [
+     "u-bill-1",
+     "u-bill-2"
+    ],
+    "metric": "expectReadsAll",
+    "min": 0.8
+   },
+   {
+    "id": "g2-rule-comply",
+    "goal": 2,
+    "cases": [
+     "u-bill-1",
+     "u-bill-2"
+    ],
+    "metric": "writeOk",
+    "min": 1
+   },
+   {
+    "id": "g2-rule-not-read",
+    "goal": 2,
+    "cases": [
+     "u-users",
+     "u-docs",
+     "u-neg"
+    ],
+    "metric": "forbidReadsOk",
+    "min": 0.8
+   },
+   {
+    "id": "g2-skill-select",
+    "goal": 2,
+    "cases": [
+     "u-skill-1",
+     "u-skill-2"
+    ],
+    "metric": "bodyRead",
+    "min": 0.8
+   },
+   {
+    "id": "g2-skill-output",
+    "goal": 2,
+    "cases": [
+     "u-skill-1",
+     "u-skill-2"
+    ],
+    "metric": "writeOk",
+    "min": 0.67
+   },
+   {
+    "id": "g2-skill-distinguish",
+    "goal": 2,
+    "cases": [
+     "u-skill-1",
+     "u-skill-2",
+     "u-est",
+     "u-users",
+     "u-docs",
+     "u-neg"
+    ],
+    "metric": "forbidSkillsOk",
+    "min": 0.8
+   },
+   {
+    "id": "g2-negative",
+    "goal": 2,
+    "cases": [
+     "u-neg"
+    ],
+    "metric": "negativeOk",
+    "min": 0.67
+   }
+  ]
+ },
+ "subsets": {
+  "goal1": {
+   "fixtures": [
+    "EC1",
+    "EC3",
+    "MN",
+    "SP"
+   ]
+  },
+  "goal2": {
+   "fixtures": [
+    "U"
+   ]
+  },
+  "negative": {
+   "kinds": [
+    "negative"
+   ]
+  }
+ },
+ "dryRun": {
+  "installedDiffExpected": [
+   ".agent-skill-chain/distribution.json",
+   "^\\.agent-skill-chain/(managed-runtime/)?skills/estimate-and-scope/SKILL\\.md$",
+   "^\\.agent-skill-chain/(managed-runtime/v05/)?templates/specs/"
+  ],
+  "requiredDiff": [
+   ".agent-skill-chain/skills/estimate-and-scope/SKILL.md",
+   ".agent-skill-chain/templates/specs/00_利用案内.md",
+   ".agent-skill-chain/templates/specs/details/02_要件/03_品質保証範囲.md",
+   ".agent-skill-chain/templates/specs/details/04_機能/01_個別機能テンプレート.md",
+   ".agent-skill-chain/templates/specs/details/05_画面/02_個別画面テンプレート.md"
+  ],
+  "note": "R against C: the installed projects may differ only in the estimate-and-scope body (and its managed-runtime copy), the spec templates (and their managed-runtime copies) and the install record, and must differ in the body and the templates the cases expect to be read (first dry run 2026-11-27: 117 files per fixture, 3 + 114 templates). The Claude Code entries are the same (the descriptions do not change). An entry starting with ^ is a regular expression."
+ }
+}

@@ -1,0 +1,6 @@
+{
+ "ownerConfirmed": false,
+ "at": null,
+ "reference": null,
+ "note": "未承認。ownerが#1840で目印file（実HOMEとこのrepositoryに置く、probeが読めないことを確かめるfile）の使用を承認したら、統括がownerConfirmed true・日付・承認のcommentのURLを記録してcommitする。それまでmarkers.mjs createとprobeは拒否される。"
+}
