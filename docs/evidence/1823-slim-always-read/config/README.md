@@ -143,3 +143,9 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1823/runs --ledger $LEDGE
 - 場面ごとの確認で、固定した基準を満たさなかったもの：m-revoked（B 3/4、S 1/4）、m-release（B 4/4、S 2/4）。m-grant・m-draftは4/4で同じ。m-decisionは両方1/4。
 - m-revokedのSの不適用は、本文を読まずに答えた試行（U）が2件。Bにも1件ある。答えの中身（mergeしない・許可を推定しない）は規則どおりに見える。m-releaseのSは本文とreferenceを読んだが、release起動の判定の記述が目印に当たらなかった2件。
 - 解釈の限界：各4回、差の多くは偶然の範囲。ただし採用の条件は「少なくならない」で、場面ごとに満たしていない。
+
+## 決定（owner、進めて、2026-11-27）
+- Sの縮めた版は採用しない。`skills/asc/SKILL.md`と配布物は変えない（このbranchでmainの状態へ戻した）。
+- 測定の仕組み（共通harness）と結果は記録として残す。生の実行記録は公開しない。
+- 評価の記録の方針と、毎回読む部分への追加の上限は、`.agent-skill-chain/project/rules/evaluation-record.json`に書いた。
+- 部分的に切り出せる候補（m-revoked・m-releaseが落ちた原因の、取消し検索とrelease判定の条件付きreference化）は、残る作業として#1823に記す。

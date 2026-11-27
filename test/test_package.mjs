@@ -259,7 +259,7 @@ assert.equal(fs.existsSync(path.join(ordinary,'.git')),false);
  assert.equal(fs.existsSync(path.join(assetWork,'.agents/skills/project-foundation/SKILL.md')),false);
  const projectSkill=fs.readFileSync(path.join(assetWork,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8');assert(!projectSkill.includes(cli));assert(projectSkill.includes('../../bin/asc.mjs'));
  const sharedSkillRoot=path.join(assetWork,'.agent-skill-chain/skills/asc');
- for(const name of ['review.md','coordination.md','post-merge.md','controller.md','merge-permission.md','merge-grant.md','decision-handling.md']){
+ for(const name of ['review.md','coordination.md','post-merge.md','controller.md']){
   const file=path.join(sharedSkillRoot,'references',name),content=fs.readFileSync(file,'utf8');
   assert.equal(content,fs.readFileSync(path.join(packageRoot,'skills/asc/references',name),'utf8'));
   for(const [,link] of content.matchAll(/\]\(([^)]+)\)/g)){

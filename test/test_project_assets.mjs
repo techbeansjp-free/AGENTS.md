@@ -401,7 +401,7 @@ test('CLI accepts independent or combined Host registration and rejects duplicat
 
 test('distribution inventory remains bounded after adding a second Host',t=>{
  const f=fixture(t);
- f.write('.agent-skill-chain/distribution.json',JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:314},(_,i)=>[`entry-${i}`,'a'.repeat(64)]))}));
+ f.write('.agent-skill-chain/distribution.json',JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:306},(_,i)=>[`entry-${i}`,'a'.repeat(64)]))}));
  assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,registerClaudeSkill:true,apply:true}),/Invalid asset inventory/);
  assert.equal(fs.existsSync(path.join(f.work,asset)),false);
 });
@@ -409,7 +409,7 @@ test('distribution inventory remains bounded after adding a second Host',t=>{
 test('the inventory bound includes retained preimages as well as all sixteen registered Skills and optional assets',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,registerSkill:true,registerClaudeSkill:true};
  // The active count follows the package inventory, so a new src/ file needs no change here (#1739); the bound does not.
- const bound=313,active=projectAssets(f.work,options).changes.length,reserve=bound-active;
+ const bound=305,active=projectAssets(f.work,options).changes.length,reserve=bound-active;
  assert.ok(active>=292&&reserve>=1,`active ${active} leaves no preimage reserve under ${bound}`);
  const record='.agent-skill-chain/distribution.json';
  const retired=count=>JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:count},(_,i)=>[`retired-${i}`,'a'.repeat(64)]))});

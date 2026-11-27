@@ -13,10 +13,9 @@ const hostNames=['.agents','.claude'];
 const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;
 // Sixteen registered Skills, two optional assets and the runtime files use 292 assets at v0.5.71; the count grows
 // with src/runtime-files.json (#1739), and what is left of the bound holds preimages of retained canonical/runtime
-// assets. Retired owned Host entries are removed. The bound was 305 (the v0.5.64-v0.5.66 value, which keeps a
-// record with the retired src/repository-facts.mjs valid, #1727). #1823 adds three ASC references (303 assets) and
-// raises it to 313, leaving a reserve of 10 preimages; a larger bound still accepts every earlier record.
-const maxAssets=313;
+// assets. Retired owned Host entries are removed. The bound stays at 305, the
+// v0.5.64-v0.5.66 value, so a record that also keeps the retired src/repository-facts.mjs stays valid (#1727).
+const maxAssets=305;
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
 // Exact retired distribution paths, maintained by trusted package releases.
 // src/repository-facts.mjs was distributed by v0.5.64-v0.5.66 and removed by #1727.
