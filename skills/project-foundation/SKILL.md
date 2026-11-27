@@ -25,7 +25,7 @@ referencesの具体的な構成は採用候補として読み、既存の必須�
 
 | 今回の対象 | 読む詳細 |
 | --- | --- |
-| API、型、DDD、画面、部品、保存・検索 | [契約・型・画面・データ](references/contracts-and-ui.md) |
+| ディレクトリ構成、API、型、DDD、画面、部品、保存・検索 | [契約・型・画面・データ](references/contracts-and-ui.md) |
 | 構築入口、コンテナ、PRD/STG/DEV、worktree、port、復旧 | [実行環境と並行開発](references/containers-and-worktrees.md) |
 | テスト、CI、脆弱性監査、Summary、ログ、完了証拠 | [検証・セキュリティ・証跡](references/verification-and-security.md) |
 

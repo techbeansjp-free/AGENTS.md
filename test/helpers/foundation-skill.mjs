@@ -5,8 +5,8 @@ import path from 'node:path';
 
 // Reviewed distribution bytes, including the subsequently requested scope refinements.
 export const foundationHashes={
- 'SKILL.md':'e50c96ce68ea12fb07023744f49af485044155167f8afb267d42360dd55bdbb5',
- 'references/foundation-decisions.md':'7dd7ffdf7d6960a83abde3c4f604bff2895f42045b3ba9d507255206108f6de5',
+ 'SKILL.md':'6b2d643c8b0de24cee492a3294e783bee751a1bb9b69e090f116a57d7bbe88fb',
+ 'references/foundation-decisions.md':'a4d142bba1ba48ad5f086b04a49be39977a8829cda9f572339910a5546e7d685',
  'references/contracts-and-ui.md':'b34cb8f0bdda28ecdd29013bbee99728386d68bd80012d3921ad3370a5f3a834',
  'references/containers-and-worktrees.md':'039ca0ed4dc4ee741b5652b190706787ca07fcdb018206b2cb6fc3d915dd68d4',
  'references/verification-and-security.md':'c06644aecd521e4ed68a7e43148bebd9d79262c11fc82320c28424b7a1388327',
