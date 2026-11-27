@@ -1,0 +1,28 @@
+{
+ "schema": "asc-eval-release/v1",
+ "note": "The tarball each condition installs (conditions.json cells[c].release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition. Both entries are placeholders until #1845 (PR #1848) is merged and PR #1838 is merged with it (README); while they are, every paid run, fixture and the fixation are refused.",
+ "C": {
+  "kind": "candidate",
+  "placeholder": true,
+  "asset": "agent-skill-chain-<version>.tgz",
+  "assetSha256": "",
+  "packedFromCommit": "",
+  "packCommand": "git clone <origin> <scratch>/rel1843/cand-src; git checkout docs/1832-spec-writing-rules at the PR #1838 head that includes origin/main after #1845; node scripts/pack-candidate.mjs <scratch>/rel1843/candidate --version=<latest release version>",
+  "note": "PR #1838のhead（#1832の規則と#1843のascの1文）。origin/mainに#1845（PR #1848）がmergeされた後に、その版をmergeしたcommitでpackする。公開しない。"
+ },
+ "B": {
+  "kind": "candidate",
+  "placeholder": true,
+  "asset": "agent-skill-chain-<version>.tgz",
+  "assetSha256": "",
+  "packedFromCommit": "",
+  "packCommand": "in the same clone: git checkout -b base/1843 <C packedFromCommit>; git revert --no-edit a57a0829 (the #1843 commit that adds the sentence, the link rewrite and its test); node scripts/pack-candidate.mjs <scratch>/rel1843/base --version=<the same version>",
+  "baseOf": "C",
+  "differsFromCandidateOnly": [
+   "release-identity.json",
+   "skills/asc/SKILL.md",
+   "src/project-assets.mjs"
+  ],
+  "note": "Cから#1843の変更（ascの1文とproject-assetsのlinkの書換え、その試験）だけを戻したもの。#1832の規則はCと同じ。公開しない。"
+ }
+}

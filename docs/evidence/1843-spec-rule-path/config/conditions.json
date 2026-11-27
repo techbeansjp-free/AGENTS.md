@@ -1,0 +1,234 @@
+{
+ "schema": "asc-eval-conditions/v1",
+ "issue": "1843",
+ "stage": "spec rule path",
+ "markerTag": "1843",
+ "note": "Fixed before any model run (decision-criteria.md). #1843: ASC installed the way it reaches a user (project-assets --register-claude-skill --apply in a dedicated worktree, the read trigger claude-md adopted), in the isolated write-tools environment of #1840 (tools level W, same --settings). B = the candidate without the #1843 change (the C commit with the #1843 commit reverted); C = the PR #1838 head (the #1832 writing rules and the #1843 sentence) merged with origin/main after #1845. Both contain the #1832 rules: the conditions differ only in the asc Skill body (and its managed-runtime copy) and the managed-runtime copy of src/project-assets.mjs (the link rewrite), which the dry run checks (dryRun). The rule is fixed levels per condition (rule.mode levels): C must meet the levels; B is the same-time control.",
+ "model": "sonnet",
+ "modelNote": "Same alias as #1814-#1823. The resolved model id (init event) is recorded per trial.",
+ "runs": 6,
+ "runsNote": "Planned repetitions per condition and case (the Issue asks for 6 of s-1; n-2 and n-3 cost about 0.03 USD a trial, so they take the same 6 instead of a per-case count the harness does not have). Only reps 1..runs are scored; a later rep counts only as the one mandatory replacement of a failed trial.",
+ "ascSkills": [
+  "asc",
+  "contract-enforcement",
+  "decision-ownership",
+  "engineering-judgment",
+  "estimate-and-scope",
+  "execution-recovery",
+  "migration-assurance",
+  "project-foundation",
+  "research-to-implementation",
+  "review-and-remediation",
+  "security-evidence",
+  "subagent-model-selection",
+  "tracker-issue-writing",
+  "user-journey-acceptance",
+  "verification-optimization",
+  "warranty-scope",
+  "work-coordination"
+ ],
+ "ascSkillsNote": "The 17 Skills the candidate distributes (unchanged since #1840).",
+ "maxTurnsByKind": {
+  "app": null
+ },
+ "maxTurnsNote": "Every fixture is an app fixture: no --max-turns (the markers and the written files need the final state); the per-trial budget bounds the cost.",
+ "probeMaxTurns": 30,
+ "probeSteps": {
+  "W": 6
+ },
+ "probeFixture": "SP",
+ "probeFixtureNote": "One isolation probe per condition on fixture SP (the fixture of s-1 and n-3). SP has no user Skill, so the 17 .claude/skills entries are all ASC entries. The isolation steps do not depend on the fixture.",
+ "budget": {
+  "ownerCapUsd": 20,
+  "capUsd": 6,
+  "safetyMarginUsd": 0.5,
+  "perTrialUsd": 0.5,
+  "probeUsd": 0.35,
+  "plan": {
+   "perKindUsd": {
+    "spec": 0.25,
+    "negative": 0.04
+   },
+   "probeUsd": 0.15
+  },
+  "expect": {
+   "perKindUsd": {
+    "spec": 0.19,
+    "negative": 0.03
+   },
+   "probeUsd": 0.13,
+   "perKindInputTokens": {
+    "spec": 190000,
+    "negative": 14000
+   },
+   "probeInputTokens": 100000,
+   "perKindOutputTokens": {
+    "spec": 6000,
+    "negative": 500
+   },
+   "probeOutputTokens": 3000
+  },
+  "note": "Owner cap 20 USD for #1843, #1844 and #1846 together (stop line 19 USD, owner 2026-11-28, #1843 comment). This measurement takes at most capUsd 6 (stop line 5.5 USD): run-trial.mjs refuses a trial when the ledger total + its budget exceeds it. Before the fixation, lower capUsd if #1844 and #1846 leave less than 6 USD under the stop line of the shared cap (README). expect per kind from the #1840 records (s-1 mean 0.147, n-2 0.025, n-3 0.032 USD) plus reading the writing rules (00_利用案内.md, about 17.5 KB) in s-1; plan = expect x about 1.3."
+ },
+ "adopt": "claude-md",
+ "toolLevels": {
+  "W": {
+   "label": "書込みあり（#1815と同じtool。browser MCPなし）",
+   "tools": "Read,Write,Edit,Glob,Grep,Skill",
+   "disallowed": "Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task",
+   "permissionMode": "acceptEdits",
+   "initPermissionMode": "acceptEdits"
+  }
+ },
+ "toolsNote": "Only level W as #1820 stage 2 and #1823 (no Bash: level X failed its isolation probe in #1820 stage 1). Without Bash the Agent cannot run the ASC CLI start, so a rule registered in context.json is reached only by reading files (decision-criteria.md limits).",
+ "settingsNote": "Every trial gets the same --settings file (run-trial.mjs isolationSettings), as #1823.",
+ "conditions": {
+  "B": {
+   "label": "基準（候補版から#1843の変更を戻したもの：#1832の規則はあり、ascの1文なし）",
+   "release": "B"
+  },
+  "C": {
+   "label": "候補版（PR #1838のhead：#1832の規則と#1843のascの1文）",
+   "release": "C"
+  }
+ },
+ "cells": {
+  "B": {
+   "tools": "W",
+   "release": "B",
+   "source": "candidate"
+  },
+  "C": {
+   "tools": "W",
+   "release": "C",
+   "source": "candidate"
+  }
+ },
+ "cellsNote": "A cell is a condition (the trace names start with it). The fixture of a trial comes from its case.",
+ "probeCells": [
+  "B",
+  "C"
+ ],
+ "probeNote": "One isolation probe per condition on fixture SP (probeFixture). probe-check.mjs judges each against level W; compare checks that they differ in no session fact.",
+ "nonAdjacentKinds": [],
+ "nonAdjacentNote": "With three cases of which two are negative, no case order keeps the negatives apart and off the end (order.mjs orderProblems), so the check is turned off; the order puts s-1 between n-2 and n-3 (run-order.json).",
+ "fixtures": {
+  "SP": {
+   "label": "会員サイトの受託案件（既存の仕様：FN-003会員登録、SCR-005会員登録画面。#1832の場面）",
+   "kind": "app",
+   "appFiles": false,
+   "baseClaudeMd": "# 会員サイト（受託開発）\n\n会員サイトの受託開発。`docs/specs/`に仕様書（機能・画面）がある。\n",
+   "extraFiles": {
+    "README.md": "# member-site\n\n会員サイト（受託開発）。仕様書は`docs/specs/`にある。\n",
+    "docs/specs/details/04_機能/FN-003_会員登録.md": "# FN-003 会員登録\n\n状態：承認済み\n\n## 概要\n\n利用者がメールアドレスで会員登録する。\n\n## 処理\n\n1. 利用者がメールアドレスを入力する。\n2. 確認コード（6桁の数字）をメールで送る。有効期限は10分。\n3. 利用者が確認コードを入力し、一致すれば登録を完了する。\n\n## 規則\n\n- 確認コードを5回続けて間違えると、その登録手続きを30分ロックする。\n",
+    "docs/specs/details/05_画面/SCR-005_会員登録.md": "# SCR-005 会員登録画面\n\n状態：承認済み\n\n## 項目\n\n| 項目 | 種類 | 必須 |\n|---|---|---|\n| メールアドレス | 入力欄 | 必須 |\n| 確認コード | 入力欄（6桁） | 必須 |\n\n## 表示\n\n- 確認コードが違うとき：「確認コードが正しくありません」\n"
+   },
+   "promptFiles": [
+    "docs/specs/details/04_機能/FN-003_会員登録.md",
+    "docs/specs/details/05_画面/SCR-005_会員登録.md"
+   ]
+  },
+  "EC1": {
+   "label": "ECサイトの受託案件（検収前。要件定義書の非機能は「最新のブラウザ」「快適に動作」だけ。#1828のT1・T4の場面）",
+   "kind": "app",
+   "appFiles": false,
+   "baseClaudeMd": "# ECサイト（受託開発）\n\n中小の小売業者向けに受託で開発しているECサイト。`docs/`に要件定義書がある。\n",
+   "extraFiles": {
+    "README.md": "# shop-front\n\n中小の小売業者向けECサイト（受託開発）。PC・スマートフォン対応。\n",
+    "docs/要件定義書.md": "# 要件定義書（ECサイト）\n\n状態：顧客確認済み（検収前）\n\n## 概要\n\n- 中小の小売業者向けのECサイト。PC・スマートフォンに対応する。\n- 決済は外部の決済代行APIを使う。\n- 在庫は顧客の基幹システムからCSVで日次に取り込む。\n\n## 非機能要件\n\n- 最新のブラウザで動作すること。\n- 快適に動作すること。\n"
+   },
+   "promptFiles": [
+    "docs/要件定義書.md"
+   ]
+  }
+ },
+ "rule": {
+  "name": "#1843 fixed levels",
+  "mode": "levels",
+  "maxFailureRate": 0.1,
+  "levels": [
+   {
+    "id": "g1-select",
+    "goal": 1,
+    "cases": [
+     "s-1"
+    ],
+    "metric": "reach",
+    "min": "5/6"
+   },
+   {
+    "id": "g1-body",
+    "goal": 1,
+    "cases": [
+     "s-1"
+    ],
+    "metric": "bodyRead",
+    "min": "5/6"
+   },
+   {
+    "id": "g1-spec-templates",
+    "goal": 1,
+    "cases": [
+     "s-1"
+    ],
+    "metric": "expectReadsAll",
+    "min": "2/3"
+   },
+   {
+    "id": "g1-spec-write",
+    "goal": 1,
+    "cases": [
+     "s-1"
+    ],
+    "metric": "writeOk",
+    "min": "1/1"
+   },
+   {
+    "id": "g1-negative",
+    "goal": 1,
+    "cases": [
+     "n-2",
+     "n-3"
+    ],
+    "metric": "negativeOk",
+    "min": "5/6"
+   },
+   {
+    "id": "g1-negative-templates",
+    "goal": 1,
+    "cases": [
+     "n-2",
+     "n-3"
+    ],
+    "metric": "forbidReadsOk",
+    "min": "1/1",
+    "use": "report",
+    "label": "合否に使わない報告（雛形・規則を1件も読まない率）"
+   }
+  ],
+  "note": "Levels written as fractions are compared in integers (#1845 levelMet: ok * b >= a * n). The Issue levels: g1-spec-templates 0.67 of #1840 as 2/3 (4 of 6), g1-spec-write 1 (6 of 6). The levels with use report are computed and shown (perCondition.reported) but do not enter meets-levels. The verdict that matters is C; B is reported side by side as the control (decision-criteria.md)."
+ },
+ "subsets": {
+  "spec": {
+   "kinds": [
+    "spec"
+   ]
+  },
+  "negative": {
+   "kinds": [
+    "negative"
+   ]
+  }
+ },
+ "dryRun": {
+  "installedDiffExpected": [
+   ".agent-skill-chain/distribution.json",
+   "^\\.agent-skill-chain/(managed-runtime/)?skills/asc/SKILL\\.md$",
+   "^\\.agent-skill-chain/managed-runtime/src/project-assets\\.mjs$"
+  ],
+  "requiredDiff": [
+   ".agent-skill-chain/skills/asc/SKILL.md"
+  ],
+  "note": "B against C: the installed projects may differ only in the asc Skill body (and its managed-runtime copy), the managed-runtime copy of src/project-assets.mjs and the install record, and must differ in the installed asc body (the sentence and its link to ../../templates/specs/00_利用案内.md). The Claude Code entries are the same (the description does not change). An entry starting with ^ is a regular expression."
+ }
+}
