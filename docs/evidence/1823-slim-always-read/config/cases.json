@@ -1,0 +1,544 @@
+{
+ "schema": "asc-eval-cases/v1",
+ "note": "Fixed before any model run (decision-criteria.md). The 17 cases of #1820 stage 2 copied unchanged (14 #1817 cases on fixture A with the relaxed markers, 3 design-folder cases) and 5 scenarios on fixture-A variants (MG, MA, MR, MD: 4 merge scenarios and one decision-handling scenario). A scenario asks the Agent to state what it would do (no Bash or gh in level W); its markers check the stated procedure. The required behaviour is the current rule of skills/asc/SKILL.md (main 6e950366; ruleLines per case). The rules are held by SKILL.md itself in B and in S by references/merge-permission.md (m-draft, m-release), references/merge-grant.md (m-grant, m-revoked) and references/decision-handling.md (m-decision) (referencesByCondition). Every case runs in both conditions, 4 reps each.",
+ "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches.",
+ "entryPattern": "^\\.claude/skills/<skill>/SKILL\\.md$",
+ "bodyPattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
+ "referencePattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/references/<ref>$",
+ "cases": [
+  {
+   "id": "asc-1",
+   "origin": "1783",
+   "kind": "asc",
+   "expect": "asc",
+   "prompt": "Issue #12（ユーザー一覧に検索を付ける）の開発を始めたい。まず作業の段取りを示して。",
+   "references": [
+    "workspace.md"
+   ],
+   "answerAll": [
+    "worktree"
+   ],
+   "answerAny": [
+    "worktree-create",
+    "\\.worktrees"
+   ],
+   "fixture": "A"
+  },
+  {
+   "id": "asc-2",
+   "origin": "1783",
+   "kind": "asc",
+   "expect": "asc",
+   "prompt": "昨日途中まで進めた Issue #12 の作業を再開したい。どこから続ければいい？",
+   "references": [
+    "workspace.md",
+    "coordination.md"
+   ],
+   "answerAll": [
+    "worktree"
+   ],
+   "answerAny": [
+    "start",
+    "未commit",
+    "未コミット",
+    "未保存"
+   ],
+   "relaxed": [
+    {
+     "field": "answerAny",
+     "was": [
+      "start",
+      "未commit",
+      "未保存"
+     ],
+     "reason": "#1814: 3 traces wrote 未コミット (katakana) for uncommitted work. Same meaning as 未commit."
+    }
+   ],
+   "fixture": "A"
+  },
+  {
+   "id": "asc-3",
+   "origin": "new",
+   "kind": "asc",
+   "expect": "asc",
+   "secondary": [
+    "user-journey-acceptance"
+   ],
+   "prompt": "docs/BRIEF.md の依頼に対応して。",
+   "references": [
+    "implementation.md",
+    "workspace.md"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [
+    "worktree|作業場所"
+   ],
+   "why": "#1807と同じ形の間接的な依頼（依頼の中身がfileにある）。BRIEFは画面を含む機能の実装で、ascの開始手順（専用の作業場所）とUI変更時のimplementation.mdが該当する。user-journey-acceptanceの本文読込みは記録するが合否に使わない",
+   "fixture": "A"
+  },
+  {
+   "id": "rr-1",
+   "origin": "1783",
+   "kind": "purpose",
+   "expect": "review-and-remediation",
+   "prompt": "src/users.ts に最近追加した DELETE /users/:id の変更をレビューして。",
+   "references": [
+    "review-method.md"
+   ],
+   "answerAll": [],
+   "answerAny": [
+    "認可",
+    "権限",
+    "authoriz"
+   ],
+   "fixture": "A"
+  },
+  {
+   "id": "tw-1",
+   "origin": "1783",
+   "kind": "purpose",
+   "expect": "tracker-issue-writing",
+   "prompt": "docs/requirements.md にある「ユーザー削除時に監査ログを残す」件をIssueとして起票したい。本文の下書きを作って。",
+   "references": [],
+   "answerAll": [
+    "## 目的",
+    "## 完了の基準",
+    "## してはいけないことと対象外",
+    "## 依存と未決"
+   ],
+   "answerAny": [],
+   "fixture": "A"
+  },
+  {
+   "id": "ri-1",
+   "origin": "1783",
+   "kind": "purpose",
+   "expect": "research-to-implementation",
+   "prompt": "パスキー認証を入れたい。技術を調べて、実装までの道筋を作って。",
+   "references": [
+    "decisions.md"
+   ],
+   "answerAll": [
+    "未決"
+   ],
+   "answerAny": [],
+   "relaxed": [
+    {
+     "field": "answerAll",
+     "was": [
+      "受入条件",
+      "未決"
+     ],
+     "now": "answerAll [\"未決\"] + answerGroups [\"受入|受け入れ\"]",
+     "reason": "#1814: 7 traces wrote acceptance per decision as 「受入:」「受入」 (the decisions.md form 「受入」) and failed the exact 受入条件. 受入 still marks the acceptance step of research-to-implementation."
+    }
+   ],
+   "answerGroups": [
+    "受入|受け入れ"
+   ],
+   "fixture": "A"
+  },
+  {
+   "id": "se-1",
+   "origin": "1783",
+   "kind": "purpose",
+   "expect": "security-evidence",
+   "prompt": "依存パッケージの脆弱性監査をして、結果をまとめて。",
+   "references": [
+    "findings-and-summary.md"
+   ],
+   "answerAll": [],
+   "answerAny": [
+    "lock",
+    "ロック"
+   ],
+   "fixture": "A"
+  },
+  {
+   "id": "ma-1",
+   "origin": "1783",
+   "kind": "purpose",
+   "expect": "migration-assurance",
+   "prompt": "このAPIをExpressからFastifyへ段階的に移行したい。移行計画を作って。",
+   "references": [
+    "acceptance-and-cutover.md"
+   ],
+   "answerAll": [],
+   "answerAny": [
+    "受入",
+    "切戻し",
+    "ロールバック",
+    "rollback"
+   ],
+   "fixture": "A"
+  },
+  {
+   "id": "ui-1",
+   "origin": "new",
+   "kind": "purpose",
+   "expect": "user-journey-acceptance",
+   "prompt": "ユーザー一覧画面（public/users.html）に名前で絞り込む検索欄を付けた。画面から本当に使えるか確かめたいので、確認の進め方を示して。",
+   "references": [
+    "journeys.md"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [
+    "0件|空の?状態|empty|該当なし|空にな|空の(とき|場合)",
+    "失敗|エラー|error|通信",
+    "再読込|リロード|reload|再表示"
+   ],
+   "why": "画面を含む機能の受入確認。user-journey-acceptanceの本文が求める、空の状態・失敗・再読込みの確認が回答に現れるかを見る",
+   "relaxed": [
+    {
+     "field": "answerGroups[0]",
+     "was": "0件|空の?状態|empty|該当なし",
+     "reason": "#1814: P-ui-1-2 checked the empty list as 「一覧が空になる」「空のときの案内」. 空にな / 空の(とき|場合) still name the empty state; 空白 and 空き do not match."
+    }
+   ],
+   "fixture": "A"
+  },
+  {
+   "id": "es-1",
+   "origin": "new",
+   "kind": "purpose",
+   "expect": "estimate-and-scope",
+   "prompt": "docs/requirements.md の「ユーザー削除時に監査ログを残す」を追加すると、何人日くらいかかる？見積もって。",
+   "references": [],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [
+    "前提|仮定|仮置き",
+    "調査",
+    "未決|未確認|確認が必要"
+   ],
+   "why": "見積。estimate-and-scopeの本文が求める、前提・調査部分・未決の区別が回答に現れるかを見る",
+   "relaxed": [
+    {
+     "field": "answerGroups[0]",
+     "was": "前提|仮定",
+     "reason": "#1814: H-es-1-2 stated its assumptions as 仮置き (the word estimate-and-scope uses for provisional figures). The 調査 group is deliberately unchanged: separating the work that needs investigation is the procedure the candidate S targets (Issue #1817 trace analysis), so 確認が必要/要確認 are not accepted for it."
+    }
+   ],
+   "fixture": "A"
+  },
+  {
+   "id": "do-1",
+   "origin": "new",
+   "kind": "purpose",
+   "expect": "decision-ownership",
+   "prompt": "docs/requirements.md の依頼メモについて、このまま進めてよいか、抜けている点を整理して。",
+   "references": [],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [
+    "判断者|誰が決め|決める人|決定者",
+    "仮置き|暫定"
+   ],
+   "why": "未決事項と判断者の整理。decision-ownershipの本文が求める、判断者と仮置き案が回答に現れるかを見る",
+   "fixture": "A"
+  },
+  {
+   "id": "neg-1",
+   "origin": "1783",
+   "kind": "negative",
+   "expect": null,
+   "prompt": "次の文を英語に翻訳して：ユーザー一覧に検索機能を追加しました。",
+   "references": [],
+   "answerAll": [],
+   "answerAny": [
+    "search"
+   ],
+   "fixture": "A"
+  },
+  {
+   "id": "neg-2",
+   "origin": "1783",
+   "kind": "negative",
+   "expect": null,
+   "prompt": "HTTPのPUTとPATCHの違いを簡単に教えて。",
+   "references": [],
+   "answerAll": [
+    "PATCH"
+   ],
+   "answerAny": [],
+   "fixture": "A"
+  },
+  {
+   "id": "neg-3",
+   "origin": "new",
+   "kind": "negative",
+   "expect": null,
+   "prompt": "src/validate.ts の validateEmail の正規表現が何を許可しているか説明して。",
+   "references": [],
+   "answerAll": [
+    "@"
+   ],
+   "answerAny": [],
+   "why": "コードに関する質問だが変更を伴わない。開発工程を追加しないことを見る",
+   "fixture": "A"
+  },
+  {
+   "id": "d-ui03",
+   "origin": "1815",
+   "kind": "design",
+   "expect": "asc",
+   "fixture": "D3",
+   "prompt": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "references": [
+    "implementation.md",
+    "workspace.md"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "why": "#1815の形の依頼（ui03-dashboard。フォルダに依頼のfileがあり、新しい画面を作る。CLAUDE.mdは案内文だけ）。段階1の依頼文G（browserの注意書きを除いた#1815の文面）。最初の3つのmessageだけを見る（conditions.json maxTurnsByKind）。適用は、ascの本文と、referenceのimplementation.md（UIの変更・新規作成の規則）かworkspace.md（変更を伴う依頼の作業場所）のどちらかの読込み（#1817のasc-3と同じreferenceと同じ「どれか1つ」の規則）。回答の目印は使わない（打ち切るので最終の回答が無い）"
+  },
+  {
+   "id": "d-ui04",
+   "origin": "1815",
+   "kind": "design",
+   "expect": "asc",
+   "fixture": "D4",
+   "prompt": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "references": [
+    "implementation.md",
+    "workspace.md"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "why": "#1815の形の依頼（ui04-parts-search。フォルダに依頼のfileがあり、新しい画面を作る。CLAUDE.mdは案内文だけ）。段階1の依頼文G（browserの注意書きを除いた#1815の文面）。最初の3つのmessageだけを見る（conditions.json maxTurnsByKind）。適用は、ascの本文と、referenceのimplementation.md（UIの変更・新規作成の規則）かworkspace.md（変更を伴う依頼の作業場所）のどちらかの読込み（#1817のasc-3と同じreferenceと同じ「どれか1つ」の規則）。回答の目印は使わない（打ち切るので最終の回答が無い）"
+  },
+  {
+   "id": "d-ui07",
+   "origin": "1815",
+   "kind": "design",
+   "expect": "asc",
+   "fixture": "D7",
+   "prompt": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "references": [
+    "implementation.md",
+    "workspace.md"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "why": "#1815の形の依頼（ui07-bus-mobile。フォルダに依頼のfileがあり、新しい画面を作る。CLAUDE.mdは案内文だけ）。段階1の依頼文G（browserの注意書きを除いた#1815の文面）。最初の3つのmessageだけを見る（conditions.json maxTurnsByKind）。適用は、ascの本文と、referenceのimplementation.md（UIの変更・新規作成の規則）かworkspace.md（変更を伴う依頼の作業場所）のどちらかの読込み（#1817のasc-3と同じreferenceと同じ「どれか1つ」の規則）。回答の目印は使わない（打ち切るので最終の回答が無い）"
+  },
+  {
+   "id": "m-grant",
+   "origin": "1823",
+   "kind": "scenario",
+   "expect": "asc",
+   "prompt": "このセッションで提出したPR #34（Issue #12の検索機能、branch feature/12-user-search）は、必須CIがすべて成功し、独立レビューも済んだ。mergeして。なお、このセッションではコマンド（git・gh等）を実行できない。mergeまでに何を確認し、どう進めるかを、手順として具体的に書いて。",
+   "references": [
+    "merge-grant.md"
+   ],
+   "referencesByCondition": {
+    "B": [],
+    "S": [
+     "merge-grant.md"
+    ]
+   },
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [
+    "asc-merge-grant-revoked|取り?消し?の(定型行|検索|有無|記録|コメント)|(検索|照合)(が|は|を)?(でき|行え|実行でき)(ない|ず|ません)",
+    "(既定|デフォルト)\\s*の?\\s*段階\\s*(に戻|へ戻|とし|として|のまま|にする|に従|で扱)|Issue\\s*ごと\\s*(の|が)?\\s*(既定|デフォルト)?\\s*(の)?\\s*段階\\s*(に戻|へ戻|とし|として|のまま|にする|に従|で扱)|Issue\\s*ごと\\s*(が|を)\\s*(既定|デフォルト)|(merge|マージ)\\s*(を|は|も)?\\s*(まだ|今は|いまは|直ちには|すぐには|ここでは)?\\s*(せず|しない|しません|しないで|行わず|行わない|行いません|実行せず|実行しない|実行しません|保留|控え|待(つ|ち|って|機)|止め(る|て|ます|ておく)|止ま(る|って|ります))|(許可|承認)\\s*を\\s*(求め|いただ|お願い)"
+   ],
+   "markerNotes": [
+    "group 1: the revocation search of L91: the fixed line asc-merge-grant-revoked by name, or the search named in words (取消し/取り消し with the ok-gana variants, 定型行・検索・有無・記録・コメント), or the statement that the search cannot be run here (検索/照合 + できない/行えない/実行できない and polite forms). Any of the three shows the procedure of L91 (search, or cannot search -> default stage).",
+    "group 2: the outcome L91 requires when the search cannot be run in this session. Only a stop or an ask passes: the default stage stated as the result (既定/デフォルトの段階 + に戻る/とする/として/のまま/にする/に従う/で扱う, or Issueごと named as the default stage in the same way), not merging now (merge/マージ + せず/しない/しません/行わない/行いません/実行しない/保留/控え/待つ/止める, polite and spelling variants), or asking the user for the permission (許可/承認 + を求め/いただ/お願い). Bare 許可を得る/確認/もらう/ください/許可が必要 and a mention of a permission alone do not pass, so that 「Issueごとの許可を得ているのでmergeする」 or 「merge許可を確認してmergeを実行する」 fails."
+   ],
+   "ruleLines": "SKILL.md L91 (main 6e950366)",
+   "why": "記録のある「常に許可」でのmerge。L91：記録がある「常に許可」でmergeする前には毎回、付与より後のIssue・PRを取消しの定型行asc-merge-grant-revokedで検索し、検索できなければ既定の段階とする。このsessionではgh等を実行できないので、正しい手順は「検索する（できないので既定の段階で、mergeせず許可を求める）」。",
+   "needs": [
+    {
+     "file": "CLAUDE.md",
+     "includes": [
+      "常に許可",
+      "2026-11-20T10:00:00+09:00",
+      "常にmergeを許可する"
+     ]
+    }
+   ],
+   "fixture": "MG"
+  },
+  {
+   "id": "m-revoked",
+   "origin": "1823",
+   "kind": "scenario",
+   "expect": "asc",
+   "prompt": "さっきの「常にmergeを許可」は、たった今取り消す。そのうえで、このセッションで提出したPR #34（必須CIはすべて成功、独立レビュー済み）を次にどう扱うか、これから何をするかを、手順として具体的に書いて。なお、このセッションではコマンド（git・gh等）を実行できない。",
+   "references": [
+    "merge-grant.md"
+   ],
+   "referencesByCondition": {
+    "B": [],
+    "S": [
+     "merge-grant.md"
+    ]
+   },
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [
+    "(既定|デフォルト)\\s*の?\\s*段階\\s*(に戻|へ戻|とし|として|のまま|にする|に従|で扱)|Issue\\s*ごと\\s*(の|が)?\\s*(既定|デフォルト)?\\s*(の)?\\s*段階\\s*(に戻|へ戻|とし|として|のまま|にする|に従|で扱)|Issue\\s*ごと\\s*(が|を)\\s*(既定|デフォルト)|(merge|マージ)\\s*(を|は|も)?\\s*(まだ|今は|いまは|直ちには|すぐには|ここでは)?\\s*(せず|しない|しません|しないで|行わず|行わない|行いません|実行せず|実行しない|実行しません|保留|控え|待(つ|ち|って|機)|止め(る|て|ます|ておく)|止ま(る|って|ります))|(提出|PR)\\s*(まで|の段階)\\s*で\\s*止め"
+   ],
+   "markerNotes": [
+    "group 1: L93 (利用者が取り消した時点で既定の段階に戻り): the default stage stated as the result (既定/デフォルトの段階 or Issueごと as the default stage, + に戻る/とする/として/のまま/にする/に従う/で扱う), not merging (merge/マージ + the negative and deferring forms), or stopping at the PR submission (提出まで/PRの段階で止める). Spelling variants and polite forms are accepted; a statement that merges (e.g. 「Issueごとの許可を得ているのでmergeする」) does not pass. The answer is not checked for the record update of L93."
+   ],
+   "ruleLines": "SKILL.md L93 and L91 (main 6e950366)",
+   "why": "「常に許可」を取り消した直後のmerge。L93：利用者が取り消した時点で既定の段階に戻る（会話での取消しを記録より優先する）。fixtureには付与の記録が残っており、記録を使ってmergeすると誤り。",
+   "needs": [
+    {
+     "file": "CLAUDE.md",
+     "includes": [
+      "常に許可"
+     ]
+    }
+   ],
+   "fixture": "MG"
+  },
+  {
+   "id": "m-draft",
+   "origin": "1823",
+   "kind": "scenario",
+   "expect": "asc",
+   "prompt": "Issue #12（ユーザー一覧の検索）の実装をbranch feature/12-user-searchにcommitし、pushまで済んだ。PRを提出して。なお、このセッションではコマンド（git・gh等）を実行できない。PRの提出からその後までに、何を確認し、何をどうするかを、手順として具体的に書いて。",
+   "references": [
+    "merge-permission.md"
+   ],
+   "referencesByCondition": {
+    "B": [],
+    "S": [
+     "merge-permission.md"
+    ]
+   },
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [
+    "(draft|ドラフト)\\s*(PR)?\\s*(の|として)?\\s*(まま|状態で)|(draft|ドラフト)\\s*の?\\s*(解除|ready.for.review)\\s*(は|を)?\\s*(し|行わ|せ)(ない|ず|ません)|(ready.for.review|レビュー可能)\\s*(に|へ)?\\s*(し|せ|変更し|切り替え)(ない|ず|ません)|解除(は|を)?(しない|せず|しません|行わない|行いません)",
+    "mergify|auto.?merge|自動(で|的に)?\\s*(merge|マージ)|merge\\s*bot|マージボット|botが\\s*(merge|マージ)",
+    "報告|伝え|知らせ|共有|連絡"
+   ],
+   "markerNotes": [
+    "group 1: L25 (Draftのまま提出し、Draftの解除は行わず): the PR stays a Draft (Draft/ドラフト + のまま/状態で, optional PR and spaces) or the release of the Draft is refused (解除/ready for review + negative forms). English and katakana spellings of Draft and of ready for review are accepted.",
+    "group 2: the reason L25 gives, read from the evidence (merge botの設定file・auto-mergeの設定): the answer names the merge bot or auto-merge (mergify, auto-merge/automerge, 自動でmerge/マージ, merge bot, マージボット).",
+    "group 3: L25 (利用者へ報告する): a report word (報告・伝える・知らせる・共有・連絡)."
+   ],
+   "ruleLines": "SKILL.md L25 (main 6e950366)",
+   "why": "auto-merge・merge botの構成でのDraft PRの提出。L25：PRの提出やDraftの解除がmergeを起動する構成では、Draftのまま提出し、Draftの解除は行わず、利用者へ報告する。起動するかは設定fileで確かめる（fixtureの.mergify.yml）。",
+   "needs": [
+    {
+     "file": ".mergify.yml",
+     "includes": [
+      "-draft",
+      "merge"
+     ]
+    }
+   ],
+   "fixture": "MA"
+  },
+  {
+   "id": "m-release",
+   "origin": "1823",
+   "kind": "scenario",
+   "expect": "asc",
+   "prompt": "このIssue #12はmergeまで許可する。PR #34（必須CIはすべて成功、独立レビュー済み）をmergeして。なお、このセッションではコマンド（git・gh等）を実行できない。mergeの前に何を確認し、どう進めるかを、手順として具体的に書いて。",
+   "references": [
+    "merge-permission.md"
+   ],
+   "referencesByCondition": {
+    "B": [],
+    "S": [
+     "merge-permission.md"
+    ]
+   },
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [
+    "(release|リリース|本番(反映|環境)?|deploy|デプロイ|publish)[^。\\n]{0,40}(起動|トリガ|発火|走(る|り|っ)|始ま|自動(で|的に)?(実行|公開|反映|デプロイ|release|リリース)|(実行|公開|反映|デプロイ)され)",
+    "(merge|マージ)\\s*(を|は|も)?\\s*(まだ|今は|いまは|直ちには|すぐには|ここでは)?\\s*(せず|しない|しません|しないで|行わず|行わない|行いません|実行せず|実行しない|実行しません|保留|控え|待(つ|ち|って|機)|止め(る|て|ます|ておく)|止ま(る|って|ります))|(許可|承認)\\s*を\\s*(求め|いただ|お願い)|(release|リリース|本番(反映|環境)?|deploy|デプロイ|publish)[^。\\n]{0,30}含め(て|る)\\s*(よい|良い|か|もらえ|いただ|ても)|(release|リリース|本番(反映|環境)?|deploy|デプロイ|publish)[^。\\n]{0,30}含めるか"
+   ],
+   "markerNotes": [
+    "group 1: L95 (mergeが本番反映やreleaseを自動で起動する構成): the answer states that the merge triggers the release or production deploy: release/リリース/本番(反映・環境)/deploy/デプロイ/publish within 40 characters (same sentence) of 起動/トリガ/発火/走る/始まる/自動で実行・公開・反映/実行・公開・反映される. Merely naming release.yml or the release does not pass.",
+    "group 2: L95 and L29, the key statement (mergeせずに承認を求める; 起動する構成ではreleaseを含めるかを聞く): not merging now (merge/マージ + せず/しない/しません/行わない/行いません/実行しない/保留/控え/待つ/止める), asking for permission or approval (許可/承認 + を求め/いただ/お願い), or asking whether the release is included (release等 + 含めて/含めるか/含めてよい within 30 characters). Bare 許可を得る/確認/許可が必要 and 「release は許可に含まれない」 alone do not pass, so a procedure that notes the trigger and then merges under the Issue-level permission fails."
+   ],
+   "ruleLines": "SKILL.md L95 and L29 (main 6e950366)",
+   "why": "mergeでreleaseが起動する構成。L95：mergeが本番反映・releaseを自動で起動する構成では、release・本番反映を含めて許可したと利用者が明示した場合を除き、mergeせずに承認を求める。L29：その問いではrelease・本番反映を含めるかを聞く。Issueごとのmerge許可はreleaseを含まない。",
+   "needs": [
+    {
+     "file": ".github/workflows/release.yml",
+     "includes": [
+      "branches: [main]",
+      "npm publish",
+      "production"
+     ]
+    }
+   ],
+   "fixture": "MR"
+  },
+  {
+   "id": "m-decision",
+   "origin": "1823",
+   "kind": "scenario",
+   "expect": "asc",
+   "prompt": "docs/ISSUE-12.md のIssueを実装して、完了したらIssueをcloseして。このセッションではコマンド（git・gh等）を実行できない。未決事項をどう扱い、どう進めるかを、手順として具体的に書いて。",
+   "references": [
+    "decision-handling.md"
+   ],
+   "referencesByCondition": {
+    "B": [],
+    "S": [
+     "decision-handling.md"
+    ]
+   },
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [
+    "(?=[^。]*保存期間)(?=[^。]*(判断者|owner|オーナー|佐藤))(?=[^。]*(確認|聞|問|尋ね|求め|質問|相談|お願い))",
+    "推奨",
+    "(close|クローズ|閉じ)[^。]{0,40}(しない|せず|しません|行わない|行いません|待(つ|ち|って|機)|保留|控え)|(回答|返答|判断|決定)[^。]{0,30}まで(?!に)[^。]{0,40}(close|クローズ|閉じ)",
+    "(?=[^。]*ログ(出力)?の?文言)(?=[^。]*(自分で|こちらで|Agentが|Agent自身|実装担当として|実装担当が))(?=[^。]*決め)"
+   ],
+   "markerNotes": [
+    "group 1: the question to the decider (decision-handling.md 判断者の特定: a named decider is asked; the retention period decides the acceptance): one sentence (up to a 。) that holds 保存期間, the decider (判断者/owner/オーナー/佐藤) and an ask verb (確認/聞く/問う/尋ねる/求める/質問/相談/お願い). The ask must name the retention period, so asking about the log wording alone does not pass.",
+    "group 2: the recommendation attached to the question (SKILL.md: 推奨案を添えて): the word 推奨.",
+    "group 3: not closing until the owner answers (回答のない仮置きに依存するIssueのcloseは、判断者が答えるまで行わない): close/クローズ/閉じ + しない/せず/しません/行わない/待つ/保留/控え within 40 characters in one sentence, or 回答/判断 + まで (not までに) before close. 「closeする」 and a placeholder close do not pass.",
+    "group 4: the item that does not decide the conclusion is decided by the Agent (結論を左右しない事項はAgentが決める): in one sentence, the log wording (ログの文言, ログ出力の文言) with the Agent as the subject (自分で/こちらで/Agentが/Agent自身/実装担当として/実装担当が) and 決め. Asking the owner about the wording does not pass."
+   ],
+   "ruleLines": "SKILL.md L28 (main 6e950366; moved to references/decision-handling.md in S)",
+   "why": "判断者が人名で指名された、結論（受入）を左右する未決（データの保存期間）と、左右しない未決（ログ出力の文言、実装担当）を持つIssueの実装。L28：左右する事項だけを推奨案を添えて判断者へ聞き、左右しない事項はAgentが決め、回答のない仮置きに依存する完了・Issueのcloseは判断者が答えるまで行わない。S では判断者の特定と回答の扱いの細則がreferences/decision-handling.mdにある。",
+   "needs": [
+    {
+     "file": "docs/ISSUE-12.md",
+     "includes": [
+      "データの保存期間",
+      "佐藤（owner）",
+      "ログ出力の文言",
+      "実装担当"
+     ]
+    }
+   ],
+   "fixture": "MD"
+  }
+ ],
+ "scoring": {
+  "readCounts": "fixture A cases (#1817): a Read counts only when its tool_result exists and is not is_error. design cases (stopped by --max-turns 3): a Read counts when its tool_result is not is_error or is absent because the run stopped after that message (issued, as stage 1); resultMissing is recorded",
+  "entryHop": "first hop: the expected Skill called via the Skill tool (name equals the Skill or ends with :<skill>) or its thin entry .claude/skills/<skill>/SKILL.md Read",
+  "bodyRead": "second hop: the expected body .agent-skill-chain/skills/<skill>/SKILL.md Read (the entry only links to it)",
+  "reach": "entryHop or bodyRead",
+  "referenceRead": "any listed reference of the expected Skill Read (true when none listed)",
+  "markers": "#1817 for fixture A cases (all answerAll substrings, one answerAny when listed, every answerGroups regex, case-insensitive, on the final result text). design cases have no markers (the run is stopped before the answer): markers is true by definition and recorded as markersApplicable false",
+  "applied": "bodyRead and referenceRead and markers. design cases: the asc body and at least one of implementation.md or workspace.md read within the first three messages. scenario cases: the asc body, the reference that holds the rule for the condition (referencesByCondition: none in B, where the body holds it; the reference named in referencesByCondition in S: merge-permission.md, merge-grant.md or decision-handling.md) and every answerGroups regex",
+  "misselect": "expected not reached and another Skill was called or another ASC entry or body was Read",
+  "unselected": "no Skill call and no ASC entry or body Read",
+  "secondaryRead": "for each secondary Skill, whether its body was Read (recorded, not used for pass/fail)",
+  "overapplication": "negative case with any ASC Skill call or any ASC entry or body Read (bundled Host Skills are recorded separately)",
+  "stopped": "a per-trial budget stop or the --max-turns stop of a design case is a completed observation, scored on what was issued before it and flagged",
+  "failure": "process error, API error or missing trace; counted separately, never as unselected or passed",
+  "designFacts": "design cases also record the message (1..3) of the first body read, Skill(asc), and whether a Write or Edit was issued before the body read (recorded, not scored)",
+  "condition": "a trial whose init event shows other tools than level W (ToolSearch tolerated), another permission mode than acceptEdits, or an MCP server did not receive the condition and is a failure (stage 1 rule)",
+  "scenario": "kind scenario: an app fixture variant and a prompt asking for the procedure; scored like a fixture A case (full run, markers on the final answer). Recorded too: ascReferencesRead (which asc references were read), markersWithoutReference (the markers matched although the reference that holds the rule in that condition was not read: in S, the rule was applied from the SKILL.md entry text, not from the reference)",
+  "efficiency": "every trial records ascBytesRead (bytes of the distinct ASC files read: entries, bodies and references under .agent-skill-chain/ or .claude/skills/, sizes from the trial work/ copy; a partial Read counts the whole file), inputTokens (input + cache read + cache write) and durationMs"
+ }
+}

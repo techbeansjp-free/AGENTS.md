@@ -1,0 +1,587 @@
+{
+ "conditions": {
+  "B": {
+   "condition": "B",
+   "runs": 88,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 12,
+   "positives": 76,
+   "entryHop": 5,
+   "reach": 75,
+   "bodyRead": 75,
+   "referenceRead": 73,
+   "applied": 69,
+   "misselect": 0,
+   "unselected": 1,
+   "markersWithoutReference": 0,
+   "negatives": 12,
+   "overapplication": 0,
+   "negMarkers": 12,
+   "designWriteBeforeBody": 0,
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [],
+   "perCase": {
+    "asc-1": "AAAA",
+    "asc-2": "AAAA",
+    "asc-3": "AAAA",
+    "rr-1": "AAAA",
+    "tw-1": "AAAA",
+    "ri-1": "AAAA",
+    "se-1": "AAAA",
+    "ma-1": "AAAA",
+    "ui-1": "AAAA",
+    "es-1": "BAAA",
+    "do-1": "AAAA",
+    "neg-1": "----",
+    "neg-2": "----",
+    "neg-3": "----",
+    "d-ui03": "AAAA",
+    "d-ui04": "AAAB",
+    "d-ui07": "AABA",
+    "m-grant": "AAAA",
+    "m-revoked": "UAAA",
+    "m-draft": "AAAA",
+    "m-release": "AAAA",
+    "m-decision": "BBAB"
+   },
+   "referenceReads": {
+    "acceptance-and-cutover.md": 4,
+    "coordination.md": 6,
+    "decisions.md": 4,
+    "findings-and-summary.md": 4,
+    "implementation.md": 13,
+    "journeys.md": 4,
+    "post-merge.md": 8,
+    "review-method.md": 4,
+    "review.md": 6,
+    "workspace.md": 14
+   },
+   "perTrial": {
+    "ascBytesRead": 25038.2,
+    "inputTokens": 69721,
+    "outputTokens": 3416.2,
+    "durationMs": 25473.1,
+    "costUsd": 0.1
+   },
+   "costUsd": 9.5232,
+   "turns": 591,
+   "durationSec": 2242
+  },
+  "S": {
+   "condition": "S",
+   "runs": 88,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 12,
+   "positives": 76,
+   "entryHop": 3,
+   "reach": 74,
+   "bodyRead": 74,
+   "referenceRead": 69,
+   "applied": 63,
+   "misselect": 0,
+   "unselected": 2,
+   "markersWithoutReference": 3,
+   "negatives": 12,
+   "overapplication": 0,
+   "negMarkers": 12,
+   "designWriteBeforeBody": 0,
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [],
+   "perCase": {
+    "asc-1": "AAAA",
+    "asc-2": "AAAA",
+    "asc-3": "AAAA",
+    "rr-1": "AAAA",
+    "tw-1": "AAAA",
+    "ri-1": "AAAA",
+    "se-1": "AAAA",
+    "ma-1": "AAAA",
+    "ui-1": "AAAA",
+    "es-1": "BAAA",
+    "do-1": "AAAA",
+    "neg-1": "----",
+    "neg-2": "----",
+    "neg-3": "----",
+    "d-ui03": "BAAA",
+    "d-ui04": "AABA",
+    "d-ui07": "ABBA",
+    "m-grant": "AAAA",
+    "m-revoked": "UBAU",
+    "m-draft": "AAAA",
+    "m-release": "BAAB",
+    "m-decision": "BBAB"
+   },
+   "referenceReads": {
+    "acceptance-and-cutover.md": 4,
+    "coordination.md": 3,
+    "decision-handling.md": 4,
+    "decisions.md": 4,
+    "findings-and-summary.md": 4,
+    "implementation.md": 9,
+    "journeys.md": 4,
+    "merge-grant.md": 5,
+    "merge-permission.md": 12,
+    "post-merge.md": 8,
+    "review-method.md": 4,
+    "review.md": 5,
+    "workspace.md": 14
+   },
+   "perTrial": {
+    "ascBytesRead": 21205.8,
+    "inputTokens": 63701.4,
+    "outputTokens": 3191.4,
+    "durationMs": 23925,
+    "costUsd": 0.1
+   },
+   "costUsd": 8.8339,
+   "turns": 586,
+   "durationSec": 2105
+  }
+ },
+ "completion": {
+  "basis": "complete",
+  "complete": true,
+  "capReached": false,
+  "lateProbes": [],
+  "missingPlanned": 0,
+  "firstMissingPlanned": null,
+  "missingReplacements": [],
+  "spentUsd": 18.5724,
+  "stopLineUsd": 39.2,
+  "perTrialUsd": 0.35
+ },
+ "judgement": {
+  "verdict": "not-a-candidate",
+  "basis": "complete",
+  "completion": {
+   "basis": "complete",
+   "complete": true,
+   "capReached": false,
+   "lateProbes": [],
+   "missingPlanned": 0,
+   "firstMissingPlanned": null,
+   "missingReplacements": [],
+   "spentUsd": 18.5724,
+   "stopLineUsd": 39.2,
+   "perTrialUsd": 0.35
+  },
+  "checks": {
+   "bodyReadLevel": {
+    "value": "74/76 >= 0.8",
+    "pass": true
+   },
+   "bodyReadNotLower": {
+    "value": "74/76 vs 75/76",
+    "pass": false
+   },
+   "appliedNotLower": {
+    "value": "63/76 vs 69/76",
+    "pass": false
+   },
+   "overapplication": {
+    "value": "0/12 vs 0/12 + 1",
+    "pass": true
+   }
+  },
+  "perCase": {
+   "m-grant": {
+    "value": "4/4 vs 4/4",
+    "pass": true
+   },
+   "m-revoked": {
+    "value": "1/4 vs 3/4",
+    "pass": false
+   },
+   "m-draft": {
+    "value": "4/4 vs 4/4",
+    "pass": true
+   },
+   "m-release": {
+    "value": "2/4 vs 4/4",
+    "pass": false
+   },
+   "m-decision": {
+    "value": "1/4 vs 1/4",
+    "pass": true
+   }
+  },
+  "efficiency": {
+   "kinds": [
+    "asc",
+    "purpose",
+    "design",
+    "negative"
+   ],
+   "B": {
+    "ascBytesRead": 21252.9,
+    "inputTokens": 72472,
+    "outputTokens": 3566.5,
+    "durationMs": 26346.8,
+    "costUsd": 0.1
+   },
+   "S": {
+    "ascBytesRead": 18079.9,
+    "inputTokens": 67392.6,
+    "outputTokens": 3287.7,
+    "durationMs": 24489.6,
+    "costUsd": 0.1
+   },
+   "checks": {
+    "ascBytesRead": {
+     "value": "18079.9 vs 21252.9",
+     "pass": true
+    },
+    "inputTokens": {
+     "value": "67392.6 vs 72472",
+     "pass": true
+    },
+    "durationMs": {
+     "value": "24489.6 vs 26346.8",
+     "pass": true
+    }
+   }
+  },
+  "separate": {
+   "fixtureA": {
+    "B": {
+     "positives": 44,
+     "bodyRead": 44,
+     "applied": 43,
+     "perCase": {
+      "asc-1": "AAAA",
+      "asc-2": "AAAA",
+      "asc-3": "AAAA",
+      "rr-1": "AAAA",
+      "tw-1": "AAAA",
+      "ri-1": "AAAA",
+      "se-1": "AAAA",
+      "ma-1": "AAAA",
+      "ui-1": "AAAA",
+      "es-1": "BAAA",
+      "do-1": "AAAA",
+      "neg-1": "----",
+      "neg-2": "----",
+      "neg-3": "----"
+     },
+     "perTrial": {
+      "ascBytesRead": 17688,
+      "inputTokens": 75030.5,
+      "outputTokens": 2458,
+      "durationMs": 20250.4,
+      "costUsd": 0.1
+     },
+     "referenceReads": {
+      "acceptance-and-cutover.md": 4,
+      "coordination.md": 4,
+      "decisions.md": 4,
+      "findings-and-summary.md": 4,
+      "implementation.md": 5,
+      "journeys.md": 4,
+      "review-method.md": 4,
+      "workspace.md": 12
+     },
+     "negatives": 12,
+     "overapplication": 0
+    },
+    "S": {
+     "positives": 44,
+     "bodyRead": 44,
+     "applied": 43,
+     "perCase": {
+      "asc-1": "AAAA",
+      "asc-2": "AAAA",
+      "asc-3": "AAAA",
+      "rr-1": "AAAA",
+      "tw-1": "AAAA",
+      "ri-1": "AAAA",
+      "se-1": "AAAA",
+      "ma-1": "AAAA",
+      "ui-1": "AAAA",
+      "es-1": "BAAA",
+      "do-1": "AAAA",
+      "neg-1": "----",
+      "neg-2": "----",
+      "neg-3": "----"
+     },
+     "perTrial": {
+      "ascBytesRead": 15766,
+      "inputTokens": 70151.1,
+      "outputTokens": 2471.3,
+      "durationMs": 20169.9,
+      "costUsd": 0.1
+     },
+     "referenceReads": {
+      "acceptance-and-cutover.md": 4,
+      "coordination.md": 3,
+      "decisions.md": 4,
+      "findings-and-summary.md": 4,
+      "implementation.md": 3,
+      "journeys.md": 4,
+      "review-method.md": 4,
+      "workspace.md": 12
+     },
+     "negatives": 12,
+     "overapplication": 0
+    },
+    "checks": {
+     "bodyReadLevel": {
+      "value": "44/44 >= 0.8",
+      "pass": true
+     },
+     "bodyReadNotLower": {
+      "value": "44/44 vs 44/44",
+      "pass": true
+     },
+     "appliedNotLower": {
+      "value": "43/44 vs 43/44",
+      "pass": true
+     },
+     "overapplication": {
+      "value": "0/12 vs 0/12 + 1",
+      "pass": true
+     }
+    }
+   },
+   "design": {
+    "B": {
+     "positives": 12,
+     "bodyRead": 12,
+     "applied": 10,
+     "perCase": {
+      "d-ui03": "AAAA",
+      "d-ui04": "AAAB",
+      "d-ui07": "AABA"
+     },
+     "perTrial": {
+      "ascBytesRead": 37888.8,
+      "inputTokens": 60532,
+      "outputTokens": 8739.7,
+      "durationMs": 54796.3,
+      "costUsd": 0.2
+     },
+     "referenceReads": {
+      "implementation.md": 8,
+      "workspace.md": 2
+     }
+    },
+    "S": {
+     "positives": 12,
+     "bodyRead": 12,
+     "applied": 8,
+     "perCase": {
+      "d-ui03": "BAAA",
+      "d-ui04": "AABA",
+      "d-ui07": "ABBA"
+     },
+     "perTrial": {
+      "ascBytesRead": 28877.8,
+      "inputTokens": 54519.8,
+      "outputTokens": 7097.4,
+      "durationMs": 44648.1,
+      "costUsd": 0.2
+     },
+     "referenceReads": {
+      "implementation.md": 6,
+      "workspace.md": 2
+     }
+    },
+    "checks": {
+     "bodyReadLevel": {
+      "value": "12/12 >= 0.8",
+      "pass": true
+     },
+     "bodyReadNotLower": {
+      "value": "12/12 vs 12/12",
+      "pass": true
+     },
+     "appliedNotLower": {
+      "value": "8/12 vs 10/12",
+      "pass": false
+     }
+    }
+   },
+   "scenario": {
+    "B": {
+     "positives": 20,
+     "bodyRead": 19,
+     "applied": 16,
+     "perCase": {
+      "m-grant": "AAAA",
+      "m-revoked": "UAAA",
+      "m-draft": "AAAA",
+      "m-release": "AAAA",
+      "m-decision": "BBAB"
+     },
+     "perTrial": {
+      "ascBytesRead": 37908.6,
+      "inputTokens": 60367.7,
+      "outputTokens": 2905,
+      "durationMs": 22502.5,
+      "costUsd": 0.1
+     },
+     "referenceReads": {
+      "coordination.md": 2,
+      "post-merge.md": 8,
+      "review.md": 6
+     }
+    },
+    "S": {
+     "positives": 20,
+     "bodyRead": 18,
+     "applied": 12,
+     "perCase": {
+      "m-grant": "AAAA",
+      "m-revoked": "UBAU",
+      "m-draft": "AAAA",
+      "m-release": "BAAB",
+      "m-decision": "BBAB"
+     },
+     "perTrial": {
+      "ascBytesRead": 31833.8,
+      "inputTokens": 51151.2,
+      "outputTokens": 2864.2,
+      "durationMs": 22005.3,
+      "costUsd": 0.1
+     },
+     "referenceReads": {
+      "decision-handling.md": 4,
+      "merge-grant.md": 5,
+      "merge-permission.md": 12,
+      "post-merge.md": 8,
+      "review.md": 5
+     }
+    },
+    "checks": {
+     "bodyReadLevel": {
+      "value": "18/20 >= 0.8",
+      "pass": true
+     },
+     "bodyReadNotLower": {
+      "value": "18/20 vs 19/20",
+      "pass": false
+     },
+     "appliedNotLower": {
+      "value": "12/20 vs 16/20",
+      "pass": false
+     }
+    }
+   },
+   "common": {
+    "B": {
+     "positives": 56,
+     "bodyRead": 56,
+     "applied": 53,
+     "perCase": {
+      "asc-1": "AAAA",
+      "asc-2": "AAAA",
+      "asc-3": "AAAA",
+      "rr-1": "AAAA",
+      "tw-1": "AAAA",
+      "ri-1": "AAAA",
+      "se-1": "AAAA",
+      "ma-1": "AAAA",
+      "ui-1": "AAAA",
+      "es-1": "BAAA",
+      "do-1": "AAAA",
+      "neg-1": "----",
+      "neg-2": "----",
+      "neg-3": "----",
+      "d-ui03": "AAAA",
+      "d-ui04": "AAAB",
+      "d-ui07": "AABA"
+     },
+     "perTrial": {
+      "ascBytesRead": 21252.9,
+      "inputTokens": 72472,
+      "outputTokens": 3566.5,
+      "durationMs": 26346.8,
+      "costUsd": 0.1
+     },
+     "referenceReads": {
+      "acceptance-and-cutover.md": 4,
+      "coordination.md": 4,
+      "decisions.md": 4,
+      "findings-and-summary.md": 4,
+      "implementation.md": 13,
+      "journeys.md": 4,
+      "review-method.md": 4,
+      "workspace.md": 14
+     },
+     "negatives": 12,
+     "overapplication": 0
+    },
+    "S": {
+     "positives": 56,
+     "bodyRead": 56,
+     "applied": 51,
+     "perCase": {
+      "asc-1": "AAAA",
+      "asc-2": "AAAA",
+      "asc-3": "AAAA",
+      "rr-1": "AAAA",
+      "tw-1": "AAAA",
+      "ri-1": "AAAA",
+      "se-1": "AAAA",
+      "ma-1": "AAAA",
+      "ui-1": "AAAA",
+      "es-1": "BAAA",
+      "do-1": "AAAA",
+      "neg-1": "----",
+      "neg-2": "----",
+      "neg-3": "----",
+      "d-ui03": "BAAA",
+      "d-ui04": "AABA",
+      "d-ui07": "ABBA"
+     },
+     "perTrial": {
+      "ascBytesRead": 18079.9,
+      "inputTokens": 67392.6,
+      "outputTokens": 3287.7,
+      "durationMs": 24489.6,
+      "costUsd": 0.1
+     },
+     "referenceReads": {
+      "acceptance-and-cutover.md": 4,
+      "coordination.md": 3,
+      "decisions.md": 4,
+      "findings-and-summary.md": 4,
+      "implementation.md": 9,
+      "journeys.md": 4,
+      "review-method.md": 4,
+      "workspace.md": 14
+     },
+     "negatives": 12,
+     "overapplication": 0
+    },
+    "checks": {
+     "bodyReadLevel": {
+      "value": "56/56 >= 0.8",
+      "pass": true
+     },
+     "bodyReadNotLower": {
+      "value": "56/56 vs 56/56",
+      "pass": true
+     },
+     "appliedNotLower": {
+      "value": "51/56 vs 53/56",
+      "pass": false
+     },
+     "overapplication": {
+      "value": "0/12 vs 0/12 + 1",
+      "pass": true
+     }
+    }
+   }
+  },
+  "note": "With 4 runs per case small differences are not significant; adoption is the owner's decision. The separate subsets are reported, not used for the verdict."
+ },
+ "published": {
+  "trials.json": "997a99261ec36521ff614b61c579c2e8866d1df1d70055aee89ae7b11a1dde3f",
+  "runs.json": "229758b2decfce46bc29d9f7322719aa6b89e87b53d10ac49b798a6e78321485",
+  "ledger.jsonl": "2f9659f8823ecc939483d51aa7b861873851dd93cb33e8d3207804fbd80afcc2",
+  "published.json": "0584299b83df0674cd67e0698f1e423d3b3399b2c9c3884925cb078be9c0a9a0"
+ },
+ "rawRunsSha256": "53673e098f8f3bf5677a2ce2a0ee580e81f36eb8aba5714f66c1caea0e64cdca"
+}

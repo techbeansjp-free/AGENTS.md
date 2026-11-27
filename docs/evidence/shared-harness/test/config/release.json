@@ -1,0 +1,23 @@
+{
+ "schema": "asc-1820s2-release/v1",
+ "note": "The tarball each condition installs. make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition: B only from the release entry, S only from the candidate entry (dry-run.mjs --allow-unreleased builds stand-ins that run-trial refuses).",
+ "B": {
+  "kind": "release",
+  "tag": "v0.5.111",
+  "targetCommit": "82d13c49bc7991d1334803a5fd7bd2753fca3f91",
+  "asset": "agent-skill-chain-0.5.111.tgz",
+  "assetSha256": "e7df164a8c132d4d77db270cd8c3fe7ed196906484b0f51d52b4de57125d3be0",
+  "sha256sumsAssetSha256": "467f561ce8e8f6b7f696fe0f9f5aabae31aa0b1c4d7308c7fb57cb43a5b985b5",
+  "note": "The same release and tarball as stage 1 (../release.json): the latest release at the stage-1 fixation, kept under <scratch>/rel1820/release/."
+ },
+ "S": {
+  "kind": "candidate",
+  "asset": "agent-skill-chain-0.5.111.tgz",
+  "assetSha256": "c51f17ecc6e62e4fa5ccf2b9da1ab5e57ea6f41da43880bb765cad8a8603775f",
+  "packedFromCommit": "bbf55465a1cb0dabdf835d94d5fb8dd16b7d7320",
+  "packCommand": "node scripts/pack-candidate.mjs <scratch>/rel1820/candidate/ --version=0.5.111",
+  "baseRelease": "B",
+  "differsFromReleaseOnly": ["package/release-identity.json", "package/skills/asc/SKILL.md", "package/v05/USAGE.md"],
+  "note": "Packed at the commit that adds the two candidate edits to the v0.5.111 target commit 82d13c49 (2afea59c: the first sentence of the read-trigger block of v05/USAGE.md; bbf55465: the asc description of skills/asc/SKILL.md; outside docs/evidence and the tests nothing else differs from 82d13c49). Unpacked and compared with the B tarball on 2026-11-26: only the three listed files differ; release-identity.json differs only in the sha256 of those two files; both files equal the files at the pack commit. No source or data file carries the pointer text: project-assets reads the block from v05/USAGE.md and the entry description from skills/asc/SKILL.md at install time. Kept under <scratch>/rel1820/candidate/. Not published; used only in this measurement."
+ }
+}

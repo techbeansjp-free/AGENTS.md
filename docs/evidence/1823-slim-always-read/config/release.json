@@ -1,0 +1,32 @@
+{
+ "schema": "asc-eval-release/v1",
+ "note": "The tarball each condition installs (conditions.json cells[c].release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition. S is a placeholder until the coordinator packs the candidate after the rules are moved: while it is a placeholder, no S fixture can be built, fixation.mjs init refuses, and run-trial.mjs --run refuses every trial (make-fixture.mjs releasePlaceholders).",
+ "B": {
+  "kind": "release",
+  "tag": "v0.5.112",
+  "targetCommit": "6e9503664afb1b88eb7188ddff96144d9d6f5852",
+  "asset": "agent-skill-chain-0.5.112.tgz",
+  "assetSha256": "efd8bef5376e6c4a2fa838b24c390545d88e9e7abfc2284ca8a403a447256283",
+  "note": "The latest release (after the #1820 adoption, merge 6e950366). Kept under <scratch>/rel1823/release/ with its SHA256SUMS. Its skills/asc/SKILL.md is byte-identical to main at 6e950366 (checked 2026-11-26)."
+ },
+ "S": {
+  "kind": "candidate",
+  "asset": "agent-skill-chain-0.5.112.tgz",
+  "assetSha256": "69204d9a82d816a77c1b50b82d7254fe9b3c718b6d665b409b1edc647b12cc03",
+  "packedFromCommit": "61c82e42d02f8fc0546ecd7711ef85f2ad479415",
+  "packCommand": "node scripts/pack-candidate.mjs <scratch>/rel1823/candidate2/ --version=0.5.112",
+  "baseRelease": "B",
+  "differsFromReleaseOnly": [
+   "package.json",
+   "release-identity.json",
+   "skills/asc/SKILL.md",
+   "skills/asc/references/coordination.md",
+   "skills/asc/references/decision-handling.md",
+   "skills/asc/references/merge-grant.md",
+   "skills/asc/references/merge-permission.md",
+   "src/project-assets.mjs",
+   "src/runtime-files.json"
+  ],
+  "note": "規則を条件付きの参照へ移した候補（merge-permission.md・merge-grant.md・decision-handling.md）。asset数の上限を305から313に上げた定数の変更を含む。"
+ }
+}

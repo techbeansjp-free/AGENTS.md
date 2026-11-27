@@ -1,0 +1,6 @@
+{
+ "schema": "asc-eval-run-order/v1",
+ "note": "Fixed before any model run (#1817 review M1). Reps outermost (1..conditions.json runs); within a rep the 22 cases in caseOrder (negative, design and scenario cases interleaved: never adjacent to their own kind and never last); within a case B then S. A cap stop therefore leaves the two conditions at most one trial apart and every case measured in the earlier reps. run-all.mjs runs only this order; run-trial.mjs refuses a planned trial that is not the next unreserved one and a replacement before every planned trial is reserved.",
+ "caseOrder": ["asc-1", "d-ui03", "m-grant", "rr-1", "neg-1", "tw-1", "m-draft", "asc-2", "d-ui07", "ri-1", "m-revoked", "neg-2", "se-1", "asc-3", "d-ui04", "m-release", "ma-1", "neg-3", "ui-1", "m-decision", "es-1", "do-1"],
+ "conditionOrder": ["B", "S"]
+}

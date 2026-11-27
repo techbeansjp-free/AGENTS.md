@@ -1,0 +1,252 @@
+{
+ "condition": "S",
+ "trial": "S-probe-1",
+ "traceSha256": "0a66b0c4d566cd93131d97aad9aaed0a4f9c21c89412e10ed91b6f92fde5e16e",
+ "metaSha256": "88d721d497d19af9436aba74ad4d1341ea2072c03d14e1f2a2e39c1b22a11d77",
+ "markerTokenSha256": [
+  "9742d548af62bb4202f201b0c1da7bad371a4d4c841875143001cacbe0a932d7",
+  "5e3d16fc5fd8b8ac7a4ad097c98cda154e98c934b512f244cc92ebfb536190b5"
+ ],
+ "pass": true,
+ "checks": {
+  "init": {
+   "pass": true,
+   "detail": "init event present"
+  },
+  "cwd": {
+   "pass": true,
+   "detail": "compared"
+  },
+  "tools": {
+   "pass": true,
+   "detail": {
+    "tools": [
+     "Edit",
+     "Glob",
+     "Grep",
+     "Read",
+     "Skill",
+     "Write"
+    ],
+    "want": [
+     "Edit",
+     "Glob",
+     "Grep",
+     "Read",
+     "Skill",
+     "Write"
+    ]
+   }
+  },
+  "permissionMode": {
+   "pass": true,
+   "detail": "acceptEdits"
+  },
+  "noMcp": {
+   "pass": true,
+   "detail": 0
+  },
+  "noPlugins": {
+   "pass": true,
+   "detail": {
+    "builtin": [
+     "<bundled-skill>",
+     "<bundled-skill>",
+     "<bundled-skill>"
+    ],
+    "other": 0
+   }
+  },
+  "programDirectory": {
+   "pass": true,
+   "detail": []
+  },
+  "ascListed": {
+   "pass": true,
+   "detail": {
+    "missing": []
+   }
+  },
+  "noOwnerSkills": {
+   "pass": true,
+   "detail": "0 listed Skill name(s) match the owner's Skills"
+  },
+  "descriptionsInContext": {
+   "pass": true,
+   "detail": {
+    "desc": {
+     "asc": true,
+     "user-journey-acceptance": true
+    },
+    "lookedUp": 0
+   }
+  },
+  "ascDescriptionsInContext": {
+   "pass": true,
+   "detail": {
+    "entries": 16,
+    "expected": 16,
+    "omitted": [],
+    "lookedUp": 0
+   }
+  },
+  "skillListingRecorded": {
+   "pass": true,
+   "detail": {
+    "overBudget": false,
+    "lines": 0,
+    "unparsed": 0,
+    "skills": null,
+    "budget": null,
+    "chars": null
+   }
+  },
+  "descriptionsVerbatimCount": {
+   "pass": true,
+   "detail": "16/16 (informational)"
+  },
+  "projectClaudeMd": {
+   "pass": true,
+   "detail": "heading marks ignored (review L3)"
+  },
+  "pointerMatchesCondition": {
+   "pass": true,
+   "detail": {
+    "expectPointer": true
+   }
+  },
+  "noRepoInstructions": {
+   "pass": true,
+   "detail": "0 repository instruction line(s) found"
+  },
+  "noOwnerInstructionsOrMemory": {
+   "pass": true,
+   "detail": "0/7 owner line(s) found"
+  },
+  "gitContextNeutral": {
+   "pass": true,
+   "detail": "checked"
+  },
+  "markersAttempted": {
+   "pass": true,
+   "detail": [
+    1,
+    1
+   ]
+  },
+  "markersRefused": {
+   "pass": true,
+   "detail": 0
+  },
+  "markerTokensAbsent": {
+   "pass": true,
+   "detail": "2 plain token(s) checked (review L2: both required); 0 string(s) of the token form in the records"
+  },
+  "debugPathsInsideTrial": {
+   "pass": true,
+   "detail": "0 outside path(s)"
+  },
+  "noRealHomeOrRepoInDebug": {
+   "pass": true,
+   "detail": "0 found"
+  },
+  "hookMatchesCondition": {
+   "pass": true,
+   "detail": {
+    "logged": 0,
+    "responses": 0
+   }
+  },
+  "noForeignHooks": {
+   "pass": true,
+   "detail": "0 hook event(s), 0 non-SessionStart, 0 foreign command(s)"
+  },
+  "probeStepsDefined": {
+   "pass": true,
+   "detail": {
+    "steps": 6,
+    "expected": 6
+   }
+  },
+  "probeStepsAttempted": {
+   "pass": true,
+   "detail": {
+    "missing": []
+   }
+  },
+  "probeStepResults": {
+   "pass": true,
+   "detail": {
+    "withoutResult": []
+   }
+  },
+  "probeStepsRefused": {
+   "pass": true,
+   "detail": {
+    "withoutRefusalEvidence": []
+   }
+  },
+  "probeStepsSucceeded": {
+   "pass": true,
+   "detail": {
+    "failed": []
+   }
+  },
+  "sentinelsAbsent": {
+   "pass": true,
+   "detail": {
+    "trial": false,
+    "repo": false
+   }
+  }
+ },
+ "info": {},
+ "steps": 6,
+ "listedSkills": 33,
+ "nonAscSkills": [
+  "deep-research",
+  "dataviz",
+  "update-config",
+  "verify",
+  "debug",
+  "code-review",
+  "simplify",
+  "batch",
+  "fewer-permission-prompts",
+  "doctor",
+  "loop",
+  "schedule",
+  "claude-api",
+  "workflow-authoring",
+  "run",
+  "run-skill-generator",
+  "plugin-authoring"
+ ],
+ "skillListing": {
+  "overBudget": false,
+  "lines": 0,
+  "unparsed": 0,
+  "skills": null,
+  "budget": null,
+  "chars": null
+ },
+ "ascOmitted": [],
+ "builtinPlugins": [
+  "<bundled-skill>",
+  "<bundled-skill>",
+  "<bundled-skill>"
+ ],
+ "managedPolicyPresent": [],
+ "tools": [
+  "Edit",
+  "Glob",
+  "Grep",
+  "Read",
+  "Skill",
+  "Write"
+ ],
+ "gitLine": "Update project files | Install ASC | initial",
+ "model": "claude-sonnet-5-5",
+ "claudeCodeVersion": "2.1.323",
+ "costUsd": 0.0990603
+}
