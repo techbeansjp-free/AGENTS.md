@@ -1,0 +1,280 @@
+TAP version 13
+# Subtest: pairing: each condition accepts only its pinned tarball
+ok 1 - pairing: each condition accepts only its pinned tarball
+  ---
+  duration_ms: 4.953706
+  ...
+# Subtest: pairing: the definitions pin a candidate packed from a commit and different references
+ok 2 - pairing: the definitions pin a candidate packed from a commit and different references
+  ---
+  duration_ms: 0.654824
+  ...
+# Subtest: pairing: installed references and the CLAUDE.md block are checked
+ok 3 - pairing: installed references and the CLAUDE.md block are checked
+  ---
+  duration_ms: 3.613357
+  ...
+# Subtest: pairing: packageDiff lists added, removed and changed files and skips prefixes
+ok 4 - pairing: packageDiff lists added, removed and changed files and skips prefixes
+  ---
+  duration_ms: 5.858907
+  ...
+# Subtest: reads: successful Reads of the body and either copy of a reference count; errors, Grep and Skill do not
+ok 5 - reads: successful Reads of the body and either copy of a reference count; errors, Grep and Skill do not
+  ---
+  duration_ms: 3.07044
+  ...
+# Subtest: reads: no reads at all
+ok 6 - reads: no reads at all
+  ---
+  duration_ms: 2.088458
+  ...
+# Subtest: run-trial: the claude command has the \#1807 tools, the MCP tools only and no prompt-forced procedure
+ok 7 - run-trial: the claude command has the \#1807 tools, the MCP tools only and no prompt-forced procedure
+  ---
+  duration_ms: 0.960276
+  ...
+# Subtest: run-trial: docker plan keeps \#1807 isolation, adds the label and never pulls
+ok 8 - run-trial: docker plan keeps \#1807 isolation, adds the label and never pulls
+  ---
+  duration_ms: 1.077301
+  ...
+# Subtest: run-trial: the child environment carries only the listed variables
+ok 9 - run-trial: the child environment carries only the listed variables
+  ---
+  duration_ms: 0.450665
+  ...
+# Subtest: run-trial: init check and credential scrub
+ok 10 - run-trial: init check and credential scrub
+  ---
+  duration_ms: 0.73959
+  ...
+# Subtest: run-trial CLI: fixed values, wrong pairing, unpinned tarball and an unauthorised run are refused
+ok 11 - run-trial CLI: fixed values, wrong pairing, unpinned tarball and an unauthorised run are refused
+  ---
+  duration_ms: 1003.083813
+  ...
+# Subtest: decide: positions, pairs, spearman and the direction thresholds
+ok 12 - decide: positions, pairs, spearman and the direction thresholds
+  ---
+  duration_ms: 2.039093
+  ...
+# Subtest: decide: an evaluator favours S only when the mean of two rounds gives >= 8 of 9 pairs and the rounds agree
+ok 13 - decide: an evaluator favours S only when the mean of two rounds gives >= 8 of 9 pairs and the rounds agree
+  ---
+  duration_ms: 0.965008
+  ...
+# Subtest: decide: indicators compare answer widths, then hidden items; failures are worst for S and best for B
+ok 14 - decide: indicators compare answer widths, then hidden items; failures are worst for S and best for B
+  ---
+  duration_ms: 1.653835
+  ...
+# Subtest: decide: a case shows an effect only with both evaluators, indicators not worse and the text read
+ok 15 - decide: a case shows an effect only with both evaluators, indicators not worse and the text read
+  ---
+  duration_ms: 2.131376
+  ...
+# Subtest: decide: overall needs effects in >= 2 cases, no harm and cost ratio <= 3
+ok 16 - decide: overall needs effects in >= 2 cases, no harm and cost ratio <= 3
+  ---
+  duration_ms: 2.282309
+  ...
+# Subtest: make-blind: ids and order are fixed by the seed and differ between rounds
+ok 17 - make-blind: ids and order are fixed by the seed and differ between rounds
+  ---
+  duration_ms: 27.747738
+  ...
+# Subtest: budget: a reservation must stay within cap minus margin
+ok 18 - budget: a reservation must stay within cap minus margin
+  ---
+  duration_ms: 1.30779
+  ...
+# Subtest: fixation: every fixed file exists and a changed digest is reported
+ok 19 - fixation: every fixed file exists and a changed digest is reported
+  ---
+  duration_ms: 21.935648
+  ...
+# Subtest: collect: the runs root and local paths are removed
+ok 20 - collect: the runs root and local paths are removed
+  ---
+  duration_ms: 3.141834
+  ...
+# Subtest: run-indicators: the first-view container has no network and mounts the runs read-only
+ok 21 - run-indicators: the first-view container has no network and mounts the runs read-only
+  ---
+  duration_ms: 0.706724
+  ...
+# Subtest: cases: three cases incl. ui03-dashboard, two widths each, items for both widths
+ok 22 - cases: three cases incl. ui03-dashboard, two widths each, items for both widths
+  ---
+  duration_ms: 0.651357
+  ...
+# Subtest: order: run-order.json is valid and gives 18 planned trials, reps outermost, B/S alternating by rep
+ok 23 - order: run-order.json is valid and gives 18 planned trials, reps outermost, B/S alternating by rep
+  ---
+  duration_ms: 1.65458
+  ...
+# Subtest: order: run-trial accepts only the next planned trial, then only the next required replacement
+ok 24 - order: run-trial accepts only the next planned trial, then only the next required replacement
+  ---
+  duration_ms: 54.697263
+  ...
+# Subtest: order: the scorer counts exactly what the runner replaced (k-th failure -> rep runs+k, no second replacement)
+ok 25 - order: the scorer counts exactly what the runner replaced (k-th failure -> rep runs+k, no second replacement)
+  ---
+  duration_ms: 29.959335
+  ...
+# Subtest: decide: not judged when the run stopped early (unless the cap was reached) or a cell has no valid trial
+ok 26 - decide: not judged when the run stopped early (unless the cap was reached) or a cell has no valid trial
+  ---
+  duration_ms: 0.467229
+  ...
+# Subtest: decide: scoring is refused when a trial ran under another fixation record
+ok 27 - decide: scoring is refused when a trial ran under another fixation record
+  ---
+  duration_ms: 33.405181
+  ...
+# Subtest: run-trial: images must have the pinned ids
+ok 28 - run-trial: images must have the pinned ids
+  ---
+  duration_ms: 2.89481
+  ...
+# Subtest: fixation: refix after the probes may change only probe.mjs; after a planned trial nothing
+ok 29 - fixation: refix after the probes may change only probe.mjs; after a planned trial nothing
+  ---
+  duration_ms: 35.937565
+  ...
+# Subtest: probe: passes only with the condition context, refused markers and no owner or repository text
+ok 30 - probe: passes only with the condition context, refused markers and no owner or repository text
+  ---
+  duration_ms: 18.871959
+  ...
+# Subtest: probe: measurement waits for passing probes of both conditions; the probe waits for the owner confirmation
+ok 31 - probe: measurement waits for passing probes of both conditions; the probe waits for the owner confirmation
+  ---
+  duration_ms: 6.686673
+  ...
+# Subtest: probe: one per condition, one retry only after a judged failure, none once measurement is reserved
+ok 32 - probe: one per condition, one retry only after a judged failure, none once measurement is reserved
+  ---
+  duration_ms: 7.944666
+  ...
+# Subtest: decide: a probe reserved after the first measurement reservation voids the cap exception
+ok 33 - decide: a probe reserved after the first measurement reservation voids the cap exception
+  ---
+  duration_ms: 6.532461
+  ...
+# Subtest: decide/make-blind: a reserved trial whose directory was removed is refused
+ok 34 - decide/make-blind: a reserved trial whose directory was removed is refused
+  ---
+  duration_ms: 98.717976
+  ...
+# Subtest: make-blind (M-1): only index.html and the assets it references are copied, never alternatives or notes
+ok 35 - make-blind (M-1): only index.html and the assets it references are copied, never alternatives or notes
+  ---
+  duration_ms: 42.485919
+  ...
+# Subtest: rank-guard (M-2, M-a): a round starts only with runs, keys, render and the other round at mode 000
+ok 36 - rank-guard (M-2, M-a): a round starts only with runs, keys, render and the other round at mode 000
+  ---
+  duration_ms: 16.953469
+  ...
+# Subtest: budget (M-3): one round per evaluator and round number, one retry only after a failed launch
+ok 37 - budget (M-3): one round per evaluator and round number, one retry only after a failed launch
+  ---
+  duration_ms: 12.319888
+  ...
+# Subtest: budget/decide (M-3, M-d 1): ranks must match the recorded host-session outputs; missing, extra or unsettled rounds are refused
+ok 38 - budget/decide (M-3, M-d 1): ranks must match the recorded host-session outputs; missing, extra or unsettled rounds are refused
+  ---
+  duration_ms: 48.686452
+  ...
+# Subtest: budget (M-d 1): settle checks host, model, cwd, times and status of the host-session output
+ok 39 - budget (M-d 1): settle checks host, model, cwd, times and status of the host-session output
+  ---
+  duration_ms: 10.08429
+  ...
+# Subtest: decide (M-d 2, 3): the keys and the blind tree must equal the make-blind records in the ledger
+ok 40 - decide (M-d 2, 3): the keys and the blind tree must equal the make-blind records in the ledger
+  ---
+  duration_ms: 14.850273
+  ...
+# Subtest: decide (M-d 4): the lock must be held from each round reservation to its settle
+ok 41 - decide (M-d 4): the lock must be held from each round reservation to its settle
+  ---
+  duration_ms: 1.34962
+  ...
+# Subtest: make-blind (M-b): comments, meta and title cues are removed from what the evaluators read
+ok 42 - make-blind (M-b): comments, meta and title cues are removed from what the evaluators read
+  ---
+  duration_ms: 6.438022
+  ...
+# Subtest: decide (M-c, L-d): ranking costs do not count toward the cap exception; generation stops before the ranking reserve
+ok 43 - decide (M-c, L-d): ranking costs do not count toward the cap exception; generation stops before the ranking reserve
+  ---
+  duration_ms: 18.967161
+  ...
+# Subtest: decide (L-c): harm is the symmetric counterpart of improvement (owner-approved 2026-11-26)
+ok 44 - decide (L-c): harm is the symmetric counterpart of improvement (owner-approved 2026-11-26)
+  ---
+  duration_ms: 0.559399
+  ...
+# Subtest: first-view clock (L-e): fixed instant, callable without new, real instances
+ok 45 - first-view clock (L-e): fixed instant, callable without new, real instances
+  ---
+  duration_ms: 2.765136
+  ...
+# Subtest: collect (L-b): permission denials keep the tool name and target only
+ok 46 - collect (L-b): permission denials keep the tool name and target only
+  ---
+  duration_ms: 5.697985
+  ...
+# Subtest: decide (M-4): failed trials are not ranked; U over valid pairs with scaled thresholds; < 2 valid is 未判定
+ok 47 - decide (M-4): failed trials are not ranked; U over valid pairs with scaled thresholds; < 2 valid is 未判定
+  ---
+  duration_ms: 0.796001
+  ...
+# Subtest: decide (L-2, L-6): 保留 and an excluded evaluator make the case not judgeable; < 2 judgeable cases is 未判定
+ok 48 - decide (L-2, L-6): 保留 and an excluded evaluator make the case not judgeable; < 2 judgeable cases is 未判定
+  ---
+  duration_ms: 0.921239
+  ...
+# Subtest: collect (M-5): page text, images, input bodies and session ids never reach the published records
+ok 49 - collect (M-5): page text, images, input bodies and session ids never reach the published records
+  ---
+  duration_ms: 5.326787
+  ...
+# Subtest: ranks (M-1, third review): one evaluator at a time; settled outputs stay sealed until decide unseals them after every round
+ok 50 - ranks (M-1, third review): one evaluator at a time; settled outputs stay sealed until decide unseals them after every round
+  ---
+  duration_ms: 15.054473
+  ...
+# Subtest: ranks (L-2, third review): the rank-guard record must keep every prefix recorded at a settle
+ok 51 - ranks (L-2, third review): the rank-guard record must keep every prefix recorded at a settle
+  ---
+  duration_ms: 4.917037
+  ...
+# Subtest: make-blind (L-1, third review): SVG comments, title, desc and metadata are removed
+ok 52 - make-blind (L-1, third review): SVG comments, title, desc and metadata are removed
+  ---
+  duration_ms: 6.096211
+  ...
+# Subtest: budget CLI: reserve fable -> settle seals the output (mode 000) -> a manual chmod 700 makes the next reserve fail
+ok 53 - budget CLI: reserve fable -> settle seals the output (mode 000) -> a manual chmod 700 makes the next reserve fail
+  ---
+  duration_ms: 1378.19939
+  ...
+# Subtest: results-dir: default is results; ASC1815_RESULTS moves the fixation and probe-approval lookups
+ok 54 - results-dir: default is results; ASC1815_RESULTS moves the fixation and probe-approval lookups
+  ---
+  duration_ms: 1625.96712
+  ...
+1..54
+# tests 54
+# suites 0
+# pass 54
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5184.932379
