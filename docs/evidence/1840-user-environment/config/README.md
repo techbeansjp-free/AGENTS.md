@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。通常のASC実行時に読み込ませない。測定の仕組みは共通のもの（[../../shared-harness/](../../shared-harness/)）を使い、このdirectoryには設定だけを置く。
 
-**状態：固定済み（下の「測定の前の固定」）、測定前（有料の実行は未実施）。** probeの前に、ownerによる目印fileの承認（`results/probe-approval.json`）が要る。
+**状態：測定済み（2026-11-28）。結果は[../README.md](../README.md)。** probeの前に、ownerによる目印fileの承認（`results/probe-approval.json`）が要る。
 
 ## 目的
 
