@@ -39,7 +39,8 @@
   "probeFixture": "MN",
   "probeFixtureNote": "The probe runs on fixture MN (the fixture of the measured cases). MN has no Skill of the user, so probe-check.mjs checks only the 17 ASC entries.",
   "budget": {
-    "ownerCapUsd": 20,
+    "ownerCapUsd": 3,
+    "ownerCapNote": "This Issue's allocation of the owner's combined 20 USD for #1843/#1844/#1846 (#1843 6, #1844 10, #1846 3 USD; recorded on Issue #1846). capUsd and the stop line stay within it.",
     "capUsd": 3,
     "safetyMarginUsd": 0.5,
     "perTrialUsd": 0.5,

@@ -11,6 +11,26 @@
     "pathPattern": "^\\.agent-skill-chain/(managed-runtime/[^/]+/)?templates/"
   },
   "markerBaseNote": "#1840 re-review High: before the markers are matched, the lines of a written file equal to a line (trimmed) of a file that existed before the trial are left out: the installed templates (.agent-skill-chain/templates/ and its managed-runtime copy, at the fixture's HEAD) and the earlier text of the written file itself (score.mjs baseLinesFor). A copied template, or one with a row filled in, adds only the lines the trial wrote. w-2 writes.requireWithoutBase applies the same to its require patterns.",
+  "report": {
+    "reads": [
+      {
+        "id": "context-json",
+        "pattern": "^\\.agent-skill-chain/project/context\\.json$"
+      },
+      {
+        "id": "money-rule",
+        "pattern": "^\\.agent-skill-chain/project/rules/money\\.md$"
+      }
+    ],
+    "answer": [
+      {
+        "id": "start-or-bash",
+        "pattern": "asc-v05|\\bstart\\b|\\bBash\\b"
+      }
+    ],
+    "writtenFiles": true
+  },
+  "reportNote": "#1840 review H3: reported per trial, never used for a level: whether context.json and the rule file were read, whether the answer mentions the ASC CLI start or Bash, and every file written (with its place).",
   "cases": [
     {
       "id": "m-r1",
@@ -71,7 +91,7 @@
           {
             "id": "R1-1-version",
             "viewpoint": "R1-1",
-            "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版|(品質保証範囲|WAR-\\d{3}|合意)[^\\n]{0,12}(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])|(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])[^\\n]{0,12}合意"
+            "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*[（(]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版|(品質保証範囲|WAR-\\d{3}|合意)[^\\n]{0,12}(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])|(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])[^\\n]{0,12}合意"
           },
           {
             "id": "R1-2",
@@ -135,7 +155,7 @@
           {
             "id": "R2-1-version",
             "viewpoint": "R2-1",
-            "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版|(品質保証範囲|WAR-\\d{3}|合意)[^\\n]{0,12}(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])|(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])[^\\n]{0,12}合意"
+            "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*[（(]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版|(品質保証範囲|WAR-\\d{3}|合意)[^\\n]{0,12}(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])|(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])[^\\n]{0,12}合意"
           },
           {
             "id": "R2-2",
@@ -214,7 +234,7 @@
           {
             "id": "R7-1-version",
             "viewpoint": "R7-1",
-            "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版|(品質保証範囲|WAR-\\d{3}|合意)[^\\n]{0,12}(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])|(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])[^\\n]{0,12}合意",
+            "pattern": "(合意の?)?版(は|が)?\\s*[:：]?\\s*[（(]?\\s*1\\.0(?![.\\d])|1\\.0\\s*版|(品質保証範囲|WAR-\\d{3}|合意)[^\\n]{0,12}(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])|(?<![\\w.])[vV]\\s?1\\.0(?![.\\d])[^\\n]{0,12}合意",
             "report": true
           }
         ]
