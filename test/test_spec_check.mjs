@@ -15,9 +15,9 @@ function specs(t,overrides={}){
  const files={
   'details/02_要件/00_要件一覧.md':'# 要件一覧\n\n'+table(['ID','区分','要件','優先度'],['REQ-web-001','非機能','対応ブラウザで主要操作を完了できる','必須'],['REQ-web-002','非機能','検索の応答時間','条件付き']),
   'details/02_要件/01_受け入れ条件.md':'# 受け入れ条件\n\n'+table(['ID','要件','結果'],['AC-web-001','REQ-web-001','注文確定後に確認メールが届く']),
-  'details/11_非機能/00_非機能要件一覧.md':'# 非機能要件一覧\n\n'+table(['ID','品質特性','適用','値の正本'],['REQ-web-002','性能・容量','条件付き','[性能・容量・可用性](01_性能・容量・可用性.md)'],['REQ-sec-001','セキュリティ','必須','[脅威・対策・監査](../10_セキュリティ/02_脅威・対策・監査.md)']),
+  'details/11_非機能/00_非機能要件一覧.md':'# 非機能要件一覧\n\n'+table(['ID','品質特性','適用','値の正本'],['REQ-web-002','性能・容量','条件付き','[性能・容量・可用性](01_性能・容量・可用性.md)'],['REQ-sec-001','セキュリティ','必須','[脅威・対策・監査](../10_セキュリティ/02_脅威・対策・監査.md)'],['REQ-web-003','保守性・再利用性・拡張性','必須','[利用性・互換性・保守性](02_利用性・互換性・保守性.md)']),
   'details/10_セキュリティ/02_脅威・対策・監査.md':'# 脅威・対策・監査\n\n'+table(['ID','要件ID','合格基準'],['THR-001','REQ-sec-001','高以上の脆弱性0件']),
-  'details/11_非機能/02_利用性・互換性・保守性.md':'# 利用性・互換性・保守性\n\n'+table(['観点','要件ID','対象','合格基準'],['対応環境・版','REQ-web-001','ブラウザ','Chrome 120以上']),
+  'details/11_非機能/02_利用性・互換性・保守性.md':'# 利用性・互換性・保守性\n\n'+table(['観点','要件ID','対象','合格基準'],['対応環境・版','REQ-web-001','ブラウザ','Chrome 120以上'],['保守性・再利用性・拡張性','REQ-web-003','変更種別','静的品質']),
   'details/04_機能/01_FN-001_注文.md':'# FN-001 注文\n\n- 関連要件: REQ-web-001\n',
   'details/02_要件/03_品質保証範囲.md':'# 品質保証範囲\n\n'+table(['ID','分類','保証する値と測定条件（正本の参照）','状態'],['WAR-001','動作環境','REQ-web-001','提案'],['WAR-002','機能・業務','AC-web-001、FN-001','提案'],['WAR-003','セキュリティ','REQ-sec-001、THR-001','提案'])+'\n```text\nREQ-web-999 はコードブロックの例\n```\n',
   ...overrides
@@ -33,7 +33,7 @@ test('the shipped templates pass and read the placement table with every ID kind
  assert.deepEqual(new Set(rows.flatMap(row=>row.prefixes)),new Set(['CON','OPEN','ACT','BR','REQ','AC','WAR','FN','SCR','API','IF','JOB','DATA','COL','ENV','CMP','NODE','OPS','THR','AUD','MON']));
 });
 
-test('a spec whose warranty refers only to defined IDs passes, including numbered copies of a template, a code block, and a choice label such as the category セキュリティ, and a word that two canonical documents of the same ID kind both use (not compared, as documented)',t=>{
+test('a spec whose warranty refers only to defined IDs passes, including numbered copies of a template, a code block, and a choice label such as the category セキュリティ, a long label keying rows of two tables by the same REQ, and a word that two canonical documents of the same ID kind both use (not compared, as documented)',t=>{
  const root=specs(t),before=fs.readFileSync(path.join(root,WARRANTY),'utf8');
  const result=checkSpecs(root);
  assert.equal(result.passed,true,JSON.stringify(result));assert.equal(result.writes,false);

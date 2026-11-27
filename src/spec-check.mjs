@@ -8,7 +8,7 @@ import path from 'node:path';
  * 2. The same value written in two documents for the same ID (a table row naming the ID repeats a cell of another
  *    document's row naming that ID) is reported, unless every such document is a canonical document of the ID kind.
  * Prose, code blocks and cells that hold an ID, a link, a code span or a {placeholder} are not compared. A value is a
- * cell with a digit (versions, thresholds, periods) or of at least MIN_TEXT characters: the short labels the templates
+ * cell after the row's first (key) cell with a digit (versions, thresholds, periods) or of at least MIN_TEXT characters: the short labels the templates
  * offer as choices (分類・品質特性・状態, e.g. セキュリティ) repeat across documents without copying a value. Nothing is written; the user decides what to change.
  */
 const MAX_FILES=2000,MAX_BYTES=1000000,MIN_DIGIT=2,MIN_TEXT=10;
@@ -144,7 +144,8 @@ export function checkSpecs(specsDirectory,{table}={}){
  const occurrences=new Map();
  for(const [file,{rows:tableRows}] of parsed)for(const row of tableRows){
   const rowIds=new Set(row.cells.flatMap(ids));
-  for(const cell of row.cells){
+  // The first cell is the row's key (an ID, or a label such as 観点 that another table keys by the same words), not a value.
+  for(const cell of row.cells.slice(1)){
    if(!isValue(cell,pattern))continue;
    for(const id of rowIds){
     const key=JSON.stringify([id,normalizeValue(cell)]);
