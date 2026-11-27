@@ -1,0 +1,88 @@
+{
+ "schema": "asc-1835-ssr/v1",
+ "command": "negation",
+ "embedding": {
+  "model": "intfloat/multilingual-e5-large",
+  "fastembed": "0.9.1",
+  "snapshots": [
+   "ac6781cd1cf88b8306a536d7c9d18a5bd57cc14b"
+  ],
+  "prefix": {
+   "response": "query: ",
+   "anchor": "query: "
+  }
+ },
+ "pairs": [
+  {
+   "id": "n01",
+   "positive": 3.958050366161913,
+   "negative": 2.094531489858516,
+   "pass": true,
+   "cosPositiveNegative": 0.9646779745974178
+  },
+  {
+   "id": "n02",
+   "positive": 3.830334642064935,
+   "negative": 2.284106983759097,
+   "pass": true,
+   "cosPositiveNegative": 0.9678625952693289
+  },
+  {
+   "id": "n03",
+   "positive": 3.885080900310114,
+   "negative": 2.1023166702213123,
+   "pass": true,
+   "cosPositiveNegative": 0.9536833040116299
+  },
+  {
+   "id": "n04",
+   "positive": 4.101755943411045,
+   "negative": 2.00410393765696,
+   "pass": true,
+   "cosPositiveNegative": 0.965301280297343
+  },
+  {
+   "id": "n05",
+   "positive": 3.8502943613156853,
+   "negative": 1.9950693832983706,
+   "pass": true,
+   "cosPositiveNegative": 0.9704708955984142
+  },
+  {
+   "id": "n06",
+   "positive": 3.4439683852906833,
+   "negative": 2.0527819295627445,
+   "pass": true,
+   "cosPositiveNegative": 0.9829786717893205
+  },
+  {
+   "id": "n07",
+   "positive": 4.135065495103483,
+   "negative": 2.3168381931865247,
+   "pass": true,
+   "cosPositiveNegative": 0.960104013669145
+  },
+  {
+   "id": "n08",
+   "positive": 4.075617587013157,
+   "negative": 1.9579559777132218,
+   "pass": true,
+   "cosPositiveNegative": 0.9582763748990576
+  },
+  {
+   "id": "n09",
+   "positive": 2.9055307798333083,
+   "negative": 2.0223157429618124,
+   "pass": true,
+   "cosPositiveNegative": 0.9605955468828105
+  },
+  {
+   "id": "n10",
+   "positive": 3.907462553933859,
+   "negative": 2.1757162122282443,
+   "pass": true,
+   "cosPositiveNegative": 0.9475630578141688
+  }
+ ],
+ "failures": 0
+}

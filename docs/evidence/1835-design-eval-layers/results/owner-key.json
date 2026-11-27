@@ -1,0 +1,60 @@
+{
+ "schema": "asc-1835-owner-key/v1",
+ "seed": "18350002",
+ "pairs": {
+  "pnvrh": {
+   "item": "L3:ui02-exhibition:A-r1~D-r1",
+   "first": "ui02-exhibition/A-r1/original",
+   "A": "ui02-exhibition/A-r1/original",
+   "B": "ui02-exhibition/D-r1/original"
+  },
+  "pcrqg": {
+   "item": "L3:ui08-existing-ds:A-r1~E-r1",
+   "first": "ui08-existing-ds/A-r1/original",
+   "A": "ui08-existing-ds/E-r1/original",
+   "B": "ui08-existing-ds/A-r1/original"
+  },
+  "pb5jq": {
+   "item": "L3:ui02-exhibition:D-r1~E-r1",
+   "first": "ui02-exhibition/D-r1/original",
+   "A": "ui02-exhibition/D-r1/original",
+   "B": "ui02-exhibition/E-r1/original"
+  },
+  "pakjb": {
+   "item": "L3:ui03-dashboard:A-r1~D-r1",
+   "first": "ui03-dashboard/A-r1/original",
+   "A": "ui03-dashboard/A-r1/original",
+   "B": "ui03-dashboard/D-r1/original"
+  },
+  "pyhjb": {
+   "item": "L3:ui03-dashboard:A-r1~E-r1",
+   "first": "ui03-dashboard/A-r1/original",
+   "A": "ui03-dashboard/A-r1/original",
+   "B": "ui03-dashboard/E-r1/original"
+  },
+  "pv6hf": {
+   "item": "L3:ui03-dashboard:D-r1~E-r1",
+   "first": "ui03-dashboard/D-r1/original",
+   "A": "ui03-dashboard/D-r1/original",
+   "B": "ui03-dashboard/E-r1/original"
+  },
+  "pemeg": {
+   "item": "L3:ui02-exhibition:A-r1~E-r1",
+   "first": "ui02-exhibition/A-r1/original",
+   "A": "ui02-exhibition/E-r1/original",
+   "B": "ui02-exhibition/A-r1/original"
+  },
+  "pb2r2": {
+   "item": "L3:ui08-existing-ds:D-r1~E-r1",
+   "first": "ui08-existing-ds/D-r1/original",
+   "A": "ui08-existing-ds/D-r1/original",
+   "B": "ui08-existing-ds/E-r1/original"
+  },
+  "punfr": {
+   "item": "L3:ui08-existing-ds:A-r1~D-r1",
+   "first": "ui08-existing-ds/A-r1/original",
+   "A": "ui08-existing-ds/D-r1/original",
+   "B": "ui08-existing-ds/A-r1/original"
+  }
+ }
+}
