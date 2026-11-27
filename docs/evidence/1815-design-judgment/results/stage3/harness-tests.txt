@@ -1,0 +1,12 @@
+# ASC1815_RESULTS=results/stage3 (fixation not yet initialised: the 2 fixation-dependent tests fail by design)
+not ok 27 - decide: scoring is refused when a trial ran under another fixation record
+not ok 53 - budget CLI: reserve fable -> settle seals the output (mode 000) -> a manual chmod 700 makes the next reserve fail
+# tests 54
+# pass 52
+# fail 2
+# skipped 0
+# ASC1815_RESULTS unset (stage 1 record)
+# tests 54
+# pass 53
+# fail 0
+# skipped 1

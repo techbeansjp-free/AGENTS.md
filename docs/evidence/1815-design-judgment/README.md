@@ -67,6 +67,29 @@ harnessの変更は最小で、記録の置き場所を選ぶ`harness/results-di
 
 結果の限界：各条件3回。候補の文が読まれない原因は分けていないが、referenceを開く条件（SKILL.mdの入口の文）が一因と考えられる。候補の文そのものの効果については、段階1と同じく何も言えない。
 
+## 段階3（入口の文を加えた再評価）
+
+段階2は、ASCの本文が18/18で読まれたのに、候補の文を置いたreference（`implementation.md`は各ケース1/3、`journeys.md`は0/18）がほとんど読まれず、3ケースとも未判定で終わった。ownerは2026-11-27に#1815を開き直し、**候補の文が実際に読まれる**ように、`skills/asc/SKILL.md`へ入口の文を1つ加えた案で段階3を行うと決めた。判定の規則（[decision-criteria.md](decision-criteria.md)。上限40 USD、Fableとcodexの盲検の順位2回ずつ、8/9の規則、未判定の規則、読込みの門）、ケース・指標・run-order・harnessの規則は変えない。
+
+| 項目 | 段階2 | 段階3 |
+| --- | --- | --- |
+| B | release v0.5.113 | release v0.5.114（target `cbc1d006`、sha256 `30eaa420…1a5e`。SHA256SUMSとGitHubのasset digestに一致） |
+| S | v0.5.113＋候補の文（2つのreference） | v0.5.114＋**同じ候補の文（`af2ab12e..bb1d1886`の2つのreferenceの差）＋SKILL.mdの入口の文1つ**。`235520a5`でpack（sha256 `8a7a86c4…2aa6`、2つの別directoryへのpackが同じsha256）。違うのは`release-identity.json`・`skills/asc/SKILL.md`・2つのreferenceだけ |
+| 比べるもの | 候補の文だけ | **取込みの一式（入口の文＋候補の文）対release**。入口の文だけの効果、候補の文だけの効果は分けない |
+| 台帳・固定の記録 | `results/stage2/` | **新しい台帳と新しい固定の記録**。`ASC1815_RESULTS=results/stage3`（段階1・2の記録は変えない） |
+
+入口の文（`skills/asc/SKILL.md`の「業務操作を単位にした実装と完了」の節の末尾。195 byte）：
+
+> 画面を作る・変える依頼は、実装前に[画面の節](references/implementation.md)、完了の確認前に[journeys.md](../user-journey-acceptance/references/journeys.md)を読む。
+
+毎回読む`skills/asc/SKILL.md`の増加：32,764 byte → 32,961 byte（**+197 byte**。入口の文195 byteと、文を分ける空行・改行2 byte）。[評価の記録の規約](../../../.agent-skill-chain/project/rules/evaluation-record.json)に従い、PRの記録にも前後のbyte数を書く。
+
+候補の文と入口の文は、これまでと同じく、packした後に取り消すcommitを続けた（配布物はmainのまま。採るのは判定の後）。harnessは、SKILL.mdがBと違ってよいように`release.json`の`S.differsOnly`と`installedReferences`（`.agent-skill-chain/skills/`と`.agent-skill-chain/managed-runtime/skills/`の両方の`asc/SKILL.md`を加えた）を更新しただけで、コードは変えていない。`run-trial.mjs`は導入後に`installedReferences`のsha256と照合するので、SKILL.mdの内容がSの一式と一致することも同じ検査で確かめられる（dry runでは、B・Sの導入先の差が`installedReferences.B`のfile一覧と一致することで確かめる）。導入後の`asc/SKILL.md`はproject共有用に実行場所の1文が書換えられるので、導入先のsha256は配布物のsha256と違う（BとSの両方で同じ書換え。Sの導入先に入口の文が入ることを確認した）。`.claude/skills/asc/SKILL.md`は本文へのリンクだけの入口で、条件間で同じ。
+
+**固定の前に固定のfileを変える**：この節・[decision-criteria.md](decision-criteria.md)の「段階3」・[release.json](release.json)の変更は、`ASC1815_RESULTS=results/stage3 node harness/fixation.mjs init …`（固定の記録の作成）より前に済ませる。段階3のcommandには全て`ASC1815_RESULTS=results/stage3`を付ける。台帳は`<scratch>/rel1815c/ledger/ledger-1815s3.jsonl`（新しく作る）。最初の記録のcommitは、固定の後にここへ書く。
+
+順位のCodexの`--model`（上の手順の`<許可されたCodexモデル>`）：repositoryには許可されたモデルの一覧が記録されていない（[host-session](../../../skills/asc/references/host-session.md)は`'<許可されたCodexモデル>'`のまま、[subagent-model-selection](../../../skills/subagent-model-selection/SKILL.md)にもCodexのモデル名が無い）。#1807のCodexの順位は`gpt-5.6-sol`で実行された記録がある（[1807のstatus](../1807-design-eval-browser/results/run2/model-ranks/codex-status.json)）。段階3で使うモデルは、順位の前にownerが決める（未決）。
+
 ## 目的（計画）
 
 外部のデザイン判断Skillから選んだ上位3案（両幅の初期表示の確認、判断の一文から情報の優先順位と密度を決める、意匠が未定のときだけ2案を描画して比べる）を、ASCの既存のSkillへ追記した版（S）が、現状のASC（B）より、題材と利用目的に合った画面を作らせるかを測る。ASCのSkillが読まれる状態（#1814の条件I）で比べる。効果が無ければ取り込まない。
