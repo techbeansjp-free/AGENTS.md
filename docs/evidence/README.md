@@ -45,7 +45,7 @@
 | [1823-slim-always-read](1823-slim-always-read/) | 毎回読む規則を縮めた案は採用しない |
 | [1828-warranty-scope](1828-warranty-scope/) | `warranty-scope`と品質保証範囲の雛形を配布した |
 | [1829-estimate-warranty](1829-estimate-warranty/) | 保守の依頼の判定について、`estimate-and-scope`の提出版が2回とも水準を満たした |
-| [1835-design-eval-layers](1835-design-eval-layers/) | デザイン評価の方式F（FLR）・S（SSR）は、どちらも不採用 |
+| [1835-design-eval-layers](1835-design-eval-layers/) | デザイン評価の方式F（FLR）は不採用。S（SSR）はこの形（ペルソナ無し・画面ごとの講評1件）では不採用で、論文の形は未判定 |
 | [1840-user-environment](1840-user-environment/) | 利用者の環境での測定は、R・Cとも固定した水準の一部を満たさなかった（測定の仕組みの直しは#1845） |
 | [decision-ownership](decision-ownership/) | `decision-ownership`を取り込み、評価して配布した |
 | [engineering-judgment](engineering-judgment/) | `engineering-judgment`・`estimate-and-scope`を取り込み、評価して配布した |

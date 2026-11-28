@@ -45,12 +45,17 @@ export function plannedTrials(order = loadOrder(), runs = loadConditions().runs)
 
 // Probes (#1817 rule 5, Medium-1): only the probe cells; only before the first planned trial is reserved; rep 1, and rep 2
 // (the one re-run) only after rep 1 of that condition is reserved.
+// #1844 probe 1: conditions.json priorProbes lists the probes that ran under the ledger of budget.priorSpend (a re-fixation
+// with a new ledger, run-trial.mjs priorProbeProblems); they count as reserved here, so the one re-run stays the only one.
 export function probeRefusal({condition, rep, reserved, order = loadOrder(), conds = loadConditions()}) {
   if (!conds.probeCells.includes(condition)) return `probe refused: ${condition} is not a probe cell (${conds.probeCells.join(', ')})`;
   const started = plannedTrials(order, conds.runs).find((t) => reserved.has(t.name));
   if (started) return `probe refused: measurement has started (${started.name} is reserved)`;
   if (!['1', '2'].includes(String(rep))) return `probe refused: rep must be 1, or 2 for the one re-run (got ${rep})`;
-  if (String(rep) === '2' && !reserved.has(trialName(condition, 'probe', 1))) return `probe refused: ${trialName(condition, 'probe', 2)} needs ${trialName(condition, 'probe', 1)} first`;
+  const prior = conds.priorProbes ?? [];
+  if (prior.includes(trialName(condition, 'probe', rep))) return `probe refused: ${trialName(condition, 'probe', rep)} ran under the prior ledger (conditions.json priorProbes)`;
+  const seen = (n) => reserved.has(n) || prior.includes(n);
+  if (String(rep) === '2' && !seen(trialName(condition, 'probe', 1))) return `probe refused: ${trialName(condition, 'probe', 2)} needs ${trialName(condition, 'probe', 1)} first`;
   return null;
 }
 

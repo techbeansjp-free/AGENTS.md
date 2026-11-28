@@ -11,7 +11,9 @@
 // (run-trial.mjs priorSpendProblems), the plan against the stop line, and prints the launch command of every probe and
 // planned trial of the built conditions with the --settings content of the first trial of each fixture kind. Output has
 // no absolute local paths: the root is written as <scratch>, the ledger directory as <ledger-dir>.
-// Usage: node dry-run.mjs <new-scratch-root> --tarball-<C> <tgz>... [--ledger <file>] [--allow-unreleased] [--out <json>] --config <dir>
+// #1844 probe 1: with a confined level, --runs-root <dir> (the runs root of the measurement) is checked against the 44-byte
+// limit of Claude Code's per-uid temp directory (runsRootTmpDir).
+// Usage: node dry-run.mjs <new-scratch-root> --tarball-<C> <tgz>... [--ledger <file>] [--runs-root <dir>] [--allow-unreleased] [--out <json>] --config <dir>
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -20,8 +22,8 @@ import {makeFixture, pinned, loadConditions, releasePlaceholders} from './make-f
 import {applyCondition, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {ascSkillsOf, referencesFor} from './score.mjs';
 import {placementProblems} from './guard.mjs';
-import {flags, BUDGET, STOP_LINE_USD, cellOf, promptFor, maxTurnsFor, isolationSettings, probeContext, probeSteps, priorSpendProblems, priorSpentUsd, fixtureOf} from './run-trial.mjs';
-import {plannedTrials, orderProblems, loadOrder} from './order.mjs';
+import {flags, BUDGET, STOP_LINE_USD, cellOf, promptFor, maxTurnsFor, isolationSettings, probeContext, probeSteps, priorSpendProblems, priorProbeProblems, priorSpentUsd, fixtureOf, tmpDirProblem} from './run-trial.mjs';
+import {plannedTrials, orderProblems, loadOrder, trialName} from './order.mjs';
 import {fixtureDir} from './run-all.mjs';
 import {description} from './probe-check.mjs';
 import {REPO_ROOT, loadSpec} from './config.mjs';
@@ -195,7 +197,7 @@ function main() {
       Object.fromEntries(Object.entries(report.compare).map(([f, x]) => [f, x.installedDiff])));
   }
   add('runOrder', orderProblems(loadOrder(), spec, conds).length === 0, orderProblems(loadOrder(), spec, conds));
-  add('priorSpend', priorSpendProblems().length === 0, priorSpendProblems());
+  add('priorSpend', priorSpendProblems().length === 0 && priorProbeProblems().length === 0, [...priorSpendProblems(), ...priorProbeProblems()]);
   const plan = trialPlan(conds, spec);
   add('budget', plan.allStagesAtMostUsd <= BUDGET.ownerCapUsd && plan.planningUsd <= plan.stopLineUsd, {prior: plan.priorSpentUsd, stopLine: plan.stopLineUsd, allStages: plan.allStagesAtMostUsd, planning: plan.planningUsd, expected: plan.expectedUsd});
   // The launch command of every probe and planned trial of the built conditions, as run-trial.mjs builds it.
@@ -205,25 +207,40 @@ function main() {
     const k = probe ? {id: 'probe'} : spec.cases.find((c) => c.id === t.case);
     const maxTurns = maxTurnsFor(k, conds);
     return {trial: t.name, condition: t.condition, case: t.case, kind: probe ? 'probe' : k.kind, fixture: fixtureOf(k, conds), maxTurns,
-      promptText: probe ? '<probe prompt of level W>' : promptFor(k),
+      promptText: probe ? `<probe prompt of level ${cell.tools}>` : promptFor(k),
       argv: ['claude', '-p', '<promptText>', ...flags({level: cell.level, model: conds.model, budget: probe ? BUDGET.probeUsd : BUDGET.perTrialUsd, maxTurns, settingsFile: 'settings.json', debugFile: probe ? 'debug.log' : null})].join(' ')};
   };
   report.launch = [...plan.probes, ...plan.planned].filter((t) => built.includes(t.condition)).map(command);
   const kindOf = (l) => conds.fixtures[l.fixture]?.kind;
   add('maxTurns', report.launch.every((l) => (l.kind === 'probe' ? l.argv.includes(`--max-turns ${conds.probeMaxTurns} `) : conds.maxTurnsByKind[kindOf(l)] ? l.argv.includes(`--max-turns ${conds.maxTurnsByKind[kindOf(l)]} `) : !l.argv.includes('--max-turns'))),
     {probe: conds.probeMaxTurns, ...conds.maxTurnsByKind});
-  add('levelFlags', report.launch.every((l) => l.argv.includes(`--tools ${conds.toolLevels.W.tools} `) && l.argv.includes(`--disallowedTools ${conds.toolLevels.W.disallowed} `) && l.argv.includes('--permission-mode acceptEdits') && l.argv.includes('--settings settings.json') && l.argv.includes(`--max-budget-usd ${l.kind === 'probe' ? BUDGET.probeUsd : BUDGET.perTrialUsd} `)));
+  // #1844: the flags of each trial's own level (every earlier config has only W).
+  const levelOf = (l) => cellOf(l.condition, conds).level;
+  add('levelFlags', report.launch.every((l) => l.argv.includes(`--tools ${levelOf(l).tools} `) && l.argv.includes(`--disallowedTools ${levelOf(l).disallowed} `) && l.argv.includes('--permission-mode acceptEdits') && l.argv.includes('--settings settings.json') && l.argv.includes(`--max-budget-usd ${l.kind === 'probe' ? BUDGET.probeUsd : BUDGET.perTrialUsd} `)));
   add('probeDebugLog', report.launch.filter((l) => l.kind === 'probe').length === built.length && report.launch.every((l) => (l.kind === 'probe') === l.argv.includes('--debug-file debug.log')));
   const runsRoot = path.join(root, 'runs');
   const mine = plan.planned.filter((t) => built.includes(t.condition));
   const fxOf = (t) => fixtureDir(fixturesRoot, t.condition, spec.cases.find((k) => k.id === t.case).fixture ?? 'A');
   const examples = [...new Map(mine.map((t) => [conds.fixtures[spec.cases.find((k) => k.id === t.case).fixture ?? 'A'].kind, t])).values()];
-  report.settingsExamples = examples.map((t) => ({trial: t.name, settings: isolationSettings({work: path.join(runsRoot, t.name, 'work'), runsRoot, fixture: fxOf(t), ledger})}));
+  report.settingsExamples = examples.map((t) => ({trial: t.name, settings: isolationSettings({work: path.join(runsRoot, t.name, 'work'), runsRoot, fixture: fxOf(t), ledger}, cellOf(t.condition, conds).level)}));
+  // #1844: a confined level (Bash in the sandbox): no allowRead, /Users and the fixture denied, work/ under no denied path.
+  const confined = report.settingsExamples.filter((x, i) => cellOf(examples[i].condition, conds).level.sandbox);
+  if (confined.length) add('confinedLayout', confined.every((x) => { const f = x.settings.sandbox.filesystem; const w = fs.realpathSync(path.dirname(runsRoot)); return !('allowRead' in f) && f.denyRead.includes('/Users') && !f.denyRead.some((d) => w === d || w.startsWith(`${d}/`)); }), confined.map((x) => x.trial));
   add('fixtureDenied', report.settingsExamples.every((x, i) => { const fx = fs.realpathSync(fxOf(examples[i])); return x.settings.sandbox.filesystem.denyRead.includes(fx) && x.settings.sandbox.filesystem.denyWrite.includes(fx); }), examples.map((t) => t.name));
+  // #1844 probe 1: a confined level needs --runs-root (the runs root of the measurement): the per-uid temp directory of
+  // every probe, planned trial and replacement up to rep 9 must fit Claude Code's 44 bytes (run-trial.mjs tmpDirProblem).
+  if (confined.length) {
+    const measured = opt('--runs-root', null);
+    const names = [...plan.probes.map((t) => trialName(t.condition, 'probe', 2)), ...plan.planned.map((t) => t.name),
+      ...plan.planned.map((t) => trialName(t.condition, t.case, 9))].filter((n, i, a) => a.indexOf(n) === i);
+    const long = measured ? names.map((n) => tmpDirProblem(path.join(path.resolve(measured), n))).filter(Boolean) : ['give --runs-root <the runs root of the measurement>'];
+    add('runsRootTmpDir', long.length === 0, long.length ? long.slice(0, 3) : {runsRoot: measured, trials: names.length});
+  }
   report.probeSteps = Object.fromEntries(plan.probes.filter((t) => built.includes(t.condition)).map((t) => {
-    const ctx = probeContext({dir: path.join(runsRoot, t.name), runsRoot, fixture: dirs[`${t.condition}-${conds.probeFixture ?? 'A'}`], ledger, homeMarker: path.join(root, 'home-marker'), repoMarker: path.join(root, 'repo-marker')});
-    const steps = probeSteps(cellOf(t.condition, conds).tools, ctx);
-    return [t.name, {count: steps.length, expected: conds.probeSteps.W, steps: steps.map((st) => `${st.id} ${st.tool} ${st.expect}`)}];
+    const cell = cellOf(t.condition, conds);
+    const ctx = probeContext({dir: path.join(runsRoot, t.name), runsRoot, fixture: dirs[`${t.condition}-${conds.probeFixture ?? 'A'}`], ledger, homeMarker: path.join(root, 'home-marker'), repoMarker: path.join(root, 'repo-marker')}, cell.level);
+    const steps = probeSteps(cell.tools, ctx);
+    return [t.name, {count: steps.length, expected: conds.probeSteps[cell.tools], steps: steps.map((st) => `${st.id} ${st.tool} ${st.expect}`)}];
   }));
   add('probeStepsCounted', Object.values(report.probeSteps).every((x) => x.count === x.expected && x.count + 2 <= conds.probeMaxTurns), Object.fromEntries(Object.entries(report.probeSteps).map(([k, x]) => [k, x.count])));
   report.plan = {...plan, probes: plan.probes.map((t) => t.name), planned: undefined};

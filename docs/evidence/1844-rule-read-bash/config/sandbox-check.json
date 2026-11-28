@@ -1,0 +1,542 @@
+{
+ "schema": "asc-sandbox-check/v1",
+ "condition": "R",
+ "tools": "X",
+ "srtVersion": "0.0.83",
+ "claudeVersion": "2.1.323 (Claude Code)",
+ "nodeVersion": "v20.12.2",
+ "pass": true,
+ "left": {
+  "trialSentinel": false,
+  "repoSentinel": false,
+  "insideFile": true,
+  "outside": {
+   "userTmp": false,
+   "runsRoot": false,
+   "varTmp": false
+  }
+ },
+ "settings": {
+  "permissions": {
+   "blockReadsOutsideWorkingDirectories": true
+  },
+  "sandbox": {
+   "enabled": true,
+   "failIfUnavailable": true,
+   "autoAllowBashIfSandboxed": true,
+   "allowUnsandboxedCommands": false,
+   "network": {
+    "allowedDomains": []
+   },
+   "filesystem": {
+    "denyRead": [
+     "/Users",
+     "/private/tmp",
+     "/private/var/folders",
+     "/Volumes",
+     "<fixture>",
+     "<root>/ledger",
+     "<root>/runs/probe-sibling",
+     "<root>/runs/R-probe-1/settings.json",
+     "<root>/runs/R-probe-1/debug.log",
+     "<root>/runs/R-probe-1/trace.jsonl",
+     "<root>/runs/R-probe-1/stderr.txt",
+     "<root>/runs/R-probe-1/meta.json",
+     "<root>/probe-R.json",
+     "/private/var/tmp/SoftwareUpdateCore",
+     "/private/var/tmp/asc-eval-1844",
+     "/private/var/tmp/asc-eval-1844-dry128"
+    ],
+    "denyWrite": [
+     "/Users",
+     "/private/tmp",
+     "/private/var/folders",
+     "/Volumes",
+     "<fixture>",
+     "<root>/ledger",
+     "<root>/runs/probe-sibling",
+     "<root>/runs/R-probe-1/settings.json",
+     "<root>/runs/R-probe-1/debug.log",
+     "<root>/runs/R-probe-1/trace.jsonl",
+     "<root>/runs/R-probe-1/stderr.txt",
+     "<root>/runs/R-probe-1/meta.json",
+     "<root>/runs/R-probe-1/home",
+     "<root>/runs/R-probe-1/config",
+     "<root>/runs/R-probe-1/bin",
+     "<root>/probe-R.json",
+     "/private/var/tmp/SoftwareUpdateCore",
+     "/private/var/tmp/asc-eval-1844",
+     "/private/var/tmp/asc-eval-1844-dry128"
+    ]
+   }
+  }
+ },
+ "rows": [
+  {
+   "id": "insideWrite",
+   "probeStep": true,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "insideCatClaudeMd",
+   "probeStep": true,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "# 請求管理（社内）",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "insideGitStatus",
+   "probeStep": true,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "## main",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "insideNode",
+   "probeStep": true,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "v20.12.2",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "insideAscHelp",
+   "probeStep": true,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "ASC v0.5 — Goal・契約・Evidenceに基づく開発ハーネス",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "insideWorktreeCreate",
+   "probeStep": true,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "{",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "insideTmpWrite",
+   "probeStep": true,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "catHomeMarker",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <home>/asc1844-home-marker.txt: No such file or directory",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "catRepoMarker",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <repo-root>/.agent-skill-chain/local/asc1844-repo-marker.txt: No such file or directory",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "catSiblingRecord",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <root>/runs/probe-sibling/record.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "catTrialSettings",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <root>/runs/R-probe-1/settings.json: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "lsFixture",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "ls: <fixture>: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "catFixtureClaudeMd",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <fixture>/CLAUDE.md: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "lsLedgerDir",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "ls: <root>/ledger: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "lsDeniedRoot1",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "ls: /private/tmp: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "lsDeniedRoot2",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "ls: /private/var/folders: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "lsDeniedRoot3",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "ls: /Volumes: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "touchTrialDir",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "touch: <root>/runs/R-probe-1/outside-write-probe.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "touchRepo",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "touch: <repo-root>/.agent-skill-chain/local/asc1844-write-probe.txt: No such file or directory",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "network",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 56,
+   "firstLine": "000curl: (56) CONNECT tunnel failed, response 403",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "lnSymlinkHome",
+   "probeStep": true,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "catSymlinkHome",
+   "probeStep": true,
+   "expect": "refused",
+   "sandboxRequired": false,
+   "exit": 1,
+   "firstLine": "cat: probe-link-home.txt: No such file or directory",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "hardLinkRepo",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "ln: <repo-root>/.agent-skill-chain/local/asc1844-repo-marker.txt: No such file or directory",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "nodeReadHome",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "node:fs:457",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "shArgRepo",
+   "probeStep": true,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <repo-root>/.agent-skill-chain/local/asc1844-repo-marker.txt: No such file or directory",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "varPathHome",
+   "probeStep": true,
+   "expect": "refused",
+   "sandboxRequired": false,
+   "exit": 1,
+   "firstLine": "cat: <home>/asc1844-home-marker.txt: No such file or directory",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "varPathSibling",
+   "probeStep": true,
+   "expect": "refused",
+   "sandboxRequired": true,
+   "exit": 1,
+   "firstLine": "cat: <root>/runs/probe-sibling/record.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "credentialLength",
+   "probeStep": true,
+   "expect": "any",
+   "exit": 0,
+   "firstLine": "0",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "touchUserTmp",
+   "probeStep": true,
+   "expect": "refused",
+   "sandboxRequired": true,
+   "exit": 1,
+   "firstLine": "touch: /private/tmp/claude-<uid>/asc1844-write-probe.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "touchRunsRoot",
+   "probeStep": true,
+   "expect": "refused",
+   "sandboxRequired": true,
+   "exit": 1,
+   "firstLine": "touch: <root>/runs/asc1844-write-probe.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "touchVarTmp",
+   "probeStep": true,
+   "expect": "refused",
+   "sandboxRequired": true,
+   "exit": 1,
+   "firstLine": "touch: /private/var/tmp/asc1844-write-probe.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "keychainDefault",
+   "probeStep": true,
+   "expect": "ok",
+   "outputPattern": "^(?!0$)[0-9]+$",
+   "baseline": "44",
+   "exit": 0,
+   "firstLine": "44",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "keychainLogin",
+   "probeStep": true,
+   "expect": "ok",
+   "outputPattern": "^(?!0$)[0-9]+$",
+   "baseline": "0",
+   "exit": 0,
+   "firstLine": "44",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "clipboard",
+   "probeStep": true,
+   "expect": "ok",
+   "outputPattern": "^0$",
+   "baseline": "754",
+   "exit": 0,
+   "firstLine": "0",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "processList",
+   "probeStep": true,
+   "expect": "ok",
+   "outputPattern": "^0$",
+   "baseline": "948",
+   "exit": 0,
+   "firstLine": "0",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "processListIndirect",
+   "probeStep": true,
+   "expect": "ok",
+   "outputPattern": "^0$",
+   "baseline": "948",
+   "exit": 0,
+   "firstLine": "0",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "symlinkDeniedCat",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: link-denied.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "hardLinkDeniedCat",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "ln: <root>/ledger/denied-record.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "nodeReadDenied",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "node:fs:457",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "shArgDenied",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <root>/ledger/denied-record.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "varPathDenied",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <root>/ledger/denied-record.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "besideRunsRoot",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <root>/probe-R.json: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "existingRealHomeFile",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <home>/.zshrc: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "existingRepoFile",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "cat: <repo-root>/AGENTS.md: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "userTmpOfClaudeCode",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "ls: /tmp/claude-<uid>: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "startInMainCheckout",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "Use a dedicated Git worktree, or explicitly select isolated-clone",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "startInWorktreeSelectsRule",
+   "probeStep": false,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "1",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "startInWorktreeUsersNoRule",
+   "probeStep": false,
+   "expect": "refused",
+   "exit": 1,
+   "firstLine": "0",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "catRuleInWorktree",
+   "probeStep": false,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "# 金額の扱い（請求）",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "commitInWorktree",
+   "probeStep": false,
+   "expect": "ok",
+   "exit": 0,
+   "firstLine": "4637bf7 probe",
+   "sandboxRefusal": false,
+   "pass": true
+  }
+ ]
+}
