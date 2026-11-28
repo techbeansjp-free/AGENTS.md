@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。通常のASC実行時に読み込ませない。測定の仕組みは共通のもの（[../../shared-harness/](../../shared-harness/)）を使い、このdirectoryには設定だけを置く。#1843の設定（[../../1843-spec-rule-path/config/](../../1843-spec-rule-path/config/)）と同じ形である。
 
-**状態：準備済み、固定の前。** dry runは合格した（下の「確認」）。計画（[../EVAL_PLAN.md](../EVAL_PLAN.md)）の固定、独立レビュー、ownerの目印fileの承認（`results/probe-approval.json`は仮の値）、固定の記録（`results/fixation.json`）がまだ。有料の実行はしていない。
+**状態：準備済み、固定の前。** dry runは合格した（下の「確認」）。計画（[../EVAL_PLAN.md](../EVAL_PLAN.md)）の固定、独立レビュー（1回目の指摘は反映済み）、ownerの目印fileの承認（`results/probe-approval.json`は仮の値）、固定の記録（`results/fixation.json`）がまだ。有料の実行はしていない。
 
 ## 目的
 
@@ -13,11 +13,11 @@
 | | B（基準） | S（候補） |
 | --- | --- | --- |
 | 中身 | release v0.5.131（現在のmain `221283eb`。17 Skill） | Bに`design-creation`（[../candidate/design-creation/](../candidate/design-creation/)の`SKILL.md`とreferences 2件）を足したもの |
-| tarball | `gh release download v0.5.131`。sha256 `e8135f4a07735c07d90fec266a491c639ef9539041d64580b4db518244f57113`（assetのdigest・`SHA256SUMS`と一致。このbranchの`0a029231`で`pack-candidate.mjs --version=0.5.131`しても同じ） | このbranchの`995f41de`（候補と配布の登録を足したcommit）で`node scripts/pack-candidate.mjs <dir> --version=0.5.131`。sha256 `d1bccb5c771017952ca85a1662a38e18b3724b593e9bcbab607ae5bd060dee88`（別のdirectoryへの2回目のpackも同じ）。次のcommit `0a029231`で取り消した（#1815と同じやり方）ので、branchの配布物はmainと同じ |
+| tarball | `gh release download v0.5.131`。sha256 `e8135f4a07735c07d90fec266a491c639ef9539041d64580b4db518244f57113`（assetのdigest・`SHA256SUMS`と一致。このbranchの`0a029231`で`pack-candidate.mjs --version=0.5.131`しても同じ） | このbranchの`3e4c7caf`（候補と配布の登録を足したcommit。レビューのL4で4節を書き分けた候補）で`node scripts/pack-candidate.mjs <dir> --version=0.5.131`。sha256 `a37e90c073cca0359a1447578e3ecf6fdca2d33630a29d02f34ccb43d9ee7626`（別のdirectoryへの2回目のpackも同じ）。次のcommit `1e7b2736`で取り消した（#1815と同じやり方）ので、branchの配布物はmainと同じ。前の版（`995f41de`でpack、`d1bccb5c…`）は使わない（`release.json`の`S.superseded`） |
 | 導入 | 利用者の手順（専用のworktreeで`project-assets --register-claude-skill --apply`、読む契機`claude-md`を採用） | 同じ |
 
 - 両tarballを展開した差（`diff -rq`）：Sは`skills/design-creation/`を足し、`package.json`（files）・`src/runtime-files.json`（3件）・`skills/README.md`（表の1行）・`src/project-assets.mjs`（`maxAssets` 313→321）・`release-identity.json`だけが違う（[release.json](release.json)の`S.differsOnly`）。
-- `995f41de`の配布の登録は、`warranty-scope`を足したcommit `b8cfec86`に倣った（`test/helpers/distributed-skills.mjs`と`test/test_project_assets.mjs`の数も同じcommitで変え、`0a029231`で戻した）。`qualityContractVersion`は上げていない（評価のためのpackで、配布しないため）。
+- 配布の登録（`995f41de`と、それを写した`3e4c7caf`）は、`warranty-scope`を足したcommit `b8cfec86`に倣った（`test/helpers/distributed-skills.mjs`と`test/test_project_assets.mjs`の数も同じcommitで変え、`0a029231`・`1e7b2736`で戻した）。`qualityContractVersion`は上げていない（評価のためのpackで、配布しないため）。
 
 ## fixtureと依頼
 
@@ -39,29 +39,47 @@
 - `conditions.json`の`ascSkillsByCondition`：条件ごとの配布Skillの一覧（Sは`design-creation`を含む18件）。採点（`score.mjs`の`ascSkillsOf`）、probeの期待するdescriptionの件数と利用者のSkillの分け方（`probe-check.mjs`）、dry runの入口の数・referenceの所在・入口の比較（両条件が配布するSkillだけを比べる）が使う。
 - fixture`design`の`files`にsubdirectoryのpath（ui08の`app/tokens.css`等）を書ける（`make-fixture.mjs`の`writeSources`）。
 - `rule.negativesRequired: false`：該当しない依頼の無い設定で、「該当しない依頼の有効な試行が無い」ことを未判定の理由にしない（`score.mjs`の`verdictOf`）。
+- `conditions.json`の`fixedExtra`（レビューのH2）：設定directoryの中のfileを、固定するものに足す（`config.mjs`の`configFixed`、`fixation.mjs`の`fixedOf`）。#1867は`layers/`の5件。設定directoryの外・`results/`・重複・無いfileは拒否する。fieldの無い設定は従来と同じ一覧。
+- `dry-run.mjs`の入口の比較を関数にした（`otherEntriesDiffer`。動きは同じ）。
+- 試験（レビューのL5ほか）：`ascSkills`の無い設定の`fixtureReferences`、入口の比較、`fixedExtra`の3件を足した。
 
 ## 費用とトークン
 
 - 2条件×4ケース×3回＝24試行と、probe 2回（fixture LP）。
-- ownerの上限20 USDは生成と層2の合計。生成の割当ては12 USD（`ownerCapUsd`・`capUsd`、余裕0.5、停止の線11.5 USD）、層2に8 USDを残す（見込み約5 USD）。
+- ownerの上限20 USD＝生成の台帳＋門の数え＋層2のFable（計画の「費用」）。生成の割当ては12 USD（`ownerCapUsd`・`capUsd`、余裕0.5、停止の線11.5 USD）、門の数えは2 USD（見込み約1.8 USD）、層2のFableは6 USD（見込み約5.3 USD）。Codexは費用を報告しないので、呼出しの回数（24回、再試行は各1回まで）で抑える。
 - 1試行の予算（`--max-budget-usd`）1.5 USD（#1804の生成と同じ）。probeは0.6 USD。
-- 見込み：#1804のsonnetの生成（ui02・ui03・ui08、1試行0.15〜0.28 USD）に、ASCとSの本文・reference（約7 KB）の読込みを足して1試行0.32 USD、計 **約8.0 USD**（計画の単価0.45で約11.2 USD）。入力（入力＋cache）約980万、出力約29万トークン（#1804は試行ごとのトークンを記録していないので粗い）。完了できる1試行の平均の上限は0.417 USD（`breakEvenPerTrialUsd`）。これを超えると停止の線で止まり、その時点の記録で判定する。
+- 見込み：#1804のsonnetの生成（ui02・ui03・ui08、1試行0.15〜0.28 USD）に、ASCとSの本文・reference（約7 KB）の読込みを足して1試行0.32 USD、計 **約8.0 USD**（計画の単価0.45で約11.2 USD）。入力（入力＋cache）約980万、出力約29万トークン（#1804は試行ごとのトークンを記録していないので粗い）。完了できる1試行の平均の上限は0.417 USD（`breakEvenPerTrialUsd`）。これを超えると停止の線で止まり、結論は「未判定」になる（計画の結論の0）。
 
 ## 確認（2026-11-28、モデルを呼ばない）
 
 ```text
-node --test docs/evidence/shared-harness/test/      # 56件すべて合格（#1867で足した4件を含む）
-node docs/evidence/shared-harness/dry-run.mjs <scratch>/rel1867/run1867dry \
+node --test docs/evidence/shared-harness/test/              # 59件すべて合格（#1867で足した7件を含む）
+node --test docs/evidence/1835-design-eval-layers/harness/   # 39件合格、1件skip（描画の差の試験。Dockerの結果が要る）
+node --test docs/evidence/1852-p-good-pairs/harness/         # 9件すべて合格
+node --test docs/evidence/1867-design-persona/harness/       # 6件すべて合格
+node docs/evidence/shared-harness/dry-run.mjs <scratch>/rel1867/run1867dry2 \
   --tarball-B <scratch>/rel1867/release/agent-skill-chain-0.5.131.tgz \
   --tarball-S <scratch>/rel1867/candidate/agent-skill-chain-0.5.131.tgz \
-  --config docs/evidence/1867-design-persona/config --out <scratch>/rel1867/run1867dry.json
+  --config docs/evidence/1867-design-persona/config --out <scratch>/rel1867/run1867dry2.json
 ```
 
-dry run：`pass: true`（16の照合すべて）。入口はBが17件、Sが18件。Sのfixtureに`design-creation`の本文とreferences 2件があり、候補とbyte単位で一致する。導入後の差は`design-creation`のfile（本文・reference・その写し・Claude Codeの入口）、`skills/README.md`とその写し、`distribution.json`、`managed-runtime/`の`package.json`・`src/runtime-files.json`・`src/project-assets.mjs`だけで、他の17件の入口は同じ。計画24試行、`--max-turns`なし、`--max-budget-usd 1.5`。
+dry run（レビューの指摘を直した後、新しいSのtarball `a37e90c0…`）：`pass: true`（16の照合すべて）。入口はBが17件、Sが18件。Sのfixtureに`design-creation`の本文とreferences 2件があり、候補とbyte単位で一致する。導入後の差は`design-creation`のfile（本文・reference・その写し・Claude Codeの入口）、`skills/README.md`とその写し、`distribution.json`、`managed-runtime/`の`package.json`・`src/runtime-files.json`・`src/project-assets.mjs`だけで、他の17件の入口は同じ（2回目のdry runも同じ13件）。tarballでは`release-identity.json`も違う（上の「条件」）が、導入後の`managed-runtime/`には`release-identity.json`が置かれない（両条件とも）。`conditions.json`の`dryRun.installedDiffExpected`は、違ってもよいものとしてそれを含む（違うことは求めない）。計画24試行、`--max-turns`なし、`--max-budget-usd 1.5`。
+
+## 層1〜3と門の数えの設定（`layers/`）
+
+レビューのH2・M1で、生成の後に使う設定も、固定の前に置いた（計画の「判定」、[decision-criteria.md](decision-criteria.md)の冒頭）。
+
+| file | 内容 | 使う道具 |
+| --- | --- | --- |
+| `layers/gate-count.json`・`gate-count-prompt.md` | 門の記録の中身の数え方（`opus`、`asc host-session claude`、読取りのみ、2回、seed、基準、出力の形、まとめ方、費用） | [../harness/gate-packet.mjs](../harness/gate-packet.mjs) |
+| `layers/layer1-cases.json`・`layer1-gold.json` | 層1のケースの設定（ui02・ui03・ui08は#1835と同じ値、lp-newは#1867で決めた）と、lp-newの必須項目 | #1835の`run-layer1.mjs layer1 --cases --gold-add`、[../harness/layer-pages.mjs](../harness/layer-pages.mjs) |
+| `layers/eval.json` | 層2（`pPairs`：同じ回の12組）と層3（`layer3.pairs`：36組）、幅、seed、Pの依頼文のsha256、上限、ownerの選択肢 | #1835の`make-packets.mjs`・`run-eval.mjs`・`owner-page.mjs` |
+
+#1835の道具に足したもの（どれもfieldか引数で働き、無ければ従来どおり。#1835・#1852の試験はすべて通る）：`run-layer1.mjs`の`--cases`（`config/cases.json`の代わり）と`--gold-add`（#1804の`gold.json`にケースを足す。同じkeyは拒否）、`make-packets.mjs`の`pPairs`（Pの束を、層3の組のうち挙げた組だけにする。層3に無い組は拒否）。試験は`eval.test.mjs`の`#1867`と[../harness/harness.test.mjs](../harness/harness.test.mjs)。
 
 ## 測定の前に残っていること
 
-1. 計画（[../EVAL_PLAN.md](../EVAL_PLAN.md)）と、この設定の独立レビュー。指摘を直してから固定する。
+1. 計画（[../EVAL_PLAN.md](../EVAL_PLAN.md)）と、この設定の独立レビュー。1回目の指摘（H1〜H4・M1〜M6・L1〜L6）は直した。L7（「下書き」の表記）は固定のcommitで直す。
 2. ownerの目印fileの承認を`results/probe-approval.json`に記録してcommitする。
 3. 固定：`node docs/evidence/shared-harness/fixation.mjs init $EV/results/fixation.json --ledger $LEDGER --config $EV`（#1843の手順と同じ）。最初の固定の記録のcommitを、この節の下に書く（`run-trial.mjs`が照合する）。
 
@@ -96,8 +114,28 @@ CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC_EVAL_ALLOW_PAID=1 node $H/ru
 node $H/fixation.mjs check $EV/results/fixation.json --config $EV
 node $H/collect.mjs <scratch>/run1867/runs $EV/results --ledger $LEDGER --config $EV
 node $H/judge.mjs $EV/results --runs-root <scratch>/run1867/runs --ledger $LEDGER --out $EV/results/judge.json --config $EV
-# この後、Sの試行のout/DESIGN-NOTES.md（<scratch>/run1867/runs/S-*/work/）を、条件名を伏せた新しいcontextが数え（decision-criteria.mdの門。Bも含む24試行）、層1・層2・層3へ進む
+# 門の数え（2回、別のseed）。置き換えた試行があれば --replace <失敗>=<置き換え> を付ける
+P67=docs/evidence/1867-design-persona/harness; G=<scratch>/run1867/gate
+node $P67/gate-packet.mjs pack <scratch>/run1867/runs $G/r1 --seed 18670011
+node $P67/gate-packet.mjs pack <scratch>/run1867/runs $G/r2 --seed 18670012
+node bin/asc-v05.mjs host-session claude $G/r1/packet --name '自動: #1867 門の数え 1' --model opus --rename-model haiku --prompt-file $G/r1/packet/TASK.md --output-dir $G/out1
+node bin/asc-v05.mjs host-session claude $G/r2/packet --name '自動: #1867 門の数え 2' --model opus --rename-model haiku --prompt-file $G/r2/packet/TASK.md --output-dir $G/out2
+# 回答（IDごと）をcommitしてから、keyで試行に戻す
+node $P67/gate-packet.mjs combine --round $G/r1/key/key.json=<回答1> --round $G/r2/key/key.json=<回答2> --runs-json $EV/results/runs.json --out $EV/results/gate.json
+# 層1（ケースごと）
+node $P67/layer-pages.mjs <scratch>/run1867/runs <scratch>/run1867/pages
+cd docs/evidence/1835-design-eval-layers
+node harness/run-layer1.mjs layer1 <scratch>/run1867/pages <scratch>/run1867/r/l1-<case> --case <case> --cases ../1867-design-persona/config/layers/layer1-cases.json --gold-add ../1867-design-persona/config/layers/layer1-gold.json
+# 層3のページ（ownerの回答をcommitするまで、owner-key.jsonとPの結果を開かない）、層2の束と実行
+C=../1867-design-persona/config/layers/eval.json
+node harness/owner-page.mjs --config $C --render-root <scratch>/run1867/r --out <scratch>/run1867/owner --seed 18670003
+node harness/make-packets.mjs --config $C --render-root <scratch>/run1867/r --out <scratch>/run1867/eval --seed 18670002
+ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --config $C --packets <scratch>/run1867/eval/packets --runs <scratch>/run1867/pruns --evaluator fable --methods P --lock <scratch>/run1867/eval/key --lock <scratch>/run1867/owner
+ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --config $C --packets <scratch>/run1867/eval/packets --runs <scratch>/run1867/pruns --evaluator codex --methods P --lock <scratch>/run1867/eval/key --lock <scratch>/run1867/owner
 ```
+
+- 層2を始める前に、生成の台帳と門の数えの費用の合計＋6 USDが20 USDを超えないことを確かめる（超えれば止めて未判定。計画の「費用」）。
+- 層2の警報・確かめられた害と、層3の効果・害の集計は、計画の規則で数える（集計の道具は無い。#1852の`decide.mjs`の`pJudgments`・`combine`で各組・回の判断を読める）。
 
 - `--run`を付けない`run-trial.mjs`・`run-all.mjs`は、起動するcommandや試行の一覧を出すだけでモデルを呼ばない。
 - 台帳とtarballと生の記録は`<scratch>`に置く。scratchが消えると判定（生の記録からの作り直し）ができないので、評価の終わりまで消さない。層1〜3は生の記録の`work/`の画面を使う。

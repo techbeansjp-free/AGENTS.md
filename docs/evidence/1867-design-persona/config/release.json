@@ -13,11 +13,11 @@
  "S": {
   "kind": "candidate",
   "asset": "agent-skill-chain-0.5.131.tgz",
-  "assetSha256": "d1bccb5c771017952ca85a1662a38e18b3724b593e9bcbab607ae5bd060dee88",
-  "packedFromCommit": "995f41de8bfa60b69eaa1f2f42b1f146d43dde61",
-  "revertedBy": "0a029231",
-  "packCommand": "git checkout 995f41de; node scripts/pack-candidate.mjs <scratch>/rel1867/candidate --version=0.5.131",
-  "reproduced": "Two packs from 995f41de into two new directories gave the same sha256.",
+  "assetSha256": "a37e90c073cca0359a1447578e3ecf6fdca2d33630a29d02f34ccb43d9ee7626",
+  "packedFromCommit": "3e4c7cafbc79c0f659f68ce675af47681ff4fe2d",
+  "revertedBy": "1e7b2736",
+  "packCommand": "git checkout 3e4c7caf; node scripts/pack-candidate.mjs <scratch>/rel1867/candidate --version=0.5.131",
+  "reproduced": "Two packs from 3e4c7caf into two new directories gave the same sha256 (2026-11-28).",
   "baseCondition": "B",
   "differsOnly": [
    "package/package.json",
@@ -27,7 +27,13 @@
    "package/src/project-assets.mjs",
    "package/src/runtime-files.json"
   ],
-  "differsNote": "Checked on 2026-11-28 with diff -rq of the unpacked B (release asset) and S tarballs: S adds skills/design-creation/ (SKILL.md and references/public-page.md, references/business-screen.md, byte-identical to ../candidate/design-creation/) and differs in package.json (files), src/runtime-files.json (the three files), skills/README.md (one table row), src/project-assets.mjs (maxAssets 313 -> 321) and release-identity.json. Nothing else.",
-  "note": "Bにdesign-creationを足した候補。#1815と同じく、候補を入れたcommit（995f41de）でpackし、次のcommit（0a029231）で取り消した。配布物はmainのまま。公開しない。"
+  "differsNote": "Checked on 2026-11-28 (again for the 3e4c7caf pack) with diff -rq of the unpacked B (release asset) and S tarballs: S adds skills/design-creation/ (SKILL.md and references/public-page.md, references/business-screen.md, byte-identical to ../candidate/design-creation/) and differs in package.json (files), src/runtime-files.json (the three files), skills/README.md (one table row), src/project-assets.mjs (maxAssets 313 -> 321) and release-identity.json. Nothing else.",
+  "note": "Bにdesign-creationを足した候補。#1815と同じく、候補を入れたcommit（3e4c7caf）でpackし、次のcommit（1e7b2736）で取り消した。配布物はmainのまま。公開しない。前の版（995f41de、レビューのL4の前）はsupersededに記録し、使わない。",
+  "superseded": {
+   "assetSha256": "d1bccb5c771017952ca85a1662a38e18b3724b593e9bcbab607ae5bd060dee88",
+   "packedFromCommit": "995f41de8bfa60b69eaa1f2f42b1f146d43dde61",
+   "revertedBy": "0a029231",
+   "why": "Review L4 rewrote section 4 of the candidate SKILL.md (interactive: show the summary and take a reply, else proceed; non-interactive: proceed without waiting and record it). Never used for a model run."
+  }
  }
 }
