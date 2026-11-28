@@ -1,16 +1,16 @@
 // node --test docs/evidence/1835-design-eval-layers/harness/
 // Tests of the layer-2/3 evaluation tools on synthetic screenshots (no model, no network, no Docker).
-import test from 'node:test';
+import test, {after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import {spawnSync} from 'node:child_process';
+import {spawnSync, spawn} from 'node:child_process';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS, pngChunks, PNG_KEEP, extractJson, readJson, parseScreen} from './eval-common.mjs';
 import {buildPackets} from './make-packets.mjs';
 import {rate, combine} from './ssr.mjs';
-import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex, checkImagesRead} from './run-eval.mjs';
+import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex, checkImagesRead, acquireLocks} from './run-eval.mjs';
 import {computeAll, decideEvaluator, missingByReason, excludeSkipped, collectJudgments, negationFailures, loadLayer1, ssrNegation} from './aggregate.mjs';
 import {newFailures} from './layer1.mjs';
 import {layer1CommandFailures} from './run-layer1.mjs';
@@ -414,4 +414,158 @@ test('run-layer1: failed commands recorded in failed.txt stop the run (also with
   assert.deepEqual(layer1CommandFailures(out), []);
   fs.writeFileSync(path.join(out, 'failed.txt'), 'render\nui02__A-r1__original\n');
   assert.deepEqual(layer1CommandFailures(out), ['render', 'ui02__A-r1__original']);
+});
+
+// #1860: overlapping runs keep --lock paths closed until the last one ends
+const lockDirs = [];
+after(() => { for (const d of lockDirs) { try { fs.chmodSync(d, 0o750); } catch {} } });
+const lockDir = () => { const d = path.join(tmp('asc1860-'), 'key'); fs.mkdirSync(d); fs.chmodSync(d, 0o750); lockDirs.push(d); return d; };
+// a separate process that takes the lock, says "locked", and releases it when its stdin ends. Every holder is ended in after()
+// so that a failing assertion does not leave a child that keeps the test file running.
+const holders = [];
+after(() => { for (const c of holders) { if (c.exitCode === null && c.signalCode === null) { c.stdin.end(); setTimeout(() => c.kill(), 2000).unref(); } } });
+function holderProc(d) {
+  const src = `import {acquireLocks} from ${JSON.stringify(new URL('./run-eval.mjs', import.meta.url).href)};
+const r = acquireLocks([${JSON.stringify(d)}]); console.log('locked'); process.stdin.resume(); process.stdin.on('end', () => { r(); process.exit(0); });`;
+  const c = spawn(process.execPath, ['--input-type=module', '-e', src], {stdio: ['pipe', 'pipe', 'inherit']});
+  holders.push(c);
+  let out = '';
+  const ready = new Promise((res, rej) => {
+    const t = setTimeout(() => rej(new Error('holder did not take the lock in 15 s')), 15000); t.unref();
+    c.stdout.on('data', (b) => { out += b; if (out.includes('locked')) { clearTimeout(t); res(); } });
+    c.on('exit', (code) => { clearTimeout(t); rej(new Error(`holder exited ${code}`)); });
+  });
+  const exited = new Promise((res) => c.on('exit', res));
+  return {ready, release: () => { c.stdin.end(); return exited; }};
+}
+const modeOf = (d) => fs.statSync(d).mode & 0o777;
+const leftovers = (d) => fs.readdirSync(path.dirname(d)).filter((n) => n !== 'key');
+
+test('--lock: overlapping holders keep mode 000 until the last release, in either end order and with three holders', () => {
+  for (const order of [[0, 1], [1, 0], [2, 0, 1]]) {
+    const d = lockDir();
+    const rel = order.map(() => acquireLocks([d]));
+    assert.equal(modeOf(d), 0);
+    order.forEach((i, k) => {
+      rel[i]();
+      assert.equal(modeOf(d), k === order.length - 1 ? 0o750 : 0, `order ${order} after ${k + 1} releases`);
+    });
+    assert.deepEqual(leftovers(d), [], 'no state or mutex file is left');
+  }
+});
+
+test('--lock: a single holder restores the mode and leaves no file, also when its run throws', () => {
+  const d = lockDir();
+  const rel = acquireLocks([d]); assert.equal(modeOf(d), 0); rel();
+  assert.equal(modeOf(d), 0o750); assert.deepEqual(leftovers(d), []);
+  assert.throws(() => { const r = acquireLocks([d]); try { throw new Error('run failed'); } finally { r(); } }, /run failed/);
+  assert.equal(modeOf(d), 0o750); assert.deepEqual(leftovers(d), []);
+});
+
+test('--lock: a holder that throws, ending first or last, does not open the path while another holder runs', () => {
+  for (const throwsFirst of [true, false]) {
+    const d = lockDir();
+    const a = acquireLocks([d]), b = acquireLocks([d]);
+    const failing = throwsFirst ? a : b, other = throwsFirst ? b : a;
+    if (throwsFirst) {
+      assert.throws(() => { try { throw new Error('boom'); } finally { failing(); } }, /boom/);
+      assert.equal(modeOf(d), 0); other(); assert.equal(modeOf(d), 0o750);
+    } else {
+      other(); assert.equal(modeOf(d), 0);
+      assert.throws(() => { try { throw new Error('boom'); } finally { failing(); } }, /boom/);
+      assert.equal(modeOf(d), 0o750);
+    }
+    assert.deepEqual(leftovers(d), []);
+  }
+});
+
+test('--lock: a state file left by dead runs stops the run and keeps the recorded mode; a failed acquire releases what it took', () => {
+  const d = lockDir();
+  const dead = spawnSync(process.execPath, ['-e', 'console.log(process.pid)']).stdout.toString().trim();
+  fs.chmodSync(d, 0);
+  fs.writeFileSync(`${d}.asc-lock.json`, JSON.stringify({mode: 0o750, holders: [{pid: Number(dead), token: 'x'}]}));
+  const other = lockDir();
+  assert.throws(() => acquireLocks([other, d]), /no longer alive.*750/s);
+  assert.equal(modeOf(other), 0o750, 'the path locked before the failure is restored');
+  assert.deepEqual(leftovers(other), []);
+  assert.equal(modeOf(d), 0);
+  fs.rmSync(`${d}.asc-lock.json`); fs.chmodSync(d, 0o750);
+});
+
+test('run --dry-run --lock: a CLI run that ends (normally or with an error) while another run holds the lock leaves the path closed', async () => {
+  const d = lockDir();
+  const h = holderProc(d); await h.ready;
+  const holder = () => h.release();
+  const cli = (evaluator) => spawnSync(process.execPath, [path.join(here, 'run-eval.mjs'), 'run', '--packets', pkRoot, '--runs', tmp('asc1860-r-'),
+    '--evaluator', evaluator, '--methods', 'D', '--dry-run', '--cap-usd', '1000', '--lock', d], {encoding: 'utf8'});
+  const ok = cli('fable');
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.equal(modeOf(d), 0, 'the CLI run ended first and did not open the path');
+  const bad = cli('nobody');
+  assert.equal(bad.status, 3);
+  assert.equal(modeOf(d), 0, 'a CLI run that failed did not open the path');
+  assert.equal(await holder(), 0);
+  assert.equal(modeOf(d), 0o750);
+  assert.deepEqual(leftovers(d), []);
+  const alone = cli('fable');
+  assert.equal(alone.status, 0, alone.stderr);
+  assert.equal(modeOf(d), 0o750, 'a run alone restores the mode as before');
+  assert.deepEqual(leftovers(d), []);
+});
+
+test('--lock: holders in separate processes keep mode 000 until the last one ends, in either end order and with three', async () => {
+  for (const order of [[0, 1], [1, 0], [2, 0, 1]]) {
+    const d = lockDir();
+    const hs = [];
+    for (const _ of order) { const h = holderProc(d); await h.ready; hs.push(h); assert.equal(modeOf(d), 0, 'closed right after each start'); }
+    for (const [k, i] of order.entries()) {
+      assert.equal(await hs[i].release(), 0);
+      assert.equal(modeOf(d), k === order.length - 1 ? 0o750 : 0, `order ${order} after ${k + 1} ends`);
+    }
+    assert.deepEqual(leftovers(d), []);
+  }
+});
+
+test('--lock: processes that start at the same time all get the lock (the mutex is contended) and the last end restores it', async () => {
+  const d = lockDir();
+  const hs = Array.from({length: 6}, () => holderProc(d));
+  await Promise.all(hs.map((h) => h.ready));
+  assert.equal(modeOf(d), 0);
+  assert.equal(JSON.parse(fs.readFileSync(`${d}.asc-lock.json`, 'utf8')).holders.length, 6);
+  for (const h of hs.slice(0, 5)) { assert.equal(await h.release(), 0); assert.equal(modeOf(d), 0); }
+  assert.equal(await hs[5].release(), 0);
+  assert.equal(modeOf(d), 0o750);
+  assert.deepEqual(leftovers(d), []);
+});
+
+test('--lock: the same path twice in one run is taken once and released cleanly', () => {
+  const d = lockDir();
+  const r = acquireLocks([d, d]);
+  assert.equal(JSON.parse(fs.readFileSync(`${d}.asc-lock.json`, 'utf8')).holders.length, 1);
+  r();
+  assert.equal(modeOf(d), 0o750);
+  assert.deepEqual(leftovers(d), []);
+});
+
+test('--lock: a path that fails to release does not stop the others from being restored; the error names it', () => {
+  const a = lockDir(), b = lockDir();
+  const r = acquireLocks([a, b]);
+  fs.writeFileSync(`${b}.asc-lock.json`, '{broken');
+  assert.throws(() => r(), /JSON|Unexpected|Expected/);
+  assert.equal(modeOf(a), 0o750, 'the other path is restored');
+  assert.deepEqual(leftovers(a), []);
+  fs.rmSync(`${b}.asc-lock.json`); fs.chmodSync(b, 0o750);
+});
+
+test('--lock: when only dead runs remain after a release, the path stays 000 and stderr says so', () => {
+  const d = lockDir();
+  const dead = Number(spawnSync(process.execPath, ['-e', 'console.log(process.pid)']).stdout.toString().trim());
+  const r = acquireLocks([d]);
+  const f = `${d}.asc-lock.json`, st = JSON.parse(fs.readFileSync(f, 'utf8'));
+  st.holders.push({pid: dead, token: 'dead'}); fs.writeFileSync(f, JSON.stringify(st));
+  const err = []; const orig = console.error; console.error = (m) => err.push(String(m));
+  try { r(); } finally { console.error = orig; }
+  assert.equal(modeOf(d), 0);
+  assert.match(err.join('\n'), /stays mode 000.*no longer alive/s);
+  fs.rmSync(f); fs.chmodSync(d, 0o750);
 });
