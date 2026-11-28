@@ -16,13 +16,18 @@
   "asset": "agent-skill-chain-<version>.tgz",
   "assetSha256": "",
   "packedFromCommit": "",
-  "packCommand": "in the same clone: git checkout -b base/1843 <C packedFromCommit>; git revert --no-edit a57a0829 (the #1843 commit that adds the sentence, the link rewrite and its test); node scripts/pack-candidate.mjs <scratch>/rel1843/base --version=<the same version>",
+  "packCommand": "in the same clone: git checkout -b base/1843 <C packedFromCommit>; git revert --no-edit <every commit of revertCommits, newest first>; node scripts/pack-candidate.mjs <scratch>/rel1843/base --version=<the same version>",
+  "revertCommits": [
+   "c92e7f1fe41176199cb7b708ab1b4a7c88607323",
+   "a57a08290c104640e89f4e4b7c0d698d4cd5baf7"
+  ],
+  "revertCommitsNote": "Every #1843 product commit (outside docs/evidence/) up to the fixation, newest first: c92e7f1f the test of the 書き方 heading (review L3), a57a0829 the sentence, the link rewrite and its test. Before packing B, list the #1843 commits on the PR #1838 head that touch anything outside docs/evidence/ and add any missing one here; a revert that conflicts stops the fixation.",
   "baseOf": "C",
   "differsFromCandidateOnly": [
    "release-identity.json",
    "skills/asc/SKILL.md",
    "src/project-assets.mjs"
   ],
-  "note": "Cから#1843の変更（ascの1文とproject-assetsのlinkの書換え、その試験）だけを戻したもの。#1832の規則はCと同じ。公開しない。"
+  "note": "Cから#1843の製品の変更（ascの1文とproject-assetsのlinkの書換え、その試験。revertCommitsのすべて）だけを戻したもの。#1832の規則はCと同じ。公開しない。"
  }
 }

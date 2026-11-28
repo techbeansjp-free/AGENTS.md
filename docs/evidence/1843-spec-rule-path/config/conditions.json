@@ -39,7 +39,7 @@
  "probeFixture": "SP",
  "probeFixtureNote": "One isolation probe per condition on fixture SP (the fixture of s-1 and n-3). SP has no user Skill, so the 17 .claude/skills entries are all ASC entries. The isolation steps do not depend on the fixture.",
  "budget": {
-  "ownerCapUsd": 20,
+  "ownerCapUsd": 6,
   "capUsd": 6,
   "safetyMarginUsd": 0.5,
   "perTrialUsd": 0.5,
@@ -68,7 +68,7 @@
    },
    "probeOutputTokens": 3000
   },
-  "note": "Owner cap 20 USD for #1843, #1844 and #1846 together (stop line 19 USD, owner 2026-11-28, #1843 comment). This measurement takes at most capUsd 6 (stop line 5.5 USD): run-trial.mjs refuses a trial when the ledger total + its budget exceeds it. Before the fixation, lower capUsd if #1844 and #1846 leave less than 6 USD under the stop line of the shared cap (README). expect per kind from the #1840 records (s-1 mean 0.147, n-2 0.025, n-3 0.032 USD) plus reading the writing rules (00_利用案内.md, about 17.5 KB) in s-1; plan = expect x about 1.3."
+  "note": "The owner cap of 20 USD is for #1843, #1844 and #1846 together (owner 2026-11-28, #1843 comment); it is enforced by a per-Issue allocation recorded on Issues #1843, #1844 and #1846 (2026-11-28): #1843 6 USD, #1844 10 USD, #1846 3 USD (19 USD). ownerCapUsd here is the allocation of #1843 (6), not the combined cap: priorSpend takes one ledger only, so the harness cannot add the spend of the other two Issues. This measurement takes at most capUsd 6 (stop line 5.5 USD): run-trial.mjs refuses a trial when the ledger total + its budget exceeds it. expect per kind from the #1840 records (s-1 mean 0.147, n-2 0.025, n-3 0.032 USD) plus reading the writing rules (00_利用案内.md, about 17.5 KB) in s-1; plan = expect x about 1.3."
  },
  "adopt": "claude-md",
  "toolLevels": {
@@ -202,11 +202,10 @@
     ],
     "metric": "forbidReadsOk",
     "min": "1/1",
-    "use": "report",
-    "label": "合否に使わない報告（雛形・規則を1件も読まない率）"
+    "label": "雛形・規則を1件も読まない（ownerの決定 2026-11-28、#1843）"
    }
   ],
-  "note": "Levels written as fractions are compared in integers (#1845 levelMet: ok * b >= a * n). The Issue levels: g1-spec-templates 0.67 of #1840 as 2/3 (4 of 6), g1-spec-write 1 (6 of 6). The levels with use report are computed and shown (perCondition.reported) but do not enter meets-levels. The verdict that matters is C; B is reported side by side as the control (decision-criteria.md)."
+  "note": "Levels written as fractions are compared in integers (#1845 levelMet: ok * b >= a * n). The Issue levels: g1-spec-templates 0.67 of #1840 as 2/3 (4 of 6), g1-spec-write 1 (6 of 6). g1-negative-templates (forbidReadsOk 1/1 on n-2 and n-3: no trial reads a template or the rules) is a pass/fail level by the owner decision of 2026-11-28 (#1843 comment); g1-negative keeps 5/6 for negativeOk, which also counts touching an ASC Skill. The verdict that matters is C; B is reported side by side as the control (decision-criteria.md)."
  },
  "subsets": {
   "spec": {

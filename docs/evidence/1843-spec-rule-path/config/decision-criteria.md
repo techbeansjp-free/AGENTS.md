@@ -11,7 +11,7 @@
 | 条件 | C（候補版：PR #1838のhead。#1832の規則と#1843のascの1文）とB（基準：Cから#1843のcommitだけを`git revert`したもの）。どちらも`project-assets --register-claude-skill --apply`で導入し、読む契機`claude-md`を採用する。違いはascの本文（とその写し）と`src/project-assets.mjs`の写し（linkの書換え）だけ（dry runで確かめる） |
 | 環境 | #1840と同じ（水準W：Read・Write・Edit・Glob・Grep・Skill、`acceptEdits`、Bashなし、同じ隔離の設定） |
 | 依頼と回数 | #1840のs-1・n-2・n-3の3依頼、各条件各6回、計36試行と、probe 2回（fixture SP） |
-| 費用 | ownerの上限は#1843・#1844・#1846の合計で20 USD（停止の線19 USD）。この測定の上限は6 USD（停止の線5.5 USD） |
+| 費用 | ownerの上限20 USDは#1843・#1844・#1846の**合計**。各Issueへの割当て（2026-11-28、Issue #1843・#1844・#1846に記録）で守る：#1843は6 USD、#1844は10 USD、#1846は3 USD。`conditions.json`の`ownerCapUsd`はこのIssueの割当て6 USDで、この測定の上限`capUsd`も6 USD（停止の線5.5 USD） |
 | 判定の性質 | 合否を見るのはC。Bは同じ時期・同じ環境の対照として並べて示す（Cの読込みが1文によるものかを見るため）。#1838のmerge・#1843のcloseはownerが決める |
 
 ## #1840からの違い
@@ -43,9 +43,10 @@
 | g1-spec-templates | s-1 | expectReadsAll | 2/3 | Issueの完了の基準（#1840のg1-spec-templatesの0.67）。6試行で4件 |
 | g1-spec-write | s-1 | writeOk | 1/1 | Issueの完了の基準（#1840のg1-spec-writeの1）。6試行で6件 |
 | g1-negative | n-2・n-3 | negativeOk | 5/6 | #1840の0.8を12試行に当てた値（10件）。#1840ではR・Cとも6/6 |
-| g1-negative-templates | n-2・n-3 | forbidReadsOk | 1/1 | 報告だけ（`use: report`）。雛形・規則を1件も読まない率 |
+| g1-negative-templates | n-2・n-3 | forbidReadsOk | 1/1 | ownerの決定（2026-11-28、#1843のcomment）：n-2・n-3で雛形・規則を読む試行は0件でなければならない。12試行で12件 |
 
 - s-1の書いたfileの照合は、#1840で校正した（[calibration-table.md](../../1840-user-environment/config/calibration-table.md)：s-1 6/6、FN-003とSCR-005の2fileに分けた形12/12）。2fileに分けた形は`requireFiles`も満たすので、校正をやり直さない。
+- g1-negative-templatesの線（1/1）はownerの決定（2026-11-28、Issue #1843のcomment）。Issueの完了の基準「規則や雛形が不要に読まれない」に数が無かったので、独立レビュー（M2）を受けてownerに聞いた。g1-negativeは5/6のまま残す。negativeOkは雛形・規則の読取りに加えてASCのSkillに触れないことも数え、ownerの決定は雛形・規則の読取りについてだけなので、Skillに触れることの許容は#1840の0.8のままにする。雛形・規則を読んだ試行はg1-negative-templatesで不合格になる。
 - Bの結果は合否に使わない。CがBより読まれたかは、試行の数で並べて示すだけで、検定はしない。
 
 ## 完了と費用
