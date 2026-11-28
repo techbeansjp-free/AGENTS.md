@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。通常のASC実行時に読み込ませない。測定の仕組みは共通のもの（[../../shared-harness/](../../shared-harness/)）を使い、このdirectoryには設定だけを置く。
 
-**状態：準備（2026-11-28）。** モデルを呼ばない確認まで行った。固定（`fixation.mjs init`）・目印file・probe・測定はまだ行っていない。最初の固定のcommitは、固定のときにこのREADMEに書く（`run-trial.mjs`が照合する）。
+**状態：固定済み（2026-11-28）。** 最初の固定は`3b429132a804b2942e9e737c354155bfdc6fb081`（[results/fixation.json](results/fixation.json)、台帳`226d63c3`、26 file）。固定の時点のLatestはv0.5.134のまま（`gh release list`、2026-11-28）。ownerの承認は[results/probe-approval.json](results/probe-approval.json)。
 
 ## 目的
 
@@ -110,3 +110,5 @@ node $H/judge.mjs $EV/results --runs-root $RUNS --ledger $LEDGER --out $EV/resul
 - `start`の実行（`commandsAll`）は、commandとその出力を結び付けて数える（PR #1857の引継ぎ、上の節）。変数で書いたCLIのpath（`node "$CLI" start`）は、規則の文（`asc-v05.mjs start`）にも当たらないので数えない。文を作る部分の判定（`fabricates`）は、`awk 'BEGIN{print …}'`のように他のprogramが文を作る形を見ない（楽観側。モデルが自然に書く形ではない）。保存した写しがありうるときの厳しい結び付けは「実行しない」側に偏る。
 - sessionのcwdは`work/.worktrees/<名前>`なので、Claude Codeは祖先の`work/CLAUDE.md`も読む（worktreeの`CLAUDE.md`と同じ文が2回入る。PR #1875のレビューL2）。利用者がworktreeで起動する手順と同じ条件なので変えない。probeの問1（Contextの指示file）の答えには指示fileが2つ挙がりうる。#1840と同じ項目の照合で不合格になれば、その差として読む。
 - 失敗した`cd …&& …`の後の作業directoryは、2つの候補（前の値と`cd`の先）で数える（PR #1857の最後のレビューM-A）。候補が8を超えるか、失敗した呼出しに`cd`が2つ以上あると不明として扱い、従来どおり深い検索は「全てを読んだ」（`unbounded`）になる。判定の前に`forbidReadsOk`の`breakdown.onlyUnbounded`を確かめる。
+- 文を作る部分の判定（`fabricates`）は、保存した写しが無いときにも規則の文より厳しい（実行しない側の食い違い。PR #1875の再レビューL-1）：`printf '\n---\n'; … start .`（`\`）、`echo "cwd: $(pwd)" && … start .`・`echo "$PWD"; … start .`（展開する文）、`printf '%s\n' ok; … start .`（`%`）、`… start . && node -e 'console.log(1)'`は、結果に`start`のJSONがあっても数えない。判定の前に`report.commands`の`outputSchema`と`ok`の差を確かめ、この形で数えなかった呼出しがあれば結果に書く。
+- 試行の前に作ったworktreeが空である（`workChanges`に何も無い）ことを、dry runも試験も確かめていない（PR #1875の再レビューL-2）。`worktree-create`がfileを残せば、試行の書いたfile（`mustWrite`・`docs/`の`require`）に入りうる。v0.5.134の`createWorktree`はHEADの内容だけを書く（再レビューの確認）ので、この版での危険は低い。

@@ -1,0 +1,40 @@
+{
+ "schema": "asc-1866-fixation/v1",
+ "note": "Append-only. run-trial.mjs --run checks the last record. See fixation.mjs for refix.",
+ "records": [
+  {
+   "stage": "#1866 rule read in a worktree made before the trial",
+   "fixedAtCommit": "3b429132a804b2942e9e737c354155bfdc6fb081",
+   "at": "2026-11-28T14:05:23.963Z",
+   "files": {
+    "config/decision-criteria.md": "cca2431607758fc7dfa68f3679617472f2df8553aefe354da3416a1399dfaed7",
+    "config/cases.json": "432441db32c8c6343e20d84abef6232089df863849a9a512163e5f284eebd6cf",
+    "config/conditions.json": "8dc391ed798d08c6749fb0d795b5d6861509ca18d3648b5509c6a48e36c3e83e",
+    "config/release.json": "5a6587462026b7847a33b031bd1ade9c309dd392cf014e289ddefbbd578bcf6b",
+    "config/run-order.json": "b3ec655296686030e415b01a31b57af55b8839239c5f0ba2024b533d77ebf45b",
+    "harness/apply-condition.mjs": "f1b31cc4f18ccd95d8609dd523473069223f74277e3da6f2d487cdb7f0aea07c",
+    "harness/collect.mjs": "3ee8b22e4fb706b077d2d2b3bee6cdc91c343ab2653d7aac6eb75ce68adf2899",
+    "harness/condition-i.mjs": "54f57aa231bf8280c581edd5d5658de8b5828954993b94ec8efbe2e54324050c",
+    "harness/config.mjs": "d49e16711c3faaabc87429d500c687facb54b60f1e9321055575a07df83c78fc",
+    "harness/fixation.mjs": "72dfe04a7924e71793ff0bef25b7ddcdaa4bcb483240568deb10015991724be9",
+    "harness/guard.mjs": "eb533b6e6ce6da772491b8c793939b4fbfd5a77185586ad77866d3e9279a42a6",
+    "harness/install-asc.mjs": "529384b4ad6eb4cff479293b571ea9f37337460eb70e8c1be4c832358ece838b",
+    "harness/judge.mjs": "f4eb31c8f23e43083cb83d959c04191da6af84cb34e9304c4d84e30171094d69",
+    "harness/ledger.mjs": "6ce2d8a4c78765e5e2cff73c08cf69229e90a691d2f7f2bf37950fcfb2bb127d",
+    "harness/make-fixture.mjs": "f16df7c3b094686459b03dac8f6545896ff148a6807503da64522471a550b8da",
+    "harness/markers.mjs": "8b1f696936dc6b6fa48c4d8d81354e4ed8989f01d8abc28adaf984cc11d383db",
+    "harness/order.mjs": "fe5ed220b34532b374ab341b2e7952e176db58da9e82178b809944e0635624b5",
+    "harness/probe-check.mjs": "a46ced8563fb9925cf08d4c2e8e4a4ab66b0993ead983318a2e827cbc7279641",
+    "harness/run-all.mjs": "420b070e8959252e73f2238ea6e7de9d0844e5cca93f79a23d2d0239ed1177d5",
+    "harness/run-trial.mjs": "960b4214d80398d615c51f2a07c92b5defa24654a1f42656ce98cf96e6df3551",
+    "harness/score.mjs": "dd8acdefaf7ea18a2a0048db46201b52c0cf30832058362618f4206d8ff9edeb",
+    "base/decision-criteria.md": "cca2431607758fc7dfa68f3679617472f2df8553aefe354da3416a1399dfaed7",
+    "base/cases.json": "432441db32c8c6343e20d84abef6232089df863849a9a512163e5f284eebd6cf",
+    "base/conditions.json": "b6ee8b94fd6752de730c68c912d337f2893f6229383aaa37e970a9e04f74a4a0",
+    "base/release.json": "4d0966f667a136f8ad284ec70f8a6b4cdfb3412b1582deb04ffb9c2b0ef42bf9",
+    "base/run-order.json": "b3ec655296686030e415b01a31b57af55b8839239c5f0ba2024b533d77ebf45b"
+   },
+   "ledgerId": "226d63c3-4098-4493-82d5-eb31d66b9ef9"
+  }
+ ]
+}
