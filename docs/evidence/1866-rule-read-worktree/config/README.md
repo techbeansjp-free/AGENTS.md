@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。通常のASC実行時に読み込ませない。測定の仕組みは共通のもの（[../../shared-harness/](../../shared-harness/)）を使い、このdirectoryには設定だけを置く。
 
-**状態：固定済み（2026-11-28）。** 最初の固定は`3b429132a804b2942e9e737c354155bfdc6fb081`（[results/fixation.json](results/fixation.json)、台帳`226d63c3`、26 file）。固定の時点のLatestはv0.5.134のまま（`gh release list`、2026-11-28）。ownerの承認は[results/probe-approval.json](results/probe-approval.json)。
+**状態：測定済み（2026-11-28）。** probeは1回目（R-probe-1）で合格し、15試行を行った（置き換え0件）。判定は`below-levels`（`money.md`の読込み0/6、`start`の実行0/12）。結果は[../README.md](../README.md)。 最初の固定は`3b429132a804b2942e9e737c354155bfdc6fb081`（[results/fixation.json](results/fixation.json)、台帳`226d63c3`、26 file）。固定の時点のLatestはv0.5.134のまま（`gh release list`、2026-11-28）。ownerの承認は[results/probe-approval.json](results/probe-approval.json)。
 
 ## 目的
 

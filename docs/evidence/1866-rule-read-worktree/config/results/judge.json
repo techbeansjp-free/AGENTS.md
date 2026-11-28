@@ -1,0 +1,243 @@
+{
+ "conditions": {
+  "R": {
+   "condition": "R",
+   "runs": 15,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 0,
+   "positives": 12,
+   "entryHop": 0,
+   "reach": 12,
+   "bodyRead": 12,
+   "referenceRead": 12,
+   "applied": 0,
+   "misselect": 0,
+   "unselected": 0,
+   "markersWithoutReference": 0,
+   "negatives": 3,
+   "overapplication": 0,
+   "negMarkers": 3,
+   "designWriteBeforeBody": 0,
+   "expectReadsAll": {
+    "n": 6,
+    "ok": 0
+   },
+   "forbidReadsOk": {
+    "n": 9,
+    "ok": 9
+   },
+   "forbidSkillsOk": {
+    "n": 9,
+    "ok": 9
+   },
+   "writeOk": {
+    "n": 12,
+    "ok": 12
+   },
+   "negativeOk": {
+    "n": 3,
+    "ok": 3
+   },
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [],
+   "perCase": {
+    "u-bill-1": "BBB",
+    "u-bill-2": "BBB",
+    "u-users": "BBB",
+    "u-docs": "BBB",
+    "u-neg": "---"
+   },
+   "referenceReads": {
+    "implementation.md": 7
+   },
+   "perTrial": {
+    "ascBytesRead": 30469.6,
+    "inputTokens": 243445.4,
+    "outputTokens": 2676.7,
+    "durationMs": 30426.1,
+    "costUsd": 0.2
+   },
+   "costUsd": 2.2814,
+   "turns": 143,
+   "durationSec": 456
+  }
+ },
+ "completion": {
+  "basis": "complete",
+  "complete": true,
+  "capReached": false,
+  "lateProbes": [],
+  "missingPlanned": 0,
+  "firstMissingPlanned": null,
+  "missingReplacements": [],
+  "spentUsd": 2.5166,
+  "stopLineUsd": 8.42,
+  "perTrialUsd": 0.8
+ },
+ "judgement": {
+  "verdict": "levels",
+  "minProvisional": true,
+  "basis": "complete",
+  "completion": {
+   "basis": "complete",
+   "complete": true,
+   "capReached": false,
+   "lateProbes": [],
+   "missingPlanned": 0,
+   "firstMissingPlanned": null,
+   "missingReplacements": [],
+   "spentUsd": 2.5166,
+   "stopLineUsd": 8.42,
+   "perTrialUsd": 0.8
+  },
+  "perCondition": {
+   "R": {
+    "verdict": "below-levels",
+    "minProvisional": true,
+    "verdictBasis": "provisional mins (conditions.json rule.minProvisional); the owner decides the level",
+    "checks": {
+     "rule-read": {
+      "metric": "expectReadsAll",
+      "cases": [
+       "u-bill-1",
+       "u-bill-2"
+      ],
+      "value": "0/6 >= 5/6",
+      "ok": 0,
+      "n": 6,
+      "pass": false,
+      "label": "固有ルールmoney.mdの読込み（Read、またはBashの読むcommand）"
+     },
+     "start-ran": {
+      "metric": "commandsAll",
+      "cases": [
+       "u-bill-1",
+       "u-bill-2",
+       "u-users",
+       "u-docs"
+      ],
+      "value": "0/12 >= 2/3",
+      "ok": 0,
+      "n": 12,
+      "pass": false,
+      "label": "ASC CLIのstartの実行（成功した結果のあるBash）"
+     },
+     "rule-comply": {
+      "metric": "writeCleanWhenWritten",
+      "cases": [
+       "u-bill-1",
+       "u-bill-2"
+      ],
+      "value": "6/6 >= 1",
+      "ok": 6,
+      "n": 6,
+      "pass": true,
+      "label": "src/billing/の差分に規則の違反（scope code）が無い"
+     },
+     "rule-not-read": {
+      "metric": "forbidReadsOk",
+      "cases": [
+       "u-users",
+       "u-docs",
+       "u-neg"
+      ],
+      "value": "9/9 >= 7/9",
+      "ok": 9,
+      "n": 9,
+      "pass": true,
+      "breakdown": {
+       "strictOk": 9,
+       "onlyUnbounded": 0,
+       "onlyMention": 0,
+       "n": 9
+      },
+      "label": "該当しない変更・依頼でmoney.mdを読まない"
+     }
+    },
+    "reported": {
+     "asc-select": {
+      "metric": "reach",
+      "cases": [
+       "u-bill-1",
+       "u-bill-2",
+       "u-users",
+       "u-docs"
+      ],
+      "value": "12/12 >= 5/6",
+      "ok": 12,
+      "n": 12,
+      "pass": true,
+      "use": "report",
+      "label": "ASCが選ばれる（報告だけ）"
+     },
+     "negative": {
+      "metric": "negativeOk",
+      "cases": [
+       "u-neg"
+      ],
+      "value": "3/3 >= 2/3",
+      "ok": 3,
+      "n": 3,
+      "pass": true,
+      "use": "report",
+      "label": "該当しない依頼（報告だけ）"
+     }
+    }
+   }
+  },
+  "separate": {
+   "change": {
+    "R": {
+     "positives": 12,
+     "bodyRead": 12,
+     "applied": 0,
+     "perCase": {
+      "u-bill-1": "BBB",
+      "u-bill-2": "BBB",
+      "u-users": "BBB",
+      "u-docs": "BBB"
+     },
+     "perTrial": {
+      "ascBytesRead": 38087,
+      "inputTokens": 300146.3,
+      "outputTokens": 3317.2,
+      "durationMs": 37451.7,
+      "costUsd": 0.2
+     },
+     "referenceReads": {
+      "implementation.md": 7
+     }
+    }
+   },
+   "negative": {
+    "R": {
+     "positives": 0,
+     "bodyRead": 0,
+     "applied": 0,
+     "perCase": {
+      "u-neg": "---"
+     },
+     "perTrial": {
+      "ascBytesRead": 0,
+      "inputTokens": 16642,
+      "outputTokens": 115,
+      "durationMs": 2324,
+      "costUsd": 0
+     },
+     "referenceReads": {},
+     "negatives": 3,
+     "overapplication": 0
+    }
+   }
+  },
+  "note": "Fixed levels per condition (release and candidate are reported side by side, not as a candidate test). Few runs per case; the decisions (merge of the candidate PRs, what to fix) are the owner's."
+ },
+ "published": {
+  "trials.json": "2492633cfe957394245d04136de3438873e551b69678450211637eda24dfdc86",
+  "runs.json": "6e65c618da57aa8add5ec1faaaec9feb5bf1c635b76942fac2b6a229860bceae",
+  "ledger.jsonl": "0c26c4155a416a931d80b8309ba07c65db640f8a1c66b9e43c67a307f928369e",
+  "published.json": "1069c08a86d53b9c6046f408a62ad9a8c0381c7a16d10bcfb1186ed317c4ea2d"
+ },
+ "rawRunsSha256": "397091c62b20c72fa0d5e416f7835e969b6d3bb95728fb997ef75e5195a0e4f3"
+}
