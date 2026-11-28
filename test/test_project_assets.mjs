@@ -316,7 +316,7 @@ test('Claude opt-in registers all distributed canonical Skills without copying H
  const preview=projectAssets(f.work,options);
  assert.deepEqual(preview.changes.map(c=>c.path).sort(),claude);assert.equal(preview.applied,false);
  assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
- assert.equal(claude.length,18);
+ assert.equal(claude.length,17);
  for(const relative of claude){
   const file=path.join(f.work,relative),entry=fs.readFileSync(file,'utf8');
   const name=relative.split('/')[2];
@@ -401,7 +401,7 @@ test('CLI accepts independent or combined Host registration and rejects duplicat
 
 test('distribution inventory remains bounded after adding a second Host',t=>{
  const f=fixture(t);
- f.write('.agent-skill-chain/distribution.json',JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:322},(_,i)=>[`entry-${i}`,'a'.repeat(64)]))}));
+ f.write('.agent-skill-chain/distribution.json',JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:314},(_,i)=>[`entry-${i}`,'a'.repeat(64)]))}));
  assert.throws(()=>projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,registerClaudeSkill:true,apply:true}),/Invalid asset inventory/);
  assert.equal(fs.existsSync(path.join(f.work,asset)),false);
 });
@@ -409,8 +409,8 @@ test('distribution inventory remains bounded after adding a second Host',t=>{
 test('the inventory bound includes retained preimages as well as all seventeen registered Skills and optional assets',t=>{
  const f=fixture(t),options={packageRoot:f.pkg,registerSkill:true,registerClaudeSkill:true};
  // The active count follows the package inventory, so a new src/ file needs no change here (#1739); the bound does not.
- const bound=321,active=projectAssets(f.work,options).changes.length,reserve=bound-active;
- assert.ok(active>=313&&reserve>=1,`active ${active} leaves no preimage reserve under ${bound}`);
+ const bound=313,active=projectAssets(f.work,options).changes.length,reserve=bound-active;
+ assert.ok(active>=305&&reserve>=1,`active ${active} leaves no preimage reserve under ${bound}`);
  const record='.agent-skill-chain/distribution.json';
  const retired=count=>JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Array.from({length:count},(_,i)=>[`retired-${i}`,'a'.repeat(64)]))});
  f.write(record,retired(reserve+1));
@@ -546,7 +546,7 @@ test('legacy records upgrade only proven entry ownership and retain each chosen 
   const selected=[...(selection.registerSkill?['.agents']:[]),...(selection.registerClaudeSkill?['.claude']:[])];
   const saved=savedAssets(f.work),preview=projectAssets(f.work,options);assertSaved(f.work,saved);assert.deepEqual(preview.registeredHosts,selected);
   assert.equal(projectAssets(f.work,{...options,apply:true}).applied,true);
-  const record=JSON.parse(fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json')));assert.deepEqual(record.registeredHosts,selected);assert.equal(record.hostEntries.length,selected.length*18);
+  const record=JSON.parse(fs.readFileSync(path.join(f.work,'.agent-skill-chain/distribution.json')));assert.deepEqual(record.registeredHosts,selected);assert.equal(record.hostEntries.length,selected.length*17);
   assert(record.hostEntries.every(name=>!name.includes('/execution-recovery/')));
   assert.equal(projectAssets(f.work,options).recordChanged,false);
  }
