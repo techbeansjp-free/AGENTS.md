@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {summarize, verdictOf, subsetFilter, levelsVerdict} from './score.mjs';
+import {summarize, verdictOf, subsetFilter, levelsVerdict, conditionCountProblems} from './score.mjs';
 import {completionStatus} from './order.mjs';
 import {differences, lastRecord} from './fixation.mjs';
 import {fixationFileProblems} from './run-trial.mjs';
@@ -97,18 +97,28 @@ export function scoringProblems({rows, fx, fxSha, ledgerIdNow, root = configDir(
   return p;
 }
 
-export function judgeRun({spec, runs, ledger, conds = loadConditions()}) {
-  const [b, c] = Object.keys(conds.cells);
+// The judgement of the scored trials with a completion status. #1858: the conditions are those of conditions.json cells
+// (conditionCountProblems: two for a comparison, one or two for rule.mode levels); a single condition is judged from its
+// own trials, without a second, empty condition. With two conditions the result is as before.
+export function judgeScored({spec, runs, completion, conds}) {
+  const count = conditionCountProblems(conds);
+  if (count.length) throw new Error(count.join('; '));
+  const names = Object.keys(conds.cells);
   const rule = conds.rule ?? {};
   const pos = (k) => !rule.positiveKinds || !k.expect || rule.positiveKinds.includes(k.kind);
-  const sums = Object.fromEntries([b, c].map((x) => [x, summarize(spec, runs, x, {only: pos})]));
-  const subsets = Object.fromEntries(Object.entries(conds.subsets ?? {}).map(([name, def]) => [name, [b, c].map((x) => summarize(spec, runs, x, {only: subsetFilter(def)}))]));
-  const perCase = rule.perCaseKinds ? Object.fromEntries(spec.cases.filter((k) => rule.perCaseKinds.includes(k.kind)).map((k) => [k.id, [b, c].map((x) => summarize(spec, runs, x, {only: (q) => q.id === k.id}))])) : null;
-  const eff = rule.efficiency ? (() => { const [eb, ec] = [b, c].map((x) => summarize(spec, runs, x, {only: (k) => rule.efficiency.kinds.includes(k.kind)})); return {b: eb, c: ec, kinds: rule.efficiency.kinds, metrics: rule.efficiency.metrics}; })() : null;
-  const completion = completionStatus({runs, reserved: ledgerOps.reservedNames(ledger), reservations: ledgerOps.reservations(ledger), spentUsd: ledgerOps.spent(ledger), budget: conds.budget});
+  const sums = Object.fromEntries(names.map((x) => [x, summarize(spec, runs, x, {only: pos})]));
+  const subsets = Object.fromEntries(Object.entries(conds.subsets ?? {}).map(([name, def]) => [name, names.map((x) => summarize(spec, runs, x, {only: subsetFilter(def)}))]));
   // #1840: rule.mode levels checks fixed levels in each condition instead of comparing a candidate with a baseline.
   if (rule.mode === 'levels') return {sums, completion, judgement: levelsVerdict(sums, runs, {completion, rule, subsets})};
+  const [b, c] = names;
+  const perCase = rule.perCaseKinds ? Object.fromEntries(spec.cases.filter((k) => rule.perCaseKinds.includes(k.kind)).map((k) => [k.id, [b, c].map((x) => summarize(spec, runs, x, {only: (q) => q.id === k.id}))])) : null;
+  const eff = rule.efficiency ? (() => { const [eb, ec] = [b, c].map((x) => summarize(spec, runs, x, {only: (k) => rule.efficiency.kinds.includes(k.kind)})); return {b: eb, c: ec, kinds: rule.efficiency.kinds, metrics: rule.efficiency.metrics}; })() : null;
   return {sums, completion, judgement: verdictOf(sums[b], sums[c], {completion, subsets, perCase, efficiency: eff, rule})};
+}
+
+export function judgeRun({spec, runs, ledger, conds = loadConditions()}) {
+  const completion = completionStatus({runs, reserved: ledgerOps.reservedNames(ledger), reservations: ledgerOps.reservations(ledger), spentUsd: ledgerOps.spent(ledger), budget: conds.budget});
+  return judgeScored({spec, runs, completion, conds});
 }
 
 function main() {
@@ -127,6 +137,8 @@ function main() {
     reservations: ledgerOps.reservations(path.resolve(ledger)), traceNames: fs.readdirSync(path.resolve(runsRoot)).filter((n) => /^[A-Z]+-.+-\d+$/.test(n) && !ledgerOps.isProbe(n)), settled: ledgerOps.settlements(path.resolve(ledger))});
   problems.push(...pub);
   if (problems.length) { console.error(`refused: ${problems.join('; ')}`); process.exit(3); }
+  const count = conditionCountProblems(loadConditions());
+  if (count.length) { console.error(`refused: ${count.join('; ')}`); process.exit(3); }
   const {sums, completion, judgement} = judgeRun({spec: loadSpec(), runs: built.runs, ledger: path.resolve(ledger)});
   const published = Object.fromEntries(['trials.json', 'runs.json', 'ledger.jsonl', 'published.json'].map((f) => [f, sha(fs.readFileSync(path.join(dir, f)))]));
   const out = {conditions: sums, completion, judgement, published, rawRunsSha256: built.rawRunsSha256};
