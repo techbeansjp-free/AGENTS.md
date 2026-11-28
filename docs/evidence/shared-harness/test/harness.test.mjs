@@ -52,7 +52,7 @@ test('shared harness: no Issue file in the harness directory, Issue files only t
     assert.doesNotMatch(src, /ASC1820S2_ALLOW_PAID/, f);
   }
   for (const f of ['guard', 'ledger', 'install-asc']) assert.ok(fs.readFileSync(path.join(H, `${f}.mjs`)).equals(fs.readFileSync(path.join(S2, 'harness', `${f}.mjs`))), `${f} is the #1820 copy`);
-  const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && f !== 'dry-run.mjs' && f !== 'calibrate.mjs').map((f) => f.replace(/\.mjs$/, '')).sort();
+  const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && f !== 'dry-run.mjs' && f !== 'calibrate.mjs' && f !== 'claude-sandbox-bash.mjs').map((f) => f.replace(/\.mjs$/, '')).sort();
   assert.deepEqual(modules, [...HARNESS_MODULES].sort());
   assert.deepEqual(FIXED.filter((f) => f.startsWith('config/')), cfg.CONFIG_FIXED.map((f) => `config/${f}`));
   assert.equal(cfg.configDir(), EV);
@@ -1146,4 +1146,21 @@ test('#1845 review M1: calibrate.mjs counts requireFiles and applies scope as sc
   assert.deepEqual([unnamed.pass, unnamed.violations, unnamed.scopeNotApplied], [false, ['decimal-literal'], true]);
   const cal = {sources: [{case: 'y', condition: 'skill', path: 'docs/evidence/shared-harness/score.mjs', earlierPass: true, note: 'n'}]};
   assert.match(markdown(calibrate(cal, {cases: [{...c, id: 'y'}]})), /scopeは当てない/);
+});
+
+// #1861: the stand-in for the Messages API that lets claude-sandbox-bash.mjs run Bash in Claude Code's sandbox without a model.
+test('claude-sandbox-bash: each Bash turn gets the next command, other requests a text, and results are read back by id', async () => {
+  const {fakeMessagesApi, stepResults, assistantReply, DUMMY_API_KEY} = await import('../claude-sandbox-bash.mjs');
+  const reply = fakeMessagesApi(['echo one', 'echo two']), bash = {tools: [{name: 'Bash'}]};
+  const first = JSON.parse(reply(bash).text), side = JSON.parse(reply({tools: []}).text), second = JSON.parse(reply(bash).text), last = JSON.parse(reply(bash).text);
+  assert.deepEqual([first.stop_reason, first.content[0].input.command, first.content[0].id], ['tool_use', 'echo one', 'toolu_fake1']);
+  assert.deepEqual([side.stop_reason, side.content[0].text], ['end_turn', 'ok']);
+  assert.equal(second.content[0].input.command, 'echo two');
+  assert.equal(last.stop_reason, 'end_turn');
+  const streamed = assistantReply({stream: true}, [{type: 'tool_use', id: 't', name: 'Bash', input: {command: 'x'}}], 'tool_use');
+  assert.equal(streamed.type, 'text/event-stream');
+  assert.deepEqual(streamed.text.match(/^event: (\S+)$/gm).map((l) => l.slice(7)), ['message_start', 'content_block_start', 'content_block_delta', 'content_block_stop', 'message_delta', 'message_stop']);
+  const stream = [JSON.stringify({type: 'user', message: {content: [{type: 'tool_result', tool_use_id: 'toolu_fake1', content: 'exit=128', is_error: false}]}}), 'not json', ''].join('\n');
+  assert.deepEqual(stepResults(stream).get('toolu_fake1'), {isError: false, content: 'exit=128'});
+  assert.match(DUMMY_API_KEY, /^sk-ant-api03-x+ZZZZmodelfree1861ZZZ$/);
 });

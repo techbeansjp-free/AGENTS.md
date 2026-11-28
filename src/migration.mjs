@@ -195,6 +195,37 @@ function assertGitMetadataWritable(origin){
  let closeError;try{fs.closeSync(fd);}catch(error){closeError=error;}
  try{fs.unlinkSync(probe);}catch(error){throw Object.assign(Error(`Remove the Git metadata write probe left at ${probe} (${error.code})`),{cause:error});}
  if(closeError)throw closeError;
+ return common;
+}
+
+/** Explain a read-only `<git-common-dir>/worktrees` without Git's own words (#1861, #1734). */
+export function gitWorktreesNotWritableMessage(records,code){
+ return `Git worktree records are not writable: ${records} (${code}). worktree-create records the new worktree there; `+
+  'Git would create the branch and then stop, leaving the branch behind. A Host sandbox, file permissions or a read-only mount can cause this. '+
+  'The Bash sandbox of Claude Code keeps .git/worktrees read-only, and sandbox.filesystem.allowWrite does not lift it. '+
+  'The user can run this worktree-create in their own terminal, outside the sandbox, and then start Claude Code in the created worktree '+
+  '(a session started at the repository root cannot commit there). '+
+  'An Agent must not widen its own sandbox or permissions; ask the user to decide. See v05/USAGE.md.';
+}
+
+/**
+ * Fail before any side effect when `<git-common-dir>/worktrees` cannot take a new worktree record. The Bash sandbox
+ * of Claude Code 2.1.323 lets a command write the common directory itself but not this subdirectory; `git worktree add -b`
+ * then creates the branch and fails with exit status 128 (#1861). A missing directory is created and removed again.
+ */
+function assertGitWorktreesWritable(common){
+ const records=path.join(common,'worktrees'),probe=path.join(records,`asc-write-probe-${process.pid}-${randomUUID()}`);
+ const denied=error=>{
+  if(!['EPERM','EACCES','EROFS'].includes(error?.code))throw error;
+  throw Object.assign(Error(gitWorktreesNotWritableMessage(records,error.code)),{cause:error,code:'ASC_GIT_WORKTREES_NOT_WRITABLE'});
+ };
+ let createdRecords=false;
+ try{fs.mkdirSync(records);createdRecords=true;}catch(error){if(error?.code!=='EEXIST')denied(error);}
+ // Another worktree may have been recorded meanwhile; a directory that is no longer empty stays.
+ const removeRecords=()=>{if(createdRecords)try{fs.rmdirSync(records);}catch(error){if(!['ENOTEMPTY','EEXIST','ENOENT'].includes(error?.code))throw error;}};
+ try{fs.mkdirSync(probe);}catch(error){removeRecords();denied(error);}
+ try{fs.rmdirSync(probe);}catch(error){throw Object.assign(Error(`Remove the Git worktree records write probe left at ${probe} (${error.code})`),{cause:error});}
+ removeRecords();
 }
 
 /** Create, never repurpose, an owner-requested linked worktree. No checkout filters. */
@@ -206,7 +237,7 @@ export function createWorktree(source,{issue,slug,type='feature',base='HEAD'}={}
  const origin=fs.realpathSync.native(source);
  demand(gitPath(origin,'rev-parse','--show-toplevel')===origin,'Repository root required');
  const head=git(origin,'rev-parse','--verify',`${base}^{commit}`).toString().trim(),branch=`${type}/${issue}-${slug}`;
- assertGitMetadataWritable(origin);
+ assertGitWorktreesWritable(assertGitMetadataWritable(origin));
  git(origin,'check-ref-format','--branch',branch);
  const refs=git(origin,'for-each-ref','--format=%(refname)',`refs/heads/${branch}`).toString().trim();demand(!refs,'Work branch already exists; choose a distinct slug');
  // Worktree materialization is not an Agent snapshot: validate metadata, then stream
