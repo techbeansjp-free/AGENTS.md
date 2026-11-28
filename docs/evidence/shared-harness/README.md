@@ -182,12 +182,12 @@ Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLev
 
 ### 文ごとの照合（`sentenceWith`・`sentenceUnless`）
 
-減点の目印（`cases.json`の`answerNone`の`{id, pattern}`）と、書いたfileの禁止（`writes.forbid`）の項目に、次の2つのfieldを足せる。どちらかがあると、`pattern`を文ごとに当て、条件を満たす文が1つでもあれば当たったとする（`score.mjs`の`entryMatches`）。どちらも無い項目と文字列だけの項目は、従来どおり全文に当てる。
+減点の目印（`cases.json`の`answerNone`の`{id, pattern}`）と、書いたfileの禁止（`writes.forbid`・`writesReport.forbid`）の項目に、次の2つのfieldを足せる。どちらかがあると、`pattern`を文ごとに当て、条件を満たす文が1つでもあれば当たったとする（`score.mjs`の`entryMatches`）。どちらも無い項目と文字列だけの項目は、従来どおり全文に当てる。
 
-- `sentenceUnless`：同じ文がこの照合にも当たれば、その文を数えない。約束しないと述べた文の中の引用（「今は『無償で直します』とも『有償です』とも答えません。」）を除くのに使う。
+- `sentenceUnless`：`pattern`に当たった箇所を囲む文がこの照合にも当たれば、その箇所を数えない。約束しないと述べた文の中の引用（「今は『無償で直します』とも『有償です』とも答えません。」）を除くのに使う。括弧の中の文章は、その中でさらに文に分ける。囲む文とは、当たった箇所のある括弧の中の文と、その括弧を引用している外側の文である。それぞれの文の、さらに内側の括弧の中は見ない。このため、返信の案（「返信案：「原因はまだお答えしません。無償で直します。」」）では、否定は別の文にあり、約束は数える。
 - `sentenceWith`：同じ文がこの照合にも当たるときだけ数える。経緯の文（「以前はメールアドレスだけだった。」）だけを数え、現在の事実の文（「選択中のタブの入力欄だけを表示する。」）を数えないのに使う。
 
-文は、改行と、括弧（「」『』（））の外の「。」「．」「！」「？」「!」「?」と、後ろが空白か末尾の「.」（英文。`1.1`や`a.ts`では区切らない）で区切る（`sentencesOf`）。括弧は種類を区別せずに深さだけを数える（「…）でも閉じる）。返信の案を括弧で囲んだ文（「『無償で直します』とお返事します。」「「無償で直します。」とお返事します。」）は、引用した文と1つの文になり、`sentenceUnless`に当たらなければ数える。括弧の深さは改行で戻す。`scope: "code"`の項目は、先にコードだけを取り出してから文に分ける。`sentenceWith`・`sentenceUnless`は空でない文字列で、正規表現として作れなければならない（`dry-run.mjs`の`sentenceFields`の検査が拒否する。空の`sentenceUnless`はすべての文に当たり、その項目を黙って無効にするため）。`calibrate.mjs`の雛形の当たり（`templateHits`）も、雛形の行を同じ照合（`entryMatches`）で数える。
+文は、改行と、括弧（「」『』（））の外の「。」「．」「！」「？」「!」「?」と、後ろが空白か末尾の「.」（英文。`1.1`や`a.ts`では区切らない）で区切る（`sentencesOf`）。括弧は種類を区別せずに深さだけを数える（「…）でも閉じる）。返信の案を括弧で囲んだ文（「『無償で直します』とお返事します。」「「無償で直します。」とお返事します。」）は、引用した文と1つの文になり、`sentenceUnless`に当たらなければ数える。括弧の深さは改行で戻す。閉じない括弧は、行の終わりまでを括弧の中として文に分ける。半角の`"`は括弧に数えない（`"…。"`の中でも区切る）。`scope: "code"`の項目は、JavaScript・TypeScriptのfileでは、先にコードだけを取り出し、行ごとに1つの文とする（コードの`!`・`?`・`.`では区切らない。`a !== b`・`a ? b : c`・`a?.b`・`1.1`）。`sentenceWith`・`sentenceUnless`は空でない文字列で、正規表現として作れなければならない（`dry-run.mjs`の`sentenceFields`の検査が拒否する。空の`sentenceUnless`はすべての文に当たり、その項目を黙って無効にするため）。必須の項目（`writes.require`・`writesReport.require`）は全文に当てるので、このfieldを書くと同じ検査が拒否する。`calibrate.mjs`の雛形の当たり（`templateHits`）も、雛形の行を同じ照合（`entryMatches`）で数える。
 
 書き方の例（#1846・#1843の設定は書き換えない。次の設定で使う）：
 
@@ -198,7 +198,7 @@ Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLev
  "sentenceWith": "以前|変更前|これまで|だった|でした|していた|から変更|に変更"}
 ```
 
-限界：除くか数えるかは文の単位で決まる。`sentenceUnless`は文のどこに当たっても（括弧の中の引用でも）その文を除く。たとえば「『お答えしません』とは言わず、無償で直します。」も除く。1つの文で、ある約束を引用して否定しながら別の約束をする（「『有償です』とは言いませんが、無償で直します。」）と、`sentenceUnless`はその文ごと除く（数え漏れの方向）。`sentenceUnless`は否定の言い方に絞り、測定の前に、その設定の想定する回答の例で試験する。上の例の`sentenceWith`の`だった|でした`も、現在の仕様の文（「入力欄だけが空だった場合はエラーを表示する。」）に当たる。`sentenceWith`も、想定する回答の例（経緯の文と現在の事実の文の両方）で試してから使う。
+限界：除くか数えるかは文の単位で決まる。`sentenceUnless`は、囲む文のどこに当たっても、その中の箇所を除く。1つの文で、ある約束を引用して否定しながら別の約束をする（「『有償です』とは言いませんが、無償で直します。」）と、`sentenceUnless`はその文ごと除く（数え漏れの方向）。`sentenceUnless`は否定の言い方に絞り、測定の前に、その設定の想定する回答の例で試験する。上の例の`sentenceWith`の`だった|でした`も、現在の仕様の文（「入力欄だけが空だった場合はエラーを表示する。」）に当たる。`sentenceWith`も、想定する回答の例（経緯の文と現在の事実の文の両方）で試してから使う。
 
 ### 条件が1つの設定
 
@@ -206,13 +206,13 @@ Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLev
 
 - `judge.mjs`の`judgeScored`（`judgeRun`から呼ぶ）は、`conditions.json`の`cells`の条件だけを使う。条件が1つなら、存在しない2つ目の条件を作らず、全体の判定（`verdict`が`levels`か`not-judged`）と`perCondition`は、その条件の試行だけから出す。判定しない理由（`reason`）は、その条件の理由を1回ずつ示す（`verdictOf`は同じ理由を重ねない）。`subsets`がある設定では、各subsetの`separate`はその条件の集計だけを示し、比べる検査（`checks`）を作らない。
 - 候補と基準を比べる規則（`rule.mode`の無い設定）は、条件がちょうど2つでないと判定できない。`levels`も、条件が0か3つ以上なら判定しない。`score.mjs`の`conditionCountProblems`がこれを示し、`dry-run.mjs`は`conditionCount`の検査で、`judge.mjs`は判定の前に、理由を示して拒否する。
-- 条件が2つの設定の判定は変わらない（試験で、`levelsVerdict`・`verdictOf`を直接呼んだ結果と一致することと、#1840・#1843の公開した`runs.json`と`judge.json`の`completion`から作り直した判定が、公開した`judge.json`と一致することを確かめる）。
+- 条件が2つの設定の判定は変わらない（試験で、`levelsVerdict`・`verdictOf`を直接呼んだ結果と一致することと、#1823（比べる規則）・#1840・#1843（`levels`）の公開した`runs.json`と`judge.json`の`completion`から作り直した判定が、公開した`judge.json`と一致することを確かめる）。
 
 ### 既存の記録への影響（2026-11-28に確かめた）
 
 - #1840・#1843・#1846の設定と記録（`cases.json`・`conditions.json`・`judge.json`・`runs.json`等）は変えていない。#1846の結果は再判定しない。
 - 各`results/fixation.json`の最後の`fixedAtCommit`の共通の仕組み（#1840は`93b200e8`、#1843は`9d6e55f5`、#1846は`3e358c13`。`git archive`で取り出したもの）で`fixation.mjs check`を行い、3つとも`ok`（差なし）だった。この変更の共通の仕組みで行うと、moduleの差（`collect`・`judge`・`make-fixture`・`order`・`probe-check`・`run-trial`・`score`）を示す。測定の後の変更であり、上の#1845と同じ扱いである。
-- 条件が2つの#1840・#1843は、公開した`runs.json`と`judge.json`の`completion`から、この変更の`judgeScored`で作り直した判定と条件の集計が、公開した`judge.json`と一致した（`test/harness.test.mjs`の試験で再確認できる）。
+- 条件が2つの#1823・#1840・#1843は、公開した`runs.json`と`judge.json`の`completion`から、この変更の`judgeScored`で作り直した判定と条件の集計が、公開した`judge.json`と一致した（`test/harness.test.mjs`の試験で再確認できる）。
 
 ## #1861で加えたもの（2026-11-28）
 

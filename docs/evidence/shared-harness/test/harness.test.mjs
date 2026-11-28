@@ -1998,7 +1998,7 @@ test('#1858 review L1/L4: sentence ends (．!? and an English "." before a space
   assert.deepEqual(sentencesOf('「閉じる）ここで。次。'), ['「閉じる）ここで。', '次。'], 'mixed kinds: the depth only');
   const k = {answerNone: [{id: 'free', pattern: FREE, sentenceUnless: NEGATED}]};
   assert.deepEqual(markerDeductionsOf(k, '原因は申し上げません!無償で直します!'), ['free'], 'the half-width ! ends the withholding sentence');
-  assert.deepEqual(markerDeductionsOf(k, '『お答えしません』とは言わず、無償で直します。'), [], 'known limit (README): sentenceUnless inside a quote leaves the sentence out');
+  assert.deepEqual(markerDeductionsOf(k, '『お答えしません』とは言わず、無償で直します。'), ['free'], 're-review M-1: a negation only inside a quote does not leave out the promise outside it');
 });
 
 test('#1858 review L2: sentenceWith / sentenceUnless must be non-empty regular expressions; dry-run checks them; the existing configs pass', () => {
@@ -2043,8 +2043,10 @@ test('#1858 review M1: one condition with subsets is judged (each subset reports
   assert.deepEqual(Object.keys(none.judgement.separate.change), ['C']);
 });
 
-test('#1858 review L4: the published two-condition judgements of #1840 and #1843 are reproduced from their runs.json', () => {
-  for (const dir of [path.join(EVROOT, '1840-user-environment/config'), C1843]) {
+test('#1858 review L4 / re-review L-3: the published two-condition judgements of #1823 (comparison), #1840 and #1843 (levels) are reproduced from their runs.json', () => {
+  assert.equal(JSON.parse(read('conditions.json', C1823)).rule.mode, undefined, '#1823 is a comparison (no rule.mode)');
+  assert.equal(JSON.parse(read('results/judge.json', C1823)).judgement.verdict, 'not-a-candidate');
+  for (const dir of [C1823, path.join(EVROOT, '1840-user-environment/config'), C1843]) {
     const rd = (f) => JSON.parse(read(f, dir));
     const j = rd('results/judge.json');
     const r = judgeScored({spec: rd('cases.json'), runs: rd('results/runs.json'), completion: j.completion, conds: rd('conditions.json')});
@@ -2052,4 +2054,33 @@ test('#1858 review L4: the published two-condition judgements of #1840 and #1843
     assert.deepEqual(r.sums, j.conditions, dir);
     assert.deepEqual(r.judgement, j.judgement, dir);
   }
+});
+
+test('#1858 re-review M-1: in a quote of several sentences, a negation in one sentence does not leave out a promise in another', () => {
+  const k = {answerNone: [{id: 'free', pattern: FREE, sentenceUnless: NEGATED}]};
+  const counted = (t) => markerDeductionsOf(k, t);
+  for (const t of ['返信案：「原因はまだお答えしません。無償で直します。」', '返信案：「原因はまだお答えしません！無償で直します！」', '「今は答えません。無償で直します。',
+    '返信案：「原因は申し上げません。『無償修補の対象です』とお伝えください。」', '返信案：（原因はお答えしません。無償で対応いたします。）']) assert.deepEqual(counted(t), ['free'], t);
+  // The negation of the sentence that holds the quote, or of the innermost sentence around the promise, still leaves it out.
+  for (const t of [NOT_PROMISED, '今は「無償で直します。」とはお約束しません。', '返信案：「『無償で直します』とはお約束しません。原因を調べます。」',
+    '返信案：「無償で直しますとはお答えしません。」', '「原因を調べます。」と書き、『無償で直します』とは申し上げません。']) assert.deepEqual(counted(t), [], t);
+  assert.deepEqual(markerDeductionsOf(k, '『有償です』とは言いませんが、無償で直します。'), [], 'known limit (README): one sentence that withholds and promises is left out');
+});
+
+test('#1858 re-review L-1: scope "code" on a code file takes each line as one sentence (!, ?, . do not split the code)', () => {
+  const dec = {forbid: [{id: 'decimal', pattern: '\\d\\.\\d', scope: 'code', sentenceUnless: 'BigInt'}]};
+  const v = (src, file = 'a.ts') => writeChecks(dec, [file], () => src).writeViolations;
+  assert.deepEqual(v('const x = price * 1.1 !== BigInt(y);\n'), []);
+  assert.deepEqual(v('const x = a ? 1.1 : BigInt(b);\n'), []);
+  assert.deepEqual(v('const x = a?.b ?? BigInt(1.1);\n'), []);
+  assert.deepEqual(v('const x = BigInt(a);\nconst y = 1.1;\n'), ['decimal'], 'another line is another sentence');
+  assert.deepEqual(v('rate 1.1 is fixed! BigInt is not used.', 'a.md'), ['decimal'], 'not a code file: the sentences of the text');
+});
+
+test('#1858 re-review L-2: the sentence fields are checked in writesReport.forbid and refused in require entries', () => {
+  assert.match(sentenceFieldProblems({cases: [{id: 's', writesReport: {forbid: [{id: 'f', pattern: 'x', sentenceUnless: ''}]}}]})[0], /^s f: sentenceUnless must be a non-empty string/);
+  assert.deepEqual(sentenceFieldProblems({cases: [{id: 's', writesReport: {forbid: [{id: 'f', pattern: 'x', sentenceUnless: 'ません'}]}}]}), []);
+  assert.match(sentenceFieldProblems({cases: [{id: 's', writes: {require: [{id: 'r', pattern: 'x', sentenceWith: '以前'}]}}]})[0], /^s r: sentenceWith is not used in a require entry/);
+  assert.match(sentenceFieldProblems({cases: [{id: 's', writesReport: {require: [{id: 'r', pattern: 'x', sentenceUnless: 'ません'}]}}]})[0], /^s r: sentenceUnless is not used in a require entry/);
+  assert.deepEqual(writeChecks({forbid: [{id: 'f', pattern: '無償', sentenceUnless: NEGATED}]}, ['CHANGELOG.md'], () => '無償とは言いません。').writeViolations, [], 'writesReport uses the same writeChecks');
 });

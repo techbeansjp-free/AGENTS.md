@@ -90,34 +90,93 @@ export function sentencesOf(text) {
   out.push(cur);
   return out.map((x) => x.trim()).filter(Boolean);
 }
-// #1858 review L2: the sentence fields of the deduction entries (answerNone, writes.forbid) of cases.json. Each one that is
-// present must be a non-empty string that compiles as a regular expression: an empty sentenceUnless matches every sentence
-// and would silently switch the entry off. dry-run.mjs refuses a config with a problem (sentenceFields).
+// #1858 re-review M-1: the units of one sentence (of sentencesOf). The text inside each bracket is split again into its
+// own sentences, at the same ends (。．！？!? and an English "."), so a quoted reply of several sentences
+// (返信案：「原因はまだお答えしません。無償で直します。」) has one unit per sentence. Each character belongs to the
+// innermost unit that holds it (a bracket character to the unit outside it); a unit's own text is its characters without
+// the brackets nested in it. An unclosed bracket runs to the end of the sentence.
+function unitsOf(sentence) {
+  const chars = [...sentence];
+  const units = [{parent: -1, own: ''}], chainOf = [];
+  const stack = [0];
+  const cur = () => stack[stack.length - 1];
+  for (const [i, ch] of chars.entries()) {
+    if (OPEN_BRACKETS.includes(ch)) {
+      units[cur()].own += ch; chainOf.push(chainTo(units, cur()));
+      units.push({parent: cur(), own: ''}); stack.push(units.length - 1); continue;
+    }
+    if (CLOSE_BRACKETS.includes(ch) && stack.length > 1) {
+      stack.pop(); units[cur()].own += ch; chainOf.push(chainTo(units, cur())); continue;
+    }
+    units[cur()].own += ch; chainOf.push(chainTo(units, cur()));
+    if (stack.length > 1 && (SENTENCE_ENDS.includes(ch) || (ch === '.' && (i + 1 === chars.length || /[\s」』）]/.test(chars[i + 1]))))) {
+      // the next sentence inside the same bracket: a sibling unit with the same parent
+      units.push({parent: units[cur()].parent, own: ''}); stack[stack.length - 1] = units.length - 1;
+    }
+  }
+  return {chars, units, chainOf};
+}
+const chainTo = (units, u) => { const c = []; for (let x = u; x !== -1; x = units[x].parent) c.unshift(x); return c; };
+// #1858 re-review M-1: whether a sentence has a match of re that sentenceUnless (u) does not leave out. A match is left
+// out when u matches the own text of a unit that holds it: the innermost sentence around the match, or a sentence that
+// quotes it (今は『無償で直します』とも答えません。). A negation in another sentence of the same quote
+// (「原因はまだお答えしません。無償で直します。」) does not leave the promise out.
+function sentenceHasMatch(re, u, sentence) {
+  if (!u) return re.test(sentence);
+  const {chars, units, chainOf} = unitsOf(sentence);
+  const offsets = []; let n = 0;
+  for (const ch of chars) { offsets.push(n); n += ch.length; }
+  const g = new RegExp(re.source, 'gi');
+  for (const m of sentence.matchAll(g)) {
+    const first = offsets.findIndex((o) => o >= m.index);
+    let last = offsets.findIndex((o) => o >= m.index + m[0].length) - 1;
+    if (last < 0) last = chars.length - 1;
+    if (last < first) last = first;
+    let chain = chainOf[first];
+    for (let i = first + 1; i <= last; i++) { let k = 0; while (k < chain.length && chain[k] === chainOf[i][k]) k++; chain = chain.slice(0, k); }
+    if (!chain.some((x) => u.test(units[x].own))) return true;
+  }
+  return false;
+}
+// #1858 review L2 / re-review L-2: the sentence fields are matched in answerNone, writes.forbid and writesReport.forbid
+// (entryMatches). Each one that is present must be a non-empty string that compiles as a regular expression: an empty
+// sentenceUnless matches every sentence and would silently switch the entry off. A require entry (writes.require,
+// writesReport.require) must not have them: it is matched on the whole text, and the field would be silently ignored.
+// dry-run.mjs refuses a config with a problem (sentenceFields).
+const SENTENCE_FIELDS = ['sentenceWith', 'sentenceUnless'];
 export function sentenceFieldProblems(spec) {
   const p = [];
+  const label = (k, e) => `${k.id} ${e.id ?? e.pattern}`;
   for (const k of spec.cases ?? []) {
-    for (const e of [...(k.answerNone ?? []), ...(k.writes?.forbid ?? [])]) {
+    for (const e of [...(k.answerNone ?? []), ...(k.writes?.forbid ?? []), ...(k.writesReport?.forbid ?? [])]) {
       if (typeof e !== 'object' || e === null) continue;
-      for (const f of ['sentenceWith', 'sentenceUnless']) {
+      for (const f of SENTENCE_FIELDS) {
         if (!(f in e)) continue;
         const v = e[f];
-        if (typeof v !== 'string' || v === '') { p.push(`${k.id} ${e.id ?? e.pattern}: ${f} must be a non-empty string`); continue; }
-        try { new RegExp(v, 'i'); } catch (err) { p.push(`${k.id} ${e.id ?? e.pattern}: ${f} is not a regular expression (${err.message})`); }
+        if (typeof v !== 'string' || v === '') { p.push(`${label(k, e)}: ${f} must be a non-empty string`); continue; }
+        try { new RegExp(v, 'i'); } catch (err) { p.push(`${label(k, e)}: ${f} is not a regular expression (${err.message})`); }
       }
+    }
+    for (const e of [...(k.writes?.require ?? []), ...(k.writesReport?.require ?? [])]) {
+      if (typeof e !== 'object' || e === null) continue;
+      for (const f of SENTENCE_FIELDS) if (f in e) p.push(`${label(k, e)}: ${f} is not used in a require entry (only in answerNone and forbid)`);
     }
   }
   return p;
 }
-// #1858: whether a deduction entry (answerNone, writes.forbid) matches a text. An entry without sentenceWith and
-// sentenceUnless (every config before #1858) matches the whole text, as before. With them, the pattern counts only in a
-// sentence (sentencesOf) that also matches sentenceWith and does not match sentenceUnless: e.g. a promise quoted in a
-// sentence that says it is not given (今は『無償で直します』とも『有償です』とも答えません。) is left out by sentenceUnless,
-// and a history marker counts only in a sentence about the earlier state (以前は…だった) with sentenceWith.
-export function entryMatches(e, text) {
+// #1858: whether a deduction entry (answerNone, writes.forbid, writesReport.forbid) matches a text. An entry without
+// sentenceWith and sentenceUnless (every config before #1858) matches the whole text, as before. With them, the pattern
+// counts only in a sentence (sentencesOf) that also matches sentenceWith, and only where sentenceUnless does not leave
+// the match out (sentenceHasMatch): e.g. a promise quoted in a sentence that says it is not given
+// (今は『無償で直します』とも『有償です』とも答えません。) is left out by sentenceUnless, and a history marker counts only in
+// a sentence about the earlier state (以前は…だった) with sentenceWith. {lines: true} (scope "code" on a code file,
+// writeChecks) takes each line as one sentence: in code, 。!?. do not end a sentence (a !== b, a ? b : c, a?.b, 1.1).
+export function entryMatches(e, text, {lines = false} = {}) {
   const re = new RegExp(patternOf(e), 'i');
   if (typeof e === 'string' || (e.sentenceWith == null && e.sentenceUnless == null)) return re.test(text);
   const w = e.sentenceWith == null ? null : new RegExp(e.sentenceWith, 'i'), u = e.sentenceUnless == null ? null : new RegExp(e.sentenceUnless, 'i');
-  return sentencesOf(text).some((x) => re.test(x) && (!w || w.test(x)) && !(u && u.test(x)));
+  const parts = lines ? String(text).split('\n').map((x) => x.trim()).filter(Boolean) : sentencesOf(text);
+  return parts.some((x) => re.test(x) && (!w || w.test(x)) && (lines ? !(u && u.test(x)) : sentenceHasMatch(re, u, x)));
 }
 // #1840: the deductions (answerNone: a pattern or {id, pattern, sentenceWith?, sentenceUnless?}) found in a text, by id (or pattern).
 export const markerDeductionsOf = (k, text) => (k.answerNone ?? []).filter((g) => entryMatches(g, text)).map((g) => (typeof g === 'string' ? g : g.id));
@@ -215,7 +274,8 @@ export function codeText(src) {
 }
 // The text a forbid entry is matched on: scope "code" takes the code of a JavaScript/TypeScript file (codeText); other
 // files and entries without scope see the whole text (as before #1845).
-const forbidTextOf = (e, rel, text) => (e.scope === 'code' && CODE_FILE.test(String(rel ?? '')) ? codeText(text) : text);
+const isCodeEntry = (e, rel) => e.scope === 'code' && CODE_FILE.test(String(rel ?? ''));
+const forbidTextOf = (e, rel, text) => (isCodeEntry(e, rel) ? codeText(text) : text);
 
 // #1840: the checks of a writes definition on the texts of the files under its pathPattern. Each require/forbid entry
 // {id, pattern, group?, viewpoint?}: the groups name what failed (e.g. facts, history, status) for the separate report.
@@ -230,7 +290,7 @@ export function writeChecks(w, files, fileText, {base = null} = {}) {
   const all = texts.filter((x) => typeof x === 'string').map((x) => (w.requireWithoutBase ? withoutBaseLines(x, base) : x)).join('\n');
   const out = {written: files, writeMissingText: texts.some((x) => typeof x !== 'string'),
     writeRequireMissing: (w.require ?? []).filter((e) => !new RegExp(e.pattern, 'i').test(all)).map((e) => e.id),
-    writeViolations: (w.forbid ?? []).filter((e) => texts.some((x, i) => typeof x === 'string' && entryMatches(e, forbidTextOf(e, files[i], x)))).map((e) => e.id)};
+    writeViolations: (w.forbid ?? []).filter((e) => texts.some((x, i) => typeof x === 'string' && entryMatches(e, forbidTextOf(e, files[i], x), {lines: isCodeEntry(e, files[i])}))).map((e) => e.id)};
   if (w.requireFiles) out.writeFilesMissing = w.requireFiles.filter((e) => !files.some((f) => new RegExp(e.pattern).test(f))).map((e) => e.id);
   const entries = [...(w.require ?? []), ...(w.forbid ?? []), ...(w.requireFiles ?? [])];
   if (entries.some((e) => e.group)) {
