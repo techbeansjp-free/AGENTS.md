@@ -83,6 +83,10 @@ fixtureは#1840のSP（会員サイト、既存のFN-003・SCR-005）とEC1（EC
 - `results/fixation.json`の最初の記録のcommitは`9d6e55f532956f220437cca1e7a6a53ac6af5a58`。台帳idは`a9b568f0-830e-4190-a9a2-6f59d5f2d3d0`、台帳は`<scratch>/rel1843/ledger/ledger-1843.jsonl`（新しい台帳、予約0件）。`run-trial.mjs`はこの記載を照合する。
 - 固定の記録は、この設定の5fileと共通の仕組みのmodule 16件のsha256を持つ。測定の終わりまで、設定と共通の仕組みを変えない。
 
+## 測定の経過（2026-11-28）
+
+- 固定（`9d6e55f5`）、fixture（B・C×SP・EC1）、probe B・C各1回（すべての項目が合格、再実行なし、目印fileは消した）、計画の36試行（失敗0件）、必須の置き換え（0件）、`fixation.mjs check`（差なし）、`collect.mjs`、`judge.mjs`の順に行った。台帳の合計2.87 USD。結果は[../README.md](../README.md)。
+
 ## 手順（統括が行う）
 
 #1840の[README](../../1840-user-environment/config/README.md)の「手順」と同じ。`EV=docs/evidence/1843-spec-rule-path/config`、条件は`R`・`C`ではなく`B`・`C`、fixtureは`SP`・`EC1`、probeのfixtureは`SP`。
