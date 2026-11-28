@@ -52,7 +52,7 @@ test('shared harness: no Issue file in the harness directory, Issue files only t
     assert.doesNotMatch(src, /ASC1820S2_ALLOW_PAID/, f);
   }
   for (const f of ['guard', 'ledger', 'install-asc']) assert.ok(fs.readFileSync(path.join(H, `${f}.mjs`)).equals(fs.readFileSync(path.join(S2, 'harness', `${f}.mjs`))), `${f} is the #1820 copy`);
-  const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && f !== 'dry-run.mjs' && f !== 'calibrate.mjs').map((f) => f.replace(/\.mjs$/, '')).sort();
+  const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && f !== 'dry-run.mjs' && f !== 'calibrate.mjs' && f !== 'sandbox-check.mjs').map((f) => f.replace(/\.mjs$/, '')).sort();
   assert.deepEqual(modules, [...HARNESS_MODULES].sort());
   assert.deepEqual(FIXED.filter((f) => f.startsWith('config/')), cfg.CONFIG_FIXED.map((f) => `config/${f}`));
   assert.equal(cfg.configDir(), EV);
@@ -130,7 +130,8 @@ test('launch: level W flags for every trial; no --max-turns on fixture A, 3 on t
   const s = isolationSettings({work: '/t/r/S-d-ui03-1/work', runsRoot: '/t/r', fixture: '/t/f/fixture-S-D3', ledger: '/t/l/ledger.jsonl'});
   assert.deepEqual(s.sandbox.filesystem, {denyRead: ['/Users', '/t/r', '/t/f/fixture-S-D3', '/t/l'], allowRead: ['/t/r/S-d-ui03-1/work'], denyWrite: ['/t/f/fixture-S-D3', '/t/l']});
   assert.equal(probeSteps('W', {homeMarker: '/h', repoMarker: '/r/x', sentinels: {trial: '/t', repo: '/r/y'}}).length, CONDS.probeSteps.W);
-  assert.throws(() => probeSteps('X', {}), /only tools level W/);
+  assert.throws(() => probeSteps('Y', {}), /only tools levels W and X/);
+  assert.throws(() => probeSteps('X', {}), /needs the probe context of a confined level/, '#1844: level X only with the confined layout');
 });
 
 test('run order: 136 planned trials, reps outermost, B then S, design and negative cases interleaved; counterexamples refused', () => {
@@ -152,6 +153,11 @@ test('run order: 136 planned trials, reps outermost, B then S, design and negati
   assert.equal(probeRefusal({condition: 'S', rep: '1', reserved: none}), null);
   assert.match(probeRefusal({condition: 'W', rep: '1', reserved: none}), /not a probe cell/);
   assert.match(probeRefusal({condition: 'B', rep: '2', reserved: none}), /needs B-probe-1 first/);
+  // #1844 probe 1: a probe of conditions.json priorProbes (run under the prior ledger) counts as reserved: rep 2 is the one re-run.
+  const pc = {...loadConditions(), priorProbes: ['B-probe-1']};
+  assert.equal(probeRefusal({condition: 'B', rep: '2', reserved: none, conds: pc}), null);
+  assert.match(probeRefusal({condition: 'B', rep: '1', reserved: none, conds: pc}), /ran under the prior ledger/);
+  assert.match(probeRefusal({condition: 'B', rep: '3', reserved: none, conds: pc}), /rep must be 1, or 2/);
   assert.match(probeRefusal({condition: 'B', rep: '1', reserved: new Set(['B-asc-1-1'])}), /measurement has started/);
 });
 
@@ -162,10 +168,10 @@ function trace({messages, tools = W.tools.split(','), mode = 'acceptEdits', subt
   const lines = [ev({type: 'system', subtype: 'init', cwd, tools, permissionMode: mode, mcp_servers: mcp, model: 'm'})];
   messages.forEach((uses, mi) => {
     const id = `msg${mi}`;
-    for (const [name, input, err] of uses) {
+    for (const [name, input, err, content] of uses) {
       const tid = `t${++n}`;
       lines.push(ev({type: 'assistant', message: {id, content: [{type: 'tool_use', id: tid, name, input}]}}));
-      if (err !== 'missing') lines.push(ev({type: 'user', message: {content: [{type: 'tool_result', tool_use_id: tid, is_error: Boolean(err), content: err ? 'denied' : 'x'}]}}));
+      if (err !== 'missing') lines.push(ev({type: 'user', message: {content: [{type: 'tool_result', tool_use_id: tid, is_error: Boolean(err), content: content ?? (err ? 'denied' : 'x')}]}}));
     }
     if (!uses.length) lines.push(ev({type: 'assistant', message: {id, content: [{type: 'text', text}]}}));
   });
@@ -888,7 +894,8 @@ test('#1840 written-file digests (M2): run-trial records the changed files; coll
   assert.match(workFilesProblem(dir), /extra\.md/);
   fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({}));
   assert.equal(workFilesProblem(dir), null, 'a meta.json without workFiles (earlier configs) is not checked');
-  assert.match(fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8'), /meta\.workFiles = workChanges\(work\)/);
+  assert.match(fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8'), /meta\.workFiles = workChanges\(work, meta\.workFilesOptions\)/);
+  assert.deepEqual(workChanges(work, undefined), workChanges(work), '#1844: without options (level W, no workFilesOptions) as before');
 });
 
 test('#1840 probe on the user\'s fixture (M3): only ascSkills count as ASC entries; the user\'s Skills must be listed and quoted', (t) => {
@@ -1146,4 +1153,698 @@ test('#1845 review M1: calibrate.mjs counts requireFiles and applies scope as sc
   assert.deepEqual([unnamed.pass, unnamed.violations, unnamed.scopeNotApplied], [false, ['decimal-literal'], true]);
   const cal = {sources: [{case: 'y', condition: 'skill', path: 'docs/evidence/shared-harness/score.mjs', earlierPass: true, note: 'n'}]};
   assert.match(markdown(calibrate(cal, {cases: [{...c, id: 'y'}]})), /scopeは当てない/);
+});
+
+// #1844: a tools level with Bash in the confined sandbox layout, and the rule read with Bash (config 1844-rule-read-bash).
+const C44DIR = path.join(EVROOT, '1844-rule-read-bash/config');
+const C44 = JSON.parse(read('conditions.json', C44DIR));
+const SPEC44 = JSON.parse(read('cases.json', C44DIR));
+const k44 = (id) => SPEC44.cases.find((c) => c.id === id);
+const X44 = C44.toolLevels.X;
+const {confinedSettings, probeContext, bashProbeSteps, probePrompt, trialEnv, TRIAL_RECORD_FILES, PROBE_SIBLING, credentialLeakOf, credentialCheckOf, removeCredentialCopies, LINK_FILE, probeEndStateOf, shq} = await import('../run-trial.mjs');
+const {bashReadsOf, bashReadPaths, bashScan, bashTraceReads, projectFilesOf, globRegExp, okCommands, commandRan, LEVEL_METRICS} = await import('../score.mjs');
+const {unreachedChanges} = await import('../make-fixture.mjs');
+const {collectTrial} = await import('../collect.mjs');
+
+test('#1844 confined settings: no allowRead, work/ and tmp/ under no denied path; level W settings unchanged', (t) => {
+  // PR #1857 review: one level more, so that d0 (the grandparent of the runs root) is at depth 3 or more also when
+  // os.tmpdir() is /tmp (confinedSettings lists no directory above depth 3).
+  const d1 = fs.realpathSync(tmp(t)), d0 = path.join(d1, 'g'), d = path.join(d0, 'root');
+  const runs = path.join(d, 'runs'), work = path.join(runs, 'R-u-bill-1-1', 'work');
+  fs.mkdirSync(work, {recursive: true}); fs.mkdirSync(path.join(runs, 'R-probe-1')); fs.writeFileSync(path.join(runs, 'probe-compare.json'), '{}');
+  // review L1: the entries beside the runs root and beside its parent (another Issue's directory) are denied too.
+  fs.mkdirSync(path.join(d, 'tmp')); fs.writeFileSync(path.join(d, 'probe-R.json'), '{}'); fs.mkdirSync(path.join(d0, 'asc-eval-other'));
+  const around = [path.join(d, 'probe-R.json'), path.join(d, 'tmp'), path.join(d0, 'asc-eval-other')];
+  const args = {work, runsRoot: runs, fixture: path.join(d, 'fixtures/R-U'), ledger: path.join(d, 'ledger/ledger.jsonl')};
+  const sb = {layout: 'confined', denyReadRoots: ['/nowhere-a'], copyNode: true, pathDirs: ['/usr/bin', '/bin']};
+  const s = isolationSettings(args, {...X44, sandbox: sb});
+  const fsr = s.sandbox.filesystem, trial = path.dirname(work);
+  assert.ok(!('allowRead' in fsr), 'no allowRead (#1820 stage 1: a --settings allowRead does not re-open a --settings denyRead)');
+  assert.deepEqual(fsr.denyRead, ['/Users', '/nowhere-a', args.fixture, path.join(d, 'ledger'), path.join(runs, 'R-probe-1'), path.join(runs, 'probe-compare.json'), ...TRIAL_RECORD_FILES.map((f) => path.join(trial, f)), ...around]);
+  // review M-a: /Users and the denyReadRoots are denied for writes too.
+  assert.deepEqual(fsr.denyWrite, ['/Users', '/nowhere-a', args.fixture, path.join(d, 'ledger'), path.join(runs, 'R-probe-1'), path.join(runs, 'probe-compare.json'), ...TRIAL_RECORD_FILES.map((f) => path.join(trial, f)), ...['home', 'config', 'bin'].map((f) => path.join(trial, f)), ...around]);
+  fs.mkdirSync(path.join(d, 'ledger')); fs.mkdirSync(path.join(d, 'fixtures'));
+  const again = isolationSettings(args, {...X44, sandbox: sb}).sandbox.filesystem.denyRead;
+  assert.equal(again.filter((p) => p === path.join(d, 'ledger')).length, 1, 'an entry denied twice is listed once');
+  assert.ok(again.includes(path.join(d, 'fixtures')));
+  assert.equal(s.sandbox.allowUnsandboxedCommands, false);
+  assert.deepEqual(s.sandbox.network, {allowedDomains: []});
+  assert.throws(() => confinedSettings(args, {...sb, denyReadRoots: [d]}), /outside every denied path/, 'a runs root under a denied root is refused');
+  assert.throws(() => confinedSettings({...args, ledger: path.join(trial, 'l.jsonl')}, sb), /outside every denied path/, 'a ledger directory that is the trial directory is refused');
+  assert.throws(() => confinedSettings({...args, work: path.join(d, 'w')}, sb), /<runs-root>\/<trial>\/work/);
+  assert.deepEqual(isolationSettings(args, W), isolationSettings(args), 'level W (no sandbox field): the stage-1 settings as before');
+  assert.deepEqual(isolationSettings(args).sandbox.filesystem.allowRead, [work]);
+  assert.deepEqual(trialEnv('/r/T', sb), {PATH: '/r/T/bin:/usr/bin:/bin', CLAUDE_CODE_TMPDIR: '/r/T/tmp'});
+  assert.equal(trialEnv('/r/T', {layout: 'confined'}).PATH, '/usr/bin:/bin:/usr/sbin:/sbin');
+});
+
+test('#1844 probe of level X: the W steps and the Bash steps of the confined layout; level W context unchanged', async () => {
+  const base = {dir: '/r/runs/R-probe-1', runsRoot: '/r/runs', fixture: '/r/fx', ledger: '/r/l/ledger.jsonl', homeMarker: '/h/m', repoMarker: '/repo/.agent-skill-chain/local/m'};
+  const w = probeContext(base), x = probeContext(base, X44);
+  assert.deepEqual(Object.keys(w).sort(), ['fixture', 'homeMarker', 'ledgerDir', 'repoMarker', 'runsRoot', 'sentinels', 'trialDir']);
+  assert.equal(x.siblingRecord, path.join('/r/runs', PROBE_SIBLING, 'record.txt'));
+  assert.deepEqual(x.deniedRoots, X44.sandbox.denyReadRoots);
+  // review M-a/M-c: the writes outside the trial and the real user's login keychain.
+  const tg = (await import('../markers.mjs')).markerTag();
+  assert.deepEqual(x.outsideWrites, {userTmp: `/private/tmp/claude-${process.getuid()}/asc${tg}-write-probe.txt`, runsRoot: `/r/runs/asc${tg}-write-probe.txt`, varTmp: `/private/var/tmp/asc${tg}-write-probe.txt`});
+  assert.equal(x.loginKeychain, path.join(os.userInfo().homedir, 'Library/Keychains/login.keychain-db'));
+  const steps = probeSteps('X', x);
+  assert.equal(steps.length, C44.probeSteps.X);
+  assert.ok(C44.probeSteps.X + 2 <= C44.probeMaxTurns);
+  assert.deepEqual(steps.slice(0, 6), probeSteps('W', x), 'the six W steps first');
+  const byId = Object.fromEntries(steps.map((s) => [s.id, s]));
+  for (const id of ['insideWrite', 'insideCatClaudeMd', 'insideGitStatus', 'insideNode', 'insideAscHelp', 'insideWorktreeCreate', 'insideTmpWrite']) assert.equal(byId[id].expect, 'ok', id);
+  for (const id of ['catHomeMarker', 'catRepoMarker', 'catSiblingRecord', 'catTrialSettings', 'lsFixture', 'catFixtureClaudeMd', 'lsLedgerDir', 'lsDeniedRoot1', 'touchTrialDir', 'touchRepo', 'network']) assert.equal(byId[id].expect, 'refused', id);
+  assert.equal(byId.catHomeMarker.command, 'cat /h/m');
+  // review M2: the indirect routes, refused; the steps without the path in their text need the sandbox's own refusal.
+  for (const id of ['readSymlinkHome', 'catSymlinkHome', 'hardLinkRepo', 'nodeReadHome', 'shArgRepo', 'varPathHome', 'varPathSibling']) assert.equal(byId[id].expect, 'refused', id);
+  // review M-b: the symlink must be made; cat of it needs the sandbox's refusal, its Read a refusal that is not a missing file.
+  assert.deepEqual([byId.lnSymlinkHome.expect, byId.credentialLength.expect, byId.readSymlinkHome.notMissing], ['ok', 'any', true]);
+  assert.deepEqual(steps.filter((s) => s.sandbox).map((s) => s.id), ['catSymlinkHome', 'varPathHome', 'varPathSibling', 'touchUserTmp', 'touchRunsRoot', 'touchVarTmp']);
+  for (const [id, f] of Object.entries({touchUserTmp: x.outsideWrites.userTmp, touchRunsRoot: x.outsideWrites.runsRoot, touchVarTmp: x.outsideWrites.varTmp})) {
+    assert.ok(!byId[id].command.includes(f), `${id}: the path is not in the command text`);
+    assert.match(byId[id].command, new RegExp(`^a='${path.dirname(f)}'; b='/${path.basename(f)}'; (mkdir -p "\\$a" && )?touch "\\$a\\$b"$`), id);
+  }
+  // review M-c: only an exit code or a count is printed; the keychain lookup does not read the secret.
+  assert.deepEqual(steps.filter((s) => s.outputPattern).map((s) => [s.id, s.expect]), [['keychainDefault', 'ok'], ['keychainLogin', 'ok'], ['clipboard', 'ok'], ['processList', 'ok'], ['processListIndirect', 'ok']]);
+  for (const id of ['keychainDefault', 'keychainLogin']) { assert.doesNotMatch(byId[id].command, / -[gw]\b/); assert.match(byId[id].command, />\/dev\/null 2>&1; echo \$\?$/); }
+  assert.ok(byId.keychainLogin.command.includes(x.loginKeychain));
+  assert.match(byId.clipboard.command, /\| wc -c$/); assert.match(byId.processList.command, /\| wc -l$/);
+  assert.deepEqual([byId.readSymlinkHome.tool, byId.readSymlinkHome.path], ['Read', path.join('/r/runs/R-probe-1/work', LINK_FILE)]);
+  for (const id of ['varPathHome', 'varPathSibling']) assert.ok(!byId[id].command.includes(id === 'varPathHome' ? '/h/m' : x.siblingRecord), `${id}: the path is not in the command text`);
+  assert.match(byId.varPathSibling.command, /^a='[^']+'; b='[^']+'; cat "\$a\$b"$/);
+  assert.doesNotMatch(byId.credentialLength.command, /\becho\b|\$CLAUDE/, 'only the length of the credential is printed');
+  assert.match(byId.credentialLength.command, /\| wc -c$/);
+  assert.deepEqual(bashProbeSteps(x).filter((s) => s.tool !== 'Bash').map((s) => s.id), ['readSymlinkHome']);
+  assert.equal(bashProbeSteps(x).length, C44.probeSteps.X - 6);
+  assert.match(probePrompt('X', x), /Bashで次のcommandを実行する：node \.agent-skill-chain\/managed-runtime\/bin\/asc-v05\.mjs --help/);
+});
+
+test('#1844 Bash reads: the operands of reading commands, after cd, not here-documents, redirections or ls', () => {
+  const R = '/w/work';
+  assert.deepEqual(bashReadsOf('cat .agent-skill-chain/project/rules/money.md', R), ['.agent-skill-chain/project/rules/money.md']);
+  assert.deepEqual(bashReadsOf('cd .worktrees/x && head -n 20 .agent-skill-chain/project/rules/money.md 2>/dev/null', R), ['.worktrees/x/.agent-skill-chain/project/rules/money.md']);
+  assert.deepEqual(bashReadsOf(`cat ${R}/src/billing/invoice.ts | grep -n bigint`, R), ['src/billing/invoice.ts'], 'review: the pattern of grep is not a path');
+  assert.deepEqual(bashReadsOf('grep -n -e bigint -f pats.txt src/a.ts', R), ['pats.txt', 'src/a.ts'], 'with -e the first operand is a file; -f FILE is read');
+  assert.deepEqual(bashReadsOf("sed -n '1,5p' src/a.ts && awk -F: '{print $1}' src/b.ts && jq '.rules' x.json", R), ['src/a.ts', 'src/b.ts', 'x.json'], 'the script of sed/awk and the filter of jq are not files');
+  assert.deepEqual(bashReadsOf("cat > src/billing/tax.ts << 'EOF'\nconst a = 1n;\ncat .agent-skill-chain/project/rules/money.md\nEOF\necho done", R), [], 'a here-document is text');
+  assert.deepEqual(bashReadsOf('ls .agent-skill-chain/project/rules/ && wc -l src/a.ts && test -f x', R), [], 'existence checks are not reads');
+  assert.deepEqual(bashReadsOf('node x.mjs < input.txt', R), ['input.txt']);
+  assert.deepEqual(bashReadsOf('cat /etc/hosts src/*.ts', R), [], 'outside the root and globs are not strict reads');
+  assert.deepEqual(bashReadsOf('sed -n 1,5p "docs/開発の始め方.md"', R), ['docs/開発の始め方.md']);
+  assert.deepEqual(bashReadsOf('git show HEAD:.agent-skill-chain/project/rules/money.md', R), ['.agent-skill-chain/project/rules/money.md'], 'git show <rev>:<path> is a read');
+  assert.deepEqual(bashReadsOf('(cd .worktrees/x && true); cat a.md', R), ['a.md'], 'a cd in a subshell is not kept');
+  assert.deepEqual(bashReadsOf("sh -c 'cat src/a.ts'", R), ['src/a.ts']);
+});
+
+test('#1844 review M1: possible Bash reads for the forbidden reads (globs, searched directories, cd across calls, unbounded output)', () => {
+  const R = '/w/work';
+  const RULE = '.agent-skill-chain/project/rules/money.md';
+  const files = projectFilesOf({priorFiles: () => [RULE, '.agent-skill-chain/project/context.json', 'src/users/store.ts', 'src/billing/invoice.ts', '.claude/skills/quote-format/SKILL.md'], changedFiles: ['.worktrees/w1/src/users/store.ts']});
+  assert.ok(files.includes(`.worktrees/w1/${RULE}`), 'the files of a worktree named by a changed file');
+  assert.ok(projectFilesOf({priorFiles: () => [RULE]}).includes(`.worktrees/~/${RULE}`), 'a placeholder worktree when none is known');
+  const p = (c, start = R) => bashScan(c, R, start, files);
+  for (const c of ['cat .agent-skill-chain/project/rules/*.md', 'grep -rn bigint .agent-skill-chain/project', 'grep -R bigint .', 'grep -rn bigint', 'rg --hidden bigint', 'git grep bigint',
+    'find .agent-skill-chain -name "*.md" -exec cat {} \\;', 'find . -type f | xargs cat', 'ls .agent-skill-chain/project/rules | xargs cat', 'head -3 .agent-skill-chain/project/rules/{money,tax}.md', 'cat .worktrees/*/.agent-skill-chain/project/rules/money.md']) {
+    assert.ok(p(c).possible.some((f) => /(^|\/)\.agent-skill-chain\/project\/rules\/money\.md$/.test(f)), c);
+    assert.ok(!p(c).reads.includes(RULE), `${c}: not a strict read (rule-read is not raised by it)`);
+  }
+  assert.ok(!p('rg bigint').possible.includes(RULE), 'rg skips hidden directories by default');
+  assert.ok(!p('find . -name "*.md"').possible.includes(RULE), 'find without -exec or xargs lists names only');
+  assert.ok(!p('grep -n bigint src/users/store.ts').possible.includes(RULE));
+  for (const c of ['git show HEAD', 'git log -p -3', 'git diff HEAD~1', 'git cat-file -p 1234567']) assert.equal(p(c).unbounded, true, c);
+  for (const c of ['git show --stat HEAD', 'git log --oneline', 'git diff', 'git status']) assert.equal(p(c).unbounded, false, c);
+  // Claude Code keeps a cd inside the project for the next Bash call.
+  const T = trace({messages: [[['Bash', {command: 'cd .agent-skill-chain/project/rules'}]], [['Bash', {command: 'cat money.md'}]], [['Bash', {command: 'cd /etc'}]], [['Bash', {command: 'cat src/a.ts'}]]], tools: X44.tools.split(','), cwd: R});
+  const b = bashTraceReads(T, files);
+  assert.deepEqual(b.reads, [RULE, 'src/a.ts'], 'the cd of the earlier call is followed; a cd outside the project is reset');
+  const failed = trace({messages: [[['Bash', {command: `cat ${RULE}; false`}, true]]], tools: X44.tools.split(','), cwd: R});
+  assert.deepEqual([bashTraceReads(failed, files).reads, bashTraceReads(failed, files).possible], [[], [RULE]], 'a non-zero exit: no strict read, but a possible one');
+  assert.ok(globRegExp('src/*.ts').test('src/a.ts') && !globRegExp('src/*').test('src/.hidden') && !globRegExp('*').test('src/a.ts'));
+  // In the scoring: a forbidden read counts the possible reads, unbounded output and bashMention; the strict count beside.
+  const opts = {level: X44, condition: 'R', fileText: () => 'export const x = 1;\n', priorFiles: () => [RULE, 'src/users/store.ts'], priorTexts: (rels) => rels.map(() => null), skills: C44.ascSkills, changedFiles: ['src/users/store.ts']};
+  const U = (cmd) => scoreRun(SPEC44, k44('u-users'), trace({messages: [[['Read', {file_path: BODY}]], [['Bash', {command: cmd}]], []], tools: X44.tools.split(','), cwd: R}), opts);
+  for (const c of ['cat .agent-skill-chain/project/rules/*.md', 'grep -rn bigint .agent-skill-chain/project', 'git log -p', "node -e 'require(\"fs\").readFileSync(\".agent-skill-chain/project/rules/money.md\")'", 'cp .agent-skill-chain/project/rules/money.md /tmp/m']) {
+    const r = U(c);
+    assert.deepEqual([r.forbiddenReads, r.forbidReadsOk, r.forbiddenReadsStrict], [['money-rule'], false, []], c);
+  }
+  const clean = U('grep -n export src/users/store.ts');
+  assert.deepEqual([clean.forbiddenReads, clean.forbidReadsOk, clean.bashUnboundedReads], [[], true, 0]);
+  const strict = U(`cat ${RULE}`);
+  assert.deepEqual([strict.forbiddenReadsStrict, strict.forbiddenReads], [['money-rule'], ['money-rule']]);
+  assert.deepEqual(U('grep -rn bigint .agent-skill-chain/project').bashPossibleReadPaths, [RULE]);
+  const asW = scoreRun(SPEC44, k44('u-users'), trace({messages: [[['Read', {file_path: BODY}]], [['Bash', {command: 'cat .agent-skill-chain/project/rules/*.md'}]], []], tools: X44.tools.split(','), cwd: R}), {...opts, level: {...X44, sandbox: undefined}, changedFiles: null});
+  assert.ok(!('forbiddenReadsStrict' in asW) && asW.forbidReadsOk === true, 'level W (no sandbox): the forbidden reads as before');
+  for (const id of ['u-users', 'u-docs', 'u-neg']) assert.ok(new RegExp(k44(id).forbidReads[0].bashMention).test('cd .agent-skill-chain/project/rules'), id);
+});
+
+test('#1844 scoring with Bash: rule read by cat in the worktree, start run, files changed by Bash, scope code; gated on the level', () => {
+  const RULE = '.worktrees/20261128_000000-1844-x/.agent-skill-chain/project/rules/money.md';
+  const START = 'node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs start .worktrees/20261128_000000-1844-x --path src/billing/invoice.ts';
+  const tools = X44.tools.split(',');
+  const T = (msgs, extra = {}) => trace({messages: msgs, tools, cwd: '/r/w', ...extra});
+  const written = '.worktrees/20261128_000000-1844-x/src/billing/tax.ts';
+  const files = {[written]: '// 税率10% (0.1) は使わない\nexport const tax = (a: bigint) => a * 10n / 100n;\n'};
+  const fileText = (rel) => files[rel] ?? null;
+  // review L-a: the fixture's files (the rule is one of them; a strict Bash read is of an existing file).
+  const opts = {level: X44, condition: 'R', fileText, ...NOBASE, priorFiles: () => ['.agent-skill-chain/project/rules/money.md', 'src/billing/invoice.ts'], skills: C44.ascSkills, changedFiles: [written]};
+  const OUT = '{\n  "schema": "asc-worktree/v1",\n  "repo": "/r/w/.worktrees/x",\n  "context": {\n    "schema": "asc-project-context-selection/v1"';
+  const good = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], [['Bash', {command: START}, false, OUT]], [['Bash', {command: `cat ${RULE}`}]], [['Bash', {command: `cat > ${written} << 'EOF'\nx\nEOF`}]], []]), opts);
+  assert.deepEqual([good.reach, good.expectReadsAll, good.commandsAll, good.writeOk, good.applied], [true, true, true, true, true], JSON.stringify(good));
+  assert.deepEqual(good.written, [written], 'the file written by Bash comes from changedFiles (meta.json workFiles)');
+  assert.deepEqual(good.bashReadPaths, [RULE]);
+  assert.equal(good.report.commands.start.ok, true);
+  const failedStart = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], [['Bash', {command: 'node .agent-skill-chain/bin/asc.mjs start . --path src/billing/invoice.ts'}, true]], []]), opts);
+  assert.deepEqual([failedStart.commandsAll, failedStart.report.commands.start], [false, {attempted: true, exitOk: false, ok: false}], 'a start that exited non-zero (main checkout) is attempted, not run');
+  // review H1: a pipeline exits with its last command; start ran only when its JSON output is in the result.
+  const REFUSED = 'Error: Use a dedicated Git worktree, or explicitly select isolated-clone';
+  for (const [cmd, out] of [[`${START} 2>&1 | head -50`, REFUSED], [`${START}; echo done`, `${REFUSED}\ndone`], [`${START} || true`, REFUSED], [`${START} 2>/dev/null | grep -c money`, '0'],
+    ['node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs start --help', OUT], [`${START} > /dev/null`, '']]) {
+    const r = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], [['Bash', {command: cmd}, false, out]], []]), opts);
+    assert.deepEqual([r.commandsAll, r.report.commands.start.exitOk, r.report.commands.start.ok], [false, true, false], cmd);
+  }
+  for (const out of [OUT, OUT.replace(/\n\s*/g, ''), '{"schema":"asc-project-context-selection/v1","selection":"path-prefix"}']) {
+    const r = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], [['Bash', {command: `${START} | head -40`}, false, out]], []]), opts);
+    assert.equal(r.commandsAll, true, `start output in the result: ${out.slice(0, 40)}`);
+  }
+  assert.equal(commandRan({pattern: 'x'}, T([[['Bash', {command: 'x'}, false, 'any']]])), true, 'without resultPattern: a result that is not an error (as before)');
+  files[written] = 'export const tax = (a: bigint) => BigInt(Math.floor(Number(a) * 0.1));\n';
+  const bad = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], []]), opts);
+  assert.deepEqual(bad.writeViolations, ['decimal-literal', 'float-function', 'number-conversion']);
+  const users = scoreRun(SPEC44, k44('u-users'), T([[['Read', {file_path: BODY}]], [['Bash', {command: `head -5 ${RULE}`}]], []]), {...opts, changedFiles: []});
+  assert.deepEqual(users.forbiddenReads, ['money-rule'], 'a Bash read of a rule that does not apply is a forbidden read');
+  const asW = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], [['Bash', {command: `cat ${RULE}`}]], []]), {...opts, level: {...X44, sandbox: undefined}, changedFiles: null});
+  assert.equal(asW.expectReadsAll, false, 'without a sandbox level, Bash reads are not counted (earlier configs unchanged)');
+  assert.ok(!('bashReadPaths' in asW));
+  assert.equal(LEVEL_METRICS.commandsAll({commandsAll: true}), true);
+  assert.deepEqual(okCommands(T([[['Bash', {command: 'a'}], ['Bash', {command: 'b'}, true]]])), ['a']);
+  assert.deepEqual(bashReadPaths(T([[['Bash', {command: 'cat README.md'}, true]]])), [], 'a failed command reads nothing');
+});
+
+test('#1844 workChanges with Bash: commits since the start and a linked worktree by its own changes', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  const work = path.join(d, 'T-x-1', 'work');
+  fs.mkdirSync(path.join(work, 'src'), {recursive: true});
+  fs.writeFileSync(path.join(work, 'src/a.ts'), 'a'); fs.writeFileSync(path.join(work, 'b.md'), 'b');
+  const g = (args, cwd = work) => spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd, encoding: 'utf8'});
+  g(['init', '-q']); g(['add', '-A']); g(['commit', '-q', '-m', 'i']);
+  const base = g(['rev-parse', 'HEAD']).stdout.trim();
+  g(['worktree', 'add', '-q', '-b', 'f/1', '.worktrees/w1', 'HEAD']);
+  const wt = path.join(work, '.worktrees/w1');
+  fs.writeFileSync(path.join(wt, 'src/a.ts'), 'changed in the worktree');
+  fs.writeFileSync(path.join(wt, 'src/new.ts'), 'new'); g(['add', 'src/new.ts'], wt); g(['commit', '-q', '-m', 'w'], wt);
+  fs.writeFileSync(path.join(work, 'b.md'), 'committed on main'); g(['commit', '-q', '-am', 'm']);
+  const opts = {base, worktrees: true};
+  assert.deepEqual(Object.keys(workChanges(work, opts)), ['.worktrees/w1/src/a.ts', '.worktrees/w1/src/new.ts', 'b.md']);
+  assert.ok(Object.keys(workChanges(work)).some((f) => f.startsWith('.worktrees/w1/') && f.endsWith('b.md')), 'without options the worktree is listed file by file (as before)');
+  const dir = path.dirname(work);
+  const endHead = g(['rev-parse', 'HEAD']).stdout.trim();
+  const meta = (m) => fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(m));
+  meta({workFiles: workChanges(work, opts), sampleHead: base, endHead, workFilesOptions: opts});
+  assert.equal(workFilesProblem(dir), null, 'a commit made by the trial is accepted at endHead');
+  meta({workFiles: workChanges(work, opts), sampleHead: base, workFilesOptions: opts});
+  assert.match(workFilesProblem(dir), /no endHead/);
+  meta({workFiles: workChanges(work, opts), sampleHead: base, endHead: base, workFilesOptions: opts});
+  assert.match(workFilesProblem(dir), /is not meta\.json endHead/);
+  meta({workFiles: workChanges(work), sampleHead: base});
+  assert.match(workFilesProblem(dir), /is not meta\.json sampleHead/, 'level W: a moved HEAD is still refused');
+});
+
+test('#1844 config: the five #1840 goal-2 cases with their prompts unchanged, Bash level X, one release condition, cap 10 USD', () => {
+  const ids = ['u-bill-1', 'u-bill-2', 'u-users', 'u-docs', 'u-neg'];
+  assert.deepEqual(SPEC44.cases.map((c) => c.id), ids);
+  for (const id of ids) assert.equal(k44(id).prompt, k40(id).prompt, `${id}: the #1840 prompt`);
+  assert.deepEqual(C44.fixtures.U, C40.fixtures.U, 'fixture U of #1840 unchanged');
+  for (const id of ['u-bill-1', 'u-bill-2']) {
+    assert.ok(k44(id).writes.forbid.every((f) => f.scope === 'code'), `${id}: the money rule on the code only (#1845)`);
+    assert.deepEqual(k44(id).writes.forbid.map((f) => [f.id, f.pattern]), k40(id).writes.forbid.map((f) => [f.id, f.pattern]));
+    assert.ok(new RegExp(k44(id).expectReads[0].pattern).test('.worktrees/20261128_000000-1-x/.agent-skill-chain/project/rules/money.md'));
+    assert.ok(new RegExp(k44(id).expectReads[0].pattern).test('.agent-skill-chain/project/rules/money.md'));
+  }
+  for (const id of ['u-bill-1', 'u-bill-2', 'u-users', 'u-docs']) for (const c of ['node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs start .worktrees/x --path src/a.ts', 'node .agent-skill-chain/bin/asc.mjs start .']) assert.ok(new RegExp(k44(id).expectCommands[0].pattern).test(c), `${id}: ${c}`);
+  assert.ok(!k44('u-neg').expectCommands);
+  assert.deepEqual(Object.keys(C44.cells), ['R']);
+  assert.equal(C44.cells.R.tools, 'X');
+  assert.equal(X44.tools, 'Bash,Read,Write,Edit,Glob,Grep,Skill');
+  assert.doesNotMatch(X44.disallowed, /Bash/);
+  assert.equal(X44.sandbox.layout, 'confined');
+  assert.deepEqual([C44.budget.ownerCapUsd, C44.budget.capUsd, C44.budget.safetyMarginUsd], [10, 9.65, 1], 'probe 1: the first ledger spent 0.35 (priorSpend)');
+  assert.deepEqual([C44.budget.priorSpend.ledger, C44.budget.priorSpend.spentUsd, C44.priorProbes], ['results/ledger-1.jsonl', 0.3472675, ['R-probe-1']]);
+  assert.equal(ledger.spent(path.join(C44DIR, C44.budget.priorSpend.ledger)), C44.budget.priorSpend.spentUsd);
+  assert.deepEqual(orderProblems(JSON.parse(read('run-order.json', C44DIR)), SPEC44, C44), []);
+  assert.equal(plannedTrials(JSON.parse(read('run-order.json', C44DIR)), C44.runs).length, 15);
+  const rel = JSON.parse(read('release.json', C44DIR));
+  assert.deepEqual([pinned('R', rel, C44).kind, pinned('R', rel, C44).tag, pinned('R', rel, C44).assetSha256], ['release', 'v0.5.128', '2fd9dcef88d997eb236a4b34a54babb9da3ccabcabd8629a0ba4624f3f74b922'], 'the latest release at measurement time');
+  assert.equal(C44.rule.minProvisional, true, 'review L3');
+  assert.match(C44.budget.note, new RegExp(`The X probe has ${C44.probeSteps.X} steps`), 'review L4: the note names the step count');
+  for (const id of ['u-bill-1', 'u-bill-2', 'u-users', 'u-docs']) assert.ok(k44(id).expectCommands[0].resultPattern && k44(id).expectCommands[0].exclude, `${id}: review H1`);
+  for (const l of C44.rule.levels) { assert.ok(LEVEL_METRICS[l.metric], l.metric); for (const id of l.cases) assert.ok(k44(id), `${l.id}: ${id}`); }
+  assert.equal(ascSkillsOf(C44).length, 17, 'v0.5.128 distributes the same 17 Skills as v0.5.121');
+});
+
+test('#1844 probe check of level X: every Bash step with its expected result passes; work/ unreadable or a sentinel left fails', async () => {
+  const {probeStepChecks} = await import('../probe-check.mjs');
+  const ctx = probeContext({dir: '/r/runs/R-probe-1', runsRoot: '/r/runs', fixture: '/r/fx', ledger: '/r/l/ledger.jsonl', homeMarker: '/h/m', repoMarker: '/repo/.agent-skill-chain/local/m'}, X44);
+  const steps = probeSteps('X', ctx);
+  const out = (s) => (s.id === 'insideCatClaudeMd' ? '# 請求管理（社内）' : s.id === 'network' ? '000' : s.id === 'credentialLength' ? '0' : /^keychain/.test(s.id) ? '44' : ['clipboard', 'processList', 'processListIndirect'].includes(s.id) ? '       0' : 'x');
+  const T = (bad = {}, texts = {}) => {
+    const lines = [ev({type: 'system', subtype: 'init', cwd: '/r/runs/R-probe-1/work', tools: X44.tools.split(','), permissionMode: 'acceptEdits', mcp_servers: [], model: 'm'})];
+    steps.forEach((s, i) => {
+      const input = s.tool === 'Bash' ? {command: s.command} : s.tool === 'Read' || s.tool === 'Write' ? {file_path: s.path} : {path: s.path, pattern: s.pattern};
+      lines.push(ev({type: 'assistant', message: {id: `m${i}`, content: [{type: 'tool_use', id: `u${i}`, name: s.tool, input}]}}));
+      const refused = (s.expect === 'refused') !== Boolean(bad[s.id]);
+      lines.push(ev({type: 'user', message: {content: [{type: 'tool_result', tool_use_id: `u${i}`, is_error: refused && s.id !== 'network', content: texts[s.id] ?? (refused ? (s.id === 'network' ? '000' : 'cat: x: Operation not permitted') : out(s))}]}}));
+    });
+    lines.push(ev({type: 'result', subtype: 'success', is_error: false, result: 'done', total_cost_usd: 0.1, num_turns: steps.length}));
+    return parseTrace(lines.join('\n'));
+  };
+  const i = {steps, expectedSteps: C44.probeSteps.X, sentinelExists: {trial: false, repo: false}, insideExists: true, workClaudeMdFirstLine: '# 請求管理（社内）'};
+  const pass = (r) => Object.values(r.checks).every((c) => c.pass);
+  assert.equal(pass(probeStepChecks(i, T(), 'X')), true, JSON.stringify(probeStepChecks(i, T(), 'X').checks));
+  assert.equal(pass(probeStepChecks(i, T({insideCatClaudeMd: true}), 'X')), false, '#1820 stage 1 failure: cat CLAUDE.md in work/ refused');
+  assert.equal(pass(probeStepChecks(i, T({catSiblingRecord: true}), 'X')), false, 'another runs-root entry readable');
+  assert.equal(pass(probeStepChecks(i, T({insideNode: true}), 'X')), false, 'node not runnable in the sandbox');
+  assert.equal(pass(probeStepChecks({...i, sentinelExists: {trial: true, repo: false}}, T(), 'X')), false, 'a sentinel left in the trial directory');
+  // review M2: the indirect routes must be refused; the steps without the path in their text by the sandbox itself.
+  for (const id of ['readSymlinkHome', 'catSymlinkHome', 'hardLinkRepo', 'nodeReadHome', 'shArgRepo', 'varPathHome']) assert.equal(pass(probeStepChecks(i, T({[id]: true}), 'X')), false, `${id} readable`);
+  const perm = 'Permission to use Bash with command cat has been denied.';
+  const byPerm = probeStepChecks(i, T({}, {varPathSibling: perm}), 'X');
+  assert.deepEqual([byPerm.checks.sandboxRefusal.pass, byPerm.checks.probeStepsRefused.pass], [false, true], 'refused by a permission check, not shown to be the sandbox');
+  assert.deepEqual(byPerm.info.refusalKind.varPathSibling, ['permission']);
+  assert.deepEqual(probeStepChecks(i, T({}, {catHomeMarker: perm}), 'X').info.refusalKind.catHomeMarker, ['permission'], 'recorded for the plain steps too');
+  assert.deepEqual(probeStepChecks(i, T(), 'X').info.refusalKind.network, ['other']);
+  // review M-b: the symlink route must be shown refused, not skipped: ln must succeed, a missing file is no refusal.
+  assert.equal(probeStepChecks(i, T({lnSymlinkHome: true}, {lnSymlinkHome: 'ln: probe-link-home.txt: Operation not permitted'}), 'X').checks.probeStepsSucceeded.pass, false, 'ln failed: the symlink route was not tried');
+  const dangling = probeStepChecks(i, T({}, {catSymlinkHome: 'cat: probe-link-home.txt: No such file or directory', readSymlinkHome: 'File does not exist.'}), 'X');
+  assert.deepEqual([dangling.checks.probeStepsRefused.pass, dangling.checks.sandboxRefusal.pass, dangling.checks.refusedNotMissing.pass], [true, false, false], 'a dangling link (or cat/Read before ln) passes the plain refusal only');
+  assert.deepEqual(probeStepChecks(i, T({}, {readSymlinkHome: perm}), 'X').checks.refusedNotMissing.pass, true, 'the Read may be refused by the permission check');
+  // review M-a: a write outside the trial refused by a permission check only, or a file left there, fails.
+  assert.equal(probeStepChecks(i, T({}, {touchVarTmp: perm}), 'X').checks.sandboxRefusal.pass, false);
+  for (const id of ['touchUserTmp', 'touchRunsRoot', 'touchVarTmp']) assert.equal(pass(probeStepChecks(i, T({[id]: true}), 'X')), false, `${id} written`);
+  assert.equal(probeStepChecks({...i, outsideExists: {userTmp: false, runsRoot: false, varTmp: false}}, T(), 'X').checks.outsideWritesAbsent.pass, true);
+  assert.equal(probeStepChecks({...i, outsideExists: {userTmp: false, runsRoot: false, varTmp: true}}, T(), 'X').checks.outsideWritesAbsent.pass, false);
+  // review M-c: the keychain found (exit code 0), a clipboard or a process list seen fails; the outputs are recorded.
+  for (const [id, text] of [['keychainDefault', '0'], ['keychainLogin', '0'], ['clipboard', '754'], ['processList', '954']]) assert.equal(probeStepChecks(i, T({}, {[id]: text}), 'X').checks.probeStepOutputs.pass, false, `${id} ${text}`);
+  assert.deepEqual(probeStepChecks(i, T(), 'X').info.stepOutputs, {keychainDefault: ['44'], keychainLogin: ['44'], clipboard: ['0'], processList: ['0'], processListIndirect: ['0']});
+  assert.equal(probeStepChecks(i, T({}, {keychainLogin: '126'}), 'X').checks.probeStepOutputs.pass, true, 'security not runnable in the sandbox (126) is refused too');
+  // #1844 probe 1: ps refused by the permission check of Claude Code (not run, the list not obtained) passes processList
+  // only; the refusal is recorded. The sandbox's refusal as an error, a count beside the refusal, or the same refusal of
+  // another step (no permissionRefusalOk) still fails.
+  const approval = 'This Bash command contains multiple operations. The following part requires approval: ps -axo pid=';
+  assert.equal(steps.find((s) => s.id === 'processList').permissionRefusalOk, true);
+  assert.deepEqual(steps.filter((s) => s.permissionRefusalOk).map((s) => s.id), ['processList']);
+  const psPerm = probeStepChecks(i, T({processList: true}, {processList: approval}), 'X');
+  assert.deepEqual([psPerm.checks.probeStepsSucceeded.pass, psPerm.checks.probeStepOutputs.pass, pass(psPerm)], [true, true, true], JSON.stringify(psPerm.checks));
+  assert.deepEqual(psPerm.info.permissionRefusalOk, {processList: ['permission']});
+  assert.deepEqual(probeStepChecks(i, T(), 'X').info.permissionRefusalOk, {processList: ['none']});
+  assert.equal(pass(probeStepChecks(i, T({processList: true}, {processList: 'zsh:1: operation not permitted: /tmp/claude-502/cwd-1a2b'}), 'X')), false, 'an error from the sandbox is not a permission refusal');
+  assert.equal(pass(probeStepChecks(i, T({processList: true}, {processList: `${approval}\n954`}), 'X')), false, 'a count beside the refusal');
+  assert.equal(pass(probeStepChecks(i, T({clipboard: true}, {clipboard: approval.replace('ps -axo pid=', 'pbpaste')}), 'X')), false, 'clipboard has no permissionRefusalOk');
+  assert.equal(pass(probeStepChecks(i, T({insideCatClaudeMd: true}, {insideCatClaudeMd: approval}), 'X')), false, 'an ok step without the flag');
+  // review of the fixes M1: ps run from node must give an empty list by the sandbox itself; a permission refusal does not pass it.
+  assert.match(steps.find((s) => s.id === 'processListIndirect').command, /^node -e .*spawnSync\("ps"/);
+  assert.equal(pass(probeStepChecks(i, T({}, {processListIndirect: '954'}), 'X')), false, 'ps from node listed processes');
+  assert.equal(pass(probeStepChecks(i, T({processListIndirect: true}, {processListIndirect: approval}), 'X')), false, 'no permissionRefusalOk');
+  // review M3: the credential: a leak fails the probe; whether Bash sees it is recorded.
+  assert.equal(probeStepChecks(i, T(), 'X').info.credentialVisibleToBash, false);
+  assert.equal(probeStepChecks(i, T({}, {credentialLength: '109'}), 'X').info.credentialVisibleToBash, true);
+  assert.equal(pass(probeStepChecks({...i, credentialLeak: false}, T(), 'X')), true);
+  assert.equal(probeStepChecks({...i, credentialLeak: true, credentialFiles: ['work/env.txt']}, T(), 'X').checks.credentialNotLeaked.pass, false);
+  assert.ok(!('credentialNotLeaked' in probeStepChecks(i, T(), 'X').checks), 'a meta.json without the field (earlier configs): no check');
+  // PR #1857 review L7: the details name an unreadable path and a failed search; without them the details are as before.
+  const ur = probeStepChecks({...i, credentialLeak: true, credentialFiles: [], credentialUnreadable: ['work/x'], credentialCheckError: 'boom'}, T(), 'X').checks.credentialNotLeaked;
+  assert.deepEqual([ur.pass, ur.detail.unreadable, ur.detail.checkError], [false, ['work/x'], 'boom']);
+  assert.deepEqual(Object.keys(probeStepChecks({...i, credentialLeak: false, credentialFiles: []}, T(), 'X').checks.credentialNotLeaked.detail), ['files', 'inGitObjects', 'inRecords']);
+  const w = probeStepChecks({steps: probeSteps('W', ctx), expectedSteps: 6, sentinelExists: {trial: false, repo: false}}, T(), 'W');
+  assert.ok(!('sandboxRefusal' in w.checks) && !('refusalKind' in w.info) && !('refusedNotMissing' in w.checks) && !('probeStepOutputs' in w.checks) && !('outsideWritesAbsent' in w.checks), 'level W: no new check');
+});
+
+test('#1844 review M3: the credential in the trial files, the git objects or the records is a leak; the trial fails in collect', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  const runs = path.join(d, 'runs'), dir = path.join(runs, 'R-u-users-1'), work = path.join(dir, 'work');
+  const SECRET = 'sk-test-credential-0123456789';
+  fs.mkdirSync(path.join(work, 'src'), {recursive: true}); fs.writeFileSync(path.join(work, 'src/a.ts'), 'a');
+  const g = (args) => spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd: work, encoding: 'utf8'});
+  g(['init', '-q']); g(['add', '-A']); g(['commit', '-q', '-m', 'i']);
+  for (const x of ['home', 'config', 'tmp']) fs.mkdirSync(path.join(dir, x));
+  fs.writeFileSync(path.join(dir, 'home/.claude.json'), SECRET);
+  const leak = (records = []) => credentialLeakOf({dir, work, secret: SECRET, records});
+  assert.deepEqual(leak(), {credentialInRecords: 0, credentialFiles: [], credentialInGitObjects: false, credentialLeak: false}, 'home/ and config/ are counted apart (credentialInChildFiles)');
+  assert.equal(leak(['a <credential> b']).credentialLeak, true, 'a scrubbed record held it');
+  fs.writeFileSync(path.join(dir, 'tmp/env.txt'), `X=${SECRET}`);
+  assert.deepEqual(leak().credentialFiles, ['tmp/env.txt']);
+  fs.rmSync(path.join(dir, 'tmp/env.txt'));
+  fs.writeFileSync(path.join(work, 'env.txt'), SECRET); g(['add', 'env.txt']); g(['commit', '-q', '-m', 'e']); fs.rmSync(path.join(work, 'env.txt'));
+  assert.deepEqual([leak().credentialFiles, leak().credentialInGitObjects, leak().credentialLeak], [[], true, true], 'committed and removed: still in the git objects');
+  const src = fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8');
+  // PR #1857 review: the scrubbed debug.log is a record too, and a failed search is recorded as a leak.
+  assert.match(src, /credentialCheckOf\(\{dir, work, secret, records: \[stream, scrub\(r\.stderr\), debugText\]\}\)/);
+  assert.equal(leak(['', '', 'debug <credential> line']).credentialLeak, true, 'the scrubbed debug.log is a record');
+  // PR #1857 review M1: a search that throws is a leak (credentialCheckError), and a probe then loses its whole work/.
+  const failed = credentialCheckOf({}, () => { throw new Error('boom'); });
+  assert.deepEqual(failed, {credentialCheckError: 'boom', credentialLeak: true});
+  if (process.getuid() !== 0) {
+    fs.writeFileSync(path.join(dir, 'tmp/locked.txt'), 'x'); fs.chmodSync(path.join(dir, 'tmp/locked.txt'), 0o000);
+    const u = leak();
+    fs.chmodSync(path.join(dir, 'tmp/locked.txt'), 0o600); fs.rmSync(path.join(dir, 'tmp/locked.txt'));
+    assert.deepEqual([u.credentialUnreadable, u.credentialLeak], [['tmp/locked.txt'], true], 'PR #1857 review: an unreadable file is not taken as clean');
+  }
+  {
+    // PR #1857 review M1 (the real functions, on a copy): a probe's copy of the credential in work/x/ made unreadable
+    // (chmod 000) is recorded per directory, the rest of the search goes on, and the removal takes the directory.
+    const pdir = path.join(runs, 'R-probe-9'), pwork = path.join(pdir, 'work');
+    fs.mkdirSync(path.join(pwork, 'x'), {recursive: true}); fs.mkdirSync(path.join(pdir, 'tmp'));
+    fs.writeFileSync(path.join(pwork, 'x/copy.txt'), SECRET); fs.writeFileSync(path.join(pdir, 'tmp/env.txt'), SECRET); fs.writeFileSync(path.join(pwork, 'keep.txt'), 'k');
+    if (process.getuid() !== 0) {
+      fs.chmodSync(path.join(pwork, 'x'), 0o000);
+      const m = credentialCheckOf({dir: pdir, work: pwork, secret: SECRET});
+      assert.deepEqual([m.credentialUnreadable, m.credentialFiles, m.credentialLeak, 'credentialCheckError' in m], [['work/x'], ['tmp/env.txt'], true, false], 'recorded per directory; the search goes on');
+      removeCredentialCopies(m, {dir: pdir, work: pwork, probe: true});
+      assert.deepEqual([fs.existsSync(path.join(pwork, 'x')), fs.existsSync(path.join(pdir, 'tmp/env.txt')), fs.existsSync(path.join(pwork, 'keep.txt')), m.credentialCleanupErrors], [false, false, true, undefined]);
+    }
+    // A failed search: the probe's whole work/ is removed, also an unreadable directory in it.
+    fs.mkdirSync(path.join(pwork, 'y'), {recursive: true}); fs.writeFileSync(path.join(pwork, 'y/copy.txt'), SECRET); fs.chmodSync(path.join(pwork, 'y'), 0o000);
+    const e = removeCredentialCopies(credentialCheckOf({}, () => { throw new Error('boom'); }), {dir: pdir, work: pwork, probe: true});
+    assert.deepEqual([fs.existsSync(pwork), e.workRemoved, e.credentialCleanupErrors], [false, 'credential check error', undefined]);
+    fs.rmSync(pdir, {recursive: true, force: true});
+  }
+  // PR #1857 review: claude is looked up before the trial directory and the reservation.
+  assert.ok(src.indexOf("if (!claudeBin) fail(") > 0 && src.indexOf("if (!claudeBin) fail(") < src.indexOf('ledgerOps.reserve(ledger, name, budget)'));
+  assert.ok(src.indexOf("if (!claudeBin) fail(") < src.indexOf('fs.cpSync(fixture, work'));
+  assert.doesNotMatch(src, /CLAUDE_CODE_SUBPROCESS_ENV_SCRUB:/, 'not set: it forces the permission mode to default (README)');
+  fs.writeFileSync(path.join(dir, 'trace.jsonl'), ev({type: 'result'}) + '\n');
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({case: 'u-users', credentialLeak: true, workFiles: {}, workFilesOptions: {base: 'x'}, workRemoved: 'credential leak'}));
+  fs.rmSync(work, {recursive: true, force: true});
+  const c = collectTrial(runs, 'R-u-users-1', {conds: C44});
+  assert.deepEqual([c.entry.failure, c.row.missing], ['credential leak', 'credential leak']);
+  assert.equal(workFilesProblem(dir), null, 'its work/ was removed on purpose');
+});
+
+test('#1844 review L2: commits HEAD no longer reaches are recorded and their files are written but not checkable; a nested .git is one entry', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  const work = path.join(d, 'T-x-1', 'work');
+  fs.mkdirSync(path.join(work, 'src/billing'), {recursive: true}); fs.writeFileSync(path.join(work, 'src/billing/a.ts'), 'a');
+  const g = (args, cwd = work) => spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd, encoding: 'utf8'});
+  g(['init', '-q']); g(['add', '-A']); g(['commit', '-q', '-m', 'i']);
+  const base = g(['rev-parse', 'HEAD']).stdout.trim();
+  assert.deepEqual(unreachedChanges(work, base), {commits: [], files: []});
+  g(['worktree', 'add', '-q', '-b', 'f/1', '.worktrees/w1', 'HEAD']);
+  const wt = path.join(work, '.worktrees/w1');
+  fs.writeFileSync(path.join(wt, 'src/billing/tax.ts'), 'export const t = 0.1;\n'); g(['add', '-A'], wt); g(['commit', '-q', '-m', 'w'], wt);
+  assert.deepEqual(unreachedChanges(work, base).files, [], 'a present worktree is seen by workChanges');
+  g(['worktree', 'remove', '--force', '.worktrees/w1']);
+  assert.deepEqual(unreachedChanges(work, base).files, ['src/billing/tax.ts'], 'the worktree removed after its commit: its branch still holds it');
+  fs.writeFileSync(path.join(work, 'src/billing/a.ts'), 'stashed'); g(['stash', '-q']);
+  assert.deepEqual(unreachedChanges(work, base).files, ['src/billing/a.ts', 'src/billing/tax.ts'], 'a stash');
+  assert.equal(unreachedChanges(work, base).commits.length >= 2, true);
+  fs.mkdirSync(path.join(work, 'nested')); spawnSync('git', ['init', '-q'], {cwd: path.join(work, 'nested')}); fs.writeFileSync(path.join(work, 'nested/n.md'), 'n');
+  const ch = workChanges(work, {base, worktrees: true});
+  assert.equal(ch['nested/.git'], 'git-directory');
+  assert.ok(!Object.keys(ch).some((f) => f.startsWith('nested/.git/')), 'the objects of a nested repository are not listed');
+  assert.ok(Object.keys(workChanges(work)).some((f) => f.startsWith('nested/.git/')), 'without options as before');
+  const tools = X44.tools.split(',');
+  const r = scoreRun(SPEC44, k44('u-bill-1'), trace({messages: [[['Read', {file_path: BODY}]], []], tools, cwd: '/r/w'}), {level: X44, condition: 'R', fileText: () => null, ...NOBASE, skills: C44.ascSkills, changedFiles: [], unreachedFiles: ['src/billing/tax.ts', 'README.md']});
+  assert.deepEqual([r.written, r.writeUnreached, r.writeMissingText, r.writeOk, LEVEL_METRICS.writeCleanWhenWritten(r)], [['src/billing/tax.ts'], ['src/billing/tax.ts'], true, false, false], 'written, not checkable: not clean');
+  assert.ok(fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8').includes('meta.unreached = unreachedChanges(work, sampleHead)'));
+});
+
+test('#1844 review L3: with rule.minProvisional the verdict says the mins are provisional; without it as before', () => {
+  const rows = [1, 2, 3].map((n) => ({condition: 'R', case: 'a', run: n, counted: true, expect: 'asc', reach: true}));
+  const s = {condition: 'R', runs: 3, positives: 3, failures: 0, negatives: 0, casesWithoutValidTrial: [], replacementsMissing: 0, bodyRead: 3, applied: 3, overapplication: 0};
+  const rule = {mode: 'levels', levels: [{id: 'sel', cases: ['a'], metric: 'reach', min: '2/3'}]};
+  const completion = {basis: 'planned', missingPlanned: 0, missingReplacements: [], spentUsd: 1, perTrialUsd: 0.5, stopLineUsd: 9};
+  const v = levelsVerdict({R: s}, rows, {completion, rule: {...rule, minProvisional: true}});
+  assert.deepEqual([v.minProvisional, v.perCondition.R.minProvisional, v.perCondition.R.verdict], [true, true, 'meets-levels']);
+  assert.match(v.perCondition.R.verdictBasis, /provisional/);
+  const before = levelsVerdict({R: s}, rows, {completion, rule});
+  assert.ok(!('minProvisional' in before) && !('minProvisional' in before.perCondition.R) && !('verdictBasis' in before.perCondition.R));
+});
+
+test('#1844 second review L-a: no strict Bash read when no content is shown (> /dev/null, grep -q/-c/-l, a missing file); still possible reads', () => {
+  const R = '/w/work', RULE = '.agent-skill-chain/project/rules/money.md';
+  for (const c of [`cat ${RULE} >/dev/null`, `cat ${RULE} > /dev/null 2>&1`, `cat ${RULE} &>/dev/null`, `cat ${RULE} >& /dev/null`, `cat ${RULE} 1>>/dev/null`, `grep -q bigint ${RULE}`, `grep -c bigint ${RULE}`,
+    `grep -l bigint ${RULE}`, `grep -rl bigint ${RULE}`, `grep -L bigint ${RULE}`, `grep --count bigint ${RULE}`, `grep --quiet bigint ${RULE}`, `rg -l bigint ${RULE}`, `rg -c bigint ${RULE}`, `cat < ${RULE} > /dev/null`]) {
+    const s = bashScan(c, R, R, [RULE]);
+    assert.deepEqual([s.reads, s.possible.includes(RULE)], [[], true], c);
+  }
+  for (const c of [`cat ${RULE} 2>/dev/null`, `grep -n bigint ${RULE}`, `grep -A3 -C2 bigint ${RULE}`, `rg -L bigint ${RULE}`, `cat ${RULE} >/dev/null; cat ${RULE}`, `cat ${RULE} > out.txt`]) assert.deepEqual(bashScan(c, R, R, [RULE]).reads, [RULE], `${c}: still strict`);
+  // A missing path read with || true exits 0; with the fixture's files known it is not a strict read.
+  const T = trace({messages: [[['Bash', {command: 'cat .worktrees/none/.agent-skill-chain/project/rules/money.md 2>/dev/null || true'}]], [['Bash', {command: `cat ${RULE}`}]]], tools: X44.tools.split(','), cwd: R});
+  assert.deepEqual(bashTraceReads(T, [RULE], {existing: true}).reads, [RULE]);
+  assert.deepEqual(bashTraceReads(T, [RULE]).reads, ['.worktrees/none/.agent-skill-chain/project/rules/money.md', RULE], 'without existing (no fixture files) as before');
+  assert.ok(bashTraceReads(T, [RULE], {existing: true}).possible.includes('.worktrees/none/.agent-skill-chain/project/rules/money.md'), 'still a possible read');
+});
+
+test('#1844 second review L-b: by which count a forbidden read was found, and the forbidReadsOk level shows the strict value and the trials failed only by unbounded output or bashMention', () => {
+  const R = '/w/work', RULE = '.agent-skill-chain/project/rules/money.md';
+  const opts = {level: X44, condition: 'R', fileText: () => 'export const x = 1;\n', priorFiles: () => [RULE, 'src/users/store.ts'], priorTexts: (rels) => rels.map(() => null), skills: C44.ascSkills, changedFiles: ['src/users/store.ts']};
+  const U = (cmd) => scoreRun(SPEC44, k44('u-users'), trace({messages: [[['Read', {file_path: BODY}]], [['Bash', {command: cmd}]], []], tools: X44.tools.split(','), cwd: R}), opts);
+  assert.deepEqual(U('git show HEAD --format=%H').forbiddenReadsBy, {'money-rule': ['unbounded']});
+  assert.deepEqual(U('cd .agent-skill-chain/project/rules').forbiddenReadsBy, {'money-rule': ['mention']});
+  assert.deepEqual(U(`cat ${RULE}`).forbiddenReadsBy, {'money-rule': ['strict', 'possible', 'mention']});
+  assert.deepEqual(U('grep -n export src/users/store.ts').forbiddenReadsBy, {});
+  const row = (by, strict = []) => ({condition: 'R', case: 'u-users', forbidReadsOk: Object.keys(by).length === 0, forbiddenReadsBy: by, forbiddenReadsStrict: strict});
+  const runs = [row({'money-rule': ['unbounded']}), row({'money-rule': ['mention']}), row({}), row({'money-rule': ['strict', 'possible', 'mention']}, ['money-rule'])];
+  const c = levelChecks(runs, 'R', [{id: 'g', metric: 'forbidReadsOk', cases: ['u-users'], min: '1/2'}]).g;
+  assert.deepEqual([c.ok, c.n, c.breakdown], [1, 4, {strictOk: 3, onlyUnbounded: 1, onlyMention: 1, n: 4}]);
+  const w = levelChecks(runs.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !k.startsWith('forbiddenReads')))), 'R', [{id: 'g', metric: 'forbidReadsOk', cases: ['u-users'], min: '1/2'}]).g;
+  assert.ok(!('breakdown' in w), 'level W rows (no forbiddenReadsBy): as before');
+});
+
+test('#1844 second review L-c: the fixture before a trial with Bash is read at meta.json sampleHead, not at the HEAD the trial committed', (t) => {
+  const work = path.join(fs.realpathSync(tmp(t)), 'work');
+  fs.mkdirSync(work, {recursive: true}); fs.writeFileSync(path.join(work, 'a.md'), 'before\n');
+  const g = (args) => spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd: work, encoding: 'utf8'});
+  g(['init', '-q']); g(['add', '-A']); g(['commit', '-q', '-m', 'i']);
+  const sampleHead = g(['rev-parse', 'HEAD']).stdout.trim();
+  fs.writeFileSync(path.join(work, 'a.md'), 'committed by the trial\n'); fs.writeFileSync(path.join(work, 'b.md'), 'b\n'); g(['add', '-A']); g(['commit', '-q', '-m', 't']);
+  assert.deepEqual([headReader(work, sampleHead).files(), headReader(work, sampleHead).text('a.md'), headReader(work, sampleHead).text('b.md')], [['a.md'], 'before\n', null]);
+  assert.deepEqual([headReader(work).files(), headReader(work).text('a.md')], [['a.md', 'b.md'], 'committed by the trial\n'], 'default HEAD as before');
+  assert.match(fs.readFileSync(path.join(H, 'collect.mjs'), 'utf8'), /headReader\(work, meta\.workFilesOptions && meta\.sampleHead \? meta\.sampleHead : 'HEAD'\)/);
+});
+
+test('#1844 probe 1: the per-uid temp directory of a confined trial fits 44 bytes; a runs root under a link gives one layout', async () => {
+  const {tmpDirProblem, perUidTmpDir, PER_UID_TMPDIR_MAX_BYTES, confinedSettings} = await import('../run-trial.mjs');
+  assert.equal(PER_UID_TMPDIR_MAX_BYTES, 44);
+  assert.equal(perUidTmpDir('/var/tmp/r1844/R-u-bill-1-4', 502), '/var/tmp/r1844/R-u-bill-1-4/tmp/claude-502');
+  assert.equal(tmpDirProblem('/var/tmp/r1844/R-u-bill-1-4', 502), null, '42 bytes');
+  assert.equal(tmpDirProblem('/var/tmp/r1844/R-u-bill-1-99', 502), null, '43 bytes');
+  assert.match(tmpDirProblem('/private/var/tmp/asc-eval-1844/runs/R-probe-1', 502), /is 60 bytes, longer than 44/, 'R-probe-1 of the first probe');
+  assert.match(tmpDirProblem('/private/var/tmp/r1844/R-u-bill-1-4', 502), /is 50 bytes/, 'the real path of /var/tmp is too long');
+  // run-trial refuses it before anything is reserved (no --run needed).
+  const C44DIR = path.join(EVROOT, '1844-rule-read-bash/config');
+  // the probes of priorProbes must be reserved and settled in the prior-stage ledger.
+  const {priorProbeProblems} = await import('../run-trial.mjs');
+  const C = JSON.parse(read('conditions.json', C44DIR));
+  assert.deepEqual(priorProbeProblems(C, C44DIR), []);
+  assert.match(priorProbeProblems({...C, priorProbes: ['R-probe-2']}, C44DIR).join(), /R-probe-2 .* not reserved and settled/);
+  assert.match(priorProbeProblems({...C, budget: {...C.budget, priorSpend: undefined}}, C44DIR).join(), /needs budget.priorSpend/);
+  assert.match(priorProbeProblems({...C, priorProbes: []}, C44DIR).join(), /R-probe-1 of the prior-stage ledger is missing from conditions.json priorProbes/, 'review of the fixes L1');
+  assert.deepEqual(priorProbeProblems({...C, priorProbes: undefined}, C44DIR), [], 'a config without priorProbes (e.g. an earlier stage in priorSpend) is not checked');
+  const tmpL = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1844-prior-'));
+  try {
+    const lf = path.join(tmpL, 'l.jsonl'); ledger.create(lf); ledger.reserve(lf, 'R-probe-1', 0.6); ledger.reserve(lf, 'R-u-bill-1-1', 0.8);
+    assert.match(priorProbeProblems({...C, budget: {...C.budget, priorSpend: {...C.budget.priorSpend, ledger: path.relative(C44DIR, lf)}}}, C44DIR).join(), /holds measurement trials \(R-u-bill-1-1\)/);
+  } finally { fs.rmSync(tmpL, {recursive: true, force: true}); }
+  const r = spawnSync(process.execPath, [path.join(H, 'run-trial.mjs'), '/private/var/tmp/asc-eval-1844-long/runs', 'R', 'probe', '1', '--fixture', '/private/var/tmp/no-fixture', '--ledger', '/private/var/tmp/no-ledger/l.jsonl', '--home-marker', '/h/m', '--repo-marker', '/r/m', '--config', C44DIR], {encoding: 'utf8'});
+  assert.equal(r.status, 3, r.stderr); assert.match(r.stderr, /per-uid temp directory .* longer than 44/);
+  // review of probe 1: a runs root through a symbolic link (/var -> /private/var) and a trial not created yet: same layout.
+  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'asc1844-link-')));
+  try {
+    fs.mkdirSync(path.join(base, 'real/runs'), {recursive: true}); fs.symlinkSync(path.join(base, 'real'), path.join(base, 'link'));
+    const runs = path.join(base, 'link/runs');
+    const sb = {layout: 'confined', denyReadRoots: []};
+    const st = confinedSettings({work: path.join(runs, 'R-u-bill-1-1/work'), runsRoot: runs, fixture: path.join(base, 'fx'), ledger: path.join(base, 'l/l.jsonl')}, sb);
+    assert.equal(st.sandbox.enabled, true);
+    // review of the fixes L2: a runs root not created yet under the link gives the same layout too.
+    assert.equal(confinedSettings({work: path.join(base, 'link/new-runs/R-u-bill-1-1/work'), runsRoot: path.join(base, 'link/new-runs'), fixture: path.join(base, 'fx'), ledger: path.join(base, 'l/l.jsonl')}, sb).sandbox.enabled, true);
+  } finally { fs.rmSync(base, {recursive: true, force: true}); }
+});
+
+// PR #1857 (CodeRabbit) fixes of the shared harness: none changes a recorded #1844 result (no measurement ran; the probes
+// keep their recorded checks, below).
+test('PR #1857 review: Bash reads after ||, git -C, a failed cd, an invalid glob; markerBase in a linked worktree', () => {
+  const root = '/r/w';
+  // `true || cat x`: cat may not have run, a possible read only; the part before || is strict.
+  assert.deepEqual(bashScan('true || cat README.md', root).reads, []);
+  assert.ok(bashScan('true || cat README.md', root).possible.includes('README.md'));
+  assert.deepEqual(bashScan('cat a.md || cat b.md; cat c.md', root).reads, ['a.md', 'c.md'], '; ends the conditional list');
+  assert.deepEqual(bashScan('cat a.md || true', root).reads, ['a.md'], 'as before');
+  assert.equal(bashScan('false || cd src', root).dir, null, 'a cd after || leaves the cwd unknown');
+  // git -C <dir>: the path of <rev>:<path> is that of the worktree in <dir>; the session cwd is unchanged.
+  const g = bashScan('git -C .worktrees/w1 show HEAD:README.md', root);
+  assert.deepEqual([g.reads, g.dir], [['.worktrees/w1/README.md'], root]);
+  assert.deepEqual(bashScan('git -C src blame a.ts', root).reads, ['src/a.ts']);
+  assert.deepEqual(bashScan('git show HEAD:README.md', root).reads, ['README.md'], 'without -C as before');
+  // A glob that is no regular expression: as in bash it matches no file (not unbounded, review L5); the rest is scanned.
+  const bad = bashScan('cat [z-a]*.md; cat ok.md', root, root, ['a.md']);
+  assert.deepEqual([bad.unbounded, bad.reads, bad.possible], [false, ['ok.md'], ['ok.md']]);
+  // review L1: sh -c after || gives possible reads only.
+  const orSh = bashScan("true || sh -c 'cat rules/money.md'", root);
+  assert.deepEqual([orSh.reads, orSh.possible], [[], ['rules/money.md']]);
+  assert.deepEqual(bashScan("sh -c 'cat rules/money.md'", root).reads, ['rules/money.md'], 'without || as before');
+  // review L4: git -C to a variable: <rev>:<path> is a possible read only (matched against the files).
+  const gv = bashScan('git -C "$W" show HEAD:rules/money.md', root, root, ['rules/money.md', '.worktrees/w1/rules/money.md']);
+  assert.deepEqual(gv.reads, []);
+  assert.ok(gv.possible.includes('rules/money.md') && gv.possible.includes('.worktrees/w1/rules/money.md'));
+  // A failed call: a lone cd keeps the cwd; a cd with more leaves it unknown; a successful cd is kept as before.
+  const trace = (calls) => ({cwd: root, uses: calls.map((c, i) => ({id: `b${i}`, name: 'Bash', input: {command: c[0]}})), results: new Map(calls.map((c, i) => [`b${i}`, {is_error: c[1]}]))});
+  assert.deepEqual(bashTraceReads(trace([['cd no-such-dir', true], ['cat README.md', false]]), ['README.md']).reads, ['README.md']);
+  assert.deepEqual(bashTraceReads(trace([['cd src && false', true], ['cat a.ts', false]]), ['src/a.ts', 'a.ts']).reads, []);
+  assert.ok(bashTraceReads(trace([['cd src && false', true], ['cat a.ts', false]]), ['src/a.ts', 'a.ts']).possible.includes('src/a.ts'), 'unknown cwd: matched against the files');
+  assert.deepEqual(bashTraceReads(trace([['cd src', false], ['cat a.ts', false]])).reads, ['src/a.ts']);
+  // review L3: a failed call of more than one cd (`cd src && cd nope`): the first may have run, the cwd is unknown.
+  assert.equal(bashScan('cd src && cd nope', root).cdOnly, false);
+  assert.deepEqual(bashTraceReads(trace([['cd src && cd nope', true], ['cat x', false]]), ['x', 'src/x']).reads, []);
+  assert.deepEqual(bashTraceReads(trace([['cd nope', true], ['cat x', false]]), ['x', 'src/x']).reads, ['x'], 'a lone cd as before');
+  // markerBase: a file written in .worktrees/<name>/ takes the base text of <rel> at the fixture's HEAD.
+  const asked = [];
+  const priorTexts = (rels) => { asked.push(...rels); return rels.map((r) => (r === 'src/a.ts' ? 'old line' : null)); };
+  const base = baseLinesFor({markerBase: {pathPattern: '^docs/'}}, ['.worktrees/w1/src/a.ts'], {priorTexts, priorFiles: () => ['src/a.ts']});
+  assert.ok(base.has('old line') && asked.includes('src/a.ts'));
+});
+
+test('PR #1857 review: collect with a .worktrees file; probe end state from meta.json; Bash path arguments quoted', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  // probe-check judges from meta.json probeEndState when recorded, from the files only for an earlier record.
+  const work = path.join(d, 'work'); fs.mkdirSync(work);
+  const ctx = {sentinels: {trial: path.join(d, 's1'), repo: path.join(d, 's2')}, outsideWrites: {a: path.join(d, 'o1')}};
+  fs.writeFileSync(path.join(d, 'o1'), 'x');
+  const end = probeEndStateOf(ctx, work);
+  assert.deepEqual(end, {sentinelExists: {trial: false, repo: false}, insideExists: false, outsideExists: {a: true}});
+  const pc = fs.readFileSync(path.join(H, 'probe-check.mjs'), 'utf8');
+  assert.match(pc, /\.\.\.\(meta\.probeEndState \?\? probeEndStateOf\(/);
+  assert.match(fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8'), /probeStepCount: probeSteps\(cell\.tools, ctx\)\.length, probeEndState\}/);
+  // A path of plain characters is unchanged (#1844's probe commands); another is one quoted word.
+  assert.equal(shq('/var/tmp/r1844/x.txt'), '/var/tmp/r1844/x.txt');
+  assert.equal(shq("/a b/it's"), `'/a b/it'\\''s'`);
+  const r = spawnSync('/bin/sh', ['-c', `printf '%s\\n' ${shq("/a b/it's")} | wc -l`], {encoding: 'utf8'});
+  assert.equal(r.stdout.trim(), '1');
+  const spaced = {dir: '/r/runs/R-probe-1', trialDir: '/r/runs/R-probe-1', fixture: '/r/f x', ledgerDir: '/r/l', homeMarker: '/h/m 1', repoMarker: '/repo/m', siblingRecord: '/r/runs/p s/record.txt',
+    deniedRoots: ['/d 1'], sentinels: {trial: '/r/runs/R-probe-1/s', repo: '/repo/s'}, outsideWrites: {userTmp: '/private/tmp/u x/f.txt', runsRoot: '/r/runs/f.txt', varTmp: '/private/var/tmp/f.txt'}, loginKeychain: '/k/login.keychain-db'};
+  const cmds = bashProbeSteps(spaced, 'z').filter((st) => st.tool === 'Bash').map((st) => st.command);
+  for (const c of ["cat '/h/m 1'", "ls '/r/f x'", "ls '/d 1'", "cat '/r/runs/p s/record.txt'", "a='/private/tmp/u x'"]) assert.ok(cmds.some((x) => x.includes(c)), c);
+  // .worktrees as a regular file: no worktree is listed and the trial is still collected.
+  const runs = path.join(d, 'runs'), dir = path.join(runs, 'R-u-users-1'), w = path.join(dir, 'work');
+  fs.mkdirSync(w, {recursive: true});
+  const g = (args) => spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd: w, encoding: 'utf8'});
+  g(['init', '-q']); fs.writeFileSync(path.join(w, 'a.txt'), 'a'); g(['add', '-A']); g(['commit', '-q', '-m', 'i']);
+  const head = g(['rev-parse', 'HEAD']).stdout.trim();
+  fs.writeFileSync(path.join(w, '.worktrees'), 'not a directory');
+  const opts = {base: head, worktrees: true};
+  fs.writeFileSync(path.join(dir, 'trace.jsonl'), ev({type: 'result'}) + '\n');
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({case: 'u-users', sampleHead: head, endHead: head, workFilesOptions: opts, workFiles: workChanges(w, opts)}));
+  const c = collectTrial(runs, 'R-u-users-1', {conds: C44});
+  assert.deepEqual(c.entry.worktrees, []);
+});
+
+// PR #1857 re-review M-1: the removal of the credential's copies goes on past a failure, takes a measured trial's tmp/, a
+// file in a read-only directory and an unreadable trial directory ('.'), and never follows a link out of the trial.
+test('PR #1857 re-review M-1: credential copies removed per item (read-only directory, measured tmp/, ".", a link out refused); the trial cleanup', {skip: process.getuid() === 0 && 'root ignores permissions'}, async (t) => {
+  const {removeTree, removeAll} = await import('../run-trial.mjs');
+  const SECRET = 'sk-test-credential-0123456789';
+  // Registered before tmp's removal so a directory left locked (a failing assertion) is opened first.
+  const opened = [];
+  t.after(() => { for (const p of opened) try { fs.chmodSync(p, 0o700); } catch { /* removed */ } });
+  const d = fs.realpathSync(tmp(t));
+  const lock = (p, mode) => { fs.chmodSync(p, mode); opened.push(p); };
+  const trial = (name) => { const dir = path.join(d, name), work = path.join(dir, 'work'); fs.mkdirSync(path.join(work, '.git'), {recursive: true}); fs.mkdirSync(path.join(dir, 'tmp')); fs.writeFileSync(path.join(work, '.git/obj'), SECRET); return {dir, work}; };
+  // A probe: a copy in a directory made read-only (chmod 500) is found and removed (its parent gets the owner's write back).
+  {
+    const {dir, work} = trial('R-probe-1');
+    fs.mkdirSync(path.join(work, 'd')); fs.writeFileSync(path.join(work, 'd/f'), SECRET); fs.writeFileSync(path.join(work, 'keep.txt'), 'k');
+    lock(path.join(work, 'd'), 0o500);
+    const m = credentialCheckOf({dir, work, secret: SECRET});
+    assert.deepEqual(m.credentialFiles, ['work/.git/obj', 'work/d/f']);
+    removeCredentialCopies(m, {dir, work, probe: true});
+    assert.deepEqual([fs.existsSync(path.join(work, 'd/f')), fs.existsSync(path.join(work, '.git')), fs.existsSync(path.join(work, 'keep.txt')), m.credentialCleanupErrors], [false, false, true, undefined]);
+  }
+  // A probe whose listed copy is reached through a link out of the trial: refused and recorded; the outside file is kept
+  // and the other removals go on (work/.git, tmp/).
+  {
+    const {dir, work} = trial('R-probe-2');
+    const outside = path.join(d, 'outside'); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, 'f'), 'not the trial’s');
+    fs.symlinkSync(outside, path.join(work, 'link'));
+    fs.writeFileSync(path.join(dir, 'tmp/env.txt'), SECRET);
+    const m = removeCredentialCopies({credentialLeak: true, credentialFiles: ['work/link/f', 'tmp/env.txt'], credentialInGitObjects: true}, {dir, work, probe: true});
+    assert.equal(fs.existsSync(path.join(outside, 'f')), true, 'not followed out of the trial');
+    assert.deepEqual([fs.existsSync(path.join(dir, 'tmp/env.txt')), fs.existsSync(path.join(work, '.git'))], [false, false], 'the rest is removed');
+    assert.equal(m.credentialCleanupErrors.length, 1);
+    assert.match(m.credentialCleanupErrors[0], /^work\/link\/f: a symbolic link on the way: work\/link$/);
+    assert.throws(() => removeTree(path.join(outside, 'f'), dir), /not under the trial directory/);
+    assert.equal(fs.existsSync(path.join(outside, 'f')), true);
+  }
+  // A measured trial: its work/ and its tmp/ (an unreadable directory and a read-only one with copies) are removed.
+  {
+    const {dir, work} = trial('R-u-users-1');
+    fs.mkdirSync(path.join(dir, 'tmp/x')); fs.writeFileSync(path.join(dir, 'tmp/x/out'), SECRET); lock(path.join(dir, 'tmp/x'), 0o000);
+    fs.mkdirSync(path.join(dir, 'tmp/ro')); fs.writeFileSync(path.join(dir, 'tmp/ro/out'), SECRET); lock(path.join(dir, 'tmp/ro'), 0o500);
+    const m = credentialCheckOf({dir, work, secret: SECRET});
+    assert.deepEqual([m.credentialUnreadable, m.credentialFiles.includes('tmp/ro/out')], [['tmp/x'], true]);
+    removeCredentialCopies(m, {dir, work, probe: false});
+    assert.deepEqual([fs.existsSync(work), fs.existsSync(path.join(dir, 'tmp')), m.workRemoved, m.credentialCleanupErrors], [false, false, 'credential leak', undefined]);
+  }
+  // review L-1: the trial directory itself unreadable ('.'): the whole work/ and tmp/ of the probe are removed and recorded.
+  {
+    const {dir, work} = trial('R-probe-3');
+    fs.writeFileSync(path.join(dir, 'tmp/env.txt'), SECRET);
+    lock(dir, 0o000);
+    const m = credentialCheckOf({dir, work, secret: SECRET});
+    assert.deepEqual(m.credentialUnreadable, ['.']);
+    removeCredentialCopies(m, {dir, work, probe: true});
+    assert.deepEqual([fs.existsSync(work), fs.existsSync(path.join(dir, 'tmp')), m.workRemoved, m.credentialCleanupErrors], [false, false, 'trial directory unreadable', undefined]);
+  }
+  // The cleanup at the end of every trial (main's finally): unreadable and read-only directories are removed, a failure is
+  // returned (not thrown), and the ledger is unlocked after it in any case.
+  {
+    const dir = path.join(d, 'R-u-users-2');
+    for (const s of ['home/a', 'config', 'bin', 'tmp/ro']) fs.mkdirSync(path.join(dir, s), {recursive: true});
+    fs.writeFileSync(path.join(dir, 'tmp/ro/f'), 'x'); lock(path.join(dir, 'tmp/ro'), 0o500); lock(path.join(dir, 'home/a'), 0o000);
+    fs.symlinkSync(path.join(d, 'outside'), path.join(dir, 'bin/link'));
+    const left = removeAll(['home', 'config', 'bin', 'tmp', '../outside'].map((s) => path.join(dir, s)), dir);
+    assert.deepEqual(['home', 'config', 'bin', 'tmp'].map((s) => fs.existsSync(path.join(dir, s))), [false, false, false, false]);
+    assert.deepEqual([left.length, fs.existsSync(path.join(d, 'outside/f'))], [1, true], 'a link is removed, not followed; a path outside is refused and returned');
+    const src = fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8');
+    assert.match(src, /try \{ left = removeAll\(\[home, config, path\.join\(dir, 'bin'\), path\.join\(dir, 'tmp'\)\], dir\); \} finally \{ unlock\(\); \}/);
+  }
+});
+
+// PR #1857 re-review M-2: with the cwd unknown (a failed call with a cd, a cd after ||, git -C to a variable), a directory
+// searched in depth or a path going up (..) is unbounded output, so a forbidden read is not missed.
+test('PR #1857 re-review M-2: unknown cwd: a searched directory and a path with .. are unbounded; a known cwd as before', () => {
+  const root = '/r/w', files = ['project/rules/money.md', 'rules/money.md', 'src/a.ts'];
+  const trace = (calls) => ({cwd: root, uses: calls.map((c, i) => ({id: `b${i}`, name: 'Bash', input: {command: c[0]}})), results: new Map(calls.map((c, i) => [`b${i}`, {is_error: c[1]}]))});
+  assert.equal(bashTraceReads(trace([['cd project/rules && false', true], ['grep -r money .', false]]), files).unbounded, 1, 'example 1 of the review');
+  assert.equal(bashTraceReads(trace([['cd src && false', true], ['cat ../rules/money.md', false]]), files).unbounded, 1, 'example 2 of the review');
+  assert.equal(bashTraceReads(trace([['false || cd src', false], ['rg money', false]]), files).unbounded, 1);
+  for (const c of ['grep -r money .', 'grep -r money rules', 'rg money', 'find rules -exec cat {} +', 'cat ./../x.md', 'cat ..', 'cat .']) assert.equal(bashScan(c, root, null, files).unbounded, true, c);
+  assert.equal(bashScan('git -C "$W" grep money', root, root, files).unbounded, true, 'review: git -C to a variable, grep');
+  // A forbidden read is then counted (caseChecks with the Bash counts).
+  const bash = bashTraceReads(trace([['cd src && false', true], ['cat ../rules/money.md', false]]), files);
+  const k = {id: 'x', forbidReads: [{id: 'money', pattern: '^rules/money\\.md$'}]};
+  assert.deepEqual(caseChecks(k, [], {uses: [], results: new Map(), cwd: root, skills: [], text: ''}, {bash}).forbiddenReads, ['money']);
+  // As before: a known cwd expands the directory against the files; an unknown cwd still matches a plain path by its end.
+  const known = bashScan('grep -r money rules', root, root, files);
+  assert.deepEqual([known.unbounded, known.possible.includes('rules/money.md')], [false, true]);
+  const plain = bashScan('cat a.ts', root, null, files);
+  assert.deepEqual([plain.unbounded, plain.possible], [false, ['src/a.ts']]);
+  assert.equal(bashScan('cat ../x.md', root, root, files).unbounded, false, 'a known cwd: .. is resolved');
+});
+
+// PR #1857 re-review L-4: a probe whose work/ was removed entirely is still read and fails credentialNotLeaked, with the
+// removal and its failures in the details.
+test('PR #1857 re-review L-4: a probe without work/ is read and fails; cleanup failures in the details', async (t) => {
+  const {d} = probeLedger(t, ['S-probe-1']);
+  const dir = path.join(d, 'S-probe-1');
+  const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({...meta, credentialLeak: true, credentialFiles: [], credentialInGitObjects: null, credentialInRecords: 0, credentialCheckError: 'boom', workRemoved: 'credential check error', credentialCleanupErrors: ['tmp: EACCES']}));
+  fs.rmSync(path.join(dir, 'work'), {recursive: true, force: true});
+  const {inputs} = fileInputs(dir, 'S', REPO, CONDS);
+  const r = checkProbe({...inputs, conditionsOverride: CONDS, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/nonexistent-home', hostInstallDir: '/opt/claude', installProblems: []});
+  assert.deepEqual([inputs.workRemoved, inputs.credentialCleanupErrors, inputs.credentialLeak, r.pass], ['credential check error', ['tmp: EACCES'], true, false]);
+  // Level X (credentialNotLeaked): the removal and its failures are in the details.
+  const {probeStepChecks} = await import('../probe-check.mjs');
+  const ctx = probeContext({dir: '/r/runs/R-probe-1', runsRoot: '/r/runs', fixture: '/r/fx', ledger: '/r/l/ledger.jsonl', homeMarker: '/h/m', repoMarker: '/repo/m'}, X44);
+  const c = probeStepChecks({...inputs, steps: probeSteps('X', ctx), expectedSteps: C44.probeSteps.X}, parseTrace(''), 'X').checks.credentialNotLeaked;
+  assert.deepEqual([c.pass, c.detail.checkError, c.detail.workRemoved, c.detail.cleanupErrors], [false, 'boom', 'credential check error', ['tmp: EACCES']]);
 });

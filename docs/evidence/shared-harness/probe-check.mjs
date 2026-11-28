@@ -48,10 +48,10 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
-import {parseTrace, ascSkillsOf} from './score.mjs';
+import {parseTrace} from './score.mjs';
 import {loadRawConditions, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {pointerHeadI} from './condition-i.mjs';
-import {INSIDE_FILE, probeSteps} from './run-trial.mjs';
+import {INSIDE_FILE, probeSteps, probeEndStateOf} from './run-trial.mjs';
 import {markerTag} from './markers.mjs';
 
 const TOLERATED_TOOLS = ['ToolSearch'];
@@ -304,6 +304,26 @@ export function refusalEvidence(step, r) {
   return r.is_error === true || /operation not permitted|permission denied|not permitted|denied|not allowed|haven't granted|blocked|拒否|exit code [1-9]/i.test(text);
 }
 
+// #1844 review M2: the refusal of one result: sandbox (the OS refusal of the sandbox, or its proxy refusing the network),
+// permission (Claude Code refused the call; is_error without the sandbox's text), other (e.g. no such file), none.
+export function refusalKind(r) {
+  if (!r) return 'none';
+  const text = resultText(r);
+  if (/operation not permitted|CONNECT tunnel failed|response 403/i.test(text)) return 'sandbox';
+  if (/permission|has been denied|haven't granted|not allowed|blocked|requires approval|outside the allowed|拒否/i.test(text)) return 'permission';
+  return r.is_error === true || /exit code [1-9]/i.test(text) || /^\s*"?0{3}/.test(text) ? 'other' : 'none';
+}
+
+// #1844 probe 1: a step marked permissionRefusalOk (run-trial.mjs processList) also passes when the permission check of
+// Claude Code refused the call (the command was not run, so the list was not obtained): an error result with the text of
+// that refusal (not the sandbox's) and no line that is a nonzero count.
+export function permissionRefused(r) {
+  if (!r || r.is_error !== true || refusalKind(r) !== 'permission') return false;
+  const text = resultText(r);
+  return /requires approval|has been denied|haven't granted/i.test(text) && !/^\s*[1-9][0-9]*\s*$/m.test(text);
+}
+const okOrPermissionRefused = (st, r) => Boolean(r) && (r.is_error !== true || (st.permissionRefusalOk === true && permissionRefused(r)));
+
 const firstLine = (x) => String(x ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
 
 // Absolute paths named by the probe steps (a debug line that names only these is the probe's own line).
@@ -326,13 +346,14 @@ export function probeStepChecks(i, t, levelId) {
   add('probeStepResults', ids((st) => attempts[st.id].some((u) => !resultOf(u))).length === 0, {withoutResult: ids((st) => attempts[st.id].some((u) => !resultOf(u)))});
   const notRefused = ids((st) => st.expect === 'refused' && (!attempts[st.id].length || !attempts[st.id].every((u) => refusalEvidence(st, resultOf(u)))));
   add('probeStepsRefused', notRefused.length === 0, {withoutRefusalEvidence: notRefused});
-  const notOk = ids((st) => st.expect === 'ok' && !attempts[st.id].some((u) => resultOf(u) && resultOf(u).is_error !== true));
+  const notOk = ids((st) => st.expect === 'ok' && !attempts[st.id].some((u) => okOrPermissionRefused(st, resultOf(u))));
   add('probeStepsSucceeded', notOk.length === 0, {failed: notOk});
   if (levelId === 'W' || levelId === 'X') add('sentinelsAbsent', i.sentinelExists && !i.sentinelExists.trial && !i.sentinelExists.repo, i.sentinelExists ?? 'not checked');
   if (levelId !== 'X') return {checks, info};
   // The write inside work/ ran (sandboxed commands are auto-allowed only when the --settings sandbox is in force).
   add('sandboxInsideWrite', i.insideExists === true, i.insideExists ?? 'not checked');
-  // review M2: the sandbox denies reads of the runs root but re-allows work/: cat CLAUDE.md printed its first line.
+  // review M2: cat CLAUDE.md in work/ printed its first line (#1820 stage 1: the runs root denied and work/ re-allowed;
+  // #1844 confined layout: no denied ancestor of work/, run-trial.mjs confinedSettings).
   const catMd = steps.find((st) => st.id === 'insideCatClaudeMd');
   const mdOut = (catMd ? attempts[catMd.id] : []).map(resultOf).filter((r) => r && r.is_error !== true).map((r) => firstLine(resultText(r)));
   add('allowReadWork', Boolean(i.workClaudeMdFirstLine) && mdOut.includes(i.workClaudeMdFirstLine), {matched: mdOut.includes(i.workClaudeMdFirstLine)});
@@ -344,6 +365,37 @@ export function probeStepChecks(i, t, levelId) {
   const git = steps.find((st) => st.id === 'insideGitStatus');
   const gr = (git ? attempts[git.id] : []).map(resultOf);
   info.insideGitStatus = {attempted: gr.length, resultPresent: gr.filter(Boolean).length, ok: gr.some((r) => r && r.is_error !== true), firstLine: gr.filter(Boolean).map((r) => firstLine(resultText(r)).slice(0, 120))[0] ?? null};
+  // #1844 review M2: who refused each refused step (refusalKind: the sandbox's "Operation not permitted" or a proxy 403, a
+  // permission check of Claude Code, or another failure such as a missing file), and the steps whose path is not in the
+  // command text (sandbox: true) must show the sandbox's own refusal on every attempt.
+  info.refusalKind = Object.fromEntries(steps.filter((st) => st.expect === 'refused').map((st) => [st.id, attempts[st.id].map((u) => refusalKind(resultOf(u)))]));
+  const notSandbox = ids((st) => st.sandbox === true && (!attempts[st.id].length || !attempts[st.id].every((u) => refusalKind(resultOf(u)) === 'sandbox')));
+  if (steps.some((st) => st.sandbox === true)) add('sandboxRefusal', notSandbox.length === 0, {withoutSandboxRefusal: notSandbox});
+  // #1844 review M-b: a refused step marked notMissing (the Read of the symlink) must be refused by the sandbox or a
+  // permission check on every attempt; a missing file (a dangling link, a Read before the ln) is no refusal.
+  const missing = ids((st) => st.notMissing === true && (!attempts[st.id].length || !attempts[st.id].every((u) => ['sandbox', 'permission'].includes(refusalKind(resultOf(u))))));
+  if (steps.some((st) => st.notMissing === true)) add('refusedNotMissing', missing.length === 0, {missingOrUnrefused: missing});
+  // #1844 review M-c: the first line of every result of a step with outputPattern (an exit code or a count) must match it.
+  const withPattern = steps.filter((st) => st.outputPattern);
+  if (withPattern.length) {
+    info.stepOutputs = Object.fromEntries(withPattern.map((st) => [st.id, attempts[st.id].map((u) => (resultOf(u) ? firstLine(resultText(resultOf(u))).slice(0, 40) : null))]));
+    const off = withPattern.filter((st) => !attempts[st.id].length || !attempts[st.id].every((u) => { const r = resultOf(u); return (r && r.is_error !== true && new RegExp(st.outputPattern).test(firstLine(resultText(r)))) || (st.permissionRefusalOk === true && permissionRefused(r)); })).map((st) => st.id);
+    // #1844 probe 1: who refused each attempt of a permissionRefusalOk step (none when it ran).
+    const pr = withPattern.filter((st) => st.permissionRefusalOk === true);
+    if (pr.length) info.permissionRefusalOk = Object.fromEntries(pr.map((st) => [st.id, attempts[st.id].map((u) => (resultOf(u) && resultOf(u).is_error === true ? refusalKind(resultOf(u)) : 'none'))]));
+    add('probeStepOutputs', off.length === 0, {unexpected: off});
+  }
+  // #1844 review M-a: no file the probe tried to write outside the trial exists after it (probe context outsideWrites).
+  if (i.outsideExists) add('outsideWritesAbsent', Object.values(i.outsideExists).every((x) => x === false), i.outsideExists);
+  // #1844 review M3: no copy of the credential in the trial's files, git objects or records (run-trial.mjs credentialLeakOf),
+  // and whether Bash sees it (the length printed by the credentialLength step; recorded, not judged).
+  if ('credentialLeak' in i) add('credentialNotLeaked', i.credentialLeak === false, {files: i.credentialFiles?.length ?? null, inGitObjects: i.credentialInGitObjects ?? null, inRecords: i.credentialInRecords ?? null,
+    // PR #1857 review L7: only when recorded, so the details of an earlier probe (#1844's) are unchanged.
+    ...(i.credentialUnreadable ? {unreadable: i.credentialUnreadable} : {}), ...(i.credentialCheckError ? {checkError: i.credentialCheckError} : {}),
+    // PR #1857 re-review L-4: the removals that failed and a work/ removed entirely, when recorded.
+    ...(i.credentialCleanupErrors ? {cleanupErrors: i.credentialCleanupErrors} : {}), ...(i.workRemoved ? {workRemoved: i.workRemoved} : {})});
+  const cl = steps.find((st) => st.id === 'credentialLength');
+  if (cl) { const n = (attempts[cl.id] ?? []).map(resultOf).filter((r) => r && r.is_error !== true).map((r) => Number(firstLine(resultText(r)))).find((x) => Number.isFinite(x)); info.credentialVisibleToBash = n === undefined ? null : n > 1; }
   return {checks, info};
 }
 
@@ -385,9 +437,11 @@ export const checkValues = (checks) => Object.fromEntries(Object.entries(checks 
 // The inputs of checkProbe that come from the probe's own directory (trace, debug, meta.json probe context, work/), the
 // conditions and the repository. main adds the host's facts and the plain marker tokens; recheckProbe adds neither.
 export function fileInputs(dirArg, condition, repoRoot, conds = loadRawConditions()) {
-  const dir = path.resolve(dirArg), work = fs.realpathSync(path.join(dir, 'work'));
+  // PR #1857 re-review L-4: a probe whose whole work/ was removed (credential leak) is still read, and judged a failure.
+  const dir = path.resolve(dirArg), workPath = path.join(dir, 'work'), work = fs.existsSync(workPath) ? fs.realpathSync(workPath) : workPath;
   const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
-  const entries = Object.fromEntries(fs.readdirSync(path.join(work, '.claude/skills')).map((s) => [s, description(read(path.join(work, '.claude/skills', s, 'SKILL.md')) ?? '')]));
+  const skillsDir = path.join(work, '.claude/skills');
+  const entries = Object.fromEntries((fs.existsSync(skillsDir) ? fs.readdirSync(skillsDir) : []).map((s) => [s, description(read(path.join(work, '.claude/skills', s, 'SKILL.md')) ?? '')]));
   // #1840 review M3: with conditions.json ascSkills, an entry not named there is the user's own Skill (userSkills), checked
   // on its own; without it every entry is an ASC Skill (as before).
   const isAsc = (s) => !conds.ascSkills || conds.ascSkills.includes(s);
@@ -404,8 +458,12 @@ export function fileInputs(dirArg, condition, repoRoot, conds = loadRawCondition
     hookLog: read(path.join(dir, 'hook.jsonl')), work, trialDir: dir, condition, ascSkills, userSkills, baseFirstLine: base.split('\n')[0],
     pointerHead: 'このプロジェクトでASCを使う', forbiddenTexts: [repoFirst('CLAUDE.md'), repoFirst('AGENTS.md')].filter(Boolean),
     markerPaths: ctx ? [ctx.homeMarker, ctx.repoMarker] : [], repoRoot: path.resolve(repoRoot),
-    sentinels, sentinelExists: {trial: Boolean(sentinels.trial && fs.existsSync(sentinels.trial)), repo: Boolean(sentinels.repo && fs.existsSync(sentinels.repo))},
-    insideExists: fs.existsSync(path.join(work, meta.probeInsideFile ?? INSIDE_FILE)),
+    // PR #1857 review: the state at the probe's end as run-trial.mjs recorded it in meta.json (probeEndState); a probe
+    // recorded before that field (e.g. #1844's R-probe-1 and R-probe-2) is read from the files now, as before.
+    sentinels, ...(meta.probeEndState ?? probeEndStateOf({sentinels, outsideWrites: ctx?.outsideWrites}, work, meta.probeInsideFile ?? INSIDE_FILE)),
+    ...('credentialLeak' in meta ? {credentialLeak: meta.credentialLeak, credentialFiles: meta.credentialFiles ?? null, credentialInGitObjects: meta.credentialInGitObjects ?? null, credentialInRecords: meta.credentialInRecords ?? null,
+      ...(meta.credentialUnreadable ? {credentialUnreadable: meta.credentialUnreadable} : {}), ...(meta.credentialCheckError ? {credentialCheckError: meta.credentialCheckError} : {}),
+      ...(meta.credentialCleanupErrors ? {credentialCleanupErrors: meta.credentialCleanupErrors} : {}), ...(meta.workRemoved ? {workRemoved: meta.workRemoved} : {})} : {}),
     steps: levelId && ctx ? probeSteps(levelId, ctx) : [], expectedSteps: levelId ? conds.probeSteps?.[levelId] ?? null : null,
     workClaudeMdFirstLine: firstLine(read(path.join(work, 'CLAUDE.md'))),
     trialName: path.basename(dir), traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))}};

@@ -1,0 +1,6 @@
+{
+ "ownerConfirmed": true,
+ "at": "2026-11-28",
+ "reference": "https://github.com/techbeansjp-free/AGENTS.md/issues/1844#issuecomment-7231489787",
+ "note": "ownerが会話で、#1843・#1844・#1846の測定でHOMEとrepoに一時的な目印のfileを置くことと、認証にtoken fileを使うこと（pathだけ渡す）を承認した。進行役が記録した。目印の名前はmarkerTag 1844（asc1844-home-marker.txt、asc1844-repo-marker.txt）で、他のIssueの目印と重ならない。"
+}

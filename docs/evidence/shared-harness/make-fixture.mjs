@@ -84,31 +84,75 @@ export function git(args, cwd) {
 // #1840 review M2: the files of a sample project that differ from its HEAD (changed, added, ignored or deleted), each with
 // its sha256 (null: deleted), sorted by path. run-trial.mjs records it in meta.json at the end of a trial; collect.mjs
 // compares it with the work/ copy again, so a file changed after the trial is detected.
-export function workChanges(work) {
-  const r = spawnSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored=matching', '--no-renames'], {cwd: work, env: gitEnv(work), encoding: 'utf8'});
+// #1844 (a level with Bash; run-trial.mjs meta.json workFilesOptions): with base (the HEAD the trial started from), the
+// files of the commits made since (git diff base HEAD) are included too; with worktrees, a directory holding a .git file
+// (a linked worktree, e.g. the one the ASC CLI worktree-create made under .worktrees/) is not listed file by file but by
+// its own changes against base, under its path. Without options the result is as before.
+export function workChanges(work, {base = null, worktrees = false} = {}) {
+  const g = (args) => spawnSync('git', args, {cwd: work, env: gitEnv(work), encoding: 'utf8'});
+  const r = g(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored=matching', '--no-renames']);
   if (r.status !== 0) throw new Error(`git status failed in ${work}: ${r.stderr}`);
   const out = {};
   const add = (rel) => {
     const f = path.join(work, rel);
     const st = fs.existsSync(f) ? fs.statSync(f) : null;
+    if (st?.isDirectory() && worktrees && fs.existsSync(path.join(f, '.git')) && fs.statSync(path.join(f, '.git')).isFile()) {
+      for (const [k, v] of Object.entries(workChanges(f, {base, worktrees}))) out[path.posix.join(rel.replace(/\/$/, ''), k)] = v;
+      return;
+    }
+    // #1844 review L2: with worktrees, the .git directory of a nested repository is one entry, not its objects file by file.
+    if (st?.isDirectory() && worktrees && path.posix.basename(rel.replace(/\/$/, '')) === '.git') { out[rel.replace(/\/$/, '')] = 'git-directory'; return; }
     if (st?.isDirectory()) { for (const e of fs.readdirSync(f)) add(path.posix.join(rel, e)); return; }
     out[rel.replace(/\/$/, '')] = st?.isFile() ? sha(fs.readFileSync(f)) : null;
   };
   for (const e of r.stdout.split('\0').filter(Boolean)) add(e.slice(3));
+  if (base) {
+    const head = g(['rev-parse', 'HEAD']).stdout.trim();
+    if (head !== base) {
+      const d = g(['diff', '-z', '--name-only', '--no-renames', base, 'HEAD']);
+      if (d.status !== 0) throw new Error(`git diff ${base} HEAD failed in ${work}: ${d.stderr}`);
+      for (const rel of d.stdout.split('\0').filter(Boolean)) if (!(rel in out)) add(rel);
+    }
+  }
   return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
-// #1840 re-review High: the files of a sample project at its HEAD (the fixture as made, before the trial; the trial has
-// no Bash and cannot commit) and their texts, for the lines the markers leave out (score.mjs baseLinesFor). headReader
+// #1844 review L2: the commits a trial made that neither HEAD nor a present linked worktree reaches (a worktree removed
+// after its commit, a branch not checked out, a stash; from every ref and reflog, git rev-list --all --reflog), and the
+// files they change. workChanges does not see them; run-trial.mjs records them (meta.json unreached) and score.mjs counts
+// such a file under a writes pathPattern as written but not checkable. Not seen: a commit whose branch was deleted after
+// its worktree was removed (no ref and no reflog left).
+export function unreachedChanges(work, base) {
+  const g = (args) => spawnSync('git', args, {cwd: work, env: gitEnv(work), encoding: 'utf8', maxBuffer: 1 << 28});
+  const wl = g(['worktree', 'list', '--porcelain']);
+  if (wl.status !== 0) throw new Error(`git worktree list failed in ${work}: ${wl.stderr}`);
+  // The HEAD of each worktree whose directory is still there (a removed worktree may still be listed as prunable).
+  const heads = [...new Set(wl.stdout.split('\n\n').map((blk) => ({p: /^worktree (.+)$/m.exec(blk)?.[1], h: /^HEAD (\S+)$/m.exec(blk)?.[1]})).filter((x) => x.p && x.h && fs.existsSync(x.p)).map((x) => x.h))];
+  const r = g(['rev-list', '--all', '--reflog', '--not', base, ...heads]);
+  if (r.status !== 0) throw new Error(`git rev-list failed in ${work}: ${r.stderr}`);
+  const commits = r.stdout.split('\n').filter(Boolean).sort();
+  const files = new Set();
+  for (const c of commits) {
+    const d = g(['diff-tree', '-r', '-m', '--root', '--no-commit-id', '--name-only', '-z', c]);
+    if (d.status !== 0) throw new Error(`git diff-tree failed in ${work}: ${d.stderr}`);
+    for (const f of d.stdout.split('\0').filter(Boolean)) files.add(f);
+  }
+  return {commits, files: [...files].sort()};
+}
+
+// #1840 re-review High: the files of a sample project at its HEAD (the fixture as made, before the trial; a trial of a
+// level without Bash cannot commit) and their texts, for the lines the markers leave out (score.mjs baseLinesFor). headReader
 // lists the files once and reads the texts in one `git cat-file --batch` per call of texts(); text() of a path that is
 // not at HEAD (a file the trial created) is null.
-export function headReader(work) {
+// #1844 review L-c: rev (default HEAD) is the commit read; a level with Bash can commit, so collect.mjs passes the
+// meta.json sampleHead for such a trial (the fixture before the trial, not its last commit).
+export function headReader(work, rev = 'HEAD') {
   const run = (args, input) => spawnSync('git', args, {cwd: work, env: gitEnv(work), input, maxBuffer: 1 << 30});
   let files = null;
   const cache = new Map();
   const list = () => {
     if (files) return files;
-    const r = run(['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
+    const r = run(['ls-tree', '-r', '-z', '--name-only', rev]);
     if (r.status !== 0) throw new Error(`git ls-tree failed in ${work}: ${r.stderr}`);
     return (files = r.stdout.toString('utf8').split('\0').filter(Boolean));
   };
@@ -118,13 +162,13 @@ export function headReader(work) {
     for (const f of want) if (!at.has(f)) cache.set(f, null);
     const read = want.filter((f) => at.has(f));
     if (!read.length) return;
-    const r = run(['cat-file', '--batch'], read.map((f) => `HEAD:${f}\n`).join(''));
+    const r = run(['cat-file', '--batch'], read.map((f) => `${rev}:${f}\n`).join(''));
     if (r.status !== 0) throw new Error(`git cat-file failed in ${work}: ${r.stderr}`);
     let pos = 0;
     for (const f of read) {
       const nl = r.stdout.indexOf(10, pos);
       const head = r.stdout.subarray(pos, nl).toString('utf8').split(' ');
-      if (head[1] !== 'blob') throw new Error(`git cat-file: ${f} is not a blob at HEAD`);
+      if (head[1] !== 'blob') throw new Error(`git cat-file: ${f} is not a blob at ${rev}`);
       const size = Number(head[2]);
       cache.set(f, r.stdout.subarray(nl + 1, nl + 1 + size).toString('utf8'));
       pos = nl + 1 + size + 1;

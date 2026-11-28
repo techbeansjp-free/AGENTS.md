@@ -54,6 +54,8 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
   if (!fs.existsSync(path.join(dir, 'meta.json'))) return failed('meta.json', 'missing trace');
   const text = fs.readFileSync(trace, 'utf8');
   const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+  // #1844 review M3: a trial whose files or records held the credential is a failure (its work/ was removed).
+  if (meta.credentialLeak) return failed('credential leak', 'credential leak');
   const cell = conds.cells[m[1]] ?? {};
   const work = path.join(dir, 'work');
   const sizeOf = (rel) => { const f = path.join(work, rel); try { return fs.statSync(f).isFile() ? fs.statSync(f).size : null; } catch { return null; } };
@@ -63,10 +65,22 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
     tarballSha256: meta.tarballSha256, installSource: meta.installSource ?? null, released: meta.released, installCondition: meta.installCondition ?? null, installFixture: meta.installFixture ?? null, adopted: meta.adopted, claudeMdSha256: meta.claudeMdSha256 ?? null, sampleHead: meta.sampleHead, applied: meta.applied,
     maxTurns: meta.maxTurns ?? null, initTools: meta.initTools ?? null, initPermissionMode: meta.initPermissionMode ?? null, settingsSha256: meta.settingsSha256 ?? null, resultSubtype: meta.resultSubtype ?? null, numTurns: meta.numTurns ?? null,
     ledgerId: meta.ledgerId ?? null, ledgerSeq: meta.ledgerSeq ?? null, fixationSha256: meta.fixationSha256, fixedAtCommit: meta.fixedAtCommit, fixationStage: meta.fixationStage,
-    exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: scrubSensitive(redact(text, dir)).hits, ...raw};
+    exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: scrubSensitive(redact(text, dir)).hits, ...raw,
+    ...(meta.sandboxLayout ? {sandboxLayout: meta.sandboxLayout, nodeVersion: meta.nodeVersion ?? null, endHead: meta.endHead ?? null, unreachedCommits: meta.unreached?.commits?.length ?? null, credentialLeak: meta.credentialLeak ?? null} : {})};
   // #1840 re-review High: the fixture's files before the trial (work/ at its HEAD), for the lines the markers leave out.
-  const head = headReader(work);
-  return {row, entry: {name, text, failure: null, sizeOf, fileText, priorFiles: head.files, priorTexts: head.texts}, dir};
+  // #1844 review L-c: a trial with Bash may have committed; its files before the trial are those of meta.json sampleHead.
+  const head = headReader(work, meta.workFilesOptions && meta.sampleHead ? meta.sampleHead : 'HEAD');
+  // #1844: with a level that has Bash, every file the trial changed or created (meta.json workFiles, by any tool) counts as
+  // written (score.mjs writtenFiles); a deleted file (null) does not.
+  const changedFiles = meta.workFilesOptions && meta.workFiles ? Object.keys(meta.workFiles).filter((f) => meta.workFiles[f] !== null) : null;
+  // #1844 review M1/L2: the worktrees under .worktrees/ (the possible Bash reads are expanded against their files) and the
+  // files of the commits HEAD no longer reaches (meta.json unreached).
+  const wtDir = path.join(work, '.worktrees');
+  // PR #1857 review: a .worktrees that is a file (not a directory) lists no worktree (the file stays a changed file).
+  const isDir = (d) => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
+  const worktrees = meta.workFilesOptions ? (isDir(wtDir) ? fs.readdirSync(wtDir).filter((n) => isDir(path.join(wtDir, n))).sort() : []) : null;
+  return {row, entry: {name, text, failure: null, sizeOf, fileText, priorFiles: head.files, priorTexts: head.texts, ...(changedFiles ? {changedFiles} : {}),
+    ...(worktrees ? {worktrees} : {}), ...(meta.unreached?.files?.length ? {unreachedFiles: meta.unreached.files} : {})}, dir};
 }
 
 // #1840 review M2: a trial whose meta.json records workFiles (run-trial.mjs, the changed and created files with their
@@ -81,16 +95,23 @@ export function workFilesProblem(dir) {
   let meta;
   try { meta = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch { return null; }
   const work = path.join(dir, 'work');
+  // #1844 review M3: a leaking trial's work/ was removed on purpose; the trial is a failure (collectTrial).
+  if (meta.credentialLeak) return null;
+  if (meta.unreachedError) return `trial ${path.basename(dir)}: the commits outside HEAD were not recorded (${meta.unreachedError})`;
   if (!meta.workFiles && !meta.workFilesError) return null;
   if (!fs.existsSync(work)) return `trial ${path.basename(dir)}: work/ is missing although meta.json records the changed files`;
   if (meta.workFilesError) return `trial ${path.basename(dir)}: the changed files were not recorded (${meta.workFilesError})`;
   // #1845 review L5: an empty sampleHead (rev-parse failed at the trial) is refused, not skipped; HEAD is read with the
   // same git environment as workChanges and headReader (an exported GIT_DIR does not point it at another repository).
   if (!meta.sampleHead) return `trial ${path.basename(dir)}: meta.json records the changed files but no sampleHead`;
+  // #1844: a level with Bash can commit, so its trial records the HEAD at the end (endHead) and work/ must be there; the
+  // changed files are taken with the options recorded (workFilesOptions: since sampleHead, worktrees by their changes).
+  if (meta.workFilesOptions && !meta.endHead) return `trial ${path.basename(dir)}: meta.json records workFilesOptions but no endHead`;
+  const want = meta.workFilesOptions ? meta.endHead : meta.sampleHead;
   const head = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, env: gitEnv(work), encoding: 'utf8'});
-  if (head.status !== 0 || head.stdout.trim() !== meta.sampleHead) return `trial ${path.basename(dir)}: the HEAD of work/ (${head.stdout.trim() || 'none'}) is not meta.json sampleHead ${meta.sampleHead}`;
+  if (head.status !== 0 || head.stdout.trim() !== want) return `trial ${path.basename(dir)}: the HEAD of work/ (${head.stdout.trim() || 'none'}) is not meta.json ${meta.workFilesOptions ? 'endHead' : 'sampleHead'} ${want}`;
   let now;
-  try { now = workChanges(path.join(dir, 'work')); } catch (e) { return `trial ${path.basename(dir)}: ${e.message}`; }
+  try { now = workChanges(path.join(dir, 'work'), meta.workFilesOptions); } catch (e) { return `trial ${path.basename(dir)}: ${e.message}`; }
   const keys = [...new Set([...Object.keys(meta.workFiles), ...Object.keys(now)])].sort();
   const differ = keys.filter((k) => meta.workFiles[k] !== now[k]);
   return differ.length ? `trial ${path.basename(dir)}: work/ differs from the files recorded at the end of the trial (${differ.slice(0, 3).join(', ')}${differ.length > 3 ? ', …' : ''})` : null;

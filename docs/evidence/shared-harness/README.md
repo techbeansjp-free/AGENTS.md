@@ -112,6 +112,70 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 - 金額の規則のような、コードについての禁止は`scope: "code"`にする。
 - `decision-criteria.md`に、観点が求めないもの（#1840のm-r7は合意の版を求めない）と、水準の分子が数えるもの（#1840のg2-rule-readは`money.md`の読取りだけ）を書く。
 
+## #1844で加えたもの（2026-11-28）
+
+Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLevels.<id>.sandbox`のfieldで加えた。そのfieldの無い水準（試験用の設定、#1823、#1840の水準W）の設定・起動・採点・照合は変えない（試験で確かめる）。#1840と#1823の測定は終わっていて、それぞれの`fixedAtCommit`の共通の仕組みで照合する（上の#1845と同じ扱い）。
+
+- `run-trial.mjs`の`confinedSettings`（`sandbox.layout: "confined"`）：`allowRead`を使わない`--settings`。#1820の段階1の水準Xは、`--settings`の`allowRead`が同じ`--settings`の`denyRead`を開け直さず（Claude Code 2.1.323）、`work/`を読めずに不合格だった。この配置では、`work/`と試行の`tmp/`の祖先を禁止しない。読取りと書込みを禁じる（`denyRead`と`denyWrite`の両方に入れる）のは、`/Users`、`denyReadRoots`、fixture、台帳のdirectory、runs rootの他の項目（起動時に列挙）、runs rootの親と祖父の他の項目、試行の記録のfile（`TRIAL_RECORD_FILES`）。書込みは、試行の`home/`・`config/`・`bin/`も禁じる。runs rootそのものや`/private/var/tmp`等、`work/`の祖先は禁止できないので、そこへの書込みはClaude Codeのsandboxの書込みの許可に任され、probeで確かめる（下の2回目のレビューM-a）。禁止が`work/`か`tmp/`を覆う配置（例：runs rootが`/private/tmp`の下で、`/private/tmp`を禁じる）は、予約の前に拒否する。
+- `trialEnv`：Claude Codeの一時directory（`CLAUDE_CODE_TMPDIR`。sandboxの中の`TMPDIR`）を試行の`tmp/`にし、Bashの`PATH`を試行の`bin/`（`copyNode`：harnessのnodeの写し。起動の前に1回実行する）と`pathDirs`だけにする。`claude`はharnessの`PATH`から絶対pathで起動する。試行の後に`bin/`と`tmp/`を消す。
+- probe（`probeSteps('X')`、`bashProbeSteps`）：Wの6操作に、Bashの操作（`work/`の中の書込み・`cat CLAUDE.md`・`git status`・node・ASC CLIの`--help`と`worktree-create`・`TMPDIR`への書込みが成功、目印・runs rootの別の項目`probe-sibling/record.txt`（probeの前に作る）・試行の`settings.json`・fixture・台帳・`denyReadRoots`の各項目の読取り、試行のdirectoryとrepositoryへの`touch`、通信が拒否）を足した。`probeContext`は水準を受け取り、confinedの水準だけ`siblingRecord`・`deniedRoots`を加える。判定は`probe-check.mjs`の水準Xの項目（#1820の段階1から残っていたもの）を使う。
+- `meta.json`（confinedの水準だけ）：`sandboxLayout`、`nodeVersion`、`endHead`（Bashはcommitできる）、`workFilesOptions`（`make-fixture.mjs`の`workChanges`の`base`：開始のHEADからのcommitの変更も含める、`worktrees`：`.git`がfileのdirectory（linked worktree）はその中の変更だけを列挙する）。`collect.mjs`は、`workFilesOptions`のある試行では`work/`のHEADが`endHead`であることと、同じoptionsでの`workFiles`の一致を確かめ、変更・作成されたfileを書いたfileとして採点に渡す（`changedFiles`）。
+- `score.mjs`（`level.sandbox`の水準だけ）：成功したBashの読むcommandの引数を読込みに数える（`bashReadsOf`・`bashReadPaths`。数え方と数えないものは`score.mjs`の注記）。`cases.json`の`expectCommands`（成功したBashのcommandに合う正規表現。指標`commandsAll`）と、`report.commands`（試みたか、成功したか）を加えた。書いたfile（`writtenFiles`）は、toolの書込みに`changedFiles`を足したもの。
+- `dry-run.mjs`：起動の引数とprobeの操作の数を、各条件の水準で確かめる（従来はWに固定）。confinedの水準には`confinedLayout`の項目を加えた。
+- `sandbox-check.mjs`（固定しないtool）：probeと同じ配置を作り、`isolationSettings`の読取り・書込みの規則を公開のsandbox runtime（`@anthropic-ai/sandbox-runtime`）に渡して、probeのBashの操作をモデルなしで実行する。Claude Codeの本体のruntimeでの確認ではないので、probeの代わりにしない。
+
+### #1844の独立レビューの是正（2026-11-28）
+
+いずれも`level.sandbox`の水準（confined）か、新しい設定のfieldがある場合だけ動く。水準Wと既存の設定の結果は変わらない（試験で確かめる）。
+
+- H1（`score.mjs`の`commandRan`）：`expectCommands`・`report.commands`の項目に`exclude`（除くcommand）と`resultPattern`（結果の本文に要るもの）を加えた。pipelineの終了codeは最後のcommandのものなので、`start`は出力のJSONのschemaが結果にある場合だけ「実行した」。`report.commands`に`exitOk`（終了code 0）を加えた。
+- M1（`bashScan`・`bashTraceReads`・`projectFilesOf`）：Bashの読込みを2通りに数える。strict（期待する読込み）：読むcommandのfileの引数（検索のpattern・sed等のscriptを除く）、`-f FILE`、`<`、`git show <rev>:<path>`、前の呼出しから引き継いだ`cd`。possible（禁止する読込み）：結果のある全ての呼出しについて、globと検索したdirectoryをfixtureのHEAD・変更したfile・各worktreeのfileに展開し、中身の分からない出力（`git show <rev>`等）は全てを読んだとし、項目の`bashMention`がcommandの文字列に合えば読んだとする。`caseChecks`は`forbiddenReads`にpossibleを、`forbiddenReadsStrict`にstrictを示す。`collect.mjs`は`.worktrees/`の名前を渡す。
+- M2（`indirectProbeSteps`、`probe-check.mjs`の`refusalKind`・`sandboxRefusal`）：symlink（BashとRead）、hard link、`node -e`、`sh -c '$0'`、変数で組み立てたpath、認証情報の長さをprobeに加えた。拒否の主体（sandbox／許可の確認／その他）を記録し、pathが文字列に無い操作はsandboxの拒否の文を要る。`expect: "any"`は記録だけ。
+- M3（`run-trial.mjs`の`credentialLeakOf`）：試行の後、消す前に、試行のdirectory（`home/`・`config/`を除く）、`work/`のgitのobject、置き換えた記録の`<credential>`を調べる。漏れがあれば測定の試行は`work/`を消して`collect.mjs`で失敗（`credential leak`）、probeは`credentialNotLeaked`で不合格。`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`は許可のmodeを`default`に強制するので使わない。
+- L1（`confinedSettings`）：runs rootの親と祖父の他の項目も禁止する（深さ3以上のdirectoryだけ列挙）。
+- L2（`make-fixture.mjs`の`unreachedChanges`、`workChanges`）：HEADも残ったworktreeも届かないcommit（`git rev-list --all --reflog`）とそのfileを`meta.json`の`unreached`に記録し、`score.mjs`はpathPatternの下のそのfileを「書いたが照合できない」（`writeUnreached`、`writeMissingText`）にする。`worktrees`のoptionでは、入れ子のrepositoryの`.git`を1項目にする。
+- L3（`levelsVerdict`）：`rule.minProvisional`があれば、判定に`minProvisional`と`verdictBasis`を付ける。
+
+### #1844の2回目の独立レビューの是正（2026-11-28）
+
+いずれも`level.sandbox`の水準か、新しい項目（probeの操作の`notMissing`・`outputPattern`、`meta.json`の`workFilesOptions`、行の`forbiddenReadsBy`）がある場合だけ動く。水準Wと既存の設定の結果は変わらない（試験で確かめる）。
+
+- M-a（`confinedSettings`、`outsideProbeSteps`、`probe-check.mjs`の`outsideWritesAbsent`）：`/Users`と`denyReadRoots`を`denyWrite`にも入れた。probeに、`/private/tmp/claude-<uid>/`・runs root・`/private/var/tmp/`への`touch`（変数で組み立てたpath、sandboxの拒否を要る）を加え、probeの後にそのfileが無いことを確かめる。
+- M-b（`indirectProbeSteps`、`refusedNotMissing`）：`lnSymlinkHome`は成功を要る。`catSymlinkHome`はsandboxの拒否を要る。symlinkのReadは、拒否が「fileが無い」（`refusalKind`の`other`）でないことを要る。
+- M-c（`outsideProbeSteps`、`probeStepOutputs`）：keychainの検索（既定の検索先と実userの`login.keychain-db`）、`pbpaste`、`ps`を、終了codeか数だけを出す形でprobeに加えた。操作の`outputPattern`に結果の最初の行が合うことを要る。`sandbox-check.mjs`は、この操作をsandboxなしでも実行して`baseline`に記録する。
+- L-a（`score.mjs`の`bashScan`・`bashTraceReads`）：標準出力を`/dev/null`へ流した読込み、`grep -q`・`-c`・`-l`・`-L`等、fixtureにも変更にも無いpath（`existing`。`scoreRun`はfixtureのfileが分かるときに使う）は、厳しい数え方の読込みにしない（広い数え方には残す）。
+- L-b（`forbiddenReadsBy`、`levelChecks`の`breakdown`）：禁止の読込みが、どの数え方（strict・possible・unbounded・mention）で見つかったかを行に記録し、`forbidReadsOk`の水準に、strictで合格した数と、unboundedだけ・mentionだけで落ちた数を並べる（判定には使わない）。
+- L-c（`make-fixture.mjs`の`headReader(work, rev)`、`collect.mjs`）：`workFilesOptions`のある試行は、試行の前のfileを`meta.json`の`sampleHead`で読む（Bashはcommitできるため）。
+- L-d・L-e：設定のREADMEの記述を直し、認証情報の検査の範囲（64MB以上のfile、入れ子のrepositoryの圧縮object）を「限界」に書いた。
+
+### PR #1857のCodeRabbitのレビューの是正（2026-11-28）
+
+#1844の測定は終わっている（未判定。15試行は行っていない）。次の直しは、#1844の記録した結果を変えない：probeの指示の文は同じ（pathに空白等が無いので、引用の直しは文字を変えない）で、`R-probe-2`を作り直した照合（`recheckProbe`）は直す前と一致した。採点（`score.mjs`）は測定の試行が無いので使っていない。#1844の照合は、`results/fixation.json`の`fixedAtCommit`の共通の仕組みで行う（上の#1845と同じ扱い）。
+
+- `score.mjs`：`||`の後の部分（`;`か改行まで）の読込みは広い数え方だけにし、そこの`cd`は作業directoryを不明にする。`git -C <dir>`は、そのcommandの中だけ`<dir>`からpathを解く。失敗した呼出しは、`cd`だけなら前の作業directoryを保ち、`cd`と他のcommandなら不明にする。正規表現にできないglob（`[z-a]`）は、bashと同じく何にも合わないとする（`unbounded`に数えない。採点を止めない）。`||`の後の`sh -c`の中の読込みも広い数え方だけにする。`git -C`の先が変数等で不明なら、`<rev>:<path>`は広い数え方だけにする。失敗した呼出しが`cd`を2つ以上含む（`cd src && cd nope`）なら、作業directoryを不明にする。`markerBase`は、linked worktreeに書いたfile（`.worktrees/<name>/<rel>`）にもfixtureのHEADの`<rel>`の旧版を使う。
+- `collect.mjs`：`.worktrees`が通常のfileなら、worktreeの一覧を空にする。
+- `run-trial.mjs`：`claude`の実行fileを、試行のdirectoryと台帳の予約の前に探す。置き換えた`debug.log`も`<credential>`の検査に渡す。認証情報の検査で読めないfileとdirectoryは、それぞれ`credentialUnreadable`として漏れに数え、検査を続ける。検査自体の失敗は`credentialCheckError`として漏れに数え、probeでも`work/`を丸ごと消す（どちらも従来どおり隔離して精算する。読めないdirectoryも権限を戻して消す）。`probe-check.mjs`の`credentialNotLeaked`の詳細は、この2つが記録されていれば`unreadable`・`checkError`として示す（記録の無い#1844のprobeの詳細は変わらない）。probeの終わりの目印・`work/`の中のfile・試行の外への書込みの有無を`meta.json`の`probeEndState`に記録し、`probe-check.mjs`はそれで判定する（その記録の無い以前のprobeは、従来どおり判定の時点のfileを見る）。probeのBashのpathの引数は1語として引用する（`shq`。`sandbox-check.mjs`も同じ）。
+- 試験：祖父のdirectoryを列挙する試験は、`os.tmpdir()`が`/tmp`でも深さ3以上になるよう1階層深くした。
+
+#### #1866（この仕組みと設定を使う次の測定）へ引き継ぐこと
+
+- 既知の限界（L2）：`||`の条件は`;`か改行で解けるので、`false || { cat a.md; cat b.md; }`や`if … then … fi`の中では、`b.md`を厳しい数え方に数える（期待する読込みの偽陽性の方向）。
+- 既知の限界（L6）：`probe-check.mjs`の`stepPathsOf`・`isProbeStepLine`のpathは空白で止まり、`unquote`は`'\''`の`\`を残す。空白や`'`を含むpathのprobeは不合格の方向に外れる（#1844のpathには無い）。probeのpathにそれらを使うなら、先に`shq`と揃える。
+- 確認（L8）：`debug.log`を認証情報の検査に加えた影響は、#1844の照合（記録済みの`credentialLeak`を使う）では確かめていない。#1866のprobeの前に、Claude Codeの`debug.log`に認証情報が通常から現れないかを1回確かめる（現れるなら全probeが誤って不合格になる）。
+- 限界（L9）：`run-trial.mjs`の`main`の配線（`debug.log`を検査に渡すこと、`claude`を予約の前に探すこと、`probeEndState`の記録）の試験は、sourceの文字列の照合にとどまる。#1866で`main`を変えるなら、実際の実行で確かめる試験を足す。
+- `cases.json`の`expectCommands`・`report.commands`（`commandRan`）は、Bashの呼出し全体の文字列に`pattern`を、結果全体に`resultPattern`を当てる。引用した文（`echo 'asc-v05.mjs start …'`）と、保存した`start`のJSONの表示を1つの呼出しで行うと、`start`を実行しなくても「実行した」に数えられる。#1844では測定の試行が無いので結果に影響しない。#1866で`start`の実行を指標にするなら、測定の前に、command（`node <asc-v05.mjs> start`の部分）と、その出力に結び付けて判定する形を加え、試験を足す（設定の`pattern`は引用したpathも許すので、引用した文を除くだけでは足りない）。
+
+### PR #1857の再レビューの是正（2026-11-28）
+
+#1844の記録した結果は変えない（測定の試行が無く、#1844のprobeの`meta.json`には`probeEndState`も`credentialCleanupErrors`も無い）。
+
+- M-1（`run-trial.mjs`の`removeCredentialCopies`・`removeAll`・`removeTree`）：認証情報の写しの削除は項目ごとに行い、1件が失敗しても残りを続け、失敗を`meta.json`の`credentialCleanupErrors`に記録する。`removeTree(p, root)`は、`root`（試行のdirectory）から`p`までのdirectoryに所有者の権限を戻してから消す（`chmod 500`のdirectoryの中のfileも消せる）。測定の試行も、`work/`に加えて`tmp/`と、記録された`work/`の外の項目を消す。試行の終わりの`finally`は`home/`・`config/`・`bin/`・`tmp/`を`removeAll`で消し、失敗しても台帳のlockを必ず解いて、消せなかったpathを標準エラーに出し終了codeを1にする（`meta.json`は精算の後なので書き足さない）。
+- M-2（`score.mjs`の`bashScan`）：作業directoryが不明なとき、深く検索するdirectoryの引数（`grep -r x .`、`grep -r x rules`、`rg x`、`find … -exec`、`git -C "$W" grep x`）と、`..`を含むpath・`.`そのものは`unbounded`（全てを読んだ）に数える。禁止の読込みの偽陰性を作らない方向で、期待する読込み（strict）は増やさない。作業directoryが分かるときと、不明なときの通常のpathの末尾の照合は従来どおり。
+- L-1：試行のdirectoryそのものが読めない（`credentialUnreadable`に`'.'`）ときは、probeでも`work/`と`tmp/`を丸ごと消し、`workRemoved`に`trial directory unreadable`と記録する。
+- L-2：`removeTree`は、試行のdirectoryの外のpathと、途中にsymlinkがあるpathを拒否する（失敗として記録し、外の権限を変えない）。残る限界：途中のdirectoryを調べてから消すまでの間にsymlinkへ差し替えられる競合は残る（Claude Codeの終了の後に子processが残る場合だけ。#1866で`main`を実際に動かす試験を足すときに確かめる）。
+- L-3：`probeEndState`はprobeなら水準Wでも記録され、Wの`sentinelsAbsent`も試行の終わりの記録で判定する（判定の結果は判定の時点のfileで見る場合と実質同じ）。上の「水準Wと既存の設定の結果は変わらない」は、このfieldの無い記録（#1844と既存のW）についての記述である。
+- L-4（`probe-check.mjs`の`fileInputs`）：`work/`を丸ごと消したprobeも読み、不合格として判定する（`work/`が無ければSkillの一覧は空）。`credentialNotLeaked`の詳細に、記録があれば`cleanupErrors`・`workRemoved`を示す。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。
