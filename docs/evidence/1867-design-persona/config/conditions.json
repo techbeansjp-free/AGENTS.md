@@ -9,7 +9,8 @@
   "layers/layer1-gold.json",
   "layers/eval.json",
   "layers/gate-count.json",
-  "layers/gate-count-prompt.md"
+  "layers/gate-count-prompt.md",
+  "layers/lp-new-brief-for-evaluation.md"
  ],
  "fixedExtraNote": "#1867 (review H2): the settings of the gate count, layer 1, layer 2 and layer 3, run outside the shared harness, are fixed with the plan (fixation.mjs hashes them as config/layers/...). The harness scripts of ../harness/ and the #1835 tools are not hashed here; they are named by the fixation commit.",
  "model": "sonnet",

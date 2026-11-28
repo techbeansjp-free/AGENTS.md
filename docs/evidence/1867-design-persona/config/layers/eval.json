@@ -10,7 +10,7 @@
    }
   },
   "lp-new": {
-   "brief": "1867-design-persona/cases/lp-new/BRIEF.md",
+   "brief": "1867-design-persona/config/layers/lp-new-brief-for-evaluation.md",
    "shots": {
     "narrow": "mobile",
     "wide": "desktop"
