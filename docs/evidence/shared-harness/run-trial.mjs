@@ -277,7 +277,7 @@ function main() {
     const reservation = ledgerOps.reserve(ledger, name, budget);
     fs.mkdirSync(home, {recursive: true}); fs.mkdirSync(config, {recursive: true});
     const applied = applyCondition(work);
-    const sampleHead = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, encoding: 'utf8'}).stdout.trim();
+    const sampleHead = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, env: gitEnv(work), encoding: 'utf8'}).stdout.trim();
     const settings = isolationSettings({work, runsRoot, fixture, ledger});
     fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 1) + '\n');
     const global = JSON.stringify({hasCompletedOnboarding: true, numStartups: 5, projects: {[fs.realpathSync(work)]: {hasTrustDialogAccepted: true}}});
