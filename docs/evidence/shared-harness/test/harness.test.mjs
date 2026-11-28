@@ -1520,12 +1520,12 @@ test('#1844 review M3: the credential in the trial files, the git objects or the
       const m = credentialCheckOf({dir: pdir, work: pwork, secret: SECRET});
       assert.deepEqual([m.credentialUnreadable, m.credentialFiles, m.credentialLeak, 'credentialCheckError' in m], [['work/x'], ['tmp/env.txt'], true, false], 'recorded per directory; the search goes on');
       removeCredentialCopies(m, {dir: pdir, work: pwork, probe: true});
-      assert.deepEqual([fs.existsSync(path.join(pwork, 'x')), fs.existsSync(path.join(pdir, 'tmp/env.txt')), fs.existsSync(path.join(pwork, 'keep.txt')), m.credentialCleanupError], [false, false, true, undefined]);
+      assert.deepEqual([fs.existsSync(path.join(pwork, 'x')), fs.existsSync(path.join(pdir, 'tmp/env.txt')), fs.existsSync(path.join(pwork, 'keep.txt')), m.credentialCleanupErrors], [false, false, true, undefined]);
     }
     // A failed search: the probe's whole work/ is removed, also an unreadable directory in it.
     fs.mkdirSync(path.join(pwork, 'y'), {recursive: true}); fs.writeFileSync(path.join(pwork, 'y/copy.txt'), SECRET); fs.chmodSync(path.join(pwork, 'y'), 0o000);
     const e = removeCredentialCopies(credentialCheckOf({}, () => { throw new Error('boom'); }), {dir: pdir, work: pwork, probe: true});
-    assert.deepEqual([fs.existsSync(pwork), e.workRemoved, e.credentialCleanupError], [false, 'credential check error', undefined]);
+    assert.deepEqual([fs.existsSync(pwork), e.workRemoved, e.credentialCleanupErrors], [false, 'credential check error', undefined]);
     fs.rmSync(pdir, {recursive: true, force: true});
   }
   // PR #1857 review: claude is looked up before the trial directory and the reservation.
@@ -1736,4 +1736,115 @@ test('PR #1857 review: collect with a .worktrees file; probe end state from meta
   fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({case: 'u-users', sampleHead: head, endHead: head, workFilesOptions: opts, workFiles: workChanges(w, opts)}));
   const c = collectTrial(runs, 'R-u-users-1', {conds: C44});
   assert.deepEqual(c.entry.worktrees, []);
+});
+
+// PR #1857 re-review M-1: the removal of the credential's copies goes on past a failure, takes a measured trial's tmp/, a
+// file in a read-only directory and an unreadable trial directory ('.'), and never follows a link out of the trial.
+test('PR #1857 re-review M-1: credential copies removed per item (read-only directory, measured tmp/, ".", a link out refused); the trial cleanup', {skip: process.getuid() === 0 && 'root ignores permissions'}, async (t) => {
+  const {removeTree, removeAll} = await import('../run-trial.mjs');
+  const SECRET = 'sk-test-credential-0123456789';
+  // Registered before tmp's removal so a directory left locked (a failing assertion) is opened first.
+  const opened = [];
+  t.after(() => { for (const p of opened) try { fs.chmodSync(p, 0o700); } catch { /* removed */ } });
+  const d = fs.realpathSync(tmp(t));
+  const lock = (p, mode) => { fs.chmodSync(p, mode); opened.push(p); };
+  const trial = (name) => { const dir = path.join(d, name), work = path.join(dir, 'work'); fs.mkdirSync(path.join(work, '.git'), {recursive: true}); fs.mkdirSync(path.join(dir, 'tmp')); fs.writeFileSync(path.join(work, '.git/obj'), SECRET); return {dir, work}; };
+  // A probe: a copy in a directory made read-only (chmod 500) is found and removed (its parent gets the owner's write back).
+  {
+    const {dir, work} = trial('R-probe-1');
+    fs.mkdirSync(path.join(work, 'd')); fs.writeFileSync(path.join(work, 'd/f'), SECRET); fs.writeFileSync(path.join(work, 'keep.txt'), 'k');
+    lock(path.join(work, 'd'), 0o500);
+    const m = credentialCheckOf({dir, work, secret: SECRET});
+    assert.deepEqual(m.credentialFiles, ['work/.git/obj', 'work/d/f']);
+    removeCredentialCopies(m, {dir, work, probe: true});
+    assert.deepEqual([fs.existsSync(path.join(work, 'd/f')), fs.existsSync(path.join(work, '.git')), fs.existsSync(path.join(work, 'keep.txt')), m.credentialCleanupErrors], [false, false, true, undefined]);
+  }
+  // A probe whose listed copy is reached through a link out of the trial: refused and recorded; the outside file is kept
+  // and the other removals go on (work/.git, tmp/).
+  {
+    const {dir, work} = trial('R-probe-2');
+    const outside = path.join(d, 'outside'); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, 'f'), 'not the trial’s');
+    fs.symlinkSync(outside, path.join(work, 'link'));
+    fs.writeFileSync(path.join(dir, 'tmp/env.txt'), SECRET);
+    const m = removeCredentialCopies({credentialLeak: true, credentialFiles: ['work/link/f', 'tmp/env.txt'], credentialInGitObjects: true}, {dir, work, probe: true});
+    assert.equal(fs.existsSync(path.join(outside, 'f')), true, 'not followed out of the trial');
+    assert.deepEqual([fs.existsSync(path.join(dir, 'tmp/env.txt')), fs.existsSync(path.join(work, '.git'))], [false, false], 'the rest is removed');
+    assert.equal(m.credentialCleanupErrors.length, 1);
+    assert.match(m.credentialCleanupErrors[0], /^work\/link\/f: a symbolic link on the way: work\/link$/);
+    assert.throws(() => removeTree(path.join(outside, 'f'), dir), /not under the trial directory/);
+    assert.equal(fs.existsSync(path.join(outside, 'f')), true);
+  }
+  // A measured trial: its work/ and its tmp/ (an unreadable directory and a read-only one with copies) are removed.
+  {
+    const {dir, work} = trial('R-u-users-1');
+    fs.mkdirSync(path.join(dir, 'tmp/x')); fs.writeFileSync(path.join(dir, 'tmp/x/out'), SECRET); lock(path.join(dir, 'tmp/x'), 0o000);
+    fs.mkdirSync(path.join(dir, 'tmp/ro')); fs.writeFileSync(path.join(dir, 'tmp/ro/out'), SECRET); lock(path.join(dir, 'tmp/ro'), 0o500);
+    const m = credentialCheckOf({dir, work, secret: SECRET});
+    assert.deepEqual([m.credentialUnreadable, m.credentialFiles.includes('tmp/ro/out')], [['tmp/x'], true]);
+    removeCredentialCopies(m, {dir, work, probe: false});
+    assert.deepEqual([fs.existsSync(work), fs.existsSync(path.join(dir, 'tmp')), m.workRemoved, m.credentialCleanupErrors], [false, false, 'credential leak', undefined]);
+  }
+  // review L-1: the trial directory itself unreadable ('.'): the whole work/ and tmp/ of the probe are removed and recorded.
+  {
+    const {dir, work} = trial('R-probe-3');
+    fs.writeFileSync(path.join(dir, 'tmp/env.txt'), SECRET);
+    lock(dir, 0o000);
+    const m = credentialCheckOf({dir, work, secret: SECRET});
+    assert.deepEqual(m.credentialUnreadable, ['.']);
+    removeCredentialCopies(m, {dir, work, probe: true});
+    assert.deepEqual([fs.existsSync(work), fs.existsSync(path.join(dir, 'tmp')), m.workRemoved, m.credentialCleanupErrors], [false, false, 'trial directory unreadable', undefined]);
+  }
+  // The cleanup at the end of every trial (main's finally): unreadable and read-only directories are removed, a failure is
+  // returned (not thrown), and the ledger is unlocked after it in any case.
+  {
+    const dir = path.join(d, 'R-u-users-2');
+    for (const s of ['home/a', 'config', 'bin', 'tmp/ro']) fs.mkdirSync(path.join(dir, s), {recursive: true});
+    fs.writeFileSync(path.join(dir, 'tmp/ro/f'), 'x'); lock(path.join(dir, 'tmp/ro'), 0o500); lock(path.join(dir, 'home/a'), 0o000);
+    fs.symlinkSync(path.join(d, 'outside'), path.join(dir, 'bin/link'));
+    const left = removeAll(['home', 'config', 'bin', 'tmp', '../outside'].map((s) => path.join(dir, s)), dir);
+    assert.deepEqual(['home', 'config', 'bin', 'tmp'].map((s) => fs.existsSync(path.join(dir, s))), [false, false, false, false]);
+    assert.deepEqual([left.length, fs.existsSync(path.join(d, 'outside/f'))], [1, true], 'a link is removed, not followed; a path outside is refused and returned');
+    const src = fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8');
+    assert.match(src, /try \{ left = removeAll\(\[home, config, path\.join\(dir, 'bin'\), path\.join\(dir, 'tmp'\)\], dir\); \} finally \{ unlock\(\); \}/);
+  }
+});
+
+// PR #1857 re-review M-2: with the cwd unknown (a failed call with a cd, a cd after ||, git -C to a variable), a directory
+// searched in depth or a path going up (..) is unbounded output, so a forbidden read is not missed.
+test('PR #1857 re-review M-2: unknown cwd: a searched directory and a path with .. are unbounded; a known cwd as before', () => {
+  const root = '/r/w', files = ['project/rules/money.md', 'rules/money.md', 'src/a.ts'];
+  const trace = (calls) => ({cwd: root, uses: calls.map((c, i) => ({id: `b${i}`, name: 'Bash', input: {command: c[0]}})), results: new Map(calls.map((c, i) => [`b${i}`, {is_error: c[1]}]))});
+  assert.equal(bashTraceReads(trace([['cd project/rules && false', true], ['grep -r money .', false]]), files).unbounded, 1, 'example 1 of the review');
+  assert.equal(bashTraceReads(trace([['cd src && false', true], ['cat ../rules/money.md', false]]), files).unbounded, 1, 'example 2 of the review');
+  assert.equal(bashTraceReads(trace([['false || cd src', false], ['rg money', false]]), files).unbounded, 1);
+  for (const c of ['grep -r money .', 'grep -r money rules', 'rg money', 'find rules -exec cat {} +', 'cat ./../x.md', 'cat ..', 'cat .']) assert.equal(bashScan(c, root, null, files).unbounded, true, c);
+  assert.equal(bashScan('git -C "$W" grep money', root, root, files).unbounded, true, 'review: git -C to a variable, grep');
+  // A forbidden read is then counted (caseChecks with the Bash counts).
+  const bash = bashTraceReads(trace([['cd src && false', true], ['cat ../rules/money.md', false]]), files);
+  const k = {id: 'x', forbidReads: [{id: 'money', pattern: '^rules/money\\.md$'}]};
+  assert.deepEqual(caseChecks(k, [], {uses: [], results: new Map(), cwd: root, skills: [], text: ''}, {bash}).forbiddenReads, ['money']);
+  // As before: a known cwd expands the directory against the files; an unknown cwd still matches a plain path by its end.
+  const known = bashScan('grep -r money rules', root, root, files);
+  assert.deepEqual([known.unbounded, known.possible.includes('rules/money.md')], [false, true]);
+  const plain = bashScan('cat a.ts', root, null, files);
+  assert.deepEqual([plain.unbounded, plain.possible], [false, ['src/a.ts']]);
+  assert.equal(bashScan('cat ../x.md', root, root, files).unbounded, false, 'a known cwd: .. is resolved');
+});
+
+// PR #1857 re-review L-4: a probe whose work/ was removed entirely is still read and fails credentialNotLeaked, with the
+// removal and its failures in the details.
+test('PR #1857 re-review L-4: a probe without work/ is read and fails; cleanup failures in the details', async (t) => {
+  const {d} = probeLedger(t, ['S-probe-1']);
+  const dir = path.join(d, 'S-probe-1');
+  const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({...meta, credentialLeak: true, credentialFiles: [], credentialInGitObjects: null, credentialInRecords: 0, credentialCheckError: 'boom', workRemoved: 'credential check error', credentialCleanupErrors: ['tmp: EACCES']}));
+  fs.rmSync(path.join(dir, 'work'), {recursive: true, force: true});
+  const {inputs} = fileInputs(dir, 'S', REPO, CONDS);
+  const r = checkProbe({...inputs, conditionsOverride: CONDS, ownerLines: [], ownerSkills: [], tokens: TOKENS, realHome: '/nonexistent-home', hostInstallDir: '/opt/claude', installProblems: []});
+  assert.deepEqual([inputs.workRemoved, inputs.credentialCleanupErrors, inputs.credentialLeak, r.pass], ['credential check error', ['tmp: EACCES'], true, false]);
+  // Level X (credentialNotLeaked): the removal and its failures are in the details.
+  const {probeStepChecks} = await import('../probe-check.mjs');
+  const ctx = probeContext({dir: '/r/runs/R-probe-1', runsRoot: '/r/runs', fixture: '/r/fx', ledger: '/r/l/ledger.jsonl', homeMarker: '/h/m', repoMarker: '/repo/m'}, X44);
+  const c = probeStepChecks({...inputs, steps: probeSteps('X', ctx), expectedSteps: C44.probeSteps.X}, parseTrace(''), 'X').checks.credentialNotLeaked;
+  assert.deepEqual([c.pass, c.detail.checkError, c.detail.workRemoved, c.detail.cleanupErrors], [false, 'boom', 'credential check error', ['tmp: EACCES']]);
 });

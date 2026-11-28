@@ -301,7 +301,14 @@ export function bashScan(command, root, start = root, files = []) {
   const literal = (d, w, strict) => {
     const p = w.replace(/[)]+$/, '');
     if (!p) return;
-    if (d === null && !path.posix.isAbsolute(p)) { for (const f of files) if (f === p.replace(/^\.\//, '') || f.endsWith(`/${p.replace(/^\.\//, '')}`)) push(possible, f); return; }
+    // PR #1857 re-review M-2: with the cwd unknown, a relative path is matched by its end against the files; one that goes
+    // up (..) or is the cwd itself (.) could be any file, so the output is counted as unbounded.
+    if (d === null && !path.posix.isAbsolute(p)) {
+      const q = p.replace(/^(\.\/)+/, '');
+      if (q === '' || q === '.' || q.split('/').includes('..')) { unbounded = true; return; }
+      for (const f of files) if (f === q || f.endsWith(`/${q}`)) push(possible, f);
+      return;
+    }
     const rel = relOf(resolve(d, p));
     if (rel === null || rel === '') return;
     if (strict && !cond) push(reads, rel);
@@ -312,7 +319,9 @@ export function bashScan(command, root, start = root, files = []) {
     for (const x of expandBraces(w.replace(/[)]+$/, ''))) {
       if (!x) continue;
       const abs = resolve(d, x);
-      if (abs === null) { if (!isGlob(x)) literal(null, x, false); else unbounded = true; continue; }
+      // PR #1857 re-review M-2: with the cwd unknown, a directory searched in depth (grep -r x ., rg x, git -C "$W" grep x)
+      // could be any directory: unbounded, as a glob.
+      if (abs === null) { if (!isGlob(x) && !deep) literal(null, x, false); else unbounded = true; continue; }
       const rel = relOf(abs);
       if (rel === null) continue;
       // PR #1857 review: a glob that is no regular expression (e.g. the range [z-a]) matches no file, as in bash (L5).

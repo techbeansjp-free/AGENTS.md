@@ -165,6 +165,17 @@ Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLev
 - 限界（L9）：`run-trial.mjs`の`main`の配線（`debug.log`を検査に渡すこと、`claude`を予約の前に探すこと、`probeEndState`の記録）の試験は、sourceの文字列の照合にとどまる。#1866で`main`を変えるなら、実際の実行で確かめる試験を足す。
 - `cases.json`の`expectCommands`・`report.commands`（`commandRan`）は、Bashの呼出し全体の文字列に`pattern`を、結果全体に`resultPattern`を当てる。引用した文（`echo 'asc-v05.mjs start …'`）と、保存した`start`のJSONの表示を1つの呼出しで行うと、`start`を実行しなくても「実行した」に数えられる。#1844では測定の試行が無いので結果に影響しない。#1866で`start`の実行を指標にするなら、測定の前に、command（`node <asc-v05.mjs> start`の部分）と、その出力に結び付けて判定する形を加え、試験を足す（設定の`pattern`は引用したpathも許すので、引用した文を除くだけでは足りない）。
 
+### PR #1857の再レビューの是正（2026-11-28）
+
+#1844の記録した結果は変えない（測定の試行が無く、#1844のprobeの`meta.json`には`probeEndState`も`credentialCleanupErrors`も無い）。
+
+- M-1（`run-trial.mjs`の`removeCredentialCopies`・`removeAll`・`removeTree`）：認証情報の写しの削除は項目ごとに行い、1件が失敗しても残りを続け、失敗を`meta.json`の`credentialCleanupErrors`に記録する。`removeTree(p, root)`は、`root`（試行のdirectory）から`p`までのdirectoryに所有者の権限を戻してから消す（`chmod 500`のdirectoryの中のfileも消せる）。測定の試行も、`work/`に加えて`tmp/`と、記録された`work/`の外の項目を消す。試行の終わりの`finally`は`home/`・`config/`・`bin/`・`tmp/`を`removeAll`で消し、失敗しても台帳のlockを必ず解いて、消せなかったpathを標準エラーに出し終了codeを1にする（`meta.json`は精算の後なので書き足さない）。
+- M-2（`score.mjs`の`bashScan`）：作業directoryが不明なとき、深く検索するdirectoryの引数（`grep -r x .`、`grep -r x rules`、`rg x`、`find … -exec`、`git -C "$W" grep x`）と、`..`を含むpath・`.`そのものは`unbounded`（全てを読んだ）に数える。禁止の読込みの偽陰性を作らない方向で、期待する読込み（strict）は増やさない。作業directoryが分かるときと、不明なときの通常のpathの末尾の照合は従来どおり。
+- L-1：試行のdirectoryそのものが読めない（`credentialUnreadable`に`'.'`）ときは、probeでも`work/`と`tmp/`を丸ごと消し、`workRemoved`に`trial directory unreadable`と記録する。
+- L-2：`removeTree`は、試行のdirectoryの外のpathと、途中にsymlinkがあるpathを拒否する（失敗として記録し、外の権限を変えない）。残る限界：途中のdirectoryを調べてから消すまでの間にsymlinkへ差し替えられる競合は残る（Claude Codeの終了の後に子processが残る場合だけ。#1866で`main`を実際に動かす試験を足すときに確かめる）。
+- L-3：`probeEndState`はprobeなら水準Wでも記録され、Wの`sentinelsAbsent`も試行の終わりの記録で判定する（判定の結果は判定の時点のfileで見る場合と実質同じ）。上の「水準Wと既存の設定の結果は変わらない」は、このfieldの無い記録（#1844と既存のW）についての記述である。
+- L-4（`probe-check.mjs`の`fileInputs`）：`work/`を丸ごと消したprobeも読み、不合格として判定する（`work/`が無ければSkillの一覧は空）。`credentialNotLeaked`の詳細に、記録があれば`cleanupErrors`・`workRemoved`を示す。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。

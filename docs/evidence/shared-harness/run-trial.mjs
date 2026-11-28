@@ -129,25 +129,56 @@ export function credentialCheckOf(args, leakOf = credentialLeakOf) {
 // #1844 review M3: the copies of the credential of a leaking trial are removed: a measured trial's work/ entirely, the
 // probe's files and work/.git. PR #1857 review M1: a probe whose search failed has its whole work/ removed (where a copy
 // could be is not known), and an unreadable directory is removed with what is in it.
+// PR #1857 re-review M-1: every listed file outside work/ is removed for a measured trial too (tmp/, bin/), and tmp/ with
+// the whole work/; one removal that fails does not stop the others, and each failure is recorded (credentialCleanupErrors).
+// L-1: an unreadable trial directory itself ('.') removes the whole work/ and tmp/ (meta.workRemoved says so).
 export function removeCredentialCopies(meta, {dir, work, probe}) {
-  try {
-    if (!probe) { removeTree(work); meta.workRemoved = 'credential leak'; }
-    else if (meta.credentialCheckError) { removeTree(work); meta.workRemoved = 'credential check error'; }
-    else { for (const f of [...(meta.credentialFiles ?? []), ...(meta.credentialUnreadable ?? [])]) removeTree(f === '.' ? work : path.join(dir, f)); if (meta.credentialInGitObjects !== false) removeTree(path.join(work, '.git')); }
-  } catch (e) { meta.credentialCleanupError = String(e.message ?? e); }
+  const listed = [...(meta.credentialFiles ?? []), ...(meta.credentialUnreadable ?? [])];
+  const whole = !probe ? 'credential leak' : meta.credentialCheckError ? 'credential check error' : listed.includes('.') ? 'trial directory unreadable' : null;
+  const targets = whole ? [work, path.join(dir, 'tmp')] : [];
+  for (const f of listed) if (f !== '.') targets.push(path.join(dir, f));
+  if (!whole && meta.credentialInGitObjects !== false) targets.push(path.join(work, '.git'));
+  const errors = removeAll(targets, dir);
+  if (whole) meta.workRemoved = whole;
+  if (errors.length) meta.credentialCleanupErrors = errors;
   return meta;
+}
+
+// PR #1857 re-review M-1: removes each path (removeTree under root), going on past a failure; returns the failures.
+export function removeAll(paths, root) {
+  const errors = [];
+  for (const p of paths) { try { removeTree(p, root); } catch (e) { errors.push(`${path.relative(root, p) || '.'}: ${e.message ?? e}`); } }
+  return errors;
 }
 
 // PR #1857 review M1: removes a file or directory, also one the trial made unreadable (chmod 000): the owner's permissions
 // are restored before it is listed and removed. A symbolic link is removed, not followed.
-export function removeTree(p) {
+// PR #1857 re-review M-1: with root, the directories from root down to p get the owner's permissions back first (a file in
+// a directory the trial made read-only, chmod 500, can then be removed). L-2: a path outside root, or a symbolic link on the
+// way from root (a directory swapped for a link after the search), is refused, so no permission outside root is changed.
+// A path that cannot be looked at for another reason than its absence throws (it is not taken as removed).
+export function removeTree(p, root = null) {
+  if (root !== null) openAncestors(p, root);
   let st;
-  try { st = fs.lstatSync(p); } catch { return; }
+  try { st = fs.lstatSync(p); } catch (e) { if (e.code === 'ENOENT' || e.code === 'ENOTDIR') return; throw e; }
   if (st.isDirectory()) {
-    try { fs.chmodSync(p, 0o700); } catch { /* not ours: listing it below fails and is reported */ }
+    try { fs.chmodSync(p, (st.mode & 0o7777) | 0o700); } catch { /* not ours: listing it below fails and is reported */ }
     for (const e of fs.readdirSync(p)) removeTree(path.join(p, e));
     fs.rmdirSync(p);
   } else fs.rmSync(p, {force: true});
+}
+function openAncestors(p, root) {
+  const rel = path.relative(root, p);
+  if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) throw new Error(`not under the trial directory: ${p}`);
+  let cur = root;
+  for (const seg of ['', ...rel.split(path.sep).slice(0, -1)]) {
+    if (seg) cur = path.join(cur, seg);
+    let st;
+    try { st = fs.lstatSync(cur); } catch (e) { if (e.code === 'ENOENT' || e.code === 'ENOTDIR') return; throw e; }
+    if (st.isSymbolicLink()) throw new Error(`a symbolic link on the way: ${path.relative(root, cur) || '.'}`);
+    if (!st.isDirectory()) return;
+    if ((st.mode & 0o700) !== 0o700) fs.chmodSync(cur, (st.mode & 0o7777) | 0o700);
+  }
 }
 
 export function filesContaining(dir, secret) {
@@ -580,10 +611,12 @@ function main() {
     ledgerOps.settle(ledger, reservation.id, name, meta.costUsd, {exit: r.status, traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))});
     console.log(JSON.stringify({trial: name, exit: r.status, subtype: meta.resultSubtype, costUsd: meta.costUsd, resolvedModel: meta.resolvedModel}));
   } finally {
-    fs.rmSync(home, {recursive: true, force: true}); fs.rmSync(config, {recursive: true, force: true});
     // #1844: the node copy and Claude Code's temporary directory of the trial (outputs of its commands) are not kept.
-    fs.rmSync(path.join(dir, 'bin'), {recursive: true, force: true}); fs.rmSync(path.join(dir, 'tmp'), {recursive: true, force: true});
-    unlock();
+    // PR #1857 re-review M-1: removeTree also removes what the trial made unreadable or read-only; a removal that fails does
+    // not stop the others or the unlock of the ledger, and is reported (the exit code is then 1).
+    let left;
+    try { left = removeAll([home, config, path.join(dir, 'bin'), path.join(dir, 'tmp')], dir); } finally { unlock(); }
+    if (left.length) { console.error(`run-trial: not removed (remove by hand): ${left.join('; ')}`); process.exitCode = 1; }
   }
 }
 
