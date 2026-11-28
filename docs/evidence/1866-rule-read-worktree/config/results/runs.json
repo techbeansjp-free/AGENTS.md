@@ -1,0 +1,1734 @@
+[
+ {
+  "condition": "R",
+  "run": 1,
+  "case": "u-bill-1",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 1,
+  "toolUses": 12,
+  "messages": 10,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.22878479999999998,
+  "turns": 13,
+  "durationMs": 39541,
+  "usage": {
+   "input": 20,
+   "output": 5200,
+   "cacheRead": 323048,
+   "cacheWrite": 36110
+  },
+  "inputTokens": 359178,
+  "bashReadPaths": [
+   ".worktrees/20261128_230801-1866-trial/.agent-skill-chain/skills/asc/references/implementation.md",
+   ".worktrees/20261128_230801-1866-trial/src/billing/invoice.ts",
+   ".worktrees/20261128_230801-1866-trial/src/billing/routes.ts",
+   ".worktrees/20261128_230801-1866-trial/package.json"
+  ],
+  "bashCommands": 7,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 2,
+  "ascBytesRead": 40492,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "expectReads": {
+   "money-rule": false
+  },
+  "expectReadsAll": false,
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "written": [
+   ".worktrees/20261128_230801-1866-trial/src/billing/invoice.ts",
+   ".worktrees/20261128_230801-1866-trial/src/billing/routes.ts"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_230801-1866-trial/src/billing/invoice.ts",
+    ".worktrees/20261128_230801-1866-trial/test/invoice.test.ts",
+    ".worktrees/20261128_230801-1866-trial/src/billing/routes.ts"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    }
+   }
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [
+   "implementation.md"
+  ],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 2,
+  "case": "u-bill-1",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 2,
+  "toolUses": 15,
+  "messages": 12,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.23287229999999998,
+  "turns": 16,
+  "durationMs": 53985,
+  "usage": {
+   "input": 24,
+   "output": 6058,
+   "cacheRead": 373723,
+   "cacheWrite": 33718
+  },
+  "inputTokens": 407465,
+  "bashReadPaths": [
+   ".worktrees/20261128_231041-1866-trial/package.json",
+   ".worktrees/20261128_231041-1866-trial/src/billing/invoice.ts",
+   ".worktrees/20261128_231041-1866-trial/src/billing/routes.ts",
+   ".worktrees/20261128_231041-1866-trial/src/users/store.ts",
+   ".worktrees/20261128_231041-1866-trial/docs/開発の始め方.md",
+   ".worktrees/20261128_231041-1866-trial/README.md",
+   ".worktrees/20261128_231041-1866-trial/src/app.ts",
+   ".worktrees/20261128_231041-1866-trial/.claude/skills/invoice-format/SKILL.md"
+  ],
+  "bashCommands": 9,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 1,
+  "ascFilesRead": 2,
+  "ascBytesRead": 40492,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "expectReads": {
+   "money-rule": false
+  },
+  "expectReadsAll": false,
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "written": [
+   ".worktrees/20261128_231041-1866-trial/src/billing/invoice.ts",
+   ".worktrees/20261128_231041-1866-trial/src/billing/invoice.test.ts",
+   ".worktrees/20261128_231041-1866-trial/src/billing/routes.ts"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_231041-1866-trial/src/billing/invoice.ts",
+    ".worktrees/20261128_231041-1866-trial/src/billing/invoice.test.ts",
+    ".worktrees/20261128_231041-1866-trial/src/billing/routes.ts"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    }
+   }
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [
+   "implementation.md"
+  ],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 3,
+  "case": "u-bill-1",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 2,
+  "toolUses": 18,
+  "messages": 16,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.2692583,
+  "turns": 19,
+  "durationMs": 134321,
+  "usage": {
+   "input": 32,
+   "output": 5865,
+   "cacheRead": 577163,
+   "cacheWrite": 38207
+  },
+  "inputTokens": 615402,
+  "bashReadPaths": [
+   ".worktrees/20261128_231416-1866-trial/.agent-skill-chain/skills/asc/references/implementation.md",
+   ".worktrees/20261128_231416-1866-trial/src/billing/invoice.ts",
+   ".worktrees/20261128_231416-1866-trial/src/billing/routes.ts",
+   ".worktrees/20261128_231416-1866-trial/src/users/store.ts",
+   ".worktrees/20261128_231416-1866-trial/package.json",
+   ".worktrees/20261128_231416-1866-trial/README.md"
+  ],
+  "bashCommands": 12,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 2,
+  "ascBytesRead": 40492,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "expectReads": {
+   "money-rule": false
+  },
+  "expectReadsAll": false,
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "written": [
+   ".worktrees/20261128_231416-1866-trial/src/billing/invoice.ts",
+   ".worktrees/20261128_231416-1866-trial/src/billing/routes.ts"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_231416-1866-trial/src/billing/invoice.ts",
+    ".worktrees/20261128_231416-1866-trial/src/billing/routes.ts",
+    ".worktrees/20261128_231416-1866-trial/test/invoice.test.ts"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": true,
+     "exitOk": true,
+     "ok": true
+    }
+   }
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [
+   "implementation.md"
+  ],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 1,
+  "case": "u-bill-2",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 1,
+  "toolUses": 10,
+  "messages": 9,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.17276020000000003,
+  "turns": 11,
+  "durationMs": 30343,
+  "usage": {
+   "input": 18,
+   "output": 3170,
+   "cacheRead": 248602,
+   "cacheWrite": 29041
+  },
+  "inputTokens": 277661,
+  "bashReadPaths": [
+   ".worktrees/20261128_230920-1866-trial/package.json",
+   ".worktrees/20261128_230920-1866-trial/src/billing/invoice.ts",
+   ".worktrees/20261128_230920-1866-trial/src/billing/routes.ts",
+   ".worktrees/20261128_230920-1866-trial/docs/開発の始め方.md"
+  ],
+  "bashCommands": 6,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 1,
+  "ascBytesRead": 34720,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "expectReads": {
+   "money-rule": false
+  },
+  "expectReadsAll": false,
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "written": [
+   ".worktrees/20261128_230920-1866-trial/src/billing/invoice.ts",
+   ".worktrees/20261128_230920-1866-trial/src/billing/invoice.test.ts"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_230920-1866-trial/src/billing/invoice.ts",
+    ".worktrees/20261128_230920-1866-trial/src/billing/invoice.test.ts"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    }
+   }
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 2,
+  "case": "u-bill-2",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 1,
+  "toolUses": 15,
+  "messages": 13,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.23413149999999996,
+  "turns": 16,
+  "durationMs": 50671,
+  "usage": {
+   "input": 26,
+   "output": 6434,
+   "cacheRead": 398475,
+   "cacheWrite": 32473
+  },
+  "inputTokens": 430974,
+  "bashReadPaths": [
+   ".worktrees/20261128_231235-1866-trial/package.json",
+   ".worktrees/20261128_231235-1866-trial/.agent-skill-chain/skills/asc/references/implementation.md",
+   ".worktrees/20261128_231235-1866-trial/src/billing/invoice.ts",
+   ".worktrees/20261128_231235-1866-trial/tsconfig.json",
+   ".worktrees/20261128_231235-1866-trial/src/billing/invoice.test.ts"
+  ],
+  "bashCommands": 9,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 1,
+  "ascFilesRead": 2,
+  "ascBytesRead": 40492,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "expectReads": {
+   "money-rule": false
+  },
+  "expectReadsAll": false,
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "written": [
+   ".worktrees/20261128_231235-1866-trial/src/billing/invoice.ts",
+   ".worktrees/20261128_231235-1866-trial/src/billing/invoice.test.ts"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_231235-1866-trial/src/billing/invoice.ts",
+    ".worktrees/20261128_231235-1866-trial/src/billing/invoice.test.ts"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    }
+   }
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [
+   "implementation.md"
+  ],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 3,
+  "case": "u-bill-2",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 2,
+  "toolUses": 8,
+  "messages": 8,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.16370270000000003,
+  "turns": 9,
+  "durationMs": 28579,
+  "usage": {
+   "input": 16,
+   "output": 2802,
+   "cacheRead": 217947,
+   "cacheWrite": 28464
+  },
+  "inputTokens": 246427,
+  "bashReadPaths": [
+   ".worktrees/20261128_231728-1866-trial/package.json",
+   ".worktrees/20261128_231728-1866-trial/tsconfig.json"
+  ],
+  "bashCommands": 5,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 2,
+  "ascBytesRead": 40492,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "expectReads": {
+   "money-rule": false
+  },
+  "expectReadsAll": false,
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "written": [
+   ".worktrees/20261128_231728-1866-trial/src/billing/invoice.test.ts",
+   ".worktrees/20261128_231728-1866-trial/src/billing/invoice.ts"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_231728-1866-trial/src/billing/invoice.test.ts",
+    ".worktrees/20261128_231728-1866-trial/src/billing/invoice.ts"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    }
+   }
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [
+   "implementation.md"
+  ],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 1,
+  "case": "u-docs",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 2,
+  "toolUses": 6,
+  "messages": 6,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1213958,
+  "turns": 7,
+  "durationMs": 14423,
+  "usage": {
+   "input": 12,
+   "output": 1008,
+   "cacheRead": 140038,
+   "cacheWrite": 24322
+  },
+  "inputTokens": 164372,
+  "bashReadPaths": [
+   ".worktrees/20261128_231014-1866-trial/package.json"
+  ],
+  "bashCommands": 3,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 1,
+  "ascBytesRead": 34720,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenReadsStrict": [],
+  "forbiddenReadsBy": {},
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "written": [
+   ".worktrees/20261128_231014-1866-trial/docs/開発の始め方.md"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_231014-1866-trial/docs/開発の始め方.md"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": true,
+     "exitOk": true,
+     "ok": true
+    }
+   }
+  },
+  "userSkillsListed": {
+   "invoice-format": true,
+   "quote-format": true
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 2,
+  "case": "u-docs",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 2,
+  "toolUses": 5,
+  "messages": 6,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1202187,
+  "turns": 6,
+  "durationMs": 12524,
+  "usage": {
+   "input": 12,
+   "output": 913,
+   "cacheRead": 140327,
+   "cacheWrite": 24258
+  },
+  "inputTokens": 164597,
+  "bashReadPaths": [
+   ".worktrees/20261128_231353-1866-trial/package.json"
+  ],
+  "bashCommands": 2,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 1,
+  "ascBytesRead": 34720,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenReadsStrict": [],
+  "forbiddenReadsBy": {},
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "written": [
+   ".worktrees/20261128_231353-1866-trial/docs/開発の始め方.md"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_231353-1866-trial/docs/開発の始め方.md"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    }
+   }
+  },
+  "userSkillsListed": {
+   "invoice-format": true,
+   "quote-format": true
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 3,
+  "case": "u-docs",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 2,
+  "toolUses": 6,
+  "messages": 6,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1221731,
+  "turns": 7,
+  "durationMs": 12537,
+  "usage": {
+   "input": 12,
+   "output": 1019,
+   "cacheRead": 140511,
+   "cacheWrite": 24477
+  },
+  "inputTokens": 165000,
+  "bashReadPaths": [
+   ".worktrees/20261128_231814-1866-trial/package.json"
+  ],
+  "bashCommands": 3,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 1,
+  "ascBytesRead": 34720,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenReadsStrict": [],
+  "forbiddenReadsBy": {},
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "written": [
+   ".worktrees/20261128_231814-1866-trial/docs/開発の始め方.md"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_231814-1866-trial/docs/開発の始め方.md"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": true,
+     "exitOk": true,
+     "ok": true
+    }
+   }
+  },
+  "userSkillsListed": {
+   "invoice-format": true,
+   "quote-format": true
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 1,
+  "case": "u-neg",
+  "kind": "negative",
+  "fixture": "U",
+  "expect": null,
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [],
+  "readAttempts": 0,
+  "toolUses": 0,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0443386,
+  "turns": 1,
+  "durationMs": 1979,
+  "usage": {
+   "input": 2,
+   "output": 84,
+   "cacheRead": 5826,
+   "cacheWrite": 10728
+  },
+  "inputTokens": 16556,
+  "bashReadPaths": [],
+  "bashCommands": 0,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 0,
+  "ascBytesRead": 0,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenReadsStrict": [],
+  "forbiddenReadsBy": {},
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    }
+   }
+  },
+  "userSkillsListed": {
+   "invoice-format": true,
+   "quote-format": true
+  },
+  "overapplication": false,
+  "negativeOk": true,
+  "otherSkillCalls": [],
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 2,
+  "case": "u-neg",
+  "kind": "negative",
+  "fixture": "U",
+  "expect": null,
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [],
+  "readAttempts": 0,
+  "toolUses": 0,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0457686,
+  "turns": 1,
+  "durationMs": 2685,
+  "usage": {
+   "input": 2,
+   "output": 179,
+   "cacheRead": 5826,
+   "cacheWrite": 10848
+  },
+  "inputTokens": 16676,
+  "bashReadPaths": [],
+  "bashCommands": 0,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 0,
+  "ascBytesRead": 0,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenReadsStrict": [],
+  "forbiddenReadsBy": {},
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    }
+   }
+  },
+  "userSkillsListed": {
+   "invoice-format": true,
+   "quote-format": true
+  },
+  "overapplication": false,
+  "negativeOk": true,
+  "otherSkillCalls": [],
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 3,
+  "case": "u-neg",
+  "kind": "negative",
+  "fixture": "U",
+  "expect": null,
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [],
+  "readAttempts": 0,
+  "toolUses": 0,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.044870600000000004,
+  "turns": 1,
+  "durationMs": 2308,
+  "usage": {
+   "input": 2,
+   "output": 82,
+   "cacheRead": 5826,
+   "cacheWrite": 10866
+  },
+  "inputTokens": 16694,
+  "bashReadPaths": [],
+  "bashCommands": 0,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 0,
+  "ascBytesRead": 0,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenReadsStrict": [],
+  "forbiddenReadsBy": {},
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    }
+   }
+  },
+  "userSkillsListed": {
+   "invoice-format": true,
+   "quote-format": true
+  },
+  "overapplication": false,
+  "negativeOk": true,
+  "otherSkillCalls": [],
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 1,
+  "case": "u-users",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 2,
+  "toolUses": 7,
+  "messages": 5,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1324079,
+  "turns": 8,
+  "durationMs": 16597,
+  "usage": {
+   "input": 10,
+   "output": 1619,
+   "cacheRead": 114059,
+   "cacheWrite": 26198
+  },
+  "inputTokens": 140267,
+  "bashReadPaths": [
+   ".worktrees/20261128_230851-1866-trial/package.json"
+  ],
+  "bashCommands": 3,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 1,
+  "ascBytesRead": 34720,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenReadsStrict": [],
+  "forbiddenReadsBy": {},
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "written": [
+   ".worktrees/20261128_230851-1866-trial/src/users/store.ts"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_230851-1866-trial/src/users/store.ts"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": true,
+     "exitOk": true,
+     "ok": true
+    }
+   }
+  },
+  "userSkillsListed": {
+   "invoice-format": true,
+   "quote-format": true
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 2,
+  "case": "u-users",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 3,
+  "toolUses": 12,
+  "messages": 9,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.16549289999999997,
+  "turns": 13,
+  "durationMs": 25605,
+  "usage": {
+   "input": 18,
+   "output": 2607,
+   "cacheRead": 249109,
+   "cacheWrite": 28619
+  },
+  "inputTokens": 277746,
+  "bashReadPaths": [
+   ".worktrees/20261128_231156-1866-trial/package.json",
+   ".worktrees/20261128_231156-1866-trial/tsconfig.json"
+  ],
+  "bashCommands": 5,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 2,
+  "ascBytesRead": 40492,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenReadsStrict": [],
+  "forbiddenReadsBy": {},
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "written": [
+   ".worktrees/20261128_231156-1866-trial/src/users/store.ts",
+   ".worktrees/20261128_231156-1866-trial/src/users/store.test.ts"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_231156-1866-trial/src/users/store.ts",
+    ".worktrees/20261128_231156-1866-trial/src/users/store.test.ts"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    }
+   }
+  },
+  "userSkillsListed": {
+   "invoice-format": true,
+   "quote-format": true
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [
+   "implementation.md"
+  ],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "R",
+  "run": 3,
+  "case": "u-users",
+  "kind": "change",
+  "fixture": "U",
+  "expect": "asc",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc"
+  ],
+  "readAttempts": 5,
+  "toolUses": 14,
+  "messages": 11,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Bash",
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1831805,
+  "turns": 15,
+  "durationMs": 30294,
+  "usage": {
+   "input": 22,
+   "output": 3111,
+   "cacheRead": 322705,
+   "cacheWrite": 29939
+  },
+  "inputTokens": 352666,
+  "bashReadPaths": [
+   ".worktrees/20261128_231644-1866-trial/package.json"
+  ],
+  "bashCommands": 6,
+  "bashPossibleReadPaths": [],
+  "bashUnboundedReads": 0,
+  "ascFilesRead": 2,
+  "ascBytesRead": 40492,
+  "stopped": null,
+  "markersApplicable": true,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenReadsStrict": [],
+  "forbiddenReadsBy": {},
+  "expectCommands": {
+   "start": false
+  },
+  "commandsAll": false,
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "written": [
+   ".worktrees/20261128_231644-1866-trial/src/users/store.ts",
+   ".worktrees/20261128_231644-1866-trial/src/users/store.test.ts"
+  ],
+  "writeMissingText": false,
+  "writeRequireMissing": [],
+  "writeViolations": [],
+  "writeOk": true,
+  "caseChecksOk": false,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-mentioned": false
+   },
+   "writtenFiles": [
+    ".worktrees/20261128_231644-1866-trial/src/users/store.ts",
+    ".worktrees/20261128_231644-1866-trial/src/users/store.test.ts"
+   ],
+   "commands": {
+    "start": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "start-path-billing": {
+     "attempted": false,
+     "exitOk": false,
+     "outputSchema": false,
+     "ok": false
+    },
+    "worktree-create": {
+     "attempted": false,
+     "exitOk": false,
+     "ok": false
+    },
+    "git-commit": {
+     "attempted": true,
+     "exitOk": true,
+     "ok": true
+    }
+   }
+  },
+  "userSkillsListed": {
+   "invoice-format": true,
+   "quote-format": true
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [
+   "implementation.md"
+  ],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ }
+]

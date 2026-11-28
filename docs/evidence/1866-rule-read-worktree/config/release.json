@@ -1,0 +1,13 @@
+{
+ "schema": "asc-eval-release/v1",
+ "note": "The tarball each condition installs (conditions.json cells[c].release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition.",
+ "R": {
+  "kind": "release",
+  "tag": "v0.5.134",
+  "targetCommit": "a63c1cb682a86339e33eef85507ac9e013b3c7c5",
+  "asset": "agent-skill-chain-0.5.134.tgz",
+  "assetSha256": "a5245996a2098d267af3e9aebb0eae02bf9f30d97735f025fbeb9424ad82f0e9",
+  "verified": "2026-11-28: gh release download v0.5.134; the sha256 of the tarball equals its line in SHA256SUMS, the asset digest of the release and the Package SHA256 of the release notes (Source a63c1cb6, Verified PR #1873, Tested HEAD 7b07bde8); source-commit.txt names a63c1cb6. Unpacked beside v0.5.133 (05cdf910…81cd, the first release with PR #1864): of the 165 files only package.json (version) and release-identity.json (version and distributionManifestSha256) differ.",
+  "note": "条件R＝測定の時点（固定の時点）で最新のGitHub Release（#1844のdecision-criteria.mdの規則。進行役の決定、2026-11-28、PR #1875の独立レビューM3）。2026-11-28の確認でLatestはv0.5.134（#1873）。PR #1864（worktree-createの書込みの確認と新しいmessage）を含む。固定の前に新しいreleaseがLatestになれば、release.jsonを直してdry runをやり直す。<scratch>/rel134/にSHA256SUMS・source-commit.txtとともに置く。"
+ }
+}

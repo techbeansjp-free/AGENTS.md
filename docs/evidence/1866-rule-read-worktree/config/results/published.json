@@ -1,0 +1,9 @@
+{
+ "files": {
+  "trials.json": "2492633cfe957394245d04136de3438873e551b69678450211637eda24dfdc86",
+  "runs.json": "6e65c618da57aa8add5ec1faaaec9feb5bf1c635b76942fac2b6a229860bceae",
+  "ledger.jsonl": "0c26c4155a416a931d80b8309ba07c65db640f8a1c66b9e43c67a307f928369e"
+ },
+ "rawRunsSha256": "397091c62b20c72fa0d5e416f7835e969b6d3bb95728fb997ef75e5195a0e4f3",
+ "note": "sha256 of the published files; rawRunsSha256 identifies the raw records kept outside the repository (sha256 of \"<trial> <raw trace sha256> <raw meta sha256>\\n\" over the trials in name order)."
+}

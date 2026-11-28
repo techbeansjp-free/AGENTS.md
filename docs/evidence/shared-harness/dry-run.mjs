@@ -22,7 +22,7 @@ import {makeFixture, pinned, loadConditions, releasePlaceholders} from './make-f
 import {applyCondition, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {ascSkillsOf, referencesFor, conditionCountProblems, sentenceFieldProblems} from './score.mjs';
 import {placementProblems} from './guard.mjs';
-import {flags, BUDGET, STOP_LINE_USD, cellOf, promptFor, maxTurnsFor, isolationSettings, probeContext, probeSteps, priorSpendProblems, priorProbeProblems, priorSpentUsd, fixtureOf, tmpDirProblem} from './run-trial.mjs';
+import {flags, BUDGET, STOP_LINE_USD, cellOf, promptFor, maxTurnsFor, isolationSettings, probeContext, probeSteps, priorSpendProblems, priorProbeProblems, priorSpentUsd, fixtureOf, tmpDirProblem, createStartWorktree, ASC_CLI} from './run-trial.mjs';
 import {plannedTrials, orderProblems, loadOrder, trialName} from './order.mjs';
 import {fixtureDir} from './run-all.mjs';
 import {description} from './probe-check.mjs';
@@ -163,6 +163,20 @@ function main() {
     const a = applyCondition(copy);
     const subjects = spawnSync('git', ['log', '--format=%s'], {cwd: copy, encoding: 'utf8'}).stdout.trim().split('\n');
     report.copies[id] = {applied: a, commitSubjects: subjects, ok: a.changedFiles.length === 0 && subjects[0] === NEUTRAL_SUBJECT && placementProblems(copy, {repoRoot}).length === 0};
+    // #1866: a level with sandbox.startWorktree: the harness's worktree-create (outside the sandbox) on the copy makes the
+    // worktree the session starts in, at the HEAD of the copy, with the ASC CLI and CLAUDE.md of the project.
+    const sws = [...new Set(Object.values(conds.cells).map((x) => conds.toolLevels[x.tools]?.sandbox?.startWorktree).filter(Boolean).map((x) => JSON.stringify(x)))].map((x) => JSON.parse(x));
+    for (const sw of sws) {
+      let r;
+      try {
+        const st = createStartWorktree(copy, sw), wt = path.join(copy, st.startDir);
+        const head = (d) => spawnSync('git', ['rev-parse', 'HEAD'], {cwd: d, encoding: 'utf8'}).stdout.trim();
+        const same = (f) => fs.existsSync(path.join(wt, f)) && fs.readFileSync(path.join(wt, f)).equals(fs.readFileSync(path.join(copy, f)));
+        r = {startDir: st.startDir.replace(/\/\d{8}_\d{6}-/, '/<YYYYMMDD_HHMMSS>-'), branch: st.branch, sameHead: head(wt) === head(copy), cli: same(ASC_CLI), claudeMd: same('CLAUDE.md'), context: same('.agent-skill-chain/project/context.json')};
+        r.ok = st.branch === `${sw.type}/${sw.issue}-${sw.slug}` && r.sameHead && r.cli && r.claudeMd && r.context;
+      } catch (e) { r = {error: String(e.message ?? e), ok: false}; }
+      (report.startWorktrees ??= {})[id] = r;
+    }
   }
   const first = `${built[0]}-${used[0]}`;
   add('pinnedTarballs', !allowUnreleased && built.every((c) => digests[c] === pinned(c)?.assetSha256), Object.fromEntries(built.map((c) => [c, pinned(c)?.kind ?? null])));
@@ -170,6 +184,7 @@ function main() {
   add('caseNeeds', Object.values(report.fixtures).every((r) => r.needs.length === 0), Object.fromEntries(Object.entries(report.fixtures).map(([k, r]) => [k, r.needs])));
   add('neutralCommitInCopies', Object.values(report.copies).every((c) => c.ok));
   add('sameCommitSubjects', new Set(Object.values(report.copies).map((c) => JSON.stringify(c.commitSubjects))).size === 1, report.copies[first].commitSubjects);
+  if (report.startWorktrees) add('startWorktree', Object.values(report.startWorktrees).every((x) => x.ok), report.startWorktrees);
   add('sameRuntimeVersion', new Set(Object.values(report.fixtures).map((r) => r.runtimeVersion)).size === 1, report.fixtures[first].runtimeVersion);
   if (built.length === 2) {
     const [cb, cs] = built;

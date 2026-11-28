@@ -62,6 +62,9 @@ export function stepResults(streamText) {
 /**
  * The real path of `dir`, or of its nearest existing parent with the rest appended (a config directory may not exist yet).
  * A broken link is followed to where it points, since Claude Code would create its files there.
+ * #1866 (PR #1864 review Low 1): the target of a broken link is resolved as the system does, one component at a time from
+ * the real path of the link's directory: a ".." goes up from the real directory reached so far (not from the text of
+ * the path, which differs when a component is itself a link), and each component that is a link is followed.
  */
 export function realish(dir, hops = 0) {
   const abs = path.resolve(dir), rest = [];
@@ -70,10 +73,20 @@ export function realish(dir, hops = 0) {
     let link = null; try { if (fs.lstatSync(at).isSymbolicLink()) link = fs.readlinkSync(at); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
     if (link !== null) {
       if (hops >= 40) throw new Error(`refused: too many links at ${at}`);
-      return path.join(realish(path.resolve(path.dirname(at), link), hops + 1), ...rest.reverse());
+      return path.join(resolveLinkTarget(realish(path.dirname(at), hops + 1), link, hops + 1), ...rest.reverse());
     }
     rest.push(path.basename(at));
   }
+}
+/** The target of a link (its text), from the real directory `from`, component by component (see realish). */
+export function resolveLinkTarget(from, target, hops = 0) {
+  let cur = path.isAbsolute(target) ? path.parse(from).root : from;
+  for (const part of target.split(/[\\/]+/).filter(Boolean)) {
+    if (part === '.') continue;
+    if (part === '..') { cur = path.dirname(cur); continue; }
+    cur = realish(path.join(cur, part), hops);
+  }
+  return cur;
 }
 
 /** Refuse a test HOME or config directory that is, or is under, the real HOME (by real path; the account's HOME, not only $HOME). */
@@ -92,6 +105,9 @@ export async function runInClaudeSandbox({claude, cwd, home, tmp, commands, out,
   home = assertNotRealHome(home, '--home');
   if (configDir) configDir = assertNotRealHome(configDir, '--config-dir');
   for (const own of ['.claude', '.claude.json']) assertNotRealHome(path.join(home, own), `--home/${own}`);
+  // #1866 (PR #1864 review Low 2): with --config-dir, Claude Code reads its settings, its .claude.json and the rest from that
+  // directory, so every entry in it is checked too (a link in it to the real HOME is refused), as the entries of the test HOME.
+  if (configDir) for (const own of new Set(['settings.json', '.claude.json', 'CLAUDE.md', ...(fs.existsSync(configDir) ? fs.readdirSync(configDir) : [])])) assertNotRealHome(path.join(configDir, own), `--config-dir/${own}`);
   fs.mkdirSync(out, {recursive: true});
   const reply = fakeMessagesApi(commands);
   const server = http.createServer((req, res) => {

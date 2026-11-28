@@ -5,6 +5,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import {spawnSync, execFileSync} from 'node:child_process';
@@ -19,7 +20,7 @@ const S1 = path.resolve(S2, '..');
 const EVROOT = path.resolve(H, '..');
 const REPO = path.resolve(EVROOT, '../..');
 const C1823 = path.join(EVROOT, '1823-slim-always-read/config');
-const {parseTrace, scoreRun, selectCounted, summarize, judge1820s2, ruleChecks, initProblems, verdictOf, referencesFor, markersOk} = await import('../score.mjs');
+const {parseTrace, scoreRun, scoreTrials, selectCounted, summarize, judge1820s2, ruleChecks, initProblems, verdictOf, referencesFor, markersOk} = await import('../score.mjs');
 const {plannedTrials, orderProblems, orderRefusal, probeRefusal, completionStatus, loadOrder} = await import('../order.mjs');
 const {flags, isolationSettings, promptFor, cellOf, maxTurnsFor, probeGateProblems, installProblems, probeSteps, priorSpendProblems, STOP_LINE_USD, INSIDE_FILE} = await import('../run-trial.mjs');
 const {approvalProblems, markerPaths} = await import('../markers.mjs');
@@ -1361,7 +1362,7 @@ test('#1844 scoring with Bash: rule read by cat in the worktree, start run, file
   assert.deepEqual(good.bashReadPaths, [RULE]);
   assert.equal(good.report.commands.start.ok, true);
   const failedStart = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], [['Bash', {command: 'node .agent-skill-chain/bin/asc.mjs start . --path src/billing/invoice.ts'}, true]], []]), opts);
-  assert.deepEqual([failedStart.commandsAll, failedStart.report.commands.start], [false, {attempted: true, exitOk: false, ok: false}], 'a start that exited non-zero (main checkout) is attempted, not run');
+  assert.deepEqual([failedStart.commandsAll, failedStart.report.commands.start], [false, {attempted: true, exitOk: false, outputSchema: false, ok: false}], 'a start that exited non-zero (main checkout) is attempted, not run');
   // review H1: a pipeline exits with its last command; start ran only when its JSON output is in the result.
   const REFUSED = 'Error: Use a dedicated Git worktree, or explicitly select isolated-clone';
   for (const [cmd, out] of [[`${START} 2>&1 | head -50`, REFUSED], [`${START}; echo done`, `${REFUSED}\ndone`], [`${START} || true`, REFUSED], [`${START} 2>/dev/null | grep -c money`, '0'],
@@ -1860,8 +1861,12 @@ test('PR #1857 re-review M-1: credential copies removed per item (read-only dire
 test('PR #1857 re-review M-2: unknown cwd: a searched directory and a path with .. are unbounded; a known cwd as before', () => {
   const root = '/r/w', files = ['project/rules/money.md', 'rules/money.md', 'src/a.ts'];
   const trace = (calls) => ({cwd: root, uses: calls.map((c, i) => ({id: `b${i}`, name: 'Bash', input: {command: c[0]}})), results: new Map(calls.map((c, i) => [`b${i}`, {is_error: c[1]}]))});
-  assert.equal(bashTraceReads(trace([['cd project/rules && false', true], ['grep -r money .', false]]), files).unbounded, 1, 'example 1 of the review');
-  assert.equal(bashTraceReads(trace([['cd src && false', true], ['cat ../rules/money.md', false]]), files).unbounded, 1, 'example 2 of the review');
+  // PR #1857 last review M-A (#1866): a failed call with one cd and more leaves two candidates (the cwd before and the cd's
+  // target), each expanded: no unbounded output, and the forbidden read from either candidate is still found.
+  const ex1 = bashTraceReads(trace([['cd project/rules && false', true], ['grep -r money .', false]]), files);
+  assert.deepEqual([ex1.unbounded, ex1.possible.includes('project/rules/money.md'), ex1.possible.includes('rules/money.md')], [0, true, true], 'example 1 of the review');
+  const ex2 = bashTraceReads(trace([['cd src && false', true], ['cat ../rules/money.md', false]]), files);
+  assert.deepEqual([ex2.unbounded, ex2.possible], [0, ['rules/money.md']], 'example 2 of the review');
   assert.equal(bashTraceReads(trace([['false || cd src', false], ['rg money', false]]), files).unbounded, 1);
   for (const c of ['grep -r money .', 'grep -r money rules', 'rg money', 'find rules -exec cat {} +', 'cat ./../x.md', 'cat ..', 'cat .']) assert.equal(bashScan(c, root, null, files).unbounded, true, c);
   assert.equal(bashScan('git -C "$W" grep money', root, root, files).unbounded, true, 'review: git -C to a variable, grep');
@@ -2083,4 +2088,463 @@ test('#1858 re-review L-2: the sentence fields are checked in writesReport.forbi
   assert.match(sentenceFieldProblems({cases: [{id: 's', writes: {require: [{id: 'r', pattern: 'x', sentenceWith: '以前'}]}}]})[0], /^s r: sentenceWith is not used in a require entry/);
   assert.match(sentenceFieldProblems({cases: [{id: 's', writesReport: {require: [{id: 'r', pattern: 'x', sentenceUnless: 'ません'}]}}]})[0], /^s r: sentenceUnless is not used in a require entry/);
   assert.deepEqual(writeChecks({forbid: [{id: 'f', pattern: '無償', sentenceUnless: NEGATED}]}, ['CHANGELOG.md'], () => '無償とは言いません。').writeViolations, [], 'writesReport uses the same writeChecks');
+});
+
+// --- #1866: the prerequisites (PR #1857 last review M-A, L-A, L-B; PR #1864 Lows; PR #1873 Lows; the commandRan handoff)
+// and the start worktree (a worktree the harness makes outside the sandbox before the trial, the session started in it).
+const C66DIR = path.join(EVROOT, '1866-rule-read-worktree/config');
+const run66 = await import('../run-trial.mjs');
+const score66 = await import('../score.mjs');
+
+test('#1866 M-A: after a failed cd-and-more call both cwd candidates are scanned: no unbounded output, strict reads only when found from both', () => {
+  const root = '/r/w', files = ['rules/money.md', 'src/a.ts', 'src/rules/money.md', 'a.ts'];
+  const tr = (calls) => ({cwd: root, uses: calls.map((c, i) => ({id: `b${i}`, name: 'Bash', input: {command: c[0]}})), results: new Map(calls.map((c, i) => [`b${i}`, {is_error: c[1]}]))});
+  // The review's example: rg in src after a failed `cd src && node t.mjs` does not read rules/money.md.
+  const ex = score66.bashTraceReads(tr([['cd src && node t.mjs', true], ['rg TODO src', false]]), files);
+  assert.equal(ex.unbounded, 0);
+  const k = {id: 'x', forbidReads: [{id: 'money', pattern: '^rules/money\\.md$'}]};
+  assert.deepEqual(caseChecks(k, [], {uses: [], results: new Map(), cwd: root, skills: [], text: ''}, {bash: ex}).forbiddenReads, [], 'no forbidden read of a file never searched');
+  // From the cwd before, rg TODO src searches src/; from src, src/src (no file): both expanded.
+  assert.ok(ex.possible.includes('src/rules/money.md'));
+  // Strict reads: a path read from both candidates is the same file only when it is absolute; a relative one differs.
+  const rel = score66.bashTraceReads(tr([['cd src && false', true], ['cat a.ts', false]]), files);
+  assert.deepEqual([rel.reads, rel.possible.sort()], [[], ['a.ts', 'src/a.ts']], 'strict: not counted under the doubt; possible: both');
+  const abs = score66.bashTraceReads(tr([['cd src && false', true], ['cat /r/w/a.ts', false]]), files);
+  assert.deepEqual(abs.reads, ['a.ts']);
+  // A cd only, as before: the cwd is kept; two cds: unknown as before (unbounded); a later absolute cd resolves it.
+  assert.deepEqual(score66.bashTraceReads(tr([['cd nope', true], ['cat a.ts', false]]), files).reads, ['a.ts']);
+  assert.equal(score66.bashTraceReads(tr([['cd src && cd x && false', true], ['grep -r money .', false]]), files).unbounded, 1);
+  assert.equal(score66.bashTraceReads(tr([['cd src && cd x && false', true], ['cd /r/w', false], ['grep -r money .', false]]), files).unbounded, 0);
+  // The candidates carry on: a second failed call doubles them, each one is reset to the start when outside it.
+  const two = score66.bashTraceReads(tr([['cd src && false', true], ['cd rules && false', true], ['cat money.md', false]]), files);
+  assert.deepEqual([two.reads, two.possible.sort(), two.unbounded], [[], ['money.md', 'rules/money.md', 'src/money.md', 'src/rules/money.md'], 0], 'four candidates, each expanded');
+  assert.deepEqual(score66.bashTraceReads(tr([['cd .. && false', true], ['cat a.ts', false]]), files).reads, ['a.ts'], 'a candidate outside the project is the start');
+  // More candidates than MAX_CWD_CANDIDATES: unknown.
+  const many = Array.from({length: 4}, (_, i) => [`cd d${i} && false`, true]);
+  assert.equal(score66.bashTraceReads(tr([...many, ['grep -r money .', false]]), files).unbounded, 1, `2^4 > ${score66.MAX_CWD_CANDIDATES}`);
+});
+
+test('#1866 commandRan with resultPattern: the command and its output are bound; quoted text or another printing part does not count', () => {
+  const E = {id: 'start', pattern: "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b", exclude: '\\s(--help|-h)(\\s|$)', resultPattern: '"schema":\\s*"asc-(worktree|project-start|project-context-selection)/v1"'};
+  const CLI = 'node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs';
+  const OUT = '{"schema": "asc-worktree/v1", "context": {"schema": "asc-project-context-selection/v1"}}';
+  const T = (cmd, out = OUT, err = false) => trace({messages: [[['Bash', {command: cmd}, err, out]]], tools: X44.tools.split(',')});
+  // The calls after another that may have saved a copy of the output (an earlier Write of the JSON).
+  const TS = (cmd) => trace({messages: [[['Write', {file_path: '/tmp/w/saved.json', content: OUT}]], [['Bash', {command: cmd}, false, OUT]]], tools: X44.tools.split(',')});
+  for (const cmd of [`${CLI} start . --path src/billing/invoice.ts`, `cd /r/w/.worktrees/x && ${CLI} start . --path src/billing/invoice.ts 2>&1 | head -40`, `${CLI} start . | jq '.context'`,
+    `${CLI} start .; echo "exit=$?"`, `set -o pipefail; ${CLI} start . | grep -A3 schema | head`, '.agent-skill-chain/managed-runtime/bin/asc-v05.mjs start .', `node --no-warnings ${CLI.slice(5)} start .`,
+    `W=/r/w ${CLI} start . 2>/dev/null`, `sh -c '${CLI} start .'`])
+    for (const t of [T(cmd), TS(cmd)]) assert.equal(commandRan(E, t), true, cmd);
+  // PR #1875 review M2: #1844 decision-criteria.md counts the call whose result has the JSON output of start; other parts
+  // that print do not stop it while no copy of the output can exist (the review's examples).
+  const beside = [`${CLI} start . --path src/billing/invoice.ts && cat ../../.agent-skill-chain/project/rules/money.md`, `git status && ${CLI} start .`, `ls; ${CLI} start .`,
+    `cd "$(git rev-parse --show-toplevel)" && ${CLI} start .`, `${CLI} start . | python3 -m json.tool`, `${CLI} start . | cat - saved.json`, `cat <<'EOF' > n.md\n${CLI} start .\nEOF\n${CLI} start .`];
+  for (const cmd of beside) assert.equal(commandRan(E, T(cmd)), true, cmd);
+  // Once a copy may exist, the strict binding: every other part quiet, filters without a file operand, no substitution.
+  for (const cmd of beside) assert.equal(commandRan(E, TS(cmd)), false, `saved copy: ${cmd}`);
+  assert.equal(score66.boundCommandRan(E, `git status && ${CLI} start .`), false, 'without the trace: strict');
+  // A copy saved in the same call or an earlier one: start sent to a file or tee, the schema text written by Bash or Edit.
+  const saved = (uses) => score66.savedCopy(E, uses.map((u) => ({name: u[0], input: u[1]})));
+  assert.equal(saved([['Bash', {command: `${CLI} start . > s.json`}]]), true);
+  assert.equal(saved([['Bash', {command: `${CLI} start . | jq . > s.json`}]]), true);
+  assert.equal(saved([['Bash', {command: `${CLI} start . | tee /tmp/x.json`}]]), true);
+  assert.equal(saved([['Bash', {command: `cat > s.json <<'EOF'\n${OUT}\nEOF`}]]), true);
+  assert.equal(saved([['Edit', {file_path: 'a', old_string: 'x', new_string: OUT}]]), true);
+  assert.equal(saved([['MultiEdit', {file_path: 'a', edits: [{old_string: 'x', new_string: OUT}]}]]), true);
+  assert.equal(saved([['Bash', {command: `${CLI} start . 2>err.txt | head`}], ['Bash', {command: 'git status > s.txt'}], ['Write', {file_path: 'a', content: 'x'}]]), false);
+  assert.equal(commandRan(E, trace({messages: [[['Bash', {command: `${CLI} start . | tee /tmp/x.json`}, false, OUT]], [['Bash', {command: `git status && ${CLI} start .`}, false, OUT]]], tools: X44.tools.split(',')})), true, 'the first call is bound (tee has no file to print)');
+  // The false positive of the PR #1857 handoff: start quoted, the JSON from a saved file; and those that make the schema up
+  // (PR #1875 review L1): printf with %, echo with expanded text or a backslash, a dump of the variables, eval.
+  for (const cmd of [`echo '${CLI} start . --path src/billing'; cat .asc-start.json`, `echo "ran ${CLI} start ."; cat saved.json`, `${CLI} start . > s.json; cat s.json`,
+    `${CLI} start . > s.json && jq . s.json`, `echo "$(cat s.json)"; ${CLI} start .`, `node -e "require('child_process'); /* asc-v05.mjs start */" ; cat s.json`,
+    `printf '%s' '{"schema": "asc-worktree/v1"}'`, `${CLI} start .; printf '{"schema": "asc-worktree/v1"}'`, `${CLI} start --help`,
+    `printf '"schema": "%s"' asc-worktree/v1; ${CLI} start .; true`, `S='x'; echo "$S"; ${CLI} start .`, `echo -e '\\x22schema'; ${CLI} start .`, `set; ${CLI} start .`, `export -p; ${CLI} start .`,
+    `env; ${CLI} start .`, `eval "$X"; ${CLI} start .`, `${CLI} start .; sh -c 'cat s.json'`, `${CLI} start .; node -e 'console.log(1)'`, `${CLI} start .; python3 -c 'print(1)'`, `${CLI} start . | xargs echo \${A}`])
+    assert.equal(commandRan(E, T(cmd)), false, cmd);
+  assert.equal(commandRan(E, T(`${CLI} start .`, OUT, true)), false, 'an error result');
+  assert.equal(commandRan(E, T(`${CLI} start .`, 'Error: Use a dedicated Git worktree')), false, 'no JSON output');
+  assert.equal(score66.boundCommandRan(E, `cat <<'EOF' > n.md\n${CLI} start .\nEOF\n${CLI} start .`), false, 'strict: a here-document is text; cat > file is another printing part');
+  // Without resultPattern: as before (the pattern on the whole command text).
+  assert.equal(commandRan({pattern: 'asc-v05\\.mjs start'}, T(`echo '${CLI} start .'`)), true);
+  // report.commands shares commandRan for ok, and shows outputSchema (the count without the binding) beside it.
+  const r = reportOf({commands: [E]}, [], T(`echo '${CLI} start .'; cat saved.json`));
+  assert.deepEqual(r.commands.start, {attempted: true, exitOk: true, outputSchema: true, ok: false});
+  assert.deepEqual(reportOf({commands: [{id: 'c', pattern: 'git commit'}]}, [], T('git commit -m x')).commands.c, {attempted: true, exitOk: true, ok: true}, 'no outputSchema without resultPattern');
+});
+
+test('#1866 PR #1873 Lows: a sentence field where it is not used is a problem; an empty-matching pattern does not throw and is a problem', () => {
+  assert.doesNotThrow(() => entryMatches({id: 'e', pattern: 'x*', sentenceUnless: 'ません'}, '無償で直します。'));
+  assert.equal(entryMatches({id: 'e', pattern: 'x*', sentenceUnless: 'ません'}, '無償で直します。'), true, 'an empty match counts (as re.test does)');
+  assert.equal(entryMatches({id: 'e', pattern: '$', sentenceUnless: '直します'}, '無償で直します。'), false, 'the empty match at the end is held by the sentence, which the negation leaves out');
+  assert.equal(entryMatches({id: 'e', pattern: '(?:)', sentenceWith: '以前'}, 'a\n以前は違った。'), true);
+  const P = (k) => sentenceFieldProblems({cases: [{id: 's', ...k}]});
+  assert.match(P({answerQuota: {min: 1, groups: [{id: 'g', pattern: 'x', sentenceUnless: 'ません'}]}})[0], /^s answerQuota\.groups\.0: sentenceUnless is not used here/);
+  assert.match(P({expectReads: [{id: 'r', pattern: 'x', sentenceWith: 'y'}]})[0], /^s expectReads\.0: sentenceWith is not used here/);
+  assert.match(P({writes: {pathPattern: 'x', requireFiles: [{id: 'f', file: 'a', sentenceWith: 'y'}]}})[0], /^s writes\.requireFiles\.0: sentenceWith/);
+  assert.match(sentenceFieldProblems({report: {answer: [{id: 'a', pattern: 'x', sentenceUnless: 'y'}]}, cases: []})[0], /^cases\.json report\.answer\.0: sentenceUnless is not used here/);
+  assert.match(P({answerNone: [{id: 'n', pattern: 'x?', sentenceUnless: 'ません'}]})[0], /^s n: pattern matches the empty string/);
+  assert.match(P({answerNone: [{id: 'n', pattern: '(', sentenceUnless: 'ません'}]})[0], /^s n: pattern is not a regular expression/);
+  assert.deepEqual(P({answerNone: [{id: 'n', pattern: 'x', sentenceUnless: 'ません'}], writes: {forbid: [{id: 'f', pattern: 'y', sentenceWith: 'z'}]}, writesReport: {forbid: [{id: 'g', pattern: 'y', sentenceUnless: 'z'}]}}), []);
+  assert.deepEqual(P({answerNone: [{id: 'n', pattern: 'x?'}]}), [], 'an entry without sentence fields is matched on the whole text as before');
+  for (const dir of [C44DIR, C66DIR, path.join(EVROOT, '1843-spec-rule-path/config'), path.join(EVROOT, '1846-warranty-version/config')]) assert.deepEqual(sentenceFieldProblems(cfg.loadSpec(dir)), [], dir);
+});
+
+test('#1866 PR #1857 last review L-A and L-B: an unreadable work/ or tmp/ of a probe is removed entirely and recorded; what is not removed is written to cleanup-left.txt', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  for (const [unreadable, why] of [['work', 'work/ unreadable'], ['tmp', 'tmp/ unreadable']]) {
+    const dir = path.join(d, `R-probe-${unreadable}`), work = path.join(dir, 'work');
+    fs.mkdirSync(path.join(work, 'src'), {recursive: true}); fs.mkdirSync(path.join(dir, 'tmp'), {recursive: true});
+    fs.writeFileSync(path.join(work, 'src/a.txt'), 'a'); fs.writeFileSync(path.join(dir, 'tmp/b.txt'), 'b');
+    fs.chmodSync(path.join(dir, unreadable), 0o000);
+    const m = run66.credentialCheckOf({dir, work, secret: 'SECRET-1866', records: []});
+    assert.deepEqual([m.credentialLeak, m.credentialUnreadable], [true, [unreadable]]);
+    run66.removeCredentialCopies(m, {dir, work, probe: true});
+    assert.deepEqual([m.workRemoved, m.credentialCleanupErrors, fs.existsSync(work), fs.existsSync(path.join(dir, 'tmp'))], [why, undefined, false, false], unreadable);
+  }
+  // A file that cannot be read keeps the probe's work/ (only that file is removed), as before.
+  const dir = path.join(d, 'R-probe-file'), work = path.join(dir, 'work');
+  fs.mkdirSync(work, {recursive: true}); fs.writeFileSync(path.join(work, 'x.txt'), 'x'); fs.writeFileSync(path.join(work, 'y.txt'), 'y'); fs.chmodSync(path.join(work, 'x.txt'), 0o000);
+  const m = run66.removeCredentialCopies(run66.credentialCheckOf({dir, work, secret: 'SECRET-1866'}), {dir, work, probe: true});
+  assert.deepEqual([m.workRemoved, fs.existsSync(path.join(work, 'y.txt')), fs.existsSync(path.join(work, 'x.txt'))], [undefined, true, false]);
+  // L-B: the paths not removed are appended to <trial>/cleanup-left.txt (and the finally of main writes it).
+  assert.equal(run66.recordCleanupLeft(dir, ['home: EACCES', 'config: EACCES']), true);
+  assert.match(fs.readFileSync(path.join(dir, run66.CLEANUP_LEFT_FILE), 'utf8'), /not removed[^\n]*\nhome: EACCES\nconfig: EACCES\n$/);
+  assert.equal(run66.recordCleanupLeft(path.join(d, 'no-such-dir'), ['x']), false, 'a failure to write it does not throw');
+  assert.match(fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8'), /if \(left\.length\) \{ recordCleanupLeft\(dir, left\);/);
+});
+
+test('#1866 PR #1864 Lows: a broken relative link is resolved component by component; the entries of --config-dir are checked', async (t) => {
+  const {realish, resolveLinkTarget, runInClaudeSandbox} = await import('../claude-sandbox-bash.mjs');
+  const d = fs.realpathSync.native(tmp(t));
+  // d/real/deep/dir, d/lnk -> real/deep (a link), d/broken -> lnk/../x/config (broken): the system resolves lnk/.. to real/,
+  // the text would give d/x.
+  fs.mkdirSync(path.join(d, 'real/deep/dir'), {recursive: true});
+  fs.symlinkSync('real/deep', path.join(d, 'lnk'));
+  fs.symlinkSync('lnk/../x/config', path.join(d, 'broken'));
+  assert.equal(realish(path.join(d, 'broken')), path.join(d, 'real/x/config'));
+  assert.equal(realish(path.join(d, 'broken', 'settings.json')), path.join(d, 'real/x/config/settings.json'));
+  assert.equal(resolveLinkTarget(path.join(d, 'real/deep'), '../../lnk/dir'), path.join(d, 'real/deep/dir'));
+  // A link at the end that leads into a (fake) real HOME through ..: refused.
+  const home = path.join(d, 'real');
+  const {assertNotRealHome} = await import('../claude-sandbox-bash.mjs');
+  assert.throws(() => assertNotRealHome(path.join(d, 'broken'), '--config-dir', [home]), /refused: --config-dir is or is under the real HOME/);
+  // --config-dir: an entry linking into the real HOME (settings.json, .claude.json or any other) is refused before anything runs.
+  const other = path.join(d, 'other'); fs.mkdirSync(other);
+  for (const own of ['settings.json', '.claude.json', 'plugins']) {
+    const cd = path.join(d, `cfg-${own}`); fs.mkdirSync(cd); fs.symlinkSync(path.join(os.homedir(), own === 'plugins' ? '.claude' : own), path.join(cd, own));
+    await assert.rejects(runInClaudeSandbox({claude: 'unused', cwd: other, home: other, tmp: other, commands: [], out: path.join(d, `out-${own}`), configDir: cd}), new RegExp(`refused: --config-dir/${own.replace('.', '\\.')} is or is under the real HOME`), own);
+    assert.ok(!fs.existsSync(path.join(d, `out-${own}`)));
+  }
+});
+
+test('#1866 config extends: conditions merged, other files from the base, fixation fixes the base files too; refusals', async (t) => {
+  const {baseDirOf, mergeConditions, cfgPath, readCfg} = cfg;
+  assert.deepEqual(mergeConditions({a: 1, b: {c: 1, d: [1, 2]}, e: 1, f: {g: 1}}, {extends: 'x', b: {d: [3]}, e: null, f: {h: 2}, i: 4}), {a: 1, b: {c: 1, d: [3]}, f: {g: 1, h: 2}, i: 4});
+  assert.deepEqual(mergeConditions({a: {extends: 1}}, {extends: 'x', b: {extends: 2}, a: {extends: 3}}), {a: {extends: 3}, b: {extends: 2}}, 'PR #1875 review L3: a nested extends is kept');
+  assert.equal(baseDirOf(C66DIR), C44DIR);
+  assert.equal(baseDirOf(C44DIR), null, '#1844 extends nothing');
+  for (const f of ['cases.json', 'run-order.json', 'decision-criteria.md']) assert.equal(cfgPath(f, C66DIR), path.join(C44DIR, f), f);
+  assert.equal(cfgPath('release.json', C66DIR), path.join(C66DIR, 'release.json'));
+  const c66 = readCfg('conditions.json', C66DIR);
+  assert.deepEqual([c66.issue, c66.markerTag, c66.budget.capUsd, c66.budget.perTrialUsd, 'priorProbes' in c66, 'extends' in c66], ['1866', '1866', 9.42, 0.8, false, false]);
+  assert.deepEqual(c66.rule, C44.rule, 'the decision rule of #1844 unchanged (owner decision)');
+  assert.deepEqual(c66.fixtures, C44.fixtures);
+  assert.deepEqual(c66.toolLevels.X, {...X44, sandbox: {...X44.sandbox, startWorktree: {issue: '1866', type: 'test', slug: 'trial'}}});
+  assert.deepEqual(cfg.loadSpec(C66DIR), SPEC44, 'the cases of #1844, byte for byte the prompts of #1840');
+  // fixation: config/<f> is the file as read, base/<f> the base's own files; a change of the base is a difference.
+  const fx = await import('../fixation.mjs');
+  assert.deepEqual(fx.fixedNames(C66DIR), [...FIXED, ...cfg.CONFIG_FIXED.map((f) => `base/${f}`)]);
+  assert.deepEqual(fx.fixedNames(C44DIR), FIXED, 'a config without extends: as before');
+  assert.equal(fx.fixedFile('config/cases.json', C66DIR), path.join(C44DIR, 'cases.json'));
+  assert.equal(fx.fixedFile('base/conditions.json', C66DIR), path.join(C44DIR, 'conditions.json'));
+  const d = fs.realpathSync(tmp(t));
+  const base = path.join(d, 'base'), own = path.join(d, 'own');
+  fs.cpSync(EV, base, {recursive: true}); fs.mkdirSync(own);
+  fs.writeFileSync(path.join(own, 'conditions.json'), JSON.stringify({extends: '../base', issue: '9999'}));
+  const rec = {files: fx.digests(own)};
+  assert.deepEqual(fx.differences(rec, own), []);
+  fs.appendFileSync(path.join(base, 'cases.json'), ' ');
+  assert.deepEqual(fx.differences(rec, own), ['config/cases.json', 'base/cases.json']);
+  fs.appendFileSync(path.join(base, 'conditions.json'), ' ');
+  assert.ok(fx.differences(rec, own).includes('base/conditions.json'), 'the base conditions.json is fixed (config/conditions.json is the own file)');
+  assert.deepEqual(fx.differences({files: {...rec.files, 'base/extra': 'x'}}, own).includes('base/extra'), true, 'a recorded name that is no longer fixed is a difference');
+  for (const [ext, re] of [['.', /names the config itself/], [path.relative(own, H), /must not name the harness/], ['../none', /no conditions\.json in the base/], [7, /must be a directory/]]) {
+    fs.writeFileSync(path.join(own, 'conditions.json'), JSON.stringify({extends: ext}));
+    assert.throws(() => baseDirOf(own), re, String(ext));
+  }
+  fs.writeFileSync(path.join(base, 'conditions.json'), JSON.stringify({extends: '../x'}));
+  fs.writeFileSync(path.join(own, 'conditions.json'), JSON.stringify({extends: '../base'}));
+  assert.throws(() => baseDirOf(own), /one level only/);
+});
+
+test('#1866 config: #1844 extended, v0.5.134 (the latest at the fixation), the cap of the owner (10 - 0.58 = 9.42 over both #1844 ledgers), probes max 2 with none prior', () => {
+  const c = cfg.readCfg('conditions.json', C66DIR);
+  const rel = cfg.readCfg('release.json', C66DIR);
+  assert.deepEqual([rel.R.tag, rel.R.assetSha256], ['v0.5.134', 'a5245996a2098d267af3e9aebb0eae02bf9f30d97735f025fbeb9424ad82f0e9']);
+  assert.deepEqual(run66.priorSpendProblems(c.budget, C66DIR), []);
+  assert.ok(Math.abs(run66.priorSpentUsd(c.budget) - 0.579093) < 1e-6);
+  assert.equal(c.budget.capUsd, Math.floor((c.budget.ownerCapUsd - run66.priorSpentUsd(c.budget)) * 100) / 100);
+  assert.deepEqual(run66.priorSpendProblems({...c.budget, capUsd: 9.43}, C66DIR), [`the cap 9.43 exceeds the owner cap 10 minus the prior spend ${run66.priorSpentUsd(c.budget)}`]);
+  assert.match(run66.priorSpendProblems({...c.budget, priorSpend: [c.budget.priorSpend[0], {...c.budget.priorSpend[1], ledgerSha256: '0'.repeat(64)}]}, C66DIR).join(), /1844-ledger-2\.jsonl differs from the sha256/);
+  assert.match(run66.priorSpendProblems({...c.budget, priorSpend: [c.budget.priorSpend[0], c.budget.priorSpend[0]]}, C66DIR).join(), /listed twice/);
+  assert.deepEqual(run66.priorSpendProblems(C44.budget, C44DIR), [], '#1844 single priorSpend: as before');
+  assert.deepEqual(run66.priorProbeProblems(c, C66DIR), [], 'no priorProbes: #1844 probes are not counted');
+  const none = new Set();
+  assert.equal(probeRefusal({condition: 'R', rep: '1', reserved: none, conds: c, order: cfg.loadOrder(C66DIR)}), null);
+  assert.match(probeRefusal({condition: 'R', rep: '3', reserved: none, conds: c, order: cfg.loadOrder(C66DIR)}), /rep must be 1, or 2/);
+  // The probe ledger-2 of #1844: its R-probe-2 is the probe #1844 published.
+  const compare = JSON.parse(read('results/probes/probe-compare.json', C44DIR));
+  const settled = ledger.settlements(path.join(C66DIR, 'results/prior/1844-ledger-2.jsonl'));
+  assert.equal(settled.get('R-probe-2').traceSha256, compare.probes[0].traceSha256);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(C44DIR, 'results/fixation.json'), 'utf8')).records[0].ledgerId, ledger.ledgerId(path.join(C66DIR, 'results/prior/1844-ledger-2.jsonl')));
+});
+
+test('#1866 probe in the start worktree: the worktree-create step must stop with the new message and leave nothing; #1844 steps unchanged', async (t) => {
+  const {probeStepChecks} = await import('../probe-check.mjs');
+  const c66 = cfg.readCfg('conditions.json', C66DIR), X66 = c66.toolLevels.X;
+  const base = {dir: '/r/runs/R-probe-1', runsRoot: '/r/runs', fixture: '/r/fx', ledger: '/r/l/ledger.jsonl', homeMarker: '/h/m', repoMarker: '/repo/.agent-skill-chain/local/m'};
+  const x44 = probeContext(base, X44), plan = probeContext(base, X66), x = probeContext({...base, startDir: '/r/runs/R-probe-1/work/.worktrees/20261128_000000-1866-trial'}, X66);
+  assert.deepEqual(probeSteps('X', x44), probeSteps('X', probeContext(base, X44)), 'without startWorktree as #1844');
+  assert.ok(!('startDir' in x44));
+  assert.equal(plan.startDir, '/r/runs/R-probe-1/work/.worktrees/<start>');
+  const tg = (await import('../markers.mjs')).markerTag();
+  assert.deepEqual(x.probeWorktree, {branch: `test/${tg}-probe`, suffix: `-${tg}-probe`});
+  const steps = probeSteps('X', x);
+  assert.equal(steps.length, c66.probeSteps.X);
+  assert.equal(steps.length, probeSteps('X', x44).length, 'one step replaced, the count unchanged');
+  const old = probeSteps('X', x44).find((s) => s.id === 'insideWorktreeCreate'), now = steps.find((s) => s.id === 'insideWorktreeCreateStops');
+  assert.deepEqual([steps.some((s) => s.id === 'insideWorktreeCreate'), now.expect, now.command, now.resultPattern], [false, 'refused', old.command, 'Git worktree records are not writable']);
+  assert.equal(steps.find((s) => s.id === 'readSymlinkHome').path, `${x.startDir}/${LINK_FILE}`, 'the link is made in the session cwd');
+  const ids = (ss) => ss.map((s) => (s.id === 'insideWorktreeCreateStops' ? 'insideWorktreeCreate' : s.id));
+  assert.deepEqual(ids(steps), ids(probeSteps('X', x44)));
+  // The check: every result shows the message; the worktree-create left no branch, directory or worktree.
+  const T = (text, err = true) => parseTrace([ev({type: 'system', subtype: 'init', cwd: x.startDir, tools: X66.tools.split(','), permissionMode: 'acceptEdits', mcp_servers: []}),
+    ev({type: 'assistant', message: {id: 'm', content: [{type: 'tool_use', id: 'u', name: 'Bash', input: {command: now.command}}]}}),
+    ev({type: 'user', message: {content: [{type: 'tool_result', tool_use_id: 'u', is_error: err, content: text}]}})].join('\n'));
+  const MSG = 'Exit code 1\nGit worktree records are not writable: /r/runs/R-probe-1/work/.git/worktrees (EPERM). Run worktree-create in your own terminal';
+  const i = {steps: [now], startDir: x.startDir, worktreeCreateLeft: {branch: false, dirs: [], otherWorktrees: []}};
+  const c1 = probeStepChecks(i, T(MSG), 'X').checks;
+  assert.deepEqual([c1.probeStepsRefused.pass, c1.probeStepResultText.pass, c1.worktreeCreateStopped.pass], [true, true, true]);
+  assert.equal(probeStepChecks(i, T('Exit code 1\nMigration Git operation failed (exit status 128)'), 'X').checks.probeStepResultText.pass, false, 'the old failure is not the new stop');
+  assert.equal(probeStepChecks(i, T('{"repo": "/r/x", "mode": "worktree"}', false), 'X').checks.probeStepsRefused.pass, false, 'worktree-create succeeded');
+  for (const left of [{branch: true, dirs: [], otherWorktrees: []}, {branch: false, dirs: ['.worktrees/x-1866-probe'], otherWorktrees: []}, {branch: false, dirs: [], otherWorktrees: ['../elsewhere']}, {branch: null, dirs: [], otherWorktrees: []}, {branch: false, dirs: [], otherWorktrees: null}])
+    assert.equal(probeStepChecks({...i, worktreeCreateLeft: left}, T(MSG), 'X').checks.worktreeCreateStopped.pass, false, JSON.stringify(left));
+  assert.equal(probeStepChecks({steps: [now], startDir: x.startDir}, T(MSG), 'X').checks.worktreeCreateStopped.pass, false, 'not recorded');
+  assert.ok(!('worktreeCreateStopped' in probeStepChecks({steps: probeSteps('X', x44)}, T(MSG), 'X').checks), '#1844 probes: no new check');
+  // worktreeCreateLeftOf on a real repository with a start worktree and what a worktree-create would leave.
+  const d = fs.realpathSync(tmp(t)), work = path.join(d, 'work');
+  fs.mkdirSync(work);
+  const g = (args, cwd = work) => spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd, encoding: 'utf8'});
+  g(['init', '-q']); g(['commit', '-q', '--allow-empty', '-m', 'i']);
+  g(['worktree', 'add', '-q', '-b', 'test/1866-trial', '.worktrees/20261128_000000-1866-trial', 'HEAD']);
+  const ctx = {startDir: path.join(work, '.worktrees/20261128_000000-1866-trial'), probeWorktree: x.probeWorktree};
+  assert.deepEqual(run66.worktreeCreateLeftOf(work, ctx), {branch: false, dirs: [], otherWorktrees: []});
+  g(['branch', x.probeWorktree.branch]);
+  fs.mkdirSync(path.join(work, `.worktrees/20261128_000001${x.probeWorktree.suffix}`));
+  fs.mkdirSync(path.join(ctx.startDir, `.worktrees/20261128_000002${x.probeWorktree.suffix}`), {recursive: true});
+  g(['worktree', 'add', '-q', '--detach', path.join(d, 'elsewhere'), 'HEAD']);
+  const left = run66.worktreeCreateLeftOf(work, ctx);
+  assert.deepEqual(left, {branch: true, dirs: [`.worktrees/20261128_000000-1866-trial/.worktrees/20261128_000002${x.probeWorktree.suffix}`, `.worktrees/20261128_000001${x.probeWorktree.suffix}`], otherWorktrees: ['../elsewhere']});
+  // probeEndStateOf: the inside file is looked for in the start worktree, and the left state is recorded.
+  fs.writeFileSync(path.join(ctx.startDir, INSIDE_FILE), 'probe');
+  const end = probeEndStateOf({...ctx, sentinels: {}}, work);
+  assert.deepEqual([end.insideExists, end.worktreeCreateLeft.branch], [true, true]);
+  assert.equal(probeEndStateOf({sentinels: {}}, work).insideExists, false, 'without startDir: work/ as before');
+});
+
+test('#1866 createStartWorktree: the CLI outside the sandbox makes the worktree; a failure or an odd answer is refused; config checks', (t) => {
+  assert.deepEqual(run66.startWorktreeProblems({issue: '1866', type: 'test', slug: 'trial'}), []);
+  for (const bad of [null, {issue: 'x', type: 'test', slug: 'a'}, {issue: '1', type: 'Test', slug: 'a'}, {issue: '1', type: 'test', slug: 'probe'}, {issue: '1', type: 'test', slug: 'a/b'}]) assert.ok(run66.startWorktreeProblems(bad).length > 0, JSON.stringify(bad));
+  const d = fs.realpathSync(tmp(t)), work = path.join(d, 'work');
+  fs.mkdirSync(path.join(work, path.dirname(run66.ASC_CLI)), {recursive: true});
+  const g = (args) => spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd: work, encoding: 'utf8'});
+  g(['init', '-q']); g(['commit', '-q', '--allow-empty', '-m', 'i']);
+  // A stand-in CLI that does what worktree-create does (git worktree add) and prints its JSON; its argv is recorded.
+  const cli = (body) => fs.writeFileSync(path.join(work, run66.ASC_CLI), body);
+  cli(`const {spawnSync} = require('child_process'); const fs = require('fs'); const [, , cmd, repo, issue, type, slug, base] = process.argv;
+fs.writeFileSync(${JSON.stringify(path.join(d, 'argv.json'))}, JSON.stringify(process.argv.slice(2)));
+const dir = repo + '/.worktrees/20261128_000000-' + issue + '-' + slug, branch = type + '/' + issue + '-' + slug;
+spawnSync('git', ['worktree', 'add', '-q', '-b', branch, dir, base], {cwd: repo});
+console.log(JSON.stringify({repo: dir, mode: 'worktree', branch, base: 'abc'}));`);
+  fs.renameSync(path.join(work, run66.ASC_CLI), path.join(work, run66.ASC_CLI.replace(/\.mjs$/, '.cjs')));
+  fs.symlinkSync(path.basename(run66.ASC_CLI).replace(/\.mjs$/, '.cjs'), path.join(work, run66.ASC_CLI));
+  const st = run66.createStartWorktree(work, {issue: '1866', type: 'test', slug: 'trial'});
+  assert.deepEqual(st, {startDir: '.worktrees/20261128_000000-1866-trial', branch: 'test/1866-trial', base: 'abc'});
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(d, 'argv.json'), 'utf8')), ['worktree-create', work, '1866', 'test', 'trial', 'HEAD']);
+  fs.rmSync(path.join(work, run66.ASC_CLI)); fs.writeFileSync(path.join(work, run66.ASC_CLI), "console.error('Git worktree records are not writable'); process.exit(1);\n");
+  assert.throws(() => run66.createStartWorktree(work, {issue: '1866', type: 'test', slug: 'other'}), /worktree-create before the trial failed \(exit 1\): Git worktree records are not writable/);
+  fs.writeFileSync(path.join(work, run66.ASC_CLI), `console.log(JSON.stringify({repo: ${JSON.stringify(d)}, mode: 'worktree', branch: 'x'}));\n`);
+  assert.throws(() => run66.createStartWorktree(work, {issue: '1866', type: 'test', slug: 'other'}), /made no worktree under \.worktrees/);
+  fs.writeFileSync(path.join(work, run66.ASC_CLI), "console.log('ok');\n");
+  assert.throws(() => run66.createStartWorktree(work, {issue: '1866', type: 'test', slug: 'other'}), /printed no JSON/);
+  assert.throws(() => run66.createStartWorktree(work, {issue: '1866', type: 'test', slug: 'probe'}), /not probe/);
+  // main: the worktree is made before the reservation, the session cwd and the trust entry are the worktree, meta records it.
+  const src = fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8');
+  assert.ok(src.indexOf('start = createStartWorktree(work, sw)') < src.indexOf('const reservation = ledgerOps.reserve(ledger, name, budget);'), 'before the reservation');
+  assert.match(src, /projects: \{\[fs\.realpathSync\(cwd\)\]: \{hasTrustDialogAccepted: true\}\}/);
+  assert.match(src, /flags\(\{level: cell\.level, model: conds\.model, budget, maxTurns, settingsFile, debugFile\}\)\], \{cwd, env,/);
+  assert.match(src, /startDir: start\.startDir, startWorktree: \{branch: start\.branch/);
+});
+
+test('#1866 scoring of a trial started in the start worktree: paths relative to the project, Bash from the worktree, cwd checked', () => {
+  const WT = '.worktrees/20261128_000000-1866-trial', ROOT = '/r/runs/R-u-bill-1-1/work', CWD = `${ROOT}/${WT}`;
+  const RULE = '.agent-skill-chain/project/rules/money.md';
+  const opts = {level: X44, condition: 'R', ...NOBASE, priorFiles: () => [RULE, 'src/billing/invoice.ts'], skills: C44.ascSkills, changedFiles: [], worktrees: ['20261128_000000-1866-trial'], startDir: WT};
+  const T = (msgs, cwd = CWD) => trace({messages: msgs, tools: X44.tools.split(','), cwd});
+  const r1 = scoreRun(SPEC44, k44('u-bill-1'), T([[['Read', {file_path: `${CWD}/${RULE}`}]], []]), opts);
+  assert.deepEqual([r1.failure, r1.expectReadsAll], [undefined, true], 'a Read in the worktree is .worktrees/<name>/<rule>');
+  const r2 = scoreRun(SPEC44, k44('u-bill-1'), T([[['Bash', {command: `cat ${RULE}`}]], []]), opts);
+  assert.deepEqual([r2.expectReadsAll, r2.bashReadPaths], [true, [`${WT}/${RULE}`]], 'Bash starts in the worktree');
+  const r3 = scoreRun(SPEC44, k44('u-users'), T([[['Bash', {command: `head -3 ../../${RULE}`}]], []]), opts);
+  assert.deepEqual([r3.bashReadPaths, r3.forbiddenReads], [[RULE], ['money-rule']], 'the main checkout rule read from the worktree');
+  const r4 = scoreRun(SPEC44, k44('u-users'), T([[['Bash', {command: 'cd ../.. && ls'}]], [['Bash', {command: `cat ${RULE}`}]], []]), opts);
+  assert.deepEqual(r4.bashReadPaths, [`${WT}/${RULE}`], 'a cd out of the worktree is reset to it for the next call (Claude Code)');
+  assert.match(scoreRun(SPEC44, k44('u-bill-1'), T([[]], ROOT), opts).failure, /the session cwd is not the start directory/);
+  const w = scoreRun(SPEC44, k44('u-bill-1'), T([[['Write', {file_path: `${CWD}/src/billing/tax.ts`, content: 'x'}]], []]), {...opts, fileText: () => 'export const t = 1n;\n'});
+  assert.deepEqual(w.written, [`${WT}/src/billing/tax.ts`]);
+  // Without startDir: as before (the cwd is the root).
+  assert.deepEqual(scoreRun(SPEC44, k44('u-bill-1'), T([[['Bash', {command: `cat ${RULE}`}]], []], ROOT), {...opts, startDir: null}).bashReadPaths, [RULE]);
+  // PR #1875 review M1: the Skill files read in the worktree (Read or Bash) are the project's ASC files and user Skills.
+  const BODY = '.agent-skill-chain/skills/asc/SKILL.md', ENTRY = '.claude/skills/asc/SKILL.md', OWN = '.claude/skills/invoice-format/SKILL.md';
+  const sizes = {opts: {...opts, priorFiles: () => [RULE, 'src/billing/invoice.ts', BODY, ENTRY, OWN], sizeOf: (r) => ({[BODY]: 100, [ENTRY]: 10})[r] ?? null}};
+  for (const [label, use] of [['Read', ['Read', {file_path: `${CWD}/${BODY}`}]], ['Bash', ['Bash', {command: `cat ${BODY}`}]], ['Bash ../../', ['Bash', {command: `cat ../../${BODY}`}]]]) {
+    const b = scoreRun(SPEC44, k44('u-bill-1'), T([[use], []]), sizes.opts);
+    assert.deepEqual([b.ascBodies, b.bodyRead, b.reach, b.ascFilesRead, b.ascBytesRead], [['asc'], true, true, 1, 100], `the ASC body by ${label}`);
+  }
+  const en = scoreRun(SPEC44, k44('u-bill-1'), T([[['Read', {file_path: `${CWD}/${ENTRY}`}]], []]), sizes.opts);
+  assert.deepEqual([en.ascEntries, en.entryHop, en.ascBytesRead], [['asc'], true, 10], 'the ASC entry in the worktree');
+  const both = scoreRun(SPEC44, k44('u-bill-1'), T([[['Read', {file_path: `${CWD}/${BODY}`}], ['Bash', {command: `cat ../../${BODY}`}]], []]), sizes.opts);
+  assert.deepEqual([both.ascFilesRead, both.ascBytesRead], [1, 100], 'the same file in the worktree and the main checkout is counted once');
+  for (const use of [['Read', {file_path: `${CWD}/${OWN}`}], ['Bash', {command: `cat ${OWN}`}]]) {
+    const n = scoreRun(SPEC44, k44('u-neg'), T([[use], []]), sizes.opts);
+    assert.deepEqual([n.forbiddenSkills, n.forbidSkillsOk, n.negativeOk], [['invoice-format'], false, false], `the user's Skill read in the worktree (${use[0]})`);
+  }
+  const ok = scoreRun(SPEC44, k44('u-neg'), T([[['Read', {file_path: `${CWD}/src/users/list.ts`}]], []]), opts);
+  assert.deepEqual([ok.forbidSkillsOk, ok.negativeOk], [true, true]);
+  // Without startDir the .worktrees/ paths are not mapped (level W and #1844 unchanged).
+  const w0 = scoreRun(SPEC44, k44('u-bill-1'), T([[['Read', {file_path: `${ROOT}/${WT}/${BODY}`}]], []], ROOT), {...opts, startDir: null});
+  assert.deepEqual([w0.ascBodies, w0.bodyRead], [[], false]);
+});
+
+// PR #1875 review L5: a measured trial started in the start worktree, from its directory: collectTrial passes startDir,
+// scoreTrials maps the worktree's paths (rule, ASC body, written file), and workFilesProblem sees a change under .worktrees/.
+test('#1866 collectTrial and scoreTrials of a trial started in the start worktree; workFilesProblem under .worktrees/', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  const runs = path.join(d, 'runs'), dir = path.join(runs, 'R-u-bill-1-1'), work = path.join(dir, 'work');
+  const WT = '.worktrees/20261128_000000-1866-trial', wt = path.join(work, WT);
+  const RULE = '.agent-skill-chain/project/rules/money.md', ABODY = '.agent-skill-chain/skills/asc/SKILL.md', TAX = 'src/billing/tax.ts';
+  const g = (args, cwd = work) => { const r = spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd, encoding: 'utf8'}); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
+  for (const [f, x] of [[RULE, '# money\n'], [ABODY, '# asc\n'], ['src/billing/invoice.ts', 'export const a = 1n;\n'], ['CLAUDE.md', '# c\n']]) { fs.mkdirSync(path.dirname(path.join(work, f)), {recursive: true}); fs.writeFileSync(path.join(work, f), x); }
+  g(['init', '-q', '-b', 'main']); g(['add', '-A']); g(['commit', '-q', '-m', 'i']);
+  const head = g(['rev-parse', 'HEAD']);
+  g(['worktree', 'add', '-q', '-b', 'test/1866-trial', WT, 'HEAD']);
+  fs.writeFileSync(path.join(wt, TAX), 'export const tax = (a: bigint) => a * 10n / 100n;\n');
+  const OUT = '{"schema": "asc-worktree/v1"}';
+  const lines = [{type: 'system', subtype: 'init', cwd: wt, tools: X44.tools.split(','), permissionMode: 'acceptEdits', mcp_servers: [], model: 'm'}];
+  const use = (id, name, input, content = 'x') => lines.push({type: 'assistant', message: {id: `m${id}`, content: [{type: 'tool_use', id: `u${id}`, name, input}]}}, {type: 'user', message: {content: [{type: 'tool_result', tool_use_id: `u${id}`, is_error: false, content}]}});
+  use(1, 'Read', {file_path: path.join(wt, ABODY)});
+  use(2, 'Bash', {command: 'node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs start . --path src/billing/invoice.ts && cat .agent-skill-chain/project/rules/money.md'}, `${OUT}\n# money`);
+  use(3, 'Write', {file_path: path.join(wt, TAX), content: 'x'});
+  lines.push({type: 'assistant', message: {id: 'm4', content: [{type: 'text', text: 'ok'}]}}, {type: 'result', subtype: 'success', is_error: false, result: 'ok', total_cost_usd: 0.05, num_turns: 4});
+  fs.writeFileSync(path.join(dir, 'trace.jsonl'), lines.map(ev).join('\n') + '\n');
+  const opts = {base: head, worktrees: true};
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({case: 'u-bill-1', sampleHead: head, endHead: head, workFilesOptions: opts, workFiles: workChanges(work, opts), startDir: WT, startWorktree: {branch: 'test/1866-trial'}}));
+  assert.equal(workFilesProblem(dir), null);
+  const c = collectTrial(runs, 'R-u-bill-1-1', {conds: C44});
+  assert.deepEqual([c.entry.startDir, c.row.startDir, c.row.startBranch, c.entry.changedFiles], [WT, WT, 'test/1866-trial', [`${WT}/${TAX}`]]);
+  const row = scoreTrials(SPEC44, [c.entry], C44).find((r) => r.case === 'u-bill-1' && r.run === 1);
+  assert.deepEqual([row.failure, row.bodyRead, row.expectReadsAll, row.commandsAll, row.written, row.writeOk, row.bashReadPaths, row.ascBytesRead], [undefined, true, true, true, [`${WT}/${TAX}`], true, [`${WT}/${RULE}`], 6 + 8], 'the ASC files: the body and the rule (.agent-skill-chain/), each once');
+  // A change after the trial under .worktrees/ is a problem.
+  fs.appendFileSync(path.join(wt, TAX), '// later\n');
+  assert.match(workFilesProblem(dir), /work\/ differs from the files recorded at the end of the trial \(\.worktrees\/20261128_000000-1866-trial\/src\/billing\/tax\.ts\)/);
+});
+
+// #1866 (PR #1857 handoff L9: main changed, so it is run for real): run-trial.mjs main for a probe of a level with
+// sandbox.startWorktree, with a stand-in claude on the harness PATH (it records its cwd and the trust entry, writes the
+// probe's inside file and prints a stream-json init and result) and a stand-in ASC CLI in the fixture (git worktree add,
+// then the JSON of worktree-create). No model and no network. A failing worktree-create is refused before the reservation.
+test('#1866 run-trial main (real run, stand-in claude and CLI): the worktree is made before the reservation and the session starts in it', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  const runs = fs.mkdtempSync('/var/tmp/a66-'); t.after(() => fs.rmSync(runs, {recursive: true, force: true}));
+  const git = (args, cwd) => { const r = spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd, encoding: 'utf8'}); assert.equal(r.status, 0, `${args.join(' ')}: ${r.stderr}`); return r.stdout.trim(); };
+  const sha = (x) => crypto.createHash('sha256').update(x).digest('hex');
+  // The fixture: a project with CLAUDE.md, a distribution record and the stand-in CLI, committed.
+  const fixture = path.join(d, 'fx', 'fixture-R-U');
+  const cliFile = (dir) => path.join(dir, run66.ASC_CLI);
+  const writeCli = (dir, ok) => fs.writeFileSync(cliFile(dir), ok
+    ? "import {spawnSync} from 'node:child_process';\nconst [, , cmd, repo, issue, type, slug, base] = process.argv;\nconst dir = `${repo}/.worktrees/20261128_000000-${issue}-${slug}`, branch = `${type}/${issue}-${slug}`;\nconst r = spawnSync('git', ['worktree', 'add', '-q', '-b', branch, dir, base], {cwd: repo});\nif (r.status !== 0) process.exit(2);\nconsole.log(JSON.stringify({repo: dir, mode: 'worktree', branch, base: 'x'}));\n"
+    : "console.error('Git worktree records are not writable: x (EPERM)'); process.exit(1);\n");
+  fs.mkdirSync(path.dirname(cliFile(fixture)), {recursive: true});
+  fs.writeFileSync(path.join(fixture, 'CLAUDE.md'), '# e2e\n');
+  fs.writeFileSync(path.join(fixture, '.agent-skill-chain/distribution.json'), '{}\n');
+  writeCli(fixture, true);
+  git(['init', '-q', '-b', 'main'], fixture); git(['add', '-A'], fixture); git(['commit', '-q', '-m', 'initial'], fixture);
+  const ASSET = 'a'.repeat(64);
+  const install = (dir) => ({condition: 'R', fixture: 'U', kind: 'app', source: 'release', pinned: true, released: true, sampleHead: git(['rev-parse', 'HEAD'], dir), claudeMdSha256: sha(fs.readFileSync(path.join(dir, 'CLAUDE.md'))),
+    install: {tarballSha256: ASSET, entries: [], distributionSha256: sha(fs.readFileSync(path.join(dir, '.agent-skill-chain/distribution.json'))), adopted: {id: 'claude-md'}}});
+  fs.writeFileSync(`${fixture}.install.json`, JSON.stringify(install(fixture)));
+  const failing = path.join(d, 'fx', 'fixture-fail');
+  fs.cpSync(fixture, failing, {recursive: true}); writeCli(failing, false); git(['commit', '-q', '-am', 'fail'], failing);
+  fs.writeFileSync(`${failing}.install.json`, JSON.stringify(install(failing)));
+  // The config, in its own Git repository (the fixation must be committed and named in README.md).
+  const repo = path.join(d, 'cfgrepo'), config = path.join(repo, 'config');
+  fs.mkdirSync(path.join(config, 'results'), {recursive: true});
+  const conds = {schema: 'asc-eval-conditions/v1', issue: '9866', stage: 'e2e', markerTag: 'zz66', model: 'sonnet', runs: 1, adopt: 'claude-md', probeMaxTurns: 60, probeSteps: {X: 40}, probeFixture: 'U', probeCells: ['R'],
+    maxTurnsByKind: {app: null}, budget: {ownerCapUsd: 2, capUsd: 2, safetyMarginUsd: 0.5, perTrialUsd: 0.5, probeUsd: 0.5},
+    toolLevels: {X: {tools: 'Bash,Read,Write,Edit,Glob,Grep,Skill', disallowed: 'Agent', permissionMode: 'acceptEdits', initPermissionMode: 'acceptEdits',
+      sandbox: {layout: 'confined', denyReadRoots: [], pathDirs: ['/usr/bin', '/bin'], copyNode: true, startWorktree: {issue: '9866', type: 'test', slug: 'trial'}}}},
+    conditions: {R: {label: 'R', release: 'R'}}, cells: {R: {tools: 'X', release: 'R', source: 'release'}}, fixtures: {U: {kind: 'app'}}, rule: {mode: 'levels', levels: []}};
+  fs.writeFileSync(path.join(config, 'conditions.json'), JSON.stringify(conds));
+  fs.writeFileSync(path.join(config, 'release.json'), JSON.stringify({R: {kind: 'release', tag: 'v0', assetSha256: ASSET}}));
+  fs.writeFileSync(path.join(config, 'cases.json'), JSON.stringify({cases: [{id: 'c1', kind: 'change', fixture: 'U', prompt: 'x'}]}));
+  fs.writeFileSync(path.join(config, 'run-order.json'), JSON.stringify({caseOrder: ['c1'], conditionOrder: ['R']}));
+  fs.writeFileSync(path.join(config, 'decision-criteria.md'), '# e2e\n');
+  fs.writeFileSync(path.join(config, 'results/probe-approval.json'), JSON.stringify({ownerConfirmed: true, at: '2026-11-28', reference: 'https://example.invalid/e2e'}));
+  git(['init', '-q'], repo); git(['add', '-A'], repo); git(['commit', '-q', '-m', 'config'], repo);
+  const ledgerFile = path.join(d, 'ledger', 'l.jsonl');
+  fs.mkdirSync(path.dirname(ledgerFile));
+  const env = {...process.env, ASC_EVAL_CONFIG: config};
+  const fx = spawnSync(process.execPath, [path.join(H, 'fixation.mjs'), 'init', path.join(config, 'results/fixation.json'), '--ledger', ledgerFile], {env, encoding: 'utf8'});
+  assert.equal(fx.status, 0, fx.stderr);
+  fs.writeFileSync(path.join(config, 'README.md'), `first fixation ${JSON.parse(fs.readFileSync(path.join(config, 'results/fixation.json'), 'utf8')).records[0].fixedAtCommit}\n`);
+  git(['add', '-A'], repo); git(['commit', '-q', '-m', 'fixation'], repo);
+  // The stand-in claude: records what it saw, writes the inside file in its cwd, prints init and result.
+  const bin = path.join(d, 'bin'), seen = path.join(d, 'seen.json');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'claude'), `#!${process.execPath}\nconst fs = require('fs'), path = require('path');\nif (process.argv.includes('--version')) { console.log('0.0.0 (stand-in)'); process.exit(0); }\n`
+    + `const cfg = JSON.parse(fs.readFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json'), 'utf8'));\n`
+    + `fs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify({cwd: process.cwd(), trusted: Object.keys(cfg.projects), tmp: process.env.CLAUDE_CODE_TMPDIR, path: process.env.PATH}));\n`
+    + `fs.writeFileSync(path.join(process.cwd(), ${JSON.stringify(INSIDE_FILE)}), 'probe');\n`
+    + `console.log(JSON.stringify({type: 'system', subtype: 'init', cwd: process.cwd(), tools: [], permissionMode: 'acceptEdits', mcp_servers: [], model: 'stand-in'}));\n`
+    + `console.log(JSON.stringify({type: 'result', subtype: 'success', is_error: false, result: 'done', total_cost_usd: 0, num_turns: 1}));\n`, {mode: 0o755});
+  const hm = path.join(d, 'm-home.txt'), rm = path.join(d, 'm-repo.txt');
+  fs.writeFileSync(hm, 'ASCZZ66-MARKER-000000000000000000000000\n'); fs.writeFileSync(rm, 'ASCZZ66-MARKER-111111111111111111111111\n');
+  const run = (fixtureDir) => spawnSync(process.execPath, [path.join(H, 'run-trial.mjs'), runs, 'R', 'probe', '1', '--fixture', fixtureDir, '--ledger', ledgerFile, '--home-marker', hm, '--repo-marker', rm, '--run'],
+    {env: {...env, PATH: `${bin}:${process.env.PATH}`, ASC_EVAL_ALLOW_PAID: '1', ANTHROPIC_API_KEY: 'stand-in-key-9866', CLAUDE_CODE_OAUTH_TOKEN: ''}, encoding: 'utf8'});
+  // A worktree-create that fails: refused, nothing reserved, the trial directory removed.
+  const bad = run(failing);
+  assert.equal(bad.status, 3, bad.stderr);
+  assert.match(bad.stderr, /refused: worktree-create before the trial failed \(exit 1\): Git worktree records are not writable/);
+  assert.deepEqual([ledger.reservations(ledgerFile).length, fs.existsSync(path.join(runs, 'R-probe-1')), fs.existsSync(seen)], [0, false, false]);
+  // The run.
+  const ok = run(fixture);
+  assert.equal(ok.status, 0, ok.stderr);
+  const dir = path.join(runs, 'R-probe-1'), work = path.join(dir, 'work'), wt = path.join(work, '.worktrees/20261128_000000-9866-trial');
+  const s = JSON.parse(fs.readFileSync(seen, 'utf8'));
+  assert.deepEqual([s.cwd, s.trusted, s.tmp, s.path.split(':')[0]], [fs.realpathSync(wt), [fs.realpathSync(wt)], path.join(dir, 'tmp'), path.join(dir, 'bin')]);
+  const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+  assert.deepEqual([meta.startDir, meta.startWorktree.branch, meta.startWorktree.endHead, meta.cwd], ['.worktrees/20261128_000000-9866-trial', 'test/9866-trial', git(['rev-parse', 'HEAD'], wt), 'work/.worktrees/<YYYYMMDD_HHMMSS>-9866-trial']);
+  assert.equal(meta.probeContext.startDir, fs.realpathSync(wt));
+  assert.deepEqual(meta.probeEndState.worktreeCreateLeft, {branch: false, dirs: [], otherWorktrees: []});
+  assert.equal(meta.probeEndState.insideExists, true, 'the inside file in the worktree');
+  assert.equal(meta.credentialLeak, false);
+  assert.equal(meta.applied.changedFiles.length, 0);
+  assert.equal(git(['log', '-1', '--format=%s'], wt), 'Update project files', 'the worktree is at the neutral commit');
+  assert.deepEqual(ledger.reservations(ledgerFile).map((e) => e.trial), ['R-probe-1']);
+  assert.ok(ledger.settlements(ledgerFile).has('R-probe-1'));
+  for (const x of ['home', 'config', 'bin', 'tmp']) assert.ok(!fs.existsSync(path.join(dir, x)), `${x} removed`);
+  assert.ok(!fs.existsSync(path.join(dir, run66.CLEANUP_LEFT_FILE)), 'nothing left to record');
+  // probe-check reads the start directory from meta.json (cwd, the worktree-create left nothing).
+  const inputs = fileInputs(dir, 'R', d, cfg.readCfg('conditions.json', config)).inputs;
+  assert.deepEqual([inputs.startDir, inputs.worktreeCreateLeft], [path.join(fs.realpathSync(work), meta.startDir), {branch: false, dirs: [], otherWorktrees: []}]);
 });

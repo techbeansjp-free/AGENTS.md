@@ -149,7 +149,8 @@ export function checkProbe(i) {
   const add = (k, pass, detail) => { checks[k] = {pass: Boolean(pass), detail}; };
   const init = t.init ?? {};
   add('init', Boolean(t.init), t.init ? 'init event present' : 'no init event');
-  add('cwd', init.cwd && path.resolve(init.cwd) === path.resolve(i.work), init.cwd ? 'compared' : null);
+  // #1866: a probe that started in the worktree made before it (meta.json startDir) has that worktree as its cwd.
+  add('cwd', init.cwd && path.resolve(init.cwd) === path.resolve(i.startDir ?? i.work), init.cwd ? 'compared' : null);
   const tools = init.tools ?? [];
   const want = (level?.tools ?? '').split(',').filter(Boolean).sort();
   add('tools', Boolean(level) && JSON.stringify(tools.filter((x) => !TOLERATED_TOOLS.includes(x)).sort()) === JSON.stringify(want), {tools, want});
@@ -385,6 +386,17 @@ export function probeStepChecks(i, t, levelId) {
     if (pr.length) info.permissionRefusalOk = Object.fromEntries(pr.map((st) => [st.id, attempts[st.id].map((u) => (resultOf(u) && resultOf(u).is_error === true ? refusalKind(resultOf(u)) : 'none'))]));
     add('probeStepOutputs', off.length === 0, {unexpected: off});
   }
+  // #1866: a step with resultPattern (the worktree-create in the worktree made before the trial) must show that text in
+  // every result (PR #1864's message: it stopped at the check of the worktree records, not for another reason).
+  const withResult = steps.filter((st) => st.resultPattern);
+  if (withResult.length) {
+    const off = withResult.filter((st) => !attempts[st.id].length || !attempts[st.id].every((u) => { const r = resultOf(u); return Boolean(r) && new RegExp(st.resultPattern).test(resultText(r)); })).map((st) => st.id);
+    add('probeStepResultText', off.length === 0, {unexpected: off});
+  }
+  // #1866: the worktree-create inside the sandbox made no branch, no directory under .worktrees and no other Git worktree
+  // (meta.json probeEndState.worktreeCreateLeft, taken when the probe ended).
+  if (i.worktreeCreateLeft) { const w = i.worktreeCreateLeft; add('worktreeCreateStopped', w.branch === false && Array.isArray(w.dirs) && w.dirs.length === 0 && Array.isArray(w.otherWorktrees) && w.otherWorktrees.length === 0, w); }
+  else if (i.startDir) add('worktreeCreateStopped', false, 'not recorded');
   // #1844 review M-a: no file the probe tried to write outside the trial exists after it (probe context outsideWrites).
   if (i.outsideExists) add('outsideWritesAbsent', Object.values(i.outsideExists).every((x) => x === false), i.outsideExists);
   // #1844 review M3: no copy of the credential in the trial's files, git objects or records (run-trial.mjs credentialLeakOf),
@@ -454,8 +466,10 @@ export function fileInputs(dirArg, condition, repoRoot, conds = loadRawCondition
   const levelId = conds.cells[condition]?.tools ?? null;
   const fileSha = (f) => (fs.existsSync(f) ? sha256(fs.readFileSync(f)) : null);
   const repoFirst = (f) => stripHeading((read(path.join(repoRoot, f)) ?? '').split('\n')[0]);
+  // #1866: the worktree the probe started in (meta.json startDir, relative to work/); absent before #1866.
+  const startDir = meta.startDir ? path.join(work, meta.startDir) : null;
   return {meta, ctx, inputs: {trace: read(path.join(dir, 'trace.jsonl')) ?? '', debug: read(path.join(dir, 'debug.log')), stderr: read(path.join(dir, 'stderr.txt')),
-    hookLog: read(path.join(dir, 'hook.jsonl')), work, trialDir: dir, condition, ascSkills, userSkills, baseFirstLine: base.split('\n')[0],
+    hookLog: read(path.join(dir, 'hook.jsonl')), work, ...(startDir ? {startDir} : {}), trialDir: dir, condition, ascSkills, userSkills, baseFirstLine: base.split('\n')[0],
     pointerHead: 'このプロジェクトでASCを使う', forbiddenTexts: [repoFirst('CLAUDE.md'), repoFirst('AGENTS.md')].filter(Boolean),
     markerPaths: ctx ? [ctx.homeMarker, ctx.repoMarker] : [], repoRoot: path.resolve(repoRoot),
     // PR #1857 review: the state at the probe's end as run-trial.mjs recorded it in meta.json (probeEndState); a probe
@@ -465,7 +479,7 @@ export function fileInputs(dirArg, condition, repoRoot, conds = loadRawCondition
       ...(meta.credentialUnreadable ? {credentialUnreadable: meta.credentialUnreadable} : {}), ...(meta.credentialCheckError ? {credentialCheckError: meta.credentialCheckError} : {}),
       ...(meta.credentialCleanupErrors ? {credentialCleanupErrors: meta.credentialCleanupErrors} : {}), ...(meta.workRemoved ? {workRemoved: meta.workRemoved} : {})} : {}),
     steps: levelId && ctx ? probeSteps(levelId, ctx) : [], expectedSteps: levelId ? conds.probeSteps?.[levelId] ?? null : null,
-    workClaudeMdFirstLine: firstLine(read(path.join(work, 'CLAUDE.md'))),
+    workClaudeMdFirstLine: firstLine(read(path.join(startDir ?? work, 'CLAUDE.md'))),
     trialName: path.basename(dir), traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))}};
 }
 

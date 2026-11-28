@@ -1,0 +1,6 @@
+{
+ "ownerConfirmed": true,
+ "at": "2026-11-28",
+ "reference": "https://github.com/techbeansjp-free/AGENTS.md/issues/1866#issuecomment-7236492574",
+ "note": "ownerが、#1866の測定（#1844の割当ての残り約9.4 USDの内）でHOMEとrepoに一時的な目印のfileを置くことと、認証にtoken file（~/.config/asc-eval/claude-oauth-token。中身は表示せず、envで渡すだけ）を使うことを承認した（#1843・#1844・#1846の2026-11-28の承認と同じ扱い）。進行役が記録した。目印の名前はmarkerTag 1866（asc1866-home-marker.txt、asc1866-repo-marker.txt）で、他のIssueの目印と重ならない。probeは2回まで。"
+}
