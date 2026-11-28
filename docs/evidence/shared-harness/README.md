@@ -112,6 +112,14 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 - 金額の規則のような、コードについての禁止は`scope: "code"`にする。
 - `decision-criteria.md`に、観点が求めないもの（#1840のm-r7は合意の版を求めない）と、水準の分子が数えるもの（#1840のg2-rule-readは`money.md`の読取りだけ）を書く。
 
+## #1867で加えたもの（2026-11-28）
+
+どれも設定のfieldで働き、そのfieldの無い設定（試験用、#1823・#1840・#1843・#1846）の動きと公開する記録は変えない（試験で確かめる）。どの測定の途中でもない（#1843・#1846は測定済み、#1844・#1861・#1866は別のbranch）。共通の仕組みのmoduleが変わるので、測定済みの設定の`fixation.mjs check`はmoduleの差を示す（#1845の節のとおり、照合と判定は各`fixedAtCommit`の共通の仕組みで行う）。
+
+- `conditions.json`の`ascSkillsByCondition`：条件ごとの配布Skillの一覧（候補がSkillを足す場合。#1867のSは`design-creation`を含む18件）。名前の無い条件と、条件を渡さない呼出しは`ascSkills`のまま。採点（`score.mjs`の`ascSkillsOf(conds, condition)`）、probeの期待するdescriptionの件数と利用者のSkillの分け方（`probe-check.mjs`の`ascEntriesOf`・`fileInputs`）、dry runの入口の数・referenceの所在（`fixtureReferences`）・入口の比較（両条件が配布するSkillだけ）が使う。
+- fixture`design`の`files`のpathにsubdirectoryを書ける（`make-fixture.mjs`の`writeSources`がdirectoryを作る。例：#1804 ui08の`app/tokens.css`）。
+- `rule.negativesRequired: false`：該当しない依頼の無い設定で、「該当しない依頼の有効な試行が無い」ことを未判定の理由にしない（`score.mjs`の`verdictOf`。`levelsVerdict`も使う）。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。
