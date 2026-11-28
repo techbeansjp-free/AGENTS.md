@@ -1,33 +1,34 @@
 {
  "schema": "asc-eval-release/v1",
- "note": "The tarball each condition installs (conditions.json cells[c].release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition. Both entries are placeholders until #1845 (PR #1848) is merged and PR #1838 is merged with it (README); while they are, every paid run, fixture and the fixation are refused.",
+ "note": "The tarball each condition installs (conditions.json cells[c].release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition. Both entries were filled in on 2026-11-28 from the PR #1838 head 79a2fda0 (main 328a19f4 = v0.5.123 with #1845 merged, the independent review fixes included).",
  "C": {
   "kind": "candidate",
-  "placeholder": true,
-  "asset": "agent-skill-chain-<version>.tgz",
-  "assetSha256": "",
-  "packedFromCommit": "",
-  "packCommand": "git clone <origin> <scratch>/rel1843/cand-src; git checkout docs/1832-spec-writing-rules at the PR #1838 head that includes origin/main after #1845; node scripts/pack-candidate.mjs <scratch>/rel1843/candidate --version=<latest release version>",
-  "note": "PR #1838のhead（#1832の規則と#1843のascの1文）。origin/mainに#1845（PR #1848）がmergeされた後に、その版をmergeしたcommitでpackする。公開しない。"
+  "asset": "agent-skill-chain-0.5.123.tgz",
+  "assetSha256": "f8e4972a05ad9dcdb7c097d16909c260944c3a7b57d1b01c72fba7d2efcb964b",
+  "packedFromCommit": "79a2fda00d5f8947d437af9c6da9cb6f20a5c776",
+  "packCommand": "git clone <origin> <scratch>/rel1843/cand-src; git -C <scratch>/rel1843/cand-src checkout 79a2fda00d5f8947d437af9c6da9cb6f20a5c776 (docs/1832-spec-writing-rules = main 328a19f4 + PR #1838); node scripts/pack-candidate.mjs <scratch>/rel1843/candidate --version=0.5.123 (the latest release; v0.5.123 targets main 328a19f4)",
+  "note": "PR #1838のhead（#1832の規則と#1843のascの1文）。origin/mainに#1845（PR #1848）がmergeされた後に、その版をmergeしたcommitでpackする。公開しない。",
+  "baseRelease": "v0.5.123 (GitHub Release, target commit 328a19f4ffe457a838544e81b2de848ff0af0bd0 = the main merged into this branch; asset sha256 c910e6b591d79dd19d170cf146f359b70d9c8455ab51b8bf7d0cf0f8ebcbebfd, equal to SHA256SUMS)",
+  "differsNote": "Confirmed on 2026-11-28 with diff -rq of the unpacked tarballs: against the v0.5.123 asset, C differs in release-identity.json and exactly the 59 distributed files of git diff 328a19f4..79a2fda0 (skills/asc/SKILL.md, src/project-assets.mjs and the 57 files under v05/templates/specs/). Against the v0.5.121 asset (sha256 2eede114…) the same files and the version in package.json differ (v0.5.121..v0.5.123 changed no distributed file)."
  },
  "B": {
   "kind": "candidate",
-  "placeholder": true,
-  "asset": "agent-skill-chain-<version>.tgz",
-  "assetSha256": "",
-  "packedFromCommit": "",
-  "packCommand": "in the same clone: git checkout -b base/1843 <C packedFromCommit>; git revert --no-edit <every commit of revertCommits, newest first>; node scripts/pack-candidate.mjs <scratch>/rel1843/base --version=<the same version>",
+  "asset": "agent-skill-chain-0.5.123.tgz",
+  "assetSha256": "35c8f8f45c79a77454720755fcf52875b89175ba3340457397525f1f1c859fb0",
+  "packedFromCommit": "d2de7c2a48635e5f15b4bf7d8e05a1f5fbe1ad9d",
+  "packCommand": "in the same clone: git checkout -b base/1843 79a2fda00d5f8947d437af9c6da9cb6f20a5c776; git revert --no-edit c92e7f1fe41176199cb7b708ab1b4a7c88607323 a57a08290c104640e89f4e4b7c0d698d4cd5baf7 (no conflict; local commits 4c76c5ac and d2de7c2a, not pushed: their ids depend on the time and the committer); node scripts/pack-candidate.mjs <scratch>/rel1843/base --version=0.5.123",
   "revertCommits": [
    "c92e7f1fe41176199cb7b708ab1b4a7c88607323",
    "a57a08290c104640e89f4e4b7c0d698d4cd5baf7"
   ],
-  "revertCommitsNote": "Every #1843 product commit (outside docs/evidence/) up to the fixation, newest first: c92e7f1f the test of the 書き方 heading (review L3), a57a0829 the sentence, the link rewrite and its test. Before packing B, list the #1843 commits on the PR #1838 head that touch anything outside docs/evidence/ and add any missing one here; a revert that conflicts stops the fixation.",
+  "revertCommitsNote": "Every #1843 product commit (outside docs/evidence/) up to the fixation, newest first: c92e7f1f the test of the 書き方 heading (review L3), a57a0829 the sentence, the link rewrite and its test. Checked on 2026-11-28: git log --no-merges origin/main..79a2fda0 outside docs/evidence/ lists no other #1843 commit (the rest are the #1832 commits).",
   "baseOf": "C",
   "differsFromCandidateOnly": [
    "release-identity.json",
    "skills/asc/SKILL.md",
    "src/project-assets.mjs"
   ],
-  "note": "Cから#1843の製品の変更（ascの1文とproject-assetsのlinkの書換え、その試験。revertCommitsのすべて）だけを戻したもの。#1832の規則はCと同じ。公開しない。"
+  "note": "Cから#1843の製品の変更（ascの1文とproject-assetsのlinkの書換え、その試験。revertCommitsのすべて）だけを戻したもの。#1832の規則はCと同じ。公開しない。",
+  "differsNote": "Confirmed on 2026-11-28 with diff -rq of the unpacked B and C tarballs: only release-identity.json, skills/asc/SKILL.md (the sentence) and src/project-assets.mjs (the link rewrite) differ."
  }
 }
