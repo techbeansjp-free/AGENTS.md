@@ -75,7 +75,7 @@ ownerの上限20 USDは#1843・#1844・#1846の合計で、この測定への割
 - 他の#1848の変更（`writes.forbid`の`scope: "code"`、`requireFiles`、`okSkills`、`work/`のHEADの照合、`GIT:`の行）は、この設定の依頼が使わない（`writes`が無い）か、照合を厳しくするだけで設定の変更は要らない。
 - #1848が`min`の形を変えてmergeされた場合は、固定の前にこの設定を合わせる。
 
-## 手順（統括が行う。まだ実行しない）
+## 手順（統括が行う。2026-11-28に実行した）
 
 `<scratch>`は一時directory、`<repo-root>`はrepositoryのcheckout。harnessはsandboxの外のshellで実行する。台帳を手で編集しない。
 
@@ -114,8 +114,11 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1846/runs --ledger $LEDGE
 - `order.mjs`の`orderProblems`：問題なし。計画の12試行は`C-m-r1-1 C-n-2-1 C-m-r2-1 C-m-r7-1 …`の順。
 - `make-fixture.mjs`の`releasePlaceholders`：`C (release.json C: placeholder)`（packの前なので、有料の実行・fixture・固定は拒否される）。
 - 水準：9件中7件の`markers`で、main `599a2b09`の仕組みは不合格、#1848 `0f61b0bf`の仕組みは合格。
-- dry runはtarballが無いので未実行（手順の2）。
+- dry run（手順の2、2026-11-28、packの後）：すべての照合に合格（`pass: true`。計画12試行、見込み1.30 USD、計画の単価で1.71 USD、停止の線2.5 USD）。
 
 ## 測定の前の固定
 
-未実施（#1848のmergeと候補版のpackの後に行う）。
+- 候補版：#1848のmerge（main `328a19f4`）を取り込んだ`fc055ec1c5febc08959c29b6e44fad779119a39a`を一時のcloneで`pack-candidate.mjs --version=0.5.121`でpackした。sha256 `91643ca012606de0cb3c9a74ce5761c46178b2ea2b4ada9e7084af61a1b9c421`。GitHub Release v0.5.121の資産（sha256 `2eede114…`、`SHA256SUMS`と一致）と展開して比べ、差は`skills/estimate-and-scope/SKILL.md`と`release-identity.json`だけだった。
+- ownerの目印fileの承認：[#1846のcomment](https://github.com/techbeansjp-free/AGENTS.md/issues/1846#issuecomment-7231490199)（`results/probe-approval.json`）。
+- `results/fixation.json`の最初の記録のcommitは`3e358c132de2a5b60af9354affc7c4fec0d37d47`。台帳idは`289acf03-ba9b-45f3-9984-31f7c9df8768`、台帳は`<scratch>/rel1846/ledger/ledger-1846.jsonl`（新しい台帳、予約0件）。`run-trial.mjs`はこの記載を照合する。
+- 固定の記録は、この設定の5fileと共通の仕組みのmodule 16件のsha256を持つ。測定の終わりまで、設定と共通の仕組みを変えない。
