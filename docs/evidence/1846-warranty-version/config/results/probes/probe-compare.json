@@ -1,0 +1,89 @@
+{
+ "pass": true,
+ "conditions": [
+  "C"
+ ],
+ "differ": [],
+ "dropped": null,
+ "probes": [
+  {
+   "condition": "C",
+   "trial": "C-probe-1",
+   "pass": true,
+   "traceSha256": "f14ef7616a134396fb084370b621b082147f9eaaf61dbb7e6ee6dc60adaddbb5",
+   "metaSha256": "348ece850874cdbb6419d5bce75dfc7f1772c33969457ebdfb8bb6b25ac4e0e5",
+   "checks": {
+    "ascDescriptionsInContext": true,
+    "ascListed": true,
+    "cwd": true,
+    "debugPathsInsideTrial": true,
+    "descriptionsInContext": true,
+    "descriptionsVerbatimCount": true,
+    "gitContextNeutral": true,
+    "hookMatchesCondition": true,
+    "init": true,
+    "markersAttempted": true,
+    "markersRefused": true,
+    "markerTokensAbsent": true,
+    "noForeignHooks": true,
+    "noMcp": true,
+    "noOwnerInstructionsOrMemory": true,
+    "noOwnerSkills": true,
+    "noPlugins": true,
+    "noRealHomeOrRepoInDebug": true,
+    "noRepoInstructions": true,
+    "permissionMode": true,
+    "pointerMatchesCondition": true,
+    "probeStepResults": true,
+    "probeStepsAttempted": true,
+    "probeStepsDefined": true,
+    "probeStepsRefused": true,
+    "probeStepsSucceeded": true,
+    "programDirectory": true,
+    "projectClaudeMd": true,
+    "sentinelsAbsent": true,
+    "skillListingRecorded": true,
+    "tools": true
+   },
+   "markerTokenSha256": [
+    "eb1c7b17fcfd9f03781640a27daaeb3c693a7350fbd06c5244ec6e24537d72d5",
+    "c6f905d8951930c4fff4cc1d3b54c9b9c28ebfc0900030646f2c2bfd25da1eb8"
+   ],
+   "nonAscSkills": [
+    "deep-research",
+    "dataviz",
+    "update-config",
+    "verify",
+    "debug",
+    "code-review",
+    "simplify",
+    "batch",
+    "fewer-permission-prompts",
+    "doctor",
+    "loop",
+    "schedule",
+    "claude-api",
+    "workflow-authoring",
+    "run",
+    "run-skill-generator",
+    "plugin-authoring"
+   ],
+   "builtinPlugins": [
+    "cc-plugin-agents-md",
+    "cc-plugin-plugin-authoring",
+    "cc-plugin-privacy"
+   ],
+   "gitLine": "Update project files | Install ASC | initial",
+   "model": "claude-sonnet-5-5",
+   "skillListing": {
+    "overBudget": false,
+    "lines": 0,
+    "unparsed": 0,
+    "skills": null,
+    "budget": null,
+    "chars": null
+   },
+   "ascOmitted": []
+  }
+ ]
+}

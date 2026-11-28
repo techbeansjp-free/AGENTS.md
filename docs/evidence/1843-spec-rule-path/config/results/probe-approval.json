@@ -1,0 +1,6 @@
+{
+ "ownerConfirmed": true,
+ "at": "2026-11-28",
+ "reference": "https://github.com/techbeansjp-free/AGENTS.md/issues/1843#issuecomment-7231489360",
+ "note": "ownerが会話で、#1843・#1844・#1846の測定でHOMEとrepoに一時的な目印のfileを置くことと、認証にtoken fileを使うこと（pathだけ渡す）を承認した。進行役がIssueに記録し、統括が記録した。"
+}

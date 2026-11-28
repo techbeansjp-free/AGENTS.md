@@ -1,0 +1,294 @@
+{
+ "conditions": {
+  "C": {
+   "condition": "C",
+   "runs": 12,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 0,
+   "positives": 9,
+   "entryHop": 0,
+   "reach": 9,
+   "bodyRead": 9,
+   "referenceRead": 9,
+   "applied": 8,
+   "misselect": 0,
+   "unselected": 0,
+   "markersWithoutReference": 0,
+   "negatives": 3,
+   "overapplication": 0,
+   "negMarkers": 3,
+   "designWriteBeforeBody": 0,
+   "expectReadsAll": {
+    "n": 9,
+    "ok": 9
+   },
+   "forbidReadsOk": {
+    "n": 3,
+    "ok": 3
+   },
+   "forbidSkillsOk": {
+    "n": 3,
+    "ok": 3
+   },
+   "negativeOk": {
+    "n": 3,
+    "ok": 3
+   },
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [],
+   "perCase": {
+    "m-r1": "AAB",
+    "m-r2": "AAA",
+    "m-r7": "AAA",
+    "n-2": "---"
+   },
+   "referenceReads": {},
+   "perTrial": {
+    "ascBytesRead": 19444.7,
+    "inputTokens": 58793.4,
+    "outputTokens": 2754.4,
+    "durationMs": 24182.5,
+    "costUsd": 0.1
+   },
+   "costUsd": 1.2275,
+   "turns": 79,
+   "durationSec": 290
+  },
+  "undefined": {
+   "runs": 0,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 0,
+   "positives": 0,
+   "entryHop": 0,
+   "reach": 0,
+   "bodyRead": 0,
+   "referenceRead": 0,
+   "applied": 0,
+   "misselect": 0,
+   "unselected": 0,
+   "markersWithoutReference": 0,
+   "negatives": 0,
+   "overapplication": 0,
+   "negMarkers": 0,
+   "designWriteBeforeBody": 0,
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [
+    "m-r1",
+    "m-r2",
+    "m-r7",
+    "n-2"
+   ],
+   "perCase": {
+    "m-r1": "",
+    "m-r2": "",
+    "m-r7": "",
+    "n-2": ""
+   },
+   "referenceReads": {},
+   "perTrial": {
+    "ascBytesRead": null,
+    "inputTokens": null,
+    "outputTokens": null,
+    "durationMs": null,
+    "costUsd": null
+   },
+   "costUsd": 0,
+   "turns": 0,
+   "durationSec": 0
+  }
+ },
+ "completion": {
+  "basis": "complete",
+  "complete": true,
+  "capReached": false,
+  "lateProbes": [],
+  "missingPlanned": 0,
+  "firstMissingPlanned": null,
+  "missingReplacements": [],
+  "spentUsd": 1.3488,
+  "stopLineUsd": 2.5,
+  "perTrialUsd": 0.5
+ },
+ "judgement": {
+  "verdict": "not-judged",
+  "reason": "undefined: no valid positive trial; undefined: no valid negative trial; undefined: no valid trial for m-r1,m-r2,m-r7,n-2",
+  "completion": {
+   "basis": "complete",
+   "complete": true,
+   "capReached": false,
+   "lateProbes": [],
+   "missingPlanned": 0,
+   "firstMissingPlanned": null,
+   "missingReplacements": [],
+   "spentUsd": 1.3488,
+   "stopLineUsd": 2.5,
+   "perTrialUsd": 0.5
+  },
+  "perCondition": {
+   "C": {
+    "verdict": "meets-levels",
+    "checks": {
+     "g1-select": {
+      "metric": "reach",
+      "cases": [
+       "m-r1",
+       "m-r2",
+       "m-r7"
+      ],
+      "value": "9/9 >= 0.8",
+      "ok": 9,
+      "n": 9,
+      "pass": true
+     },
+     "g1-body": {
+      "metric": "bodyRead",
+      "cases": [
+       "m-r1",
+       "m-r2",
+       "m-r7"
+      ],
+      "value": "9/9 >= 0.8",
+      "ok": 9,
+      "n": 9,
+      "pass": true
+     },
+     "g1-maintenance-reads": {
+      "metric": "expectReadsAll",
+      "cases": [
+       "m-r1",
+       "m-r2",
+       "m-r7"
+      ],
+      "value": "9/9 >= 0.8",
+      "ok": 9,
+      "n": 9,
+      "pass": true
+     },
+     "g1-maintenance-answer": {
+      "metric": "markers",
+      "cases": [
+       "m-r1",
+       "m-r2",
+       "m-r7"
+      ],
+      "value": "8/9 >= 7/9",
+      "ok": 8,
+      "n": 9,
+      "pass": true
+     },
+     "g1-negative": {
+      "metric": "negativeOk",
+      "cases": [
+       "n-2"
+      ],
+      "value": "3/3 >= 0.8",
+      "ok": 3,
+      "n": 3,
+      "pass": true
+     }
+    },
+    "reported": {
+     "g1-adjacent-skill": {
+      "metric": "forbidSkillsOk",
+      "cases": [
+       "n-2"
+      ],
+      "value": "3/3 >= 0.67",
+      "ok": 3,
+      "n": 3,
+      "pass": true,
+      "use": "report",
+      "label": "合否に使わない報告（n-2の隣接Skill）"
+     }
+    }
+   },
+   "undefined": {
+    "verdict": "below-levels",
+    "checks": {
+     "g1-select": {
+      "metric": "reach",
+      "cases": [
+       "m-r1",
+       "m-r2",
+       "m-r7"
+      ],
+      "value": "0/0 >= 0.8",
+      "ok": 0,
+      "n": 0,
+      "pass": false
+     },
+     "g1-body": {
+      "metric": "bodyRead",
+      "cases": [
+       "m-r1",
+       "m-r2",
+       "m-r7"
+      ],
+      "value": "0/0 >= 0.8",
+      "ok": 0,
+      "n": 0,
+      "pass": false
+     },
+     "g1-maintenance-reads": {
+      "metric": "expectReadsAll",
+      "cases": [
+       "m-r1",
+       "m-r2",
+       "m-r7"
+      ],
+      "value": "0/0 >= 0.8",
+      "ok": 0,
+      "n": 0,
+      "pass": false
+     },
+     "g1-maintenance-answer": {
+      "metric": "markers",
+      "cases": [
+       "m-r1",
+       "m-r2",
+       "m-r7"
+      ],
+      "value": "0/0 >= 7/9",
+      "ok": 0,
+      "n": 0,
+      "pass": false
+     },
+     "g1-negative": {
+      "metric": "negativeOk",
+      "cases": [
+       "n-2"
+      ],
+      "value": "0/0 >= 0.8",
+      "ok": 0,
+      "n": 0,
+      "pass": false
+     }
+    },
+    "reported": {
+     "g1-adjacent-skill": {
+      "metric": "forbidSkillsOk",
+      "cases": [
+       "n-2"
+      ],
+      "value": "0/0 >= 0.67",
+      "ok": 0,
+      "n": 0,
+      "pass": false,
+      "use": "report",
+      "label": "合否に使わない報告（n-2の隣接Skill）"
+     }
+    }
+   }
+  },
+  "separate": {}
+ },
+ "published": {
+  "trials.json": "c05c1438e1c45170729d1b5602d49880265f7ea851558c4193698ed5894e4342",
+  "runs.json": "1ca5628d29b6c39e8bb0841cfce382293acfa9441635a5db97759c3946af1def",
+  "ledger.jsonl": "61ccac53c32f66181993c42d016df1ac383b8b74289f1c59dca396657f34568b",
+  "published.json": "578f78e8660264bbd47021a4fc42fefcf5902101dcb30ce5c2f4760ecf15c568"
+ },
+ "rawRunsSha256": "1b53e073aa3d03a474b20b3f6ee120da23f8ea8a7a5d2bc16e8e8a4736d8098d"
+}

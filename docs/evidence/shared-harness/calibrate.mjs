@@ -10,7 +10,8 @@
 //       pass of a case is derived from them: see earlierFromScores). form "written": the answer section is the text of
 //       the file <as> the trial wrote, the answer is answerText (default empty), with the lines of base left out.
 //   {case, section, commit?, path, condition, earlierPass: true|false|null, note, form?, as?, base?, answerText?}
-//       one answer with its recorded result (form "written" as above).
+//       one answer with its recorded result (form "written" as above). In the answer form of a writes case, `as` (a path
+//       under its pathPattern) names the answer as the one written file, so a forbid entry's scope "code" applies.
 //   {case, condition, mustFail: true, note, base?, answerText, written: [file]}  an answer that must fail (a copied template,
 //       its headings and tables, the guide only, one row filled in): the answer text and the written files.
 //   {case, condition, earlierPass, note, form: "written", commit, path, base?, answerText?, written: [file]}  written files
@@ -79,20 +80,25 @@ const viewpointsOfWrites = (k) => [...new Set([...(k.writes.require ?? []), ...(
 
 // The marker or written-file result of one answer for a case, with the viewpoint hits. written: null (the answer is the
 // one written file of a writes case, or the answer of a marker case) or [{rel, text}]; base: the lines left out.
-export function evaluate(k, spec, {answer, written = null, base = null}) {
+// #1845 review M1: requireFiles (writeFilesMissing) counts as in score.mjs. An answer checked as the one written file is
+// named answerAs (the source's `as`, a path under the case's pathPattern, so scope "code" applies as in scoring); without
+// it the name is <answer>, no scope applies, and the row says so (scopeNotApplied).
+export function evaluate(k, spec, {answer, written = null, base = null, answerAs = null}) {
   if (k.writes) {
-    let files = ['<answer>'], fileText = () => answer;
+    let files = [answerAs ?? '<answer>'], fileText = () => answer;
     if (written) {
       const m = new Map(written.map((w) => [w.rel, w.text]));
       fileText = (r) => m.get(r) ?? null;
       files = written.map((w) => w.rel).filter((f) => new RegExp(k.writes.pathPattern).test(f));
     }
     const w = writeChecks(k.writes, files, fileText, {base});
-    const failed = new Set([...w.writeRequireMissing, ...w.writeViolations]);
+    const failed = new Set([...w.writeRequireMissing, ...w.writeViolations, ...(w.writeFilesMissing ?? [])]);
     const entries = [...(k.writes.require ?? []), ...(k.writes.forbid ?? [])];
     const viewpoints = Object.fromEntries(viewpointsOfWrites(k).map((v) => [v, !entries.some((e) => e.viewpoint === v && failed.has(e.id))]));
     const out = {pass: failed.size === 0 && (!k.writes.mustWrite || files.length > 0) && !w.writeMissingText, viewpoints, written: files, requireMissing: w.writeRequireMissing, violations: w.writeViolations, failedGroups: w.writeFailedGroups ?? []};
-    if (written && base) { const u = writeChecks(k.writes, files, fileText); out.passWithoutBase = u.writeRequireMissing.length === 0 && u.writeViolations.length === 0 && (!k.writes.mustWrite || files.length > 0); }
+    if (w.writeFilesMissing) out.filesMissing = w.writeFilesMissing;
+    if (!written && !answerAs && (k.writes.forbid ?? []).some((e) => e.scope)) out.scopeNotApplied = true;
+    if (written && base) { const u = writeChecks(k.writes, files, fileText); out.passWithoutBase = u.writeRequireMissing.length === 0 && u.writeViolations.length === 0 && (u.writeFilesMissing ?? []).length === 0 && (!k.writes.mustWrite || files.length > 0); }
     if (written && k.writesReport) {
       const r = writeChecks(k.writesReport, written.map((x) => x.rel).filter((f) => new RegExp(k.writesReport.pathPattern).test(f)), fileText);
       out.report = {written: r.written, violations: r.writeViolations};
@@ -157,11 +163,12 @@ export function calibrate(cal, spec) {
         if (text === null) throw new Error(`no section ${s.section} in ${it.answer}`);
         if (form === 'written') { answer = s.answerText ?? ''; written = [{rel: s.as, text}]; } else answer = text;
       }
-      const r = evaluate(k, spec, {answer, written, base});
+      const r = evaluate(k, spec, {answer, written, base, answerAs: form === 'answer' ? s.as ?? null : null});
       const vp = it.scores ? Object.fromEntries(Object.entries(r.viewpoints).map(([v, hit]) => [v, {earlier: it.scores[v] ?? null, marker: hit, agree: it.scores[v] === (hit ? 1 : 0)}])) : null;
       rows.push({case: s.case, form, section: s.section ?? null, answer: it.answer, commit: it.commit, condition: it.condition, skill: form === 'mustFail' ? null : isSkill(it.condition), base: s.base ?? null,
         written: written ? written.map((w) => w.rel) : null, earlierPass: it.earlierPass, markerPass: r.pass, agree: it.earlierPass === null ? null : it.earlierPass === r.pass, viewpoints: vp, viewpointHits: r.viewpoints,
-        ...(r.groups ? {groups: r.groups, deductions: r.deductions} : {requireMissing: r.requireMissing, violations: r.violations, failedGroups: r.failedGroups}),
+        ...(r.groups ? {groups: r.groups, deductions: r.deductions} : {requireMissing: r.requireMissing, violations: r.violations, failedGroups: r.failedGroups, ...(r.filesMissing ? {filesMissing: r.filesMissing} : {})}),
+        ...(r.scopeNotApplied ? {scopeNotApplied: true} : {}),
         ...('passWithoutBase' in r ? {passWithoutBase: r.passWithoutBase} : {}), ...('excludedLines' in r ? {excludedLines: r.excludedLines} : {}), ...(r.report ? {report: r.report} : {}), note: it.note});
     }
   }
@@ -210,7 +217,7 @@ export function markdown({rows, byCase, byCaseWritten, mustFail, viewpointRates}
   const formName = {answer: '回答', written: '書いたfile', mustFail: '落ちるべき'};
   for (const r of rows) {
     const vp = Object.entries(r.viewpoints ?? {}).map(([v, x]) => `${v} ${x.earlier}/${x.marker ? 1 : 0}`).join('、');
-    const why = r.groups ? [...Object.entries(r.groups).filter(([, ok]) => !ok).map(([g]) => g), ...r.deductions.map((d) => `減点:${d}`)].join('、') : [...r.requireMissing, ...r.violations, ...(r.report?.violations.length ? [`本文の外（報告だけ）:${r.report.violations.join('・')}`] : [])].join('、');
+    const why = r.groups ? [...Object.entries(r.groups).filter(([, ok]) => !ok).map(([g]) => g), ...r.deductions.map((d) => `減点:${d}`)].join('、') : [...r.requireMissing, ...(r.filesMissing ?? []).map((f) => `fileなし:${f}`), ...r.violations, ...(r.scopeNotApplied ? ['（回答の全文に照合：scopeは当てない）'] : []), ...(r.report?.violations.length ? [`本文の外（報告だけ）:${r.report.violations.join('・')}`] : [])].join('、');
     const where = r.answer ? `\`${r.commit ? `${r.commit.slice(0, 8)}:` : ''}${r.answer.replace(/^docs\/evidence\//, '')}\`${r.section ? ` ${r.section}` : ''}` : r.note ?? '-';
     const files = r.written && r.form !== 'answer' ? `→ ${r.written.length ? r.written.map((w) => `\`${w}\``).join('・') : '（対象のfileなし）'}${r.base ? `（雛形${r.base}）` : ''}` : '';
     L.push(`| ${r.case} | ${formName[r.form]} | ${where}${files ? ` ${files}` : ''} | ${r.condition} | ${yn(r.earlierPass)} | ${yn(r.markerPass)} | ${r.agree === null ? '-' : r.agree ? '一致' : '不一致'} | ${'passWithoutBase' in r ? yn(r.passWithoutBase) : '-'} | ${vp || '-'} | ${why || '-'} |`);
