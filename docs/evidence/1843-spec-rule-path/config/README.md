@@ -62,15 +62,7 @@ fixtureは#1840のSP（会員サイト、既存のFN-003・SCR-005）とEC1（EC
 
 ## 測定の前に残っていること
 
-1. #1845（PR #1848）がmainにmergeされる。
-2. このbranchにorigin/mainをmergeし、PR #1838のheadを決める（独立レビューの是正を含む）。
-3. Cをpackし、そのcommitで`release.json`の`B.revertCommits`（固定の時点の#1843の製品のcommitすべて。足りなければ一覧を直す）を`git revert`してBをpackする。`release.json`の`placeholder`を消し、sha256・`packedFromCommit`を書く。
-4. dry run（B・C）：`dryRun.installedDiffExpected`のとおり、導入後の差がascの本文（とその写し）、`managed-runtime/src/project-assets.mjs`、導入の記録だけであることを確かめる。共通の仕組みのdry runは本文の中身を見ないので、次の2点は統括がdry runで作ったfixtureで確かめ、結果をこのREADMEに書く。
-   - Bの導入先の`.agent-skill-chain/skills/asc/SKILL.md`と`.agent-skill-chain/managed-runtime/skills/asc/SKILL.md`に`00_利用案内.md#書き方`が無い。
-   - Cの導入先の同じ2fileの1文のlinkが実在のfileに解決し（前者は`.agent-skill-chain/templates/specs/00_利用案内.md`、後者は`.agent-skill-chain/managed-runtime/v05/templates/specs/00_利用案内.md`）、そのfileに見出し`## 書き方`がある。
-5. 独立レビューの後に`fixation.mjs init`で固定し、固定のcommitをこのREADMEに書く。
-6. ownerの目印fileの承認を`results/probe-approval.json`に記録し、probe（B・C）。
-7. 測定（36試行）、`collect.mjs`・`judge.mjs`。結果を`docs/evidence/1843-spec-rule-path/README.md`に書く。
+なし（2026-11-28にすべて終えた。下の固定と実行の記録を参照）。
 
 ## 測定の前の固定（2026-11-28）
 
