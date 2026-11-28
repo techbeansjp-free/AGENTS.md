@@ -1224,7 +1224,7 @@ test('#1844 probe of level X: the W steps and the Bash steps of the confined lay
     assert.match(byId[id].command, new RegExp(`^a='${path.dirname(f)}'; b='/${path.basename(f)}'; (mkdir -p "\\$a" && )?touch "\\$a\\$b"$`), id);
   }
   // review M-c: only an exit code or a count is printed; the keychain lookup does not read the secret.
-  assert.deepEqual(steps.filter((s) => s.outputPattern).map((s) => [s.id, s.expect]), [['keychainDefault', 'ok'], ['keychainLogin', 'ok'], ['clipboard', 'ok'], ['processList', 'ok']]);
+  assert.deepEqual(steps.filter((s) => s.outputPattern).map((s) => [s.id, s.expect]), [['keychainDefault', 'ok'], ['keychainLogin', 'ok'], ['clipboard', 'ok'], ['processList', 'ok'], ['processListIndirect', 'ok']]);
   for (const id of ['keychainDefault', 'keychainLogin']) { assert.doesNotMatch(byId[id].command, / -[gw]\b/); assert.match(byId[id].command, />\/dev\/null 2>&1; echo \$\?$/); }
   assert.ok(byId.keychainLogin.command.includes(x.loginKeychain));
   assert.match(byId.clipboard.command, /\| wc -c$/); assert.match(byId.processList.command, /\| wc -l$/);
@@ -1404,7 +1404,7 @@ test('#1844 probe check of level X: every Bash step with its expected result pas
   const {probeStepChecks} = await import('../probe-check.mjs');
   const ctx = probeContext({dir: '/r/runs/R-probe-1', runsRoot: '/r/runs', fixture: '/r/fx', ledger: '/r/l/ledger.jsonl', homeMarker: '/h/m', repoMarker: '/repo/.agent-skill-chain/local/m'}, X44);
   const steps = probeSteps('X', ctx);
-  const out = (s) => (s.id === 'insideCatClaudeMd' ? '# 請求管理（社内）' : s.id === 'network' ? '000' : s.id === 'credentialLength' ? '0' : /^keychain/.test(s.id) ? '44' : ['clipboard', 'processList'].includes(s.id) ? '       0' : 'x');
+  const out = (s) => (s.id === 'insideCatClaudeMd' ? '# 請求管理（社内）' : s.id === 'network' ? '000' : s.id === 'credentialLength' ? '0' : /^keychain/.test(s.id) ? '44' : ['clipboard', 'processList', 'processListIndirect'].includes(s.id) ? '       0' : 'x');
   const T = (bad = {}, texts = {}) => {
     const lines = [ev({type: 'system', subtype: 'init', cwd: '/r/runs/R-probe-1/work', tools: X44.tools.split(','), permissionMode: 'acceptEdits', mcp_servers: [], model: 'm'})];
     steps.forEach((s, i) => {
@@ -1443,7 +1443,7 @@ test('#1844 probe check of level X: every Bash step with its expected result pas
   assert.equal(probeStepChecks({...i, outsideExists: {userTmp: false, runsRoot: false, varTmp: true}}, T(), 'X').checks.outsideWritesAbsent.pass, false);
   // review M-c: the keychain found (exit code 0), a clipboard or a process list seen fails; the outputs are recorded.
   for (const [id, text] of [['keychainDefault', '0'], ['keychainLogin', '0'], ['clipboard', '754'], ['processList', '954']]) assert.equal(probeStepChecks(i, T({}, {[id]: text}), 'X').checks.probeStepOutputs.pass, false, `${id} ${text}`);
-  assert.deepEqual(probeStepChecks(i, T(), 'X').info.stepOutputs, {keychainDefault: ['44'], keychainLogin: ['44'], clipboard: ['0'], processList: ['0']});
+  assert.deepEqual(probeStepChecks(i, T(), 'X').info.stepOutputs, {keychainDefault: ['44'], keychainLogin: ['44'], clipboard: ['0'], processList: ['0'], processListIndirect: ['0']});
   assert.equal(probeStepChecks(i, T({}, {keychainLogin: '126'}), 'X').checks.probeStepOutputs.pass, true, 'security not runnable in the sandbox (126) is refused too');
   // #1844 probe 1: ps refused by the permission check of Claude Code (not run, the list not obtained) passes processList
   // only; the refusal is recorded. The sandbox's refusal as an error, a count beside the refusal, or the same refusal of
@@ -1459,6 +1459,10 @@ test('#1844 probe check of level X: every Bash step with its expected result pas
   assert.equal(pass(probeStepChecks(i, T({processList: true}, {processList: `${approval}\n954`}), 'X')), false, 'a count beside the refusal');
   assert.equal(pass(probeStepChecks(i, T({clipboard: true}, {clipboard: approval.replace('ps -axo pid=', 'pbpaste')}), 'X')), false, 'clipboard has no permissionRefusalOk');
   assert.equal(pass(probeStepChecks(i, T({insideCatClaudeMd: true}, {insideCatClaudeMd: approval}), 'X')), false, 'an ok step without the flag');
+  // review of the fixes M1: ps run from node must give an empty list by the sandbox itself; a permission refusal does not pass it.
+  assert.match(steps.find((s) => s.id === 'processListIndirect').command, /^node -e .*spawnSync\("ps"/);
+  assert.equal(pass(probeStepChecks(i, T({}, {processListIndirect: '954'}), 'X')), false, 'ps from node listed processes');
+  assert.equal(pass(probeStepChecks(i, T({processListIndirect: true}, {processListIndirect: approval}), 'X')), false, 'no permissionRefusalOk');
   // review M3: the credential: a leak fails the probe; whether Bash sees it is recorded.
   assert.equal(probeStepChecks(i, T(), 'X').info.credentialVisibleToBash, false);
   assert.equal(probeStepChecks(i, T({}, {credentialLength: '109'}), 'X').info.credentialVisibleToBash, true);
@@ -1596,7 +1600,13 @@ test('#1844 probe 1: the per-uid temp directory of a confined trial fits 44 byte
   assert.deepEqual(priorProbeProblems(C, C44DIR), []);
   assert.match(priorProbeProblems({...C, priorProbes: ['R-probe-2']}, C44DIR).join(), /R-probe-2 .* not reserved and settled/);
   assert.match(priorProbeProblems({...C, budget: {...C.budget, priorSpend: undefined}}, C44DIR).join(), /needs budget.priorSpend/);
-  assert.deepEqual(priorProbeProblems({...C, priorProbes: undefined}, C44DIR), []);
+  assert.match(priorProbeProblems({...C, priorProbes: []}, C44DIR).join(), /R-probe-1 of the prior-stage ledger is missing from conditions.json priorProbes/, 'review of the fixes L1');
+  assert.deepEqual(priorProbeProblems({...C, priorProbes: undefined}, C44DIR), [], 'a config without priorProbes (e.g. an earlier stage in priorSpend) is not checked');
+  const tmpL = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1844-prior-'));
+  try {
+    const lf = path.join(tmpL, 'l.jsonl'); ledger.create(lf); ledger.reserve(lf, 'R-probe-1', 0.6); ledger.reserve(lf, 'R-u-bill-1-1', 0.8);
+    assert.match(priorProbeProblems({...C, budget: {...C.budget, priorSpend: {...C.budget.priorSpend, ledger: path.relative(C44DIR, lf)}}}, C44DIR).join(), /holds measurement trials \(R-u-bill-1-1\)/);
+  } finally { fs.rmSync(tmpL, {recursive: true, force: true}); }
   const r = spawnSync(process.execPath, [path.join(H, 'run-trial.mjs'), '/private/var/tmp/asc-eval-1844-long/runs', 'R', 'probe', '1', '--fixture', '/private/var/tmp/no-fixture', '--ledger', '/private/var/tmp/no-ledger/l.jsonl', '--home-marker', '/h/m', '--repo-marker', '/r/m', '--config', C44DIR], {encoding: 'utf8'});
   assert.equal(r.status, 3, r.stderr); assert.match(r.stderr, /per-uid temp directory .* longer than 44/);
   // review of probe 1: a runs root through a symbolic link (/var -> /private/var) and a trial not created yet: same layout.
@@ -1607,5 +1617,7 @@ test('#1844 probe 1: the per-uid temp directory of a confined trial fits 44 byte
     const sb = {layout: 'confined', denyReadRoots: []};
     const st = confinedSettings({work: path.join(runs, 'R-u-bill-1-1/work'), runsRoot: runs, fixture: path.join(base, 'fx'), ledger: path.join(base, 'l/l.jsonl')}, sb);
     assert.equal(st.sandbox.enabled, true);
+    // review of the fixes L2: a runs root not created yet under the link gives the same layout too.
+    assert.equal(confinedSettings({work: path.join(base, 'link/new-runs/R-u-bill-1-1/work'), runsRoot: path.join(base, 'link/new-runs'), fixture: path.join(base, 'fx'), ledger: path.join(base, 'l/l.jsonl')}, sb).sandbox.enabled, true);
   } finally { fs.rmSync(base, {recursive: true, force: true}); }
 });

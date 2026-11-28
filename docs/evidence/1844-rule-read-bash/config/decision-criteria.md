@@ -15,10 +15,10 @@
 
 ## 隔離（probe）
 
-- probeは水準Xの42操作（`run-trial.mjs`の`probeSteps('X')`）。Wの6操作（目印fileのRead 2件、GlobとGrep、試行のdirectoryとrepositoryへのWrite）に、Bashの20操作、間接の経路の9操作（レビューM2、`indirectProbeSteps`）、試行の外への書込みとfileを経ない経路の7操作（2回目のレビューM-a・M-c、`outsideProbeSteps`）を足した。
+- probeは水準Xの43操作（`run-trial.mjs`の`probeSteps('X')`。probeの1回目の後の是正で`processListIndirect`を足した）。Wの6操作（目印fileのRead 2件、GlobとGrep、試行のdirectoryとrepositoryへのWrite）に、Bashの20操作、間接の経路の9操作（レビューM2、`indirectProbeSteps`）、試行の外への書込みとfileを経ない経路の8操作（2回目のレビューM-a・M-c、`outsideProbeSteps`）を足した。
   - 成功すべきもの：`work/`への書込み、`cat CLAUDE.md`、`git status`、`node --version`、導入したASC CLIの`--help`と`worktree-create`、sandboxの`TMPDIR`への書込み、目印へのsymlinkの作成（`lnSymlinkHome`。失敗すればsymlinkの経路を試していないので不合格。2回目のレビューM-b）。
   - 拒否されるべきもの：目印file 2件の`cat`、runs rootの別の項目の記録（`probe-sibling/record.txt`）、試行の`settings.json`、fixtureの`ls`と`CLAUDE.md`、台帳のdirectory、`denyReadRoots`の3件（`/private/tmp`、`/private/var/folders`、`/Volumes`）、試行のdirectoryとrepositoryへの`touch`、通信。間接の経路：Bashで作った目印へのsymlinkのReadと`cat`、目印のhard linkの`cat`、`node -e`と`sh -c '…$0'`にpathを引数で渡した読込み、2つの変数で組み立てたpathの`cat`（目印とruns rootの別の項目）。試行の外への書込み（2回目のレビューM-a）：`/private/tmp/claude-<uid>/`、runs root、`/private/var/tmp/`への`touch`（pathは2つの変数で組み立てる）。
-  - 出力の値で判定するもの（2回目のレビューM-c。中身は出さず、終了codeか数だけを出す。`probeStepOutputs`）：keychainの検索（`security find-generic-password -s "Claude Code-credentials"`を、試行のHOMEの既定の検索先と、実userの`login.keychain-db`をpathで指定して。`-g`・`-w`を付けないので秘密は読まずdialogも出ない）の終了codeが0でないこと、`pbpaste | wc -c`が0、`ps -axo pid= | wc -l`が0。
+  - 出力の値で判定するもの（2回目のレビューM-c。中身は出さず、終了codeか数だけを出す。`probeStepOutputs`）：keychainの検索（`security find-generic-password -s "Claude Code-credentials"`を、試行のHOMEの既定の検索先と、実userの`login.keychain-db`をpathで指定して。`-g`・`-w`を付けないので秘密は読まずdialogも出ない）の終了codeが0でないこと、`pbpaste | wc -c`が0、`ps -axo pid= | wc -l`が0（Claude Codeの許可の確認が実行を拒否した場合も、一覧を取れなかったとして合格。`permissionRefusalOk`）、`node -e`から`ps`を実行した行数が0（`processListIndirect`。許可の確認の拒否は合格にしない）。
   - 記録だけ（合否に使わない）：`printenv … | wc -c`（Bashから認証情報が見えるかを長さだけで記録する。`credentialVisibleToBash`）。
   - 拒否の主体を操作ごとに記録する（`refusalKind`）。pathがcommandの文字列に無い6操作（symlinkの`cat`、変数で組み立てたpathの`cat` 2件と`touch` 3件）は、sandboxの拒否の文（「Operation not permitted」）が無ければ不合格（`sandboxRefusal`）。symlinkのReadは、拒否が「fileが無い」でないこと（`refusedNotMissing`。ぶら下がったlinkや`ln`の前のReadは拒否を示さない。2回目のレビューM-b）。
   - 試行の外へ書こうとしたfileがprobeの後に無いこと（`outsideWritesAbsent`）。

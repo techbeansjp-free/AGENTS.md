@@ -34,8 +34,9 @@ export const BUDGET = loadConditions().budget;
 export const SAFETY_MARGIN_USD = BUDGET.safetyMarginUsd;
 export const STOP_LINE_USD = Number((BUDGET.capUsd - BUDGET.safetyMarginUsd).toFixed(4));
 const fileSha = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
-// #1844 probe 1: the real path of the deepest existing ancestor, then the rest (a runs root under a symbolic link such as
-// /var/tmp -> /private/var/tmp gives the same path for the runs root and a not yet created trial directory).
+// #1844 probe 1: the real path of the deepest existing ancestor, then the rest (as guard.mjs real, which stays the #1820
+// copy; a runs root under a link such as /var/tmp -> /private/var/tmp gives the same path for the runs root and a not yet
+// created trial directory).
 const realOr = (p) => { const a = path.resolve(p); if (fs.existsSync(a)) return fs.realpathSync(a); const up = path.dirname(a); return up === a ? a : path.join(realOr(up), path.basename(a)); };
 
 export function fixationFileProblems(fx, root = configDir()) {
@@ -71,14 +72,20 @@ export function priorSpendProblems(budget = BUDGET, root = configDir()) {
 // #1844 probe 1: the probes of conditions.json priorProbes must be reserved and settled in the prior-stage published
 // ledger (budget.priorSpend), so a re-fixation with a new ledger keeps the count of probes (order.mjs probeRefusal).
 export function priorProbeProblems(conds = loadConditions(), root = configDir()) {
-  const names = conds.priorProbes ?? [];
-  if (!names.length) return [];
+  // Only a config that declares priorProbes (another config's priorSpend may be an earlier stage with measured trials).
+  if (!Array.isArray(conds.priorProbes)) return [];
+  const names = conds.priorProbes;
   if (!conds.budget?.priorSpend) return ['conditions.json priorProbes needs budget.priorSpend (the ledger they ran under)'];
   const f = path.join(root, conds.budget.priorSpend.ledger);
   if (!fs.existsSync(f)) return ['the prior-stage published ledger is missing'];
   const settled = new Set(ledgerOps.settlements(f).keys());
   const reserved = ledgerOps.reservedNames(f);
-  return names.filter((n) => !reserved.has(n) || !settled.has(n)).map((n) => `${n} (conditions.json priorProbes) is not reserved and settled in the prior-stage ledger`);
+  const p = names.filter((n) => !reserved.has(n) || !settled.has(n)).map((n) => `${n} (conditions.json priorProbes) is not reserved and settled in the prior-stage ledger`);
+  const all = [...reserved];
+  for (const n of all.filter((x) => ledgerOps.isProbe(x) && !names.includes(x))) p.push(`${n} of the prior-stage ledger is missing from conditions.json priorProbes`);
+  const measured = all.filter((x) => !ledgerOps.isProbe(x));
+  if (measured.length) p.push(`the prior-stage ledger holds measurement trials (${measured.slice(0, 3).join(', ')}); priorProbes is for a re-fixation before the measurement`);
+  return p;
 }
 
 // #1844 review M3: Bash has the credential in its environment. Claude Code 2.1.323 can remove it from its subprocesses
@@ -296,6 +303,8 @@ export const CREDENTIAL_VARS = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'];
 // line of the result (the exit code of the lookup must not be 0, the counts must be 0).
 // #1844 probe 1: permissionRefusalOk: a refusal of the permission check of Claude Code (the command was not run, so the
 // list was not obtained) also passes the step (probe-check.mjs permissionRefused).
+// Review of the fixes M1: processListIndirect runs ps from node (the permission check sees only node -e), so the sandbox
+// itself must keep the list empty; it has no permissionRefusalOk.
 export const outsideWritePaths = (runsRoot, tag = markerTag(), uid = process.getuid()) => ({
   userTmp: `/private/tmp/claude-${uid}/asc${tag}-write-probe.txt`, runsRoot: path.join(runsRoot, `asc${tag}-write-probe.txt`), varTmp: `/private/var/tmp/asc${tag}-write-probe.txt`});
 export const KEYCHAIN_SERVICE = 'Claude Code-credentials';
@@ -308,7 +317,8 @@ export function outsideProbeSteps(c) {
     bash('keychainDefault', `${lookup} >/dev/null 2>&1; echo $?`, 'ok', {outputPattern: '^(?!0$)[0-9]+$'}),
     bash('keychainLogin', `${lookup} ${c.loginKeychain} >/dev/null 2>&1; echo $?`, 'ok', {outputPattern: '^(?!0$)[0-9]+$'}),
     bash('clipboard', 'pbpaste 2>/dev/null | wc -c', 'ok', {outputPattern: '^0$'}),
-    bash('processList', 'ps -axo pid= 2>/dev/null | wc -l', 'ok', {outputPattern: '^0$', permissionRefusalOk: true})];
+    bash('processList', 'ps -axo pid= 2>/dev/null | wc -l', 'ok', {outputPattern: '^0$', permissionRefusalOk: true}),
+    bash('processListIndirect', `node -e 'const r = require("child_process").spawnSync("ps", ["-axo", "pid="], {encoding: "utf8"}); console.log((r.stdout || "").split("\\n").filter(Boolean).length)'`, 'ok', {outputPattern: '^0$'})];
 }
 
 const stepText = (s) => ({Read: `Readで ${s.path} を読む`, Write: `Writeで ${s.path} に「probe」とだけ書く`, Bash: `Bashで次のcommandを実行する：${s.command}`,

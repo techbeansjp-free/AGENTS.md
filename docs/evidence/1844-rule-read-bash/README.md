@@ -23,7 +23,7 @@ Claude Code 2.1.323、`claude-sonnet-5-5`、44ターン、42操作すべてを�
    - debug.logの警告：「CLAUDE_CODE_TMPDIR makes the per-uid temp dir 60 bytes, too long for AF_UNIX sockets; child-process $TMPDIR falls back to /tmp/claude-502」。
    - 2.1.323の本体は、`<CLAUDE_CODE_TMPDIR>/claude-<uid>`が44 byteを超えると、子processの`TMPDIR`と作業fileを`/tmp/claude-<uid>`に移す（binaryの`z6r=44`）。試行の`tmp/`（`/private/var/tmp/asc-eval-1844/runs/R-probe-1/tmp`、49 byte）は長すぎた。移った先の`/private/tmp`は読取りと書込みの禁止の中なので、Bashは終わりの処理で失敗する。
    - モデルを呼ばない確認（sandbox-check）は、srtに`TMPDIR`を明示して渡すので、この本体の振舞いを再現しなかった。
-   - 直し方の案：runs rootを短くする（例：`/var/tmp/r1844`。最長の試行名`R-u-bill-1-4`で`CLAUDE_CODE_TMPDIR`は31 byte、per-uidは42 byte）。設定と共通の仕組みのmoduleは変えずに済む。ただし、`/var`と`/private/var`の違いを含めて、probeで確かめていない。
+   - 直し方の案：runs rootを短くする（例：`/var/tmp/r1844`。最長の試行名`R-u-bill-1-4`で`CLAUDE_CODE_TMPDIR`は31 byte、per-uidは42 byte）。（実際の是正では、`/var`のlinkの扱いと44 byteの検査のために`run-trial.mjs`も変えた。[config/README.md](config/README.md)の「probeの1回目の後の是正」。）なお、`/var`と`/private/var`の違いを含めて、probeで確かめていない。
 2. **`ps`を許可の層が止める。**
    - `processList`（`ps -axo pid= 2>/dev/null | wc -l`）は、sandboxの中で動かず、許可の確認で拒否された（「This Bash command contains multiple operations. The following part requires approval: ps -axo pid=」、debug.logの「Bash tool permission denied」）。ほかの35のBashはsandboxの自動許可で動いた。
    - probeはこの操作の成功（出力0）を求めるので、1の原因を直しても不合格になる。processの一覧は取り出されていないので、隔離としては安全な側である。

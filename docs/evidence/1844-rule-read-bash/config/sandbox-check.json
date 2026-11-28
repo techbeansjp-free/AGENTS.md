@@ -43,7 +43,9 @@
      "<root>/runs/R-probe-1/stderr.txt",
      "<root>/runs/R-probe-1/meta.json",
      "<root>/probe-R.json",
-     "/private/var/tmp/asc-eval-1844/tmp/asc-bootstrap-4iRdJr"
+     "/private/var/tmp/SoftwareUpdateCore",
+     "/private/var/tmp/asc-eval-1844",
+     "/private/var/tmp/asc-eval-1844-dry128"
     ],
     "denyWrite": [
      "/Users",
@@ -62,7 +64,9 @@
      "<root>/runs/R-probe-1/config",
      "<root>/runs/R-probe-1/bin",
      "<root>/probe-R.json",
-     "/private/var/tmp/asc-eval-1844/tmp/asc-bootstrap-4iRdJr"
+     "/private/var/tmp/SoftwareUpdateCore",
+     "/private/var/tmp/asc-eval-1844",
+     "/private/var/tmp/asc-eval-1844-dry128"
     ]
    }
   }
@@ -391,7 +395,18 @@
    "probeStep": true,
    "expect": "ok",
    "outputPattern": "^0$",
-   "baseline": "942",
+   "baseline": "949",
+   "exit": 0,
+   "firstLine": "0",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "processListIndirect",
+   "probeStep": true,
+   "expect": "ok",
+   "outputPattern": "^0$",
+   "baseline": "941",
    "exit": 0,
    "firstLine": "0",
    "sandboxRefusal": false,
@@ -519,7 +534,7 @@
    "probeStep": false,
    "expect": "ok",
    "exit": 0,
-   "firstLine": "3246d80 probe",
+   "firstLine": "2d516e8 probe",
    "sandboxRefusal": false,
    "pass": true
   }
