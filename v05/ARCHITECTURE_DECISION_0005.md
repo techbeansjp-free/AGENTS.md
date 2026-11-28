@@ -96,6 +96,7 @@ ASC に新しい runtime の機構を足す前に、Issue か PR で少なくと
 | #1648 / [ADR 0004](ARCHITECTURE_DECISION_0004.md)（グラフ型 runtime の考え方） | ループの終了条件と明示的な状態は導入せず、判断点の宣言は保留した判断。本 ADR の「対照評価なしに製品にしない」の先例。#1737 の Adaptive-lived Context は、ADR 0004 の再検討条件と同じ採用条件で比べる |
 | #1737（Adaptive-lived Context と DB レスの Semantic Projection の評価） | 本 ADR に従う。Adaptive-lived Context は 7 の方針と評価として扱い、汎用の session・context runtime は Host に残す。Semantic Projection は 8 の派生した read model の候補で、authority にせず、共有 DB を要求しない |
 | #1755（CLI で sessionを終わらせずに Context を更新する） | 本 ADR の 7 に従う。CLI の進行役 session を終わらせて新しい session に任せる方式は、続きを動かす者がいなくなるため採らない。Context の更新は Host の自動 compaction に任せ、ASC は規則（`skills/asc/references/coordination.md`）と、Host の公式の `SessionStart` hook から呼ばれる、読取り専用の薄い CLI `resume-context`だけを持つ。閾値を下げる既定の変更は、ADR 0004 と同じ採用条件で測るまで行わない。測定は、#1737 の実績（1試行 25M〜127M token、2組で約300M token）から費用が大きく、owner の判断を待つ |
+| [評価記録の一覧](../docs/evidence/README.md) | 過去の評価・検証（不採用・保留の根拠を含む）の記録と、その結論の1行。同じ評価や提案をやり直す前に確かめる |
 
 ## 見直す条件
 
