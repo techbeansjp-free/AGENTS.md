@@ -73,7 +73,7 @@ export function assertNotRealHome(dir, label, realHomes = [os.homedir(), os.user
   const target = realish(dir);
   for (const home of new Set(realHomes.filter(Boolean).map(realish))) {
     const rel = path.relative(home, target);
-    if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) throw new Error(`refused: ${label} is or is under the real HOME (${home})`);
+    if (rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel))) throw new Error(`refused: ${label} is or is under the real HOME (${home})`);
   }
   return target;
 }

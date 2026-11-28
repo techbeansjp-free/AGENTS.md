@@ -1178,11 +1178,12 @@ test('claude-sandbox-bash: a HOME or config directory at or under the real HOME 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csb-home-')), real = path.join(root, 'real'), other = path.join(root, 'other'), link = path.join(root, 'link');
   try {
     fs.mkdirSync(path.join(real, '.claude'), {recursive: true}); fs.mkdirSync(other); fs.symlinkSync(real, link);
-    for (const dir of [real, link, path.join(real, '.claude'), path.join(link, 'not-yet', 'config')])
+    for (const dir of [real, link, path.join(real, '.claude'), path.join(link, 'not-yet', 'config'), path.join(real, '..test-home'), path.join(link, '..x', 'config')])
       assert.throws(() => assertNotRealHome(dir, '--home', [real]), /refused: --home is or is under the real HOME/, dir);
     assert.equal(assertNotRealHome(path.join(other, 'not-yet'), '--config-dir', [real]), path.join(fs.realpathSync.native(other), 'not-yet'));
     assert.equal(assertNotRealHome(`${real}-sibling`, '--home', [real, null]), `${fs.realpathSync.native(real)}-sibling`, 'a sibling with a shared prefix is accepted');
     assert.equal(assertNotRealHome(other, '--home', [real]), fs.realpathSync.native(other));
+    assert.equal(assertNotRealHome(path.join(root, '..outside'), '--home', [real]), path.join(fs.realpathSync.native(root), '..outside'), 'a name starting with .. outside HOME is accepted');
     await assert.rejects(runInClaudeSandbox({claude: 'unused', cwd: other, home: other, tmp: other, commands: [], out: path.join(root, 'out'), configDir: path.join(os.homedir(), '.claude')}), /refused: --config-dir/);
     assert.ok(!fs.existsSync(path.join(root, 'out')), 'nothing is written before the guard');
   } finally { fs.rmSync(root, {recursive: true, force: true}); }

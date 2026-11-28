@@ -219,12 +219,14 @@ function assertGitWorktreesWritable(common){
  const records=path.join(common,'worktrees'),probe=path.join(records,`asc-write-probe-${process.pid}-${randomUUID()}`);
  let createdRecords=false;
  const makeRecords=()=>{try{fs.mkdirSync(records);createdRecords=true;}catch(error){if(error?.code!=='EEXIST')denied(error);}};
- // A directory that is no longer empty (another worktree was recorded meanwhile) stays.
- const removeRecords=()=>{if(createdRecords)try{fs.rmdirSync(records);}catch(error){if(!['ENOTEMPTY','EEXIST','ENOENT'].includes(error?.code))throw error;}};
+ const refused=code=>['EPERM','EACCES','EROFS'].includes(code);
+ // A directory that is no longer empty (another worktree was recorded meanwhile) stays. A refused removal is only
+ // reported, so that the explanation of the refused check is not replaced by the raw error of the cleanup.
+ const removeRecords=()=>{if(createdRecords)try{fs.rmdirSync(records);}catch(error){if(refused(error?.code))return error.code;if(!['ENOTEMPTY','EEXIST','ENOENT'].includes(error?.code))throw error;}return null;};
  const denied=error=>{
-  removeRecords();
-  if(!['EPERM','EACCES','EROFS'].includes(error?.code))throw error;
-  throw Object.assign(Error(gitWorktreesNotWritableMessage(records,error.code)),{cause:error,code:'ASC_GIT_WORKTREES_NOT_WRITABLE'});
+  const left=removeRecords();
+  if(!refused(error?.code))throw error;
+  throw Object.assign(Error(gitWorktreesNotWritableMessage(records,error.code)+(left?` The empty ${records} made by this check could not be removed (${left}); Git ignores it.`:'')),{cause:error,code:'ASC_GIT_WORKTREES_NOT_WRITABLE'});
  };
  makeRecords();
  // Another check that created the directory may have removed it between the two steps; make it once more.

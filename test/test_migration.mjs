@@ -210,6 +210,19 @@ test('a denied .git/worktrees that does not exist yet stops creation, and a crea
  assert.equal(createWorktree(f.source,{issue:1861,slug:'missing-records'}).branch,'feature/1861-missing-records');
 });
 
+test('a refused removal of the records directory made by the check keeps the explanation (#1861)',t=>{
+ const f=fixture(t),records=path.join(f.source,'.git','worktrees'),originalMkdir=fs.mkdirSync,originalRmdir=fs.rmdirSync;
+ fs.mkdirSync=(dir,...rest)=>{if(path.basename(String(dir)).startsWith('asc-write-probe-'))throw Object.assign(Error('denied'),{code:'EPERM'});return originalMkdir(dir,...rest);};
+ fs.rmdirSync=(dir,...rest)=>{if(path.resolve(String(dir))===records)throw Object.assign(Error('denied'),{code:'EACCES'});return originalRmdir(dir,...rest);};
+ try{assert.throws(()=>createWorktree(f.source,{issue:1861,slug:'records-kept'}),error=>{
+  assert.equal(error.code,'ASC_GIT_WORKTREES_NOT_WRITABLE');
+  assert.match(error.message,/^Git worktree records are not writable: .*\(EPERM\)\./);
+  assert.match(error.message,/The empty .*worktrees made by this check could not be removed \(EACCES\); Git ignores it\.$/);return true;});}
+ finally{fs.mkdirSync=originalMkdir;fs.rmdirSync=originalRmdir;}
+ assert.deepEqual(fs.readdirSync(records),[],'the empty directory is left');
+ assert(!fs.existsSync(path.join(f.source,'.worktrees')));assert.equal(f.git('branch','--list','feature/1861-records-kept'),'');
+});
+
 test('an empty .git/worktrees is kept after the check, and one made by the check stays once it passes (#1861)',t=>{
  const f=fixture(t),records=path.join(f.source,'.git','worktrees');
  f.git('branch','feature/1861-taken');
