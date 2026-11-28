@@ -1,0 +1,237 @@
+{
+ "schema": "asc-1852-eval/v1",
+ "note": "#1852の設定（EVAL_PLAN.md）。#1835の道具（../1835-design-eval-layers/harness/）に--configで渡す。層2は無い。layer3.pairsはharness/select-pairs.mjsの出力で、試験が一致を確かめる。P・評価者・依頼文・出力の上限は#1835と同じ。",
+ "cases": {
+  "ui02-exhibition": {
+   "brief": "1804-design-judgment/cases/ui02-exhibition/BRIEF.md",
+   "shots": {
+    "narrow": "mobile",
+    "wide": "desktop"
+   }
+  },
+  "ui03-dashboard": {
+   "brief": "1804-design-judgment/cases/ui03-dashboard/BRIEF.md",
+   "shots": {
+    "narrow": "tablet",
+    "wide": "desktop"
+   }
+  },
+  "ui08-existing-ds": {
+   "brief": "1804-design-judgment/cases/ui08-existing-ds/BRIEF.md",
+   "shots": {
+    "narrow": "mobile",
+    "wide": "desktop"
+   }
+  }
+ },
+ "renderLayout": "l1-{case}/{case}__{trial}__{variant}/{shot}.png",
+ "layer3": {
+  "pairs": {
+   "ui02-exhibition": [
+    [
+     "A-r1",
+     "B-r1"
+    ],
+    [
+     "A-r3",
+     "B-r3"
+    ],
+    [
+     "A-r3",
+     "D-r2"
+    ],
+    [
+     "A-r2",
+     "D-r1"
+    ],
+    [
+     "A-r2",
+     "E-r3"
+    ],
+    [
+     "A-r1",
+     "E-r2"
+    ],
+    [
+     "B-r3",
+     "D-r1"
+    ],
+    [
+     "B-r2",
+     "D-r3"
+    ],
+    [
+     "B-r2",
+     "E-r3"
+    ],
+    [
+     "B-r3",
+     "E-r2"
+    ],
+    [
+     "D-r3",
+     "E-r3"
+    ],
+    [
+     "D-r1",
+     "E-r2"
+    ]
+   ],
+   "ui03-dashboard": [
+    [
+     "A-r2",
+     "B-r3"
+    ],
+    [
+     "A-r3",
+     "B-r1"
+    ],
+    [
+     "A-r2",
+     "D-r2"
+    ],
+    [
+     "A-r3",
+     "D-r1"
+    ],
+    [
+     "A-r2",
+     "E-r2"
+    ],
+    [
+     "A-r1",
+     "E-r3"
+    ],
+    [
+     "B-r3",
+     "D-r1"
+    ],
+    [
+     "B-r1",
+     "D-r2"
+    ],
+    [
+     "B-r3",
+     "E-r2"
+    ],
+    [
+     "B-r2",
+     "E-r3"
+    ],
+    [
+     "D-r2",
+     "E-r3"
+    ],
+    [
+     "D-r3",
+     "E-r1"
+    ]
+   ],
+   "ui08-existing-ds": [
+    [
+     "A-r1",
+     "B-r2"
+    ],
+    [
+     "A-r2",
+     "B-r3"
+    ],
+    [
+     "A-r1",
+     "D-r2"
+    ],
+    [
+     "A-r2",
+     "D-r3"
+    ],
+    [
+     "A-r3",
+     "E-r3"
+    ],
+    [
+     "A-r2",
+     "E-r1"
+    ],
+    [
+     "B-r1",
+     "D-r1"
+    ],
+    [
+     "B-r3",
+     "D-r3"
+    ],
+    [
+     "B-r3",
+     "E-r2"
+    ],
+    [
+     "B-r2",
+     "E-r3"
+    ],
+    [
+     "D-r3",
+     "E-r2"
+    ],
+    [
+     "D-r1",
+     "E-r3"
+    ]
+   ]
+  }
+ },
+ "rounds": [
+  1,
+  2
+ ],
+ "methods": [
+  "P"
+ ],
+ "budget": {
+  "capUsd": 18,
+  "projectionLimitUsd": 18,
+  "evaluator": "fable"
+ },
+ "retries": {
+  "default": 0,
+  "max": 1
+ },
+ "limits": {
+  "reasonMaxChars": 300,
+  "critiqueMaxChars": 800,
+  "fable": {
+   "P": {
+    "maxTurns": 12,
+    "maxOutputTokens": 4000,
+    "maxBudgetUsd": 0.8,
+    "timeoutSec": 420
+   }
+  },
+  "codex": {
+   "P": {
+    "timeoutSec": 420
+   }
+  }
+ },
+ "evaluators": {
+  "fable": {
+   "command": "claude",
+   "model": "fable",
+   "tools": "Read,Glob,Grep"
+  },
+  "codex": {
+   "command": "codex",
+   "model": "gpt-6.2-sol"
+  }
+ },
+ "dryRun": {
+  "usdPerCall": {
+   "P": 0.21
+  }
+ },
+ "decision": {
+  "test": "one-sided binomial",
+  "chance": 0.5,
+  "alpha": 0.05,
+  "minOwnerDecidedPairs": 24
+ }
+}

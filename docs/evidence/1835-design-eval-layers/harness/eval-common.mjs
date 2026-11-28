@@ -64,19 +64,21 @@ export function stripPng(buf) {
   return {png: Buffer.concat([PNG_SIG, ...kept.map((c) => buf.subarray(c.start, c.end))]), removed: chunks.filter((c) => !PNG_KEEP.has(c.type)).map((c) => c.type)};
 }
 
-// Screens and items of the plan (sections 2 and 3). Screen key: <case>/<trial>/<variant> (variant "original" for originals).
+// Screens and items of the plan (sections 2 and 3). layer2 may be absent (no layer-2 items). Screen key: <case>/<trial>/<variant> (variant "original" for originals).
 export const screenKey = (c, t, v) => `${c}/${t}/${v}`;
 export const parseScreen = (k) => { const [c, t, v] = k.split('/'); return {case: c, trial: t, variant: v}; };
 export function planItems(cfg) {
   const items = [];
   for (const c of Object.keys(cfg.cases)) {
-    for (const [v, meta] of Object.entries(cfg.layer2.variants)) {
+    for (const [v, meta] of Object.entries(cfg.layer2?.variants ?? {})) {
       items.push({id: `L2:${c}:${v}`, layer: 2, case: c, variant: v, kind: meta.kind, strength: meta.strength, control: v === cfg.layer2.control,
         first: screenKey(c, cfg.layer2.base, 'original'), second: screenKey(c, cfg.layer2.base, v)});
     }
-    const t = cfg.layer3.trials;
-    for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) {
-      items.push({id: `L3:${c}:${t[i]}~${t[j]}`, layer: 3, case: c, first: screenKey(c, t[i], 'original'), second: screenKey(c, t[j], 'original')});
+    // layer3.pairs (#1852): an explicit list of [trial, trial] per case; otherwise every pair of layer3.trials (#1835)
+    const t = cfg.layer3.trials ?? [];
+    const pairs = cfg.layer3.pairs ? (cfg.layer3.pairs[c] ?? []) : t.flatMap((a, i) => t.slice(i + 1).map((b) => [a, b]));
+    for (const [a, b] of pairs) {
+      items.push({id: `L3:${c}:${a}~${b}`, layer: 3, case: c, first: screenKey(c, a, 'original'), second: screenKey(c, b, 'original')});
     }
   }
   return items;
