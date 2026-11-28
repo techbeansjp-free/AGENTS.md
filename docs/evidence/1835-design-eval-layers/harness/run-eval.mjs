@@ -346,6 +346,8 @@ export function budgetPlan({index, key, perCall, cfg, priorUsd = 0, negPairs}) {
 // A state file whose holders are all dead processes (a run stopped by a signal) stops the run: check the mode and remove it.
 const sleepMs = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+// the state file is replaced by rename, so a failed write leaves the previous record whole
+const writeState = (f, st) => { fs.writeFileSync(`${f}.tmp`, JSON.stringify(st, null, 1) + '\n'); fs.renameSync(`${f}.tmp`, f); };
 function withMutex(p, fn) {
   const m = `${p}.asc-lock.mutex`;
   for (let i = 0; ; i++) {
@@ -368,7 +370,7 @@ export function acquireLocks(paths, {pid = process.pid} = {}) {
           const f = `${p}.asc-lock.json`, st = readJson(f);
           st.holders = st.holders.filter((h) => h.token !== token);
           if (!st.holders.length) { fs.chmodSync(p, st.mode); fs.rmSync(f); return; }
-          writeJson(f, st);
+          writeState(f, st);
           if (!st.holders.some((h) => alive(h.pid))) {
             console.error(`--lock: ${p} stays mode 000: ${f} lists only runs that are no longer alive (pids ${st.holders.map((h) => h.pid).join(',')}). ` +
               `Restore the mode (recorded: ${st.mode.toString(8)}) by hand and remove ${f}`);
@@ -387,9 +389,10 @@ export function acquireLocks(paths, {pid = process.pid} = {}) {
           throw new Error(`--lock: ${f} is left by runs that are no longer alive (pids ${st.holders.map((h) => h.pid).join(',')}). ` +
             `Restore the mode of ${p} (recorded: ${st.mode.toString(8)}) by hand if needed and remove ${f}`);
         }
-        if (!st.holders.length) fs.chmodSync(p, 0);
+        const first = !st.holders.length;
         st.holders.push({pid, token});
-        writeJson(f, st);
+        writeState(f, st);
+        if (first) { try { fs.chmodSync(p, 0); } catch (e) { fs.rmSync(f, {force: true}); throw e; } }
       });
       held.push(p);
     }
