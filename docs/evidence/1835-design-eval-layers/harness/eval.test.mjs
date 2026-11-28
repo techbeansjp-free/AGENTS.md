@@ -420,12 +420,21 @@ test('run-layer1: failed commands recorded in failed.txt stop the run (also with
 const lockDirs = [];
 after(() => { for (const d of lockDirs) { try { fs.chmodSync(d, 0o750); } catch {} } });
 const lockDir = () => { const d = path.join(tmp('asc1860-'), 'key'); fs.mkdirSync(d); fs.chmodSync(d, 0o750); lockDirs.push(d); return d; };
-// a separate process that takes the lock, says "locked", and releases it when its stdin ends
+// a separate process that takes the lock, says "locked", and releases it when its stdin ends. Every holder is ended in after()
+// so that a failing assertion does not leave a child that keeps the test file running.
+const holders = [];
+after(() => { for (const c of holders) { if (c.exitCode === null && c.signalCode === null) { c.stdin.end(); setTimeout(() => c.kill(), 2000).unref(); } } });
 function holderProc(d) {
   const src = `import {acquireLocks} from ${JSON.stringify(new URL('./run-eval.mjs', import.meta.url).href)};
 const r = acquireLocks([${JSON.stringify(d)}]); console.log('locked'); process.stdin.resume(); process.stdin.on('end', () => { r(); process.exit(0); });`;
   const c = spawn(process.execPath, ['--input-type=module', '-e', src], {stdio: ['pipe', 'pipe', 'inherit']});
-  const ready = new Promise((res, rej) => { c.stdout.on('data', (b) => { if (String(b).includes('locked')) res(); }); c.on('exit', (code) => rej(new Error(`holder exited ${code}`))); });
+  holders.push(c);
+  let out = '';
+  const ready = new Promise((res, rej) => {
+    const t = setTimeout(() => rej(new Error('holder did not take the lock in 15 s')), 15000); t.unref();
+    c.stdout.on('data', (b) => { out += b; if (out.includes('locked')) { clearTimeout(t); res(); } });
+    c.on('exit', (code) => { clearTimeout(t); rej(new Error(`holder exited ${code}`)); });
+  });
   const exited = new Promise((res) => c.on('exit', res));
   return {ready, release: () => { c.stdin.end(); return exited; }};
 }
@@ -536,4 +545,27 @@ test('--lock: the same path twice in one run is taken once and released cleanly'
   r();
   assert.equal(modeOf(d), 0o750);
   assert.deepEqual(leftovers(d), []);
+});
+
+test('--lock: a path that fails to release does not stop the others from being restored; the error names it', () => {
+  const a = lockDir(), b = lockDir();
+  const r = acquireLocks([a, b]);
+  fs.writeFileSync(`${b}.asc-lock.json`, '{broken');
+  assert.throws(() => r(), /JSON|Unexpected|Expected/);
+  assert.equal(modeOf(a), 0o750, 'the other path is restored');
+  assert.deepEqual(leftovers(a), []);
+  fs.rmSync(`${b}.asc-lock.json`); fs.chmodSync(b, 0o750);
+});
+
+test('--lock: when only dead runs remain after a release, the path stays 000 and stderr says so', () => {
+  const d = lockDir();
+  const dead = Number(spawnSync(process.execPath, ['-e', 'console.log(process.pid)']).stdout.toString().trim());
+  const r = acquireLocks([d]);
+  const f = `${d}.asc-lock.json`, st = JSON.parse(fs.readFileSync(f, 'utf8'));
+  st.holders.push({pid: dead, token: 'dead'}); fs.writeFileSync(f, JSON.stringify(st));
+  const err = []; const orig = console.error; console.error = (m) => err.push(String(m));
+  try { r(); } finally { console.error = orig; }
+  assert.equal(modeOf(d), 0);
+  assert.match(err.join('\n'), /stays mode 000.*no longer alive/s);
+  fs.rmSync(f); fs.chmodSync(d, 0o750);
 });

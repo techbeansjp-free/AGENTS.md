@@ -426,6 +426,8 @@ function main() {
       log: (s) => console.error(s)});
     console.log(JSON.stringify(summary, null, 1));
     if (summary.stopped) process.exitCode = 5;
-  } catch (e) { console.error(e.message); process.exitCode = 3; } finally { restore(); }
+  } catch (e) { console.error(e.message); process.exitCode = 3; } finally {
+    try { restore(); } catch (e) { console.error(e.message); process.exitCode = 3; }
+  }
 }
 if (import.meta.url === `file://${process.argv[1]}`) main();
