@@ -59,6 +59,8 @@ export function parseTrace(text) {
   return {init, cwd: init?.cwd ?? null, result, messages, results, uses,
     reads: uses.filter((u) => u.name === 'Read' && results.has(u.id) && !results.get(u.id).is_error).map((u) => String(u.input?.file_path ?? '')),
     skills: uses.filter((u) => u.name === 'Skill').map((u) => String(u.input?.skill ?? '')),
+    // #1845: the Skill calls whose result is present and not an error.
+    okSkills: uses.filter((u) => u.name === 'Skill' && results.has(u.id) && !results.get(u.id).is_error).map((u) => String(u.input?.skill ?? '')),
     readAttempts: uses.filter((u) => u.name === 'Read').length,
     text: typeof result?.result === 'string' && result.result ? result.result : texts.join('\n')};
 }
@@ -105,19 +107,82 @@ export function markerTextOf(spec, answer, written, base = null) {
   return {text: [answer, ...kept].join('\n'), excludedLines: texts.reduce((a, x, i) => a + lines(x) - lines(kept[i]), 0)};
 }
 
+// #1845: the code of a JavaScript/TypeScript text, with the comments and the string literals (and the literal parts of
+// template literals; their ${...} expressions stay code) replaced by spaces, the line breaks kept. A regular expression
+// literal stays code but is skipped as one token, so a quote inside it does not open a string. A small scanner, not a
+// parser: `/` is a regular expression after an operator (not `++`/`--`), an opening bracket, a comma, a keyword or the
+// start, else a division (also after `)`: `if (x) /re/` is misread, a known limit; `of` is an identifier, so
+// `for (x of /re/g)` is misread too). JSX text is code (not left out).
+// Used by a writes forbid entry with scope "code" (e.g. a decimal literal is a violation in `price * 1.1`, not in
+// `// 1bp = 0.01%` or in `'10.9'`).
+export const CODE_FILE = /\.(c|m)?(j|t)sx?$/i;
+export function codeText(src) {
+  const out = src.split('');
+  const blank = (a, b) => { for (let i = a; i < b; i++) if (out[i] !== '\n' && out[i] !== '\r') out[i] = ' '; };
+  const KEYWORDS = new Set(['return', 'typeof', 'instanceof', 'in', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
+  let i = 0, prev = '';
+  const braces = []; // per open brace: true when it opened a ${ of a template literal
+  const template = (start) => { // from the char after a backtick (or the } closing a ${), to the next backtick or ${
+    let j = start;
+    while (j < src.length && src[j] !== '`' && !(src[j] === '$' && src[j + 1] === '{')) j += src[j] === '\\' ? 2 : 1;
+    blank(start, Math.min(j, src.length));
+    if (src[j] === '$') { braces.push(true); prev = '{'; return j + 2; }
+    prev = 'x'; return j + 1;
+  };
+  while (i < src.length) {
+    const c = src[i], d = src[i + 1];
+    if (c === '/' && d === '/') { const e = src.indexOf('\n', i); const end = e < 0 ? src.length : e; blank(i, end); i = end; continue; }
+    if (c === '/' && d === '*') { const e = src.indexOf('*/', i + 2); const end = e < 0 ? src.length : e + 2; blank(i, end); i = end; continue; }
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      // #1845 CodeRabbit: a backslash before CRLF continues the line as one unit.
+      while (j < src.length && src[j] !== c && src[j] !== '\n') j += src[j] !== '\\' ? 1 : src[j + 1] === '\r' && src[j + 2] === '\n' ? 3 : 2;
+      blank(i + 1, Math.min(j, src.length)); i = j + 1; prev = 'x'; continue;
+    }
+    if (c === '`') { i = template(i + 1); continue; }
+    if (c === '{') { braces.push(false); prev = '{'; i++; continue; }
+    if (c === '}') { if (braces.pop()) { i = template(i + 1); continue; } prev = '}'; i++; continue; }
+    if (c === '/') {
+      // #1845 review L1: after `++` or `--` (prev '++'/'--') a `/` is a division (`n++ / 2`).
+      const regexStart = prev === '' || /^[(,=:[!&|?{};+\-*%<>~^]$/.test(prev) || KEYWORDS.has(prev);
+      if (regexStart) {
+        let j = i + 1, cls = false;
+        while (j < src.length && src[j] !== '\n' && (cls || src[j] !== '/')) { if (src[j] === '\\') j++; else if (src[j] === '[') cls = true; else if (src[j] === ']') cls = false; j++; }
+        j++;
+        while (j < src.length && /[a-z]/i.test(src[j])) j++;
+        i = j; prev = 'x'; continue;
+      }
+      prev = '/'; i++; continue;
+    }
+    if (/\s/.test(c)) { i++; continue; }
+    if (/[A-Za-z_$]/.test(c)) { let j = i; while (j < src.length && /[\w$]/.test(src[j])) j++; prev = src.slice(i, j); i = j; continue; }
+    if (/[0-9]/.test(c)) { let j = i; while (j < src.length && /[\w.]/.test(src[j])) j++; prev = 'x'; i = j; continue; }
+    if ((c === '+' || c === '-') && d === c) { prev = c + c; i += 2; continue; }
+    prev = c; i++;
+  }
+  return out.join('');
+}
+// The text a forbid entry is matched on: scope "code" takes the code of a JavaScript/TypeScript file (codeText); other
+// files and entries without scope see the whole text (as before #1845).
+const forbidTextOf = (e, rel, text) => (e.scope === 'code' && CODE_FILE.test(String(rel ?? '')) ? codeText(text) : text);
+
 // #1840: the checks of a writes definition on the texts of the files under its pathPattern. Each require/forbid entry
 // {id, pattern, group?, viewpoint?}: the groups name what failed (e.g. facts, history, status) for the separate report.
 // #1840 re-review High: with requireWithoutBase (and a base), the require patterns are matched on the texts without the
 // base lines (a copied template line does not satisfy them); the forbid patterns always see the whole text.
+// #1845: a forbid entry with scope "code" sees only the code of a JavaScript/TypeScript file (forbidTextOf); requireFiles
+// [{id, pattern}] (optional) needs, for each entry, a written file whose path matches (e.g. both FN-003 and SCR-005),
+// the missing ones in writeFilesMissing.
 export function writeChecks(w, files, fileText, {base = null} = {}) {
   const texts = files.map((f) => (fileText ? fileText(f) : null));
   const all = texts.filter((x) => typeof x === 'string').map((x) => (w.requireWithoutBase ? withoutBaseLines(x, base) : x)).join('\n');
   const out = {written: files, writeMissingText: texts.some((x) => typeof x !== 'string'),
     writeRequireMissing: (w.require ?? []).filter((e) => !new RegExp(e.pattern, 'i').test(all)).map((e) => e.id),
-    writeViolations: (w.forbid ?? []).filter((e) => texts.some((x) => typeof x === 'string' && new RegExp(e.pattern, 'i').test(x))).map((e) => e.id)};
-  const entries = [...(w.require ?? []), ...(w.forbid ?? [])];
+    writeViolations: (w.forbid ?? []).filter((e) => texts.some((x, i) => typeof x === 'string' && new RegExp(e.pattern, 'i').test(forbidTextOf(e, files[i], x)))).map((e) => e.id)};
+  if (w.requireFiles) out.writeFilesMissing = w.requireFiles.filter((e) => !files.some((f) => new RegExp(e.pattern).test(f))).map((e) => e.id);
+  const entries = [...(w.require ?? []), ...(w.forbid ?? []), ...(w.requireFiles ?? [])];
   if (entries.some((e) => e.group)) {
-    const failed = new Set([...out.writeRequireMissing, ...out.writeViolations]);
+    const failed = new Set([...out.writeRequireMissing, ...out.writeViolations, ...(out.writeFilesMissing ?? [])]);
     out.writeFailedGroups = [...new Set(entries.filter((e) => failed.has(e.id)).map((e) => e.group ?? 'other'))];
   }
   return out;
@@ -155,7 +220,7 @@ export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS, bas
     const w = k.writes;
     const files = writtenFiles(t).filter((f) => new RegExp(w.pathPattern).test(f));
     Object.assign(out, writeChecks(w, files, fileText, {base}));
-    out.writeOk = (!w.mustWrite || files.length > 0) && !out.writeMissingText && out.writeRequireMissing.length === 0 && out.writeViolations.length === 0;
+    out.writeOk = (!w.mustWrite || files.length > 0) && !out.writeMissingText && out.writeRequireMissing.length === 0 && out.writeViolations.length === 0 && (out.writeFilesMissing ?? []).length === 0;
     // #1840 review L3: a trial that wrote no file under pathPattern; its answer text against the require patterns (reported).
     if (!files.length && (w.require ?? []).length) out.writeRequireInAnswer = w.require.filter((e) => new RegExp(e.pattern, 'i').test(t.text)).map((e) => e.id);
   }
@@ -270,7 +335,9 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
     const e = k.expect;
     // #1840: a user's own Skill (userSkill: true) has its whole body in .claude/skills/<name>/SKILL.md, which the Skill
     // tool loads; its Skill call or a Read of that file is the body.
-    const ownBody = k.userSkill === true && (t.skills.some((s) => same(s, e)) || rel.includes(`.claude/skills/${e}/SKILL.md`));
+    // #1845: only a Skill call whose result is not an error (okSkills; a trace object without it: skills) or a successful
+    // Read (rel) counts as the body.
+    const ownBody = k.userSkill === true && ((t.okSkills ?? t.skills).some((s) => same(s, e)) || rel.includes(`.claude/skills/${e}/SKILL.md`));
     row.entryHop = t.skills.some((s) => same(s, e)) || ascEntries.includes(e);
     row.bodyRead = k.userSkill === true ? ownBody : ascBodies.includes(e);
     row.reach = row.entryHop || row.bodyRead;
@@ -450,6 +517,14 @@ export const LEVEL_METRICS = {
   // wrote nothing are left out of the rate and counted as notEligible).
   writeCleanWhenWritten: (r) => (r.written ?? []).length > 0 && !r.writeMissingText && (r.writeViolations ?? []).length === 0,
 };
+// #1845: a level min given as a fraction text "a/b" (e.g. "2/3") is compared in integers (ok * b >= a * n), so 4/6 meets
+// "2/3"; a number min is compared as a rate (as before). Throws on another text.
+export function levelMet(ok, n, min) {
+  if (typeof min === 'number') return ok / n >= min;
+  const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(String(min));
+  if (!m || Number(m[2]) === 0) throw new Error(`level min ${JSON.stringify(min)} is neither a number nor a fraction "a/b"`);
+  return ok * Number(m[2]) >= Number(m[1]) * n;
+}
 // The trials a metric is rated on (all by default).
 export const LEVEL_ELIGIBLE = {writeCleanWhenWritten: (r) => (r.written ?? []).length > 0};
 export function levelChecks(runs, condition, levels) {
@@ -459,7 +534,7 @@ export function levelChecks(runs, condition, levels) {
     const all = runs.filter((r) => r.condition === condition && r.counted !== false && !r.failure && l.cases.includes(r.case));
     const rs = all.filter(LEVEL_ELIGIBLE[l.metric] ?? (() => true));
     const ok = rs.filter(f).length;
-    return [l.id, {metric: l.metric, cases: l.cases, value: `${ok}/${rs.length} >= ${l.min}`, ok, n: rs.length, pass: rs.length > 0 && ok / rs.length >= l.min,
+    return [l.id, {metric: l.metric, cases: l.cases, value: `${ok}/${rs.length} >= ${l.min}`, ok, n: rs.length, pass: rs.length > 0 && levelMet(ok, rs.length, l.min),
       ...(rs.length !== all.length ? {notEligible: all.length - rs.length} : {}), ...(l.use ? {use: l.use} : {}), ...(l.label ? {label: l.label} : {})}];
   }));
 }
