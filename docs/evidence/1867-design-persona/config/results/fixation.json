@@ -1,0 +1,41 @@
+{
+ "schema": "asc-1867-fixation/v1",
+ "note": "Append-only. run-trial.mjs --run checks the last record. See fixation.mjs for refix.",
+ "records": [
+  {
+   "stage": "#1867 design persona generation",
+   "fixedAtCommit": "5958bae930bb843a1356d3aa8abc33de7d028dac",
+   "at": "2026-11-28T12:28:25.897Z",
+   "files": {
+    "config/decision-criteria.md": "18f3ae40c3c6751cd07ad3c52d7dddb596165008cefa39547f94bf0379d4fb5a",
+    "config/cases.json": "fdd1af3e2d03bb5298c0695b61a2578e22b8b1201cfcb0b50ec6e8717c874ad3",
+    "config/conditions.json": "2d75a6a38a633272fc638bb23b6df3fa0c364744d916e9fa7027c4a4fcd9707e",
+    "config/release.json": "3fda2fdc81a0e7066b451afe6c405a971a9add38ca7bbf735c3d13a208b462f0",
+    "config/run-order.json": "35029efd5bd173f90e3fad7a06aecd3eb2b5c04909385b916c095c5780afa426",
+    "config/layers/layer1-cases.json": "3d0e4b5393e9813fdef55c657439383fc6c7652fc506eefcb5edc322faef64da",
+    "config/layers/layer1-gold.json": "49e5891b74220e1b19273e571e38a3e6e150a567b45ef011e0b520b6497d9714",
+    "config/layers/eval.json": "173a3f99fe0d2151e487bc027f4339c62cd0301346eb79a9d296501aa5bf41a7",
+    "config/layers/gate-count.json": "0820586fc3e0f1292120034024f49687feb6604d9c30125602d66ef018ea88ec",
+    "config/layers/gate-count-prompt.md": "516263bd720fed9c2f579686727c46febd3fc91e0005f7931441647f3f6658e1",
+    "config/layers/lp-new-brief-for-evaluation.md": "f35accd68fe1476e12b228cd3b42648eae6c580287170b48e425d1c88b1dc130",
+    "harness/apply-condition.mjs": "f1b31cc4f18ccd95d8609dd523473069223f74277e3da6f2d487cdb7f0aea07c",
+    "harness/collect.mjs": "3caefe24b1f9d00751572c2f1b958eedb15a571385321a66321490fef5ed1d52",
+    "harness/condition-i.mjs": "54f57aa231bf8280c581edd5d5658de8b5828954993b94ec8efbe2e54324050c",
+    "harness/config.mjs": "476f4f4a1f8964fbf25fa435fd9a54503effe0f072112e3b1a47dda203df5fa4",
+    "harness/fixation.mjs": "d38b6f8c11a80d983a304354f2064fad20ddb2f2615d9a8fe573d616da5c3a85",
+    "harness/guard.mjs": "eb533b6e6ce6da772491b8c793939b4fbfd5a77185586ad77866d3e9279a42a6",
+    "harness/install-asc.mjs": "529384b4ad6eb4cff479293b571ea9f37337460eb70e8c1be4c832358ece838b",
+    "harness/judge.mjs": "ce83ff508d35db8a3870bdf3d3fce3284d1e314892bfb5d5d435e2b36c6f4c38",
+    "harness/ledger.mjs": "6ce2d8a4c78765e5e2cff73c08cf69229e90a691d2f7f2bf37950fcfb2bb127d",
+    "harness/make-fixture.mjs": "a8a6857b666766bf70053c789e76668ec9a21797a85c3960f68cf6bd6cddf46f",
+    "harness/markers.mjs": "8b1f696936dc6b6fa48c4d8d81354e4ed8989f01d8abc28adaf984cc11d383db",
+    "harness/order.mjs": "298d6c09682b9dc3c695280b376a18c3071f85a667393d1be5107aacf334d876",
+    "harness/probe-check.mjs": "79b4b6a030d5075cd1dcfb26b8ee98cdf9ee7fc5418b6e94dad6102366f3e804",
+    "harness/run-all.mjs": "420b070e8959252e73f2238ea6e7de9d0844e5cca93f79a23d2d0239ed1177d5",
+    "harness/run-trial.mjs": "a3ffc4eb7f780dc77509241cdb36499cfbc817e44b68c43bfcd7027aaa4eaa40",
+    "harness/score.mjs": "0acd4b1326951e1b7b9befaa842b0577fd637449af8ed4971b653c319dd47514"
+   },
+   "ledgerId": "46a22e6c-12c1-4f63-9843-5938852f08fb"
+  }
+ ]
+}

@@ -87,6 +87,8 @@ dry run（3回目のレビューの指摘を直した後にも`run1867dry4`で`p
 2. ownerの目印fileの承認を`results/probe-approval.json`に記録してcommitする。
 3. 固定：`node docs/evidence/shared-harness/fixation.mjs init $EV/results/fixation.json --ledger $LEDGER --config $EV`（#1843の手順と同じ）。最初の固定の記録のcommitを、この節の下に書く（`run-trial.mjs`が照合する）。
 
+**固定（2026-11-28）：** 最初の固定の記録は`5958bae930bb843a1356d3aa8abc33de7d028dac`（27 file、ledger `46a22e6c-12c1-4f63-9843-5938852f08fb`）。手順の`FIX`はこのcommitである。固定の対象の道具（`stage-check.mjs`の`TOOLS`）も、このcommitと照合する。
+
 ## 手順（統括が行う）
 
 #1840の[README](../../1840-user-environment/config/README.md)の「手順」と同じ。`EV=docs/evidence/1867-design-persona/config`、条件は`B`・`S`、fixtureは`UI02`・`LP`・`UI03`・`UI08`、probeのfixtureは`LP`。
