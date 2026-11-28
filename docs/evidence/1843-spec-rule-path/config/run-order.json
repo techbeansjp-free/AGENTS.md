@@ -1,0 +1,13 @@
+{
+ "schema": "asc-eval-run-order/v1",
+ "note": "Fixed before any model run. Reps outermost (1..conditions.json runs); within a rep n-2, s-1, n-3 (s-1 between the two negatives; nonAdjacentKinds is off, conditions.json); within a case B (control) then C (candidate).",
+ "caseOrder": [
+  "n-2",
+  "s-1",
+  "n-3"
+ ],
+ "conditionOrder": [
+  "B",
+  "C"
+ ]
+}

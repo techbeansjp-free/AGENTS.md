@@ -1,0 +1,244 @@
+{
+ "schema": "asc-eval-cases/v1",
+ "note": "Fixed before any model run (decision-criteria.md). #1843: whether the one asc sentence (a change that writes or modifies a spec document reads the writing rules first) brings the writing rules to the Agent when it rewrites the existing FN-003 / SCR-005 (s-1), and does not bring the rules or templates into requests that do not write a spec (n-2 translation, n-3 a question about the current spec). The three cases are those of #1840 (prompts, fixtures, writes and answer markers unchanged); the differences are listed in the case notes (expectReads, forbidReads, writes.requireFiles). Prompts are natural sentences without Skill names or file paths.",
+ "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches.",
+ "entryPattern": "^\\.claude/skills/<skill>/SKILL\\.md$",
+ "bodyPattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
+ "referencePattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/references/<ref>$",
+ "markerText": "answer+writes",
+ "markerTextNote": "#1840 review M1: the markers are matched on the answer and the text of every file the trial wrote (score.mjs scoreRun).",
+ "markerBase": {
+  "pathPattern": "^\\.agent-skill-chain/(managed-runtime/[^/]+/)?templates/"
+ },
+ "markerBaseNote": "#1840 re-review High: before the markers are matched, the lines of a written file equal to a line (trimmed) of a file that existed before the trial are left out: the installed templates (.agent-skill-chain/templates/ and its managed-runtime copy, at the fixture's HEAD) and the earlier text of the written file itself (score.mjs baseLinesFor). A copied template, or one with a row filled in, adds only the lines the trial wrote. w-2 writes.requireWithoutBase applies the same to its require patterns.",
+ "report": {
+  "reads": [
+   {
+    "id": "template-guide",
+    "pattern": "^\\.agent-skill-chain/(managed-runtime/v05/)?templates/specs/00_利用案内\\.md$"
+   },
+   {
+    "id": "template-feature-or-screen",
+    "pattern": "^\\.agent-skill-chain/(managed-runtime/v05/)?templates/specs/details/(04_機能/01_個別機能|05_画面/02_個別画面)テンプレート\\.md$"
+   },
+   {
+    "id": "any-template",
+    "pattern": "^\\.agent-skill-chain/(managed-runtime/v05/)?templates/specs/"
+   },
+   {
+    "id": "workspace-reference",
+    "pattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/asc/references/workspace\\.md$"
+   }
+  ],
+  "answer": [
+   {
+    "id": "start-or-bash",
+    "pattern": "asc-v05|\\bstart\\b|\\bBash\\b"
+   }
+  ],
+  "writtenFiles": true
+ },
+ "reportNote": "Reported per trial, never used for a level: which templates were read (the rules, the feature / screen templates, any template), whether the workspace reference was read (the path the s-1 trials of #1840 took), whether the answer mentions the ASC CLI start or Bash, and every file written.",
+ "cases": [
+  {
+   "id": "n-2",
+   "goal": 1,
+   "origin": "1828 N5",
+   "kind": "negative",
+   "fixture": "EC1",
+   "expect": null,
+   "references": [],
+   "forbidReads": [
+    {
+     "id": "templates",
+     "pattern": "^\\.agent-skill-chain/(managed-runtime/v05/)?templates/specs/"
+    }
+   ],
+   "forbidSkills": [
+    "warranty-scope"
+   ],
+   "prompt": "「保証範囲を顧客と合意済みです」を英語に訳して。",
+   "answerAny": [
+    "agree|agreed"
+   ],
+   "answerAll": [],
+   "answerGroups": [],
+   "needs": [],
+   "forbidReadsNote": "#1843: the writing rules and every template, in the installed copy or its managed-runtime copy (#1845 / PR #1842 review)."
+  },
+  {
+   "id": "s-1",
+   "goal": 1,
+   "origin": "1840 s-1 (1832)",
+   "kind": "spec",
+   "fixture": "SP",
+   "expect": "asc",
+   "references": [],
+   "expectReads": [
+    {
+     "id": "template-guide",
+     "pattern": "^\\.agent-skill-chain/(managed-runtime/v05/)?templates/specs/00_利用案内\\.md$"
+    }
+   ],
+   "prompt": "会員登録機能（FN-003）と会員登録画面（SCR-005）の仕様書を、次の変更に合わせて書き直してほしい。\n\n- これまで会員登録はメールアドレスだけだったが、今回から電話番号でも登録できるようにした。\n- 登録時に送る確認コードは6桁の数字。有効期限は以前は10分だったが、問い合わせが多かったので15分に延ばした。\n- 確認コードを5回続けて間違えると、その登録手続きを30分ロックする（これは前から変わらない）。\n- 電話番号はE.164形式で受け付ける。\n- 画面では、登録手段を「メールアドレス」「電話番号」のタブで切り替える。前はメールアドレスの入力欄だけだった。\n- 確認コードが期限切れのときは「確認コードの有効期限が切れました。もう一度送信してください」と表示し、再送信ボタンを出す。\n- この変更は2026-11-20の打合せで顧客の佐藤さん（役割：業務責任者）が決めた。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/specs/details/(04_機能|05_画面)/",
+    "mustWrite": true,
+    "require": [
+     {
+      "id": "F1",
+      "pattern": "電話番号",
+      "group": "facts"
+     },
+     {
+      "id": "F2",
+      "pattern": "6\\s*桁",
+      "group": "facts"
+     },
+     {
+      "id": "F3",
+      "pattern": "15\\s*分",
+      "group": "facts"
+     },
+     {
+      "id": "F4",
+      "pattern": "30\\s*分",
+      "group": "facts"
+     },
+     {
+      "id": "F5",
+      "pattern": "E\\.164",
+      "group": "facts"
+     },
+     {
+      "id": "F6",
+      "pattern": "タブ",
+      "group": "facts"
+     },
+     {
+      "id": "F7",
+      "pattern": "有効期限が切れました",
+      "group": "facts"
+     },
+     {
+      "id": "F7-resend",
+      "pattern": "再送信",
+      "group": "facts"
+     }
+    ],
+    "forbid": [
+     {
+      "id": "history-old-value",
+      "pattern": "10\\s*分",
+      "group": "history"
+     },
+     {
+      "id": "history-before",
+      "pattern": "以前は|(?<![名手建午])前(は|から)|変更前|これまで",
+      "group": "history"
+     },
+     {
+      "id": "history-change",
+      "pattern": "延ば|延長し|追加した|今回(から|の変更)|変更なし",
+      "group": "history"
+     },
+     {
+      "id": "history-reason",
+      "pattern": "問い合わせが多",
+      "group": "history"
+     },
+     {
+      "id": "history-only",
+      "pattern": "入力欄だけ|メールアドレスだけ",
+      "group": "history"
+     },
+     {
+      "id": "status-approved",
+      "pattern": "(^|\\n)\\s*状態\\s*[:：]\\s*\\**\\s*承認済み",
+      "group": "status"
+     }
+    ],
+    "requireFiles": [
+     {
+      "id": "FN-003",
+      "pattern": "(^|/)docs/specs/details/04_機能/FN-003[^/]*\\.md$",
+      "group": "files"
+     },
+     {
+      "id": "SCR-005",
+      "pattern": "(^|/)docs/specs/details/05_画面/SCR-005[^/]*\\.md$",
+      "group": "files"
+     }
+    ],
+    "requireFilesNote": "#1845 (writes.requireFiles): both existing files must be rewritten; a trial that writes only one of them fails with writeFilesMissing. #1840 accepted either."
+   },
+   "viewpoints": [
+    "書き方の規則（00_利用案内.md）を書く前に読む",
+    "FN-003とSCR-005の両方を書き直す",
+    "7つの事実（F1〜F7）：本文（個別機能・個別画面）",
+    "経緯の文0件：本文",
+    "状態を承認済みと書かない",
+    "本文の外（変更履歴等）の経緯：報告だけ",
+    "個別機能・個別画面の雛形の読取り：報告だけ"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [],
+   "writesReport": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/specs/(?!details/(04_機能|05_画面)/)",
+    "forbid": [
+     {
+      "id": "history-old-value",
+      "pattern": "10\\s*分",
+      "group": "history"
+     },
+     {
+      "id": "history-before",
+      "pattern": "以前は|(?<![名手建午])前(は|から)|変更前|これまで",
+      "group": "history"
+     },
+     {
+      "id": "history-change",
+      "pattern": "延ば|延長し|追加した|今回(から|の変更)|変更なし",
+      "group": "history"
+     },
+     {
+      "id": "history-reason",
+      "pattern": "問い合わせが多",
+      "group": "history"
+     },
+     {
+      "id": "history-only",
+      "pattern": "入力欄だけ|メールアドレスだけ",
+      "group": "history"
+     }
+    ]
+   },
+   "expectReadsNote": "#1843: only the document that holds the writing rules (00_利用案内.md, the target of the one asc sentence), in the installed copy or its managed-runtime copy (#1845 / PR #1842 review). #1840 also required a feature or screen template; that read is reported only (report.reads template-feature-or-screen), since neither the Issue nor the sentence asks for it."
+  },
+  {
+   "id": "n-3",
+   "goal": 1,
+   "origin": "new",
+   "kind": "negative",
+   "fixture": "SP",
+   "expect": null,
+   "references": [],
+   "forbidReads": [
+    {
+     "id": "templates",
+     "pattern": "^\\.agent-skill-chain/(managed-runtime/v05/)?templates/specs/"
+    }
+   ],
+   "prompt": "会員登録の確認コードの有効期限は、今の仕様書では何分になっている？",
+   "answerAny": [
+    "10\\s*分"
+   ],
+   "answerAll": [],
+   "answerGroups": [],
+   "needs": [],
+   "forbidReadsNote": "#1843: the writing rules and every template, in the installed copy or its managed-runtime copy (#1845 / PR #1842 review)."
+  }
+ ]
+}
