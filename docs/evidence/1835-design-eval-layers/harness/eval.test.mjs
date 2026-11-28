@@ -10,7 +10,7 @@ import {spawnSync} from 'node:child_process';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS, pngChunks, PNG_KEEP, extractJson, readJson, parseScreen} from './eval-common.mjs';
 import {buildPackets} from './make-packets.mjs';
 import {rate, combine} from './ssr.mjs';
-import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex, checkImagesRead} from './run-eval.mjs';
+import {runEvaluator, readLedger, spentUsd, budgetPlan, parseFable, parseCodex, checkImagesRead, acquireLocks} from './run-eval.mjs';
 import {computeAll, decideEvaluator, missingByReason, excludeSkipped, collectJudgments, negationFailures, loadLayer1, ssrNegation} from './aggregate.mjs';
 import {newFailures} from './layer1.mjs';
 import {layer1CommandFailures} from './run-layer1.mjs';
@@ -414,4 +414,80 @@ test('run-layer1: failed commands recorded in failed.txt stop the run (also with
   assert.deepEqual(layer1CommandFailures(out), []);
   fs.writeFileSync(path.join(out, 'failed.txt'), 'render\nui02__A-r1__original\n');
   assert.deepEqual(layer1CommandFailures(out), ['render', 'ui02__A-r1__original']);
+});
+
+// #1860: overlapping runs keep --lock paths closed until the last one ends
+const lockDir = () => { const d = path.join(tmp('asc1860-'), 'key'); fs.mkdirSync(d); fs.chmodSync(d, 0o750); return d; };
+const modeOf = (d) => fs.statSync(d).mode & 0o777;
+const leftovers = (d) => fs.readdirSync(path.dirname(d)).filter((n) => n !== 'key');
+
+test('--lock: overlapping holders keep mode 000 until the last release, in either end order and with three holders', () => {
+  for (const order of [[0, 1], [1, 0], [2, 0, 1]]) {
+    const d = lockDir();
+    const rel = order.map(() => acquireLocks([d]));
+    assert.equal(modeOf(d), 0);
+    order.forEach((i, k) => {
+      rel[i]();
+      assert.equal(modeOf(d), k === order.length - 1 ? 0o750 : 0, `order ${order} after ${k + 1} releases`);
+    });
+    assert.deepEqual(leftovers(d), [], 'no state or mutex file is left');
+  }
+});
+
+test('--lock: a single holder restores the mode and leaves no file, also when its run throws', () => {
+  const d = lockDir();
+  const rel = acquireLocks([d]); assert.equal(modeOf(d), 0); rel();
+  assert.equal(modeOf(d), 0o750); assert.deepEqual(leftovers(d), []);
+  assert.throws(() => { const r = acquireLocks([d]); try { throw new Error('run failed'); } finally { r(); } }, /run failed/);
+  assert.equal(modeOf(d), 0o750); assert.deepEqual(leftovers(d), []);
+});
+
+test('--lock: a holder that throws, ending first or last, does not open the path while another holder runs', () => {
+  for (const throwsFirst of [true, false]) {
+    const d = lockDir();
+    const a = acquireLocks([d]), b = acquireLocks([d]);
+    const failing = throwsFirst ? a : b, other = throwsFirst ? b : a;
+    if (throwsFirst) {
+      assert.throws(() => { try { throw new Error('boom'); } finally { failing(); } }, /boom/);
+      assert.equal(modeOf(d), 0); other(); assert.equal(modeOf(d), 0o750);
+    } else {
+      other(); assert.equal(modeOf(d), 0);
+      assert.throws(() => { try { throw new Error('boom'); } finally { failing(); } }, /boom/);
+      assert.equal(modeOf(d), 0o750);
+    }
+    assert.deepEqual(leftovers(d), []);
+  }
+});
+
+test('--lock: a state file left by dead runs stops the run and keeps the recorded mode; a failed acquire releases what it took', () => {
+  const d = lockDir();
+  const dead = spawnSync(process.execPath, ['-e', 'console.log(process.pid)']).stdout.toString().trim();
+  fs.chmodSync(d, 0);
+  fs.writeFileSync(`${d}.asc-lock.json`, JSON.stringify({mode: 0o750, holders: [{pid: Number(dead), token: 'x'}]}));
+  const other = lockDir();
+  assert.throws(() => acquireLocks([other, d]), /no longer alive.*750/s);
+  assert.equal(modeOf(other), 0o750, 'the path locked before the failure is restored');
+  assert.deepEqual(leftovers(other), []);
+  assert.equal(modeOf(d), 0);
+  fs.rmSync(`${d}.asc-lock.json`); fs.chmodSync(d, 0o750);
+});
+
+test('run --dry-run --lock: a CLI run that ends (normally or with an error) while another holder runs leaves the path closed', () => {
+  const d = lockDir();
+  const holder = acquireLocks([d]);
+  const cli = (evaluator) => spawnSync(process.execPath, [path.join(here, 'run-eval.mjs'), 'run', '--packets', pkRoot, '--runs', tmp('asc1860-r-'),
+    '--evaluator', evaluator, '--methods', 'D', '--dry-run', '--cap-usd', '1000', '--lock', d], {encoding: 'utf8'});
+  const ok = cli('fable');
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.equal(modeOf(d), 0, 'the CLI run ended first and did not open the path');
+  const bad = cli('nobody');
+  assert.equal(bad.status, 3);
+  assert.equal(modeOf(d), 0, 'a CLI run that failed did not open the path');
+  holder();
+  assert.equal(modeOf(d), 0o750);
+  assert.deepEqual(leftovers(d), []);
+  const alone = cli('fable');
+  assert.equal(alone.status, 0, alone.stderr);
+  assert.equal(modeOf(d), 0o750, 'a run alone restores the mode as before');
+  assert.deepEqual(leftovers(d), []);
 });

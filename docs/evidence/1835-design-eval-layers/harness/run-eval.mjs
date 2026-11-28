@@ -340,6 +340,52 @@ export function budgetPlan({index, key, perCall, cfg, priorUsd = 0, negPairs}) {
   return {limitUsd: cfg.budget.projectionLimitUsd, priorUsd, perCall, steps: steps.map(({skip, ...s}) => s), decision: chosen ? chosen.name : 'stop: 予算の見込みで未判定', skip: chosen?.skip ?? null, dropD: chosen ? chosen.name !== 'all' : null};
 }
 
+// --lock: the paths stay mode 000 from the first run's start to the last run's end, also when runs overlap (#1860; in #1852
+// a run that ended first restored the mode while the other was still running). <path>.asc-lock.json keeps the original
+// mode and the holders; it is changed only under <path>.asc-lock.mutex (created with O_EXCL) and removed by the last holder.
+// A state file whose holders are all dead processes (a run stopped by a signal) stops the run: check the mode and remove it.
+const sleepMs = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+function withMutex(p, fn) {
+  const m = `${p}.asc-lock.mutex`;
+  for (let i = 0; ; i++) {
+    try { fs.closeSync(fs.openSync(m, 'wx')); break; } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      if (i >= 500) throw new Error(`--lock: ${m} has been held for 10 s; if no run is starting or ending, remove it`);
+      sleepMs(20);
+    }
+  }
+  try { return fn(); } finally { fs.rmSync(m, {force: true}); }
+}
+export function acquireLocks(paths, {pid = process.pid} = {}) {
+  const held = [];
+  const token = `${pid}-${process.hrtime.bigint()}-${Math.random().toString(36).slice(2)}`;
+  const release = () => {
+    for (const p of held.splice(0).reverse()) withMutex(p, () => {
+      const f = `${p}.asc-lock.json`, st = readJson(f);
+      st.holders = st.holders.filter((h) => h.token !== token);
+      if (st.holders.length) writeJson(f, st); else { fs.chmodSync(p, st.mode); fs.rmSync(f); }
+    });
+  };
+  try {
+    for (const p of paths) {
+      withMutex(p, () => {
+        const f = `${p}.asc-lock.json`;
+        const st = fs.existsSync(f) ? readJson(f) : {mode: fs.statSync(p).mode & 0o777, holders: []};
+        if (st.holders.length && !st.holders.some((h) => alive(h.pid))) {
+          throw new Error(`--lock: ${f} is left by runs that are no longer alive (pids ${st.holders.map((h) => h.pid).join(',')}). ` +
+            `Restore the mode of ${p} (recorded: ${st.mode.toString(8)}) by hand if needed and remove ${f}`);
+        }
+        if (!st.holders.length) fs.chmodSync(p, 0);
+        st.holders.push({pid, token});
+        writeJson(f, st);
+      });
+      held.push(p);
+    }
+  } catch (e) { release(); throw e; }
+  return release;
+}
+
 function main() {
   const a = process.argv.slice(2), cmd = a[0];
   const opt = (n) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : null; };
@@ -357,11 +403,9 @@ function main() {
   }
   if (cmd !== 'run') { console.error('usage: run-eval.mjs run|plan ... (see the header of this file)'); process.exit(2); }
   const dryRun = a.includes('--dry-run');
-  const locks = all('--lock').map((p) => path.resolve(p));
-  const modes = locks.map((p) => [p, fs.statSync(p).mode & 0o777]);
-  const restore = () => { for (const [p, m] of modes) fs.chmodSync(p, m); };
+  let restore = () => {};
   try {
-    for (const [p] of modes) fs.chmodSync(p, 0);
+    restore = acquireLocks(all('--lock').map((p) => path.resolve(p)));
     const summary = runEvaluator({cfg, packetsRoot, runs: path.resolve(opt('--runs') ?? ''), evaluator: opt('--evaluator'), dryRun,
       methods: opt('--methods') ? opt('--methods').split(',') : ORDER, rounds: opt('--rounds') ? opt('--rounds').split(',').map(Number) : cfg.rounds,
       only: opt('--only') ? new Set(opt('--only').split(',')) : null,

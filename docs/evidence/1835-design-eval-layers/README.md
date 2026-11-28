@@ -279,10 +279,13 @@ node harness/aggregate.mjs decide --key $O/key/key.json --runs $O/runs --out $O/
 
 本番の後に足した試験：`results/ssr.json`の96件を記録された類似度から再計算する照合、Fableの`tool_result`が誤りのRead、Codexの`images-not-viewed`の判定（誤検出しない例を含む）、計画した否定の反例の欠測（FとS）、層1の計測エラーの扱いと描画のcommandの失敗、予算で外した束の除外。
 
+#1860で足した試験：`--lock`を重ねたときに、終わる順序（2つの両順と3つ）・例外で終わる側（先・後）によらず最後の終了まで000で、最後に元のmodeに戻り、補助のfileが残らないこと。動いていない実行が残した状態のfileで止まること。CLIの`run --dry-run --lock`が、他の実行の間に正常終了・エラー終了してもmodeを戻さないこと。単独の実行で従来どおり元のmodeに戻ること。
+
 ### 未確認事項（層2・層3の道具）
 
 - **予算の見込み**：#1807・#1815の実績から、Fableの1回の費用を見積ると、計画の全呼出し（2回×（D 3・P 27・F講評 27・F採点 27・否定の反例 20））で約24〜42 USDになり、Dとcontrast-strongを外しても約17〜32 USDである。計画5節の2では、本番の前の試行で18 USDを超えると見込まれれば「予算の見込みで未判定」として止まる可能性が高い。試行の実測で決める。**本番の後：** 試行の実測で見込みが26.4〜34.3 USDとなり、ownerが上限を30 USDに改めた（[EVAL_PLAN.md](EVAL_PLAN.md)5節）。
 - **Codexの読取りの範囲**：`codex exec -s read-only`は書込みだけを防ぎ、読取りを限定しない（[host-session](../../../skills/asc/references/host-session.md)）。#1815は`asc host-session`の実行ごとのpermission profileで読取りを限定した。この道具は、指定どおり`codex exec`を使い、keyとownerの対応表を`--lock`（mode 000）で閉じる。束の他の回・他の束は読める状態のままである。Codexの出力の長さとturnには、CLIの上限の指定が無く、時間の上限だけを掛ける。
+- **`--lock`と並行の実行**：同じpathに`--lock`を付けた`run`を並行して動かしてよい（#1860で直した）。最初の起動でmodeを000にし、最後の実行の終了で元のmodeに戻す。途中で終わる実行は、正常終了でも例外でも、他の実行が動いている間はmodeを戻さない。元のmodeと動いている実行は、対象の隣の`<path>.asc-lock.json`に記録し、最後の実行の終了で消す。`<path>.asc-lock.json`が残っていて、記録された実行がどれも動いていないときは、起動を止める。signal等で止めた実行の残りなので、記録されたmodeを確かめて手で戻し、そのfileを消す。signalで止めたときにmodeを戻す処理は無い。
 - **Fableの文脈**：`--restricted`でも、user単位の`CLAUDE.md`やmemoryが読み込まれるかは確かめていない。束はrepositoryの外（scratch）にあるので、repositoryの`CLAUDE.md`は祖先に無い。
 - **Codexのmodel**：`gpt-6.2-sol`は#1815段階3でownerが答えたもので、#1835での使用は確かめていない。
 - **Fableで画像を見たか**（本番の後に、`tool_result`が誤りのReadは読んだと数えないよう直した。中身が画像かまでは見ない。本番の184回では誤りの`tool_result`が0件）：`--output-format stream-json --verbose`（導入済みclaude 2.1.323の`--help`で確認）で、assistantのeventのtool_use（`Read`の`input.file_path`）と、最後のresult event（`result`・`total_cost_usd`・`usage`・`duration_ms`）を記録から取り出す。その呼出しの束のPNGのうち、Readされなかったものが1つでもあれば欠測（理由`images-not-read`）。result eventが無ければ欠測（`no-result-event`）で、費用は1回の予算の額で数える。**実機のstream-jsonの出力は、まだ見ていない**（有料の呼出しをしていない）。eventの形（`type: assistant`の`message.content[]`のtool_use、`type: result`）は、既知のSDKの形に合わせた偽の出力で試験している。Readのpathが相対・symlink経由の場合は、cwdとrealpathで解決して照合する。Readの`tool_result`の中身の種類（画像か）までは見ない。**本番の後：** 実機のstream-jsonはこの形で読め、Fableの184回はすべて有効で、渡した画像をすべてReadしていた。
