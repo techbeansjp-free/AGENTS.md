@@ -1,0 +1,6 @@
+{
+ "ownerConfirmed": false,
+ "at": "",
+ "reference": "",
+ "note": "仮の値（#1867）。ownerがHOMEとrepoに一時的な目印のfileを置くこと（probe）を承認したら、統括がownerConfirmed・at・reference（承認を記録したIssueのcommentのURL）を埋めてcommitする。それまでmarkers.mjs createは拒否する。"
+}

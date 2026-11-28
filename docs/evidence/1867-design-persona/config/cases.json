@@ -1,0 +1,344 @@
+{
+ "schema": "asc-eval-cases/v1",
+ "note": "Fixed before any model run (decision-criteria.md). #1867: the four design cases of the evaluation plan (../EVAL_PLAN.md). The prompt is the #1804 generation prompt (1804-design-judgment/harness/gen-prompt.txt) unchanged for every case; the brief is BRIEF.md in the fixture (sha256 pinned in conditions.json). The prompt names no Skill and no file path other than BRIEF.md. Every case expects design-creation, which only S distributes: in B its reach, bodyRead and expectReads are false by construction and are not used (decision-criteria.md).",
+ "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches.",
+ "entryPattern": "^\\.claude/skills/<skill>/SKILL\\.md$",
+ "bodyPattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
+ "referencePattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/references/<ref>$",
+ "report": {
+  "reads": [
+   {
+    "id": "design-creation-entry",
+    "pattern": "^\\.claude/skills/design-creation/SKILL\\.md$"
+   },
+   {
+    "id": "design-creation-body",
+    "pattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/design-creation/SKILL\\.md$"
+   },
+   {
+    "id": "reference-public-page",
+    "pattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/design-creation/references/public-page\\.md$"
+   },
+   {
+    "id": "reference-business-screen",
+    "pattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/design-creation/references/business-screen\\.md$"
+   },
+   {
+    "id": "asc-body",
+    "pattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/asc/SKILL\\.md$"
+   },
+   {
+    "id": "inquiries",
+    "pattern": "^inquiries\\.md$"
+   },
+   {
+    "id": "fonts",
+    "pattern": "^FONTS\\.md$"
+   }
+  ],
+  "writtenFiles": true
+ },
+ "reportNote": "Reported per trial, never used for a level: which design-creation files were read (the Claude Code entry, the body, each reference), whether the asc body was read (the read trigger), whether the lp-new inquiries record and FONTS.md were read, and every file written. The Skill calls are in the row (skills). writesReport matches a few words in out/DESIGN-NOTES.md (仮説, 根拠/出典, ペルソナ/利用者の像) as a hint for the person who counts the records; it is not the gate (decision-criteria.md).",
+ "cases": [
+  {
+   "id": "ui02-exhibition",
+   "origin": "1804 ui02-exhibition",
+   "kind": "page",
+   "family": "public",
+   "fixture": "UI02",
+   "expect": "design-creation",
+   "secondary": [
+    "asc"
+   ],
+   "referencesByCondition": {
+    "B": [],
+    "S": [
+     "public-page.md",
+     "business-screen.md"
+    ]
+   },
+   "expectReads": [
+    {
+     "id": "design-creation-body",
+     "pattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/design-creation/SKILL\\.md$"
+    }
+   ],
+   "writes": {
+    "pathPattern": "^out/(index\\.html|DESIGN-NOTES\\.md)$",
+    "mustWrite": true,
+    "require": [],
+    "forbid": [],
+    "requireFiles": [
+     {
+      "id": "page",
+      "pattern": "^out/index\\.html$",
+      "group": "deliverable"
+     },
+     {
+      "id": "record",
+      "pattern": "^out/DESIGN-NOTES\\.md$",
+      "group": "record"
+     }
+    ]
+   },
+   "writesReport": {
+    "pathPattern": "^out/DESIGN-NOTES\\.md$",
+    "require": [
+     {
+      "id": "word-hypothesis",
+      "pattern": "仮説"
+     },
+     {
+      "id": "word-evidence",
+      "pattern": "根拠|出典"
+     },
+     {
+      "id": "word-persona",
+      "pattern": "ペルソナ|利用者の像|利用者像"
+     }
+    ],
+    "forbid": []
+   },
+   "prompt": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": "BRIEF.md",
+     "includes": [
+      "## 成果物",
+      "DESIGN-NOTES.md"
+     ]
+    }
+   ],
+   "why": "#1804の企画展の案内ページ（公開ページ）。依頼文の「利用者」節に利用者の種類と端末がある。成果物はout/index.htmlとout/DESIGN-NOTES.md。"
+  },
+  {
+   "id": "lp-new",
+   "origin": "1867 lp-new",
+   "kind": "page",
+   "family": "public",
+   "fixture": "LP",
+   "expect": "design-creation",
+   "secondary": [
+    "asc"
+   ],
+   "referencesByCondition": {
+    "B": [],
+    "S": [
+     "public-page.md",
+     "business-screen.md"
+    ]
+   },
+   "expectReads": [
+    {
+     "id": "design-creation-body",
+     "pattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/design-creation/SKILL\\.md$"
+    }
+   ],
+   "writes": {
+    "pathPattern": "^out/(index\\.html|DESIGN-NOTES\\.md)$",
+    "mustWrite": true,
+    "require": [],
+    "forbid": [],
+    "requireFiles": [
+     {
+      "id": "page",
+      "pattern": "^out/index\\.html$",
+      "group": "deliverable"
+     },
+     {
+      "id": "record",
+      "pattern": "^out/DESIGN-NOTES\\.md$",
+      "group": "record"
+     }
+    ]
+   },
+   "writesReport": {
+    "pathPattern": "^out/DESIGN-NOTES\\.md$",
+    "require": [
+     {
+      "id": "word-hypothesis",
+      "pattern": "仮説"
+     },
+     {
+      "id": "word-evidence",
+      "pattern": "根拠|出典"
+     },
+     {
+      "id": "word-persona",
+      "pattern": "ペルソナ|利用者の像|利用者像"
+     }
+    ],
+    "forbid": []
+   },
+   "prompt": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": "BRIEF.md",
+     "includes": [
+      "## 成果物",
+      "DESIGN-NOTES.md"
+     ]
+    }
+   ],
+   "why": "#1867で作った出張のスマートフォン相談サービスのLP（公開ページ）。依頼文の「利用者」節は薄く、利用者について分かることの多くは問合せの記録（inquiries.md）にある。成果物はout/index.htmlとout/DESIGN-NOTES.md。"
+  },
+  {
+   "id": "ui03-dashboard",
+   "origin": "1804 ui03-dashboard",
+   "kind": "page",
+   "family": "business",
+   "fixture": "UI03",
+   "expect": "design-creation",
+   "secondary": [
+    "asc"
+   ],
+   "referencesByCondition": {
+    "B": [],
+    "S": [
+     "public-page.md",
+     "business-screen.md"
+    ]
+   },
+   "expectReads": [
+    {
+     "id": "design-creation-body",
+     "pattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/design-creation/SKILL\\.md$"
+    }
+   ],
+   "writes": {
+    "pathPattern": "^out/(index\\.html|DESIGN-NOTES\\.md)$",
+    "mustWrite": true,
+    "require": [],
+    "forbid": [],
+    "requireFiles": [
+     {
+      "id": "page",
+      "pattern": "^out/index\\.html$",
+      "group": "deliverable"
+     },
+     {
+      "id": "record",
+      "pattern": "^out/DESIGN-NOTES\\.md$",
+      "group": "record"
+     }
+    ]
+   },
+   "writesReport": {
+    "pathPattern": "^out/DESIGN-NOTES\\.md$",
+    "require": [
+     {
+      "id": "word-hypothesis",
+      "pattern": "仮説"
+     },
+     {
+      "id": "word-evidence",
+      "pattern": "根拠|出典"
+     },
+     {
+      "id": "word-persona",
+      "pattern": "ペルソナ|利用者の像|利用者像"
+     }
+    ],
+    "forbid": []
+   },
+   "prompt": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": "BRIEF.md",
+     "includes": [
+      "## 成果物",
+      "DESIGN-NOTES.md"
+     ]
+    }
+   ],
+   "why": "#1804の出荷オペレーションの監視画面（業務の画面）。成果物はout/index.htmlとout/DESIGN-NOTES.md。"
+  },
+  {
+   "id": "ui08-existing-ds",
+   "origin": "1804 ui08-existing-ds",
+   "kind": "page",
+   "family": "business",
+   "fixture": "UI08",
+   "expect": "design-creation",
+   "secondary": [
+    "asc"
+   ],
+   "referencesByCondition": {
+    "B": [],
+    "S": [
+     "public-page.md",
+     "business-screen.md"
+    ]
+   },
+   "expectReads": [
+    {
+     "id": "design-creation-body",
+     "pattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/design-creation/SKILL\\.md$"
+    }
+   ],
+   "writes": {
+    "pathPattern": "^(app/billing\\.(html|css)|out/DESIGN-NOTES\\.md)$",
+    "mustWrite": true,
+    "require": [],
+    "forbid": [],
+    "requireFiles": [
+     {
+      "id": "page",
+      "pattern": "^app/billing\\.html$",
+      "group": "deliverable"
+     },
+     {
+      "id": "record",
+      "pattern": "^out/DESIGN-NOTES\\.md$",
+      "group": "record"
+     }
+    ]
+   },
+   "writesReport": {
+    "pathPattern": "^out/DESIGN-NOTES\\.md$",
+    "require": [
+     {
+      "id": "word-hypothesis",
+      "pattern": "仮説"
+     },
+     {
+      "id": "word-evidence",
+      "pattern": "根拠|出典"
+     },
+     {
+      "id": "word-persona",
+      "pattern": "ペルソナ|利用者の像|利用者像"
+     }
+    ],
+    "forbid": []
+   },
+   "prompt": "このフォルダの BRIEF.md の依頼に対応してください。作業はこのフォルダの中だけで行ってください。終わったら、作成・変更したファイルの一覧を報告してください。",
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": "BRIEF.md",
+     "includes": [
+      "## 成果物",
+      "DESIGN-NOTES.md"
+     ]
+    }
+   ],
+   "why": "#1804の既存のデザインシステム上の請求先の編集画面（業務の画面）。成果物はapp/billing.html（必要ならapp/billing.css）とout/DESIGN-NOTES.md。app/の既存のfileを変えたかはreport.writtenFilesで示す。"
+  }
+ ],
+ "scoring": {
+  "machine": "Per S trial: design-creation body read (expectReads; also bodyRead), a reference read (referenceRead, report), the deliverable and the record written (writes.requireFiles; writeOk). Failures (no init or result event, a result error that is not the budget stop, the condition not received) are failures of the shared harness.",
+  "person": "The content of out/DESIGN-NOTES.md (the user picture with evidence and hypotheses told apart, the decisions tied to users) is counted by a person after collect.mjs, as decision-criteria.md says. It is not in runs.json."
+ }
+}

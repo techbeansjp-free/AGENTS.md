@@ -68,8 +68,9 @@ const stripHeading = (s) => s.replace(/^\s*#+\s*/, '').trim();
 const inside = (child, parent) => { const r = path.relative(parent, child); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
 // Review M1 (stage 2): the number of ASC entries whose descriptions must all be in the context, and the debug-log line.
 export const ASC_ENTRIES = 16;
-// #1840: the number expected for a config (conditions.json ascSkills; else ASC_ENTRIES).
-export const ascEntriesOf = (conds) => (conds?.ascSkills ? conds.ascSkills.length : ASC_ENTRIES);
+// #1840: the number expected for a config (conditions.json ascSkills; else ASC_ENTRIES). #1867: per condition
+// (ascSkillsByCondition, score.mjs ascSkillsOf).
+export const ascEntriesOf = (conds, condition = null) => (conds?.ascSkills || conds?.ascSkillsByCondition?.[condition] ? ascSkillsOf(conds, condition).length : ASC_ENTRIES);
 const OVER_BUDGET_RE = /Skill listing over budget:\s*(\d+) skills, (\d+) chars > (\d+) budget/;
 // The Skill-listing state of one probe from its debug log (null when there is no debug log).
 export function skillListingOf(debug) {
@@ -183,7 +184,7 @@ export function checkProbe(i) {
   add('descriptionsInContext', looked.length === 0 && Object.values(desc).every(Boolean), {desc, lookedUp: looked.length});
   // Review M1 (b): every ASC description is quoted verbatim from the Skill list, with no look-up of the Skill files.
   const ascOmitted = asc.filter((s) => !norm(text).includes(norm(i.ascSkills[s] || '\u0000'))).sort();
-  add('ascDescriptionsInContext', asc.length === ascEntriesOf(conds) && looked.length === 0 && ascOmitted.length === 0, {entries: asc.length, expected: ascEntriesOf(conds), omitted: ascOmitted, lookedUp: looked.length});
+  add('ascDescriptionsInContext', asc.length === ascEntriesOf(conds, i.condition ?? null) && looked.length === 0 && ascOmitted.length === 0, {entries: asc.length, expected: ascEntriesOf(conds, i.condition ?? null), omitted: ascOmitted, lookedUp: looked.length});
   // Review M1 (a): the debug log is needed for the listing state; `compare` checks the state across the conditions.
   const skillListing = skillListingOf(i.debug);
   add('skillListingRecorded', skillListing !== null && skillListing.unparsed === 0, skillListing ?? 'no debug log');
@@ -389,8 +390,9 @@ export function fileInputs(dirArg, condition, repoRoot, conds = loadRawCondition
   const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
   const entries = Object.fromEntries(fs.readdirSync(path.join(work, '.claude/skills')).map((s) => [s, description(read(path.join(work, '.claude/skills', s, 'SKILL.md')) ?? '')]));
   // #1840 review M3: with conditions.json ascSkills, an entry not named there is the user's own Skill (userSkills), checked
-  // on its own; without it every entry is an ASC Skill (as before).
-  const isAsc = (s) => !conds.ascSkills || conds.ascSkills.includes(s);
+  // on its own; without it every entry is an ASC Skill (as before). #1867: the list of the condition (ascSkillsByCondition).
+  const named = conds.ascSkills || conds.ascSkillsByCondition?.[condition] ? ascSkillsOf(conds, condition) : null;
+  const isAsc = (s) => !named || named.includes(s);
   const ascSkills = Object.fromEntries(Object.entries(entries).filter(([s]) => isAsc(s)));
   const userSkills = Object.fromEntries(Object.entries(entries).filter(([s]) => !isAsc(s)));
   const base = conds.fixtures[conds.probeFixture ?? 'A'].baseClaudeMd ?? '';

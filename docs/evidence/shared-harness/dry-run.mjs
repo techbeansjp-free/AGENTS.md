@@ -95,7 +95,7 @@ export function trialPlan(conds = loadConditions(), spec = loadSpec()) {
 // .agent-skill-chain/skills/asc/references, so another Skill's as ../../<skill>/references/<ref>); without the field (the
 // test config, #1823) only the asc cases, as before (review L1).
 export function fixtureReferences(cases, condition, conds) {
-  const skills = ascSkillsOf(conds);
+  const skills = ascSkillsOf(conds, condition);
   const refCases = conds.ascSkills ? cases.filter((k) => skills.includes(k.expect)) : cases.filter((k) => k.expect === 'asc');
   return [...new Set(refCases.flatMap((k) => referencesFor(k, condition).map((r) => (k.expect === 'asc' ? r : `../../${k.expect}/references/${r}`))))];
 }
@@ -143,7 +143,7 @@ function main() {
     const md = fs.readFileSync(path.join(dir, 'CLAUDE.md'), 'utf8');
     const def = conds.fixtures[f];
     const cases = spec.cases.filter((k) => (k.fixture ?? 'A') === f);
-    const skills = ascSkillsOf(conds);
+    const skills = ascSkillsOf(conds, c);
     const refs = fixtureReferences(cases, c, conds);
     const row = {condition: c, fixture: f, kind: def.kind, source: made.source, pinned: made.pinned, tarballSha256: made.install.tarballSha256, packageVersion: made.install.packageVersion,
       runtimeVersion: made.install.runtimeVersion, sources: made.sources, entries: made.install.entries.length, entryProblems: made.install.problems, adopted: made.install.adopted?.id ?? null,
@@ -178,7 +178,9 @@ function main() {
       const b = dirs[`${cb}-${f}`], s = dirs[`${cs}-${f}`];
       const md = (d) => fs.readFileSync(path.join(d, 'CLAUDE.md'), 'utf8');
       const entry = (d, n) => fs.readFileSync(path.join(d, '.claude/skills', n, 'SKILL.md'), 'utf8');
-      const x = {installedDiff: installedDiff(b, s), otherEntriesDiffer: ascSkillsOf(conds).filter((n) => n !== 'asc' && entry(b, n) !== entry(s, n))};
+      // #1867: the entries of the Skills both conditions distribute (ascSkillsByCondition may add a Skill to one).
+      const common = ascSkillsOf(conds, cb).filter((n) => ascSkillsOf(conds, cs).includes(n));
+      const x = {installedDiff: installedDiff(b, s), otherEntriesDiffer: common.filter((n) => n !== 'asc' && entry(b, n) !== entry(s, n))};
       if (texts) {
         const descB = description(entry(b, 'asc')), descS = description(entry(s, 'asc'));
         const ascRest = entry(b, 'asc').replace(/^description: .*$/m, '') === entry(s, 'asc').replace(/^description: .*$/m, '');

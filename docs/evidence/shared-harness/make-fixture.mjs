@@ -65,6 +65,8 @@ export function writeSources(dir, fixtureId, conds = loadConditions()) {
     for (const [name, src] of Object.entries(f.files)) {
       const bytes = fs.readFileSync(path.join(evidenceRoot, src.from));
       if (sha(bytes) !== src.sha256) throw new Error(`refused: ${src.from} differs from the sha256 conditions.json pins`);
+      // #1867: a design file may lie in a subdirectory (e.g. app/tokens.css of ui08).
+      fs.mkdirSync(path.dirname(path.join(dir, name)), {recursive: true});
       fs.writeFileSync(path.join(dir, name), bytes);
       written.push(name);
     }

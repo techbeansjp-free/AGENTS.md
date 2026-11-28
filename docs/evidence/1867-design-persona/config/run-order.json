@@ -1,0 +1,14 @@
+{
+ "schema": "asc-eval-run-order/v1",
+ "note": "Fixed before any model run. Reps outermost (1..conditions.json runs); within a rep the public pages and the business screens alternate (ui02-exhibition, ui03-dashboard, lp-new, ui08-existing-ds); within a case B (baseline) then S (candidate).",
+ "caseOrder": [
+  "ui02-exhibition",
+  "ui03-dashboard",
+  "lp-new",
+  "ui08-existing-ds"
+ ],
+ "conditionOrder": [
+  "B",
+  "S"
+ ]
+}

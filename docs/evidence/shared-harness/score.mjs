@@ -19,8 +19,10 @@ import {loadConditions} from './apply-condition.mjs';
 
 export const ASC_SKILLS = ['asc', 'contract-enforcement', 'decision-ownership', 'engineering-judgment', 'estimate-and-scope', 'execution-recovery', 'migration-assurance', 'project-foundation', 'research-to-implementation', 'review-and-remediation', 'security-evidence', 'subagent-model-selection', 'tracker-issue-writing', 'user-journey-acceptance', 'verification-optimization', 'work-coordination'];
 // #1840: the distributed Skill names of the releases measured (conditions.json ascSkills, e.g. 17 with warranty-scope);
-// without it the 16 names above.
-export const ascSkillsOf = (conds) => conds?.ascSkills ?? ASC_SKILLS;
+// without it the 16 names above. #1867: a condition whose release distributes other Skills (a candidate that adds a
+// Skill) names its own list in conditions.json ascSkillsByCondition[<condition>]; a condition not named there, and a
+// call without a condition, keep ascSkills (a config without the field is unchanged).
+export const ascSkillsOf = (conds, condition = null) => (condition !== null && conds?.ascSkillsByCondition?.[condition]) || (conds?.ascSkills ?? ASC_SKILLS);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const same = (called, s) => called === s || called.endsWith(`:${s}`);
 
@@ -400,7 +402,7 @@ export function scoreTrials(spec, entries, conds = loadConditions()) {
     if (e.failure || e.text === null || e.text === undefined) { runs.push({...base, failure: e.failure ?? 'missing trace'}); continue; }
     let t;
     try { t = parseTrace(e.text); } catch (err) { runs.push({...base, failure: `unreadable trace: ${err.message}`}); continue; }
-    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, priorTexts: e.priorTexts ?? null, priorFiles: e.priorFiles ?? null, skills: ascSkillsOf(conds)})});
+    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, priorTexts: e.priorTexts ?? null, priorFiles: e.priorFiles ?? null, skills: ascSkillsOf(conds, condition)})});
   }
   return selectCounted(runs, conds.runs);
 }
@@ -480,7 +482,8 @@ export function verdictOf(baseline, candidate, {completion = null, subsets = {},
   for (const s of [baseline, candidate]) {
     if (s.runs === 0 || s.positives === 0) reasons.push(`${s.condition}: no valid positive trial`);
     else if (s.failures / s.runs > maxFailureRate) reasons.push(`${s.condition}: failures above ${maxFailureRate * 100}%`);
-    if (!s.negatives) reasons.push(`${s.condition}: no valid negative trial`);
+    // #1867: a config without negative cases (every case expects a Skill) says so in rule.negativesRequired false.
+    if (!s.negatives && rule.negativesRequired !== false) reasons.push(`${s.condition}: no valid negative trial`);
     if ((s.casesWithoutValidTrial ?? []).length) reasons.push(`${s.condition}: no valid trial for ${s.casesWithoutValidTrial.join(',')}`);
     if (s.replacementsMissing) reasons.push(`${s.condition}: ${s.replacementsMissing} failed trial(s) without the mandatory replacement`);
   }

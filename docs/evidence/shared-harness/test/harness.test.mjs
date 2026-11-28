@@ -1147,3 +1147,69 @@ test('#1845 review M1: calibrate.mjs counts requireFiles and applies scope as sc
   const cal = {sources: [{case: 'y', condition: 'skill', path: 'docs/evidence/shared-harness/score.mjs', earlierPass: true, note: 'n'}]};
   assert.match(markdown(calibrate(cal, {cases: [{...c, id: 'y'}]})), /scopeは当てない/);
 });
+
+// #1867: a candidate that adds a Skill (ascSkillsByCondition), design files in subdirectories, a config without
+// negative cases (rule.negativesRequired false). A config without these fields behaves as before.
+const C67DIR = path.join(EVROOT, '1867-design-persona/config');
+const C67 = JSON.parse(read('conditions.json', C67DIR));
+const SPEC67 = JSON.parse(read('cases.json', C67DIR));
+
+test('#1867 per-condition Skill lists: S adds design-creation; B, a call without a condition and earlier configs keep ascSkills', () => {
+  assert.equal(ascSkillsOf(C67, 'B').length, 17);
+  assert.equal(ascSkillsOf(C67, 'S').length, 18);
+  assert.ok(ascSkillsOf(C67, 'S').includes('design-creation') && !ascSkillsOf(C67, 'B').includes('design-creation'));
+  assert.deepEqual(ascSkillsOf(C67), C67.ascSkills);
+  assert.deepEqual([ascEntriesOf(C67, 'B'), ascEntriesOf(C67, 'S'), ascEntriesOf(C67)], [17, 18, 17]);
+  assert.deepEqual([ascSkillsOf(C40, 'C').length, ascEntriesOf(C40, 'C'), ascEntriesOf(CONDS, 'S')], [17, 17, ASC_ENTRIES], 'configs without the field are unchanged');
+  const onlyBy = {ascSkillsByCondition: {S: [...ASC, 'x']}};
+  assert.deepEqual([ascEntriesOf(onlyBy, 'S'), ascEntriesOf(onlyBy, 'B')], [17, ASC_ENTRIES]);
+  // Scoring: the design-creation body is an ASC body in S only.
+  const k = SPEC67.cases.find((c) => c.id === 'lp-new');
+  const tr = () => trace({messages: [[['Read', {file_path: '.agent-skill-chain/skills/design-creation/SKILL.md'}]], [['Read', {file_path: '.agent-skill-chain/skills/design-creation/references/public-page.md'}]], [['Write', {file_path: 'out/index.html', content: 'x'}], ['Write', {file_path: 'out/DESIGN-NOTES.md', content: 'x'}]], []]});
+  const fileText = (r) => (r === 'out/DESIGN-NOTES.md' ? '利用者の像（根拠：問合せの記録、仮説：…）' : '<html></html>');
+  const s = scoreRun(SPEC67, k, tr(), {level: W, condition: 'S', fileText, ...NOBASE, skills: ascSkillsOf(C67, 'S')});
+  assert.deepEqual([s.bodyRead, s.expectReadsAll, s.referenceRead, s.ascReferencesRead, s.writeOk], [true, true, true, ['public-page.md'], true]);
+  assert.deepEqual([s.writesReport.requireMissing, s.report.reads['design-creation-body'], s.report.reads['inquiries']], [[], true, false]);
+  const noNotes = scoreRun(SPEC67, k, trace({messages: [[['Write', {file_path: 'out/index.html', content: 'x'}]], []]}), {level: W, condition: 'S', fileText, ...NOBASE, skills: ascSkillsOf(C67, 'S')});
+  assert.deepEqual([noNotes.writeOk, noNotes.writeFilesMissing, noNotes.expectReadsAll], [false, ['record'], false]);
+  const b = scoreRun(SPEC67, k, tr(), {level: W, condition: 'B', fileText, ...NOBASE, skills: ascSkillsOf(C67, 'B')});
+  assert.deepEqual([b.bodyRead, b.references], [false, []], 'B distributes no design-creation');
+});
+
+test('#1867 fixtures and references: design files in subdirectories are written; the S fixture needs the design-creation references', (t) => {
+  const d = tmp(t);
+  assert.deepEqual(writeSources(d, 'UI08', C67), ['BRIEF.md', 'FONTS.md', 'app/DESIGN-SYSTEM.md', 'app/components.css', 'app/members.html', 'app/tokens.css']);
+  assert.ok(fs.readFileSync(path.join(d, 'app/tokens.css'), 'utf8').length > 0);
+  assert.deepEqual(writeSources(tmp(t), 'LP', C67), ['BRIEF.md', 'FONTS.md', 'inquiries.md']);
+  for (const f of ['D3', 'D4', 'D7']) assert.deepEqual(writeSources(tmp(t), f, CONDS), ['BRIEF.md', 'FONTS.md', 'data.json'], 'flat design folders as before');
+  assert.deepEqual(fixtureReferences(SPEC67.cases, 'S', C67), ['../../design-creation/references/public-page.md', '../../design-creation/references/business-screen.md']);
+  assert.deepEqual(fixtureReferences(SPEC67.cases, 'B', C67), []);
+  assert.deepEqual(orderProblems(JSON.parse(read('run-order.json', C67DIR)), SPEC67, C67), []);
+  assert.equal(plannedTrials(JSON.parse(read('run-order.json', C67DIR)), C67.runs).length, 24);
+  for (const c of SPEC67.cases) for (const n of ascSkillsOf(C67, 'S')) assert.ok(!c.prompt.includes(n), `${c.id} names ${n}`);
+});
+
+test('#1867 probe inputs: an entry the condition distributes is an ASC entry, else the user\'s Skill', (t) => {
+  const conds = {...CONDS, ascSkills: ASC, ascSkillsByCondition: {S: [...ASC, 'design-creation']}};
+  const {d} = probeLedger(t, ['B-probe-1']);
+  const dir = path.join(d, 'B-probe-1'), work = path.join(dir, 'work');
+  fs.mkdirSync(path.join(work, '.claude/skills/design-creation'), {recursive: true});
+  fs.writeFileSync(path.join(work, '.claude/skills/design-creation/SKILL.md'), '---\nname: design-creation\ndescription: デザインを作る。\n---\n');
+  const s = fileInputs(dir, 'S', REPO, conds).inputs, b = fileInputs(dir, 'B', REPO, conds).inputs;
+  assert.deepEqual([Object.keys(s.ascSkills).length, Object.keys(s.userSkills)], [17, []]);
+  assert.deepEqual([Object.keys(b.ascSkills).length, Object.keys(b.userSkills)], [16, ['design-creation']]);
+});
+
+test('#1867 rule: without negative cases the levels are judged only when rule.negativesRequired is false', () => {
+  const pos = (c, ok) => ({condition: c, run: 1, case: 'x', expect: 'design-creation', counted: true, expectReadsAll: ok, reach: ok, bodyRead: ok});
+  const runs = [pos('B', false), pos('S', true)];
+  const sums = {B: summarize({cases: [{id: 'x', expect: 'design-creation'}]}, runs, 'B'), S: summarize({cases: [{id: 'x', expect: 'design-creation'}]}, runs, 'S')};
+  const completion = {basis: 'complete', missingPlanned: 0, missingReplacements: []};
+  const levels = [{id: 'gate', cases: ['x'], metric: 'expectReadsAll', min: '1/1'}];
+  const old = levelsVerdict(sums, runs, {completion, rule: {mode: 'levels', levels}});
+  assert.equal(old.verdict, 'not-judged');
+  assert.match(old.reason, /no valid negative trial/);
+  const now = levelsVerdict(sums, runs, {completion, rule: {mode: 'levels', levels, negativesRequired: false}});
+  assert.deepEqual([now.verdict, now.perCondition.S.verdict, now.perCondition.B.verdict], ['levels', 'meets-levels', 'below-levels']);
+  assert.equal(C67.rule.negativesRequired, false);
+});

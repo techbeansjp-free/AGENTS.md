@@ -1,0 +1,362 @@
+{
+ "schema": "asc-eval-conditions/v1",
+ "issue": "1867",
+ "stage": "design persona generation",
+ "markerTag": "1867",
+ "note": "Fixed before any model run (decision-criteria.md). #1867: the generation part of the evaluation plan (../EVAL_PLAN.md). ASC installed the way it reaches a user (project-assets --register-claude-skill --apply in a dedicated worktree, the read trigger claude-md adopted), in the isolated write-tools environment of #1840 (tools level W, no Bash, no network, no browser). B = the release v0.5.131 (the current main 221283eb, 17 Skills); S = B plus the candidate Skill design-creation (packed from a commit that adds it and is reverted in the next commit, as #1815). The four design cases of the plan: the #1804 briefs and fixture files unchanged (sha256 pinned below) and the new lp-new. The harness records only what a machine can count (whether the design-creation body and references were read, whether the deliverables were written); what the design record says (the user picture with evidence and hypotheses, the decisions tied to users) is counted afterwards by a person (decision-criteria.md).",
+ "model": "sonnet",
+ "modelNote": "Same alias as #1804, #1815 and #1840-#1846. The resolved model id (init event) is recorded per trial.",
+ "runs": 3,
+ "runsNote": "The plan: 3 runs per condition and case (24 trials). Only reps 1..runs are scored; a later rep counts only as the one mandatory replacement of a failed trial.",
+ "ascSkills": [
+  "asc",
+  "contract-enforcement",
+  "decision-ownership",
+  "engineering-judgment",
+  "estimate-and-scope",
+  "execution-recovery",
+  "migration-assurance",
+  "project-foundation",
+  "research-to-implementation",
+  "review-and-remediation",
+  "security-evidence",
+  "subagent-model-selection",
+  "tracker-issue-writing",
+  "user-journey-acceptance",
+  "verification-optimization",
+  "warranty-scope",
+  "work-coordination"
+ ],
+ "ascSkillsNote": "The 17 Skills of the release v0.5.131 (B).",
+ "ascSkillsByCondition": {
+  "S": [
+   "asc",
+   "contract-enforcement",
+   "decision-ownership",
+   "design-creation",
+   "engineering-judgment",
+   "estimate-and-scope",
+   "execution-recovery",
+   "migration-assurance",
+   "project-foundation",
+   "research-to-implementation",
+   "review-and-remediation",
+   "security-evidence",
+   "subagent-model-selection",
+   "tracker-issue-writing",
+   "user-journey-acceptance",
+   "verification-optimization",
+   "warranty-scope",
+   "work-coordination"
+  ]
+ },
+ "ascSkillsByConditionNote": "S distributes the 17 Skills and design-creation (shared harness #1867: score.mjs ascSkillsOf, probe-check.mjs ascEntriesOf, dry-run.mjs). B keeps ascSkills.",
+ "maxTurnsByKind": {
+  "design": null
+ },
+ "maxTurnsNote": "Every fixture is a design folder generated to the end (the deliverables need the final state): no --max-turns, unlike the three-message design trials of #1820 stage 2; the per-trial budget bounds the cost. The cases have kind page (not design), so they are scored as full trials (score.mjs isDesign).",
+ "probeMaxTurns": 30,
+ "probeSteps": {
+  "W": 6
+ },
+ "probeFixture": "LP",
+ "probeFixtureNote": "One isolation probe per condition on fixture LP. The design folders have no user Skill, so every .claude/skills entry is an ASC entry of the condition (17 in B, 18 in S). The isolation steps do not depend on the fixture.",
+ "budget": {
+  "ownerCapUsd": 12,
+  "capUsd": 12,
+  "safetyMarginUsd": 0.5,
+  "perTrialUsd": 1.5,
+  "probeUsd": 0.6,
+  "plan": {
+   "perKindUsd": {
+    "page": 0.45
+   },
+   "probeUsd": 0.2
+  },
+  "expect": {
+   "perKindUsd": {
+    "page": 0.32
+   },
+   "probeUsd": 0.15,
+   "perKindInputTokens": {
+    "page": 400000
+   },
+   "probeInputTokens": 100000,
+   "perKindOutputTokens": {
+    "page": 12000
+   },
+   "probeOutputTokens": 3000
+  },
+  "note": "The owner cap of 20 USD is for the generation and layer 2 (P) of #1867 together (owner 2026-11-28, Issue #1867 comment). The generation is allocated 12 USD (ownerCapUsd here is that allocation, not the combined cap: the harness keeps one ledger, and layer 2 is run with the #1835 tools outside it); layer 2 keeps 8 USD (plan: about 5 USD, Fable P 12 pairs x 2 at about 0.21 USD). capUsd 12, stop line 11.5 USD: run-trial.mjs refuses a trial when the ledger total + its budget exceeds it. perTrialUsd 1.5 is the --max-budget-usd of every trial and its ledger reservation, as the #1804 generation (run-gen.mjs --budget 1.5; its sonnet trials of ui02, ui03 and ui08 cost 0.15-0.28 USD). expect: the #1804 maximum 0.28 plus reading ASC (the read trigger) and in S the design-creation body and a reference (about 7 KB) = 0.32; plan = expect x about 1.4. Tokens are rough (#1804 records no token counts per trial): input including cache about 400k, output about 12k per trial. probeUsd 0.6 as #1820 stage 2; the #1843 probes cost about 0.13 USD."
+ },
+ "adopt": "claude-md",
+ "toolLevels": {
+  "W": {
+   "label": "書込みあり（#1815・#1840と同じtool。browser MCPなし）",
+   "tools": "Read,Write,Edit,Glob,Grep,Skill",
+   "disallowed": "Bash,NotebookEdit,WebFetch,WebSearch,Agent,Task",
+   "permissionMode": "acceptEdits",
+   "initPermissionMode": "acceptEdits"
+  }
+ },
+ "toolsNote": "Only level W, the tools of the #1804 generation (Read, Write, Edit, Glob, Grep, Skill) with the isolation of #1840. No network and no browser, so step 6 of the candidate Skill (render and check at narrow and wide widths) cannot run (EVAL_PLAN.md: reported as not judged).",
+ "settingsNote": "Every trial gets the same --settings file (run-trial.mjs isolationSettings), as #1823-#1846.",
+ "conditions": {
+  "B": {
+   "label": "基準（release v0.5.131＝現在のmain 221283eb。17 Skill）",
+   "release": "B"
+  },
+  "S": {
+   "label": "候補（Bにdesign-creationのSKILL.mdとreferences 2件を足したもの）",
+   "release": "S"
+  }
+ },
+ "cells": {
+  "B": {
+   "tools": "W",
+   "release": "B",
+   "source": "release"
+  },
+  "S": {
+   "tools": "W",
+   "release": "S",
+   "source": "candidate"
+  }
+ },
+ "cellsNote": "A cell is a condition (the trace names start with it). The fixture of a trial comes from its case.",
+ "probeCells": [
+  "B",
+  "S"
+ ],
+ "probeNote": "One isolation probe per condition on fixture LP (probeFixture). probe-check.mjs judges each against level W (17 ASC descriptions in B, 18 in S); compare checks that they differ in no session fact (the Skills outside ASC, plugins, git context, model, the Skill-listing state).",
+ "nonAdjacentKinds": [],
+ "nonAdjacentNote": "Every case has kind page, so there is nothing to keep apart; the order alternates public pages and business screens (run-order.json).",
+ "fixtures": {
+  "UI02": {
+   "label": "企画展の案内ページ（#1804 ui02-exhibition。依頼文と書体の一覧。CLAUDE.mdはASCの案内文だけ）",
+   "kind": "design",
+   "baseClaudeMd": null,
+   "files": {
+    "BRIEF.md": {
+     "from": "1804-design-judgment/cases/ui02-exhibition/BRIEF.md",
+     "sha256": "acccd1c9f968ffbb2e0d7e31675c99db159dc8d29c167044606a6ea791495eec"
+    },
+    "FONTS.md": {
+     "from": "1804-design-judgment/cases/FONTS.md",
+     "sha256": "5bbf686e1f397632ec853c3bc4f85139a8df4bbdd110414dbc96fd6e7d887cbb"
+    }
+   },
+   "emptyDirs": [
+    "out"
+   ]
+  },
+  "LP": {
+   "label": "出張のスマートフォン相談サービスのLP（#1867 lp-new。依頼文、問合せの記録、書体の一覧）",
+   "kind": "design",
+   "baseClaudeMd": null,
+   "files": {
+    "BRIEF.md": {
+     "from": "1867-design-persona/cases/lp-new/BRIEF.md",
+     "sha256": "ea05aad090c074e98e64240057e851a97b00483ccb7dbbcc737642039821c768"
+    },
+    "inquiries.md": {
+     "from": "1867-design-persona/cases/lp-new/inquiries.md",
+     "sha256": "edccb3610031bd716ea0b6bc10883c34441acf7d9f6de78913a3b74216540d1d"
+    },
+    "FONTS.md": {
+     "from": "1804-design-judgment/cases/FONTS.md",
+     "sha256": "5bbf686e1f397632ec853c3bc4f85139a8df4bbdd110414dbc96fd6e7d887cbb"
+    }
+   },
+   "emptyDirs": [
+    "out"
+   ]
+  },
+  "UI03": {
+   "label": "出荷オペレーションの監視画面（#1804 ui03-dashboard。依頼文、data.json、書体の一覧）",
+   "kind": "design",
+   "baseClaudeMd": null,
+   "files": {
+    "BRIEF.md": {
+     "from": "1804-design-judgment/cases/ui03-dashboard/BRIEF.md",
+     "sha256": "d7523652a9dcf1070e910ad3a73ca2c51f00bb957bf00a8d6b791788bfed5a1b"
+    },
+    "data.json": {
+     "from": "1804-design-judgment/cases/ui03-dashboard/data.json",
+     "sha256": "8bfc52909e6107759f7388b4b66e407cf5cb124cb6347ba92867b21cbd6d7685"
+    },
+    "FONTS.md": {
+     "from": "1804-design-judgment/cases/FONTS.md",
+     "sha256": "5bbf686e1f397632ec853c3bc4f85139a8df4bbdd110414dbc96fd6e7d887cbb"
+    }
+   },
+   "emptyDirs": [
+    "out"
+   ]
+  },
+  "UI08": {
+   "label": "既存のデザインシステム上の請求先の編集画面（#1804 ui08-existing-ds。依頼文、app/の既存のfile 4件、書体の一覧）",
+   "kind": "design",
+   "baseClaudeMd": null,
+   "files": {
+    "BRIEF.md": {
+     "from": "1804-design-judgment/cases/ui08-existing-ds/BRIEF.md",
+     "sha256": "a91a356e0c486719869bef756497d175bd1ce15f5c203a9cdd5ed2c08cccbd25"
+    },
+    "app/DESIGN-SYSTEM.md": {
+     "from": "1804-design-judgment/cases/ui08-existing-ds/app/DESIGN-SYSTEM.md",
+     "sha256": "4fc0bdaf0db3911ae8f87a9eb9e3f40e5cceb7e177e966d09cb4fcf2c3cd5c85"
+    },
+    "app/components.css": {
+     "from": "1804-design-judgment/cases/ui08-existing-ds/app/components.css",
+     "sha256": "83545c5412c1b0ad505864952678445000e1a06bc9502c297afc7039cf605589"
+    },
+    "app/members.html": {
+     "from": "1804-design-judgment/cases/ui08-existing-ds/app/members.html",
+     "sha256": "e62343225b6c386585a3a73f0ee95b95a72a805b4dace735c3c4478b815c6faf"
+    },
+    "app/tokens.css": {
+     "from": "1804-design-judgment/cases/ui08-existing-ds/app/tokens.css",
+     "sha256": "7156ce5d4645ab455316e738197f0ed0979acb0b34104d1de96632634e24756e"
+    },
+    "FONTS.md": {
+     "from": "1804-design-judgment/cases/FONTS.md",
+     "sha256": "5bbf686e1f397632ec853c3bc4f85139a8df4bbdd110414dbc96fd6e7d887cbb"
+    }
+   },
+   "emptyDirs": [
+    "out"
+   ]
+  }
+ },
+ "fixturesNote": "The #1804 generation copied the case folder and cases/FONTS.md into the fixture (harness/run-gen.mjs); the same files are pinned here. lp-new uses the same FONTS.md. The #1804 fixture had no out/ directory; an empty out/ (not tracked by Git) is added as in #1815 and #1820 stage 2 (the Write tool would create it anyway).",
+ "rule": {
+  "name": "#1867 generation: machine part of the gate",
+  "mode": "levels",
+  "maxFailureRate": 0.1,
+  "negativesRequired": false,
+  "levels": [
+   {
+    "id": "gate-read-ui02-exhibition",
+    "cases": [
+     "ui02-exhibition"
+    ],
+    "metric": "expectReadsAll",
+    "min": "2/3",
+    "label": "門の機械の部分（ui02-exhibition）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は人が数える）"
+   },
+   {
+    "id": "gate-read-lp-new",
+    "cases": [
+     "lp-new"
+    ],
+    "metric": "expectReadsAll",
+    "min": "2/3",
+    "label": "門の機械の部分（lp-new）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は人が数える）"
+   },
+   {
+    "id": "gate-read-ui03-dashboard",
+    "cases": [
+     "ui03-dashboard"
+    ],
+    "metric": "expectReadsAll",
+    "min": "2/3",
+    "label": "門の機械の部分（ui03-dashboard）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は人が数える）"
+   },
+   {
+    "id": "gate-read-ui08-existing-ds",
+    "cases": [
+     "ui08-existing-ds"
+    ],
+    "metric": "expectReadsAll",
+    "min": "2/3",
+    "label": "門の機械の部分（ui08-existing-ds）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は人が数える）"
+   },
+   {
+    "id": "written-ui02-exhibition",
+    "cases": [
+     "ui02-exhibition"
+    ],
+    "metric": "writeOk",
+    "min": "2/3",
+    "use": "report",
+    "label": "報告（ui02-exhibition）：依頼の成果物と記録の両方を書いた試行"
+   },
+   {
+    "id": "written-lp-new",
+    "cases": [
+     "lp-new"
+    ],
+    "metric": "writeOk",
+    "min": "2/3",
+    "use": "report",
+    "label": "報告（lp-new）：依頼の成果物と記録の両方を書いた試行"
+   },
+   {
+    "id": "written-ui03-dashboard",
+    "cases": [
+     "ui03-dashboard"
+    ],
+    "metric": "writeOk",
+    "min": "2/3",
+    "use": "report",
+    "label": "報告（ui03-dashboard）：依頼の成果物と記録の両方を書いた試行"
+   },
+   {
+    "id": "written-ui08-existing-ds",
+    "cases": [
+     "ui08-existing-ds"
+    ],
+    "metric": "writeOk",
+    "min": "2/3",
+    "use": "report",
+    "label": "報告（ui08-existing-ds）：依頼の成果物と記録の両方を書いた試行"
+   },
+   {
+    "id": "reference-read",
+    "cases": [
+     "ui02-exhibition",
+     "lp-new",
+     "ui03-dashboard",
+     "ui08-existing-ds"
+    ],
+    "metric": "referenceRead",
+    "min": "1/1",
+    "use": "report",
+    "label": "報告：design-creationのreference（public-page.mdかbusiness-screen.md）の読込み"
+   }
+  ],
+  "note": "The gate of the plan (decision-criteria.md) has a machine part and a part a person counts. The harness checks only the machine part in S: per case, the design-creation SKILL.md read (expectReads) in at least 2 of 3 trials. A case whose level fails cannot pass the gate; a case whose level passes still needs the record count. perCondition.S.verdict meets-levels means every case passed the machine part; it is not the gate result (the gate needs 3 judgeable cases of 4, after the record count). The B levels are computed by the harness and not used (B has no design-creation). The report levels (use report) do not enter any verdict. No negative case: rule.negativesRequired false (shared harness #1867)."
+ },
+ "subsets": {
+  "public": {
+   "fixtures": [
+    "UI02",
+    "LP"
+   ]
+  },
+  "business": {
+   "fixtures": [
+    "UI03",
+    "UI08"
+   ]
+  }
+ },
+ "dryRun": {
+  "installedDiffExpected": [
+   ".agent-skill-chain/distribution.json",
+   ".agent-skill-chain/skills/README.md",
+   ".agent-skill-chain/managed-runtime/skills/README.md",
+   "^\\.agent-skill-chain/(managed-runtime/)?skills/design-creation/",
+   ".claude/skills/design-creation/SKILL.md",
+   "^\\.agent-skill-chain/managed-runtime/(package\\.json|release-identity\\.json|src/runtime-files\\.json|src/project-assets\\.mjs)$"
+  ],
+  "requiredDiff": [
+   ".agent-skill-chain/skills/design-creation/SKILL.md",
+   ".agent-skill-chain/skills/design-creation/references/public-page.md",
+   ".agent-skill-chain/skills/design-creation/references/business-screen.md",
+   ".claude/skills/design-creation/SKILL.md"
+  ],
+  "note": "B against S: the installed projects may differ only in the design-creation files (the body, the two references, their managed-runtime copies and the Claude Code entry), the Skill list README (the added row) and its copy, the install record, and the managed-runtime copies of the registration (package.json, src/runtime-files.json, src/project-assets.mjs maxAssets) and of release-identity.json. The 17 other entries must be byte-identical (otherEntriesSame). An entry starting with ^ is a regular expression."
+ }
+}
