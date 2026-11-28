@@ -39,7 +39,7 @@ Issue：[#1852](https://github.com/techbeansjp-free/AGENTS.md/issues/1852)。計
 - 言えない：一般の利用者や顧客の正解との一致。ownerの判断は「ASCとしての基準」の代わりである。
 - 規模は3ケース・36組（優劣25組）である。
 
-#1835の層2の結果（Pは既知の劣化をよく見分ける）は、この結果では変わらない。Pは、1か所を壊した劣化の検出には使えるが、良い案どうしの優劣の判定には使えない。
+#1835の層2の結果（Pは既知の劣化をよく見分ける）は、この結果では変わらない。良い案どうしの比較では、この3ケースで両方の評価者が偶然以上の一致を示せなかったため、ownerはPを使わないと決めた。
 
 ## 費用・時間
 
@@ -60,7 +60,7 @@ Issue：[#1852](https://github.com/techbeansjp-free/AGENTS.md/issues/1852)。計
 - `owner-key.json`：比較用のページの対応表。
 - `key.json`：評価者に渡した束の対応表。
 
-理由の文・screenshot・生の実行記録は公開しない。scratchの台帳`ledger.jsonl`のsha256は`f9e96351…0734`である。
+理由の文・screenshot・生の実行記録は公開しない。scratchの台帳`ledger.jsonl`のsha256は`f9e96351ff0334739e56cd5f70a00f9709d063a793cdd2a23fc7a79a45660734`である。
 
 ## 再現の手順
 
@@ -73,17 +73,35 @@ node harness/make-packets.mjs --config $C --render-root <out> --out <out>/eval -
 node harness/owner-page.mjs  --config $C --render-root <out> --out <out>/owner --seed 18520003
 ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --config $C --packets <out>/eval/packets --runs <out>/runs --evaluator fable --methods P --lock <out>/eval/key --lock <out>/owner
 ASC1835_ALLOW_PAID=1 node harness/run-eval.mjs run --config $C --packets <out>/eval/packets --runs <out>/runs --evaluator codex --methods P --lock <out>/eval/key --lock <out>/owner
-node ../1852-p-good-pairs/harness/decide.mjs --key <out>/eval/key/key.json --runs <out>/runs --owner owner-answers.json \
-  --owner-key <out>/owner/owner-key.json --out result.json --layer1 <out>/l1-<case>/layer1.json ...
+node ../1852-p-good-pairs/harness/decide.mjs --key <out>/eval/key/key.json --runs <out>/runs --owner ../1852-p-good-pairs/results/owner-answers.json \
+  --owner-key <out>/owner/owner-key.json --out ../1852-p-good-pairs/results/result.json --layer1 <out>/l1-<case>/layer1.json ...
 node --test ../1852-p-good-pairs/harness/
 ```
 
 - `<pages>`は、#1835の`degrade.mjs`の出力から、各画面の`original`だけを写したものである。`manifest.json`のvariantも`original`だけにした。
-- 2つの評価者を並行して動かすと、`--lock`の後始末が、もう一方が閉じた後のmode（000）を戻すため、directoryが閉じたまま残る。今回は手で戻し、ownerの対応表のsha256が実行の前と同じであることを確かめた。並行させない場合は起きない。
+
+## 対応表の閉じ方の不備（並行実行）
+
+計画3節は「Codexの実行中は、keyとownerの対応表を`--lock`で閉じる」としていた。今回はFableとCodexを並行して動かしたため、これを守れなかった時間帯がある。
+
+- `--lock`は、起動時のmodeを記録して000にし、終了時に記録したmodeへ戻す。Fableが先に起動して閉じ、5秒後に起動したCodexは000を元のmodeとして記録した。
+- Fableが02:06:01Zに終わってmodeを開いた値に戻し、Codexは02:11:36Zまで動いた。約5.5分のあいだ、Codexの実行中に対応表が読める状態だった。Codexの終了で000に戻ったので、終了後は手で開いた。
+- この時間帯に終わったCodexの呼出しは13回である。13回とも隔離の確認は`checked`（束の外のpathを読むcommandは無い）で、実行の記録に`key.json`・`owner-key`・ownerのdirectoryへの言及は無かった。72回全体でも隔離は全件`checked`である。
+- ownerの対応表のsha256は、実行の前（ページの作り直しで得た値）と後で同じだった（`78b2e506…`）。
+- 次に並行させるときは、評価者ごとに閉じるのではなく、両方の実行の外側で閉じて最後に開く。道具（#1835の`run-eval.mjs`）の直しは、このIssueの範囲に含めない。
 
 ## #1835の道具への変更
 
-動作は変えずに、次を足した（#1835の試験はすべて通る）。
+動作は変えずに、次を足した（#1835の試験はすべて通る）。どれも計画の固定（`e8286908`）に含まれ、ownerの比較とPの実行の前にcommitした。計画の冒頭の「設定だけを変える」は、この変更を含めて読む（計画は固定後なので本文を変えない）。
+
+結果の記録の後に、判定の道具（`decide.mjs`）を次のとおり直した。本判定の数値は変わらない（直す前と後の`result.json`は、副次の報告の欄を除いて同じ）。
+
+- 副次の報告から採否（`result`）を外した。計画5節は副次の報告を判定しないとしている。
+- ownerが優劣を付けた組が0組のとき、p値が無いのに採用になり得たのを、未判定にした（今回は25組で該当しない）。
+- ownerの回答に4つの選択肢以外の値があれば、集計を止める。
+- `pJudgments`の向きの変換（回ごとにA・Bが入れ替わる場合）の試験を足した。
+
+#1835の道具に足したもの：
 
 - `eval-common.mjs`：`layer3.pairs`で組を明示できる。`layer2`が無い設定を受ける。
 - `make-packets.mjs`：設定の`methods`にある方式の束だけを作る（設定に無ければ従来どおり全部）。

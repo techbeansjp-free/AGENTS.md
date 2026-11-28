@@ -52,7 +52,7 @@ export function buildPackets({cfg = loadConfig(), renderRoot, out, seed, allowMi
     const all = items.filter((i) => i.layer === 2 && i.case === c), ok = all.filter((i) => !i.excluded);
     if (all.length && ok.length < all.length * cfg.layer2.minPairsPerCaseFraction) l2Undetermined.push(c);
   }
-  // packets are made only for the configured methods (#1852 runs P only); without cfg.methods, every method (#1835)
+  // packets are made only for the configured methods (#1852 runs P only); without cfg.methods, every method. #1835's config lists D, P, Fc, Fs and Neg, so its packets are unchanged
   const wants = (m) => !cfg.methods || cfg.methods.includes(m);
   const newId = idAllocator(makeRng(seed, 'ids'));
   const newPacket = idAllocator(makeRng(seed, 'packets'), 6);

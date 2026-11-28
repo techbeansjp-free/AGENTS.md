@@ -1,4 +1,4 @@
-// Layer 3 (EVAL_PLAN.md section 8): one local HTML page on which the owner compares the 9 natural pairs blind.
+// Layer 3 (EVAL_PLAN.md section 8): one local HTML page on which the owner compares the layer-3 pairs blind (#1835: 9, #1852: 36 with --config).
 // Usage: node harness/owner-page.mjs --render-root <dir> --out <dir> --seed <text> [--config <eval.json>]
 // Output: <out>/owner-page.html (screenshots embedded as data: URIs with metadata chunks removed; a CSP blocks every
 // network request) and <out>/owner-key.json (pair id -> item and which screen is A/B; keep it away from the owner until the

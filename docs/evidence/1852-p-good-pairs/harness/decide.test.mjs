@@ -60,3 +60,26 @@ test('decide: split rounds become same and do not agree with an owner choice', (
   const r = decide({items, J: {fable: split, codex: split}, rounds: [1, 2], owner, rule});
   assert.equal(r.perEvaluator.fable.agree, 0); assert.equal(r.perEvaluator.fable.pSameOnDecided, 24); assert.equal(r.perEvaluator.fable.reproducibility.n, 0);
 });
+
+test('pJudgments: orientation through the key when the A/B sides change between rounds; invalid answers are missing', async () => {
+  const os = await import('node:os');
+  const {pJudgments} = await import('./decide.mjs');
+  const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1852-'));
+  const key = {rounds: [1, 2], items: [{id: 'L3:c:x', first: 'c/A-r1/original', second: 'c/B-r1/original'}],
+    packets: {pk1: {round: 1, method: 'P', item: 'L3:c:x', task: {A: 'a1', B: 'b1'}, ids: {a1: 'c/A-r1/original', b1: 'c/B-r1/original'}},
+      pk2: {round: 2, method: 'P', item: 'L3:c:x', task: {A: 'a2', B: 'b2'}, ids: {a2: 'c/B-r1/original', b2: 'c/A-r1/original'}}}};
+  const put = (e, r, pk, st) => { const d = path.join(runs, e, `round${r}`, 'P', pk); fs.mkdirSync(d, {recursive: true}); fs.writeFileSync(path.join(d, 'status.json'), JSON.stringify(st)); };
+  put('fable', 1, 'pk1', {status: 'valid', answer: {choice: 'A'}}); // A = first
+  put('fable', 2, 'pk2', {status: 'valid', answer: {choice: 'B'}}); // B = first (sides swapped)
+  put('codex', 1, 'pk1', {status: 'valid', answer: {choice: '同等'}});
+  put('codex', 2, 'pk2', {status: 'invalid', answer: null});
+  const J = pJudgments({key, runs});
+  assert.deepEqual([J.fable[1]['L3:c:x'], J.fable[2]['L3:c:x']], ['first', 'first']);
+  assert.deepEqual([J.codex[1]['L3:c:x'], J.codex[2]['L3:c:x']], ['same', null]);
+  fs.rmSync(runs, {recursive: true});
+});
+test('decide: no decided pair is undetermined (not adopted by a null p-value)', () => {
+  const items = mk(3), owner = Object.fromEntries(items.map((it) => [it.id, 'same']));
+  const r = decide({items, J: {fable: judge(items, () => 'first'), codex: judge(items, () => 'first')}, rounds: [1, 2], owner, rule: {...rule, minOwnerDecidedPairs: 0}});
+  assert.equal(r.perEvaluator.fable.result, '未判定');
+});

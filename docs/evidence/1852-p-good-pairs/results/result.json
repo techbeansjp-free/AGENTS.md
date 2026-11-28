@@ -173,6 +173,7 @@
    "L3:ui02-exhibition:A-r1~B-r1"
   ],
   "secondaryWithoutFailing": {
+   "note": "副次の報告。判定しない（計画5節）",
    "pairs": 35,
    "fable": {
     "agree": 18,
@@ -185,8 +186,7 @@
     "reproducibility": {
      "n": 33,
      "d": 35
-    },
-    "result": "採用"
+    }
    },
    "codex": {
     "agree": 16,
@@ -199,8 +199,7 @@
     "reproducibility": {
      "n": 28,
      "d": 35
-    },
-    "result": "不採用"
+    }
    }
   }
  },

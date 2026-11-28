@@ -52,7 +52,7 @@ export function decide({items, J, rounds, owner, rule, budgetStopped = false}) {
     const pValue = n ? binomTail(n, k, rule.chance) : null;
     let result;
     if (budgetStopped) result = '未判定';
-    else if (n < rule.minOwnerDecidedPairs) result = '未判定';
+    else if (!n || n < rule.minOwnerDecidedPairs) result = '未判定';
     else result = pValue <= rule.alpha ? '採用' : '不採用';
     per[e] = {agree: k, n, rate: n ? k / n : null, pValue, criticalK: n ? criticalK(n, rule.alpha, rule.chance) : null, pSameOnDecided: same, missingOnDecided: missing,
       reproducibility: {n: repro, d: both.length}, result, pairs: pair};
@@ -71,6 +71,8 @@ function main() {
   const key = readJson(path.resolve(opt('--key'))), runs = path.resolve(opt('--runs'));
   const items = key.items.filter((i) => !i.excluded);
   const owner = loadOwner(path.resolve(opt('--owner')), path.resolve(opt('--owner-key')));
+  const bad = Object.entries(owner).filter(([, v]) => v === null);
+  if (bad.length) throw new Error(`owner answers with an unknown choice: ${bad.map(([k]) => k).join(', ')}`);
   const ledgerFile = path.join(runs, 'ledger.jsonl');
   const ledger = fs.existsSync(ledgerFile) ? fs.readFileSync(ledgerFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
   const res = decide({items, J: pJudgments({key, runs}), rounds: key.rounds, owner, rule: cfg.decision, budgetStopped: ledger.some((l) => l.type === 'stop')});
@@ -82,7 +84,7 @@ function main() {
   const out = {schema: 'asc-1852-result/v1', rule: cfg.decision, items: items.length, excludedItems: key.items.filter((i) => i.excluded),
     ...res, ownerByItem: owner, layer1: {screens: Object.keys(l1).length, failingScreens: Object.entries(l1).filter(([, v]) => v === false).map(([k]) => k),
       unknownScreens: Object.entries(l1).filter(([, v]) => v === undefined).map(([k]) => k), pairsWithFailingScreen: failing,
-      secondaryWithoutFailing: {pairs: passing.length, ...Object.fromEntries(EVALUATORS.map((e) => [e, (({pairs, ...x}) => x)(sub.perEvaluator[e])]))}},
+      secondaryWithoutFailing: {note: '副次の報告。判定しない（計画5節）', pairs: passing.length, ...Object.fromEntries(EVALUATORS.map((e) => [e, (({pairs, result, ...x}) => x)(sub.perEvaluator[e])]))}},
     costs: costsFromLedger(ledger), budgetStopped: ledger.some((l) => l.type === 'stop'), missingByReason: missingByReason(runs)};
   writeJson(path.resolve(opt('--out')), out);
   console.log(JSON.stringify({conclusion: out.conclusion, owner: out.owner, ...Object.fromEntries(EVALUATORS.map((e) => [e, (({pairs, ...x}) => x)(out.perEvaluator[e])]))}, null, 1));
