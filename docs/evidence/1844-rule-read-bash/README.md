@@ -4,10 +4,11 @@
 
 ## 状態（2026-11-28）
 
-- **未測定。隔離の確認（probe）の1回目が不合格で、15試行は行っていない。** 規則で許される1回のやり直しは使っていない（下の「やり直さなかった理由」）。
-- 固有ルールが読まれるかの結果はまだない。#1840のBashなしの下限（`money.md`の読込み R 1/6、C 0/6）と並べる値もない。
-- 最初の固定は`59dc321d`（[config/results/fixation-1.json](config/results/fixation-1.json)、台帳`889bb6f5`。probe 1の後の是正で固定をやり直した：[config/README.md](config/README.md)の「probeの1回目の後の是正」）。条件RはGitHub Release v0.5.128（固定の直前の`gh release list`でLatest。v0.5.123から更新し、dry runを取り直して全15項目が合格）。
-- 生の記録（`/private/var/tmp/asc-eval-1844/`）はcommitしていない。
+- **未判定（隔離の確認に合格する環境を用意できなかった）。** probeは規則で許される2回（R-probe-1、R-probe-2）とも不合格で、15試行は行っていない（[config/decision-criteria.md](config/decision-criteria.md)の「probeが2回とも不合格なら測定しない」）。
+- 固有ルールが読まれるかの結果はない。#1840のBashなしの下限（`money.md`の読込み R 1/6、C 0/6）と並べる値もない。
+- 2回目の不合格は1項目：`probeStepsSucceeded`の`insideWorktreeCreate`（導入したASC CLIの`worktree-create`が、Claude Codeのsandboxの中で「Migration Git operation failed (exit status 128)」、終了code 1）。1回目の2つの原因は直っていた（下の「probeの2回目」）。
+- 最初の固定は`59dc321d`（[config/results/fixation-1.json](config/results/fixation-1.json)、台帳`889bb6f5`）、是正の後の固定は`c25da95b`（[config/results/fixation.json](config/results/fixation.json)、台帳`a48998d6`）。条件RはGitHub Release v0.5.128。
+- 生の記録（`/private/var/tmp/asc-eval-1844/`、`/var/tmp/r1844/`）はcommitしていない。probe 2の公開用の記録は[config/results/probes/](config/results/probes/)。
 
 ## probeの1回目（R-probe-1）
 
@@ -29,33 +30,41 @@ Claude Code 2.1.323、`claude-sonnet-5-5`、44ターン、42操作すべてを�
    - probeはこの操作の成功（出力0）を求めるので、1の原因を直しても不合格になる。processの一覧は取り出されていないので、隔離としては安全な側である。
    - 直すには、`probe-check.mjs`の是正（`refix`。許可の層の拒否を「一覧を取れない」に数える）か、`run-trial.mjs`の操作の変更（固定のやり直し）が要る。どちらも判定の規則をprobeの後に変えることになるので、独立レビューとownerか進行役の判断が要る。
 
-## やり直さなかった理由
+## probeの1回目の後の是正
 
-規則で許されるやり直しは1回である。2の原因は本体の許可の判定で、同じ設定なら同じに起こると見られる（1回の観察による。試行の中の`ps`だけが止まり、ほかの35のBashは自動許可で動いた）。1の原因だけを直してやり直しても`processList`で不合格になり、やり直しの1回を使い切る。このため、やり直しを残して止めた。
+[config/README.md](config/README.md)の「probeの1回目の後の是正」。要点：runs rootを`/var/tmp/r1844`にし、per-uidの一時directoryが44 byteを超える試行を`run-trial.mjs`が予約の前に拒否する（`dry-run.mjs`も`--runs-root`を確かめる）。`processList`は許可の層の拒否を合格に数え、許可の層を通らない`processListIndirect`（`node -e`から`ps`）を足した（43操作、`--max-turns 60`）。`run-trial.mjs`を変えたので新しい台帳で固定をやり直し、1回目の費用は`priorSpend`、回数は`priorProbes`で引き継いだ。独立レビューは2回（1回目：Medium 1・Low 3、2回目：Low 3。すべて是正）。判定の規則・水準・採点は変えていない。
 
-- 進行役が決めること：(a) 2の直し方（`refix`か固定のやり直しか）とそのレビュー、(b) 1の直し（runs rootを短くする）を手順に入れること、(c) そのうえで残りの1回のprobeを行うか。
-- 2つとも直さずにやり直すなら、probeは2回とも不合格になり、結果は「未判定（隔離の確認に合格する環境を用意できなかった）」になる。
+## probeの2回目（R-probe-2）
+
+Claude Code 2.1.323、`claude-sonnet-5-5`、44ターン、43操作すべてを試みた。
+
+- 合格した項目：40項目のうち39項目。1回目の原因はどちらも直っていた。
+  - debug.logに一時directoryの警告は無く、成功すべきBashは`cat CLAUDE.md`（`allowReadWork`）、`git status`（`## main`）、`node`、ASC CLIの`--help`、`TMPDIR`への書込み等が成功した。
+  - `processList`はまた許可の層が止め（「requires approval: ps -axo pid=」）、合格に数えた（`info.permissionRefusalOk: permission`）。許可の層を通らない`processListIndirect`は0行で、sandboxが一覧を空にした（`probeStepOutputs`合格）。
+  - 隔離は1回目と同じく保たれた：目印fileと禁止したpathの読取り、試行の外への書込み、通信はすべて拒否され（`sandboxRefusal`・`refusedNotMissing`・`outsideWritesAbsent`・`networkBlocked`合格）、目印のtokenと認証情報はどの記録にも無かった（`markerTokensAbsent`・`credentialNotLeaked`）。Bashからは認証情報が見えなかった（`credentialVisibleToBash: false`）。
+- 不合格の項目：`probeStepsSucceeded`（`insideWorktreeCreate`だけ）。`node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs worktree-create . 1844 test probe HEAD`が「Migration Git operation failed (exit status 128)」で終了code 1になった。`work/`にworktreeは作られていない（`git worktree list`はmainだけ）。
+  - モデルを呼ばない確認（srt 0.0.83のsandbox-check）では同じ操作が成功していた。失敗はClaude Code本体のsandboxの中でだけ観察した（1回）。gitのstderrはASC CLIの文に含まれず、原因（本体のsandboxが`.git`の下への書込みを既定で禁じる等）は確かめていない。
+  - この操作は、利用者の手順で`start`の前に専用worktreeを作る段である。原因が本体のsandboxの既定の禁止なら、Bashをsandboxの中で動かす利用者の環境では、ASCの`start`まで進めないことになる（未確認。測定の結果ではない）。
 
 ## 費用・トークン・時間
 
-| | probe 1回 |
-| --- | --- |
-| 費用（USD） | 0.35（台帳 0.3473） |
-| 入力（入力＋cache、トークン） | 約115万（cacheの読込み 112.1万、作成 3.3万） |
-| 出力（トークン） | 約1.05万 |
-| 時間 | 2.4分（`wallMs` 143,289） |
+| | probe 1回目 | probe 2回目 | 是正のレビュー（2回） |
+| --- | --- | --- | --- |
+| 費用（USD） | 0.35（台帳1 0.3473） | 0.23（台帳2 0.2318） | Claude Code（opus）2 session、台帳の外 |
+| 入力（入力＋cache、トークン） | 約115万 | 約7.6万（cacheの読込み 5.1万、作成 2.4万） | |
+| 出力（トークン） | 約1.05万 | 約1.30万 | |
+| 時間 | 2.4分 | 1.3分（`wallMs` 79,489） | 約4.6分＋約5分 |
 
-- 台帳の合計0.35 USD（このIssueの割当て10 USD、停止の線9 USD）。
-- 見込み（probe 0.38 USD、入力22万）より入力が多い。cacheの読込みが42操作の往復で積み上がった。
+- 2つの台帳の合計0.58 USD（このIssueの割当て10 USD、停止の線9 USD）。
 
 ## 隔離と後片付け
 
-- 目印fileは`markers.mjs create`で作り、probeの後に`markers.mjs remove`で消した（失敗しても消すscriptで実行）。2つとも無いことを`ls`で確かめた。目印のために作られた空のdirectory（`.agent-skill-chain/local/`）も消した。
+- 目印fileは2回とも`markers.mjs create`で作り、probeの後に`markers.mjs remove`で消した（失敗しても消すscriptで実行）。2つとも無いことを`ls`で確かめた。目印のために作られた空のdirectory（`.agent-skill-chain/local/`）も消した。
 - 試行の外へ書こうとしたfile（`/private/tmp/claude-<uid>/`・runs root・`/private/var/tmp/`）は無かった。
 - token fileは中身を表示せず、手順どおりenvへ渡しただけである。
 
 ## 限界
 
-- 未測定なので、固有ルールの読込み・`start`の実行・規則の遵守・該当しない依頼での不読込みの値はない。
-- 1の直し方（短いruns root）が効くかは、モデルを呼ぶprobeで確かめていない。
+- 未判定で測定していないので、固有ルールの読込み・`start`の実行・規則の遵守・該当しない依頼での不読込みの値はない。
+- 1の直し方（短いruns root）が効くことはprobeの2回目で確かめた（一時directoryの警告なし、成功すべきBashが成功）。`worktree-create`の失敗の原因は確かめていない。
 - 3回目の独立レビューのLow：L2（READMEの文の誤り）は固定の前に直した。L1（probeにkeychainとclipboardのsandboxなしの比較の値が無い）は[config/README.md](config/README.md)の限界に書いた。L3（sandbox-check.jsonが利用者の環境のmetadata：keychainの項目の有無、clipboardの長さ、process数を公開する。秘密ではない）は直していない。
