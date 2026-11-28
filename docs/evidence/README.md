@@ -2,6 +2,8 @@
 
 過去の評価・検証の記録と、その結論の1行である。各記録は記載のcommit・版に対するもので、現行仕様や現在の合格証明ではない（[文書の利用範囲](../README.md)）。結論の詳細と限界は各記録を読む。
 
+ADRに属する評価は`v05/evaluation/`にあり、末尾の表に並べる。
+
 | 記録 | 結論 |
 | --- | --- |
 | [1024-consumer-acceptance](1024-consumer-acceptance/) | consumer acceptanceの3機構（git依存の準備・packed bin・規模による出力上限）の故障注入の証跡 |
@@ -11,7 +13,7 @@
 | [1566-claude-code-host-identity](1566-claude-code-host-identity/) | Claude Codeのagentは`agent_id`と`SendMessage`の宛先で識別でき、ASC側のagent台帳は要らない |
 | [1579-acceptance-applicability](1579-acceptance-applicability/) | 既存受入の適用範囲と現行差分の回帰を固定し、#1579を終了可能と判断した |
 | [1601-distribution-findings.md](1601-distribution-findings.md) | 配布物レビューの9指摘はいずれも現行sourceで対応済みで、追加の修正は不要 |
-| [1622-1627-skill-workflows](1622-1627-skill-workflows/) | #1622〜#1627は既存の機構で足り、案内・参照の追記だけを行った（新Skillは足さない） |
+| [1622-1627-skill-workflows](1622-1627-skill-workflows/) | #1622〜#1627を現行と照合し、案内・referenceを追記し、任意Skill `tracker-issue-writing`を足した（#1627の協議Skillは任意の配置`v05/optional-skills`に分けた） |
 | [1642-host-skill-sync](1642-host-skill-sync/) | Host入口の通常更新・uninstallを隔離した利用先で確認した（24ケース成功） |
 | [1644-host-session-names](1644-host-session-names/) | `host-session`（開始名`自動: `、正常終了名`済: 自動: `）を追加した検証 |
 | [1644-host-session-root](1644-host-session-root/) | `host-session`の起動rootを主要checkoutにし、対象worktreeと分けた修正の検証 |
@@ -38,13 +40,22 @@
 | [1807-design-eval-browser](1807-design-eval-browser/) | 外部のデザインSkillはそのままの形では採用しない（ownerの判断） |
 | [1814-skill-invocation](1814-skill-invocation/) | `project-assets`で`CLAUDE.md`の案内文を採用する条件Iが、Skillの読込みの水準を満たした |
 | [1815-design-judgment](1815-design-judgment/) | デザイン判断の取込み候補は効果なしで、取り込まない |
-| [1817-skill-application](1817-skill-application/) | Skill本文の改善案を採用の候補と判定した（採否はowner） |
+| [1817-skill-application](1817-skill-application/) | Skill本文の改善案2つ（`asc`・`estimate-and-scope`）が採用の候補の水準を満たし、ownerが採用した（PR #1819でmerge、v0.5.110から配布） |
 | [1820-write-tools-read](1820-write-tools-read/) | ASCの本文が読まれるかを分けたのはフォルダで、toolと依頼文ではなかった（段階1） |
 | [1823-slim-always-read](1823-slim-always-read/) | 毎回読む規則を縮めた案は採用しない |
 | [1828-warranty-scope](1828-warranty-scope/) | `warranty-scope`と品質保証範囲の雛形を配布した |
 | [1829-estimate-warranty](1829-estimate-warranty/) | 保守の依頼の判定について、`estimate-and-scope`の提出版が2回とも水準を満たした |
 | [1835-design-eval-layers](1835-design-eval-layers/) | デザイン評価の方式F（FLR）・S（SSR）は、どちらも不採用 |
-| [1840-user-environment](1840-user-environment/) | 利用者の環境での測定は、R・Cとも固定した水準の一部を満たさなかった（後続は#1843〜#1846） |
+| [1840-user-environment](1840-user-environment/) | 利用者の環境での測定は、R・Cとも固定した水準の一部を満たさなかった（測定の仕組みの直しは#1845） |
 | [decision-ownership](decision-ownership/) | `decision-ownership`を取り込み、評価して配布した |
 | [engineering-judgment](engineering-judgment/) | `engineering-judgment`・`estimate-and-scope`を取り込み、評価して配布した |
 | [shared-harness](shared-harness/) | 評価記録ではなく、共通の測定の仕組み |
+
+`v05/evaluation/`の評価記録：
+
+| 記録 | 結論 |
+| --- | --- |
+| [repository-graph](../../v05/evaluation/repository-graph/) | #1614のリポジトリ派生グラフの評価。導入は保留（[ADR 0003](../../v05/ARCHITECTURE_DECISION_0003.md)） |
+| [graph-runtime](../../v05/evaluation/graph-runtime/) | #1648・#1737のグラフ型runtimeとAdaptive-lived Contextの評価（[ADR 0004](../../v05/ARCHITECTURE_DECISION_0004.md)） |
+| [AUTORESEARCH_1766_ASSESSMENT.md](../../v05/evaluation/AUTORESEARCH_1766_ASSESSMENT.md) | 改善案の固定評価による自動反復（autoresearch）は、現時点では実装不要 |
+| [scenario-review-results](../../v05/evaluation/scenario-review-results/) | 標準Reviewerへのシナリオ導出・反証の追加を採用した評価。検出率はbaselineと同じで、性能向上の主張ではない |
