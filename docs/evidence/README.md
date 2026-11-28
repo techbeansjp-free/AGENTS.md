@@ -2,7 +2,7 @@
 
 過去の評価・検証の記録と、その結論の1行である。各記録は記載のcommit・版に対するもので、現行仕様や現在の合格証明ではない（[文書の利用範囲](../README.md)）。結論の詳細と限界は各記録を読む。
 
-ADRに属する評価は`v05/evaluation/`にあり、末尾の表に並べる。
+`v05/evaluation/`にある評価は、末尾の表に並べる。
 
 | 記録 | 結論 |
 | --- | --- |
@@ -40,7 +40,7 @@ ADRに属する評価は`v05/evaluation/`にあり、末尾の表に並べる。
 | [1807-design-eval-browser](1807-design-eval-browser/) | 外部のデザインSkillはそのままの形では採用しない（ownerの判断） |
 | [1814-skill-invocation](1814-skill-invocation/) | `project-assets`で`CLAUDE.md`の案内文を採用する条件Iが、Skillの読込みの水準を満たした |
 | [1815-design-judgment](1815-design-judgment/) | デザイン判断の取込み候補は効果なしで、取り込まない |
-| [1817-skill-application](1817-skill-application/) | Skill本文の改善案2つ（`asc`・`estimate-and-scope`）が採用の候補の水準を満たし、ownerが採用した（PR #1819でmerge、v0.5.110から配布） |
+| [1817-skill-application](1817-skill-application/) | Skill本文の改善案2つ（`asc`・`estimate-and-scope`）が採用の候補の水準を満たし、ownerが採用した（[PR #1819](https://github.com/techbeansjp-free/AGENTS.md/pull/1819)でmerge、[v0.5.110](https://github.com/techbeansjp-free/AGENTS.md/releases/tag/v0.5.110)から配布） |
 | [1820-write-tools-read](1820-write-tools-read/) | ASCの本文が読まれるかを分けたのはフォルダで、toolと依頼文ではなかった（段階1） |
 | [1823-slim-always-read](1823-slim-always-read/) | 毎回読む規則を縮めた案は採用しない |
 | [1828-warranty-scope](1828-warranty-scope/) | `warranty-scope`と品質保証範囲の雛形を配布した |
@@ -56,6 +56,6 @@ ADRに属する評価は`v05/evaluation/`にあり、末尾の表に並べる。
 | 記録 | 結論 |
 | --- | --- |
 | [repository-graph](../../v05/evaluation/repository-graph/) | #1614のリポジトリ派生グラフの評価。導入は保留（[ADR 0003](../../v05/ARCHITECTURE_DECISION_0003.md)） |
-| [graph-runtime](../../v05/evaluation/graph-runtime/) | #1648・#1737のグラフ型runtimeとAdaptive-lived Contextの評価（[ADR 0004](../../v05/ARCHITECTURE_DECISION_0004.md)） |
+| [graph-runtime](../../v05/evaluation/graph-runtime/) | #1648・#1737のグラフ型runtime：ループの終了条件・明示的な状態は導入せず、判断点の宣言は保留。Adaptive-lived Context（adaptive rotation）も導入しない（[ADR 0004](../../v05/ARCHITECTURE_DECISION_0004.md)） |
 | [AUTORESEARCH_1766_ASSESSMENT.md](../../v05/evaluation/AUTORESEARCH_1766_ASSESSMENT.md) | 改善案の固定評価による自動反復（autoresearch）は、現時点では実装不要 |
 | [scenario-review-results](../../v05/evaluation/scenario-review-results/) | 標準Reviewerへのシナリオ導出・反証の追加を採用した評価。検出率はbaselineと同じで、性能向上の主張ではない |
