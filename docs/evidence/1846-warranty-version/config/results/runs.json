@@ -1,0 +1,875 @@
+[
+ {
+  "condition": "C",
+  "run": 1,
+  "case": "m-r1",
+  "kind": "maintenance",
+  "fixture": "MN",
+  "expect": "estimate-and-scope",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "estimate-and-scope"
+  ],
+  "readAttempts": 5,
+  "toolUses": 7,
+  "messages": 4,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.10468830000000001,
+  "turns": 8,
+  "durationMs": 24674,
+  "usage": {
+   "input": 8,
+   "output": 2902,
+   "cacheRead": 48723,
+   "cacheWrite": 17695
+  },
+  "inputTokens": 66426,
+  "ascFilesRead": 2,
+  "ascBytesRead": 13915,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "markerGroups": {
+   "R1-1-war": true,
+   "R1-1-version": true,
+   "R1-2": true
+  },
+  "markerDeductions": [],
+  "resultMissing": false,
+  "expectReads": {
+   "project-warranty": true
+  },
+  "expectReadsAll": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": true,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 2,
+  "case": "m-r1",
+  "kind": "maintenance",
+  "fixture": "MN",
+  "expect": "estimate-and-scope",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "estimate-and-scope"
+  ],
+  "readAttempts": 5,
+  "toolUses": 7,
+  "messages": 4,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1110584,
+  "turns": 8,
+  "durationMs": 28900,
+  "usage": {
+   "input": 8,
+   "output": 3477,
+   "cacheRead": 48724,
+   "cacheWrite": 17850
+  },
+  "inputTokens": 66582,
+  "ascFilesRead": 2,
+  "ascBytesRead": 13915,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "markerGroups": {
+   "R1-1-war": true,
+   "R1-1-version": true,
+   "R1-2": true
+  },
+  "markerDeductions": [],
+  "resultMissing": false,
+  "expectReads": {
+   "project-warranty": true
+  },
+  "expectReadsAll": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": true,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 3,
+  "case": "m-r1",
+  "kind": "maintenance",
+  "fixture": "MN",
+  "expect": "estimate-and-scope",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "estimate-and-scope"
+  ],
+  "readAttempts": 5,
+  "toolUses": 7,
+  "messages": 4,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1123219,
+  "turns": 8,
+  "durationMs": 31869,
+  "usage": {
+   "input": 8,
+   "output": 3584,
+   "cacheRead": 48859,
+   "cacheWrite": 17895
+  },
+  "inputTokens": 66762,
+  "ascFilesRead": 2,
+  "ascBytesRead": 13915,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": false,
+  "markerGroups": {
+   "R1-1-war": true,
+   "R1-1-version": true,
+   "R1-2": true
+  },
+  "markerDeductions": [
+   "free-before-check"
+  ],
+  "resultMissing": false,
+  "expectReads": {
+   "project-warranty": true
+  },
+  "expectReadsAll": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": false,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 1,
+  "case": "m-r2",
+  "kind": "maintenance",
+  "fixture": "MN",
+  "expect": "estimate-and-scope",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc",
+   "estimate-and-scope"
+  ],
+  "readAttempts": 7,
+  "toolUses": 8,
+  "messages": 3,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1545336,
+  "turns": 9,
+  "durationMs": 31245,
+  "usage": {
+   "input": 6,
+   "output": 3653,
+   "cacheRead": 41076,
+   "cacheWrite": 28471
+  },
+  "inputTokens": 69553,
+  "ascFilesRead": 3,
+  "ascBytesRead": 48163,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "markerGroups": {
+   "R2-1-war": true,
+   "R2-1-version": true,
+   "R2-2": true
+  },
+  "markerDeductions": [],
+  "resultMissing": false,
+  "expectReads": {
+   "project-warranty": true
+  },
+  "expectReadsAll": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": true,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 2,
+  "case": "m-r2",
+  "kind": "maintenance",
+  "fixture": "MN",
+  "expect": "estimate-and-scope",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc",
+   "estimate-and-scope"
+  ],
+  "readAttempts": 7,
+  "toolUses": 9,
+  "messages": 4,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1657159,
+  "turns": 10,
+  "durationMs": 32049,
+  "usage": {
+   "input": 8,
+   "output": 3759,
+   "cacheRead": 73779,
+   "cacheWrite": 30183
+  },
+  "inputTokens": 103970,
+  "ascFilesRead": 3,
+  "ascBytesRead": 48163,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "markerGroups": {
+   "R2-1-war": true,
+   "R2-1-version": true,
+   "R2-2": true
+  },
+  "markerDeductions": [],
+  "resultMissing": false,
+  "expectReads": {
+   "project-warranty": true
+  },
+  "expectReadsAll": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": true,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 3,
+  "case": "m-r2",
+  "kind": "maintenance",
+  "fixture": "MN",
+  "expect": "estimate-and-scope",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "asc",
+   "estimate-and-scope"
+  ],
+  "readAttempts": 7,
+  "toolUses": 9,
+  "messages": 4,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1681065,
+  "turns": 10,
+  "durationMs": 35194,
+  "usage": {
+   "input": 8,
+   "output": 3923,
+   "cacheRead": 73805,
+   "cacheWrite": 30370
+  },
+  "inputTokens": 104183,
+  "ascFilesRead": 3,
+  "ascBytesRead": 48163,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "markerGroups": {
+   "R2-1-war": true,
+   "R2-1-version": true,
+   "R2-2": true
+  },
+  "markerDeductions": [],
+  "resultMissing": false,
+  "expectReads": {
+   "project-warranty": true
+  },
+  "expectReadsAll": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": true,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 1,
+  "case": "m-r7",
+  "kind": "maintenance",
+  "fixture": "MN",
+  "expect": "estimate-and-scope",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "estimate-and-scope"
+  ],
+  "readAttempts": 5,
+  "toolUses": 7,
+  "messages": 4,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.10872530000000001,
+  "turns": 8,
+  "durationMs": 30785,
+  "usage": {
+   "input": 8,
+   "output": 3710,
+   "cacheRead": 48933,
+   "cacheWrite": 16679
+  },
+  "inputTokens": 65620,
+  "ascFilesRead": 2,
+  "ascBytesRead": 13915,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "markerGroups": {
+   "R7-1-war": true,
+   "R7-1-open": true,
+   "R7-2": true,
+   "R7-1-version": true
+  },
+  "markerDeductions": [],
+  "resultMissing": false,
+  "expectReads": {
+   "project-warranty": true
+  },
+  "expectReadsAll": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": true,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 2,
+  "case": "m-r7",
+  "kind": "maintenance",
+  "fixture": "MN",
+  "expect": "estimate-and-scope",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "estimate-and-scope",
+   "warranty-scope"
+  ],
+  "readAttempts": 5,
+  "toolUses": 7,
+  "messages": 4,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1228552,
+  "turns": 8,
+  "durationMs": 38211,
+  "usage": {
+   "input": 8,
+   "output": 4426,
+   "cacheRead": 48472,
+   "cacheWrite": 18433
+  },
+  "inputTokens": 66913,
+  "ascFilesRead": 3,
+  "ascBytesRead": 19272,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "markerGroups": {
+   "R7-1-war": true,
+   "R7-1-open": true,
+   "R7-2": true,
+   "R7-1-version": true
+  },
+  "markerDeductions": [],
+  "resultMissing": false,
+  "expectReads": {
+   "project-warranty": true
+  },
+  "expectReadsAll": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": true,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 3,
+  "case": "m-r7",
+  "kind": "maintenance",
+  "fixture": "MN",
+  "expect": "estimate-and-scope",
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [
+   "estimate-and-scope"
+  ],
+  "readAttempts": 4,
+  "toolUses": 6,
+  "messages": 4,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.1047429,
+  "turns": 7,
+  "durationMs": 31505,
+  "usage": {
+   "input": 8,
+   "output": 3444,
+   "cacheRead": 48589,
+   "cacheWrite": 16357
+  },
+  "inputTokens": 64954,
+  "ascFilesRead": 2,
+  "ascBytesRead": 13915,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "markerGroups": {
+   "R7-1-war": true,
+   "R7-1-open": true,
+   "R7-2": true,
+   "R7-1-version": true
+  },
+  "markerDeductions": [],
+  "resultMissing": false,
+  "expectReads": {
+   "project-warranty": true
+  },
+  "expectReadsAll": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "entryHop": false,
+  "bodyRead": true,
+  "reach": true,
+  "references": [],
+  "ascReferencesRead": [],
+  "referenceRead": true,
+  "applied": true,
+  "markersWithoutReference": false,
+  "misselect": false,
+  "unselected": false,
+  "secondaryRead": {},
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 1,
+  "case": "n-2",
+  "kind": "negative",
+  "fixture": "EC1",
+  "expect": null,
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [],
+  "readAttempts": 0,
+  "toolUses": 0,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0248266,
+  "turns": 1,
+  "durationMs": 1504,
+  "usage": {
+   "input": 2,
+   "output": 49,
+   "cacheRead": 4206,
+   "cacheWrite": 5978
+  },
+  "inputTokens": 10186,
+  "ascFilesRead": 0,
+  "ascBytesRead": 0,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "overapplication": false,
+  "negativeOk": true,
+  "otherSkillCalls": [],
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 2,
+  "case": "n-2",
+  "kind": "negative",
+  "fixture": "EC1",
+  "expect": null,
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [],
+  "readAttempts": 0,
+  "toolUses": 0,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0249966,
+  "turns": 1,
+  "durationMs": 2070,
+  "usage": {
+   "input": 2,
+   "output": 66,
+   "cacheRead": 4206,
+   "cacheWrite": 5978
+  },
+  "inputTokens": 10186,
+  "ascFilesRead": 0,
+  "ascBytesRead": 0,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "overapplication": false,
+  "negativeOk": true,
+  "otherSkillCalls": [],
+  "counted": true
+ },
+ {
+  "condition": "C",
+  "run": 3,
+  "case": "n-2",
+  "kind": "negative",
+  "fixture": "EC1",
+  "expect": null,
+  "skills": [],
+  "ascEntries": [],
+  "ascBodies": [],
+  "readAttempts": 0,
+  "toolUses": 0,
+  "messages": 1,
+  "model": "claude-sonnet-5-5",
+  "initTools": [
+   "Edit",
+   "Glob",
+   "Grep",
+   "Read",
+   "Skill",
+   "Write"
+  ],
+  "permissionMode": "acceptEdits",
+  "costUsd": 0.0249366,
+  "turns": 1,
+  "durationMs": 2184,
+  "usage": {
+   "input": 2,
+   "output": 60,
+   "cacheRead": 4206,
+   "cacheWrite": 5978
+  },
+  "inputTokens": 10186,
+  "ascFilesRead": 0,
+  "ascBytesRead": 0,
+  "stopped": null,
+  "markersApplicable": true,
+  "markerBaseExcludedLines": 0,
+  "markers": true,
+  "resultMissing": false,
+  "forbiddenReads": [],
+  "forbidReadsOk": true,
+  "forbiddenSkills": [],
+  "forbidSkillsOk": true,
+  "caseChecksOk": true,
+  "report": {
+   "reads": {
+    "context-json": false,
+    "money-rule": false
+   },
+   "answer": {
+    "start-or-bash": false
+   },
+   "writtenFiles": []
+  },
+  "overapplication": false,
+  "negativeOk": true,
+  "otherSkillCalls": [],
+  "counted": true
+ }
+]
