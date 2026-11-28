@@ -1,0 +1,3 @@
+{"ledgerId":"889bb6f5-f6ca-42ed-86a8-9911cf48833d","createdAt":"2026-11-28T03:20:52.265Z"}
+{"id":"5df0e6d6-3008-464a-988d-6f961a30fa1f","seq":0,"trial":"R-probe-1","reservedUsd":0.6,"at":"2026-11-28T03:22:08.474Z"}
+{"id":"5df0e6d6-3008-464a-988d-6f961a30fa1f","trial":"R-probe-1","costUsd":0.3472675,"exit":0,"traceSha256":"14a632e9617f37b4aa31a1f91a2d325eea5f086eb3410c9b2a29c7166269b3bc","metaSha256":"17417844d6b99551ff8566b37fe77035dc6663b1fa97b65ef8cbca61a35a30f9","at":"2026-11-28T03:24:37.456Z"}

@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。通常のASC実行時に読み込ませない。測定の仕組みは共通のもの（[../../shared-harness/](../../shared-harness/)）を使い、このdirectoryには設定だけを置く。
 
-**状態：固定済み（2026-11-28）。** 最初の固定の記録は`59dc321d9461147e6583b3ed8e011b8f18ad76c1`（[results/fixation.json](results/fixation.json)、設定と共通の仕組みの21file、新しい台帳）。probeの1回目が不合格で、測定はしていない。結果と原因は[../README.md](../README.md)。
+**状態：固定のやり直し（2026-11-28）。** 最初の固定（`59dc321d`、[results/fixation-1.json](results/fixation-1.json)、台帳`889bb6f5`）の下でprobeの1回目（R-probe-1）が不合格だった。原因の2つ（下の「probeの1回目の後の是正」）を直すために`run-trial.mjs`等を変えたので、新しい台帳で固定をやり直した（[results/fixation.json](results/fixation.json)。固定の記録のcommitは下の「固定のやり直し」）。結果と原因は[../README.md](../README.md)。
 
 ## 目的
 
@@ -18,7 +18,7 @@
 
 #1820の段階1の水準Xは、`--settings`の`allowRead`（`work/`）が同じ`--settings`の`denyRead`（runs root）を開け直さなかったため、`work/`を読めず不合格だった（Claude Code 2.1.323。同じ版の本体の文にも「--settingsが読取りを禁じたpathを開け直すallowReadは無視する」とある）。共通の仕組みに、`allowRead`を使わない配置を足した（`run-trial.mjs`の`confinedSettings`。conditions.jsonの`toolLevels.X.sandbox`）。
 
-- 読取りの禁止：`/Users`（実HOMEとrepository、`nodenv`のnode）、`/private/tmp`・`/private/var/folders`・`/Volumes`（他のsessionの一時file等）、fixture、台帳のdirectory、runs rootの他の項目（起動時に列挙。試行は台帳のlockの下で1つずつ動く）、runs rootの親と祖父の他の項目（`$ROOT/tmp`・`$ROOT/probe-R.json`・`/private/var/tmp`の他のIssueの評価用directory等。起動時に列挙。深さ3未満のdirectoryは列挙しない。レビューL1）、試行の`settings.json`・`debug.log`・`trace.jsonl`・`stderr.txt`・`meta.json`。どれも`work/`と試行の`tmp/`の祖先ではない（祖先なら`run-trial.mjs`が予約の前に拒否する）。
+- 読取りの禁止：`/Users`（実HOMEとrepository、`nodenv`のnode）、`/private/tmp`・`/private/var/folders`・`/Volumes`（他のsessionの一時file等）、fixture、台帳のdirectory、runs rootの他の項目（起動時に列挙。試行は台帳のlockの下で1つずつ動く）、runs rootの親と祖父の他の項目（`$ROOT/tmp`・`$ROOT/probe-R-2.json`・`/private/var/tmp`の他のIssueの評価用directory等。起動時に列挙。深さ3未満のdirectoryは列挙しない。レビューL1）、試行の`settings.json`・`debug.log`・`trace.jsonl`・`stderr.txt`・`meta.json`。どれも`work/`と試行の`tmp/`の祖先ではない（祖先なら`run-trial.mjs`が予約の前に拒否する）。
 - 書込みの禁止：上の読取りの禁止のすべて（`/Users`と`denyReadRoots`を含む。2回目のレビューM-a）に加え、試行の`home/`・`config/`・`bin/`。runs rootそのものと`/private/var/tmp`は`work/`の祖先なので禁止できず、`work/`と`tmp/`の外への書込みが拒否されるかはClaude Codeのsandboxの書込みの許可（作業directoryと`CLAUDE_CODE_TMPDIR`。`CLAUDE_CODE_TMPDIR`を試行の`tmp/`にする）に任される。本体が既定で足す許可があるかは、probeで`/private/tmp/claude-<uid>/`・runs root・`/private/var/tmp/`への`touch`を試して確かめる（変数で組み立てたpathで、sandboxの拒否を要る）。
 - Bashの`PATH`：試行の`bin/`（harnessのnodeの写し。実HOMEの下のnodeはsandboxで動かないため）と`/Library/Developer/CommandLineTools/usr/bin`・`/usr/bin`・`/bin`・`/usr/sbin`・`/sbin`。`/usr/bin/git`はxcrunの一時fileを`/private/var/folders`に作ろうとして警告を出すので、Command Line Toolsのgitを先に置く。
 - runs root・fixture・台帳は`/private/var/tmp/asc-eval-1844/`の下に置く（`/private/tmp`は読取りの禁止の中なので使えない）。
@@ -49,13 +49,25 @@
 - 15試行（変更12、該当しない3）とprobe 1回。上限10 USD、停止の線9 USD。1試行の予算（`--max-budget-usd`と台帳の予約）0.8 USD、probe 0.6 USD。
 - 見込み：変更0.28、該当しない0.04、probe 0.38 USD（#1840の平均：変更0.11〜0.21、該当しない0.025を、`start`の実行・出力とBashの分だけ増やした。probeは42操作）。計 **約3.9 USD**（計画の単価で5.5 USD）、入力（入力＋cache）約292万トークン、出力約5.5万トークン。probeのやり直しと置き換えがあっても停止の線の内に収まる見込み。
 
+## probeの1回目の後の是正（2026-11-28）
+
+原因と観察は[../README.md](../README.md)の「probeの1回目」。判定の規則・水準・採点（`score.mjs`・`judge.mjs`・decision-criteria.md・cases.json）は変えていない。
+
+1. **Bashの作業fileの場所**：Claude Code 2.1.323は、`<CLAUDE_CODE_TMPDIR>/claude-<uid>`が44 byteを超えると、子processの`TMPDIR`とshellのcwdのfileを`/tmp/claude-<uid>`（読取りと書込みの禁止の中）に移す。長さは環境変数の文字列のまま数える（linkを解かない）。
+   - runs rootを`/var/tmp/r1844`にする（最長の`R-u-bill-1-99`で43 byte）。`/private/var/tmp`の下では、名前が無くても最長の試行で50 byteになり、収まらない。
+   - `run-trial.mjs`：試行の`tmp/`のper-uidのpathが44 byteを超える試行を、予約の前に拒否する（`tmpDirProblem`。`--run`なしの計画の表示でも）。`dry-run.mjs`：`--runs-root`の、probe・予定の15試行・rep 9までの置き換えのすべてを確かめる（`runsRootTmpDir`。confinedの水準では`--runs-root`が要る）。
+   - `/var`は`/private/var`へのlinkなので、`run-trial.mjs`の`realOr`を、存在する一番深い祖先の実pathに残りを足す形にした（以前は、runs rootがあり試行のdirectoryがまだ無いと、runs rootだけ実pathになり、`confinedSettings`が「<runs-root>/<trial>/workでない」と拒否した）。sandboxの禁止の一覧は従来どおり実path（`/private/var/tmp/…`）で書かれる。
+2. **`ps`を許可の層が止める**：`processList`の操作に`permissionRefusalOk`を付け、`probe-check.mjs`は、Claude Codeの許可の確認による拒否（errorの結果で、「requires approval」「has been denied」「haven't granted」の文があり、sandboxの拒否の文が無く、0でない数の行が無いもの）を、一覧を取れなかったとして合格に数える（`permissionRefused`）。拒否の主体は`info.permissionRefusalOk`に記録する。ほかの操作には適用しない。
+3. 固定のやり直し：`run-trial.mjs`は`refix`で変えられないので（`refix`は`probe-check.mjs`だけ）、新しい台帳で固定をやり直した。最初の台帳を[results/ledger-1.jsonl](results/ledger-1.jsonl)に公開し、`conditions.json`の`budget.priorSpend`（0.3472675 USD）で費用を引き継ぐ（`capUsd` 9.65、新しい台帳の停止の線8.65 USD、合計で9 USD）。R-probe-1は`priorProbes`で予約済みと数える（`order.mjs`）ので、残りのやり直しはR-probe-2の1回だけである。
+
 ## 手順（進行役が行う。probeは#1846のprobeが終わってから）
 
 ```text
 H=docs/evidence/shared-harness
 EV=docs/evidence/1844-rule-read-bash/config
 ROOT=/private/var/tmp/asc-eval-1844
-LEDGER=$ROOT/ledger/ledger-1844.jsonl
+RUNS=/var/tmp/r1844          # probeの1回目の後：<RUNS>/<試行>/tmp/claude-<uid>が44 byte以内（run-trial.mjs tmpDirProblem）
+LEDGER=$ROOT/ledger/ledger-1844-2.jsonl   # 固定のやり直しの新しい台帳（最初の台帳はledger-1844.jsonl）
 TGZ=<scratch>/rel1844-128/agent-skill-chain-0.5.128.tgz   # gh release download v0.5.128 で取得し、sha256を照合する
 # 1. 固定（台帳を作り、固定の記録をcommitし、最初の固定のcommitをこのREADMEに書いてcommitする）
 node $H/fixation.mjs init $EV/results/fixation.json --ledger $LEDGER --config $EV
@@ -63,17 +75,17 @@ node $H/fixation.mjs init $EV/results/fixation.json --ledger $LEDGER --config $E
 node $H/make-fixture.mjs R U $TGZ 2fd9dcef88d997eb236a4b34a54babb9da3ccabcabd8629a0ba4624f3f74b922 $ROOT/fixtures/fixture-R-U $ROOT/tmp --config $EV
 # 3. 隔離の確認（目印fileは確認の後に消す）。harnessはsandboxの外のshellで実行する
 node $H/markers.mjs create <repo-root> --config $EV
-CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/asc-eval/claude-oauth-token)" ASC_EVAL_ALLOW_PAID=1 node $H/run-trial.mjs $ROOT/runs R probe 1 --fixture $ROOT/fixtures/fixture-R-U --ledger $LEDGER --home-marker <home marker> --repo-marker <repo marker> --run --config $EV
-node $H/probe-check.mjs $ROOT/runs/R-probe-1 R <home marker> <repo marker> <repo-root> --config $EV > $ROOT/probe-R.json
-node $H/probe-check.mjs compare $ROOT/probe-R.json --out $ROOT/runs/probe-compare.json --config $EV
-node $H/probe-check.mjs publish $EV/results/probes $ROOT/probe-R.json $ROOT/runs/probe-compare.json --home-marker <home marker> --repo-marker <repo marker> --repo-root <repo-root> --runs-root $ROOT/runs --config $EV
+CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/asc-eval/claude-oauth-token)" ASC_EVAL_ALLOW_PAID=1 node $H/run-trial.mjs $RUNS R probe 2 --fixture $ROOT/fixtures/fixture-R-U --ledger $LEDGER --home-marker <home marker> --repo-marker <repo marker> --run --config $EV
+node $H/probe-check.mjs $RUNS/R-probe-2 R <home marker> <repo marker> <repo-root> --config $EV > $ROOT/probe-R-2.json
+node $H/probe-check.mjs compare $ROOT/probe-R-2.json --out $RUNS/probe-compare.json --config $EV
+node $H/probe-check.mjs publish $EV/results/probes $ROOT/probe-R-2.json $RUNS/probe-compare.json --home-marker <home marker> --repo-marker <repo marker> --repo-root <repo-root> --runs-root $RUNS --config $EV
 node $H/markers.mjs remove <repo-root> --config $EV
 # 4. 測定（probeが合格した場合だけ）
-CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/asc-eval/claude-oauth-token)" ASC_EVAL_ALLOW_PAID=1 node $H/run-all.mjs planned $ROOT/runs --fixtures $ROOT/fixtures --ledger $LEDGER --run --config $EV
-CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/asc-eval/claude-oauth-token)" ASC_EVAL_ALLOW_PAID=1 node $H/run-all.mjs replacements $ROOT/runs --fixtures $ROOT/fixtures --ledger $LEDGER --run --config $EV
+CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/asc-eval/claude-oauth-token)" ASC_EVAL_ALLOW_PAID=1 node $H/run-all.mjs planned $RUNS --fixtures $ROOT/fixtures --ledger $LEDGER --run --config $EV
+CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/asc-eval/claude-oauth-token)" ASC_EVAL_ALLOW_PAID=1 node $H/run-all.mjs replacements $RUNS --fixtures $ROOT/fixtures --ledger $LEDGER --run --config $EV
 # 5. 公開する記録と判定
-node $H/collect.mjs $ROOT/runs $EV/results --ledger $LEDGER --config $EV
-node $H/judge.mjs $EV/results --runs-root $ROOT/runs --ledger $LEDGER --out $EV/results/judge.json --config $EV
+node $H/collect.mjs $RUNS $EV/results --ledger $LEDGER --config $EV
+node $H/judge.mjs $EV/results --runs-root $RUNS --ledger $LEDGER --out $EV/results/judge.json --config $EV
 ```
 
 - `<repo-root>`は、`run-trial.mjs`と照合が使うrepository（このworktree）。#1840の1回目のprobeは本体のcheckoutを渡して不合格になった。

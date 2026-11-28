@@ -48,7 +48,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
-import {parseTrace, ascSkillsOf} from './score.mjs';
+import {parseTrace} from './score.mjs';
 import {loadRawConditions, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {pointerHeadI} from './condition-i.mjs';
 import {INSIDE_FILE, probeSteps} from './run-trial.mjs';
@@ -314,6 +314,16 @@ export function refusalKind(r) {
   return r.is_error === true || /exit code [1-9]/i.test(text) || /^\s*"?0{3}/.test(text) ? 'other' : 'none';
 }
 
+// #1844 probe 1: a step marked permissionRefusalOk (run-trial.mjs processList) also passes when the permission check of
+// Claude Code refused the call (the command was not run, so the list was not obtained): an error result with the text of
+// that refusal (not the sandbox's) and no line that is a nonzero count.
+export function permissionRefused(r) {
+  if (!r || r.is_error !== true || refusalKind(r) !== 'permission') return false;
+  const text = resultText(r);
+  return /requires approval|has been denied|haven't granted/i.test(text) && !/^\s*[1-9][0-9]*\s*$/m.test(text);
+}
+const okOrPermissionRefused = (st, r) => Boolean(r) && (r.is_error !== true || (st.permissionRefusalOk === true && permissionRefused(r)));
+
 const firstLine = (x) => String(x ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
 
 // Absolute paths named by the probe steps (a debug line that names only these is the probe's own line).
@@ -336,7 +346,7 @@ export function probeStepChecks(i, t, levelId) {
   add('probeStepResults', ids((st) => attempts[st.id].some((u) => !resultOf(u))).length === 0, {withoutResult: ids((st) => attempts[st.id].some((u) => !resultOf(u)))});
   const notRefused = ids((st) => st.expect === 'refused' && (!attempts[st.id].length || !attempts[st.id].every((u) => refusalEvidence(st, resultOf(u)))));
   add('probeStepsRefused', notRefused.length === 0, {withoutRefusalEvidence: notRefused});
-  const notOk = ids((st) => st.expect === 'ok' && !attempts[st.id].some((u) => resultOf(u) && resultOf(u).is_error !== true));
+  const notOk = ids((st) => st.expect === 'ok' && !attempts[st.id].some((u) => okOrPermissionRefused(st, resultOf(u))));
   add('probeStepsSucceeded', notOk.length === 0, {failed: notOk});
   if (levelId === 'W' || levelId === 'X') add('sentinelsAbsent', i.sentinelExists && !i.sentinelExists.trial && !i.sentinelExists.repo, i.sentinelExists ?? 'not checked');
   if (levelId !== 'X') return {checks, info};
@@ -369,7 +379,10 @@ export function probeStepChecks(i, t, levelId) {
   const withPattern = steps.filter((st) => st.outputPattern);
   if (withPattern.length) {
     info.stepOutputs = Object.fromEntries(withPattern.map((st) => [st.id, attempts[st.id].map((u) => (resultOf(u) ? firstLine(resultText(resultOf(u))).slice(0, 40) : null))]));
-    const off = withPattern.filter((st) => !attempts[st.id].length || !attempts[st.id].every((u) => resultOf(u) && resultOf(u).is_error !== true && new RegExp(st.outputPattern).test(firstLine(resultText(resultOf(u)))))).map((st) => st.id);
+    const off = withPattern.filter((st) => !attempts[st.id].length || !attempts[st.id].every((u) => { const r = resultOf(u); return (r && r.is_error !== true && new RegExp(st.outputPattern).test(firstLine(resultText(r)))) || (st.permissionRefusalOk === true && permissionRefused(r)); })).map((st) => st.id);
+    // #1844 probe 1: who refused each attempt of a permissionRefusalOk step (none when it ran).
+    const pr = withPattern.filter((st) => st.permissionRefusalOk === true);
+    if (pr.length) info.permissionRefusalOk = Object.fromEntries(pr.map((st) => [st.id, attempts[st.id].map((u) => (resultOf(u) && resultOf(u).is_error === true ? refusalKind(resultOf(u)) : 'none'))]));
     add('probeStepOutputs', off.length === 0, {unexpected: off});
   }
   // #1844 review M-a: no file the probe tried to write outside the trial exists after it (probe context outsideWrites).
