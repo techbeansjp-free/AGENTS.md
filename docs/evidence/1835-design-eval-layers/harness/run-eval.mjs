@@ -361,14 +361,25 @@ export function acquireLocks(paths, {pid = process.pid} = {}) {
   const held = [];
   const token = `${pid}-${process.hrtime.bigint()}-${Math.random().toString(36).slice(2)}`;
   const release = () => {
-    for (const p of held.splice(0).reverse()) withMutex(p, () => {
-      const f = `${p}.asc-lock.json`, st = readJson(f);
-      st.holders = st.holders.filter((h) => h.token !== token);
-      if (st.holders.length) writeJson(f, st); else { fs.chmodSync(p, st.mode); fs.rmSync(f); }
-    });
+    const errors = [];
+    for (const p of held.splice(0).reverse()) {
+      try {
+        withMutex(p, () => {
+          const f = `${p}.asc-lock.json`, st = readJson(f);
+          st.holders = st.holders.filter((h) => h.token !== token);
+          if (!st.holders.length) { fs.chmodSync(p, st.mode); fs.rmSync(f); return; }
+          writeJson(f, st);
+          if (!st.holders.some((h) => alive(h.pid))) {
+            console.error(`--lock: ${p} stays mode 000: ${f} lists only runs that are no longer alive (pids ${st.holders.map((h) => h.pid).join(',')}). ` +
+              `Restore the mode (recorded: ${st.mode.toString(8)}) by hand and remove ${f}`);
+          }
+        });
+      } catch (e) { errors.push(e); }
+    }
+    if (errors.length) throw errors.length === 1 ? errors[0] : new AggregateError(errors, `--lock: ${errors.length} paths were not released: ${errors.map((e) => e.message).join('; ')}`);
   };
   try {
-    for (const p of paths) {
+    for (const p of [...new Set(paths)]) {
       withMutex(p, () => {
         const f = `${p}.asc-lock.json`;
         const st = fs.existsSync(f) ? readJson(f) : {mode: fs.statSync(p).mode & 0o777, holders: []};
@@ -382,7 +393,7 @@ export function acquireLocks(paths, {pid = process.pid} = {}) {
       });
       held.push(p);
     }
-  } catch (e) { release(); throw e; }
+  } catch (e) { try { release(); } catch (r) { e.message += ` (and releasing what was taken failed: ${r.message})`; } throw e; }
   return release;
 }
 

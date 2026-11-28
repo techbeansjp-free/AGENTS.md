@@ -1,12 +1,12 @@
 // node --test docs/evidence/1835-design-eval-layers/harness/
 // Tests of the layer-2/3 evaluation tools on synthetic screenshots (no model, no network, no Docker).
-import test from 'node:test';
+import test, {after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import {spawnSync} from 'node:child_process';
+import {spawnSync, spawn} from 'node:child_process';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS, pngChunks, PNG_KEEP, extractJson, readJson, parseScreen} from './eval-common.mjs';
 import {buildPackets} from './make-packets.mjs';
 import {rate, combine} from './ssr.mjs';
@@ -417,7 +417,18 @@ test('run-layer1: failed commands recorded in failed.txt stop the run (also with
 });
 
 // #1860: overlapping runs keep --lock paths closed until the last one ends
-const lockDir = () => { const d = path.join(tmp('asc1860-'), 'key'); fs.mkdirSync(d); fs.chmodSync(d, 0o750); return d; };
+const lockDirs = [];
+after(() => { for (const d of lockDirs) { try { fs.chmodSync(d, 0o750); } catch {} } });
+const lockDir = () => { const d = path.join(tmp('asc1860-'), 'key'); fs.mkdirSync(d); fs.chmodSync(d, 0o750); lockDirs.push(d); return d; };
+// a separate process that takes the lock, says "locked", and releases it when its stdin ends
+function holderProc(d) {
+  const src = `import {acquireLocks} from ${JSON.stringify(new URL('./run-eval.mjs', import.meta.url).href)};
+const r = acquireLocks([${JSON.stringify(d)}]); console.log('locked'); process.stdin.resume(); process.stdin.on('end', () => { r(); process.exit(0); });`;
+  const c = spawn(process.execPath, ['--input-type=module', '-e', src], {stdio: ['pipe', 'pipe', 'inherit']});
+  const ready = new Promise((res, rej) => { c.stdout.on('data', (b) => { if (String(b).includes('locked')) res(); }); c.on('exit', (code) => rej(new Error(`holder exited ${code}`))); });
+  const exited = new Promise((res) => c.on('exit', res));
+  return {ready, release: () => { c.stdin.end(); return exited; }};
+}
 const modeOf = (d) => fs.statSync(d).mode & 0o777;
 const leftovers = (d) => fs.readdirSync(path.dirname(d)).filter((n) => n !== 'key');
 
@@ -472,9 +483,10 @@ test('--lock: a state file left by dead runs stops the run and keeps the recorde
   fs.rmSync(`${d}.asc-lock.json`); fs.chmodSync(d, 0o750);
 });
 
-test('run --dry-run --lock: a CLI run that ends (normally or with an error) while another holder runs leaves the path closed', () => {
+test('run --dry-run --lock: a CLI run that ends (normally or with an error) while another run holds the lock leaves the path closed', async () => {
   const d = lockDir();
-  const holder = acquireLocks([d]);
+  const h = holderProc(d); await h.ready;
+  const holder = () => h.release();
   const cli = (evaluator) => spawnSync(process.execPath, [path.join(here, 'run-eval.mjs'), 'run', '--packets', pkRoot, '--runs', tmp('asc1860-r-'),
     '--evaluator', evaluator, '--methods', 'D', '--dry-run', '--cap-usd', '1000', '--lock', d], {encoding: 'utf8'});
   const ok = cli('fable');
@@ -483,11 +495,45 @@ test('run --dry-run --lock: a CLI run that ends (normally or with an error) whil
   const bad = cli('nobody');
   assert.equal(bad.status, 3);
   assert.equal(modeOf(d), 0, 'a CLI run that failed did not open the path');
-  holder();
+  assert.equal(await holder(), 0);
   assert.equal(modeOf(d), 0o750);
   assert.deepEqual(leftovers(d), []);
   const alone = cli('fable');
   assert.equal(alone.status, 0, alone.stderr);
   assert.equal(modeOf(d), 0o750, 'a run alone restores the mode as before');
+  assert.deepEqual(leftovers(d), []);
+});
+
+test('--lock: holders in separate processes keep mode 000 until the last one ends, in either end order and with three', async () => {
+  for (const order of [[0, 1], [1, 0], [2, 0, 1]]) {
+    const d = lockDir();
+    const hs = [];
+    for (const _ of order) { const h = holderProc(d); await h.ready; hs.push(h); assert.equal(modeOf(d), 0, 'closed right after each start'); }
+    for (const [k, i] of order.entries()) {
+      assert.equal(await hs[i].release(), 0);
+      assert.equal(modeOf(d), k === order.length - 1 ? 0o750 : 0, `order ${order} after ${k + 1} ends`);
+    }
+    assert.deepEqual(leftovers(d), []);
+  }
+});
+
+test('--lock: processes that start at the same time all get the lock (the mutex is contended) and the last end restores it', async () => {
+  const d = lockDir();
+  const hs = Array.from({length: 6}, () => holderProc(d));
+  await Promise.all(hs.map((h) => h.ready));
+  assert.equal(modeOf(d), 0);
+  assert.equal(JSON.parse(fs.readFileSync(`${d}.asc-lock.json`, 'utf8')).holders.length, 6);
+  for (const h of hs.slice(0, 5)) { assert.equal(await h.release(), 0); assert.equal(modeOf(d), 0); }
+  assert.equal(await hs[5].release(), 0);
+  assert.equal(modeOf(d), 0o750);
+  assert.deepEqual(leftovers(d), []);
+});
+
+test('--lock: the same path twice in one run is taken once and released cleanly', () => {
+  const d = lockDir();
+  const r = acquireLocks([d, d]);
+  assert.equal(JSON.parse(fs.readFileSync(`${d}.asc-lock.json`, 'utf8')).holders.length, 1);
+  r();
+  assert.equal(modeOf(d), 0o750);
   assert.deepEqual(leftovers(d), []);
 });
