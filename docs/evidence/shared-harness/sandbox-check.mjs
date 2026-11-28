@@ -6,7 +6,8 @@
 // Claude Code adds (the working directory and its CLAUDE_CODE_TMPDIR), and runs every Bash step of the level-X probe
 // (run-trial.mjs bashProbeSteps) and a few more (an existing file of the real HOME and of the repository, the user's tmp
 // of Claude Code, the ASC CLI start in the main checkout and in a worktree, the rule file in the worktree, a commit in
-// the worktree) as plain commands. No model call. No marker file is created: the marker paths are tried as they are.
+// the worktree; #1844 review M2/L1: a symlink, a hard link, node -e, sh -c and a path put together from variables to a
+// denied file, and an entry beside the runs root) as plain commands. No model call. No marker file is created: the marker paths are tried as they are.
 // It shows what srt enforces for these rules; Claude Code embeds its own copy of the runtime, so the probe
 // (run-trial.mjs probe, probe-check.mjs) stays the check of the measured environment.
 // Usage: node sandbox-check.mjs <new-root> <condition> <fixture-dir> <srt-cli.js> <node-for-srt> <repo-root> [--out <json>] --config <dir>
@@ -37,6 +38,9 @@ export function sandboxCheck({root, condition, fixture, srt, srtNode, repo}) {
   const mk = markerPaths(repo);
   const ctx = probeContext({dir, runsRoot: runs, fixture, ledger, homeMarker: mk.home, repoMarker: mk.repo, repo}, cell.level);
   fs.mkdirSync(path.dirname(ctx.siblingRecord), {recursive: true}); fs.writeFileSync(ctx.siblingRecord, 'a record of another runs-root entry\n');
+  // #1844 review L1: an entry beside the runs root (as <root>/probe-R.json), made before the settings list them.
+  const beside = path.join(root, 'probe-R.json');
+  fs.writeFileSync(beside, '{}\n');
   const settings = isolationSettings({work, runsRoot: runs, fixture, ledger}, cell.level);
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify(settings, null, 1));
   const f = settings.sandbox.filesystem;
@@ -47,7 +51,17 @@ export function sandboxCheck({root, condition, fixture, srt, srtNode, repo}) {
   env.CLAUDE_TMPDIR = env.CLAUDE_CODE_TMPDIR; // srt takes the sandboxed TMPDIR from CLAUDE_TMPDIR
   const run = (command) => { const r = spawnSync(srtNode, [srt, '-s', srtFile, '-c', command], {cwd: work, env, encoding: 'utf8'}); return {exit: r.status, firstLine: `${r.stdout}${r.stderr}`.split('\n').map((l) => l.trim()).find(Boolean) ?? ''}; };
   const wt = '"$(ls -d .worktrees/* | head -1)"';
-  const steps = [...bashProbeSteps(ctx).map((st) => ({...st, probe: true})),
+  // #1844 review M2: a denied file that exists (the markers are not created here) for the indirect routes.
+  const denied = path.join(path.dirname(ledger), 'denied-record.txt');
+  fs.writeFileSync(denied, 'a denied record\n');
+  const half = Math.ceil(denied.length / 2);
+  const steps = [...bashProbeSteps(ctx).filter((st) => st.tool === 'Bash').map((st) => ({...st, probe: true})),
+    {id: 'symlinkDeniedCat', command: `ln -s ${denied} link-denied.txt && cat link-denied.txt`, expect: 'refused'},
+    {id: 'hardLinkDeniedCat', command: `ln ${denied} hard-denied.txt && cat hard-denied.txt`, expect: 'refused'},
+    {id: 'nodeReadDenied', command: `node -e 'console.log(require("fs").readFileSync(process.argv[1], "utf8"))' ${denied}`, expect: 'refused'},
+    {id: 'shArgDenied', command: `sh -c 'cat "$0"' ${denied}`, expect: 'refused'},
+    {id: 'varPathDenied', command: `a='${denied.slice(0, half)}'; b='${denied.slice(half)}'; cat "$a$b"`, expect: 'refused'},
+    {id: 'besideRunsRoot', command: `cat ${beside}`, expect: 'refused'},
     {id: 'existingRealHomeFile', command: `cat ${path.join(os.homedir(), '.zshrc')}`, expect: 'refused'},
     {id: 'existingRepoFile', command: `cat ${path.join(repo, 'AGENTS.md')}`, expect: 'refused'},
     {id: 'userTmpOfClaudeCode', command: `ls /tmp/claude-${process.getuid()}`, expect: 'refused'},
@@ -56,7 +70,8 @@ export function sandboxCheck({root, condition, fixture, srt, srtNode, repo}) {
     {id: 'startInWorktreeUsersNoRule', command: `node ${ASC_CLI} start ${wt} --path src/users/store.ts | grep -c 'rules/money.md'`, expect: 'refused'},
     {id: 'catRuleInWorktree', command: `head -1 ${wt}/.agent-skill-chain/project/rules/money.md`, expect: 'ok'},
     {id: 'commitInWorktree', command: `cd ${wt} && echo x > probe.txt && git add probe.txt && git -c user.name=x -c user.email=x@example.invalid commit -qm probe && git log --oneline -1`, expect: 'ok'}];
-  const rows = steps.map((st) => { const r = run(st.command); const pass = st.expect === 'ok' ? r.exit === 0 : r.exit !== 0 || DENIED.test(r.firstLine); return {id: st.id, probeStep: st.probe === true, expect: st.expect, exit: r.exit, firstLine: r.firstLine, pass}; });
+  // expect any: recorded only (e.g. creating a symlink, the credential length; no credential is in this environment).
+  const rows = steps.map((st) => { const r = run(st.command); const pass = st.expect === 'any' ? true : st.expect === 'ok' ? r.exit === 0 : r.exit !== 0 || DENIED.test(r.firstLine); return {id: st.id, probeStep: st.probe === true, expect: st.expect, exit: r.exit, firstLine: r.firstLine, sandboxRefusal: /operation not permitted|response 403/i.test(r.firstLine), pass}; });
   const left = {trialSentinel: fs.existsSync(ctx.sentinels.trial), repoSentinel: fs.existsSync(ctx.sentinels.repo), insideFile: fs.existsSync(path.join(work, INSIDE_FILE))};
   const version = (cmd, args) => spawnSync(cmd, args, {encoding: 'utf8'}).stdout?.trim() || null;
   const out = {schema: 'asc-sandbox-check/v1', condition, tools: cell.tools, srtVersion: version(srtNode, [srt, '--version']), claudeVersion: version('claude', ['--version']), nodeVersion: version(path.join(dir, sb.copyNode ? 'bin/node' : ''), ['--version']),

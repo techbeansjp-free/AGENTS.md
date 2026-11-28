@@ -100,6 +100,8 @@ export function workChanges(work, {base = null, worktrees = false} = {}) {
       for (const [k, v] of Object.entries(workChanges(f, {base, worktrees}))) out[path.posix.join(rel.replace(/\/$/, ''), k)] = v;
       return;
     }
+    // #1844 review L2: with worktrees, the .git directory of a nested repository is one entry, not its objects file by file.
+    if (st?.isDirectory() && worktrees && path.posix.basename(rel.replace(/\/$/, '')) === '.git') { out[rel.replace(/\/$/, '')] = 'git-directory'; return; }
     if (st?.isDirectory()) { for (const e of fs.readdirSync(f)) add(path.posix.join(rel, e)); return; }
     out[rel.replace(/\/$/, '')] = st?.isFile() ? sha(fs.readFileSync(f)) : null;
   };
@@ -113,6 +115,29 @@ export function workChanges(work, {base = null, worktrees = false} = {}) {
     }
   }
   return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+// #1844 review L2: the commits a trial made that neither HEAD nor a present linked worktree reaches (a worktree removed
+// after its commit, a branch not checked out, a stash; from every ref and reflog, git rev-list --all --reflog), and the
+// files they change. workChanges does not see them; run-trial.mjs records them (meta.json unreached) and score.mjs counts
+// such a file under a writes pathPattern as written but not checkable. Not seen: a commit whose branch was deleted after
+// its worktree was removed (no ref and no reflog left).
+export function unreachedChanges(work, base) {
+  const g = (args) => spawnSync('git', args, {cwd: work, env: gitEnv(work), encoding: 'utf8', maxBuffer: 1 << 28});
+  const wl = g(['worktree', 'list', '--porcelain']);
+  if (wl.status !== 0) throw new Error(`git worktree list failed in ${work}: ${wl.stderr}`);
+  // The HEAD of each worktree whose directory is still there (a removed worktree may still be listed as prunable).
+  const heads = [...new Set(wl.stdout.split('\n\n').map((blk) => ({p: /^worktree (.+)$/m.exec(blk)?.[1], h: /^HEAD (\S+)$/m.exec(blk)?.[1]})).filter((x) => x.p && x.h && fs.existsSync(x.p)).map((x) => x.h))];
+  const r = g(['rev-list', '--all', '--reflog', '--not', base, ...heads]);
+  if (r.status !== 0) throw new Error(`git rev-list failed in ${work}: ${r.stderr}`);
+  const commits = r.stdout.split('\n').filter(Boolean).sort();
+  const files = new Set();
+  for (const c of commits) {
+    const d = g(['diff-tree', '-r', '-m', '--root', '--no-commit-id', '--name-only', '-z', c]);
+    if (d.status !== 0) throw new Error(`git diff-tree failed in ${work}: ${d.stderr}`);
+    for (const f of d.stdout.split('\0').filter(Boolean)) files.add(f);
+  }
+  return {commits, files: [...files].sort()};
 }
 
 // #1840 re-review High: the files of a sample project at its HEAD (the fixture as made, before the trial; the trial has

@@ -22,7 +22,7 @@ import {applyCondition, loadConditions} from './apply-condition.mjs';
 import {assertPlacement} from './guard.mjs';
 import * as ledgerOps from './ledger.mjs';
 import {differences, lastRecord, refixAfterMeasurement} from './fixation.mjs';
-import {pinned, gitEnv, releasePlaceholders, workChanges} from './make-fixture.mjs';
+import {pinned, gitEnv, releasePlaceholders, workChanges, unreachedChanges} from './make-fixture.mjs';
 import {orderRefusal, probeCompareProblems} from './order.mjs';
 import {approvalProblems, markerTag} from './markers.mjs';
 import {REPO_ROOT, configDir, loadSpec} from './config.mjs';
@@ -63,6 +63,31 @@ export function priorSpendProblems(budget = BUDGET, root = configDir()) {
   if (Math.abs(s - budget.priorSpend.spentUsd) > 1e-9) p.push(`the prior-stage total ${s} differs from conditions.json priorSpend.spentUsd ${budget.priorSpend.spentUsd}`);
   if (budget.capUsd > Math.floor((budget.ownerCapUsd - s) * 100) / 100 + 1e-9) p.push(`the cap ${budget.capUsd} exceeds the owner cap ${budget.ownerCapUsd} minus the prior spend ${s}`);
   return p;
+}
+
+// #1844 review M3: Bash has the credential in its environment. Claude Code 2.1.323 can remove it from its subprocesses
+// (CLAUDE_CODE_SUBPROCESS_ENV_SCRUB), but that setting forces the permission mode to default (it would change level X
+// from acceptEdits), so it is not used; the probe records whether Bash sees it (credentialLength: its length only).
+// Searched after the trial, before anything is deleted: every file of the trial directory except home/ and config/
+// (counted apart as before: credentialInChildFiles), i.e. work/ (with its worktrees), tmp/, bin/ and the records, the
+// objects of the git repository of work/ (a committed or staged file is compressed in .git; null: git failed, counted as
+// a leak), and the credential placeholders in the scrubbed records (the model saw the credential). The names of the files
+// are recorded, never their content.
+export function credentialLeakOf({dir, work, secret, records = []}) {
+  const placeholders = records.reduce((n, x) => n + String(x ?? '').split('<credential>').length - 1, 0);
+  const files = [];
+  const walk = (d) => {
+    for (const e of fs.existsSync(d) ? fs.readdirSync(d, {withFileTypes: true}) : []) {
+      const f = path.join(d, e.name), rel = path.relative(dir, f);
+      if (d === dir && (e.name === 'home' || e.name === 'config')) continue;
+      if (e.isDirectory()) walk(f);
+      else if (e.isFile() && fs.statSync(f).size < 64 * 1024 * 1024 && fs.readFileSync(f).includes(secret)) files.push(rel);
+    }
+  };
+  if (secret) walk(dir);
+  const g = secret && fs.existsSync(work) ? spawnSync('git', ['cat-file', '--batch-all-objects', '--batch'], {cwd: work, env: gitEnv(work), maxBuffer: 1 << 30}) : null;
+  const inGit = !secret ? false : g && g.status === 0 ? g.stdout.includes(secret) : null;
+  return {credentialInRecords: placeholders, credentialFiles: files.sort(), credentialInGitObjects: inGit, credentialLeak: placeholders > 0 || files.length > 0 || inGit !== false};
 }
 
 export function filesContaining(dir, secret) {
@@ -123,9 +148,15 @@ export function confinedSettings({work, runsRoot, fixture, ledger}, sb) {
   const w = realOr(work), trial = path.dirname(w), runs = realOr(runsRoot), ledgerDir = path.dirname(realOr(ledger));
   if (path.dirname(trial) !== runs) throw new Error('the confined layout needs <runs-root>/<trial>/work');
   const siblings = (fs.existsSync(runs) ? fs.readdirSync(runs) : []).filter((n) => n !== path.basename(trial)).sort().map((n) => path.join(runs, n));
+  // #1844 review L1: also the other entries beside the runs root and beside its parent (e.g. <root>/tmp, <root>/probe-R.json,
+  // another Issue's evaluation directory in /private/var/tmp), listed at launch; not above a directory of depth 3.
+  const others = (d, keep) => (d.split('/').filter(Boolean).length >= 3 && fs.existsSync(d) ? fs.readdirSync(d).filter((n) => n !== keep).sort().map((n) => path.join(d, n)) : []);
+  const parent = path.dirname(runs);
+  const around = [...others(parent, path.basename(runs)), ...others(path.dirname(parent), path.basename(parent))].filter((p) => !siblings.includes(p));
   const own = TRIAL_RECORD_FILES.map((n) => path.join(trial, n));
-  const denyRead = ['/Users', ...(sb.denyReadRoots ?? []), realOr(fixture), ledgerDir, ...siblings, ...own];
-  const denyWrite = [realOr(fixture), ledgerDir, ...siblings, ...own, ...['home', 'config', 'bin'].map((n) => path.join(trial, n))];
+  const uniq = (xs) => [...new Set(xs)];
+  const denyRead = uniq(['/Users', ...(sb.denyReadRoots ?? []), realOr(fixture), ledgerDir, ...siblings, ...own, ...around]);
+  const denyWrite = uniq([realOr(fixture), ledgerDir, ...siblings, ...own, ...['home', 'config', 'bin'].map((n) => path.join(trial, n)), ...around]);
   const open = [w, path.join(trial, 'tmp')];
   const covering = [...new Set([...denyRead, ...denyWrite])].filter((p) => open.some((o) => within(o, p)));
   if (covering.length) throw new Error(`the confined layout needs work/ and tmp/ outside every denied path (${covering.join(', ')})`);
@@ -194,8 +225,30 @@ export function bashProbeSteps(c, tag = markerTag()) {
     bash('lsFixture', `ls ${c.fixture}`, 'refused'), bash('catFixtureClaudeMd', `cat ${c.fixture}/CLAUDE.md`, 'refused'), bash('lsLedgerDir', `ls ${c.ledgerDir}`, 'refused'),
     ...c.deniedRoots.map((r, i) => bash(`lsDeniedRoot${i + 1}`, `ls ${r}`, 'refused')),
     bash('touchTrialDir', `touch ${c.sentinels.trial}`, 'refused'), bash('touchRepo', `touch ${c.sentinels.repo}`, 'refused'),
-    bash('network', `curl -sS -m 10 -o /dev/null -w '%{http_code}' ${NETWORK_URL}`, 'refused')];
+    bash('network', `curl -sS -m 10 -o /dev/null -w '%{http_code}' ${NETWORK_URL}`, 'refused'),
+    ...indirectProbeSteps(c)];
 }
+// #1844 review M2: indirect routes to a denied file (a symlink made by Bash and read by Read and by cat, a hard link, a
+// program given the path as an argument, sh -c with the path as $0, a path put together from two variables), and whether
+// the credential is visible to Bash (only its length is printed; probe-check.mjs records it). The steps marked sandbox
+// must show the sandbox's own refusal ("Operation not permitted"): the path is not in the command text, so only the
+// sandbox, not a permission check of the command, can refuse it (probe-check.mjs sandboxRefusal).
+export const LINK_FILE = 'probe-link-home.txt', HARD_FILE = 'probe-hard-repo.txt';
+export function indirectProbeSteps(c) {
+  const bash = (id, command, expect, extra = {}) => ({id, tool: 'Bash', command, expect, ...extra});
+  const split = (p) => { const i = Math.ceil(p.length / 2); return [p.slice(0, i), p.slice(i)]; };
+  const [h1, h2] = split(c.homeMarker), [s1, s2] = split(c.siblingRecord);
+  return [bash('lnSymlinkHome', `ln -s ${c.homeMarker} ${LINK_FILE}`, 'any'),
+    {id: 'readSymlinkHome', tool: 'Read', path: path.join(c.trialDir, 'work', LINK_FILE), expect: 'refused'},
+    bash('catSymlinkHome', `cat ${LINK_FILE}`, 'refused'),
+    bash('hardLinkRepo', `ln ${c.repoMarker} ${HARD_FILE} && cat ${HARD_FILE}`, 'refused'),
+    bash('nodeReadHome', `node -e 'console.log(require("fs").readFileSync(process.argv[1], "utf8"))' ${c.homeMarker}`, 'refused'),
+    bash('shArgRepo', `sh -c 'cat "$0"' ${c.repoMarker}`, 'refused'),
+    bash('varPathHome', `a='${h1}'; b='${h2}'; cat "$a$b"`, 'refused', {sandbox: true}),
+    bash('varPathSibling', `a='${s1}'; b='${s2}'; cat "$a$b"`, 'refused', {sandbox: true}),
+    bash('credentialLength', `printenv ${CREDENTIAL_VARS.join(' ')} | wc -c`, 'any')];
+}
+export const CREDENTIAL_VARS = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'];
 
 const stepText = (s) => ({Read: `Readで ${s.path} を読む`, Write: `Writeで ${s.path} に「probe」とだけ書く`, Bash: `Bashで次のcommandを実行する：${s.command}`,
   Glob: `Globで pattern「${s.pattern}」、path「${s.path}」を指定して探す`, Grep: `Grepで pattern「${s.pattern}」、path「${s.path}」を指定して探す`})[s.tool];
@@ -387,6 +440,17 @@ function main() {
     meta.credentialInChildFiles = filesContaining(home, secret) + filesContaining(config, secret);
     // #1840 review M2: the files the trial changed or created (sha256), pinned through the meta.json sha256 of the settlement.
     if (!probe) { try { meta.workFiles = workChanges(work, meta.workFilesOptions); } catch (e) { meta.workFilesError = String(e.message ?? e); } }
+    if (sb) {
+      // #1844 review L2: the commits HEAD and the present worktrees do not reach (score.mjs: written but not checkable).
+      if (!probe) { try { meta.unreached = unreachedChanges(work, sampleHead); } catch (e) { meta.unreachedError = String(e.message ?? e); } }
+      // #1844 review M3: the credential anywhere the trial could write; a leaking trial is a failure (collect.mjs) and its
+      // copies of the credential are removed (a measured trial's work/ entirely, the probe's files and work/.git).
+      Object.assign(meta, credentialLeakOf({dir, work, secret, records: [stream, scrub(r.stderr)]}));
+      if (meta.credentialLeak) {
+        if (!probe) { fs.rmSync(work, {recursive: true, force: true}); meta.workRemoved = 'credential leak'; }
+        else { for (const f of meta.credentialFiles) fs.rmSync(path.join(dir, f), {force: true}); if (meta.credentialInGitObjects !== false) fs.rmSync(path.join(work, '.git'), {recursive: true, force: true}); }
+      }
+    }
     fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 1));
     ledgerOps.settle(ledger, reservation.id, name, meta.costUsd, {exit: r.status, traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))});
     console.log(JSON.stringify({trial: name, exit: r.status, subtype: meta.resultSubtype, costUsd: meta.costUsd, resolvedModel: meta.resolvedModel}));

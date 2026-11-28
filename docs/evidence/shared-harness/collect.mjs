@@ -54,6 +54,8 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
   if (!fs.existsSync(path.join(dir, 'meta.json'))) return failed('meta.json', 'missing trace');
   const text = fs.readFileSync(trace, 'utf8');
   const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+  // #1844 review M3: a trial whose files or records held the credential is a failure (its work/ was removed).
+  if (meta.credentialLeak) return failed('credential leak', 'credential leak');
   const cell = conds.cells[m[1]] ?? {};
   const work = path.join(dir, 'work');
   const sizeOf = (rel) => { const f = path.join(work, rel); try { return fs.statSync(f).isFile() ? fs.statSync(f).size : null; } catch { return null; } };
@@ -64,13 +66,18 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
     maxTurns: meta.maxTurns ?? null, initTools: meta.initTools ?? null, initPermissionMode: meta.initPermissionMode ?? null, settingsSha256: meta.settingsSha256 ?? null, resultSubtype: meta.resultSubtype ?? null, numTurns: meta.numTurns ?? null,
     ledgerId: meta.ledgerId ?? null, ledgerSeq: meta.ledgerSeq ?? null, fixationSha256: meta.fixationSha256, fixedAtCommit: meta.fixedAtCommit, fixationStage: meta.fixationStage,
     exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: scrubSensitive(redact(text, dir)).hits, ...raw,
-    ...(meta.sandboxLayout ? {sandboxLayout: meta.sandboxLayout, nodeVersion: meta.nodeVersion ?? null, endHead: meta.endHead ?? null} : {})};
+    ...(meta.sandboxLayout ? {sandboxLayout: meta.sandboxLayout, nodeVersion: meta.nodeVersion ?? null, endHead: meta.endHead ?? null, unreachedCommits: meta.unreached?.commits?.length ?? null, credentialLeak: meta.credentialLeak ?? null} : {})};
   // #1840 re-review High: the fixture's files before the trial (work/ at its HEAD), for the lines the markers leave out.
   const head = headReader(work);
   // #1844: with a level that has Bash, every file the trial changed or created (meta.json workFiles, by any tool) counts as
   // written (score.mjs writtenFiles); a deleted file (null) does not.
   const changedFiles = meta.workFilesOptions && meta.workFiles ? Object.keys(meta.workFiles).filter((f) => meta.workFiles[f] !== null) : null;
-  return {row, entry: {name, text, failure: null, sizeOf, fileText, priorFiles: head.files, priorTexts: head.texts, ...(changedFiles ? {changedFiles} : {})}, dir};
+  // #1844 review M1/L2: the worktrees under .worktrees/ (the possible Bash reads are expanded against their files) and the
+  // files of the commits HEAD no longer reaches (meta.json unreached).
+  const wtDir = path.join(work, '.worktrees');
+  const worktrees = meta.workFilesOptions ? (fs.existsSync(wtDir) ? fs.readdirSync(wtDir).filter((n) => fs.statSync(path.join(wtDir, n)).isDirectory()).sort() : []) : null;
+  return {row, entry: {name, text, failure: null, sizeOf, fileText, priorFiles: head.files, priorTexts: head.texts, ...(changedFiles ? {changedFiles} : {}),
+    ...(worktrees ? {worktrees} : {}), ...(meta.unreached?.files?.length ? {unreachedFiles: meta.unreached.files} : {})}, dir};
 }
 
 // #1840 review M2: a trial whose meta.json records workFiles (run-trial.mjs, the changed and created files with their
@@ -85,6 +92,9 @@ export function workFilesProblem(dir) {
   let meta;
   try { meta = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch { return null; }
   const work = path.join(dir, 'work');
+  // #1844 review M3: a leaking trial's work/ was removed on purpose; the trial is a failure (collectTrial).
+  if (meta.credentialLeak) return null;
+  if (meta.unreachedError) return `trial ${path.basename(dir)}: the commits outside HEAD were not recorded (${meta.unreachedError})`;
   if (!meta.workFiles && !meta.workFilesError) return null;
   if (!fs.existsSync(work)) return `trial ${path.basename(dir)}: work/ is missing although meta.json records the changed files`;
   if (meta.workFilesError) return `trial ${path.basename(dir)}: the changed files were not recorded (${meta.workFilesError})`;

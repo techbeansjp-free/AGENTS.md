@@ -205,37 +205,222 @@ export function writtenFiles(t) {
 
 // #1844: the Bash commands of a trace whose result is present and not an error (a command that exited 0).
 export const okCommands = (t) => t.uses.filter((u) => u.name === 'Bash' && t.results.has(u.id) && !t.results.get(u.id).is_error).map((u) => String(u.input?.command ?? ''));
-// #1844: the project-relative files a successful Bash command read, as #1820 stage 1 counted them: the operands of cat, head,
-// tail, sed, awk, less, more, grep, rg, nl, bat, view, strings and jq (and a < redirection), in each part of the command
-// split at ;, &&, ||, | and new lines, resolved against the session cwd and a preceding `cd <dir>` of the same command.
-// Not counted: ls, test, stat, wc and the like (existence), a directory operand (grep -r), an unexpanded glob, a file read
-// by a program (node -e, git show). A small splitter, not a shell parser: quotes are removed, not interpreted.
-export const READ_COMMANDS = new Set(['cat', 'head', 'tail', 'sed', 'awk', 'less', 'more', 'grep', 'egrep', 'fgrep', 'rg', 'nl', 'bat', 'view', 'strings', 'jq']);
-export function bashReadsOf(command, root) {
-  const out = [];
-  let dir = root;
-  // A here-document's body is text, not commands.
-  const text = String(command).replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2\s*(?=\n|$)/g, (m) => m.split('\n')[0].replace(/<<-?.*$/, ''));
-  for (const part of text.split(/&&|\|\||;|\||\n/)) {
-    const words = (part.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? []).map((w) => w.replace(/^["']|["']$/g, ''));
-    while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift();
-    if (!words.length) continue;
-    const cmd = path.posix.basename(words[0].replace(/^\(+/, ''));
-    if (cmd === 'cd' && words[1]) { dir = path.posix.resolve(dir, words[1]); continue; }
-    // An input redirection (< f, <f) is a read for any command; an output redirection and its target are not operands.
-    const redirect = (w) => /^[0-9&]*(>>?|<)/.test(w);
-    const operands = words.slice(1).flatMap((w, i, xs) => (w === '<' ? [] : xs[i - 1] === '<' ? [w] : /^<[^<]/.test(w) ? [w.slice(1)]
-      : redirect(w) || /^[0-9&]*>>?$/.test(xs[i - 1] ?? '') ? [] : READ_COMMANDS.has(cmd) && !w.startsWith('-') && !/^\d+$/.test(w) ? [w] : []));
-    for (const w of operands) {
-      const p = w.replace(/[)]+$/, '');
-      if (!p || /[*?[\]]/.test(p)) continue;
-      const rel = projectRelative(path.posix.resolve(dir, p), root);
-      if (rel && !out.includes(rel)) out.push(rel);
-    }
-  }
-  return out;
+const resultTextOf = (r) => (typeof r?.content === 'string' ? r.content : Array.isArray(r?.content) ? r.content.map((c) => (typeof c?.text === 'string' ? c.text : '')).join('\n') : '');
+// #1844 review H1: a command entry {id, pattern, exclude?, resultPattern?} ran when a Bash call's command matches pattern
+// and not exclude, its result is present and not an error, and (with resultPattern) the result text matches resultPattern.
+// The exit status alone is not enough: a pipeline exits with its last command (`start … | head` exits 0 when start
+// stopped in the main checkout), so cases.json asks for the schema of the start output in the result.
+export function commandRan(e, t) {
+  return t.uses.some((u) => {
+    if (u.name !== 'Bash') return false;
+    const c = String(u.input?.command ?? ''), r = t.results.get(u.id);
+    return new RegExp(e.pattern).test(c) && !(e.exclude && new RegExp(e.exclude).test(c)) && Boolean(r) && !r.is_error && (!e.resultPattern || new RegExp(e.resultPattern).test(resultTextOf(r)));
+  });
 }
-export const bashReadPaths = (t) => [...new Set(t.uses.filter((u) => u.name === 'Bash' && t.results.has(u.id) && !t.results.get(u.id).is_error).flatMap((u) => bashReadsOf(u.input?.command ?? '', t.cwd)))];
+
+// #1844: the files a Bash command read, from its text (a small splitter, not a shell parser: quotes are removed, not
+// interpreted; parts are split at ;, &&, ||, |, & and new lines; a here-document's body is text).
+// - strict reads (bashReadPaths; rule-read): the file operands of READ_COMMANDS (the pattern of grep/rg and the script of
+//   sed/awk/jq are not operands; -f FILE is), a < input, `git show <rev>:<path>`, `git blame <path>`, resolved against
+//   the session cwd as it stands after the earlier Bash calls (Claude Code keeps a cd inside the project for the next
+//   call; review M1) and a cd earlier in the same command (a cd in a ( … ) subshell is not kept). Unexpanded globs and
+//   directories are not counted, so a strict read is never more than the command named.
+// - possible reads (bashPossibleReads; the forbidden reads, review M1): every strict read and, for any Bash call with a
+//   result (also a non-zero exit, its output may still have been shown), the operands of more reading commands (sort,
+//   cut, diff, xxd, …), globs expanded against the project files, a directory searched recursively (grep -r, rg, ag,
+//   ack, git grep, find … -exec, a list fed to xargs) as every file under it, and "unbounded" for output whose files the
+//   text does not name (git show <rev>, git log -p, git diff <rev>, git cat-file -p <sha>). cases.json bashMention (a
+//   pattern on the command text, e.g. project/rules) adds the calls that name a rule's place in another way (cd into it,
+//   node -e, cp). What remains uncounted is listed in the README of the config.
+export const READ_COMMANDS = new Set(['cat', 'head', 'tail', 'sed', 'awk', 'less', 'more', 'grep', 'egrep', 'fgrep', 'rg', 'nl', 'bat', 'view', 'strings', 'jq']);
+const MORE_READERS = new Set(['tac', 'rev', 'cut', 'sort', 'uniq', 'paste', 'column', 'fold', 'od', 'xxd', 'hexdump', 'base64', 'diff', 'cmp', 'comm', 'join', 'iconv', 'zcat', 'gzcat', 'bzcat', 'xzcat', 'fmt', 'pr', 'expand', 'unexpand', 'ag', 'ack']);
+const SEARCHERS = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack']);
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh']);
+const WRAPPERS = new Set(['env', 'command', 'time', 'nice', 'nohup', 'exec', 'builtin', 'sudo']);
+const OPT_ARGS = {
+  grep: ['-e', '-f', '-A', '-B', '-C', '-m', '-d', '-D', '--regexp', '--file', '--include', '--exclude', '--exclude-dir', '--max-count', '--context', '--after-context', '--before-context', '--label'],
+  rg: ['-e', '-f', '-g', '-t', '-T', '-A', '-B', '-C', '-m', '-M', '-j', '-E', '-d', '--regexp', '--file', '--glob', '--iglob', '--type', '--type-not', '--max-count', '--context', '--after-context', '--before-context', '--max-columns', '--threads', '--encoding', '--sort', '--sortr', '--max-depth'],
+  ag: ['-G', '-A', '-B', '-C', '-m', '--ignore-dir', '--ignore', '--file-search-regex'], ack: ['-A', '-B', '-C', '-m', '--ignore-dir', '--type'],
+  sed: ['-e', '-f', '--expression', '--file', '-l'], awk: ['-f', '-v', '-F'], jq: ['-f', '--from-file', '--indent'],
+  head: ['-n', '-c'], tail: ['-n', '-c'], cut: ['-d', '-f', '-c', '-b'], sort: ['-k', '-t', '-o', '-S', '-T'], nl: ['-b', '-s', '-w', '-v', '-i', '-n'],
+  xxd: ['-l', '-s', '-c', '-g'], od: ['-N', '-j', '-t', '-A'], hexdump: ['-n', '-s', '-e'], diff: ['-U', '-C', '--label', '-x', '-X'], uniq: ['-f', '-s'], fold: ['-w'], column: ['-s', '-c'],
+};
+const OPT_ARGS2 = {jq: ['--arg', '--argjson', '--slurpfile', '--rawfile']};
+const FILE_OPTS = new Set(['-f', '--file', '--from-file']);
+const isGlob = (w) => /[*?[]/.test(w);
+const stripHeredocs = (s) => String(s).replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2\s*(?=\n|$)/g, (m) => m.split('\n')[0].replace(/<<-?.*$/, ''));
+const wordsOf = (part) => (part.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? []).map((w) => w.replace(/^["']|["']$/g, ''));
+// The words of a part without redirections, and its < inputs.
+function splitRedirects(words) {
+  const args = [], inputs = [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (w === '<') { if (words[i + 1]) inputs.push(words[++i]); continue; }
+    if (/^<[^<(]/.test(w)) { inputs.push(w.slice(1)); continue; }
+    if (/^[0-9&]*>>?$/.test(w) || /^[0-9]*<<<?$/.test(w)) { i++; continue; }
+    if (/^[0-9&]*(>>?|<<)/.test(w)) continue;
+    args.push(w);
+  }
+  return {args, inputs};
+}
+const expandBraces = (w) => { const m = /^(.*?)\{([^{}]*,[^{}]*)\}(.*)$/.exec(w); return m ? m[2].split(',').flatMap((x) => expandBraces(`${m[1]}${x}${m[3]}`)) : [w]; };
+// A glob on a project-relative path as a regular expression (no globstar; * and ? do not match a leading dot).
+export function globRegExp(rel, {prefix = false} = {}) {
+  const seg = (s) => {
+    let out = /^[*?[]/.test(s) ? '(?!\\.)' : '';
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (c === '*') out += '[^/]*';
+      else if (c === '?') out += '[^/]';
+      else if (c === '[') { const j = s.indexOf(']', i + 2); if (j < 0) { out += '\\['; continue; } out += `[${s.slice(i + 1, j).replace(/^!/, '^').replace(/\\/g, '\\\\')}]`; i = j; }
+      else out += c.replace(/[.+^${}()|\\]/g, '\\$&');
+    }
+    return out;
+  };
+  return new RegExp(`^${rel.split('/').map(seg).join('/')}${prefix ? '(/.*)?' : ''}$`);
+}
+
+// One Bash command: {reads, possible, unbounded, dir}; dir is the cwd after it (null: unknown), keep whether it lasts.
+export function bashScan(command, root, start = root, files = []) {
+  const reads = [], possible = [];
+  let unbounded = false;
+  let dir = start, kept = start;
+  const relOf = (abs) => (projectRelative(`${abs}/__x__`, root) === '__x__' ? '' : projectRelative(abs, root));
+  const push = (arr, r) => { if (r && !arr.includes(r)) arr.push(r); };
+  const resolve = (d, w) => (path.posix.isAbsolute(w) ? path.posix.normalize(w) : d === null ? null : path.posix.resolve(d, w));
+  // A strict read of a literal operand (also possible).
+  const literal = (d, w, strict) => {
+    const p = w.replace(/[)]+$/, '');
+    if (!p) return;
+    if (d === null && !path.posix.isAbsolute(p)) { for (const f of files) if (f === p.replace(/^\.\//, '') || f.endsWith(`/${p.replace(/^\.\//, '')}`)) push(possible, f); return; }
+    const rel = relOf(resolve(d, p));
+    if (rel === null || rel === '') return;
+    if (strict) push(reads, rel);
+    push(possible, rel);
+  };
+  // A possible read of an operand: a glob against the files; with deep, a directory as every file under it.
+  const loose = (d, w, {deep = false, skipHidden = false} = {}) => {
+    for (const x of expandBraces(w.replace(/[)]+$/, ''))) {
+      if (!x) continue;
+      const abs = resolve(d, x);
+      if (abs === null) { if (!isGlob(x)) literal(null, x, false); else unbounded = true; continue; }
+      const rel = relOf(abs);
+      if (rel === null) continue;
+      if (isGlob(rel)) { const re = globRegExp(rel, {prefix: deep}); for (const f of files) if (re.test(f)) push(possible, f); continue; }
+      if (rel) push(possible, rel);
+      if (deep) for (const f of files) if (rel === '' || f.startsWith(`${rel}/`)) { const below = rel ? f.slice(rel.length + 1) : f; if (!skipHidden || !below.split('/').some((s) => s.startsWith('.'))) push(possible, f); }
+    }
+  };
+  const text = stripHeredocs(command);
+  const parts = text.split(/&&|\|\||;|\|&?|\n|(?<![>&<0-9])&(?![>&])/);
+  const all = parts.map((part) => ({part, ...splitRedirects(wordsOf(part))}));
+  const head = (args) => { const a = [...args]; while (a.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(a[0]) || WRAPPERS.has(path.posix.basename(a[0])) || a[0] === '!')) a.shift(); return a; };
+  const cmdOf = (a) => path.posix.basename(String(a[0] ?? '').replace(/^[({]+/, ''));
+  // xargs feeds a list into a reading command: every operand of the whole command is then a possible read.
+  const xargsReader = all.some(({args}) => { const a = head(args); if (cmdOf(a) !== 'xargs') return false; const rest = a.slice(1); let i = 0; while (i < rest.length && rest[i].startsWith('-')) i += /^-[IdELnPs]$/.test(rest[i]) ? 2 : 1; const c = path.posix.basename(rest[i] ?? ''); return READ_COMMANDS.has(c) || MORE_READERS.has(c); });
+  let outer;
+  for (const {part, args: raw, inputs} of all) {
+    // A ( … ) subshell: its cd ends with it.
+    if (/^\s*\(/.test(part) && outer === undefined) outer = dir;
+    scanPart(part, raw, inputs);
+    if (/\)\s*$/.test(part) && outer !== undefined) { dir = outer; outer = undefined; }
+  }
+  function scanPart(part, raw, inputs) {
+    for (const f of inputs) literal(dir, f, true);
+    let a = head(raw);
+    if (!a.length) return;
+    let cmd = cmdOf(a);
+    const sub = outer !== undefined;
+    if (cmd === 'cd' || cmd === 'pushd') {
+      const target = a[1];
+      // cd alone or to ~ leaves the project (reset by the next call); cd - or a computed target: unknown.
+      dir = !target || target.startsWith('~') ? '/' : target === '-' || /[$`*?]/.test(target) ? null : resolve(dir, target);
+      if (!sub) kept = dir;
+      return;
+    }
+    if (cmd === 'popd') { dir = null; if (!sub) kept = dir; return; }
+    if (SHELLS.has(cmd) && a.includes('-c')) { const inner = a[a.indexOf('-c') + 1]; if (inner) { const s = bashScan(inner, root, dir, files); for (const r of s.reads) push(reads, r); for (const r of s.possible) push(possible, r); unbounded ||= s.unbounded; } return; }
+    if (cmd === 'xargs') { const rest = a.slice(1); let i = 0; while (i < rest.length && rest[i].startsWith('-')) i += /^-[IdELnPs]$/.test(rest[i]) ? 2 : 1; a = rest.slice(i); cmd = cmdOf(a); if (!a.length) return; }
+    if (xargsReader) for (const w of a.slice(1)) if (!w.startsWith('-')) loose(dir, w, {deep: true});
+    if (cmd === 'git') {
+      let i = 1;
+      while (i < a.length && a[i].startsWith('-')) i += ['-C', '-c', '--git-dir', '--work-tree'].includes(a[i]) ? 2 : 1;
+      const subc = a[i], rest = a.slice(i + 1), ops = rest.filter((w) => !w.startsWith('-'));
+      const wtRoot = () => { const r = dir === null ? null : relOf(dir); const m = r === null ? null : /^(\.worktrees\/[^/]+)(\/|$)/.exec(r); return m ? path.posix.join(root, m[1]) : root; };
+      const noPatch = rest.some((w) => /^(--stat|--name-only|--name-status|-s|--no-patch|--shortstat|--numstat|--summary|--raw)$/.test(w));
+      if (subc === 'show' || subc === 'cat-file') {
+        for (const w of ops) { const m = /^[^:]*:(.+)$/.exec(w); if (m) literal(m[1].startsWith('./') || m[1].startsWith('../') ? dir : wtRoot(), m[1], true); else if (!noPatch && !/^(blob|tree|commit|tag)$/.test(w)) unbounded = true; }
+        if (subc === 'show' && !ops.length && !noPatch) unbounded = true;
+      } else if (subc === 'log' && rest.some((w) => /^(-p|-u|--patch|--full-diff|-L.*)$/.test(w)) && !noPatch) unbounded = true;
+      else if (subc === 'diff' && !noPatch && ops.some((w) => /\.\.|^(HEAD|@)[~^]|^[0-9a-f]{7,40}$|^(origin\/|main$|master$)/.test(w))) unbounded = true;
+      else if (subc === 'blame') { for (const w of ops) literal(dir, w, true); }
+      else if (subc === 'grep') { const hasE = rest.some((w) => FILE_OPTS.has(w) || w === '-e'); const paths = ops.slice(hasE ? 0 : 1).filter((w) => w !== '--'); if (paths.some((w) => /^(HEAD|@)|^[0-9a-f]{7,40}$/.test(w))) unbounded = true; for (const w of paths.length ? paths : ['.']) loose(dir, w, {deep: true}); }
+      return;
+    }
+    if (cmd === 'find') {
+      const reader = a.some((w, k) => /^-(exec|execdir|ok|okdir)$/.test(w) && (READ_COMMANDS.has(path.posix.basename(a[k + 1] ?? '')) || MORE_READERS.has(path.posix.basename(a[k + 1] ?? ''))));
+      if (reader || xargsReader) { const st = []; for (const w of a.slice(1)) { if (/^-[HLP]$/.test(w)) continue; if (/^[-(!]/.test(w)) break; st.push(w); } for (const w of st.length ? st : ['.']) loose(dir, w, {deep: true}); }
+      return;
+    }
+    const strict = READ_COMMANDS.has(cmd), reader = strict || MORE_READERS.has(cmd);
+    if (!reader) return;
+    const opts = OPT_ARGS[SEARCHERS.has(cmd) && cmd !== 'rg' && cmd !== 'ag' && cmd !== 'ack' ? 'grep' : cmd] ?? [], opts2 = OPT_ARGS2[cmd] ?? [];
+    const flagsSeen = [], ops = [];
+    let explicitPattern = false;
+    for (let i = 1; i < a.length; i++) {
+      const w = a[i];
+      if (w === '--') { ops.push(...a.slice(i + 1)); break; }
+      if (opts2.includes(w)) { if (w === '--slurpfile' || w === '--rawfile') literal(dir, a[i + 2] ?? '', true); i += 2; continue; }
+      if (w === '-d' && a[i + 1] === 'recurse' && SEARCHERS.has(cmd)) { flagsSeen.push('-drecurse'); i++; continue; }
+      if (opts.includes(w)) { if (FILE_OPTS.has(w) && (SEARCHERS.has(cmd) || ['sed', 'awk', 'jq'].includes(cmd))) { literal(dir, a[i + 1] ?? '', true); explicitPattern = true; } if (w === '-e' || w === '--regexp' || w === '--expression') explicitPattern = true; i++; continue; }
+      if (/^--(regexp|file|expression)=/.test(w)) { explicitPattern = true; if (/^--file=/.test(w)) literal(dir, w.slice(7), true); continue; }
+      if (w.startsWith('-') && w !== '-') { flagsSeen.push(w); continue; }
+      ops.push(w);
+    }
+    // The pattern of a search, the script of sed/awk and the filter of jq are not files.
+    if ((SEARCHERS.has(cmd) || ['sed', 'awk', 'jq'].includes(cmd)) && !explicitPattern && !(cmd === 'rg' && flagsSeen.includes('--files'))) ops.shift();
+    const recursive = ['rg', 'ag', 'ack'].includes(cmd) || (SEARCHERS.has(cmd) && flagsSeen.some((w) => /^-[A-Za-z]*[rR]/.test(w) || /^--(dereference-)?recursive$/.test(w) || w === '-drecurse')) || (cmd === 'diff' && flagsSeen.some((w) => /^-[A-Za-z]*r/.test(w)));
+    const skipHidden = (cmd === 'rg' || cmd === 'ag') && !flagsSeen.some((w) => /^(--hidden|-\.|--unrestricted|-u+)$/.test(w) || /^-[A-Za-z]*u/.test(w));
+    for (const w of ops) {
+      if (/^\d+$/.test(w)) continue;
+      if (isGlob(w) || /\{[^}]*,/.test(w)) loose(dir, w, {deep: recursive, skipHidden});
+      else { literal(dir, w, strict); if (recursive) loose(dir, w, {deep: true, skipHidden}); }
+    }
+    if (recursive && !ops.length) loose(dir, '.', {deep: true, skipHidden});
+  }
+  return {reads, possible, unbounded, dir: kept};
+}
+export const bashReadsOf = (command, root, start = root) => bashScan(command, root, start).reads;
+
+// #1844 review M1: the Bash calls of a trace in order, with the cwd carried from one call to the next (a cd that ends
+// outside the project is not kept, as Claude Code resets it). files: the project-relative files the globs and directories
+// are expanded against (score.mjs projectFilesOf).
+export function bashTraceReads(t, files = []) {
+  const reads = [], possible = [], commands = [];
+  let unbounded = 0, dir = t.cwd;
+  for (const u of t.uses) {
+    if (u.name !== 'Bash' || !t.results.has(u.id)) continue;
+    const c = String(u.input?.command ?? '');
+    const s = bashScan(c, t.cwd, dir, files);
+    if (!t.results.get(u.id).is_error) for (const r of s.reads) if (!reads.includes(r)) reads.push(r);
+    for (const r of s.possible) if (!possible.includes(r)) possible.push(r);
+    if (s.unbounded) unbounded += 1;
+    commands.push(c);
+    dir = s.dir === null ? null : projectRelative(`${s.dir}/__x__`, t.cwd) === null ? t.cwd : s.dir;
+  }
+  return {reads, possible, unbounded, commands};
+}
+export const bashReadPaths = (t) => bashTraceReads(t).reads;
+// The project files for the expansion: the fixture at its HEAD (priorFiles), the files the trial changed, and the same
+// files under each worktree of .worktrees/ (the names given, from the changed files, or "~" when none is known).
+export function projectFilesOf({priorFiles = null, changedFiles = null, worktrees = null} = {}) {
+  const base = [...new Set([...(priorFiles ? priorFiles() : []), ...(changedFiles ?? [])])];
+  const names = new Set(worktrees ?? []);
+  for (const f of changedFiles ?? []) { const m = /^\.worktrees\/([^/]+)\//.exec(f); if (m) names.add(m[1]); }
+  if (!names.size) names.add('~');
+  const plain = base.filter((f) => !f.startsWith('.worktrees/'));
+  return [...new Set([...base, ...[...names].flatMap((n) => plain.map((f) => `.worktrees/${n}/${f}`))])];
+}
 
 // #1840: the case-level checks beyond the Skill body (all optional; a case without them gets none of these fields):
 // - expectReads [{id, pattern}]: each pattern (a regular expression on the project-relative path) matched by a counted Read;
@@ -244,22 +429,34 @@ export const bashReadPaths = (t) => [...new Set(t.uses.filter((u) => u.name === 
 // - writes {pathPattern, mustWrite, require: [re], forbid: [{id, pattern}]}: the files written under pathPattern, read
 //   from the trial's work/ copy at the end (fileText), hold every require pattern (over all of them) and no forbid pattern
 //   (the diff must not break a rule); mustWrite needs at least one such file.
-export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS, base = null} = {}) {
+// #1844 review M1: with a level that has Bash, bash {possible, unbounded, commands} (bashTraceReads): a forbidden read is
+// also a possible Bash read, any read when a call's output is unbounded, or a call whose text matches the entry's
+// bashMention; forbiddenReadsStrict keeps the strict count beside it. Without it (level W) as before.
+export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS, base = null, bash = null} = {}) {
   const out = {};
   const hit = (p) => rel.some((r) => new RegExp(p).test(r));
+  const loose = bash ? [...new Set([...rel, ...bash.possible])] : rel;
+  const looseHit = (e) => (bash ? bash.unbounded > 0 || loose.some((r) => new RegExp(e.pattern).test(r)) || Boolean(e.bashMention && bash.commands.some((c) => new RegExp(e.bashMention).test(c))) : hit(e.pattern));
   if (k.expectReads) { out.expectReads = Object.fromEntries(k.expectReads.map((e) => [e.id, hit(e.pattern)])); out.expectReadsAll = Object.values(out.expectReads).every(Boolean); }
-  if (k.forbidReads) { out.forbiddenReads = k.forbidReads.filter((e) => hit(e.pattern)).map((e) => e.id); out.forbidReadsOk = out.forbiddenReads.length === 0; }
-  // #1844: expectCommands [{id, pattern}]: each pattern matched by a Bash command that succeeded (okCommands).
-  if (k.expectCommands) { const ok = okCommands(t); out.expectCommands = Object.fromEntries(k.expectCommands.map((e) => [e.id, ok.some((c) => new RegExp(e.pattern).test(c))])); out.commandsAll = Object.values(out.expectCommands).every(Boolean); }
+  if (k.forbidReads) {
+    out.forbiddenReads = k.forbidReads.filter(looseHit).map((e) => e.id); out.forbidReadsOk = out.forbiddenReads.length === 0;
+    if (bash) out.forbiddenReadsStrict = k.forbidReads.filter((e) => hit(e.pattern)).map((e) => e.id);
+  }
+  // #1844: expectCommands [{id, pattern, exclude?, resultPattern?}]: each entry ran (commandRan; review H1).
+  if (k.expectCommands) { out.expectCommands = Object.fromEntries(k.expectCommands.map((e) => [e.id, commandRan(e, t)])); out.commandsAll = Object.values(out.expectCommands).every(Boolean); }
   if (k.forbidSkills) {
-    out.forbiddenSkills = k.forbidSkills.filter((s) => t.skills.some((c) => same(c, s)) || rel.some((r) => r === `.claude/skills/${s}/SKILL.md` || (skills.includes(s) && new RegExp(`^\\.agent-skill-chain/(managed-runtime/)?skills/${esc(s)}/SKILL\\.md$`).test(r))));
+    out.forbiddenSkills = k.forbidSkills.filter((s) => t.skills.some((c) => same(c, s)) || (bash?.unbounded > 0) || loose.some((r) => r === `.claude/skills/${s}/SKILL.md` || (skills.includes(s) && new RegExp(`^\\.agent-skill-chain/(managed-runtime/)?skills/${esc(s)}/SKILL\\.md$`).test(r))));
     out.forbidSkillsOk = out.forbiddenSkills.length === 0;
   }
   if (k.writes) {
     const w = k.writes;
     const files = writtenFiles(t).filter((f) => new RegExp(w.pathPattern).test(f));
     Object.assign(out, writeChecks(w, files, fileText, {base}));
-    out.writeOk = (!w.mustWrite || files.length > 0) && !out.writeMissingText && out.writeRequireMissing.length === 0 && out.writeViolations.length === 0 && (out.writeFilesMissing ?? []).length === 0;
+    // #1844 review L2: a file under pathPattern changed only in a commit HEAD no longer reaches (a removed worktree, another
+    // branch, a stash; meta.json unreachedFiles) cannot be checked: it is written, listed and not checkable (writeMissingText).
+    const lost = (t.unreachedFiles ?? []).filter((f) => new RegExp(w.pathPattern).test(f) && !files.includes(f));
+    if (lost.length) { out.writeUnreached = lost; out.written = [...out.written, ...lost]; out.writeMissingText = true; }
+    out.writeOk = (!w.mustWrite || out.written.length > 0) && !out.writeMissingText && out.writeRequireMissing.length === 0 && out.writeViolations.length === 0 && (out.writeFilesMissing ?? []).length === 0;
     // #1840 review L3: a trial that wrote no file under pathPattern; its answer text against the require patterns (reported).
     if (!files.length && (w.require ?? []).length) out.writeRequireInAnswer = w.require.filter((e) => new RegExp(e.pattern, 'i').test(t.text)).map((e) => e.id);
   }
@@ -281,8 +478,8 @@ export function reportOf(report, rel, t) {
   if (report.reads) out.reads = Object.fromEntries(report.reads.map((e) => [e.id, rel.some((r) => new RegExp(e.pattern).test(r))]));
   if (report.answer) out.answer = Object.fromEntries(report.answer.map((e) => [e.id, new RegExp(e.pattern, 'i').test(t.text)]));
   if (report.writtenFiles) out.writtenFiles = writtenFiles(t);
-  // #1844: per pattern, whether a Bash command matched it (attempted) and whether such a command succeeded (ok).
-  if (report.commands) { const all = t.uses.filter((u) => u.name === 'Bash').map((u) => String(u.input?.command ?? '')), ok = okCommands(t); out.commands = Object.fromEntries(report.commands.map((e) => [e.id, {attempted: all.some((c) => new RegExp(e.pattern).test(c)), ok: ok.some((c) => new RegExp(e.pattern).test(c))}])); }
+  // #1844: per entry, whether a Bash command matched it (attempted), exited 0 (exitOk) and ran (ok: commandRan, review H1).
+  if (report.commands) { const all = t.uses.filter((u) => u.name === 'Bash').map((u) => String(u.input?.command ?? '')), ok = okCommands(t); out.commands = Object.fromEntries(report.commands.map((e) => [e.id, {attempted: all.some((c) => new RegExp(e.pattern).test(c)), exitOk: ok.some((c) => new RegExp(e.pattern).test(c)), ok: commandRan(e, t)}])); }
   return out;
 }
 
@@ -328,12 +525,15 @@ export const inputTokensOf = (u) => (u ? (u.input ?? 0) + (u.cacheRead ?? 0) + (
 // .claude/skills/ is not an ASC file).
 const ascFile = (r, skills) => /^\.agent-skill-chain\//.test(r) || skills.some((s) => r.startsWith(`.claude/skills/${s}/`));
 
-export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = null, fileText = null, priorTexts = null, priorFiles = null, skills = ASC_SKILLS, changedFiles = null} = {}) {
+export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = null, fileText = null, priorTexts = null, priorFiles = null, skills = ASC_SKILLS, changedFiles = null, worktrees = null, unreachedFiles = null} = {}) {
   const pat = (key, s, r = '') => new RegExp(spec[key].replace('<skill>', esc(s)).replace('<ref>', esc(r)));
   if (changedFiles) t = {...t, changedFiles};
+  if (unreachedFiles) t = {...t, unreachedFiles};
   const reads = countedReads(k, t);
-  // #1844: with a level that has Bash (toolLevels.<id>.sandbox), a reading Bash command counts as a read too.
-  const bashRel = level?.sandbox ? bashReadPaths(t) : null;
+  // #1844: with a level that has Bash (toolLevels.<id>.sandbox), a reading Bash command counts as a read too (strict), and
+  // the possible reads are counted for the forbidden ones (review M1).
+  const bash = level?.sandbox ? bashTraceReads(t, projectFilesOf({priorFiles, changedFiles, worktrees})) : null;
+  const bashRel = bash ? bash.reads : null;
   const rel = [...new Set([...reads.map((r) => r.path), ...(bashRel ?? [])])];
   const ascBodies = skills.filter((s) => rel.some((r) => pat('bodyPattern', s).test(r)));
   const ascEntries = skills.filter((s) => rel.some((r) => pat('entryPattern', s).test(r)));
@@ -343,7 +543,13 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
     costUsd: t.result?.total_cost_usd ?? null, turns: t.result?.num_turns ?? null, durationMs: t.result?.duration_ms ?? null,
     usage: t.result?.usage ? {input: t.result.usage.input_tokens, output: t.result.usage.output_tokens, cacheRead: t.result.usage.cache_read_input_tokens, cacheWrite: t.result.usage.cache_creation_input_tokens} : null};
   row.inputTokens = inputTokensOf(row.usage);
-  if (bashRel) { row.bashReadPaths = bashRel; row.bashCommands = t.uses.filter((u) => u.name === 'Bash').length; }
+  if (bashRel) {
+    row.bashReadPaths = bashRel; row.bashCommands = t.uses.filter((u) => u.name === 'Bash').length;
+    // The possible reads beyond the strict ones that a report or forbid pattern names, and the calls with unbounded output.
+    const named = [...(spec.report?.reads ?? []), ...(k.forbidReads ?? [])].map((e) => new RegExp(e.pattern));
+    row.bashPossibleReadPaths = bash.possible.filter((r) => !rel.includes(r) && named.some((re) => re.test(r)));
+    row.bashUnboundedReads = bash.unbounded;
+  }
   const ascFiles = [...new Set(rel.filter((r) => ascFile(r, skills)))].sort();
   row.ascFilesRead = ascFiles.length;
   row.ascBytesRead = sizeOf ? ascFiles.reduce((a, r) => a + (sizeOf(r) ?? 0), 0) : null;
@@ -370,7 +576,7 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
   if ((k.answerNone ?? []).length) row.markerDeductions = markerDeductionsOf(k, markerText);
   row.resultMissing = reads.some((r) => r.resultMissing);
   const touched = ascCalls.length > 0 || ascEntries.length > 0 || ascBodies.length > 0;
-  const extra = caseChecks(k, rel, t, {fileText, skills, base});
+  const extra = caseChecks(k, rel, t, {fileText, skills, base, bash});
   Object.assign(row, extra);
   if (spec.report) row.report = reportOf(spec.report, rel, t);
   // #1840 review M3: whether the session's Skill list (init) holds the user's own Skills the case names.
@@ -445,7 +651,7 @@ export function scoreTrials(spec, entries, conds = loadConditions()) {
     if (e.failure || e.text === null || e.text === undefined) { runs.push({...base, failure: e.failure ?? 'missing trace'}); continue; }
     let t;
     try { t = parseTrace(e.text); } catch (err) { runs.push({...base, failure: `unreadable trace: ${err.message}`}); continue; }
-    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, priorTexts: e.priorTexts ?? null, priorFiles: e.priorFiles ?? null, skills: ascSkillsOf(conds), changedFiles: e.changedFiles ?? null})});
+    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, priorTexts: e.priorTexts ?? null, priorFiles: e.priorFiles ?? null, skills: ascSkillsOf(conds), changedFiles: e.changedFiles ?? null, worktrees: e.worktrees ?? null, unreachedFiles: e.unreachedFiles ?? null})});
   }
   return selectCounted(runs, conds.runs);
 }
@@ -592,9 +798,10 @@ export function levelsVerdict(sums, runs, {completion = null, rule = {}, subsets
   const used = (rule.levels ?? []).filter((l) => l.use !== 'report'), reported = (rule.levels ?? []).filter((l) => l.use === 'report');
   const perCondition = Object.fromEntries(conds.map((c) => {
     const checks = levelChecks(runs, c, used);
-    return [c, {verdict: Object.values(checks).every((x) => x.pass) ? 'meets-levels' : 'below-levels', checks, ...(reported.length ? {reported: levelChecks(runs, c, reported)} : {})}];
+    // #1844 review L3: with rule.minProvisional the mins are provisional (the owner decides the level), and the verdict says so.
+    return [c, {verdict: Object.values(checks).every((x) => x.pass) ? 'meets-levels' : 'below-levels', ...(rule.minProvisional ? {minProvisional: true, verdictBasis: 'provisional mins (conditions.json rule.minProvisional); the owner decides the level'} : {}), checks, ...(reported.length ? {reported: levelChecks(runs, c, reported)} : {})}];
   }));
-  if (pre.verdict === 'not-judged') return {verdict: 'not-judged', reason: pre.reason, completion, perCondition, separate: pre.separate};
-  return {verdict: 'levels', basis: completion.basis, completion, perCondition, separate: pre.separate,
+  if (pre.verdict === 'not-judged') return {verdict: 'not-judged', ...(rule.minProvisional ? {minProvisional: true} : {}), reason: pre.reason, completion, perCondition, separate: pre.separate};
+  return {verdict: 'levels', ...(rule.minProvisional ? {minProvisional: true} : {}), basis: completion.basis, completion, perCondition, separate: pre.separate,
     note: 'Fixed levels per condition (release and candidate are reported side by side, not as a candidate test). Few runs per case; the decisions (merge of the candidate PRs, what to fix) are the owner\'s.'};
 }

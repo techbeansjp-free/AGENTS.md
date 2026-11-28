@@ -1,7 +1,7 @@
 {
  "schema": "asc-eval-cases/v1",
- "note": "Fixed before any model run (decision-criteria.md). #1844: the five goal-2 cases of #1840 on fixture U (prompts unchanged, byte for byte), for a user environment with Bash. Changes from #1840: the money-rule forbid entries have scope \"code\" (#1845: only the code of a JavaScript/TypeScript file, not comments or strings); expectCommands needs the ASC CLI start run in the change cases; a Read or a reading Bash command (score.mjs bashReadPaths) counts as a read; with Bash, the files a trial changed (meta.json workFiles, any tool) count as written. The rule-file patterns also match the file in a worktree under .worktrees/ (the ASC CLI start runs only in a dedicated worktree; checked without a model, start-selection.json).",
- "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches. A Bash command's file operands are resolved against the same root (a cd inside the command is followed).",
+ "note": "Fixed before any model run (decision-criteria.md). #1844: the five goal-2 cases of #1840 on fixture U (prompts unchanged, byte for byte), for a user environment with Bash. Changes from #1840: the money-rule forbid entries have scope \"code\" (#1845: only the code of a JavaScript/TypeScript file, not comments or strings); expectCommands needs the ASC CLI start run in the change cases (review H1: its JSON output, schema asc-worktree/v1 or asc-project-start/v1, in a result that is not an error; not --help); a Read or a reading Bash command (score.mjs bashReadPaths, strict) counts as a read for expectReads; for forbidReads also a possible Bash read (score.mjs bashTraceReads: globs and searched directories expanded, unbounded output, bashMention on the command text; review M1); with Bash, the files a trial changed (meta.json workFiles, any tool) count as written. The rule-file patterns also match the file in a worktree under .worktrees/ (the ASC CLI start runs only in a dedicated worktree; checked without a model, start-selection.json).",
+ "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches. A Bash command's file operands are resolved against the same root (a cd earlier in the command and a cd of an earlier Bash call that stayed inside the root are followed; review M1).",
  "entryPattern": "^\\.claude/skills/<skill>/SKILL\\.md$",
  "bodyPattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
  "referencePattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/references/<ref>$",
@@ -19,11 +19,15 @@
   "commands": [
    {
     "id": "start",
-    "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b"
+    "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b",
+    "exclude": "\\s(--help|-h)(\\s|$)",
+    "resultPattern": "\"schema\":\\s*\"asc-(worktree|project-start|project-context-selection)/v1\""
    },
    {
     "id": "start-path-billing",
-    "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b.*--path[ =]['\"]?(\\./)?src/billing"
+    "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b.*--path[ =]['\"]?(\\./)?src/billing",
+    "exclude": "\\s(--help|-h)(\\s|$)",
+    "resultPattern": "\"schema\":\\s*\"asc-(worktree|project-start|project-context-selection)/v1\""
    },
    {
     "id": "worktree-create",
@@ -96,7 +100,9 @@
    "expectCommands": [
     {
      "id": "start",
-     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b"
+     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b",
+     "exclude": "\\s(--help|-h)(\\s|$)",
+     "resultPattern": "\"schema\":\\s*\"asc-(worktree|project-start|project-context-selection)/v1\""
     }
    ]
   },
@@ -152,7 +158,9 @@
    "expectCommands": [
     {
      "id": "start",
-     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b"
+     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b",
+     "exclude": "\\s(--help|-h)(\\s|$)",
+     "resultPattern": "\"schema\":\\s*\"asc-(worktree|project-start|project-context-selection)/v1\""
     }
    ]
   },
@@ -167,7 +175,8 @@
    "forbidReads": [
     {
      "id": "money-rule",
-     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$"
+     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$",
+     "bashMention": "project/rules|rules/money|money\\.md"
     }
    ],
    "forbidSkills": [
@@ -194,7 +203,9 @@
    "expectCommands": [
     {
      "id": "start",
-     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b"
+     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b",
+     "exclude": "\\s(--help|-h)(\\s|$)",
+     "resultPattern": "\"schema\":\\s*\"asc-(worktree|project-start|project-context-selection)/v1\""
     }
    ]
   },
@@ -209,7 +220,8 @@
    "forbidReads": [
     {
      "id": "money-rule",
-     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$"
+     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$",
+     "bashMention": "project/rules|rules/money|money\\.md"
     }
    ],
    "forbidSkills": [
@@ -242,7 +254,9 @@
    "expectCommands": [
     {
      "id": "start",
-     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b"
+     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b",
+     "exclude": "\\s(--help|-h)(\\s|$)",
+     "resultPattern": "\"schema\":\\s*\"asc-(worktree|project-start|project-context-selection)/v1\""
     }
    ]
   },
@@ -257,7 +271,8 @@
    "forbidReads": [
     {
      "id": "money-rule",
-     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$"
+     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$",
+     "bashMention": "project/rules|rules/money|money\\.md"
     }
    ],
    "forbidSkills": [

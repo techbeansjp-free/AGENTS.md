@@ -3,7 +3,7 @@
  "issue": "1844",
  "stage": "rule read with Bash",
  "markerTag": "1844",
- "note": "Fixed before any model run (decision-criteria.md). #1844: does a project rule the user registered in .agent-skill-chain/project/context.json get read where it applies, in a user environment with Bash (the ASC CLI start can run)? ASC is installed the way it reaches a user (the GitHub Release v0.5.121 tarball, project-assets --register-claude-skill --apply in a dedicated worktree, the read trigger claude-md adopted, as #1840), on fixture U of #1840 unchanged, with the #1840 cases u-bill-1, u-bill-2, u-users, u-docs and u-neg. One condition (R); #1840's no-Bash release results are the published lower bound shown beside it (decision-criteria.md). Tools level X: level W plus Bash, Bash only inside the Claude Code sandbox with the confined layout of the shared harness (run-trial.mjs confinedSettings: no allowRead, no denied ancestor of work/).",
+ "note": "Fixed before any model run (decision-criteria.md). #1844: does a project rule the user registered in .agent-skill-chain/project/context.json get read where it applies, in a user environment with Bash (the ASC CLI start can run)? ASC is installed the way it reaches a user (the GitHub Release tarball latest at measurement time, v0.5.123, project-assets --register-claude-skill --apply in a dedicated worktree, the read trigger claude-md adopted, as #1840), on fixture U of #1840 unchanged, with the #1840 cases u-bill-1, u-bill-2, u-users, u-docs and u-neg. One condition (R); #1840's no-Bash release results are the published lower bound shown beside it (decision-criteria.md). Tools level X: level W plus Bash, Bash only inside the Claude Code sandbox with the confined layout of the shared harness (run-trial.mjs confinedSettings: no allowRead, no denied ancestor of work/).",
  "model": "sonnet",
  "modelNote": "Same alias as #1814-#1840. The resolved model id (init event) is recorded per trial.",
  "runs": 3,
@@ -27,14 +27,14 @@
   "warranty-scope",
   "work-coordination"
  ],
- "ascSkillsNote": "The 17 Skills the v0.5.121 tarball distributes (checked by listing the tarball, 2026-11-28).",
+ "ascSkillsNote": "The 17 Skills the v0.5.123 tarball distributes (the install record of the dry run, 2026-11-28: the same 17 as v0.5.121; the tarball also holds v05/optional-skills/model-deliberation, which is optional and not distributed).",
  "maxTurnsByKind": {
   "app": null
  },
  "maxTurnsNote": "No --max-turns (the written files need the final state); the per-trial budget bounds the cost.",
- "probeMaxTurns": 40,
+ "probeMaxTurns": 50,
  "probeSteps": {
-  "X": 26
+  "X": 35
  },
  "probeFixture": "U",
  "probeFixtureNote": "The probe runs on fixture U (as #1840): the 17 ASC entries and the user's Skills (invoice-format, quote-format) are checked (userSkillsListed).",
@@ -49,26 +49,26 @@
     "change": 0.4,
     "negative": 0.06
    },
-   "probeUsd": 0.4
+   "probeUsd": 0.45
   },
   "expect": {
    "perKindUsd": {
     "change": 0.28,
     "negative": 0.04
    },
-   "probeUsd": 0.25,
+   "probeUsd": 0.33,
    "perKindInputTokens": {
     "change": 220000,
     "negative": 20000
    },
-   "probeInputTokens": 160000,
+   "probeInputTokens": 220000,
    "perKindOutputTokens": {
     "change": 4000,
     "negative": 500
    },
-   "probeOutputTokens": 4000
+   "probeOutputTokens": 5000
   },
-  "note": "Owner cap: 20 USD over #1843, #1844 and #1846 (owner, 2026-11-28, Issue #1844 comment 7227036027); this Issue's allocation 10 USD (coordinator, comment 7227522588). Stop line = 10 - 1 = 9 USD: run-trial.mjs refuses a trial when the ledger total + its budget exceeds it. perTrialUsd is the --max-budget-usd of every trial. expect: #1840 R/C means (change 0.11-0.21, negative 0.025) scaled up for start, its output and the Bash calls; plan = expect x about 1.4. The X probe has 22 steps (#1820 stage 1 X probe of 19 steps: 0.19 USD)."
+  "note": "Owner cap: 20 USD over #1843, #1844 and #1846 (owner, 2026-11-28, Issue #1844 comment 7227036027); this Issue's allocation 10 USD (coordinator, comment 7227522588). Stop line = 10 - 1 = 9 USD: run-trial.mjs refuses a trial when the ledger total + its budget exceeds it. perTrialUsd is the --max-budget-usd of every trial. expect: #1840 R/C means (change 0.11-0.21, negative 0.025) scaled up for start, its output and the Bash calls; plan = expect x about 1.4. The X probe has 35 steps (review L4: 26 before the indirect routes of review M2; #1820 stage 1 X probe of 19 steps: 0.19 USD)."
  },
  "adopt": "claude-md",
  "toolLevels": {
@@ -100,7 +100,7 @@
  "settingsNote": "Every trial gets the --settings file of its level (run-trial.mjs isolationSettings; level X: confinedSettings).",
  "conditions": {
   "R": {
-   "label": "リリース版（GitHub Release v0.5.121を導入）",
+   "label": "リリース版（測定の時点で最新のGitHub Release v0.5.123を導入）",
    "release": "R"
   }
  },
@@ -225,7 +225,8 @@
     "label": "該当しない依頼（報告だけ）"
    }
   ],
-  "note": "decision-criteria.md. The fraction mins are compared in integers (score.mjs levelMet)."
+  "minProvisional": true,
+  "note": "decision-criteria.md. The fraction mins are compared in integers (score.mjs levelMet). review L3: the mins are provisional (minProvisional; judge.json says so per condition); the owner decides the level."
  },
  "subsets": {
   "change": {
