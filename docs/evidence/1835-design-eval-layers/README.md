@@ -8,6 +8,8 @@
 
 ## 道具
 
+#1852が、この道具に互換の変更（組の明示・方式ごとの束・`owner-page.mjs --config`）を加えた。#1835の設定での動作は変わらない（[1852-p-good-pairs](../1852-p-good-pairs/README.md)）。
+
 | file | 内容 |
 | --- | --- |
 | `harness/degrade.mjs` | 1つの画面から、1か所だけを変えた劣化版と陰性対照を作る。乱数は使わない。`manifest.json`に、どの要素をどう変えたかを書く |

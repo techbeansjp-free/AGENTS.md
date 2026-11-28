@@ -1,0 +1,251 @@
+{
+ "schema": "asc-1852-result/v1",
+ "rule": {
+  "test": "one-sided binomial",
+  "chance": 0.5,
+  "alpha": 0.05,
+  "minOwnerDecidedPairs": 24
+ },
+ "items": 36,
+ "excludedItems": [],
+ "owner": {
+  "decided": 25,
+  "same": 11,
+  "skip": 0,
+  "unanswered": 0
+ },
+ "perEvaluator": {
+  "fable": {
+   "agree": 18,
+   "n": 25,
+   "rate": 0.72,
+   "pValue": 0.021642625331878662,
+   "criticalK": 18,
+   "pSameOnDecided": 1,
+   "missingOnDecided": 0,
+   "reproducibility": {
+    "n": 34,
+    "d": 36
+   },
+   "result": "採用",
+   "pairs": {
+    "L3:ui02-exhibition:A-r1~B-r1": "second",
+    "L3:ui02-exhibition:A-r3~B-r3": "first",
+    "L3:ui02-exhibition:A-r3~D-r2": "first",
+    "L3:ui02-exhibition:A-r2~D-r1": "first",
+    "L3:ui02-exhibition:A-r2~E-r3": "first",
+    "L3:ui02-exhibition:A-r1~E-r2": "second",
+    "L3:ui02-exhibition:B-r3~D-r1": "first",
+    "L3:ui02-exhibition:B-r2~D-r3": "second",
+    "L3:ui02-exhibition:B-r2~E-r3": "second",
+    "L3:ui02-exhibition:B-r3~E-r2": "same",
+    "L3:ui02-exhibition:D-r3~E-r3": "first",
+    "L3:ui02-exhibition:D-r1~E-r2": "second",
+    "L3:ui03-dashboard:A-r2~B-r3": "second",
+    "L3:ui03-dashboard:A-r3~B-r1": "second",
+    "L3:ui03-dashboard:A-r2~D-r2": "second",
+    "L3:ui03-dashboard:A-r3~D-r1": "second",
+    "L3:ui03-dashboard:A-r2~E-r2": "first",
+    "L3:ui03-dashboard:A-r1~E-r3": "first",
+    "L3:ui03-dashboard:B-r3~D-r1": "first",
+    "L3:ui03-dashboard:B-r1~D-r2": "second",
+    "L3:ui03-dashboard:B-r3~E-r2": "first",
+    "L3:ui03-dashboard:B-r2~E-r3": "first",
+    "L3:ui03-dashboard:D-r2~E-r3": "first",
+    "L3:ui03-dashboard:D-r3~E-r1": "second",
+    "L3:ui08-existing-ds:A-r1~B-r2": "second",
+    "L3:ui08-existing-ds:A-r2~B-r3": "first",
+    "L3:ui08-existing-ds:A-r1~D-r2": "first",
+    "L3:ui08-existing-ds:A-r2~D-r3": "same",
+    "L3:ui08-existing-ds:A-r3~E-r3": "second",
+    "L3:ui08-existing-ds:A-r2~E-r1": "first",
+    "L3:ui08-existing-ds:B-r1~D-r1": "first",
+    "L3:ui08-existing-ds:B-r3~D-r3": "second",
+    "L3:ui08-existing-ds:B-r3~E-r2": "second",
+    "L3:ui08-existing-ds:B-r2~E-r3": "first",
+    "L3:ui08-existing-ds:D-r3~E-r2": "second",
+    "L3:ui08-existing-ds:D-r1~E-r3": "second"
+   }
+  },
+  "codex": {
+   "agree": 16,
+   "n": 25,
+   "rate": 0.64,
+   "pValue": 0.11476147174835205,
+   "criticalK": 18,
+   "pSameOnDecided": 5,
+   "missingOnDecided": 0,
+   "reproducibility": {
+    "n": 29,
+    "d": 36
+   },
+   "result": "不採用",
+   "pairs": {
+    "L3:ui02-exhibition:A-r1~B-r1": "second",
+    "L3:ui02-exhibition:A-r3~B-r3": "first",
+    "L3:ui02-exhibition:A-r3~D-r2": "first",
+    "L3:ui02-exhibition:A-r2~D-r1": "first",
+    "L3:ui02-exhibition:A-r2~E-r3": "first",
+    "L3:ui02-exhibition:A-r1~E-r2": "first",
+    "L3:ui02-exhibition:B-r3~D-r1": "same",
+    "L3:ui02-exhibition:B-r2~D-r3": "second",
+    "L3:ui02-exhibition:B-r2~E-r3": "first",
+    "L3:ui02-exhibition:B-r3~E-r2": "same",
+    "L3:ui02-exhibition:D-r3~E-r3": "first",
+    "L3:ui02-exhibition:D-r1~E-r2": "first",
+    "L3:ui03-dashboard:A-r2~B-r3": "second",
+    "L3:ui03-dashboard:A-r3~B-r1": "second",
+    "L3:ui03-dashboard:A-r2~D-r2": "second",
+    "L3:ui03-dashboard:A-r3~D-r1": "second",
+    "L3:ui03-dashboard:A-r2~E-r2": "second",
+    "L3:ui03-dashboard:A-r1~E-r3": "first",
+    "L3:ui03-dashboard:B-r3~D-r1": "same",
+    "L3:ui03-dashboard:B-r1~D-r2": "same",
+    "L3:ui03-dashboard:B-r3~E-r2": "first",
+    "L3:ui03-dashboard:B-r2~E-r3": "same",
+    "L3:ui03-dashboard:D-r2~E-r3": "first",
+    "L3:ui03-dashboard:D-r3~E-r1": "second",
+    "L3:ui08-existing-ds:A-r1~B-r2": "same",
+    "L3:ui08-existing-ds:A-r2~B-r3": "first",
+    "L3:ui08-existing-ds:A-r1~D-r2": "first",
+    "L3:ui08-existing-ds:A-r2~D-r3": "first",
+    "L3:ui08-existing-ds:A-r3~E-r3": "first",
+    "L3:ui08-existing-ds:A-r2~E-r1": "first",
+    "L3:ui08-existing-ds:B-r1~D-r1": "first",
+    "L3:ui08-existing-ds:B-r3~D-r3": "second",
+    "L3:ui08-existing-ds:B-r3~E-r2": "second",
+    "L3:ui08-existing-ds:B-r2~E-r3": "first",
+    "L3:ui08-existing-ds:D-r3~E-r2": "second",
+    "L3:ui08-existing-ds:D-r1~E-r3": "same"
+   }
+  }
+ },
+ "conclusion": "不採用",
+ "interEvaluator": {
+  "n": 24,
+  "d": 36
+ },
+ "ownerByItem": {
+  "L3:ui03-dashboard:B-r1~D-r2": "second",
+  "L3:ui08-existing-ds:B-r3~D-r3": "second",
+  "L3:ui02-exhibition:B-r3~D-r1": "first",
+  "L3:ui02-exhibition:B-r3~E-r2": "first",
+  "L3:ui08-existing-ds:A-r2~B-r3": "first",
+  "L3:ui03-dashboard:D-r2~E-r3": "first",
+  "L3:ui02-exhibition:A-r3~D-r2": "first",
+  "L3:ui02-exhibition:B-r2~E-r3": "first",
+  "L3:ui02-exhibition:B-r2~D-r3": "first",
+  "L3:ui02-exhibition:D-r1~E-r2": "second",
+  "L3:ui02-exhibition:A-r2~D-r1": "first",
+  "L3:ui08-existing-ds:B-r1~D-r1": "first",
+  "L3:ui08-existing-ds:A-r1~B-r2": "same",
+  "L3:ui03-dashboard:A-r1~E-r3": "first",
+  "L3:ui08-existing-ds:B-r3~E-r2": "second",
+  "L3:ui08-existing-ds:A-r2~D-r3": "same",
+  "L3:ui02-exhibition:D-r3~E-r3": "first",
+  "L3:ui03-dashboard:A-r3~B-r1": "second",
+  "L3:ui03-dashboard:A-r2~E-r2": "same",
+  "L3:ui02-exhibition:A-r1~B-r1": "same",
+  "L3:ui03-dashboard:B-r3~E-r2": "same",
+  "L3:ui08-existing-ds:D-r1~E-r3": "second",
+  "L3:ui03-dashboard:D-r3~E-r1": "same",
+  "L3:ui03-dashboard:A-r2~B-r3": "second",
+  "L3:ui02-exhibition:A-r2~E-r3": "second",
+  "L3:ui08-existing-ds:B-r2~E-r3": "same",
+  "L3:ui03-dashboard:A-r3~D-r1": "second",
+  "L3:ui03-dashboard:A-r2~D-r2": "same",
+  "L3:ui03-dashboard:B-r2~E-r3": "second",
+  "L3:ui03-dashboard:B-r3~D-r1": "same",
+  "L3:ui08-existing-ds:A-r3~E-r3": "same",
+  "L3:ui02-exhibition:A-r1~E-r2": "first",
+  "L3:ui08-existing-ds:A-r2~E-r1": "second",
+  "L3:ui02-exhibition:A-r3~B-r3": "first",
+  "L3:ui08-existing-ds:D-r3~E-r2": "same",
+  "L3:ui08-existing-ds:A-r1~D-r2": "first"
+ },
+ "layer1": {
+  "screens": 36,
+  "failingScreens": [
+   "ui02-exhibition/B-r1/original"
+  ],
+  "unknownScreens": [],
+  "pairsWithFailingScreen": [
+   "L3:ui02-exhibition:A-r1~B-r1"
+  ],
+  "secondaryWithoutFailing": {
+   "note": "副次の報告。判定しない（計画5節）",
+   "pairs": 35,
+   "fable": {
+    "agree": 18,
+    "n": 25,
+    "rate": 0.72,
+    "pValue": 0.021642625331878662,
+    "criticalK": 18,
+    "pSameOnDecided": 1,
+    "missingOnDecided": 0,
+    "reproducibility": {
+     "n": 33,
+     "d": 35
+    }
+   },
+   "codex": {
+    "agree": 16,
+    "n": 25,
+    "rate": 0.64,
+    "pValue": 0.11476147174835205,
+    "criticalK": 18,
+    "pSameOnDecided": 5,
+    "missingOnDecided": 0,
+    "reproducibility": {
+     "n": 28,
+     "d": 35
+    }
+   }
+  }
+ },
+ "costs": {
+  "fable": {
+   "P": {
+    "calls": 72,
+    "usd": 16.100748499999998,
+    "costMissing": 0,
+    "durationMs": 1398248,
+    "tokens": {
+     "input": 432,
+     "cacheCreation": 721259,
+     "cacheRead": 1588574,
+     "output": 105668
+    }
+   }
+  },
+  "codex": {
+   "P": {
+    "calls": 72,
+    "usd": 0,
+    "costMissing": 0,
+    "durationMs": 1729842,
+    "tokens": {
+     "input": 5215645,
+     "cacheCreation": 0,
+     "cacheRead": 4040704,
+     "output": 32261
+    }
+   }
+  }
+ },
+ "budgetStopped": false,
+ "missingByReason": {
+  "fable": {
+   "total": 72,
+   "valid": 72,
+   "byReason": {},
+   "isolationUnconfirmed": 0
+  },
+  "codex": {
+   "total": 72,
+   "valid": 72,
+   "byReason": {},
+   "isolationUnconfirmed": 0
+  }
+ }
+}
