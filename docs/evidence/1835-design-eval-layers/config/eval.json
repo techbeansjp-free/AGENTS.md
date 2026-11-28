@@ -1,0 +1,48 @@
+{
+ "schema": "asc-1835-eval/v1",
+ "note": "層2・層3の評価の設定（EVAL_PLAN.mdの2・3・5節）。shotsは描画済みのscreenshotの名前（#1807 render.mjsの幅の名前）。renderLayoutは run-layer1.mjs layer1 の出力の配置。limitsの値は計画の固定（5節の「出力の上限」）で決める値の案で、有料の実行の前に確かめる。codexのmodelは#1815段階3でownerが答えたもの（gpt-6.2-sol）で、#1835では未確認。",
+ "cases": {
+  "ui02-exhibition": {"brief": "1804-design-judgment/cases/ui02-exhibition/BRIEF.md", "shots": {"narrow": "mobile", "wide": "desktop"}},
+  "ui03-dashboard": {"brief": "1804-design-judgment/cases/ui03-dashboard/BRIEF.md", "shots": {"narrow": "tablet", "wide": "desktop"}},
+  "ui08-existing-ds": {"brief": "1804-design-judgment/cases/ui08-existing-ds/BRIEF.md", "shots": {"narrow": "mobile", "wide": "desktop"}}
+ },
+ "renderLayout": "l1-{case}-{trial}/{case}__{trial}__{variant}/{shot}.png",
+ "layer2": {
+  "base": "A-r1",
+  "variants": {
+   "hierarchy-weak": {"kind": "hierarchy", "strength": "weak"},
+   "hierarchy-strong": {"kind": "hierarchy", "strength": "strong"},
+   "spacing-weak": {"kind": "spacing", "strength": "weak"},
+   "spacing-strong": {"kind": "spacing", "strength": "strong"},
+   "contrast-strong": {"kind": "contrast", "strength": "strong"},
+   "control-attr-order": {"kind": "control", "strength": null}
+  },
+  "control": "control-attr-order",
+  "minPairsPerCaseFraction": 0.5
+ },
+ "layer3": {"trials": ["A-r1", "D-r1", "E-r1"]},
+ "rounds": [1, 2],
+ "methods": ["D", "P", "Fc", "Fs", "Neg"],
+ "budget": {"capUsd": 30, "projectionLimitUsd": 28, "evaluator": "fable"},
+ "retries": {"default": 0, "max": 1},
+ "limits": {
+  "critiqueMaxChars": 800,
+  "reasonMaxChars": 300,
+  "fable": {
+   "D": {"maxTurns": 30, "maxOutputTokens": 8000, "maxBudgetUsd": 2.5, "timeoutSec": 900},
+   "P": {"maxTurns": 12, "maxOutputTokens": 4000, "maxBudgetUsd": 0.8, "timeoutSec": 420},
+   "Fc": {"maxTurns": 10, "maxOutputTokens": 4000, "maxBudgetUsd": 0.6, "timeoutSec": 300},
+   "Fs": {"maxTurns": 2, "maxOutputTokens": 2000, "maxBudgetUsd": 0.3, "timeoutSec": 180},
+   "Neg": {"maxTurns": 2, "maxOutputTokens": 2000, "maxBudgetUsd": 0.3, "timeoutSec": 180}
+  },
+  "codex": {
+   "D": {"timeoutSec": 900}, "P": {"timeoutSec": 420}, "Fc": {"timeoutSec": 300}, "Fs": {"timeoutSec": 180}, "Neg": {"timeoutSec": 180}
+  }
+ },
+ "evaluators": {
+  "fable": {"command": "claude", "model": "fable", "tools": "Read,Glob,Grep"},
+  "codex": {"command": "codex", "model": "gpt-6.2-sol"}
+ },
+ "dryRun": {"usdPerCall": {"D": 0.8, "P": 0.2, "Fc": 0.15, "Fs": 0.05, "Neg": 0.05}},
+ "ssr": {"sameThreshold": 0.1, "model": "intfloat/multilingual-e5-large", "prefix": {"response": "query: ", "anchor": "query: "}}
+}

@@ -1,0 +1,63 @@
+{
+ "schema": "asc-1835-cases/v1",
+ "note": "層1・層2の材料を作る設定（#1835）。対象は#1804の生成物（results/outputs/<case>/<条件>-r<n>/）。wide・narrowは描画の2幅で、依頼文の利用環境による（ui03は依頼文が狭幅をタブレット800pxとするので、mobileではなくtablet）。renderAliasは#1807 harness/render.mjsのVIEWPORTSのkeyで、同じ2幅を持つものを借りる（ui08の広幅は#1804の1280pxではなく1440pxになる）。firstViewは#1815 harness/first-view.mjsの書式。ui03だけは#1815 cases.jsonのui03-dashboardをそのまま使う（firstViewFrom）。targetsは劣化を当てる要素の見つけ方（harness/degrade.mjs）。textは静的なHTMLの文字（script・styleを除く、NFKC・空白除去）で最初に見つかる要素、idPatternはid属性、tagsは要素名の制限、blockはそこから『まとまり』（BLOCK_TAGSの要素で、親が2つ以上の要素を持つもの）まで上がる。peersは同じ役割の部品の候補selectorで、描画後に3つ以上見えた最初のものを使う（harness/probe.mjs）。",
+ "cases": {
+  "ui02-exhibition": {
+   "html": "out__index.html",
+   "extraFiles": {},
+   "goldKey": "ui02",
+   "renderAlias": "ui07",
+   "fixedNow": "2027-03-20T10:00:00+09:00",
+   "wide": {"width": 1440, "height": 900, "renderName": "desktop"},
+   "narrow": {"width": 390, "height": 844, "renderName": "mobile"},
+   "question": "行くかどうか・いつ行くかを決められるか（BRIEF.md）。初期表示の項目は#1804 gold.jsonのfirstViewportMobile",
+   "firstView": {
+    "narrow": {"items": [["干潟と海苔の百年"], ["4月10日", "4/10"]], "selectors": []},
+    "wide": {"items": [["干潟と海苔の百年"], ["4月10日", "4/10"]], "selectors": []}
+   },
+   "targets": {
+    "hierarchy": {"find": {"text": ["9:30"]}, "block": true, "mustContain": [["9:30", "400"], ["9:30"]], "strongDestination": "main", "why": "rubric.mdのUI-02で最初に必要な情報（会期・開館・料金・予約）のうち、開館時間と観覧料を含む最小のまとまり"},
+    "pushout": {"find": {"text": ["4月10日", "4/10"]}, "block": true, "edge": "before", "why": "初期表示の項目（会期）を含むまとまり"},
+    "spacing": {"find": {"text": ["関連イベント", "イベント"], "tags": ["h2", "h3"]}, "why": "関連イベントの見出しと、その内容"},
+    "peers": ["#events li", "#events article", ".event", "main li"]
+   }
+  },
+  "ui03-dashboard": {
+   "html": "out__index.html",
+   "extraFiles": {},
+   "goldKey": "ui03",
+   "renderAlias": "ui03",
+   "firstViewFrom": "1815-design-judgment/cases.json#ui03-dashboard",
+   "targets": {
+    "hierarchy": {"find": {"idPattern": "^(summary|attention|verdict|band)$"}, "block": false, "why": "rubric.mdのUI-03で最初に必要な情報（対処が必要なもの）の要約のまとまり"},
+    "pushout": {"find": {"tags": ["header"]}, "block": false, "edge": "after", "why": "画面の見出し（header）の後ろを押し下げ、KPI・レーン・データ源を初期表示の外へ出す"},
+    "spacing": {"find": {"text": ["KPI", "主要指標", "レーン別"], "tags": ["h2"]}, "why": "KPI（無ければレーン）の見出しと、その内容"},
+    "peers": ["#kpis > *"]
+   }
+  },
+  "ui08-existing-ds": {
+   "html": "app__billing.html",
+   "extraFiles": {
+    "billing.css": "results/outputs/{case}/{trial}/app__billing.css",
+    "tokens.css": "cases/ui08-existing-ds/app/tokens.css",
+    "components.css": "cases/ui08-existing-ds/app/components.css"
+   },
+   "goldKey": "ui08",
+   "renderAlias": "ui04",
+   "fixedNow": "2027-03-08T10:00:00+09:00",
+   "wide": {"width": 1440, "height": 900, "renderName": "desktop"},
+   "narrow": {"width": 390, "height": 844, "renderName": "mobile"},
+   "question": "請求先を編集できるか（BRIEF.md）。初期表示に請求先の名称の入力欄があること",
+   "firstView": {
+    "narrow": {"items": [["名称"]], "selectors": ["input:not([type=hidden])"]},
+    "wide": {"items": [["名称"]], "selectors": ["input:not([type=hidden])"]}
+   },
+   "targets": {
+    "hierarchy": {"find": {"text": ["請求先の名称", "請求先名", "名称"], "tags": ["label"]}, "block": true, "strongAfterSameClass": true, "why": "rubric.mdのUI-08で最初に必要な情報（入力）のうち、最初の必須項目（請求先の名称）の入力欄のまとまり"},
+    "pushout": {"find": {"text": ["請求先の名称", "請求先名", "名称"], "tags": ["label"]}, "block": true, "edge": "before", "why": "最初の入力欄から下を初期表示の外へ出す"},
+    "spacing": {"find": {"text": ["メールアドレス", "メール"], "tags": ["label"]}, "why": "メールアドレスの項目名と、その入力欄"},
+    "peers": [".field"]
+   }
+  }
+ }
+}
