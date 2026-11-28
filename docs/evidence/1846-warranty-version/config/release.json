@@ -1,0 +1,18 @@
+{
+  "schema": "asc-eval-release/v1",
+  "note": "The tarball the condition installs (conditions.json cells.C.release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here. C was filled in on 2026-11-28 from the final product HEAD (after the independent review and the merge of #1848).",
+  "C": {
+    "kind": "candidate",
+    "asset": "agent-skill-chain-0.5.121.tgz",
+    "assetSha256": "91643ca012606de0cb3c9a74ce5761c46178b2ea2b4ada9e7084af61a1b9c421",
+    "packedFromCommit": "fc055ec1c5febc08959c29b6e44fad779119a39a",
+    "packCommand": "git clone https://github.com/techbeansjp-free/AGENTS.md.git <scratch>/rel1846/cand-src; git -C <scratch>/rel1846/cand-src checkout fc055ec1c5febc08959c29b6e44fad779119a39a (feature/1846-warranty-version-cite = main 328a19f4 + this PR); node scripts/pack-candidate.mjs <scratch>/rel1846/candidate --version=0.5.121",
+    "note": "未mergeの#1846（estimate-and-scopeの版の書き方の例）を含む候補。公開しない。この測定だけに使う。",
+    "baseRelease": "v0.5.121 (GitHub Release, target commit 599a2b09184ef3d7bc0a0ca6704c435ecf581433 = the base of this branch)",
+    "differsFromReleaseOnly": [
+      "release-identity.json",
+      "skills/estimate-and-scope/SKILL.md"
+    ],
+    "differsNote": "Confirmed on 2026-11-28: the packed tarball and the GitHub Release v0.5.121 asset (sha256 2eede114e558fafec81ba9bbcde59cfbb6749320c3a2915b091b55a8dc794e1a, equal to SHA256SUMS) were unpacked and compared with diff -rq; only these two files differ."
+  }
+}

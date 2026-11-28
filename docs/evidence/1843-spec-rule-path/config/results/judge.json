@@ -1,0 +1,410 @@
+{
+ "conditions": {
+  "B": {
+   "condition": "B",
+   "runs": 18,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 0,
+   "positives": 6,
+   "entryHop": 0,
+   "reach": 6,
+   "bodyRead": 6,
+   "referenceRead": 6,
+   "applied": 0,
+   "misselect": 0,
+   "unselected": 0,
+   "markersWithoutReference": 0,
+   "negatives": 12,
+   "overapplication": 0,
+   "negMarkers": 12,
+   "designWriteBeforeBody": 0,
+   "expectReadsAll": {
+    "n": 6,
+    "ok": 0
+   },
+   "forbidReadsOk": {
+    "n": 12,
+    "ok": 12
+   },
+   "forbidSkillsOk": {
+    "n": 6,
+    "ok": 6
+   },
+   "writeOk": {
+    "n": 6,
+    "ok": 0
+   },
+   "negativeOk": {
+    "n": 12,
+    "ok": 12
+   },
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [],
+   "perCase": {
+    "n-2": "------",
+    "s-1": "BBBBBB",
+    "n-3": "------"
+   },
+   "referenceReads": {
+    "workspace.md": 6
+   },
+   "perTrial": {
+    "ascBytesRead": 13357.7,
+    "inputTokens": 49709.9,
+    "outputTokens": 1361.1,
+    "durationMs": 11725.2,
+    "costUsd": 0.1
+   },
+   "costUsd": 1.1963,
+   "turns": 70,
+   "durationSec": 211
+  },
+  "C": {
+   "condition": "C",
+   "runs": 18,
+   "notCounted": 0,
+   "failures": 0,
+   "stopped": 0,
+   "positives": 6,
+   "entryHop": 1,
+   "reach": 6,
+   "bodyRead": 6,
+   "referenceRead": 6,
+   "applied": 4,
+   "misselect": 0,
+   "unselected": 0,
+   "markersWithoutReference": 0,
+   "negatives": 12,
+   "overapplication": 0,
+   "negMarkers": 12,
+   "designWriteBeforeBody": 0,
+   "expectReadsAll": {
+    "n": 6,
+    "ok": 6
+   },
+   "forbidReadsOk": {
+    "n": 12,
+    "ok": 12
+   },
+   "forbidSkillsOk": {
+    "n": 6,
+    "ok": 6
+   },
+   "writeOk": {
+    "n": 6,
+    "ok": 4
+   },
+   "negativeOk": {
+    "n": 12,
+    "ok": 12
+   },
+   "replacementsMissing": 0,
+   "casesWithoutValidTrial": [],
+   "perCase": {
+    "n-2": "------",
+    "s-1": "BAABAA",
+    "n-3": "------"
+   },
+   "referenceReads": {
+    "workspace.md": 6
+   },
+   "perTrial": {
+    "ascBytesRead": 19447.7,
+    "inputTokens": 64058,
+    "outputTokens": 1591.4,
+    "durationMs": 13238.6,
+    "costUsd": 0.1
+   },
+   "costUsd": 1.461,
+   "turns": 87,
+   "durationSec": 238
+  }
+ },
+ "completion": {
+  "basis": "complete",
+  "complete": true,
+  "capReached": false,
+  "lateProbes": [],
+  "missingPlanned": 0,
+  "firstMissingPlanned": null,
+  "missingReplacements": [],
+  "spentUsd": 2.8708,
+  "stopLineUsd": 5.5,
+  "perTrialUsd": 0.5
+ },
+ "judgement": {
+  "verdict": "levels",
+  "basis": "complete",
+  "completion": {
+   "basis": "complete",
+   "complete": true,
+   "capReached": false,
+   "lateProbes": [],
+   "missingPlanned": 0,
+   "firstMissingPlanned": null,
+   "missingReplacements": [],
+   "spentUsd": 2.8708,
+   "stopLineUsd": 5.5,
+   "perTrialUsd": 0.5
+  },
+  "perCondition": {
+   "B": {
+    "verdict": "below-levels",
+    "checks": {
+     "g1-select": {
+      "metric": "reach",
+      "cases": [
+       "s-1"
+      ],
+      "value": "6/6 >= 5/6",
+      "ok": 6,
+      "n": 6,
+      "pass": true
+     },
+     "g1-body": {
+      "metric": "bodyRead",
+      "cases": [
+       "s-1"
+      ],
+      "value": "6/6 >= 5/6",
+      "ok": 6,
+      "n": 6,
+      "pass": true
+     },
+     "g1-spec-templates": {
+      "metric": "expectReadsAll",
+      "cases": [
+       "s-1"
+      ],
+      "value": "0/6 >= 2/3",
+      "ok": 0,
+      "n": 6,
+      "pass": false
+     },
+     "g1-spec-write": {
+      "metric": "writeOk",
+      "cases": [
+       "s-1"
+      ],
+      "value": "0/6 >= 1/1",
+      "ok": 0,
+      "n": 6,
+      "pass": false
+     },
+     "g1-negative": {
+      "metric": "negativeOk",
+      "cases": [
+       "n-2",
+       "n-3"
+      ],
+      "value": "12/12 >= 5/6",
+      "ok": 12,
+      "n": 12,
+      "pass": true
+     },
+     "g1-negative-templates": {
+      "metric": "forbidReadsOk",
+      "cases": [
+       "n-2",
+       "n-3"
+      ],
+      "value": "12/12 >= 1/1",
+      "ok": 12,
+      "n": 12,
+      "pass": true,
+      "label": "雛形・規則を1件も読まない（ownerの決定 2026-11-28、#1843）"
+     }
+    }
+   },
+   "C": {
+    "verdict": "below-levels",
+    "checks": {
+     "g1-select": {
+      "metric": "reach",
+      "cases": [
+       "s-1"
+      ],
+      "value": "6/6 >= 5/6",
+      "ok": 6,
+      "n": 6,
+      "pass": true
+     },
+     "g1-body": {
+      "metric": "bodyRead",
+      "cases": [
+       "s-1"
+      ],
+      "value": "6/6 >= 5/6",
+      "ok": 6,
+      "n": 6,
+      "pass": true
+     },
+     "g1-spec-templates": {
+      "metric": "expectReadsAll",
+      "cases": [
+       "s-1"
+      ],
+      "value": "6/6 >= 2/3",
+      "ok": 6,
+      "n": 6,
+      "pass": true
+     },
+     "g1-spec-write": {
+      "metric": "writeOk",
+      "cases": [
+       "s-1"
+      ],
+      "value": "4/6 >= 1/1",
+      "ok": 4,
+      "n": 6,
+      "pass": false
+     },
+     "g1-negative": {
+      "metric": "negativeOk",
+      "cases": [
+       "n-2",
+       "n-3"
+      ],
+      "value": "12/12 >= 5/6",
+      "ok": 12,
+      "n": 12,
+      "pass": true
+     },
+     "g1-negative-templates": {
+      "metric": "forbidReadsOk",
+      "cases": [
+       "n-2",
+       "n-3"
+      ],
+      "value": "12/12 >= 1/1",
+      "ok": 12,
+      "n": 12,
+      "pass": true,
+      "label": "雛形・規則を1件も読まない（ownerの決定 2026-11-28、#1843）"
+     }
+    }
+   }
+  },
+  "separate": {
+   "spec": {
+    "B": {
+     "positives": 6,
+     "bodyRead": 6,
+     "applied": 0,
+     "perCase": {
+      "s-1": "BBBBBB"
+     },
+     "perTrial": {
+      "ascBytesRead": 40073,
+      "inputTokens": 118021,
+      "outputTokens": 3583.7,
+      "durationMs": 28782.8,
+      "costUsd": 0.1
+     },
+     "referenceReads": {
+      "workspace.md": 6
+     }
+    },
+    "C": {
+     "positives": 6,
+     "bodyRead": 6,
+     "applied": 4,
+     "perCase": {
+      "s-1": "BAABAA"
+     },
+     "perTrial": {
+      "ascBytesRead": 58343,
+      "inputTokens": 160999.8,
+      "outputTokens": 4279.7,
+      "durationMs": 33339.3,
+      "costUsd": 0.2
+     },
+     "referenceReads": {
+      "workspace.md": 6
+     }
+    },
+    "checks": {
+     "bodyReadLevel": {
+      "value": "6/6 >= 0.8",
+      "pass": true
+     },
+     "bodyReadAboveBaseline": {
+      "value": "6/6 vs 6/6",
+      "pass": false
+     },
+     "appliedNotLower": {
+      "value": "4/6 vs 0/6",
+      "pass": true
+     }
+    }
+   },
+   "negative": {
+    "B": {
+     "positives": 0,
+     "bodyRead": 0,
+     "applied": 0,
+     "perCase": {
+      "n-2": "------",
+      "n-3": "------"
+     },
+     "perTrial": {
+      "ascBytesRead": 0,
+      "inputTokens": 15554.3,
+      "outputTokens": 249.8,
+      "durationMs": 3196.4,
+      "costUsd": 0
+     },
+     "referenceReads": {},
+     "negatives": 12,
+     "overapplication": 0
+    },
+    "C": {
+     "positives": 0,
+     "bodyRead": 0,
+     "applied": 0,
+     "perCase": {
+      "n-2": "------",
+      "n-3": "------"
+     },
+     "perTrial": {
+      "ascBytesRead": 0,
+      "inputTokens": 15587.1,
+      "outputTokens": 247.3,
+      "durationMs": 3188.2,
+      "costUsd": 0
+     },
+     "referenceReads": {},
+     "negatives": 12,
+     "overapplication": 0
+    },
+    "checks": {
+     "bodyReadLevel": {
+      "value": "0/0 >= 0.8",
+      "pass": false
+     },
+     "bodyReadAboveBaseline": {
+      "value": "0/0 vs 0/0",
+      "pass": false
+     },
+     "appliedNotLower": {
+      "value": "0/0 vs 0/0",
+      "pass": false
+     },
+     "overapplication": {
+      "value": "0/12 vs 0/12 + 1",
+      "pass": true
+     }
+    }
+   }
+  },
+  "note": "Fixed levels per condition (release and candidate are reported side by side, not as a candidate test). Few runs per case; the decisions (merge of the candidate PRs, what to fix) are the owner's."
+ },
+ "published": {
+  "trials.json": "32bbb2f0984f17637d1b64f7ab705dfe6ff5f034b3e58e58c68ec35e67333d3f",
+  "runs.json": "23bcaae0af56b5e411409a8c9ac0d14ba279878c8b126053935af67702c0b087",
+  "ledger.jsonl": "04dfc6731a53a77a745033a4fd41395fd94642785f5d0da0ee7b7acb675d207d",
+  "published.json": "e6832e203b5798e141ec0e8f1480b37071ed771db23aff360c367618292d4777"
+ },
+ "rawRunsSha256": "68f65fb8414d9b4f99c1bd2c83f302e651504fefde2fb3da03b0b804672806d8"
+}

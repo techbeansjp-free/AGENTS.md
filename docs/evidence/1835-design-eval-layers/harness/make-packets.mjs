@@ -50,8 +50,10 @@ export function buildPackets({cfg = loadConfig(), renderRoot, out, seed, allowMi
   const l2Undetermined = [];
   for (const c of Object.keys(cfg.cases)) {
     const all = items.filter((i) => i.layer === 2 && i.case === c), ok = all.filter((i) => !i.excluded);
-    if (ok.length < all.length * cfg.layer2.minPairsPerCaseFraction) l2Undetermined.push(c);
+    if (all.length && ok.length < all.length * cfg.layer2.minPairsPerCaseFraction) l2Undetermined.push(c);
   }
+  // packets are made only for the configured methods (#1852 runs P only); without cfg.methods, every method. #1835's config lists D, P, Fc, Fs and Neg, so its packets are unchanged
+  const wants = (m) => !cfg.methods || cfg.methods.includes(m);
   const newId = idAllocator(makeRng(seed, 'ids'));
   const newPacket = idAllocator(makeRng(seed, 'packets'), 6);
   const key = {schema: 'asc-1835-key/v1', seed, rounds: cfg.rounds, items, missing, l2Undetermined, packets: {}, screens: {}};
@@ -79,7 +81,7 @@ export function buildPackets({cfg = loadConfig(), renderRoot, out, seed, allowMi
   for (const round of cfg.rounds) {
     const rnd = makeRng(seed, `round${round}`);
     // P: one packet per pair
-    for (const it of shuffle(pItems, rnd)) {
+    for (const it of wants('P') ? shuffle(pItems, rnd) : []) {
       const firstIsA = (round % 2 === 1) === firstHalf.has(it.id);
       sides[it.id] = {...sides[it.id], [round]: firstIsA ? 'first' : 'second'};
       const [a, b] = firstIsA ? [it.first, it.second] : [it.second, it.first];
@@ -87,12 +89,12 @@ export function buildPackets({cfg = loadConfig(), renderRoot, out, seed, allowMi
       key.packets[writePacket(round, 'P', it.case, {method: 'P', A: idA, B: idB}, {[idA]: a, [idB]: b})].item = it.id;
     }
     // F: one packet per screen
-    for (const s of shuffle(screensOf(live), rnd)) {
+    for (const s of wants('Fc') ? shuffle(screensOf(live), rnd) : []) {
       const id = newId();
       writePacket(round, 'F', parseScreen(s).case, {method: 'F', screen: id}, {[id]: s});
     }
     // D: one packet per case, two groups (layer 2 without the negative control; layer 3)
-    for (const c of Object.keys(cfg.cases)) {
+    for (const c of wants('D') ? Object.keys(cfg.cases) : []) {
       const g2 = live.filter((i) => i.case === c && i.layer === 2 && !i.control);
       const l2 = g2.length ? [g2[0].first, ...g2.map((i) => i.second)] : [];
       const l3 = screensOf(live.filter((i) => i.case === c && i.layer === 3));

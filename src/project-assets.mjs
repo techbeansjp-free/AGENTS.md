@@ -136,6 +136,7 @@ function catalog(packageRoot,hosts){
  }
  const skill=read(packageRoot,'skills/asc/SKILL.md').toString()
   .replaceAll('../../bin/asc-v05.mjs','../../bin/asc.mjs')
+  .replaceAll('](../../v05/templates/specs/','](../../templates/specs/')
   .replace('このSkillは配布パッケージ内の場所で使用する。','このSkillはプロジェクトで共有できる。入口はruntime.jsonの版と一致するローカルパッケージを使用する。標準は同梱の.agent-skill-chain/managed-runtime/で、ASC_CLIや別インストールは不要。明示的に別版の実行先を選ぶ場合だけ環境変数ASC_CLIを使う。共有ファイルに絶対パスを書かない。');
  assets.set(prefix+'skills/asc/SKILL.md',Buffer.from(skill));
  assets.set(prefix+'00_利用案内.md',Buffer.from(`# ASC v0.5 利用案内\n\n- [実行手順](v05/USAGE.md)\n- [移行手順](v05/MIGRATION_PLAN.md)\n- [実行Skill](skills/asc/SKILL.md)\n- [開発基盤・規約の構築Skill](skills/project-foundation/SKILL.md)\n- [受託開発の保証範囲の合意Skill](skills/warranty-scope/SKILL.md)\n- [目的別Skill一覧](skills/README.md)\n- [任意の仕様書雛形](templates/specs/00_利用案内.md)\n\nproject/と既存の固有ルールは利用者が所有し、ASC更新では変更しない。作成済み仕様書も利用者の成果物として保持する。Host用入口は初回に--register-skill（.agents）または--register-claude-skill（.claude）で選ぶ。登録したHostの入口は以後の通常更新で追加・更新し、配布からなくなった未編集の管理入口だけを削除する。ファイル配置だけで実際のHost認識を確認したことにはならない。\n`));
