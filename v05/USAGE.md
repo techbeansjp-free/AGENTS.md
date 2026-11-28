@@ -213,7 +213,7 @@ runtime-binにはhostが信頼するNode実行file等を用意し、`asc-v05 ass
 
 ReviewerにはGit管理情報を含まないsnapshotと、controllerが観測した差分・対象HEAD・検証結果を渡します。変更箇所と関連契約から調べ、不明点や危険性に応じて範囲を広げます。文書不変や形式検証の成功だけで、意味的整合性を保証しません。
 
-`NODE_DOCUMENT_REPAIR_EVIDENCE.json`は古い設計の検出と是正を実Agentで確認した局所試験です。Deliveryはstubです。`NODE_DOCUMENT_COMMON_EVIDENCE.json`は共通fixtureの実Draft/CI試行で、137.86秒と以前の92.05秒より遅い観測でした。単発の時間差から因果効果や性能達成を判断していません。
+以下の`NODE_*_EVIDENCE.json`は非公開の評価記録の名前であり、このrepository・配布物には含まれません。`NODE_DOCUMENT_REPAIR_EVIDENCE.json`は古い設計の検出と是正を実Agentで確認した局所試験です。Deliveryはstubです。`NODE_DOCUMENT_COMMON_EVIDENCE.json`は共通fixtureの実Draft/CI試行で、137.86秒と以前の92.05秒より遅い観測でした。単発の時間差から因果効果や性能達成を判断していません。
 
 探索指示を絞った後の共通fixtureは91.86秒・2 Agentで実Draft/CIまで完走しました（NODE_DOCUMENT_FOCUSED_EVIDENCE.json）。各1回の観測であり、恒常的な速度維持の証明ではありません。修復時に許可された文書が削除されていた場合、基点Gitの該当内容だけを参照として渡します。参照の改変は拒否し、参照自体を成果物へ取り込みません。
 
@@ -265,7 +265,7 @@ Source observation has no fixed repository byte/file-count quota. Git contents a
 
 標準経路は冒頭の専用一時prefixから`project-assets`を実行し、プロジェクト内の同梱本体を更新する。snapshot ControllerのHostツール管理や任意の外部prefixを選ぶ場合も、候補worktree外に**ASC専用の新規directory**を版ごとに用意し、固定したlocal tarballを導入する。npmオプションは冒頭と同じものを使い、既存の共有prefixへinstall・uninstall・pruneしない。入口は`<asc-only-prefix>/node_modules/.bin/asc-v05`。NodeはHostが用意する。更新は新しい専用prefixを作り、差し戻しでは保持した旧tarballを別の新規専用prefixへ導入して明示的な参照先を切り替える。取得済みtarballとそのhashを保持する。全世界へのglobal installやcandidate側からの自己更新は行わない。
 
-`NODE_PACKAGE_UPGRADE_EVIDENCE.json`ではLinuxの同一prefixで2つのprivate alpha snapshotを往復し、配布37fileの一覧とbytes、npmのCLI入口、利用者file保持を確認した。公開registry、他OS、v0.4のpolicy/Skill/CI変換、実行中プロセスのhot upgradeは対象外。既存プロセス終了後に切り替え、新しい実行では現在のContractとEvidenceを再確認する。これによって旧版のレビューや承認が新しい変更に引き継がれるわけではない。
+`NODE_PACKAGE_UPGRADE_EVIDENCE.json`（非公開の評価記録。このrepository・配布物には含まれない）ではLinuxの同一prefixで2つのprivate alpha snapshotを往復し、配布37fileの一覧とbytes、npmのCLI入口、利用者file保持を確認した。公開registry、他OS、v0.4のpolicy/Skill/CI変換、実行中プロセスのhot upgradeは対象外。既存プロセス終了後に切り替え、新しい実行では現在のContractとEvidenceを再確認する。これによって旧版のレビューや承認が新しい変更に引き継がれるわけではない。
 
 ### Agentの寿命管理
 
