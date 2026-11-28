@@ -52,20 +52,32 @@ export function fixationFileProblems(fx, root = configDir()) {
 
 // The owner cap may cover an earlier stage (budget.priorSpend: {ledger relative to the config, ledgerSha256, spentUsd}):
 // its spend is read again from its published ledger (pinned sha256 and total), and the cap must not exceed the remainder.
-export const priorSpentUsd = (budget = BUDGET) => budget.priorSpend?.spentUsd ?? 0;
+// #1866: priorSpend may be a list of such entries (an earlier Issue's two ledgers, e.g. #1844's probe 1 and probe 2);
+// their totals are added. A single entry is read as before.
+export const priorSpendEntries = (budget = BUDGET) => (budget.priorSpend ? (Array.isArray(budget.priorSpend) ? budget.priorSpend : [budget.priorSpend]) : []);
+export const priorSpentUsd = (budget = BUDGET) => priorSpendEntries(budget).reduce((a, e) => a + (e.spentUsd ?? 0), 0);
 export function priorSpendProblems(budget = BUDGET, root = configDir()) {
   const p = [];
   if (!(budget.perTrialUsd > 0) || !(budget.probeUsd > 0) || !(budget.safetyMarginUsd >= 0)) p.push('budget perTrialUsd, probeUsd and safetyMarginUsd must be set');
-  if (!budget.priorSpend) {
+  const entries = priorSpendEntries(budget);
+  if (!entries.length) {
+    if (Array.isArray(budget.priorSpend)) p.push('budget.priorSpend is an empty list');
     if (!(budget.capUsd <= budget.ownerCapUsd)) p.push(`the cap ${budget.capUsd} exceeds the owner cap ${budget.ownerCapUsd}`);
     return p;
   }
-  const f = path.join(root, budget.priorSpend.ledger);
-  if (!fs.existsSync(f)) return [...p, 'the prior-stage published ledger is missing'];
-  if (fileSha(f) !== budget.priorSpend.ledgerSha256) p.push('the prior-stage published ledger differs from the sha256 conditions.json pins');
-  const s = ledgerOps.spent(f);
-  if (Math.abs(s - budget.priorSpend.spentUsd) > 1e-9) p.push(`the prior-stage total ${s} differs from conditions.json priorSpend.spentUsd ${budget.priorSpend.spentUsd}`);
-  if (budget.capUsd > Math.floor((budget.ownerCapUsd - s) * 100) / 100 + 1e-9) p.push(`the cap ${budget.capUsd} exceeds the owner cap ${budget.ownerCapUsd} minus the prior spend ${s}`);
+  let total = 0;
+  const seen = new Set();
+  for (const e of entries) {
+    const f = path.join(root, String(e.ledger ?? ''));
+    if (!e.ledger || !fs.existsSync(f)) return [...p, 'the prior-stage published ledger is missing'];
+    if (seen.has(path.resolve(f))) p.push(`the prior-stage ledger ${e.ledger} is listed twice`);
+    seen.add(path.resolve(f));
+    if (fileSha(f) !== e.ledgerSha256) p.push(entries.length > 1 ? `the prior-stage published ledger ${e.ledger} differs from the sha256 conditions.json pins` : 'the prior-stage published ledger differs from the sha256 conditions.json pins');
+    const s = ledgerOps.spent(f);
+    if (Math.abs(s - e.spentUsd) > 1e-9) p.push(`the prior-stage total ${s} differs from conditions.json priorSpend.spentUsd ${e.spentUsd}`);
+    total += s;
+  }
+  if (budget.capUsd > Math.floor((budget.ownerCapUsd - total) * 100) / 100 + 1e-9) p.push(`the cap ${budget.capUsd} exceeds the owner cap ${budget.ownerCapUsd} minus the prior spend ${total}`);
   return p;
 }
 
@@ -76,6 +88,7 @@ export function priorProbeProblems(conds = loadConditions(), root = configDir())
   if (!Array.isArray(conds.priorProbes)) return [];
   const names = conds.priorProbes;
   if (!conds.budget?.priorSpend) return ['conditions.json priorProbes needs budget.priorSpend (the ledger they ran under)'];
+  if (Array.isArray(conds.budget.priorSpend)) return ['conditions.json priorProbes needs a single budget.priorSpend ledger (the re-fixation of the same measurement)'];
   const f = path.join(root, conds.budget.priorSpend.ledger);
   if (!fs.existsSync(f)) return ['the prior-stage published ledger is missing'];
   const settled = new Set(ledgerOps.settlements(f).keys());
@@ -134,9 +147,11 @@ export function credentialCheckOf(args, leakOf = credentialLeakOf) {
 // L-1: an unreadable trial directory itself ('.') removes the whole work/ and tmp/ (meta.workRemoved says so).
 export function removeCredentialCopies(meta, {dir, work, probe}) {
   const listed = [...(meta.credentialFiles ?? []), ...(meta.credentialUnreadable ?? [])];
-  const whole = !probe ? 'credential leak' : meta.credentialCheckError ? 'credential check error' : listed.includes('.') ? 'trial directory unreadable' : null;
+  // PR #1857 last review L-A (#1866): an unreadable work/ or tmp/ itself is removed entirely too, and recorded as such.
+  const whole = !probe ? 'credential leak' : meta.credentialCheckError ? 'credential check error' : listed.includes('.') ? 'trial directory unreadable'
+    : listed.includes('work') ? 'work/ unreadable' : listed.includes('tmp') ? 'tmp/ unreadable' : null;
   const targets = whole ? [work, path.join(dir, 'tmp')] : [];
-  for (const f of listed) if (f !== '.') targets.push(path.join(dir, f));
+  for (const f of listed) if (f !== '.' && !(whole && (f === 'work' || f === 'tmp'))) targets.push(path.join(dir, f));
   if (!whole && meta.credentialInGitObjects !== false) targets.push(path.join(work, '.git'));
   const errors = removeAll(targets, dir);
   if (whole) meta.workRemoved = whole;
@@ -179,6 +194,11 @@ function openAncestors(p, root) {
     if (!st.isDirectory()) return;
     if ((st.mode & 0o700) !== 0o700) fs.chmodSync(cur, (st.mode & 0o7777) | 0o700);
   }
+}
+
+export const CLEANUP_LEFT_FILE = 'cleanup-left.txt';
+export function recordCleanupLeft(dir, left) {
+  try { fs.writeFileSync(path.join(dir, CLEANUP_LEFT_FILE), `${new Date().toISOString()} not removed (home/ and config/ may hold a copy of the credential; remove by hand):\n${left.map((l) => `${l}\n`).join('')}`, {flag: 'a'}); return true; } catch { return false; }
 }
 
 export function filesContaining(dir, secret) {
@@ -292,16 +312,39 @@ export const NETWORK_URL = 'https://example.com';
 export const INSIDE_FILE = 'sandbox-inside-probe.txt';
 // PR #1857 review: whether the probe's sentinels, its file inside work/ and its writes outside the trial exist, taken when
 // the probe ends and kept in meta.json (pinned by the settlement's sha256); probe-check.mjs judges from this record.
+// #1866: with a start worktree (probe context startDir), the file inside is written in the worktree (the session cwd),
+// and the probe's worktree-create inside the sandbox must have left nothing (worktreeCreateLeftOf).
 export function probeEndStateOf(ctx, work, insideFile = INSIDE_FILE) {
   const sentinels = ctx?.sentinels ?? {};
   return {sentinelExists: {trial: Boolean(sentinels.trial && fs.existsSync(sentinels.trial)), repo: Boolean(sentinels.repo && fs.existsSync(sentinels.repo))},
-    insideExists: fs.existsSync(path.join(work, insideFile)),
-    ...(ctx?.outsideWrites ? {outsideExists: Object.fromEntries(Object.entries(ctx.outsideWrites).map(([k, f]) => [k, fs.existsSync(f)]))} : {})};
+    insideExists: fs.existsSync(path.join(ctx?.startDir ?? work, insideFile)),
+    ...(ctx?.outsideWrites ? {outsideExists: Object.fromEntries(Object.entries(ctx.outsideWrites).map(([k, f]) => [k, fs.existsSync(f)]))} : {}),
+    ...(ctx?.probeWorktree ? {worktreeCreateLeft: worktreeCreateLeftOf(work, ctx)} : {})};
+}
+// #1866: what the probe's worktree-create (branch probeWorktree.branch, directory name ending probeWorktree.suffix) left
+// in the project: the branch, directories under .worktrees of the project and of the start worktree, and the Git
+// worktrees other than the main checkout and the start worktree (git worktree list; null when git failed).
+export function worktreeCreateLeftOf(work, ctx) {
+  const g = (args) => spawnSync('git', args, {cwd: work, env: gitEnv(work), encoding: 'utf8'});
+  const ref = g(['for-each-ref', '--format=%(refname)', `refs/heads/${ctx.probeWorktree.branch}`]);
+  const dirs = [path.join(work, '.worktrees'), ...(ctx.startDir ? [path.join(ctx.startDir, '.worktrees')] : [])]
+    .flatMap((d) => { try { return fs.readdirSync(d).filter((n) => n.endsWith(ctx.probeWorktree.suffix)).map((n) => path.relative(work, path.join(d, n))); } catch { return []; } });
+  const wl = g(['worktree', 'list', '--porcelain']);
+  const real = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+  const known = new Set([real(work), ...(ctx.startDir ? [real(ctx.startDir)] : [])]);
+  const others = wl.status === 0 ? wl.stdout.split('\n').filter((l) => l.startsWith('worktree ')).map((l) => real(l.slice(9))).filter((p) => !known.has(p)).map((p) => path.relative(work, p)) : null;
+  return {branch: ref.status === 0 ? ref.stdout.trim() !== '' : null, dirs: dirs.sort(), otherWorktrees: others};
 }
 
-export function probeContext({dir, runsRoot, fixture, ledger, homeMarker, repoMarker, repo = repoRoot}, level = null) {
+// #1866: a level with sandbox.startWorktree starts the session in the worktree the harness made (startDir: its real
+// path; before it exists, the plan uses <trial>/work/.worktrees/<start>), and the probe checks that the worktree-create
+// of the Bash steps stops (probeWorktree: the branch and the end of the directory name it would make).
+export const START_PLACEHOLDER = '<start>';
+export function probeContext({dir, runsRoot, fixture, ledger, homeMarker, repoMarker, repo = repoRoot, startDir = null}, level = null) {
   const trialDir = path.join(realOr(runsRoot), path.basename(dir));
+  const sw = level?.sandbox?.startWorktree ?? null;
   return {homeMarker: path.resolve(homeMarker), repoMarker: path.resolve(repoMarker), trialDir, runsRoot: realOr(runsRoot), fixture: realOr(fixture),
+    ...(sw ? {startDir: startDir ? realOr(startDir) : path.join(trialDir, 'work/.worktrees', START_PLACEHOLDER), probeWorktree: {branch: `test/${markerTag()}-probe`, suffix: `-${markerTag()}-probe`}} : {}),
     ledgerDir: path.dirname(realOr(ledger)), sentinels: sentinelPaths({dir: trialDir, repo}),
     // #1844: a confined level's probe also reads a record of another runs-root entry and lists the denied roots; review
     // M-a/M-c: it writes outside the trial (outsideWrites) and looks up the login keychain of the real user (loginKeychain).
@@ -333,12 +376,16 @@ export const ASC_CLI = '.agent-skill-chain/managed-runtime/bin/asc-v05.mjs';
 // #1844's probes are unchanged); any other is single-quoted. sq: the text inside a single-quoted word.
 export const sq = (p) => `'${String(p).replace(/'/g, `'\\''`)}'`;
 export const shq = (p) => (/^[A-Za-z0-9_@%+=:,./-]+$/.test(String(p)) ? String(p) : sq(p));
+export const WORKTREE_RECORDS_REFUSAL = 'Git worktree records are not writable';
 export function bashProbeSteps(c, tag = markerTag()) {
   if (!c.siblingRecord || !Array.isArray(c.deniedRoots) || !c.outsideWrites || !c.loginKeychain) throw new Error('level X needs the probe context of a confined level (siblingRecord, deniedRoots, outsideWrites, loginKeychain)');
-  const bash = (id, command, expect) => ({id, tool: 'Bash', command, expect});
+  const bash = (id, command, expect, extra = {}) => ({id, tool: 'Bash', command, expect, ...extra});
   return [bash('insideWrite', `echo probe > ${INSIDE_FILE}`, 'ok'), bash('insideCatClaudeMd', 'cat CLAUDE.md', 'ok'), bash('insideGitStatus', 'git status --short --branch', 'ok'),
     bash('insideNode', 'node --version', 'ok'), bash('insideAscHelp', `node ${ASC_CLI} --help`, 'ok'),
-    bash('insideWorktreeCreate', `node ${ASC_CLI} worktree-create . ${tag} test probe HEAD`, 'ok'), bash('insideTmpWrite', 'echo probe > "$TMPDIR/sandbox-tmp-probe.txt"', 'ok'),
+    // #1866: in a worktree made before the trial (probe context startDir), worktree-create inside the sandbox must stop
+    // with the message of PR #1864 (resultPattern on every result) and leave nothing (probe-check.mjs worktreeCreateStopped).
+    c.startDir ? bash('insideWorktreeCreateStops', `node ${ASC_CLI} worktree-create . ${tag} test probe HEAD`, 'refused', {resultPattern: WORKTREE_RECORDS_REFUSAL})
+      : bash('insideWorktreeCreate', `node ${ASC_CLI} worktree-create . ${tag} test probe HEAD`, 'ok'), bash('insideTmpWrite', 'echo probe > "$TMPDIR/sandbox-tmp-probe.txt"', 'ok'),
     bash('catHomeMarker', `cat ${shq(c.homeMarker)}`, 'refused'), bash('catRepoMarker', `cat ${shq(c.repoMarker)}`, 'refused'),
     bash('catSiblingRecord', `cat ${shq(c.siblingRecord)}`, 'refused'), bash('catTrialSettings', `cat ${shq(`${c.trialDir}/settings.json`)}`, 'refused'),
     bash('lsFixture', `ls ${shq(c.fixture)}`, 'refused'), bash('catFixtureClaudeMd', `cat ${shq(`${c.fixture}/CLAUDE.md`)}`, 'refused'), bash('lsLedgerDir', `ls ${shq(c.ledgerDir)}`, 'refused'),
@@ -361,7 +408,7 @@ export function indirectProbeSteps(c) {
   const split = (p) => { const i = Math.ceil(p.length / 2); return [p.slice(0, i), p.slice(i)]; };
   const [h1, h2] = split(c.homeMarker), [s1, s2] = split(c.siblingRecord);
   return [bash('lnSymlinkHome', `ln -s ${shq(c.homeMarker)} ${LINK_FILE}`, 'ok'),
-    {id: 'readSymlinkHome', tool: 'Read', path: path.join(c.trialDir, 'work', LINK_FILE), expect: 'refused', notMissing: true},
+    {id: 'readSymlinkHome', tool: 'Read', path: path.join(c.startDir ?? path.join(c.trialDir, 'work'), LINK_FILE), expect: 'refused', notMissing: true},
     bash('catSymlinkHome', `cat ${LINK_FILE}`, 'refused', {sandbox: true}),
     bash('hardLinkRepo', `ln ${shq(c.repoMarker)} ${HARD_FILE} && cat ${HARD_FILE}`, 'refused'),
     bash('nodeReadHome', `node -e 'console.log(require("fs").readFileSync(process.argv[1], "utf8"))' ${shq(c.homeMarker)}`, 'refused'),
@@ -453,6 +500,31 @@ export function installProblems(install, work, cell, fixtureId) {
   return p;
 }
 
+// #1866: the worktree a user makes in their own terminal before starting Claude Code in it (#1861, v05/USAGE.md): the
+// installed ASC CLI's worktree-create, run by the harness outside the sandbox (never by the model), on the project work/.
+// sw is conditions.json toolLevels.<id>.sandbox.startWorktree {issue, type, slug}. Returns the worktree relative to
+// work/ (startDir, .worktrees/<name>), its branch and base; throws when the CLI fails or reports anything else.
+export function startWorktreeProblems(sw) {
+  if (!sw || typeof sw !== 'object') return ['sandbox.startWorktree must be an object {issue, type, slug}'];
+  const p = [];
+  if (!/^[0-9]+$/.test(String(sw.issue ?? ''))) p.push('sandbox.startWorktree.issue must be a number');
+  if (!/^[a-z]+$/.test(String(sw.type ?? ''))) p.push('sandbox.startWorktree.type must be lower-case letters');
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(String(sw.slug ?? '')) || sw.slug === 'probe') p.push('sandbox.startWorktree.slug must be lower-case letters, digits and -, and not probe (the probe step uses it)');
+  return p;
+}
+export function createStartWorktree(work, sw, {node = process.execPath, env = {...gitEnv(work), PATH: process.env.PATH}} = {}) {
+  const p = startWorktreeProblems(sw);
+  if (p.length) throw new Error(p.join('; '));
+  const r = spawnSync(node, [path.join(work, ASC_CLI), 'worktree-create', work, String(sw.issue), sw.type, sw.slug, 'HEAD'], {cwd: work, env, encoding: 'utf8'});
+  if (r.status !== 0) throw new Error(`worktree-create before the trial failed (exit ${r.status}): ${String(r.stderr || r.stdout).trim().split('\n')[0].slice(0, 200)}`);
+  let out;
+  try { out = JSON.parse(r.stdout); } catch { throw new Error('worktree-create before the trial printed no JSON'); }
+  const real = (q) => fs.realpathSync(q);
+  const rel = out?.repo && fs.existsSync(out.repo) ? path.relative(real(work), real(out.repo)) : null;
+  if (out?.mode !== 'worktree' || !rel || !/^\.worktrees\/[^/]+$/.test(rel) || !out.branch) throw new Error(`worktree-create before the trial made no worktree under .worktrees/ (${JSON.stringify({mode: out?.mode, repo: rel, branch: out?.branch})})`);
+  return {startDir: rel.split(path.sep).join('/'), branch: out.branch, base: out.base ?? null};
+}
+
 function main() {
   const args = process.argv.slice(2);
   const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -482,12 +554,14 @@ function main() {
   let maxTurns;
   try { maxTurns = maxTurnsFor(k, conds); } catch (e) { fail(e.message); }
   const sb = cell.level.sandbox ?? null;
-  const ctxNow = () => probeContext({dir, runsRoot, fixture, ledger: path.resolve(ledgerArg), homeMarker, repoMarker}, cell.level);
+  const ctxNow = (startDir = null) => probeContext({dir, runsRoot, fixture, ledger: path.resolve(ledgerArg), homeMarker, repoMarker, startDir}, cell.level);
+  const sw = cell.level.sandbox?.startWorktree ?? null;
+  if (sw) { const p = startWorktreeProblems(sw); if (p.length) fail(p.join('; ')); }
   let prompt;
   try { prompt = probe ? probePrompt(cell.tools, ctxNow()) : promptFor(k); } catch (e) { fail(e.message); }
   if (probe && probeSteps(cell.tools, ctxNow()).length !== conds.probeSteps?.[cell.tools]) fail(`the probe has not the ${conds.probeSteps?.[cell.tools]} steps of conditions.json probeSteps`);
   const plan = {trial: name, condition: cellId, tools: cell.tools, fixture: fixtureId, case: caseId, kind: probe ? 'probe' : k.kind, model: conds.model, budgetUsd: budget, maxTurns,
-    cwd: 'work/', home: 'home/', configDir: 'config/', promptText: probe ? '<probe prompt>' : prompt,
+    cwd: sw ? `work/.worktrees/<${sw.type}/${sw.issue}-${sw.slug}>` : 'work/', home: 'home/', configDir: 'config/', promptText: probe ? '<probe prompt>' : prompt,
     ...(probe ? {probeSteps: probeSteps(cell.tools, ctxNow()).length} : {}),
     command: ['claude', '-p', '<prompt>', ...flags({level: cell.level, model: conds.model, budget, maxTurns, settingsFile: 'settings.json', debugFile: debugFile && 'debug.log'})].join(' ')};
   try { assertPlacement(work, {repoRoot}); } catch (e) { fail(e.message); }
@@ -542,13 +616,18 @@ function main() {
     const installFile = `${fixture}.install.json`;
     const install = fs.existsSync(installFile) ? JSON.parse(fs.readFileSync(installFile, 'utf8')) : null;
     fs.cpSync(fixture, work, {recursive: true});
-    const ctx = probe ? ctxNow() : null;
-    if (probe) prompt = probePrompt(cell.tools, ctx);
     const problems = installProblems(install, work, cell, fixtureId);
     if (problems.length) { fs.rmSync(dir, {recursive: true, force: true}); unlock(); fail(problems.join('; ')); }
+    // #1866: with sandbox.startWorktree, the neutral commit and the worktree the user makes in their terminal come before
+    // the reservation (a worktree-create that fails reserves nothing); the session starts in that worktree.
+    let applied = sw ? applyCondition(work) : null, start = null;
+    if (sw) { try { start = createStartWorktree(work, sw); } catch (e) { fs.rmSync(dir, {recursive: true, force: true}); unlock(); fail(e.message); } }
+    const cwd = start ? path.join(work, start.startDir) : work;
+    const ctx = probe ? ctxNow(start ? cwd : null) : null;
+    if (probe) prompt = probePrompt(cell.tools, ctx);
     const reservation = ledgerOps.reserve(ledger, name, budget);
     fs.mkdirSync(home, {recursive: true}); fs.mkdirSync(config, {recursive: true});
-    const applied = applyCondition(work);
+    if (!sw) applied = applyCondition(work);
     const sampleHead = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, env: gitEnv(work), encoding: 'utf8'}).stdout.trim();
     // #1844: a confined level's trial gets its tmp/ and bin/ (the harness node, run once here so its first start is not
     // inside the sandbox), and its probe a record of another runs-root entry to be refused.
@@ -565,13 +644,13 @@ function main() {
     }
     const settings = isolationSettings({work, runsRoot, fixture, ledger}, cell.level);
     fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 1) + '\n');
-    const global = JSON.stringify({hasCompletedOnboarding: true, numStartups: 5, projects: {[fs.realpathSync(work)]: {hasTrustDialogAccepted: true}}});
+    const global = JSON.stringify({hasCompletedOnboarding: true, numStartups: 5, projects: {[fs.realpathSync(cwd)]: {hasTrustDialogAccepted: true}}});
     fs.writeFileSync(path.join(config, '.claude.json'), global); fs.writeFileSync(path.join(home, '.claude.json'), global);
     const env = {PATH: process.env.PATH, HOME: home, CLAUDE_CONFIG_DIR: config, LANG: 'C.UTF-8', [credential]: process.env[credential],
       DISABLE_AUTOUPDATER: '1', DISABLE_TELEMETRY: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', ...(sb ? trialEnv(dir, sb) : {})};
     const version = spawnSync(claudeBin, ['--version'], {env, encoding: 'utf8'}).stdout?.trim() ?? null;
     const t0 = Date.now();
-    const r = spawnSync(claudeBin, ['-p', prompt, ...flags({level: cell.level, model: conds.model, budget, maxTurns, settingsFile, debugFile})], {cwd: work, env, input: '', encoding: 'utf8', timeout: 15 * 60 * 1000, maxBuffer: 256 * 1024 * 1024});
+    const r = spawnSync(claudeBin, ['-p', prompt, ...flags({level: cell.level, model: conds.model, budget, maxTurns, settingsFile, debugFile})], {cwd, env, input: '', encoding: 'utf8', timeout: 15 * 60 * 1000, maxBuffer: 256 * 1024 * 1024});
     const secret = process.env[credential];
     const scrub = (s) => (s ?? '').split(secret).join('<credential>');
     const stream = scrub(r.stdout);
@@ -592,7 +671,9 @@ function main() {
       resultSubtype: last?.subtype ?? null, numTurns: last?.num_turns ?? null, budget,
       ...(probe ? {probeContext: ctx, probeSentinels: ctx.sentinels, probeInsideFile: INSIDE_FILE, probeStepCount: probeSteps(cell.tools, ctx).length, probeEndState} : {}),
       // #1844: a confined level records its node, the HEAD of work/ at the end (Bash can commit) and how workFiles was taken.
-      ...(sb ? {sandboxLayout: sb.layout, nodeVersion, endHead: spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, env: gitEnv(work), encoding: 'utf8'}).stdout.trim(), workFilesOptions: {base: sampleHead, worktrees: true}} : {})};
+      ...(sb ? {sandboxLayout: sb.layout, nodeVersion, endHead: spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, env: gitEnv(work), encoding: 'utf8'}).stdout.trim(), workFilesOptions: {base: sampleHead, worktrees: true}} : {}),
+      // #1866: the worktree the harness made before the trial (the session cwd) and its HEAD at the end (Bash can commit).
+      ...(start ? {startDir: start.startDir, startWorktree: {branch: start.branch, base: start.base, endHead: spawnSync('git', ['rev-parse', 'HEAD'], {cwd, env: gitEnv(cwd), encoding: 'utf8'}).stdout.trim()}} : {})};
     meta.credentialInChildFiles = filesContaining(home, secret) + filesContaining(config, secret);
     // #1840 review M2: the files the trial changed or created (sha256), pinned through the meta.json sha256 of the settlement.
     if (!probe) { try { meta.workFiles = workChanges(work, meta.workFilesOptions); } catch (e) { meta.workFilesError = String(e.message ?? e); } }
@@ -616,7 +697,9 @@ function main() {
     // not stop the others or the unlock of the ledger, and is reported (the exit code is then 1).
     let left;
     try { left = removeAll([home, config, path.join(dir, 'bin'), path.join(dir, 'tmp')], dir); } finally { unlock(); }
-    if (left.length) { console.error(`run-trial: not removed (remove by hand): ${left.join('; ')}`); process.exitCode = 1; }
+    // PR #1857 last review L-B (#1866): what was not removed is also written to <trial>/cleanup-left.txt (not settled, not
+    // part of the records), so it is found later without the saved standard error.
+    if (left.length) { recordCleanupLeft(dir, left); console.error(`run-trial: not removed (remove by hand; listed in ${CLEANUP_LEFT_FILE}): ${left.join('; ')}`); process.exitCode = 1; }
   }
 }
 

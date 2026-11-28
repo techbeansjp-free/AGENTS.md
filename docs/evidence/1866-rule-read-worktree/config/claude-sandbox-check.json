@@ -1,0 +1,540 @@
+{
+ "schema": "asc-1866-claude-sandbox-check/v1",
+ "note": "#1866 model-free checks in the real Claude Code sandbox (not a fixed record). The Messages API is a stand-in on 127.0.0.1 (dummy API key; no request reaches Anthropic, nothing is billed). (1) claudeSandboxBash: every Bash step of the #1866 probe (run-trial.mjs bashProbeSteps with startDir) and six more, run by the Bash tool of Claude Code inside its sandbox, in a probe trial laid out with the harness functions (fixture U of v0.5.133, neutral commit, the worktree made outside the sandbox by createStartWorktree, the --settings of level X, the session started in the worktree). No marker file was made (the marker paths do not exist). (2) splitCommit: git add / git commit in the worktree as separate commands. (3) runTrialMain: run-trial.mjs main itself for R-probe-1 with a scratch copy of this config (extends and the priorSpend paths made absolute-relative for the scratch location; its own fixation and ledger), the harness PATH starting with a wrapper that points the real claude at the stand-in (which answers each turn with the next probe step parsed from the probe prompt, then \"done\"); then probe-check.mjs on it. The marker files were scratch files outside HOME and the repository (no marker in HOME/repo).",
+ "claudeVersion": "2.1.323 (Claude Code)",
+ "claudeSandboxBash": {
+  "steps": 42,
+  "failedByThisScript": [
+   "processList",
+   "commitHere"
+  ],
+  "failedNote": "processList: refused by the permission check of Claude Code (\"requires approval: ps -axo pid=\"), which probe-check.mjs counts as passing (permissionRefusalOk, as #1844); commitHere: git -c ... commit in one compound command needs approval in -p (the permission layer, not the sandbox); see splitCommit.",
+  "initCwdIsWorktree": true,
+  "worktreeCreateResult": "Exit code 1\nGit worktree records are not writable: <runs-root>/R-probe-1/work/.git/worktrees (EPERM). worktree-create records the new worktree there; Git would create the branch and then stop, leaving the branch behind. A Host sandbox, file permissions or a read-only mount can cause this. The Bash sandbox of Claude Code keeps .git/worktrees read-only, and sandbox.filesystem.allowWrite does not lift it. The user can run this worktree-create in their own terminal, outside the sandbox, and then start Claude Code in the created worktree (a session started at the repository root cannot commit there). An Agent must not widen its own sandbox or permissions; ask the user to decide. See v05/USAGE.md.",
+  "debugLog": {
+   "bytes": 92407,
+   "dummyKeyHits": 0,
+   "keySuffixHits": 0,
+   "skAnt": 0
+  },
+  "credential": {
+   "credentialInRecords": 0,
+   "credentialFiles": [],
+   "credentialInGitObjects": false,
+   "credentialLeak": false
+  },
+  "endState": {
+   "sentinelExists": {
+    "trial": false,
+    "repo": false
+   },
+   "insideExists": true,
+   "outsideExists": {
+    "userTmp": false,
+    "runsRoot": false,
+    "varTmp": false
+   },
+   "worktreeCreateLeft": {
+    "branch": false,
+    "dirs": [],
+    "otherWorktrees": []
+   }
+  },
+  "rows": [
+   {
+    "id": "insideWrite",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "(Bash completed with no output)",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "insideCatClaudeMd",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "# 請求管理（社内）",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "insideGitStatus",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "## test/1866-trial",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "insideNode",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "v20.12.2",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "insideAscHelp",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "ASC v0.5 — Goal・契約・Evidenceに基づく開発ハーネス",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "insideWorktreeCreateStops",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "insideTmpWrite",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "(Bash completed with no output)",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "catHomeMarker",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "catRepoMarker",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "catSiblingRecord",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "catTrialSettings",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "lsFixture",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "catFixtureClaudeMd",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "lsLedgerDir",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "lsDeniedRoot1",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "lsDeniedRoot2",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "lsDeniedRoot3",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "touchTrialDir",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "touchRepo",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "network",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 56",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "lnSymlinkHome",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "(Bash completed with no output)",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "catSymlinkHome",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "hardLinkRepo",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "nodeReadHome",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "shArgRepo",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "varPathHome",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "varPathSibling",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "credentialLength",
+    "expect": "any",
+    "isError": false,
+    "missing": false,
+    "first": "0",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "touchUserTmp",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "touchRunsRoot",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "touchVarTmp",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "keychainDefault",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "44",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "keychainLogin",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "44",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "clipboard",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "0",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "processList",
+    "expect": "ok",
+    "isError": true,
+    "missing": false,
+    "first": "This Bash command contains multiple operations. The following part requires approval: ps -axo pid=",
+    "sandboxRefusal": false,
+    "pass": false
+   },
+   {
+    "id": "processListIndirect",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "0",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "startHere",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "{",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "startHereRule",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "1",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "catMainCheckoutRule",
+    "expect": "ok",
+    "isError": false,
+    "missing": false,
+    "first": "# 金額の扱い（請求）",
+    "sandboxRefusal": false,
+    "pass": true
+   },
+   {
+    "id": "commitHere",
+    "expect": "ok",
+    "isError": true,
+    "missing": false,
+    "first": "This Bash command contains multiple operations. The following parts require approval: git add probe-commit.txt, git -c user.name=x -c user.email=x@example.inval",
+    "sandboxRefusal": false,
+    "pass": false
+   },
+   {
+    "id": "writeMainCheckout",
+    "expect": "refused",
+    "isError": true,
+    "missing": false,
+    "first": "Exit code 1",
+    "sandboxRefusal": true,
+    "pass": true
+   },
+   {
+    "id": "gitWorktreeList",
+    "expect": "any",
+    "isError": false,
+    "missing": false,
+    "first": "<trial>/work                                        c24ecdb [main]",
+    "sandboxRefusal": false,
+    "pass": true
+   }
+  ]
+ },
+ "splitCommit": [
+  {
+   "command": "echo x > probe-commit.txt",
+   "isError": false,
+   "first": "(Bash completed with no output)"
+  },
+  {
+   "command": "git add probe-commit.txt",
+   "isError": false,
+   "first": "(Bash completed with no output)"
+  },
+  {
+   "command": "git commit -qm probe",
+   "isError": false,
+   "first": "(Bash completed with no output)"
+  },
+  {
+   "command": "git log --oneline -1",
+   "isError": false,
+   "first": "77693fa probe"
+  },
+  {
+   "command": "git config user.name",
+   "isError": true,
+   "first": "Exit code 1"
+  },
+  {
+   "command": "git -c user.name=x -c user.email=x@example.invalid commit -qm probe",
+   "isError": true,
+   "first": "This command requires approval"
+  }
+ ],
+ "runTrialMain": {
+  "exit": 0,
+  "numTurns": 44,
+  "wallMs": 59598,
+  "startDir": ".worktrees/<YYYYMMDD_HHMMSS>-1866-trial",
+  "startBranch": "test/1866-trial",
+  "credentialLeak": false,
+  "credentialInRecords": 0,
+  "probeEndState": {
+   "sentinelExists": {
+    "trial": false,
+    "repo": false
+   },
+   "insideExists": true,
+   "outsideExists": {
+    "userTmp": false,
+    "runsRoot": false,
+    "varTmp": false
+   },
+   "worktreeCreateLeft": {
+    "branch": false,
+    "dirs": [],
+    "otherWorktrees": []
+   }
+  },
+  "probeCheck": {
+   "init": true,
+   "cwd": true,
+   "tools": true,
+   "permissionMode": true,
+   "noMcp": true,
+   "noPlugins": true,
+   "programDirectory": true,
+   "ascListed": true,
+   "noOwnerSkills": true,
+   "descriptionsInContext": false,
+   "ascDescriptionsInContext": false,
+   "skillListingRecorded": true,
+   "userSkillsListed": false,
+   "descriptionsVerbatimCount": true,
+   "projectClaudeMd": false,
+   "pointerMatchesCondition": false,
+   "noRepoInstructions": true,
+   "noOwnerInstructionsOrMemory": true,
+   "gitContextNeutral": true,
+   "markersAttempted": true,
+   "markersRefused": true,
+   "markerTokensAbsent": true,
+   "debugPathsInsideTrial": false,
+   "noRealHomeOrRepoInDebug": false,
+   "hookMatchesCondition": true,
+   "noForeignHooks": true,
+   "probeStepsDefined": true,
+   "probeStepsAttempted": true,
+   "probeStepResults": true,
+   "probeStepsRefused": true,
+   "probeStepsSucceeded": true,
+   "sentinelsAbsent": true,
+   "sandboxInsideWrite": true,
+   "allowReadWork": true,
+   "networkBlocked": true,
+   "sandboxRefusal": true,
+   "refusedNotMissing": true,
+   "probeStepOutputs": true,
+   "probeStepResultText": true,
+   "worktreeCreateStopped": true,
+   "outsideWritesAbsent": true,
+   "credentialNotLeaked": true
+  },
+  "expectedFailures": {
+   "answer (the stand-in answers only \"done\")": [
+    "descriptionsInContext",
+    "ascDescriptionsInContext",
+    "userSkillsListed",
+    "projectClaudeMd",
+    "pointerMatchesCondition"
+   ],
+   "scratch markers (the Glob step names the marker directory outside the repository, so the debug line of the Write suggestion for <repo-root>/.agent-skill-chain/local is not a probe-step line; in the probe the markers are in that directory, as in #1844 R-probe-2, which passed both)": [
+    "debugPathsInsideTrial",
+    "noRealHomeOrRepoInDebug"
+   ]
+  },
+  "otherFailures": []
+ }
+}

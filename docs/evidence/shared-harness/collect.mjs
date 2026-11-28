@@ -66,7 +66,8 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
     maxTurns: meta.maxTurns ?? null, initTools: meta.initTools ?? null, initPermissionMode: meta.initPermissionMode ?? null, settingsSha256: meta.settingsSha256 ?? null, resultSubtype: meta.resultSubtype ?? null, numTurns: meta.numTurns ?? null,
     ledgerId: meta.ledgerId ?? null, ledgerSeq: meta.ledgerSeq ?? null, fixationSha256: meta.fixationSha256, fixedAtCommit: meta.fixedAtCommit, fixationStage: meta.fixationStage,
     exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: scrubSensitive(redact(text, dir)).hits, ...raw,
-    ...(meta.sandboxLayout ? {sandboxLayout: meta.sandboxLayout, nodeVersion: meta.nodeVersion ?? null, endHead: meta.endHead ?? null, unreachedCommits: meta.unreached?.commits?.length ?? null, credentialLeak: meta.credentialLeak ?? null} : {})};
+    ...(meta.sandboxLayout ? {sandboxLayout: meta.sandboxLayout, nodeVersion: meta.nodeVersion ?? null, endHead: meta.endHead ?? null, unreachedCommits: meta.unreached?.commits?.length ?? null, credentialLeak: meta.credentialLeak ?? null} : {}),
+    ...(meta.startDir ? {startDir: meta.startDir, startBranch: meta.startWorktree?.branch ?? null} : {})};
   // #1840 re-review High: the fixture's files before the trial (work/ at its HEAD), for the lines the markers leave out.
   // #1844 review L-c: a trial with Bash may have committed; its files before the trial are those of meta.json sampleHead.
   const head = headReader(work, meta.workFilesOptions && meta.sampleHead ? meta.sampleHead : 'HEAD');
@@ -80,7 +81,9 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
   const isDir = (d) => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
   const worktrees = meta.workFilesOptions ? (isDir(wtDir) ? fs.readdirSync(wtDir).filter((n) => isDir(path.join(wtDir, n))).sort() : []) : null;
   return {row, entry: {name, text, failure: null, sizeOf, fileText, priorFiles: head.files, priorTexts: head.texts, ...(changedFiles ? {changedFiles} : {}),
-    ...(worktrees ? {worktrees} : {}), ...(meta.unreached?.files?.length ? {unreachedFiles: meta.unreached.files} : {})}, dir};
+    ...(worktrees ? {worktrees} : {}), ...(meta.unreached?.files?.length ? {unreachedFiles: meta.unreached.files} : {}),
+    // #1866: the trial started in the worktree the harness made before it (meta.json startDir; score.mjs scoreRun startDir).
+    ...(meta.startDir ? {startDir: meta.startDir} : {})}, dir};
 }
 
 // #1840 review M2: a trial whose meta.json records workFiles (run-trial.mjs, the changed and created files with their

@@ -16,11 +16,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {cellOf, probeContext, isolationSettings, trialEnv, bashProbeSteps, ASC_CLI, INSIDE_FILE, shq, sq} from './run-trial.mjs';
+import {cellOf, probeContext, isolationSettings, trialEnv, bashProbeSteps, ASC_CLI, INSIDE_FILE, shq, sq, createStartWorktree, worktreeCreateLeftOf} from './run-trial.mjs';
 import {loadConditions} from './config.mjs';
 import {markerPaths} from './markers.mjs';
 
 const DENIED = /operation not permitted|permission denied|denied|response 403|^0{3}/i;
+// #1866: srt allows writes only to the start worktree and tmp/, so the whole <work>/.git is read-only and worktree-create
+// stops at its earlier check of the Git metadata (#1730), before the check of the worktree records (PR #1864) that Claude
+// Code's sandbox reaches (it allows .git but not .git/worktrees, apart from the session's own worktree; #1861). Either
+// stop is accepted here; the probe and claude-sandbox-bash.mjs need the PR #1864 message.
+const SRT_STRICTER = /Git metadata is not writable/;
 
 export function sandboxCheck({root, condition, fixture, srt, srtNode, repo}) {
   if (fs.existsSync(root)) throw new Error(`refused: exists ${root}`);
@@ -37,7 +42,11 @@ export function sandboxCheck({root, condition, fixture, srt, srtNode, repo}) {
     spawnSync(path.join(dir, 'bin/node'), ['--version']);
   }
   const mk = markerPaths(repo);
-  const ctx = probeContext({dir, runsRoot: runs, fixture, ledger, homeMarker: mk.home, repoMarker: mk.repo, repo}, cell.level);
+  // #1866: with sandbox.startWorktree, the worktree is made outside the sandbox first (run-trial.mjs createStartWorktree)
+  // and the commands run in it; srt gets the write allowance of that worktree (not of work/).
+  const start = sb.startWorktree ? createStartWorktree(work, sb.startWorktree) : null;
+  const cwd = start ? path.join(work, start.startDir) : work;
+  const ctx = probeContext({dir, runsRoot: runs, fixture, ledger, homeMarker: mk.home, repoMarker: mk.repo, repo, startDir: start ? cwd : null}, cell.level);
   fs.mkdirSync(path.dirname(ctx.siblingRecord), {recursive: true}); fs.writeFileSync(ctx.siblingRecord, 'a record of another runs-root entry\n');
   // #1844 review L1: an entry beside the runs root (as <root>/probe-R.json), made before the settings list them.
   const beside = path.join(root, 'probe-R.json');
@@ -47,10 +56,10 @@ export function sandboxCheck({root, condition, fixture, srt, srtNode, repo}) {
   const f = settings.sandbox.filesystem;
   const srtFile = path.join(root, 'srt-settings.json');
   fs.writeFileSync(srtFile, JSON.stringify({network: {allowedDomains: [], deniedDomains: []},
-    filesystem: {denyRead: f.denyRead, allowWrite: [fs.realpathSync(work), fs.realpathSync(path.join(dir, 'tmp'))], denyWrite: f.denyWrite}}, null, 1));
+    filesystem: {denyRead: f.denyRead, allowWrite: [fs.realpathSync(cwd), fs.realpathSync(path.join(dir, 'tmp'))], denyWrite: f.denyWrite}}, null, 1));
   const env = {HOME: path.join(dir, 'home'), LANG: 'C.UTF-8', ...trialEnv(dir, sb)};
   env.CLAUDE_TMPDIR = env.CLAUDE_CODE_TMPDIR; // srt takes the sandboxed TMPDIR from CLAUDE_TMPDIR
-  const run = (command) => { const r = spawnSync(srtNode, [srt, '-s', srtFile, '-c', command], {cwd: work, env, encoding: 'utf8'}); return {exit: r.status, firstLine: `${r.stdout}${r.stderr}`.split('\n').map((l) => l.trim()).find(Boolean) ?? ''}; };
+  const run = (command) => { const r = spawnSync(srtNode, [srt, '-s', srtFile, '-c', command], {cwd, env, encoding: 'utf8'}); return {exit: r.status, text: `${r.stdout}${r.stderr}`, firstLine: `${r.stdout}${r.stderr}`.split('\n').map((l) => l.trim()).find(Boolean) ?? ''}; };
   const wt = '"$(ls -d .worktrees/* | head -1)"';
   // #1844 review M2: a denied file that exists (the markers are not created here) for the indirect routes.
   const denied = path.join(path.dirname(ledger), 'denied-record.txt');
@@ -66,29 +75,40 @@ export function sandboxCheck({root, condition, fixture, srt, srtNode, repo}) {
     {id: 'existingRealHomeFile', command: `cat ${shq(path.join(os.homedir(), '.zshrc'))}`, expect: 'refused'},
     {id: 'existingRepoFile', command: `cat ${shq(path.join(repo, 'AGENTS.md'))}`, expect: 'refused'},
     {id: 'userTmpOfClaudeCode', command: `ls /tmp/claude-${process.getuid()}`, expect: 'refused'},
-    {id: 'startInMainCheckout', command: `node ${ASC_CLI} start . --path src/billing/invoice.ts`, expect: 'refused'},
-    {id: 'startInWorktreeSelectsRule', command: `node ${ASC_CLI} start ${wt} --path src/billing/invoice.ts | grep -c 'rules/money.md'`, expect: 'ok'},
-    {id: 'startInWorktreeUsersNoRule', command: `node ${ASC_CLI} start ${wt} --path src/users/store.ts | grep -c 'rules/money.md'`, expect: 'refused'},
-    {id: 'catRuleInWorktree', command: `head -1 ${wt}/.agent-skill-chain/project/rules/money.md`, expect: 'ok'},
-    {id: 'commitInWorktree', command: `cd ${wt} && echo x > probe.txt && git add probe.txt && git -c user.name=x -c user.email=x@example.invalid commit -qm probe && git log --oneline -1`, expect: 'ok'}];
+    ...(start ? [
+      // #1866: in the worktree made before the trial. srt has no exception for the session's own worktree records (Claude
+      // Code 2.1.323 has one, #1861), so the commit is recorded only (expect any); the Claude Code check is
+      // claude-sandbox-bash.mjs.
+      {id: 'startHereSelectsRule', command: `node ${ASC_CLI} start . --path src/billing/invoice.ts | grep -c 'rules/money.md'`, expect: 'ok'},
+      {id: 'startHereUsersNoRule', command: `node ${ASC_CLI} start . --path src/users/store.ts | grep -c 'rules/money.md'`, expect: 'refused'},
+      {id: 'catRuleHere', command: 'head -1 .agent-skill-chain/project/rules/money.md', expect: 'ok'},
+      {id: 'catMainCheckoutRule', command: 'head -1 ../../.agent-skill-chain/project/rules/money.md', expect: 'ok'},
+      {id: 'commitHere', command: 'echo x > probe.txt && git add probe.txt && git -c user.name=x -c user.email=x@example.invalid commit -qm probe && git log --oneline -1', expect: 'any'}]
+    : [{id: 'startInMainCheckout', command: `node ${ASC_CLI} start . --path src/billing/invoice.ts`, expect: 'refused'},
+      {id: 'startInWorktreeSelectsRule', command: `node ${ASC_CLI} start ${wt} --path src/billing/invoice.ts | grep -c 'rules/money.md'`, expect: 'ok'},
+      {id: 'startInWorktreeUsersNoRule', command: `node ${ASC_CLI} start ${wt} --path src/users/store.ts | grep -c 'rules/money.md'`, expect: 'refused'},
+      {id: 'catRuleInWorktree', command: `head -1 ${wt}/.agent-skill-chain/project/rules/money.md`, expect: 'ok'},
+      {id: 'commitInWorktree', command: `cd ${wt} && echo x > probe.txt && git add probe.txt && git -c user.name=x -c user.email=x@example.invalid commit -qm probe && git log --oneline -1`, expect: 'ok'}])];
   // expect any: recorded only (the credential length; no credential is in this environment). #1844 review M-b/M-c: a step
   // marked sandbox needs the sandbox's own refusal, except the two whose target is a marker (not created here: "No such
   // file"); a step with outputPattern needs exit 0 and its first line to match. The M-c steps are also run once without the
   // sandbox in the same environment (baseline), so that a refusal is not just an empty keychain, clipboard or process list.
   const MARKER_TARGET = new Set(['catSymlinkHome', 'varPathHome']);
-  const plain = (command) => { const r = spawnSync('/bin/bash', ['-c', command], {cwd: work, env, encoding: 'utf8'}); return `${r.stdout}${r.stderr}`.split('\n').map((l) => l.trim()).find(Boolean) ?? ''; };
+  const plain = (command) => { const r = spawnSync('/bin/bash', ['-c', command], {cwd, env, encoding: 'utf8'}); return `${r.stdout}${r.stderr}`.split('\n').map((l) => l.trim()).find(Boolean) ?? ''; };
   const rows = steps.map((st) => {
     const r = run(st.command), sandboxRefusal = /operation not permitted|response 403/i.test(r.firstLine);
     const pass = st.expect === 'any' ? true : st.expect === 'ok' ? r.exit === 0 && (!st.outputPattern || new RegExp(st.outputPattern).test(r.firstLine))
-      : (r.exit !== 0 || DENIED.test(r.firstLine)) && (!st.sandbox || MARKER_TARGET.has(st.id) || sandboxRefusal);
+      : (r.exit !== 0 || DENIED.test(r.firstLine)) && (!st.sandbox || MARKER_TARGET.has(st.id) || sandboxRefusal) && (!st.resultPattern || new RegExp(st.resultPattern).test(r.text) || SRT_STRICTER.test(r.text));
     return {id: st.id, probeStep: st.probe === true, expect: st.expect, ...(st.outputPattern ? {outputPattern: st.outputPattern, baseline: plain(st.command)} : {}), ...(st.sandbox ? {sandboxRequired: !MARKER_TARGET.has(st.id)} : {}),
       exit: r.exit, firstLine: r.firstLine, sandboxRefusal, pass};
   });
-  const left = {trialSentinel: fs.existsSync(ctx.sentinels.trial), repoSentinel: fs.existsSync(ctx.sentinels.repo), insideFile: fs.existsSync(path.join(work, INSIDE_FILE)),
-    outside: Object.fromEntries(Object.entries(ctx.outsideWrites).map(([k, f]) => [k, fs.existsSync(f)]))};
+  const left = {trialSentinel: fs.existsSync(ctx.sentinels.trial), repoSentinel: fs.existsSync(ctx.sentinels.repo), insideFile: fs.existsSync(path.join(cwd, INSIDE_FILE)),
+    outside: Object.fromEntries(Object.entries(ctx.outsideWrites).map(([k, f]) => [k, fs.existsSync(f)])), ...(ctx.probeWorktree ? {worktreeCreateLeft: worktreeCreateLeftOf(work, ctx)} : {})};
+  const wl = left.worktreeCreateLeft;
   const version = (cmd, args) => spawnSync(cmd, args, {encoding: 'utf8'}).stdout?.trim() || null;
   const out = {schema: 'asc-sandbox-check/v1', condition, tools: cell.tools, srtVersion: version(srtNode, [srt, '--version']), claudeVersion: version('claude', ['--version']), nodeVersion: version(path.join(dir, sb.copyNode ? 'bin/node' : ''), ['--version']),
-    pass: rows.every((r) => r.pass) && !left.trialSentinel && !left.repoSentinel && left.insideFile && Object.values(left.outside).every((x) => !x), left, settings, rows};
+    pass: rows.every((r) => r.pass) && !left.trialSentinel && !left.repoSentinel && left.insideFile && Object.values(left.outside).every((x) => !x) && (!wl || (wl.branch === false && wl.dirs.length === 0 && wl.otherWorktrees?.length === 0)),
+    ...(start ? {startDir: start.startDir, startBranch: start.branch} : {}), left, settings, rows};
   fs.rmSync(path.join(dir, 'bin'), {recursive: true, force: true});
   return JSON.parse(JSON.stringify(out).split(fs.realpathSync(fixture)).join('<fixture>').split(fixture).join('<fixture>').split(fs.realpathSync(root)).join('<root>').split(root).join('<root>').split(path.resolve(repo)).join('<repo-root>').split(os.homedir()).join('<home>'));
 }

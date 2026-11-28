@@ -1,0 +1,49 @@
+{
+ "schema": "asc-eval-conditions/v1",
+ "extends": "../../1844-rule-read-bash/config",
+ "extendsNote": "#1866 forbids copying #1844's config: this config reads #1844's conditions.json, cases.json, run-order.json and decision-criteria.md through config.mjs (extends) and overrides only the fields below (objects are merged key by key, null removes a key). release.json, README.md and results/ are this config's own.",
+ "issue": "1866",
+ "stage": "rule read in a worktree made before the trial",
+ "markerTag": "1866",
+ "note": "Fixed before any model run (#1844 decision-criteria.md, unchanged by the owner's decision of 2026-11-28). #1866: does a project rule the user registered in .agent-skill-chain/project/context.json get read where it applies, when the user makes the worktree in their own terminal (worktree-create outside the sandbox) and starts Claude Code in it (the procedure of #1861, v05/USAGE.md)? As #1844 (fixture U, the five #1840 cases, level X with Bash in the confined sandbox) except: the release is v0.5.133 (the first release with PR #1864's worktree-create check), and before each trial the harness runs the installed ASC CLI worktree-create outside the sandbox (toolLevels.X.sandbox.startWorktree) and starts Claude Code in that worktree. The probe's worktree-create inside the sandbox must stop with 'Git worktree records are not writable' and make neither a branch nor a directory under .worktrees (run-trial.mjs startWorktreeProbeSteps).",
+ "ascSkillsNote": "The 17 Skills the v0.5.133 tarball distributes (skills/ of the tarball, 2026-11-28: the same 17 as v0.5.128).",
+ "probeFixtureNote": "The probe runs on fixture U (as #1844), in the worktree the harness made before it: the 17 ASC entries and the user's Skills (invoice-format, quote-format) are checked (userSkillsListed).",
+ "budget": {
+  "ownerCapUsd": 10,
+  "capUsd": 9.42,
+  "priorSpend": [
+   {
+    "ledger": "../../1844-rule-read-bash/config/results/ledger-1.jsonl",
+    "ledgerSha256": "48277fa8c3a6f0fea340a907864ec3fbfc4e43a536034d0388a34dd3d4bcefe7",
+    "spentUsd": 0.3472675
+   },
+   {
+    "ledger": "results/prior/1844-ledger-2.jsonl",
+    "ledgerSha256": "eb88d691c92e9848051475620471f83ca78ee30cc84539a784d67d062bfc30e8",
+    "spentUsd": 0.23182550000000002
+   }
+  ],
+  "note": "Owner decision (2026-11-28, Issue #1866 comment 7236492574): the paid cap of #1866 is what is left of #1844's allocation, about 9.4 USD (10 - 0.58; within the 20 USD of #1843, #1844 and #1846). Expressed as #1844's allocation (ownerCapUsd 10) with #1844's two ledgers as priorSpend (probe 1: 0.3472675 USD, published by #1844; probe 2: 0.2318255 USD, its ledger a48998d6 published here as results/prior/1844-ledger-2.jsonl; its R-probe-2 trace/meta sha256 are those of #1844's published probe-compare.json): capUsd = floor((10 - 0.579093) x 100) / 100 = 9.42, the stop line of the new ledger 9.42 - 1 = 8.42 USD (run-trial.mjs refuses a trial when the ledger total + its budget exceeds it). perTrialUsd, probeUsd, plan and expect as #1844 (the steps differ by one replaced step and one worktree-create run by the harness outside the model)."
+ },
+ "toolLevels": {
+  "X": {
+   "sandbox": {
+    "startWorktree": {
+     "issue": "1866",
+     "type": "test",
+     "slug": "trial"
+    }
+   }
+  }
+ },
+ "startWorktreeNote": "toolLevels.X.sandbox.startWorktree: before the model is started, run-trial.mjs runs the installed ASC CLI (node <work>/.agent-skill-chain/managed-runtime/bin/asc-v05.mjs worktree-create <work> 1866 test trial HEAD) outside the sandbox, as the user does in their terminal (#1861, v05/USAGE.md), and starts Claude Code in the worktree it made (meta.json startDir, startWorktree). The sandbox layout is unchanged (work/ is the project with its .git; the session cwd is the worktree under work/.worktrees/).",
+ "conditions": {
+  "R": {
+   "label": "リリース版（v0.5.133。PR #1864のworktree-createの確認を含む最初のrelease）を導入し、試行の前にsandboxの外で作ったworktreeで起動する"
+  }
+ },
+ "cellsNote": "One condition. The lower bound without Bash is #1840's published R (v0.5.119, level W); it is shown beside, not run again. #1844 measured nothing (未判定).",
+ "priorProbes": null,
+ "priorProbesNote": null,
+ "probeNote": "One isolation probe on fixture U in the worktree made before it (a second one only as the replacement of a failed probe: probes max 2, owner decision 2026-11-28). probe-check.mjs judges it against level X; #1844's probes ran under #1844's ledgers and are not counted here."
+}

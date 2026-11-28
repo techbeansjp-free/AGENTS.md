@@ -128,7 +128,10 @@ function sentenceHasMatch(re, u, sentence) {
   for (const ch of chars) { offsets.push(n); n += ch.length; }
   const g = new RegExp(re.source, 'gi');
   for (const m of sentence.matchAll(g)) {
-    const first = offsets.findIndex((o) => o >= m.index);
+    // PR #1873 re-review L-2 (#1866): an empty match at the end of the sentence has no character at or after it; it is
+    // held by the unit of the last character (findIndex -1 would leave the chain undefined and throw).
+    let first = offsets.findIndex((o) => o >= m.index);
+    if (first < 0) first = chars.length - 1;
     let last = offsets.findIndex((o) => o >= m.index + m[0].length) - 1;
     if (last < 0) last = chars.length - 1;
     if (last < first) last = first;
@@ -144,24 +147,45 @@ function sentenceHasMatch(re, u, sentence) {
 // writesReport.require) must not have them: it is matched on the whole text, and the field would be silently ignored.
 // dry-run.mjs refuses a config with a problem (sentenceFields).
 const SENTENCE_FIELDS = ['sentenceWith', 'sentenceUnless'];
+// PR #1873 re-review L-1 (#1866): a sentence field anywhere else in a case (answerQuota.groups, expectReads,
+// expectCommands, report entries, ...) or in the top-level fields of cases.json is silently ignored by the scoring, so it
+// is a problem too; and an entry with a sentence field whose pattern matches the empty string matches every sentence.
+const SENTENCE_PLACES = [/^answerNone\.\d+$/, /^writes\.forbid\.\d+$/, /^writesReport\.forbid\.\d+$/];
+const REQUIRE_PLACES = [/^writes\.require\.\d+$/, /^writesReport\.require\.\d+$/];
+function sentenceObjects(x, at = '', out = []) {
+  if (Array.isArray(x)) x.forEach((v, i) => sentenceObjects(v, at ? `${at}.${i}` : String(i), out));
+  else if (x && typeof x === 'object') {
+    if (SENTENCE_FIELDS.some((f) => f in x)) out.push([at, x]);
+    for (const [k, v] of Object.entries(x)) if (!SENTENCE_FIELDS.includes(k)) sentenceObjects(v, at ? `${at}.${k}` : k, out);
+  }
+  return out;
+}
 export function sentenceFieldProblems(spec) {
   const p = [];
   const label = (k, e) => `${k.id} ${e.id ?? e.pattern}`;
   for (const k of spec.cases ?? []) {
     for (const e of [...(k.answerNone ?? []), ...(k.writes?.forbid ?? []), ...(k.writesReport?.forbid ?? [])]) {
       if (typeof e !== 'object' || e === null) continue;
+      let used = false;
       for (const f of SENTENCE_FIELDS) {
         if (!(f in e)) continue;
+        used = true;
         const v = e[f];
         if (typeof v !== 'string' || v === '') { p.push(`${label(k, e)}: ${f} must be a non-empty string`); continue; }
         try { new RegExp(v, 'i'); } catch (err) { p.push(`${label(k, e)}: ${f} is not a regular expression (${err.message})`); }
       }
+      if (used) { let re = null; try { re = new RegExp(patternOf(e), 'i'); } catch (err) { p.push(`${label(k, e)}: pattern is not a regular expression (${err.message})`); } if (re && re.test('')) p.push(`${label(k, e)}: pattern matches the empty string (it would match every sentence)`); }
     }
     for (const e of [...(k.writes?.require ?? []), ...(k.writesReport?.require ?? [])]) {
       if (typeof e !== 'object' || e === null) continue;
       for (const f of SENTENCE_FIELDS) if (f in e) p.push(`${label(k, e)}: ${f} is not used in a require entry (only in answerNone and forbid)`);
     }
+    for (const [at, e] of sentenceObjects(k)) {
+      if (SENTENCE_PLACES.some((re) => re.test(at)) || REQUIRE_PLACES.some((re) => re.test(at))) continue;
+      p.push(`${k.id} ${at}: ${SENTENCE_FIELDS.filter((f) => f in e).join(', ')} is not used here (only in answerNone, writes.forbid and writesReport.forbid)`);
+    }
   }
+  for (const [at, e] of sentenceObjects(Object.fromEntries(Object.entries(spec).filter(([key]) => key !== 'cases')))) p.push(`cases.json ${at}: ${SENTENCE_FIELDS.filter((f) => f in e).join(', ')} is not used here (only in the answerNone and forbid entries of a case)`);
   return p;
 }
 // #1858: whether a deduction entry (answerNone, writes.forbid, writesReport.forbid) matches a text. An entry without
@@ -322,12 +346,72 @@ const resultTextOf = (r) => (typeof r?.content === 'string' ? r.content : Array.
 // and not exclude, its result is present and not an error, and (with resultPattern) the result text matches resultPattern.
 // The exit status alone is not enough: a pipeline exits with its last command (`start … | head` exits 0 when start
 // stopped in the main checkout), so cases.json asks for the schema of the start output in the result.
+// PR #1857 handoff (#1866): with resultPattern, the command and its output are bound (boundCommandRan): the pattern must
+// be the program run by a part of the call (not text quoted in it, e.g. `echo 'asc-v05.mjs start …'`), and no other part
+// of the call may print something else (e.g. `cat saved-start.json`), so the output that matches resultPattern is the
+// output of that command. Without resultPattern as before (the pattern on the whole command text).
 export function commandRan(e, t) {
   return t.uses.some((u) => {
     if (u.name !== 'Bash') return false;
     const c = String(u.input?.command ?? ''), r = t.results.get(u.id);
-    return new RegExp(e.pattern).test(c) && !(e.exclude && new RegExp(e.exclude).test(c)) && Boolean(r) && !r.is_error && (!e.resultPattern || new RegExp(e.resultPattern).test(resultTextOf(r)));
+    if (!r || r.is_error) return false;
+    if (!e.resultPattern) return new RegExp(e.pattern).test(c) && !(e.exclude && new RegExp(e.exclude).test(c));
+    return boundCommandRan(e, c) && new RegExp(e.resultPattern).test(resultTextOf(r));
   });
+}
+// The parts of a Bash call that may stand beside the bound command: before or after it (joined by ;, && or ||), commands
+// that print nothing or only their own literal words; in the pipeline after it, filters of its output with no file operand.
+const QUIET_PARTS = new Set(['cd', 'pushd', 'popd', 'export', 'set', 'unset', 'true', 'false', ':', 'echo', 'printf', 'pwd', 'sleep', 'test', '[']);
+const OUTPUT_FILTERS = new Set(['head', 'tail', 'grep', 'egrep', 'fgrep', 'jq', 'sed', 'awk', 'cat', 'tee', 'less', 'more', 'sort', 'uniq', 'nl', 'cut', 'column', 'fold', 'tr', 'wc']);
+const SCRIPT_FIRST = new Set(['grep', 'egrep', 'fgrep', 'jq', 'sed', 'awk', 'tr']);
+const NODE_EVAL = /^(-e|-p|-pe|--eval|--print|-i|--interactive)(=|$)/;
+const headWords = (args) => { const a = [...args]; while (a.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(a[0]) || WRAPPERS.has(path.posix.basename(a[0])) || a[0] === '!')) a.shift(); return a; };
+const programOf = (a) => path.posix.basename(String(a[0] ?? '').replace(/^[({]+/, ''));
+// Whether a part runs the program the entry names: its words (quotes removed) after env assignments and wrappers, and
+// after node and its options (node -e/-p evaluates text: not a program run), begin with a word in which the pattern's
+// match starts; the part's standard output is not sent to a file; exclude does not match the part.
+function runsProgram(e, part, args, outFile) {
+  let a = headWords(args);
+  if (['node', 'nodejs'].includes(programOf(a))) { a = a.slice(1); while (a.length && a[0].startsWith('-')) { if (NODE_EVAL.test(a[0])) return false; a = a.slice(/^(-r|--require|--import|--loader)$/.test(a[0]) ? 2 : 1); } }
+  if (!a.length || outFile) return false;
+  const m = new RegExp(e.pattern).exec(a.join(' '));
+  return Boolean(m) && m.index < a[0].length && !(e.exclude && new RegExp(e.exclude).test(part));
+}
+function filterOk(args) {
+  const a = headWords(args), cmd = programOf(a);
+  if (!OUTPUT_FILTERS.has(cmd)) return false;
+  if (cmd === 'tee') return true;
+  const opts = OPT_ARGS[['egrep', 'fgrep'].includes(cmd) ? 'grep' : cmd] ?? [];
+  const ops = [];
+  let pattern = false;
+  for (let i = 1; i < a.length; i++) {
+    const w = a[i];
+    if (w === '--') { ops.push(...a.slice(i + 1)); break; }
+    if (opts.includes(w)) { if (FILE_OPTS.has(w)) return false; if (['-e', '--regexp', '--expression'].includes(w)) pattern = true; i++; continue; }
+    if (w.startsWith('-') && w !== '-') continue;
+    ops.push(w);
+  }
+  return ops.length <= (SCRIPT_FIRST.has(cmd) && !pattern ? 1 : 0);
+}
+export function boundCommandRan(e, command) {
+  const text = stripHeredocs(command);
+  // A command substitution can print anything (echo "$(cat saved.json)"): not bound.
+  if (/\$\(|`/.test(text)) return false;
+  const tokens = text.split(/(&&|\|\||;|\|&?|\n|(?<![>&<0-9])&(?![>&]))/);
+  const parts = [];
+  for (let i = 0; i < tokens.length; i += 2) parts.push({part: tokens[i], sep: tokens[i - 1] ?? null, ...splitRedirects(wordsOf(tokens[i]))});
+  let ran = false, fromProgram = false;
+  for (const p of parts) {
+    const piped = p.sep === '|' || p.sep === '|&';
+    if (!piped) fromProgram = false;
+    if (!headWords(p.args).length) continue;
+    if (runsProgram(e, p.part, p.args, p.outFile)) { ran = true; fromProgram = true; continue; }
+    if (piped && fromProgram) { if (filterOk(p.args)) continue; return false; }
+    const cmd = programOf(headWords(p.args));
+    if (!QUIET_PARTS.has(cmd)) return false;
+    if (['echo', 'printf'].includes(cmd) && e.resultPattern && new RegExp(e.resultPattern).test(p.args.join(' '))) return false;
+  }
+  return ran;
 }
 
 // #1844: the files a Bash command read, from its text (a small splitter, not a shell parser: quotes are removed, not
@@ -370,8 +454,9 @@ const wordsOf = (part) => (part.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? []).map((w) 
 // #1844 review L-a: outNull, the standard output goes to /dev/null (>, 1>, &>, >& and the >> forms; 2> is not).
 function splitRedirects(words) {
   const args = [], inputs = [];
-  let outNull = false;
-  const toNull = (op, target) => { if (target === '/dev/null' && /^(1|&)?>>?&?$/.test(op)) outNull = true; };
+  let outNull = false, outFile = false;
+  // #1866: outFile, the standard output goes to a file (not /dev/null, not another descriptor such as >&2).
+  const toNull = (op, target) => { if (!/^(1|&)?>>?&?$/.test(op)) return; if (target === '/dev/null') outNull = true; else if (!/^[0-9-]$/.test(String(target ?? ''))) outFile = true; };
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
     if (w === '<') { if (words[i + 1]) inputs.push(words[++i]); continue; }
@@ -380,7 +465,7 @@ function splitRedirects(words) {
     if (/^[0-9&]*(>>?|<<)/.test(w)) { const m = /^([0-9&]*>>?&?)(.*)$/.exec(w); if (m) toNull(m[1], m[2]); continue; }
     args.push(w);
   }
-  return {args, inputs, outNull};
+  return {args, inputs, outNull, outFile};
 }
 const expandBraces = (w) => { const m = /^(.*?)\{([^{}]*,[^{}]*)\}(.*)$/.exec(w); return m ? m[2].split(',').flatMap((x) => expandBraces(`${m[1]}${x}${m[3]}`)) : [w]; };
 // A glob on a project-relative path as a regular expression (no globstar; * and ? do not match a leading dot).
@@ -541,7 +626,7 @@ export function bashScan(command, root, start = root, files = []) {
   }
   // cdOnly: the command is a single cd/pushd/popd (a failed call left the cwd as it was). PR #1857 review L3: with more
   // than one (`cd src && cd nope`) an earlier one may have run, so the cwd is unknown.
-  return {reads, possible, unbounded, dir: kept, moved: cds > 0, cdOnly: cds === 1 && all.every(({args}) => !head(args).length || ['cd', 'pushd', 'popd'].includes(cmdOf(head(args))))};
+  return {reads, possible, unbounded, dir: kept, moved: cds > 0, cds, cdOnly: cds === 1 && all.every(({args}) => !head(args).length || ['cd', 'pushd', 'popd'].includes(cmdOf(head(args))))};
 }
 export const bashReadsOf = (command, root, start = root) => bashScan(command, root, start).reads;
 
@@ -549,23 +634,35 @@ export const bashReadsOf = (command, root, start = root) => bashScan(command, ro
 // outside the project is not kept, as Claude Code resets it). files: the project-relative files the globs and directories
 // are expanded against (score.mjs projectFilesOf).
 // #1844 review L-a: existing (scoreRun: when the fixture's files are known) keeps only the strict reads of those files.
+// PR #1857 last review M-A (#1866): after a failed call with one cd and more (`cd src && node t.mjs` that failed), the cwd
+// is one of two candidates, the cwd before (the cd failed) and the cd's target (a later command failed); every later call
+// is scanned from each candidate: its strict reads are those found from every candidate (none added by the doubt), its
+// possible reads those found from any, and its output unbounded when it is from any (a deep search from a known
+// candidate is expanded, not unbounded). Unknown (null) stays as before: a cd to a computed target, two or more cds in a
+// failed call, a cd after ||. More than MAX_CWD_CANDIDATES candidates are unknown.
+// #1866: t.startCwd (scoreRun startDir: the trial started in a worktree of the project) is where the session starts and
+// where Claude Code puts the cwd back when a call ends outside it; t.cwd stays the project root the paths are relative to.
+export const MAX_CWD_CANDIDATES = 8;
 export function bashTraceReads(t, files = [], {existing = false} = {}) {
   const reads = [], possible = [], commands = [];
-  let unbounded = 0, dir = t.cwd;
+  const start = t.startCwd ?? t.cwd;
+  let unbounded = 0, dirs = [start];
   for (const u of t.uses) {
     if (u.name !== 'Bash' || !t.results.has(u.id)) continue;
     const c = String(u.input?.command ?? '');
-    const s = bashScan(c, t.cwd, dir, files);
-    // #1844 review L-a: with existing, a strict read is one of the project files (a missing path read with || true is not).
-    if (!t.results.get(u.id).is_error) for (const r of s.reads) if (!reads.includes(r) && (!existing || files.includes(r))) reads.push(r);
-    for (const r of s.possible) if (!possible.includes(r)) possible.push(r);
-    if (s.unbounded) unbounded += 1;
-    commands.push(c);
-    // PR #1857 review: a failed call keeps the cwd when it was only a cd (the cd failed); a failed call with a cd and more
-    // leaves it unknown (whether the cd ran is not known).
+    const scans = dirs.map((d) => bashScan(c, t.cwd, d, files));
     const failed = t.results.get(u.id).is_error;
-    const next = failed && s.moved ? (s.cdOnly ? dir : null) : s.dir;
-    dir = next === null ? null : projectRelative(`${next}/__x__`, t.cwd) === null ? t.cwd : next;
+    // #1844 review L-a: with existing, a strict read is one of the project files (a missing path read with || true is not).
+    if (!failed) for (const r of scans[0].reads) if (!reads.includes(r) && scans.every((s) => s.reads.includes(r)) && (!existing || files.includes(r))) reads.push(r);
+    for (const s of scans) for (const r of s.possible) if (!possible.includes(r)) possible.push(r);
+    if (scans.some((s) => s.unbounded)) unbounded += 1;
+    commands.push(c);
+    // PR #1857 review: a failed call keeps the cwd when it was only a cd (the cd failed); M-A: a failed call with one cd and
+    // more gives both candidates; with two or more cds the cwd is unknown.
+    const next = scans.flatMap((s, i) => (failed && s.moved ? (s.cdOnly ? [dirs[i]] : s.cds === 1 ? [dirs[i], s.dir] : [null]) : [s.dir]))
+      .map((d) => (d === null ? null : projectRelative(`${d}/__x__`, start) === null ? start : d));
+    const uniq = [...new Set(next)];
+    dirs = uniq.length > MAX_CWD_CANDIDATES ? [null] : uniq;
   }
   return {reads, possible, unbounded, commands};
 }
@@ -689,8 +786,18 @@ export const inputTokensOf = (u) => (u ? (u.input ?? 0) + (u.cacheRead ?? 0) + (
 // .claude/skills/ is not an ASC file).
 const ascFile = (r, skills) => /^\.agent-skill-chain\//.test(r) || skills.some((s) => r.startsWith(`.claude/skills/${s}/`));
 
-export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = null, fileText = null, priorTexts = null, priorFiles = null, skills = ASC_SKILLS, changedFiles = null, worktrees = null, unreachedFiles = null} = {}) {
+export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = null, fileText = null, priorTexts = null, priorFiles = null, skills = ASC_SKILLS, changedFiles = null, worktrees = null, unreachedFiles = null, startDir = null} = {}) {
   const pat = (key, s, r = '') => new RegExp(spec[key].replace('<skill>', esc(s)).replace('<ref>', esc(r)));
+  // #1866: a trial that started in a worktree the harness made (meta.json startDir, e.g. .worktrees/<name>) has that
+  // worktree as its session cwd; the paths are still taken relative to the project root (work/), so a file of the
+  // worktree is .worktrees/<name>/<path> as in the changed files, and a file of the main checkout read from the worktree
+  // (cat ../../.agent-skill-chain/...) is in the project. Bash starts in the worktree (startCwd).
+  let startProblem = null;
+  if (startDir) {
+    const cwd = String(t.cwd ?? ''), suffix = `/${startDir}`;
+    if (cwd.endsWith(suffix) && cwd.length > suffix.length) t = {...t, cwd: cwd.slice(0, -suffix.length), startCwd: cwd};
+    else startProblem = `the session cwd is not the start directory ${startDir}`;
+  }
   if (changedFiles) t = {...t, changedFiles};
   if (unreachedFiles) t = {...t, unreachedFiles};
   const reads = countedReads(k, t);
@@ -718,6 +825,7 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
   row.ascFilesRead = ascFiles.length;
   row.ascBytesRead = sizeOf ? ascFiles.reduce((a, r) => a + (sizeOf(r) ?? 0), 0) : null;
   if (!t.init) return {...row, failure: 'no init event'};
+  if (startProblem) return {...row, failure: startProblem};
   if (!t.result) return {...row, failure: 'no result event'};
   if (level) {
     const ip = initProblems(t.init, level);
@@ -815,7 +923,7 @@ export function scoreTrials(spec, entries, conds = loadConditions()) {
     if (e.failure || e.text === null || e.text === undefined) { runs.push({...base, failure: e.failure ?? 'missing trace'}); continue; }
     let t;
     try { t = parseTrace(e.text); } catch (err) { runs.push({...base, failure: `unreadable trace: ${err.message}`}); continue; }
-    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, priorTexts: e.priorTexts ?? null, priorFiles: e.priorFiles ?? null, skills: ascSkillsOf(conds), changedFiles: e.changedFiles ?? null, worktrees: e.worktrees ?? null, unreachedFiles: e.unreachedFiles ?? null})});
+    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, priorTexts: e.priorTexts ?? null, priorFiles: e.priorFiles ?? null, skills: ascSkillsOf(conds), changedFiles: e.changedFiles ?? null, worktrees: e.worktrees ?? null, unreachedFiles: e.unreachedFiles ?? null, startDir: e.startDir ?? null})});
   }
   return selectCounted(runs, conds.runs);
 }
