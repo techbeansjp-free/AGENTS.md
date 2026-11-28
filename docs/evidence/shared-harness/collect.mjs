@@ -68,7 +68,8 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
     exit: meta.exit, costUsd: meta.costUsd, wallMs: meta.wallMs, redactedSensitive: scrubSensitive(redact(text, dir)).hits, ...raw,
     ...(meta.sandboxLayout ? {sandboxLayout: meta.sandboxLayout, nodeVersion: meta.nodeVersion ?? null, endHead: meta.endHead ?? null, unreachedCommits: meta.unreached?.commits?.length ?? null, credentialLeak: meta.credentialLeak ?? null} : {})};
   // #1840 re-review High: the fixture's files before the trial (work/ at its HEAD), for the lines the markers leave out.
-  const head = headReader(work);
+  // #1844 review L-c: a trial with Bash may have committed; its files before the trial are those of meta.json sampleHead.
+  const head = headReader(work, meta.workFilesOptions && meta.sampleHead ? meta.sampleHead : 'HEAD');
   // #1844: with a level that has Bash, every file the trial changed or created (meta.json workFiles, by any tool) counts as
   // written (score.mjs writtenFiles); a deleted file (null) does not.
   const changedFiles = meta.workFilesOptions && meta.workFiles ? Object.keys(meta.workFiles).filter((f) => meta.workFiles[f] !== null) : null;

@@ -15,6 +15,7 @@
 //          [--ledger <file>] [--home-marker <file> --repo-marker <file>] [--run] --config <dir>   (a probe always needs --ledger)
 // Without --run it prints the plan (the launch command) and prepares nothing.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
@@ -134,12 +135,14 @@ export function isolationSettings({work, runsRoot, fixture, ledger}, level = nul
 // #1844: a tools level with Bash (conditions.json toolLevels.<id>.sandbox {layout: "confined", denyReadRoots, pathDirs,
 // copyNode}). #1820 stage 1 level X failed its probe because a --settings allowRead does not re-open a --settings denyRead
 // (Claude Code 2.1.323: work/ under the denied runs root stayed unreadable and git exited 128). The confined layout needs
-// no allowRead: no denied path is work/, the trial's tmp/ or an ancestor of them. Denied for reads and writes: /Users (the
-// real HOME and the repository), the denyReadRoots (e.g. /private/tmp, /private/var/folders), the fixture, the ledger
-// directory, every other entry of the runs root (listed at launch; trials run one at a time under the ledger lock) and the
-// harness files of the trial (TRIAL_RECORD_FILES); writes also to the trial's home/, config/ and bin/. Writes are allowed
-// by the sandbox only in the working directory and the trial's CLAUDE_CODE_TMPDIR (trialEnv). Throws when a denied path
-// covers work/ or tmp/.
+// no allowRead: no denied path is work/, the trial's tmp/ or an ancestor of them. Denied for reads and writes (denyRead
+// and denyWrite both list them): /Users (the real HOME and the repository), the denyReadRoots (e.g. /private/tmp,
+// /private/var/folders), the fixture, the ledger directory, every other entry of the runs root (listed at launch; trials
+// run one at a time under the ledger lock), the entries beside the runs root and its parent, and the harness files of the
+// trial (TRIAL_RECORD_FILES); writes also to the trial's home/, config/ and bin/. Any other path outside work/ and the
+// trial's CLAUDE_CODE_TMPDIR (trialEnv), e.g. the runs root itself or /private/var/tmp (ancestors of work/, so they cannot
+// be denied), is left to the write allowlist of Claude Code's sandbox; the probe tries those writes (outsideProbeSteps;
+// #1844 review M-a). Throws when a denied path covers work/ or tmp/.
 export const TRIAL_RECORD_FILES = ['settings.json', 'debug.log', 'trace.jsonl', 'stderr.txt', 'meta.json'];
 export const PROBE_SIBLING = 'probe-sibling';
 const within = (child, parent) => { const r = path.relative(parent, child); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
@@ -156,7 +159,9 @@ export function confinedSettings({work, runsRoot, fixture, ledger}, sb) {
   const own = TRIAL_RECORD_FILES.map((n) => path.join(trial, n));
   const uniq = (xs) => [...new Set(xs)];
   const denyRead = uniq(['/Users', ...(sb.denyReadRoots ?? []), realOr(fixture), ledgerDir, ...siblings, ...own, ...around]);
-  const denyWrite = uniq([realOr(fixture), ledgerDir, ...siblings, ...own, ...['home', 'config', 'bin'].map((n) => path.join(trial, n)), ...around]);
+  // #1844 review M-a: /Users and the denyReadRoots are denied for writes too (a credential written to /private/tmp would be
+  // outside the trial directory that credentialLeakOf searches).
+  const denyWrite = uniq(['/Users', ...(sb.denyReadRoots ?? []), realOr(fixture), ledgerDir, ...siblings, ...own, ...['home', 'config', 'bin'].map((n) => path.join(trial, n)), ...around]);
   const open = [w, path.join(trial, 'tmp')];
   const covering = [...new Set([...denyRead, ...denyWrite])].filter((p) => open.some((o) => within(o, p)));
   if (covering.length) throw new Error(`the confined layout needs work/ and tmp/ outside every denied path (${covering.join(', ')})`);
@@ -190,8 +195,10 @@ export function probeContext({dir, runsRoot, fixture, ledger, homeMarker, repoMa
   const trialDir = path.join(realOr(runsRoot), path.basename(dir));
   return {homeMarker: path.resolve(homeMarker), repoMarker: path.resolve(repoMarker), trialDir, runsRoot: realOr(runsRoot), fixture: realOr(fixture),
     ledgerDir: path.dirname(realOr(ledger)), sentinels: sentinelPaths({dir: trialDir, repo}),
-    // #1844: a confined level's probe also reads a record of another runs-root entry and lists the denied roots.
-    ...(level?.sandbox ? {siblingRecord: path.join(realOr(runsRoot), PROBE_SIBLING, 'record.txt'), deniedRoots: [...(level.sandbox.denyReadRoots ?? [])]} : {})};
+    // #1844: a confined level's probe also reads a record of another runs-root entry and lists the denied roots; review
+    // M-a/M-c: it writes outside the trial (outsideWrites) and looks up the login keychain of the real user (loginKeychain).
+    ...(level?.sandbox ? {siblingRecord: path.join(realOr(runsRoot), PROBE_SIBLING, 'record.txt'), deniedRoots: [...(level.sandbox.denyReadRoots ?? [])],
+      outsideWrites: outsideWritePaths(realOr(runsRoot)), loginKeychain: path.join(os.userInfo().homedir, 'Library/Keychains/login.keychain-db')} : {})};
 }
 
 // Stage 1, unchanged for level W: the marker Reads, a Glob and a Grep outside, a Write into the trial directory and into
@@ -215,7 +222,7 @@ export function probeSteps(levelId, c, tag = markerTag()) {
 // touch in the trial directory and the repository and the network must be refused.
 export const ASC_CLI = '.agent-skill-chain/managed-runtime/bin/asc-v05.mjs';
 export function bashProbeSteps(c, tag = markerTag()) {
-  if (!c.siblingRecord || !Array.isArray(c.deniedRoots)) throw new Error('level X needs the probe context of a confined level (siblingRecord, deniedRoots)');
+  if (!c.siblingRecord || !Array.isArray(c.deniedRoots) || !c.outsideWrites || !c.loginKeychain) throw new Error('level X needs the probe context of a confined level (siblingRecord, deniedRoots, outsideWrites, loginKeychain)');
   const bash = (id, command, expect) => ({id, tool: 'Bash', command, expect});
   return [bash('insideWrite', `echo probe > ${INSIDE_FILE}`, 'ok'), bash('insideCatClaudeMd', 'cat CLAUDE.md', 'ok'), bash('insideGitStatus', 'git status --short --branch', 'ok'),
     bash('insideNode', 'node --version', 'ok'), bash('insideAscHelp', `node ${ASC_CLI} --help`, 'ok'),
@@ -226,21 +233,24 @@ export function bashProbeSteps(c, tag = markerTag()) {
     ...c.deniedRoots.map((r, i) => bash(`lsDeniedRoot${i + 1}`, `ls ${r}`, 'refused')),
     bash('touchTrialDir', `touch ${c.sentinels.trial}`, 'refused'), bash('touchRepo', `touch ${c.sentinels.repo}`, 'refused'),
     bash('network', `curl -sS -m 10 -o /dev/null -w '%{http_code}' ${NETWORK_URL}`, 'refused'),
-    ...indirectProbeSteps(c)];
+    ...indirectProbeSteps(c), ...outsideProbeSteps(c)];
 }
 // #1844 review M2: indirect routes to a denied file (a symlink made by Bash and read by Read and by cat, a hard link, a
 // program given the path as an argument, sh -c with the path as $0, a path put together from two variables), and whether
 // the credential is visible to Bash (only its length is printed; probe-check.mjs records it). The steps marked sandbox
 // must show the sandbox's own refusal ("Operation not permitted"): the path is not in the command text, so only the
 // sandbox, not a permission check of the command, can refuse it (probe-check.mjs sandboxRefusal).
+// Review M-b: the symlink must be made (lnSymlinkHome ok), cat of it needs the sandbox's refusal, and its Read a refusal
+// that is not a missing file (notMissing; probe-check.mjs refusedNotMissing): a dangling link or a Read before the ln
+// shows no refusal at all.
 export const LINK_FILE = 'probe-link-home.txt', HARD_FILE = 'probe-hard-repo.txt';
 export function indirectProbeSteps(c) {
   const bash = (id, command, expect, extra = {}) => ({id, tool: 'Bash', command, expect, ...extra});
   const split = (p) => { const i = Math.ceil(p.length / 2); return [p.slice(0, i), p.slice(i)]; };
   const [h1, h2] = split(c.homeMarker), [s1, s2] = split(c.siblingRecord);
-  return [bash('lnSymlinkHome', `ln -s ${c.homeMarker} ${LINK_FILE}`, 'any'),
-    {id: 'readSymlinkHome', tool: 'Read', path: path.join(c.trialDir, 'work', LINK_FILE), expect: 'refused'},
-    bash('catSymlinkHome', `cat ${LINK_FILE}`, 'refused'),
+  return [bash('lnSymlinkHome', `ln -s ${c.homeMarker} ${LINK_FILE}`, 'ok'),
+    {id: 'readSymlinkHome', tool: 'Read', path: path.join(c.trialDir, 'work', LINK_FILE), expect: 'refused', notMissing: true},
+    bash('catSymlinkHome', `cat ${LINK_FILE}`, 'refused', {sandbox: true}),
     bash('hardLinkRepo', `ln ${c.repoMarker} ${HARD_FILE} && cat ${HARD_FILE}`, 'refused'),
     bash('nodeReadHome', `node -e 'console.log(require("fs").readFileSync(process.argv[1], "utf8"))' ${c.homeMarker}`, 'refused'),
     bash('shArgRepo', `sh -c 'cat "$0"' ${c.repoMarker}`, 'refused'),
@@ -249,6 +259,30 @@ export function indirectProbeSteps(c) {
     bash('credentialLength', `printenv ${CREDENTIAL_VARS.join(' ')} | wc -c`, 'any')];
 }
 export const CREDENTIAL_VARS = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'];
+
+// #1844 review M-a: writes outside the trial that no denyWrite names: the user's tmp of Claude Code (/private/tmp/claude-<uid>,
+// under a denied root), the runs root and /private/var/tmp (ancestors of work/, left to the write allowlist of Claude
+// Code's sandbox). Each path is put together from two variables (the sandbox must refuse it: sandbox) and must not exist
+// after the probe (probe-check.mjs outsideWritesAbsent).
+// Review M-c: routes to the real environment that do not go through a file of the trial: the keychain (through securityd;
+// the default search list of the trial's HOME and the real user's login keychain named by path), the clipboard and the
+// list of processes (the environment of the user's other processes). Only an exit code or a count is printed, never the
+// content; find-generic-password without -g/-w does not read the secret (no keychain dialog). outputPattern: the first
+// line of the result (the exit code of the lookup must not be 0, the counts must be 0).
+export const outsideWritePaths = (runsRoot, tag = markerTag(), uid = process.getuid()) => ({
+  userTmp: `/private/tmp/claude-${uid}/asc${tag}-write-probe.txt`, runsRoot: path.join(runsRoot, `asc${tag}-write-probe.txt`), varTmp: `/private/var/tmp/asc${tag}-write-probe.txt`});
+export const KEYCHAIN_SERVICE = 'Claude Code-credentials';
+export function outsideProbeSteps(c) {
+  const bash = (id, command, expect, extra = {}) => ({id, tool: 'Bash', command, expect, ...extra});
+  const o = c.outsideWrites;
+  const touch = (id, f, mk = false) => bash(id, `a='${path.dirname(f)}'; b='/${path.basename(f)}'; ${mk ? 'mkdir -p "$a" && ' : ''}touch "$a$b"`, 'refused', {sandbox: true});
+  const lookup = `security find-generic-password -s "${KEYCHAIN_SERVICE}"`;
+  return [touch('touchUserTmp', o.userTmp, true), touch('touchRunsRoot', o.runsRoot), touch('touchVarTmp', o.varTmp),
+    bash('keychainDefault', `${lookup} >/dev/null 2>&1; echo $?`, 'ok', {outputPattern: '^(?!0$)[0-9]+$'}),
+    bash('keychainLogin', `${lookup} ${c.loginKeychain} >/dev/null 2>&1; echo $?`, 'ok', {outputPattern: '^(?!0$)[0-9]+$'}),
+    bash('clipboard', 'pbpaste 2>/dev/null | wc -c', 'ok', {outputPattern: '^0$'}),
+    bash('processList', 'ps -axo pid= 2>/dev/null | wc -l', 'ok', {outputPattern: '^0$'})];
+}
 
 const stepText = (s) => ({Read: `Readで ${s.path} を読む`, Write: `Writeで ${s.path} に「probe」とだけ書く`, Bash: `Bashで次のcommandを実行する：${s.command}`,
   Glob: `Globで pattern「${s.pattern}」、path「${s.path}」を指定して探す`, Grep: `Grepで pattern「${s.pattern}」、path「${s.path}」を指定して探す`})[s.tool];

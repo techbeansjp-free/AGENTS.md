@@ -140,17 +140,19 @@ export function unreachedChanges(work, base) {
   return {commits, files: [...files].sort()};
 }
 
-// #1840 re-review High: the files of a sample project at its HEAD (the fixture as made, before the trial; the trial has
-// no Bash and cannot commit) and their texts, for the lines the markers leave out (score.mjs baseLinesFor). headReader
+// #1840 re-review High: the files of a sample project at its HEAD (the fixture as made, before the trial; a trial of a
+// level without Bash cannot commit) and their texts, for the lines the markers leave out (score.mjs baseLinesFor). headReader
 // lists the files once and reads the texts in one `git cat-file --batch` per call of texts(); text() of a path that is
 // not at HEAD (a file the trial created) is null.
-export function headReader(work) {
+// #1844 review L-c: rev (default HEAD) is the commit read; a level with Bash can commit, so collect.mjs passes the
+// meta.json sampleHead for such a trial (the fixture before the trial, not its last commit).
+export function headReader(work, rev = 'HEAD') {
   const run = (args, input) => spawnSync('git', args, {cwd: work, env: gitEnv(work), input, maxBuffer: 1 << 30});
   let files = null;
   const cache = new Map();
   const list = () => {
     if (files) return files;
-    const r = run(['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
+    const r = run(['ls-tree', '-r', '-z', '--name-only', rev]);
     if (r.status !== 0) throw new Error(`git ls-tree failed in ${work}: ${r.stderr}`);
     return (files = r.stdout.toString('utf8').split('\0').filter(Boolean));
   };
@@ -160,13 +162,13 @@ export function headReader(work) {
     for (const f of want) if (!at.has(f)) cache.set(f, null);
     const read = want.filter((f) => at.has(f));
     if (!read.length) return;
-    const r = run(['cat-file', '--batch'], read.map((f) => `HEAD:${f}\n`).join(''));
+    const r = run(['cat-file', '--batch'], read.map((f) => `${rev}:${f}\n`).join(''));
     if (r.status !== 0) throw new Error(`git cat-file failed in ${work}: ${r.stderr}`);
     let pos = 0;
     for (const f of read) {
       const nl = r.stdout.indexOf(10, pos);
       const head = r.stdout.subarray(pos, nl).toString('utf8').split(' ');
-      if (head[1] !== 'blob') throw new Error(`git cat-file: ${f} is not a blob at HEAD`);
+      if (head[1] !== 'blob') throw new Error(`git cat-file: ${f} is not a blob at ${rev}`);
       const size = Number(head[2]);
       cache.set(f, r.stdout.subarray(nl + 1, nl + 1 + size).toString('utf8'));
       pos = nl + 1 + size + 1;

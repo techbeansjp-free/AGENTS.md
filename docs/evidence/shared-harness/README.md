@@ -116,7 +116,7 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 
 Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLevels.<id>.sandbox`のfieldで加えた。そのfieldの無い水準（試験用の設定、#1823、#1840の水準W）の設定・起動・採点・照合は変えない（試験で確かめる）。#1840と#1823の測定は終わっていて、それぞれの`fixedAtCommit`の共通の仕組みで照合する（上の#1845と同じ扱い）。
 
-- `run-trial.mjs`の`confinedSettings`（`sandbox.layout: "confined"`）：`allowRead`を使わない`--settings`。#1820の段階1の水準Xは、`--settings`の`allowRead`が同じ`--settings`の`denyRead`を開け直さず（Claude Code 2.1.323）、`work/`を読めずに不合格だった。この配置では、`work/`と試行の`tmp/`の祖先を禁止しない。読取りと書込みを禁じるのは、`/Users`、`denyReadRoots`、fixture、台帳のdirectory、runs rootの他の項目（起動時に列挙）、試行の記録のfile（`TRIAL_RECORD_FILES`）。書込みは、試行の`home/`・`config/`・`bin/`も禁じる。禁止が`work/`か`tmp/`を覆う配置（例：runs rootが`/private/tmp`の下で、`/private/tmp`を禁じる）は、予約の前に拒否する。
+- `run-trial.mjs`の`confinedSettings`（`sandbox.layout: "confined"`）：`allowRead`を使わない`--settings`。#1820の段階1の水準Xは、`--settings`の`allowRead`が同じ`--settings`の`denyRead`を開け直さず（Claude Code 2.1.323）、`work/`を読めずに不合格だった。この配置では、`work/`と試行の`tmp/`の祖先を禁止しない。読取りと書込みを禁じる（`denyRead`と`denyWrite`の両方に入れる）のは、`/Users`、`denyReadRoots`、fixture、台帳のdirectory、runs rootの他の項目（起動時に列挙）、runs rootの親と祖父の他の項目、試行の記録のfile（`TRIAL_RECORD_FILES`）。書込みは、試行の`home/`・`config/`・`bin/`も禁じる。runs rootそのものや`/private/var/tmp`等、`work/`の祖先は禁止できないので、そこへの書込みはClaude Codeのsandboxの書込みの許可に任され、probeで確かめる（下の2回目のレビューM-a）。禁止が`work/`か`tmp/`を覆う配置（例：runs rootが`/private/tmp`の下で、`/private/tmp`を禁じる）は、予約の前に拒否する。
 - `trialEnv`：Claude Codeの一時directory（`CLAUDE_CODE_TMPDIR`。sandboxの中の`TMPDIR`）を試行の`tmp/`にし、Bashの`PATH`を試行の`bin/`（`copyNode`：harnessのnodeの写し。起動の前に1回実行する）と`pathDirs`だけにする。`claude`はharnessの`PATH`から絶対pathで起動する。試行の後に`bin/`と`tmp/`を消す。
 - probe（`probeSteps('X')`、`bashProbeSteps`）：Wの6操作に、Bashの操作（`work/`の中の書込み・`cat CLAUDE.md`・`git status`・node・ASC CLIの`--help`と`worktree-create`・`TMPDIR`への書込みが成功、目印・runs rootの別の項目`probe-sibling/record.txt`（probeの前に作る）・試行の`settings.json`・fixture・台帳・`denyReadRoots`の各項目の読取り、試行のdirectoryとrepositoryへの`touch`、通信が拒否）を足した。`probeContext`は水準を受け取り、confinedの水準だけ`siblingRecord`・`deniedRoots`を加える。判定は`probe-check.mjs`の水準Xの項目（#1820の段階1から残っていたもの）を使う。
 - `meta.json`（confinedの水準だけ）：`sandboxLayout`、`nodeVersion`、`endHead`（Bashはcommitできる）、`workFilesOptions`（`make-fixture.mjs`の`workChanges`の`base`：開始のHEADからのcommitの変更も含める、`worktrees`：`.git`がfileのdirectory（linked worktree）はその中の変更だけを列挙する）。`collect.mjs`は、`workFilesOptions`のある試行では`work/`のHEADが`endHead`であることと、同じoptionsでの`workFiles`の一致を確かめ、変更・作成されたfileを書いたfileとして採点に渡す（`changedFiles`）。
@@ -135,6 +135,18 @@ Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLev
 - L1（`confinedSettings`）：runs rootの親と祖父の他の項目も禁止する（深さ3以上のdirectoryだけ列挙）。
 - L2（`make-fixture.mjs`の`unreachedChanges`、`workChanges`）：HEADも残ったworktreeも届かないcommit（`git rev-list --all --reflog`）とそのfileを`meta.json`の`unreached`に記録し、`score.mjs`はpathPatternの下のそのfileを「書いたが照合できない」（`writeUnreached`、`writeMissingText`）にする。`worktrees`のoptionでは、入れ子のrepositoryの`.git`を1項目にする。
 - L3（`levelsVerdict`）：`rule.minProvisional`があれば、判定に`minProvisional`と`verdictBasis`を付ける。
+
+### #1844の2回目の独立レビューの是正（2026-11-28）
+
+いずれも`level.sandbox`の水準か、新しい項目（probeの操作の`notMissing`・`outputPattern`、`meta.json`の`workFilesOptions`、行の`forbiddenReadsBy`）がある場合だけ動く。水準Wと既存の設定の結果は変わらない（試験で確かめる）。
+
+- M-a（`confinedSettings`、`outsideProbeSteps`、`probe-check.mjs`の`outsideWritesAbsent`）：`/Users`と`denyReadRoots`を`denyWrite`にも入れた。probeに、`/private/tmp/claude-<uid>/`・runs root・`/private/var/tmp/`への`touch`（変数で組み立てたpath、sandboxの拒否を要る）を加え、probeの後にそのfileが無いことを確かめる。
+- M-b（`indirectProbeSteps`、`refusedNotMissing`）：`lnSymlinkHome`は成功を要る。`catSymlinkHome`はsandboxの拒否を要る。symlinkのReadは、拒否が「fileが無い」（`refusalKind`の`other`）でないことを要る。
+- M-c（`outsideProbeSteps`、`probeStepOutputs`）：keychainの検索（既定の検索先と実userの`login.keychain-db`）、`pbpaste`、`ps`を、終了codeか数だけを出す形でprobeに加えた。操作の`outputPattern`に結果の最初の行が合うことを要る。`sandbox-check.mjs`は、この操作をsandboxなしでも実行して`baseline`に記録する。
+- L-a（`score.mjs`の`bashScan`・`bashTraceReads`）：標準出力を`/dev/null`へ流した読込み、`grep -q`・`-c`・`-l`・`-L`等、fixtureにも変更にも無いpath（`existing`。`scoreRun`はfixtureのfileが分かるときに使う）は、厳しい数え方の読込みにしない（広い数え方には残す）。
+- L-b（`forbiddenReadsBy`、`levelChecks`の`breakdown`）：禁止の読込みが、どの数え方（strict・possible・unbounded・mention）で見つかったかを行に記録し、`forbidReadsOk`の水準に、strictで合格した数と、unboundedだけ・mentionだけで落ちた数を並べる（判定には使わない）。
+- L-c（`make-fixture.mjs`の`headReader(work, rev)`、`collect.mjs`）：`workFilesOptions`のある試行は、試行の前のfileを`meta.json`の`sampleHead`で読む（Bashはcommitできるため）。
+- L-d・L-e：設定のREADMEの記述を直し、認証情報の検査の範囲（64MB以上のfile、入れ子のrepositoryの圧縮object）を「限界」に書いた。
 
 ## 変更するとき
 

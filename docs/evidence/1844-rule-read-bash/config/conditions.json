@@ -34,7 +34,7 @@
  "maxTurnsNote": "No --max-turns (the written files need the final state); the per-trial budget bounds the cost.",
  "probeMaxTurns": 50,
  "probeSteps": {
-  "X": 35
+  "X": 42
  },
  "probeFixture": "U",
  "probeFixtureNote": "The probe runs on fixture U (as #1840): the 17 ASC entries and the user's Skills (invoice-format, quote-format) are checked (userSkillsListed).",
@@ -49,14 +49,14 @@
     "change": 0.4,
     "negative": 0.06
    },
-   "probeUsd": 0.45
+   "probeUsd": 0.53
   },
   "expect": {
    "perKindUsd": {
     "change": 0.28,
     "negative": 0.04
    },
-   "probeUsd": 0.33,
+   "probeUsd": 0.38,
    "perKindInputTokens": {
     "change": 220000,
     "negative": 20000
@@ -68,7 +68,7 @@
    },
    "probeOutputTokens": 5000
   },
-  "note": "Owner cap: 20 USD over #1843, #1844 and #1846 (owner, 2026-11-28, Issue #1844 comment 7227036027); this Issue's allocation 10 USD (coordinator, comment 7227522588). Stop line = 10 - 1 = 9 USD: run-trial.mjs refuses a trial when the ledger total + its budget exceeds it. perTrialUsd is the --max-budget-usd of every trial. expect: #1840 R/C means (change 0.11-0.21, negative 0.025) scaled up for start, its output and the Bash calls; plan = expect x about 1.4. The X probe has 35 steps (review L4: 26 before the indirect routes of review M2; #1820 stage 1 X probe of 19 steps: 0.19 USD)."
+  "note": "Owner cap: 20 USD over #1843, #1844 and #1846 (owner, 2026-11-28, Issue #1844 comment 7227036027); this Issue's allocation 10 USD (coordinator, comment 7227522588). Stop line = 10 - 1 = 9 USD: run-trial.mjs refuses a trial when the ledger total + its budget exceeds it. perTrialUsd is the --max-budget-usd of every trial. expect: #1840 R/C means (change 0.11-0.21, negative 0.025) scaled up for start, its output and the Bash calls; plan = expect x about 1.4. The X probe has 42 steps (second review M-a/M-c: 35 before the writes outside the trial and the routes that do not go through a file; review L4: 26 before the indirect routes of review M2; #1820 stage 1 X probe of 19 steps: 0.19 USD)."
  },
  "adopt": "claude-md",
  "toolLevels": {

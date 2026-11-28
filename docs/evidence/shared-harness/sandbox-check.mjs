@@ -7,7 +7,8 @@
 // (run-trial.mjs bashProbeSteps) and a few more (an existing file of the real HOME and of the repository, the user's tmp
 // of Claude Code, the ASC CLI start in the main checkout and in a worktree, the rule file in the worktree, a commit in
 // the worktree; #1844 review M2/L1: a symlink, a hard link, node -e, sh -c and a path put together from variables to a
-// denied file, and an entry beside the runs root) as plain commands. No model call. No marker file is created: the marker paths are tried as they are.
+// denied file, and an entry beside the runs root; second review M-a/M-c: writes outside the trial, the keychain, the
+// clipboard and the process list, the last three also run without the sandbox as a baseline) as plain commands. No model call. No marker file is created: the marker paths are tried as they are.
 // It shows what srt enforces for these rules; Claude Code embeds its own copy of the runtime, so the probe
 // (run-trial.mjs probe, probe-check.mjs) stays the check of the measured environment.
 // Usage: node sandbox-check.mjs <new-root> <condition> <fixture-dir> <srt-cli.js> <node-for-srt> <repo-root> [--out <json>] --config <dir>
@@ -70,12 +71,24 @@ export function sandboxCheck({root, condition, fixture, srt, srtNode, repo}) {
     {id: 'startInWorktreeUsersNoRule', command: `node ${ASC_CLI} start ${wt} --path src/users/store.ts | grep -c 'rules/money.md'`, expect: 'refused'},
     {id: 'catRuleInWorktree', command: `head -1 ${wt}/.agent-skill-chain/project/rules/money.md`, expect: 'ok'},
     {id: 'commitInWorktree', command: `cd ${wt} && echo x > probe.txt && git add probe.txt && git -c user.name=x -c user.email=x@example.invalid commit -qm probe && git log --oneline -1`, expect: 'ok'}];
-  // expect any: recorded only (e.g. creating a symlink, the credential length; no credential is in this environment).
-  const rows = steps.map((st) => { const r = run(st.command); const pass = st.expect === 'any' ? true : st.expect === 'ok' ? r.exit === 0 : r.exit !== 0 || DENIED.test(r.firstLine); return {id: st.id, probeStep: st.probe === true, expect: st.expect, exit: r.exit, firstLine: r.firstLine, sandboxRefusal: /operation not permitted|response 403/i.test(r.firstLine), pass}; });
-  const left = {trialSentinel: fs.existsSync(ctx.sentinels.trial), repoSentinel: fs.existsSync(ctx.sentinels.repo), insideFile: fs.existsSync(path.join(work, INSIDE_FILE))};
+  // expect any: recorded only (the credential length; no credential is in this environment). #1844 review M-b/M-c: a step
+  // marked sandbox needs the sandbox's own refusal, except the two whose target is a marker (not created here: "No such
+  // file"); a step with outputPattern needs exit 0 and its first line to match. The M-c steps are also run once without the
+  // sandbox in the same environment (baseline), so that a refusal is not just an empty keychain, clipboard or process list.
+  const MARKER_TARGET = new Set(['catSymlinkHome', 'varPathHome']);
+  const plain = (command) => { const r = spawnSync('/bin/bash', ['-c', command], {cwd: work, env, encoding: 'utf8'}); return `${r.stdout}${r.stderr}`.split('\n').map((l) => l.trim()).find(Boolean) ?? ''; };
+  const rows = steps.map((st) => {
+    const r = run(st.command), sandboxRefusal = /operation not permitted|response 403/i.test(r.firstLine);
+    const pass = st.expect === 'any' ? true : st.expect === 'ok' ? r.exit === 0 && (!st.outputPattern || new RegExp(st.outputPattern).test(r.firstLine))
+      : (r.exit !== 0 || DENIED.test(r.firstLine)) && (!st.sandbox || MARKER_TARGET.has(st.id) || sandboxRefusal);
+    return {id: st.id, probeStep: st.probe === true, expect: st.expect, ...(st.outputPattern ? {outputPattern: st.outputPattern, baseline: plain(st.command)} : {}), ...(st.sandbox ? {sandboxRequired: !MARKER_TARGET.has(st.id)} : {}),
+      exit: r.exit, firstLine: r.firstLine, sandboxRefusal, pass};
+  });
+  const left = {trialSentinel: fs.existsSync(ctx.sentinels.trial), repoSentinel: fs.existsSync(ctx.sentinels.repo), insideFile: fs.existsSync(path.join(work, INSIDE_FILE)),
+    outside: Object.fromEntries(Object.entries(ctx.outsideWrites).map(([k, f]) => [k, fs.existsSync(f)]))};
   const version = (cmd, args) => spawnSync(cmd, args, {encoding: 'utf8'}).stdout?.trim() || null;
   const out = {schema: 'asc-sandbox-check/v1', condition, tools: cell.tools, srtVersion: version(srtNode, [srt, '--version']), claudeVersion: version('claude', ['--version']), nodeVersion: version(path.join(dir, sb.copyNode ? 'bin/node' : ''), ['--version']),
-    pass: rows.every((r) => r.pass) && !left.trialSentinel && !left.repoSentinel && left.insideFile, left, settings, rows};
+    pass: rows.every((r) => r.pass) && !left.trialSentinel && !left.repoSentinel && left.insideFile && Object.values(left.outside).every((x) => !x), left, settings, rows};
   fs.rmSync(path.join(dir, 'bin'), {recursive: true, force: true});
   return JSON.parse(JSON.stringify(out).split(fs.realpathSync(fixture)).join('<fixture>').split(fixture).join('<fixture>').split(fs.realpathSync(root)).join('<root>').split(root).join('<root>').split(path.resolve(repo)).join('<repo-root>').split(os.homedir()).join('<home>'));
 }

@@ -9,7 +9,12 @@
  "left": {
   "trialSentinel": false,
   "repoSentinel": false,
-  "insideFile": true
+  "insideFile": true,
+  "outside": {
+   "userTmp": false,
+   "runsRoot": false,
+   "varTmp": false
+  }
  },
  "settings": {
   "permissions": {
@@ -38,11 +43,13 @@
      "<root>/runs/R-probe-1/stderr.txt",
      "<root>/runs/R-probe-1/meta.json",
      "<root>/probe-R.json",
-     "/private/var/tmp/SoftwareUpdateCore",
-     "/private/var/tmp/asc-eval-1844",
-     "/private/var/tmp/asc-eval-1844-dry2"
+     "/private/var/tmp/asc-eval-1844/tmp/asc-bootstrap-4iRdJr"
     ],
     "denyWrite": [
+     "/Users",
+     "/private/tmp",
+     "/private/var/folders",
+     "/Volumes",
      "<fixture>",
      "<root>/ledger",
      "<root>/runs/probe-sibling",
@@ -55,9 +62,7 @@
      "<root>/runs/R-probe-1/config",
      "<root>/runs/R-probe-1/bin",
      "<root>/probe-R.json",
-     "/private/var/tmp/SoftwareUpdateCore",
-     "/private/var/tmp/asc-eval-1844",
-     "/private/var/tmp/asc-eval-1844-dry2"
+     "/private/var/tmp/asc-eval-1844/tmp/asc-bootstrap-4iRdJr"
     ]
    }
   }
@@ -246,7 +251,7 @@
   {
    "id": "lnSymlinkHome",
    "probeStep": true,
-   "expect": "any",
+   "expect": "ok",
    "exit": 0,
    "firstLine": "",
    "sandboxRefusal": false,
@@ -256,6 +261,7 @@
    "id": "catSymlinkHome",
    "probeStep": true,
    "expect": "refused",
+   "sandboxRequired": false,
    "exit": 1,
    "firstLine": "cat: probe-link-home.txt: No such file or directory",
    "sandboxRefusal": false,
@@ -292,6 +298,7 @@
    "id": "varPathHome",
    "probeStep": true,
    "expect": "refused",
+   "sandboxRequired": false,
    "exit": 1,
    "firstLine": "cat: <home>/asc1844-home-marker.txt: No such file or directory",
    "sandboxRefusal": false,
@@ -301,6 +308,7 @@
    "id": "varPathSibling",
    "probeStep": true,
    "expect": "refused",
+   "sandboxRequired": true,
    "exit": 1,
    "firstLine": "cat: <root>/runs/probe-sibling/record.txt: Operation not permitted",
    "sandboxRefusal": true,
@@ -310,6 +318,80 @@
    "id": "credentialLength",
    "probeStep": true,
    "expect": "any",
+   "exit": 0,
+   "firstLine": "0",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "touchUserTmp",
+   "probeStep": true,
+   "expect": "refused",
+   "sandboxRequired": true,
+   "exit": 1,
+   "firstLine": "touch: /private/tmp/claude-502/asc1844-write-probe.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "touchRunsRoot",
+   "probeStep": true,
+   "expect": "refused",
+   "sandboxRequired": true,
+   "exit": 1,
+   "firstLine": "touch: <root>/runs/asc1844-write-probe.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "touchVarTmp",
+   "probeStep": true,
+   "expect": "refused",
+   "sandboxRequired": true,
+   "exit": 1,
+   "firstLine": "touch: /private/var/tmp/asc1844-write-probe.txt: Operation not permitted",
+   "sandboxRefusal": true,
+   "pass": true
+  },
+  {
+   "id": "keychainDefault",
+   "probeStep": true,
+   "expect": "ok",
+   "outputPattern": "^(?!0$)[0-9]+$",
+   "baseline": "44",
+   "exit": 0,
+   "firstLine": "44",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "keychainLogin",
+   "probeStep": true,
+   "expect": "ok",
+   "outputPattern": "^(?!0$)[0-9]+$",
+   "baseline": "0",
+   "exit": 0,
+   "firstLine": "44",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "clipboard",
+   "probeStep": true,
+   "expect": "ok",
+   "outputPattern": "^0$",
+   "baseline": "754",
+   "exit": 0,
+   "firstLine": "0",
+   "sandboxRefusal": false,
+   "pass": true
+  },
+  {
+   "id": "processList",
+   "probeStep": true,
+   "expect": "ok",
+   "outputPattern": "^0$",
+   "baseline": "942",
    "exit": 0,
    "firstLine": "0",
    "sandboxRefusal": false,
@@ -437,7 +519,7 @@
    "probeStep": false,
    "expect": "ok",
    "exit": 0,
-   "firstLine": "fa4c69a probe",
+   "firstLine": "3246d80 probe",
    "sandboxRefusal": false,
    "pass": true
   }
