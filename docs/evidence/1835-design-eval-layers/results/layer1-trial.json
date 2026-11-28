@@ -1,0 +1,2207 @@
+{
+ "schema": "asc-1835-layer1-trial/v1",
+ "note": "層1の暫定の判定（harness/layer1.mjs）。合格は「使いやすい」ことを意味せず、不合格はこの限られた範囲での反証として扱う。試行の記録で、層2・層3の評価ではない。",
+ "runs": [
+  {
+   "dir": "l1-ui02-exhibition-A-r1",
+   "seconds": 436,
+   "image": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8"
+  },
+  {
+   "dir": "l1-ui02-exhibition-A-r2",
+   "seconds": 158,
+   "image": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8"
+  },
+  {
+   "dir": "l1-ui02-exhibition-B-r2",
+   "seconds": 115,
+   "image": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8"
+  },
+  {
+   "dir": "l1-ui03-dashboard-A-r1",
+   "seconds": 182,
+   "image": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8"
+  },
+  {
+   "dir": "l1-ui08-existing-ds-A-r1",
+   "seconds": 171,
+   "image": "sha256:03213dc6d4b230f35252f8077c5a5407d1d7c40cec2fb81d5e971103b750fcb8"
+  }
+ ],
+ "pages": [
+  {
+   "case": "ui02-exhibition",
+   "trial": "A-r1",
+   "baselineEqual": {
+    "wide": true,
+    "narrow": true
+   },
+   "variants": [
+    {
+     "variant": "original",
+     "group": "original",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": null,
+      "narrow": null
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "contrast-strong",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +57 (wide)",
+      "axe color-contrast +57 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 57,
+       "axeColorContrastNodes": 57
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 57,
+       "axeColorContrastNodes": 57
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "contrast-weak",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +52 (wide)",
+      "axe color-contrast +52 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 52,
+       "axeColorContrastNodes": 52
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 52,
+       "axeColorContrastNodes": 52
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "pushout",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": false,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "answerInitialView"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": false,
+       "answerMissing": [
+        "4月10日"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": false,
+       "answerMissing": [
+        "4月10日"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "hierarchy-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "hierarchy-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "spacing-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "spacing-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "inconsistency-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "inconsistency-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "control-attr-order",
+     "group": "control",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": true,
+      "narrow": true
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    },
+    {
+     "variant": "control-whitespace",
+     "group": "control",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": true,
+      "narrow": true
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 0.885,
+     "errors": []
+    }
+   ]
+  },
+  {
+   "case": "ui02-exhibition",
+   "trial": "A-r2",
+   "baselineEqual": {
+    "wide": true,
+    "narrow": true
+   },
+   "variants": [
+    {
+     "variant": "original",
+     "group": "original",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": null,
+      "narrow": null
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "contrast-strong",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +62 (wide)",
+      "axe color-contrast +62 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 62,
+       "axeColorContrastNodes": 62
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 62,
+       "axeColorContrastNodes": 62
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "contrast-weak",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +61 (wide)",
+      "axe color-contrast +61 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 61,
+       "axeColorContrastNodes": 61
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 61,
+       "axeColorContrastNodes": 61
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "pushout",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": false,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "answerInitialView"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": false,
+       "answerMissing": [
+        "4月10日"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": false,
+       "answerMissing": [
+        "4月10日"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "hierarchy-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "hierarchy-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "spacing-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "spacing-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "inconsistency-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "inconsistency-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "control-attr-order",
+     "group": "control",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": true,
+      "narrow": true
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "control-whitespace",
+     "group": "control",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": true,
+      "narrow": true
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    }
+   ]
+  },
+  {
+   "case": "ui02-exhibition",
+   "trial": "B-r2",
+   "baselineEqual": {
+    "wide": true,
+    "narrow": true
+   },
+   "variants": [
+    {
+     "variant": "original",
+     "group": "original",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": null,
+      "narrow": null
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "contrast-strong",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +20 (wide)",
+      "axe color-contrast +20 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 20,
+       "axeColorContrastNodes": 20
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 20,
+       "axeColorContrastNodes": 20
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "contrast-weak",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +57 (wide)",
+      "axe color-contrast +57 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 57,
+       "axeColorContrastNodes": 57
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 57,
+       "axeColorContrastNodes": 57
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "pushout",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": false,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "answerInitialView"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": false,
+       "answerMissing": [
+        "4月10日"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": false,
+       "answerMissing": [
+        "4月10日"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "hierarchy-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "hierarchy-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "spacing-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "spacing-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "inconsistency-strong",
+     "group": "pass",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +1 (wide)",
+      "axe color-contrast +1 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 1,
+       "axeColorContrastNodes": 1
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 1,
+       "axeColorContrastNodes": 1
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "inconsistency-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "control-attr-order",
+     "group": "control",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": true,
+      "narrow": true
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "control-whitespace",
+     "group": "control",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": true,
+      "narrow": true
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    }
+   ]
+  },
+  {
+   "case": "ui03-dashboard",
+   "trial": "A-r1",
+   "baselineEqual": {
+    "wide": true,
+    "narrow": true
+   },
+   "variants": [
+    {
+     "variant": "original",
+     "group": "original",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": null,
+      "narrow": null
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "contrast-strong",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +64 (wide)",
+      "axe color-contrast +46 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 64,
+       "axeColorContrastNodes": 64
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 46,
+       "axeColorContrastNodes": 46
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "contrast-weak",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +60 (wide)",
+      "axe color-contrast +42 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 60,
+       "axeColorContrastNodes": 60
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 42,
+       "axeColorContrastNodes": 42
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "pushout",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": false,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "answerInitialView"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": false,
+       "answerMissing": [
+        "出荷遅延率",
+        "LANE-B01",
+        "LANE-C02",
+        "温度センサー"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": false,
+       "answerMissing": [
+        "出荷遅延率",
+        "LANE-B01",
+        "LANE-C02",
+        "温度センサー"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "hierarchy-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "hierarchy-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "spacing-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "spacing-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "inconsistency-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "inconsistency-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "control-attr-order",
+     "group": "control",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": true,
+      "narrow": true
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "control-whitespace",
+     "group": "control",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": true,
+      "narrow": true
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    }
+   ]
+  },
+  {
+   "case": "ui08-existing-ds",
+   "trial": "A-r1",
+   "baselineEqual": {
+    "wide": true,
+    "narrow": true
+   },
+   "variants": [
+    {
+     "variant": "original",
+     "group": "original",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": null,
+      "narrow": null
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "contrast-strong",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +10 (wide)",
+      "axe color-contrast +10 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 10,
+       "axeColorContrastNodes": 10
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 10,
+       "axeColorContrastNodes": 10
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "contrast-weak",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": false,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "axeNoSeriousCritical",
+      "axe color-contrast +9 (wide)",
+      "axe color-contrast +9 (narrow)"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 9,
+       "axeColorContrastNodes": 9
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 9,
+       "axeColorContrastNodes": 9
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "pushout",
+     "group": "l1",
+     "pass": false,
+     "checks": {
+      "answerInitialView": false,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "answerInitialView"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": false,
+       "answerMissing": [
+        "名称"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": false,
+       "answerMissing": [
+        "名称"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "hierarchy-strong",
+     "group": "pass",
+     "pass": false,
+     "checks": {
+      "answerInitialView": false,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [
+      "answerInitialView"
+     ],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": false,
+       "answerMissing": [
+        "名称"
+       ],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "hierarchy-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "spacing-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "spacing-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "inconsistency-strong",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "inconsistency-weak",
+     "group": "pass",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": false,
+      "narrow": false
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "control-attr-order",
+     "group": "control",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": true,
+      "narrow": true
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    },
+    {
+     "variant": "control-whitespace",
+     "group": "control",
+     "pass": true,
+     "checks": {
+      "answerInitialView": true,
+      "noOverflowX": true,
+      "axeNoSeriousCritical": true,
+      "noExternalRequests": true
+     },
+     "newFailures": [],
+     "pixelsEqualToOriginal": {
+      "wide": true,
+      "narrow": true
+     },
+     "widths": {
+      "wide": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      },
+      "narrow": {
+       "answerAll": true,
+       "answerMissing": [],
+       "overflowX": false,
+       "axeSeriousCritical": 0,
+       "axeColorContrastNodes": 0
+      }
+     },
+     "coverage": 1,
+     "errors": []
+    }
+   ]
+  }
+ ]
+}

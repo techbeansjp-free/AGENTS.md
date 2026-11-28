@@ -4,6 +4,10 @@
 
 「ASCのSkillが、書込みのtoolがある利用者同等の隔離した環境で読まれ、適用されるか」を測る仕組みを1つにまとめたもの。#1820の段階2のharness（`docs/evidence/1820-write-tools-read/stage2/harness/`）を一度だけ写し、Issueごとの値を設定のdirectoryから読む形にした（#1823、ownerの決定）。**以後の測定は、Issueごとに設定のdirectoryだけを置き、この仕組みを写さない。**
 
+## 画面デザインの評価（#1835）
+
+画面デザインを評価者（Fable・Codex）に比べさせる測定は、この仕組みとは別の手順で行う。3層（層1：機械判定の下限、層2：既知の劣化による評価者の校正、層3：ownerの盲検の一対比較）を総合点にまとめずに報告する。手順・道具・結果は[1835-design-eval-layers](../1835-design-eval-layers/README.md)にある。#1835では、画面を並べて見せる一対比較が既知の劣化を最もよく見分け、講評を点にする方式（FLR・SSR）は不採用だった。道具はこのdirectoryへ移していない。
+
 ## 過去の写しの扱い
 
 #1807・#1814・#1815・#1817・#1820の各directoryにあるharnessの写しは、その測定の記録として残す。**変更・拡張しない。** 新しい測定に必要な変更は、ここに加える（下の「変更するとき」）。
@@ -86,6 +90,27 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 - `cases.json`の`markerBase` {`pathPattern`}：`markerText: "answer+writes"`で目印を当てる前に、書いたfileの文から、試行の前からあるfileと同じ行（前後の空白を除いて行単位で比べる）を除く（`score.mjs`の`baseLinesFor`・`markerTextOf`）。試行の前からあるfileは、fixtureのHEADのうち`pathPattern`に合うfile（導入した雛形）と、書いたfile自身の試行の前の版。除いた行の数を`markerBaseExcludedLines`に記録する。`collect.mjs`は`work/`のHEADを`make-fixture.mjs`の`headReader`（`git ls-tree`と`git cat-file --batch`）で読み、`priorFiles`・`priorTexts`として渡す。`markerBase`があるのにそれが無ければ採点を拒否する。
 - `writes.requireWithoutBase`：`require`の照合にも同じ除き方を使う（`forbid`は全文に当てる）。
 - `calibrate.mjs`：`bases`（条件ごとの雛形：commitとdirectory）、回答を書いたfileとして当てる形（`form: "written"`）、落ちるべき回答（`mustFail`：雛形そのまま・見出しと表だけ・利用案内だけ・1行だけ埋めた雛形等を、雛形のfileから作る）、1つの回答を複数のfileに分ける形（`fromLine`・`untilLine`）。表に、雛形と同じ行を除かない場合の結果、観点ごとのSkillあり・なしの当たる率と採点、各目印が当たる雛形の行の数、落ちるべき回答の結果を加えた。#1828の「これまでの採点」の合否は、目印と同じ観点と`min`を0/1の点に当てて作ったもので、#1828の判定ではないことを表に書く。
+
+## #1845で加えたもの（2026-11-28）
+
+#1840の測定の後に、金額の規則の照合と、PR #1842のレビューの指摘を直した。照合の直しと`requireFiles`・分数の水準は設定のfieldで働き、そのfieldの無い設定（試験用、#1823、#1840）の採点は変えない。残りの直し（`work/`の照合・すべての`GIT:`の行・利用者のSkillの成功）は拒否と判定を厳しくするもので、#1840の記録では結果が変わらない。#1840の生の記録から作り直した`trials.json`・`runs.json`は、公開したものとbyteで一致する（#1845のPRの記録）。#1840の設定のfile（`cases.json`・`conditions.json`・`decision-criteria.md`等）は変えていない。共通の仕組みのmoduleが変わるので、#1840と#1823の`fixation.mjs check`はmoduleの差を示す（下の「変更するとき」のとおり、測定の後の変更である）。#1840・#1823の記録の照合と判定（`fixation.mjs check`・`judge.mjs`）は、それぞれの`results/fixation.json`の`fixedAtCommit`の共通の仕組みで行う（例：`git worktree add <dir> <fixedAtCommit>`で取り出したものを使う）。#1840の`decision-criteria.md`の「共通の仕組みのmoduleを変えない」は、その測定の判定までを指す。
+
+- `writes.forbid`の`scope: "code"`：JavaScript・TypeScriptのfile（`.js`・`.ts`等）では、コメントと文字列（template literalの文字の部分）を空白にしたコードだけに照合する（`score.mjs`の`codeText`）。`// 税10.9 → 10`や`1bp = 0.01%`は数えず、`price * 1.1`や`Number(subtotal) * rate`は数える。他のfileとscopeの無い項目は全文に照合する（従来どおり）。JSX（`.jsx`・`.tsx`）の文の部分はコードとして照合する（`<p>1bp = 0.01%</p>`は数える）。JSXの文の中の`'`・`"`・`//`は文字列・コメントの始まりと読み、同じ行の後ろのコードを照合しない。小さなscannerでparserではなく、`)`の直後の正規表現（`if (ok) /x/.test(s)`）は除算と読む。
+- `writes.requireFiles` [{`id`, `pattern`, `group`}]：書いたfileのpathに、項目ごとに合うものが要る（例：FN-003とSCR-005の両方）。足りない項目は`writeFilesMissing`。`calibrate.mjs`も`writeFilesMissing`を不合格に数える。`calibrate.mjs`で回答を1つの書いたfileとして当てる形では、sourceの`as`（`pathPattern`に合うpath）がそのfileの名前になり、`scope`が採点と同じに効く。`as`が無ければ名前は`<answer>`で、`scope`は当てず全文に照合し、表の「落ちた点」にそう書く。
+- 水準の`min`を分数の文字列（例：`"2/3"`）で書くと、整数で比べる（`ok * 3 >= 2 * n`。4/6・7/9が届く）。数の`min`は従来どおり率で比べる。
+- `collect.mjs`：`workFiles`（か`workFilesError`）を記録した試行は、`work/`が無ければ拒否し、`work/`のHEADが`meta.json`の`sampleHead`と違うか、`sampleHead`が記録されていなければ拒否する（何も書く前に。HEADは`gitEnv`の環境で読む）。
+- `probe-check.mjs`：`gitContextNeutral`は、回答のすべての`GIT:`の行を見る（記録の`gitLine`は最後の行のまま）。
+- 利用者のSkill（`userSkill`）の本文の読込みは、結果がerrorでない`Skill`の呼出しか、成功したReadだけを数える。
+
+### 次の設定を書くときの注意（#1842のレビューの指摘のうち、設定で直すもの）
+
+次の指摘は設定の値の問題なので、仕組みではなく次の測定の設定で直す（#1840の設定は固定したので直さない）。
+
+- 雛形の読取りの照合（`forbidReads`・`expectReads`）は、配布の写し`managed-runtime/v05/templates/specs/`も含める（`cases.json`の値の例：`^\\.agent-skill-chain/(managed-runtime/v05/)?templates/specs/`）。
+- 複数のfileを書く依頼（#1840のs-1）は、`writes.requireFiles`でfileごとに求める。
+- 水準の`min`は、試行の数で割り切れない値（0.67・0.78）ではなく分数の文字列で書く。
+- 金額の規則のような、コードについての禁止は`scope: "code"`にする。
+- `decision-criteria.md`に、観点が求めないもの（#1840のm-r7は合意の版を求めない）と、水準の分子が数えるもの（#1840のg2-rule-readは`money.md`の読取りだけ）を書く。
 
 ## 変更するとき
 
