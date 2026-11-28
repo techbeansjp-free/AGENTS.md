@@ -83,3 +83,7 @@ test('decide: no decided pair is undetermined (not adopted by a null p-value)', 
   const r = decide({items, J: {fable: judge(items, () => 'first'), codex: judge(items, () => 'first')}, rounds: [1, 2], owner, rule: {...rule, minOwnerDecidedPairs: 0}});
   assert.equal(r.perEvaluator.fable.result, '未判定');
 });
+test('decide: an owner answer outside the four choices stops the count', () => {
+  const items = mk(2);
+  assert.throws(() => decide({items, J: {fable: judge(items, () => 'first'), codex: judge(items, () => 'first')}, rounds: [1, 2], owner: {[items[0].id]: 'first', [items[1].id]: null}, rule}), /unknown choice/);
+});

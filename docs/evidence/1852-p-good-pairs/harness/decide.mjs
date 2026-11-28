@@ -39,6 +39,8 @@ export function pJudgments({key, runs}) {
 export const combine = (js) => (js.some((j) => j === null) ? null : js.every((j) => j === js[0]) ? js[0] : 'same');
 
 export function decide({items, J, rounds, owner, rule, budgetStopped = false}) {
+  const bad = Object.entries(owner).filter(([, v]) => !['first', 'second', 'same', 'skip'].includes(v));
+  if (bad.length) throw new Error(`owner answers with an unknown choice: ${bad.map(([k]) => k).join(', ')}`);
   const decided = items.filter((i) => owner[i.id] === 'first' || owner[i.id] === 'second');
   const ownerCounts = {decided: decided.length, same: items.filter((i) => owner[i.id] === 'same').length, skip: items.filter((i) => owner[i.id] === 'skip').length,
     unanswered: items.filter((i) => !(i.id in owner)).length};
@@ -71,8 +73,6 @@ function main() {
   const key = readJson(path.resolve(opt('--key'))), runs = path.resolve(opt('--runs'));
   const items = key.items.filter((i) => !i.excluded);
   const owner = loadOwner(path.resolve(opt('--owner')), path.resolve(opt('--owner-key')));
-  const bad = Object.entries(owner).filter(([, v]) => v === null);
-  if (bad.length) throw new Error(`owner answers with an unknown choice: ${bad.map(([k]) => k).join(', ')}`);
   const ledgerFile = path.join(runs, 'ledger.jsonl');
   const ledger = fs.existsSync(ledgerFile) ? fs.readFileSync(ledgerFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
   const res = decide({items, J: pJudgments({key, runs}), rounds: key.rounds, owner, rule: cfg.decision, budgetStopped: ledger.some((l) => l.type === 'stop')});
