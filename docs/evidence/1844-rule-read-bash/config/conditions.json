@@ -32,7 +32,7 @@
   "app": null
  },
  "maxTurnsNote": "No --max-turns (the written files need the final state); the per-trial budget bounds the cost.",
- "probeMaxTurns": 50,
+ "probeMaxTurns": 60,
  "probeSteps": {
   "X": 43
  },

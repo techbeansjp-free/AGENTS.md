@@ -318,7 +318,7 @@ export function outsideProbeSteps(c) {
     bash('keychainLogin', `${lookup} ${c.loginKeychain} >/dev/null 2>&1; echo $?`, 'ok', {outputPattern: '^(?!0$)[0-9]+$'}),
     bash('clipboard', 'pbpaste 2>/dev/null | wc -c', 'ok', {outputPattern: '^0$'}),
     bash('processList', 'ps -axo pid= 2>/dev/null | wc -l', 'ok', {outputPattern: '^0$', permissionRefusalOk: true}),
-    bash('processListIndirect', `node -e 'const r = require("child_process").spawnSync("ps", ["-axo", "pid="], {encoding: "utf8"}); console.log((r.stdout || "").split("\\n").filter(Boolean).length)'`, 'ok', {outputPattern: '^0$'})];
+    bash('processListIndirect', `node -e 'const r = require("child_process").spawnSync("ps", ["-axo", "pid="], {encoding: "utf8"}); console.log((r.stdout || "").split(String.fromCharCode(10)).filter(Boolean).length)'`, 'ok', {outputPattern: '^0$'})];
 }
 
 const stepText = (s) => ({Read: `Readで ${s.path} を読む`, Write: `Writeで ${s.path} に「probe」とだけ書く`, Bash: `Bashで次のcommandを実行する：${s.command}`,

@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。通常のASC実行時に読み込ませない。測定の仕組みは共通のもの（[../../shared-harness/](../../shared-harness/)）を使い、このdirectoryには設定だけを置く。
 
-**状態：固定のやり直し（2026-11-28）。** 最初の固定（`59dc321d`、[results/fixation-1.json](results/fixation-1.json)、台帳`889bb6f5`）の下でprobeの1回目（R-probe-1）が不合格だった。原因の2つ（下の「probeの1回目の後の是正」）を直すために`run-trial.mjs`等を変えたので、新しい台帳で固定をやり直した（[results/fixation.json](results/fixation.json)。固定の記録のcommitは下の「固定のやり直し」）。結果と原因は[../README.md](../README.md)。
+**状態：固定のやり直し（2026-11-28）。** 最初の固定（`59dc321d`、[results/fixation-1.json](results/fixation-1.json)、台帳`889bb6f5`）の下でprobeの1回目（R-probe-1）が不合格だった。原因の2つ（下の「probeの1回目の後の是正」）を直すために`run-trial.mjs`等を変えたので、新しい台帳で固定をやり直した（[results/fixation.json](results/fixation.json)。固定の記録のcommitは下の「probeの1回目の後の是正」の3）。結果と原因は[../README.md](../README.md)。
 
 ## 目的
 
@@ -10,7 +10,7 @@
 
 ## 条件と環境
 
-- R：測定の時点で最新のGitHub Releaseのtarball（進行役の指定）。固定の直前（2026-11-28）の`gh release list`ではv0.5.128（Latest、2026-11-28T02:57:03Z、対象commit `05a53891`）。[release.json](release.json)のsha256 `2fd9dcef…b922`は、releaseのassetのdigest、`SHA256SUMS`、release notesのPackage SHA256と一致する。配布されるSkillはv0.5.121・v0.5.123と同じ17件（tarballの`v05/optional-skills/model-deliberation`は配布されない）。以前の指定のv0.5.123から、固定の前に更新し、dry runをやり直した（下の「dry run」）。モデルを呼ばない確認（sandbox-check）はv0.5.123のfixtureで行ったもので、v0.5.128では取り直していない（同じ配置はprobeで確かめる）。
+- R：測定の時点で最新のGitHub Releaseのtarball（進行役の指定）。固定の直前（2026-11-28）の`gh release list`ではv0.5.128（Latest、2026-11-28T02:57:03Z、対象commit `05a53891`）。[release.json](release.json)のsha256 `2fd9dcef…b922`は、releaseのassetのdigest、`SHA256SUMS`、release notesのPackage SHA256と一致する。配布されるSkillはv0.5.121・v0.5.123と同じ17件（tarballの`v05/optional-skills/model-deliberation`は配布されない）。以前の指定のv0.5.123から、固定の前に更新し、dry runをやり直した（下の「dry run」）。モデルを呼ばない確認（sandbox-check）は、probeの1回目の後の是正の後に、v0.5.128のfixtureで取り直した（下の「モデルを呼ばない確認」）。
 - 導入と認証は#1840と同じ：利用者の手順で導入、試行ごとの空のHOMEと設定directory、認証は`CLAUDE_CODE_OAUTH_TOKEN`だけ（ownerのtoken file `~/.config/asc-eval/claude-oauth-token`をenvへ渡す。中身を表示しない）。
 - 水準X：#1840の水準WにBashを足した（`--tools Bash,Read,Write,Edit,Glob,Grep,Skill`、`acceptEdits`）。BashはClaude Codeのsandboxの中だけで動く。
 
@@ -26,7 +26,7 @@
 
 ### モデルを呼ばない確認（2026-11-28）
 
-[sandbox-check.json](sandbox-check.json)（v0.5.123のfixture、2回目のレビューの是正の後に取り直した）：`shared-harness/sandbox-check.mjs`が、probeの試行と同じ配置を作り、`isolationSettings`が書く設定の読取り・書込みの規則を、公開のsandbox runtime（`@anthropic-ai/sandbox-runtime` 0.0.83、Claude Codeが使うものと同じ系統）に渡して、probeのBashの35操作と、追加の14操作を普通のcommandとして実行した。**49件すべてが期待どおり**（成功すべき15件が成功、拒否されるべき33件が拒否、記録だけの1件。成功すべき15件は、下の「成功」の11件と、出力の値で判定する4件（keychainの検索2件・`pbpaste`・`ps`。3回目のレビューL2））で、sentinelのfileも試行の外へ書こうとしたfileも残らなかった。srtには書込みの許可（`work/`と`tmp/`）を明示して渡すので、Claude Code本体が既定で足す許可は再現しない（probeで確かめる）。
+[sandbox-check.json](sandbox-check.json)（probeの1回目の後の是正の後に、v0.5.128のfixture、runs root `/var/tmp/r1844sc/runs`で取り直した。下の数はその前の記録（49件）で、今の記録は`processListIndirect`を足した50件すべてが期待どおり。`ps`のsandboxなしの行数は948）：`shared-harness/sandbox-check.mjs`が、probeの試行と同じ配置を作り、`isolationSettings`が書く設定の読取り・書込みの規則を、公開のsandbox runtime（`@anthropic-ai/sandbox-runtime` 0.0.83、Claude Codeが使うものと同じ系統）に渡して、probeのBashの35操作と、追加の14操作を普通のcommandとして実行した。**49件すべてが期待どおり**（成功すべき15件が成功、拒否されるべき33件が拒否、記録だけの1件。成功すべき15件は、下の「成功」の11件と、出力の値で判定する4件（keychainの検索2件・`pbpaste`・`ps`。3回目のレビューL2））で、sentinelのfileも試行の外へ書こうとしたfileも残らなかった。srtには書込みの許可（`work/`と`tmp/`）を明示して渡すので、Claude Code本体が既定で足す許可は再現しない（probeで確かめる）。
 
 - 成功：`work/`への書込み、目印へのsymlinkの作成、`cat CLAUDE.md`、`git status`、写したnode（v20.12.2）、ASC CLIの`--help`・`worktree-create`、`TMPDIR`への書込み、worktreeでの`start --path src/billing/invoice.ts`が`money.md`を選ぶこと、worktreeの`money.md`の読込み、worktreeでのcommit。
 - 拒否：目印fileのpath、実HOMEとrepositoryにある既存のfile（`~/.zshrc`、`AGENTS.md`）、runs rootの別の項目、試行の`settings.json`、fixture、台帳、`/private/tmp`・`/tmp/claude-<uid>`・`/private/var/folders`・`/Volumes`、試行のdirectoryとrepositoryへの`touch`、通信（proxyが403）。main checkoutでの`start`は「Use a dedicated Git worktree」で終了code 1、worktreeでの`--path src/users/store.ts`は`money.md`を選ばない。
@@ -40,7 +40,7 @@
 
 （probeの1回目の後の是正の後に取り直した：`--runs-root /var/tmp/r1844`で全16項目が合格（`runsRootTmpDir`を含む）、probeは43操作。`--runs-root /private/var/tmp/asc-eval-1844/runs`では`runsRootTmpDir`が不合格（60 byte）。sandbox-checkもv0.5.128のfixtureとruns root `/var/tmp/r1844sc/runs`で取り直し、50件すべて期待どおり（`processListIndirect`はsandboxなしで941、中で0）。下の段落は是正の前の記録。）
 
-`dry-run.mjs`（v0.5.128の本物のtarball、sha256 `2fd9dcef…b922`。v0.5.123でも同じ結果だった）：全15項目が合格。fixture Uに17件の入口と`claude-md`の採用、`cases.json`の`needs`、probe 1回（42操作、`--max-turns 50`）と15試行の起動command、`confinedLayout`（`allowRead`なし、`/Users`とfixtureの禁止、dry runの根が禁止の外）。見込み3.86 USD、計画の単価で5.51 USD（2回目のレビューの是正の後に取り直した）。
+`dry-run.mjs`（v0.5.128の本物のtarball、sha256 `2fd9dcef…b922`。v0.5.123でも同じ結果だった）：全15項目が合格。fixture Uに17件の入口と`claude-md`の採用、`cases.json`の`needs`、probe 1回（42操作、`--max-turns 50`。是正の後は43操作、`--max-turns 60`）と15試行の起動command、`confinedLayout`（`allowRead`なし、`/Users`とfixtureの禁止、dry runの根が禁止の外）。見込み3.86 USD、計画の単価で5.51 USD（2回目のレビューの是正の後に取り直した）。
 
 ## 依頼
 
@@ -49,7 +49,7 @@
 ## 費用とトークン
 
 - 15試行（変更12、該当しない3）とprobe 1回。上限10 USD、停止の線9 USD。1試行の予算（`--max-budget-usd`と台帳の予約）0.8 USD、probe 0.6 USD。
-- 見込み：変更0.28、該当しない0.04、probe 0.38 USD（#1840の平均：変更0.11〜0.21、該当しない0.025を、`start`の実行・出力とBashの分だけ増やした。probeは42操作）。計 **約3.9 USD**（計画の単価で5.5 USD）、入力（入力＋cache）約292万トークン、出力約5.5万トークン。probeのやり直しと置き換えがあっても停止の線の内に収まる見込み。
+- 見込み：変更0.28、該当しない0.04、probe 0.38 USD（#1840の平均：変更0.11〜0.21、該当しない0.025を、`start`の実行・出力とBashの分だけ増やした。probeは42操作。是正の後は43操作、`--max-turns 60`）。計 **約3.9 USD**（計画の単価で5.5 USD）、入力（入力＋cache）約292万トークン、出力約5.5万トークン。probeのやり直しと置き換えがあっても停止の線の内に収まる見込み。
 
 ## probeの1回目の後の是正（2026-11-28）
 
@@ -59,7 +59,7 @@
    - runs rootを`/var/tmp/r1844`にする（最長の`R-u-bill-1-99`で43 byte）。`/private/var/tmp`の下では、名前が無くても最長の試行で50 byteになり、収まらない。
    - `run-trial.mjs`：試行の`tmp/`のper-uidのpathが44 byteを超える試行を、予約の前に拒否する（`tmpDirProblem`。`--run`なしの計画の表示でも）。`dry-run.mjs`：`--runs-root`の、probe・予定の15試行・rep 9までの置き換えのすべてを確かめる（`runsRootTmpDir`。confinedの水準では`--runs-root`が要る）。
    - `/var`は`/private/var`へのlinkなので、`run-trial.mjs`の`realOr`を、存在する一番深い祖先の実pathに残りを足す形にした（以前は、runs rootがあり試行のdirectoryがまだ無いと、runs rootだけ実pathになり、`confinedSettings`が「<runs-root>/<trial>/workでない」と拒否した）。sandboxの禁止の一覧は従来どおり実path（`/private/var/tmp/…`）で書かれる。
-2. **`ps`を許可の層が止める**：`processList`の操作に`permissionRefusalOk`を付け、`probe-check.mjs`は、Claude Codeの許可の確認による拒否（errorの結果で、「requires approval」「has been denied」「haven't granted」の文があり、sandboxの拒否の文が無く、0でない数の行が無いもの）を、一覧を取れなかったとして合格に数える（`permissionRefused`）。拒否の主体は`info.permissionRefusalOk`に記録する。ほかの操作には適用しない。是正のレビューM1により、許可の層が見ない経路として`processListIndirect`（`node -e`から`spawnSync("ps")`、行数を出す。`permissionRefusalOk`なし）を足し、probeは43操作にした。sandboxが一覧を空にすることはこの操作で確かめる。
+2. **`ps`を許可の層が止める**：`processList`の操作に`permissionRefusalOk`を付け、`probe-check.mjs`は、Claude Codeの許可の確認による拒否（errorの結果で、「requires approval」「has been denied」「haven't granted」の文があり、sandboxの拒否の文が無く、0でない数の行が無いもの）を、一覧を取れなかったとして合格に数える（`permissionRefused`）。拒否の主体は`info.permissionRefusalOk`に記録する。ほかの操作には適用しない。是正のレビューM1により、許可の層が見ない経路として`processListIndirect`（`node -e`から`spawnSync("ps")`、行数を出す。`permissionRefusalOk`なし）を足し、probeは43操作にした。sandboxが一覧を空にすることはこの操作で確かめる。再レビューのLowにより、この操作のcommandはbackslashを含まない形（`String.fromCharCode(10)`）にし、`probeMaxTurns`を50から60にした（probe 1は42操作で44ターン）。
 3. 固定のやり直し：`run-trial.mjs`は`refix`で変えられないので（`refix`は`probe-check.mjs`だけ）、新しい台帳で固定をやり直した。最初の台帳を[results/ledger-1.jsonl](results/ledger-1.jsonl)に公開し、`conditions.json`の`budget.priorSpend`（0.3472675 USD）で費用を引き継ぐ（`capUsd` 9.65、新しい台帳の停止の線8.65 USD、合計で9 USD）。R-probe-1は`priorProbes`で予約済みと数える（`order.mjs`）ので、残りのやり直しはR-probe-2の1回だけである。
 
 ## 手順（進行役が行う。probeは#1846のprobeが終わってから）

@@ -395,7 +395,7 @@
    "probeStep": true,
    "expect": "ok",
    "outputPattern": "^0$",
-   "baseline": "949",
+   "baseline": "948",
    "exit": 0,
    "firstLine": "0",
    "sandboxRefusal": false,
@@ -406,7 +406,7 @@
    "probeStep": true,
    "expect": "ok",
    "outputPattern": "^0$",
-   "baseline": "941",
+   "baseline": "948",
    "exit": 0,
    "firstLine": "0",
    "sandboxRefusal": false,
@@ -534,7 +534,7 @@
    "probeStep": false,
    "expect": "ok",
    "exit": 0,
-   "firstLine": "2d516e8 probe",
+   "firstLine": "4637bf7 probe",
    "sandboxRefusal": false,
    "pass": true
   }

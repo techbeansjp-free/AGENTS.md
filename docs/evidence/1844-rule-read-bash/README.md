@@ -6,7 +6,7 @@
 
 - **未測定。隔離の確認（probe）の1回目が不合格で、15試行は行っていない。** 規則で許される1回のやり直しは使っていない（下の「やり直さなかった理由」）。
 - 固有ルールが読まれるかの結果はまだない。#1840のBashなしの下限（`money.md`の読込み R 1/6、C 0/6）と並べる値もない。
-- 固定は`59dc321d`（[config/results/fixation.json](config/results/fixation.json)、新しい台帳）。条件RはGitHub Release v0.5.128（固定の直前の`gh release list`でLatest。v0.5.123から更新し、dry runを取り直して全15項目が合格）。
+- 最初の固定は`59dc321d`（[config/results/fixation-1.json](config/results/fixation-1.json)、台帳`889bb6f5`。probe 1の後の是正で固定をやり直した：[config/README.md](config/README.md)の「probeの1回目の後の是正」）。条件RはGitHub Release v0.5.128（固定の直前の`gh release list`でLatest。v0.5.123から更新し、dry runを取り直して全15項目が合格）。
 - 生の記録（`/private/var/tmp/asc-eval-1844/`）はcommitしていない。
 
 ## probeの1回目（R-probe-1）
