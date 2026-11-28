@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。通常のASC実行時に読み込ませない。測定の仕組みは共通のもの（[../../shared-harness/](../../shared-harness/)）を使い、このdirectoryには設定だけを置く。#1840の設定（[../../1840-user-environment/config/](../../1840-user-environment/config/)）と同じ形である。
 
-**状態：設定だけ（2026-11-28）。未固定・未測定。** `release.json`の2件は仮の値（`placeholder`）なので、fixture・固定・有料の実行はすべて拒否される。
+**状態：固定済み（2026-11-28、下の「測定の前の固定」）。** 結果は[../README.md](../README.md)。
 
 ## 目的
 
@@ -71,6 +71,17 @@ fixtureは#1840のSP（会員サイト、既存のFN-003・SCR-005）とEC1（EC
 5. 独立レビューの後に`fixation.mjs init`で固定し、固定のcommitをこのREADMEに書く。
 6. ownerの目印fileの承認を`results/probe-approval.json`に記録し、probe（B・C）。
 7. 測定（36試行）、`collect.mjs`・`judge.mjs`。結果を`docs/evidence/1843-spec-rule-path/README.md`に書く。
+
+## 測定の前の固定（2026-11-28）
+
+- C：PR #1838のhead `79a2fda00d5f8947d437af9c6da9cb6f20a5c776`（main `328a19f4`＝v0.5.123を取り込み、独立レビューの是正を含む）を一時のcloneで`pack-candidate.mjs --version=0.5.123`でpackした。sha256 `f8e4972a05ad9dcdb7c097d16909c260944c3a7b57d1b01c72fba7d2efcb964b`。
+- B：同じcloneで`79a2fda0`から`revertCommits`の2件（`c92e7f1f`・`a57a0829`）を`git revert`した（衝突なし。手元のcommit `d2de7c2a`、pushしない）。sha256 `35c8f8f45c79a77454720755fcf52875b89175ba3340457397525f1f1c859fb0`。`origin/main..79a2fda0`のmerge以外のcommitで`docs/evidence/`の外に触れる#1843のcommitは、この2件だけだった。
+- tarballの比較（展開して`diff -rq`）：BとCの差は`skills/asc/SKILL.md`・`src/project-assets.mjs`・`release-identity.json`だけ。Cとv0.5.123の資産（`SHA256SUMS`と一致）の差は、`git diff 328a19f4..79a2fda0`の配布するfile 59件（ascの本文、`src/project-assets.mjs`、`v05/templates/specs/`の57件）と`release-identity.json`だけ。v0.5.121の資産とは、これに`package.json`の版の番号が加わるだけ。
+- dry run（B・C）：すべての照合に合格（`pass: true`。導入後の差は`distribution.json`・ascの本文とその写し・`managed-runtime/src/project-assets.mjs`だけ。計画36試行、見込み3.26 USD、計画の単価で4.26 USD、停止の線5.5 USD）。
+- 手順4の確認（dry runのfixture SP・EC1）：Bの`.agent-skill-chain/skills/asc/SKILL.md`と`.agent-skill-chain/managed-runtime/skills/asc/SKILL.md`に`00_利用案内.md#書き方`は無い（0件）。Cの同じ2fileの1文のlinkは、それぞれ`.agent-skill-chain/templates/specs/00_利用案内.md`と`.agent-skill-chain/managed-runtime/v05/templates/specs/00_利用案内.md`に解決し、どちらのfileも実在して見出し`## 書き方`がある。
+- ownerの目印fileの承認：[#1843のcomment](https://github.com/techbeansjp-free/AGENTS.md/issues/1843#issuecomment-7231489360)（`results/probe-approval.json`）。
+- `results/fixation.json`の最初の記録のcommitは`9d6e55f532956f220437cca1e7a6a53ac6af5a58`。台帳idは`a9b568f0-830e-4190-a9a2-6f59d5f2d3d0`、台帳は`<scratch>/rel1843/ledger/ledger-1843.jsonl`（新しい台帳、予約0件）。`run-trial.mjs`はこの記載を照合する。
+- 固定の記録は、この設定の5fileと共通の仕組みのmodule 16件のsha256を持つ。測定の終わりまで、設定と共通の仕組みを変えない。
 
 ## 手順（統括が行う）
 
