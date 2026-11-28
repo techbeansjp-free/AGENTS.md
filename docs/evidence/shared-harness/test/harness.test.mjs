@@ -1213,3 +1213,45 @@ test('#1867 rule: without negative cases the levels are judged only when rule.ne
   assert.deepEqual([now.verdict, now.perCondition.S.verdict, now.perCondition.B.verdict], ['levels', 'meets-levels', 'below-levels']);
   assert.equal(C67.rule.negativesRequired, false);
 });
+
+// #1867 review L5 and H2: the two combinations the earlier tests did not reach, and conditions.json fixedExtra.
+const {otherEntriesDiffer} = await import('../dry-run.mjs');
+const {fixedOf, digests, differences} = await import('../fixation.mjs');
+
+test('#1867 fixtureReferences: ascSkillsByCondition without ascSkills keeps the asc cases only (as before)', () => {
+  const cases = [{id: 'a', expect: 'asc', references: ['implementation.md']}, {id: 'd', expect: 'design-creation', references: ['public-page.md']}];
+  const onlyBy = {ascSkillsByCondition: {S: [...ASC, 'design-creation']}};
+  assert.deepEqual(fixtureReferences(cases, 'S', onlyBy), ['implementation.md']);
+  assert.deepEqual(fixtureReferences(cases, 'B', onlyBy), ['implementation.md']);
+  assert.deepEqual(fixtureReferences(cases, 'S', {ascSkills: ASC, ascSkillsByCondition: {S: [...ASC, 'design-creation']}}), ['implementation.md', '../../design-creation/references/public-page.md']);
+});
+
+test('#1867 dry-run entries: only the Skills both conditions distribute are compared; asc and the added Skill are not', () => {
+  const conds = {ascSkills: ASC, ascSkillsByCondition: {S: [...ASC, 'design-creation']}};
+  const same = (n) => `entry ${n}`;
+  assert.deepEqual(otherEntriesDiffer(conds, 'B', 'S', same, same), []);
+  const sOnly = (n) => (n === 'design-creation' || n === 'asc' ? 'changed' : `entry ${n}`);
+  assert.deepEqual(otherEntriesDiffer(conds, 'B', 'S', same, sOnly), [], 'the added Skill and asc are outside the comparison');
+  const drift = (n) => (n === 'work-coordination' ? 'changed' : `entry ${n}`);
+  assert.deepEqual(otherEntriesDiffer(conds, 'B', 'S', same, drift), ['work-coordination']);
+  assert.deepEqual(otherEntriesDiffer({ascSkills: ASC}, 'B', 'S', same, drift), ['work-coordination'], 'without ascSkillsByCondition every entry but asc');
+});
+
+test('#1867 fixedExtra: the listed config files are fixed; a config without it fixes the same files as before', (t) => {
+  assert.deepEqual(fixedOf(EV), FIXED, 'the test config has no fixedExtra');
+  const d = tmp(t);
+  for (const f of cfg.CONFIG_FIXED) fs.copyFileSync(path.join(EV, f), path.join(d, f));
+  const conds = JSON.parse(read('conditions.json'));
+  fs.mkdirSync(path.join(d, 'layers'));
+  fs.writeFileSync(path.join(d, 'layers/eval.json'), '{"a":1}\n');
+  fs.writeFileSync(path.join(d, 'conditions.json'), JSON.stringify({...conds, fixedExtra: ['layers/eval.json']}));
+  assert.deepEqual(fixedOf(d).filter((f) => !FIXED.includes(f)), ['config/layers/eval.json']);
+  const rec = {files: digests(d)};
+  assert.deepEqual(differences(rec, d), []);
+  fs.writeFileSync(path.join(d, 'layers/eval.json'), '{"a":2}\n');
+  assert.deepEqual(differences(rec, d), ['config/layers/eval.json']);
+  for (const bad of [['../x.json'], ['/abs.json'], ['missing.json'], ['cases.json'], ['results/judge.json'], ['layers/eval.json', 'layers/eval.json'], 'x']) {
+    fs.writeFileSync(path.join(d, 'conditions.json'), JSON.stringify({...conds, fixedExtra: bad}));
+    assert.throws(() => fixedOf(d), /fixedExtra/, JSON.stringify(bad));
+  }
+});

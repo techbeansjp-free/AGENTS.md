@@ -74,7 +74,15 @@ export function buildPackets({cfg = loadConfig(), renderRoot, out, seed, allowMi
   };
 
   const sides = {}; // P: is the item's first screen shown as A, per round
-  const pItems = live;
+  // #1867: cfg.pPairs {case: [[trial, trial]]} limits the P packets to those layer-3 pairs (layer 2 of #1867: the same-round
+  // pairs only, while the owner compares all layer-3 pairs); each listed pair must be a layer-3 pair. Without it, every item (as before)
+  let pItems = live;
+  if (cfg.pPairs) {
+    const want = new Set(Object.entries(cfg.pPairs).flatMap(([c, ps]) => ps.map(([a, b]) => `L3:${c}:${a}~${b}`)));
+    const unknown = [...want].filter((id) => !items.some((i) => i.id === id));
+    if (unknown.length) throw new Error(`pPairs not in layer3.pairs: ${unknown.join(', ')}`);
+    pItems = live.filter((i) => want.has(i.id));
+  }
   const rndSide = makeRng(seed, 'sides');
   const firstHalf = new Set(shuffle(pItems.map((i) => i.id), rndSide).slice(0, Math.ceil(pItems.length / 2)));
   const dOrders = {};

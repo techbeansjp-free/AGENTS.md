@@ -38,7 +38,7 @@
   ],
   "writtenFiles": true
  },
- "reportNote": "Reported per trial, never used for a level: which design-creation files were read (the Claude Code entry, the body, each reference), whether the asc body was read (the read trigger), whether the lp-new inquiries record and FONTS.md were read, and every file written. The Skill calls are in the row (skills). writesReport matches a few words in out/DESIGN-NOTES.md (仮説, 根拠/出典, ペルソナ/利用者の像) as a hint for the person who counts the records; it is not the gate (decision-criteria.md).",
+ "reportNote": "Reported per trial, never used for a level: which design-creation files were read (the Claude Code entry, the body, each reference), whether the asc body was read (the read trigger), whether the lp-new inquiries record and FONTS.md were read, and every file written. The Skill calls are in the row (skills). writesReport matches a few words in out/DESIGN-NOTES.md (仮説, 根拠/出典, ペルソナ/利用者の像) as a hint for the fresh context that counts the records (blind to the condition); it is not the gate (decision-criteria.md).",
  "cases": [
   {
    "id": "ui02-exhibition",
@@ -339,6 +339,6 @@
  ],
  "scoring": {
   "machine": "Per S trial: design-creation body read (expectReads; also bodyRead), a reference read (referenceRead, report), the deliverable and the record written (writes.requireFiles; writeOk). Failures (no init or result event, a result error that is not the budget stop, the condition not received) are failures of the shared harness.",
-  "person": "The content of out/DESIGN-NOTES.md (the user picture with evidence and hypotheses told apart, the decisions tied to users) is counted by a person after collect.mjs, as decision-criteria.md says. It is not in runs.json."
+  "recordCount": "The content of out/DESIGN-NOTES.md (the user picture with evidence and hypotheses told apart, the decisions tied to users) is counted after collect.mjs by a fresh context, blind to the condition (layers/gate-count.json), as decision-criteria.md says. It is not in runs.json."
  }
 }

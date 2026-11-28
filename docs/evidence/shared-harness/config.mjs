@@ -41,3 +41,17 @@ export const loadOrder = (dir) => readCfg('run-order.json', dir);
 export const loadRelease = (dir) => readCfg('release.json', dir);
 // The files of a config that are fixed before any model run (fixation.mjs).
 export const CONFIG_FIXED = ['decision-criteria.md', 'cases.json', 'conditions.json', 'release.json', 'run-order.json'];
+// #1867: conditions.json fixedExtra [path] adds config files (relative to the config directory, e.g. the layer 1-3
+// settings run outside the harness) to the fixed files. Without the field the list is CONFIG_FIXED, as before.
+export function configFixed(dir = configDir()) {
+  const extra = loadConditions(dir).fixedExtra ?? [];
+  if (!Array.isArray(extra)) throw new Error('conditions.json fixedExtra must be an array of paths');
+  for (const f of extra) {
+    const abs = path.resolve(dir, String(f));
+    if (typeof f !== 'string' || !f || path.isAbsolute(f) || !inside(abs, dir) || abs === path.resolve(dir)) throw new Error(`conditions.json fixedExtra: ${f} is not a path inside the config directory`);
+    if (CONFIG_FIXED.includes(f) || f.startsWith('results/')) throw new Error(`conditions.json fixedExtra: ${f} is already fixed or a result`);
+    if (!fs.existsSync(abs)) throw new Error(`conditions.json fixedExtra: ${f} does not exist`);
+  }
+  if (new Set(extra).size !== extra.length) throw new Error('conditions.json fixedExtra has a duplicate');
+  return [...CONFIG_FIXED, ...extra];
+}

@@ -6,9 +6,12 @@
 //   node run-layer1.mjs probe  <pages-dir> [--case c] [--trial t] [--write-config]
 //        pages-dir is the output of degrade.mjs; probes each <case>/<trial>/original. --write-config merges the result
 //        into config/page-probe.json (then run degrade.mjs again).
-//   node run-layer1.mjs layer1 <pages-dir> <out-dir> [--case c] [--trial t] [--skip-render]
+//   node run-layer1.mjs layer1 <pages-dir> <out-dir> [--case c] [--trial t] [--skip-render] [--cases <cases.json>] [--gold-add <gold.json>]
 //        renders the original and every variant made (manifest.json), runs first-view and compare, and writes
 //        <out-dir>/layer1.json. Screenshots stay in <out-dir> (do not commit them).
+//        #1867: --cases replaces config/cases.json (same format; e.g. a case #1835 does not have); --gold-add adds the
+//        cases of another gold file to #1804 gold.json (a case in both is refused) and the run reads the merged file from
+//        <out-dir>/gold.json. Without them the run is as before.
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -29,9 +32,9 @@ export function layer1CommandFailures(out) {
   return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean) : [];
 }
 
-export function mergedCases() {
+export function mergedCases(cases = CASES) {
   const out = {schema: 'asc-1835-cases-merged/v1', cases: {}};
-  for (const [id, c] of Object.entries(CASES)) {
+  for (const [id, c] of Object.entries(cases)) {
     let spec = {...c};
     if (c.firstViewFrom) {
       const [file, key] = c.firstViewFrom.split('#');
@@ -41,6 +44,17 @@ export function mergedCases() {
     out.cases[id] = spec;
   }
   return out;
+}
+
+// #1867: #1804 gold.json with the cases of another gold file added; a case in both is refused (never overridden).
+export function mergedGold(addFile = null) {
+  const gold = JSON.parse(fs.readFileSync(path.join(E1804, 'gold.json'), 'utf8'));
+  if (!addFile) return gold;
+  const add = JSON.parse(fs.readFileSync(addFile, 'utf8'));
+  const cases = Object.fromEntries(Object.entries(add).filter(([k]) => !['schema', 'note'].includes(k)));
+  const both = Object.keys(cases).filter((k) => k in gold);
+  if (both.length) throw new Error(`--gold-add: ${both.join(', ')} already in #1804 gold.json`);
+  return {...gold, ...cases};
 }
 
 function docker(pagesDir, outDir, script) {
@@ -85,16 +99,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   } else if (mode === 'layer1') {
     const out = path.resolve(outArg); fs.mkdirSync(out, {recursive: true});
-    const cases = mergedCases();
+    const caseDefs = opt('--cases') ? JSON.parse(fs.readFileSync(path.resolve(opt('--cases')), 'utf8')).cases : CASES;
+    const cases = mergedCases(caseDefs);
     fs.writeFileSync(path.join(out, 'cases.json'), JSON.stringify(cases, null, 1));
-    const ALIAS = Object.fromEntries(Object.entries(CASES).map(([k, c]) => [k, c.renderAlias]));
+    const goldAdd = opt('--gold-add') ? path.resolve(opt('--gold-add')) : null;
+    const goldMerged = mergedGold(goldAdd);
+    if (goldAdd) fs.writeFileSync(path.join(out, 'gold.json'), JSON.stringify(goldMerged, null, 1));
+    const goldIn = goldAdd ? '/out/gold.json' : '/opt/g/gold.json';
+    const ALIAS = Object.fromEntries(Object.entries(caseDefs).map(([k, c]) => [k, c.renderAlias]));
     const made = (p) => p.variants.filter((v) => !v.excluded).map((v) => v.variant);
     const tid = (p, v) => `${p.case}__${p.trial}__${v}`;
     const targets = pages.flatMap((p) => made(p).map((v) => ({id: tid(p, v), case: ALIAS[p.case], file: `${sel(p)}/${v}/index.html`})));
     fs.writeFileSync(path.join(out, 'targets.json'), JSON.stringify(targets, null, 1));
     fs.writeFileSync(path.join(out, 'pairs.json'), JSON.stringify(pages.map((p) => ({key: `${p.case}/${p.trial}`, case: p.case, original: `${sel(p)}/original/index.html`,
       variants: Object.fromEntries(made(p).filter((v) => v !== 'original').map((v) => [v, `${sel(p)}/${v}/index.html`]))})), null, 1));
-    const fv = pages.flatMap((p) => made(p).map((v) => `mkdir -p /out/${tid(p, v)} && node /opt/fv/first-view.mjs /out/cases.json ${p.case} ${sel(p)}/${v}/index.html /opt/g/gold.json > /out/${tid(p, v)}/first-view.json || echo ${tid(p, v)} >> /out/failed.txt`)).join('; ');
+    const fv = pages.flatMap((p) => made(p).map((v) => `mkdir -p /out/${tid(p, v)} && node /opt/fv/first-view.mjs /out/cases.json ${p.case} ${sel(p)}/${v}/index.html ${goldIn} > /out/${tid(p, v)}/first-view.json || echo ${tid(p, v)} >> /out/failed.txt`)).join('; ');
     const t0 = Date.now();
     fs.rmSync(path.join(out, 'layer1.json'), {force: true}); // never leave an older record behind a failed run
     if (!args.includes('--skip-render')) {
@@ -108,7 +127,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const seconds = Math.round((Date.now() - t0) / 1000);
     const render = Object.fromEntries(JSON.parse(fs.readFileSync(path.join(out, 'render.json'), 'utf8')).map((r) => [r.id, r]));
     const cmp = JSON.parse(fs.readFileSync(path.join(out, 'compare.json'), 'utf8')).pages;
-    const gold = JSON.parse(fs.readFileSync(path.join(E1804, 'gold.json'), 'utf8'));
+    const gold = goldMerged;
     const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
     const result = {schema: 'asc-1835-layer1/v1', note: '層1の暫定の判定。合格は「使いやすい」ことを意味せず、不合格はこの限られた範囲での反証として扱う。', image: IMAGE_ID, seconds, pages: []};
     for (const p of pages) {

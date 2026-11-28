@@ -1,0 +1,129 @@
+{
+ "schema": "asc-1835-cases/v1",
+ "note": "#1867の層1の設定。#1835のrun-layer1.mjs layer1に--casesで渡す（#1835のconfig/cases.jsonと同じ書式）。ui02・ui03・ui08は#1835のconfig/cases.jsonの値をそのまま写した（層1が読むfieldだけ。劣化版を作らないのでtargets・html・extraFilesは置かない）。ui03は#1815のcases.jsonから初期表示の項目と幅を読む（firstViewFrom）。lp-newは#1867で決めた：幅はui02と同じ2幅（依頼文に幅の指定は無く、問合せの記録では家族が夜にスマートフォンで見る。render.mjsの幅の表はui07を借りる）、時計は開業の後の2027-03-01（依頼文・資料に日時で変わる内容は無い）、初期表示の項目はサービス名と、申込みか問合せの手段（依頼の目的。tel:のリンクか#applyへのリンクのどちらか）。必須項目はlayer1-gold.jsonのlp-new（依頼文の「このページに必ず載せる」）。",
+ "cases": {
+  "ui02-exhibition": {
+   "goldKey": "ui02",
+   "renderAlias": "ui07",
+   "fixedNow": "2027-03-20T10:00:00+09:00",
+   "wide": {
+    "width": 1440,
+    "height": 900,
+    "renderName": "desktop"
+   },
+   "narrow": {
+    "width": 390,
+    "height": 844,
+    "renderName": "mobile"
+   },
+   "question": "行くかどうか・いつ行くかを決められるか（BRIEF.md）。初期表示の項目は#1804 gold.jsonのfirstViewportMobile",
+   "firstView": {
+    "narrow": {
+     "items": [
+      [
+       "干潟と海苔の百年"
+      ],
+      [
+       "4月10日",
+       "4/10"
+      ]
+     ],
+     "selectors": []
+    },
+    "wide": {
+     "items": [
+      [
+       "干潟と海苔の百年"
+      ],
+      [
+       "4月10日",
+       "4/10"
+      ]
+     ],
+     "selectors": []
+    }
+   }
+  },
+  "lp-new": {
+   "goldKey": "lp-new",
+   "renderAlias": "ui07",
+   "fixedNow": "2027-03-01T10:00:00+09:00",
+   "wide": {
+    "width": 1440,
+    "height": 900,
+    "renderName": "desktop"
+   },
+   "narrow": {
+    "width": 390,
+    "height": 844,
+    "renderName": "mobile"
+   },
+   "question": "申し込むか問い合わせるかを決められるか（BRIEF.md「ページを見た人に、申し込みか問合せをしてもらえるようにしたい」）。初期表示に、サービス名と、電話（tel:のリンク）か申込み（#applyへのリンク）のどちらかがあること",
+   "firstView": {
+    "narrow": {
+     "items": [
+      [
+       "ひだまりスマホ相談"
+      ]
+     ],
+     "selectors": [
+      "a[href^=\"tel:\"], a[href$=\"#apply\"]"
+     ]
+    },
+    "wide": {
+     "items": [
+      [
+       "ひだまりスマホ相談"
+      ]
+     ],
+     "selectors": [
+      "a[href^=\"tel:\"], a[href$=\"#apply\"]"
+     ]
+    }
+   }
+  },
+  "ui03-dashboard": {
+   "goldKey": "ui03",
+   "renderAlias": "ui03",
+   "firstViewFrom": "1815-design-judgment/cases.json#ui03-dashboard"
+  },
+  "ui08-existing-ds": {
+   "goldKey": "ui08",
+   "renderAlias": "ui04",
+   "fixedNow": "2027-03-08T10:00:00+09:00",
+   "wide": {
+    "width": 1440,
+    "height": 900,
+    "renderName": "desktop"
+   },
+   "narrow": {
+    "width": 390,
+    "height": 844,
+    "renderName": "mobile"
+   },
+   "question": "請求先を編集できるか（BRIEF.md）。初期表示に請求先の名称の入力欄があること",
+   "firstView": {
+    "narrow": {
+     "items": [
+      [
+       "名称"
+      ]
+     ],
+     "selectors": [
+      "input:not([type=hidden])"
+     ]
+    },
+    "wide": {
+     "items": [
+      [
+       "名称"
+      ]
+     ],
+     "selectors": [
+      "input:not([type=hidden])"
+     ]
+    }
+   }
+  }
+ }
+}

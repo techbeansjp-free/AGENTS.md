@@ -15,11 +15,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import * as ledgerOps from './ledger.mjs';
-import {HARNESS_DIR, CONFIG_FIXED, configDir, loadConditions} from './config.mjs';
+import {HARNESS_DIR, CONFIG_FIXED, configFixed, configDir, loadConditions} from './config.mjs';
 import {releasePlaceholders} from './make-fixture.mjs';
 
 export const HARNESS_MODULES = ['apply-condition', 'collect', 'condition-i', 'config', 'fixation', 'guard', 'install-asc', 'judge', 'ledger', 'make-fixture', 'markers', 'order', 'probe-check', 'run-all', 'run-trial', 'score'];
 export const FIXED = [...CONFIG_FIXED.map((f) => `config/${f}`), ...HARNESS_MODULES.map((n) => `harness/${n}.mjs`)];
+// The fixed files of one config: FIXED with the config's fixedExtra (#1867; config.mjs configFixed) as config/<path>.
+export const fixedOf = (root = configDir()) => [...configFixed(root).map((f) => `config/${f}`), ...HARNESS_MODULES.map((n) => `harness/${n}.mjs`)];
 // The only fixed file a pre-measurement correction may change.
 export const REFIX_ALLOWED = ['harness/probe-check.mjs'];
 
@@ -27,10 +29,10 @@ const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 // A FIXED name to its file: config/<f> in the config directory, harness/<f> in the shared harness directory.
 export const fixedFile = (f, root = configDir()) => (f.startsWith('config/') ? path.join(root, f.slice(7)) : path.join(HARNESS_DIR, f.slice(8)));
 const read = (f, root) => fs.readFileSync(fixedFile(f, root));
-export const digests = (root = configDir()) => Object.fromEntries(FIXED.map((f) => [f, sha(read(f, root))]));
+export const digests = (root = configDir()) => Object.fromEntries(fixedOf(root).map((f) => [f, sha(read(f, root))]));
 export function differences(record, root = configDir()) {
   const now = digests(root);
-  return FIXED.filter((f) => record.files?.[f] !== now[f]);
+  return fixedOf(root).filter((f) => record.files?.[f] !== now[f]);
 }
 
 export function refixViolations(base, ledgerFile, root = configDir()) {
@@ -42,7 +44,7 @@ export function refixViolations(base, ledgerFile, root = configDir()) {
   const started = res.filter((e) => !ledgerOps.isProbe(e.trial)).map((e) => e.trial);
   if (started.length) v.push(`measurement trials exist in the ledger (${started.slice(0, 3).join(', ')})`);
   const now = digests(root);
-  for (const f of FIXED) if (base.files[f] !== now[f] && !REFIX_ALLOWED.includes(f)) v.push(`${f} changed (refix may change only ${REFIX_ALLOWED.join(', ')})`);
+  for (const f of fixedOf(root)) if (base.files[f] !== now[f] && !REFIX_ALLOWED.includes(f)) v.push(`${f} changed (refix may change only ${REFIX_ALLOWED.join(', ')})`);
   return v;
 }
 
@@ -65,7 +67,7 @@ function main() {
   const stageName = `#${conds.issue} ${conds.stage ?? 'measurement'}`;
   const fail = (m) => { console.error(`refused: ${m}`); process.exit(3); };
   const record = (stage, extra = {}) => {
-    const dirty = git(['status', '--porcelain', '--', ...FIXED.map((f) => fixedFile(f, root))]);
+    const dirty = git(['status', '--porcelain', '--', ...fixedOf(root).map((f) => fixedFile(f, root))]);
     if (dirty) fail(`fixed files have uncommitted changes:\n${dirty}`);
     return {stage, fixedAtCommit: git(['rev-parse', 'HEAD']), at: new Date().toISOString(), files: digests(root), ...extra};
   };
@@ -82,7 +84,7 @@ function main() {
     if (ledgerOps.reservations(lf).length) fail('the ledger already holds reservations; init is pre-measurement only');
     const r = record(stageName, {ledgerId: ledgerOps.ledgerId(lf)});
     save({schema: `asc-${conds.issue}-fixation/v1`, note: 'Append-only. run-trial.mjs --run checks the last record. See fixation.mjs for refix.', records: [r]});
-    console.log(JSON.stringify({stage: r.stage, fixedAtCommit: r.fixedAtCommit, files: FIXED.length, ledgerId: r.ledgerId}));
+    console.log(JSON.stringify({stage: r.stage, fixedAtCommit: r.fixedAtCommit, files: fixedOf(root).length, ledgerId: r.ledgerId}));
   } else if (action === 'refix') {
     const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
     const ledgerFile = opt('--ledger'), reason = opt('--reason'), review = opt('--review');

@@ -3,7 +3,15 @@
  "issue": "1867",
  "stage": "design persona generation",
  "markerTag": "1867",
- "note": "Fixed before any model run (decision-criteria.md). #1867: the generation part of the evaluation plan (../EVAL_PLAN.md). ASC installed the way it reaches a user (project-assets --register-claude-skill --apply in a dedicated worktree, the read trigger claude-md adopted), in the isolated write-tools environment of #1840 (tools level W, no Bash, no network, no browser). B = the release v0.5.131 (the current main 221283eb, 17 Skills); S = B plus the candidate Skill design-creation (packed from a commit that adds it and is reverted in the next commit, as #1815). The four design cases of the plan: the #1804 briefs and fixture files unchanged (sha256 pinned below) and the new lp-new. The harness records only what a machine can count (whether the design-creation body and references were read, whether the deliverables were written); what the design record says (the user picture with evidence and hypotheses, the decisions tied to users) is counted afterwards by a person (decision-criteria.md).",
+ "note": "Fixed before any model run (decision-criteria.md). #1867: the generation part of the evaluation plan (../EVAL_PLAN.md). ASC installed the way it reaches a user (project-assets --register-claude-skill --apply in a dedicated worktree, the read trigger claude-md adopted), in the isolated write-tools environment of #1840 (tools level W, no Bash, no network, no browser). B = the release v0.5.131 (the current main 221283eb, 17 Skills); S = B plus the candidate Skill design-creation (packed from a commit that adds it and is reverted in the next commit, as #1815). The four design cases of the plan: the #1804 briefs and fixture files unchanged (sha256 pinned below) and the new lp-new. The harness records only what a machine can count (whether the design-creation body and references were read, whether the deliverables were written); what the design record says (the user picture with evidence and hypotheses, the decisions tied to users) is counted afterwards by a fresh context, blind to the condition (decision-criteria.md; layers/gate-count.json).",
+ "fixedExtra": [
+  "layers/layer1-cases.json",
+  "layers/layer1-gold.json",
+  "layers/eval.json",
+  "layers/gate-count.json",
+  "layers/gate-count-prompt.md"
+ ],
+ "fixedExtraNote": "#1867 (review H2): the settings of the gate count, layer 1, layer 2 and layer 3, run outside the shared harness, are fixed with the plan (fixation.mjs hashes them as config/layers/...). The harness scripts of ../harness/ and the #1835 tools are not hashed here; they are named by the fixation commit.",
  "model": "sonnet",
  "modelNote": "Same alias as #1804, #1815 and #1840-#1846. The resolved model id (init event) is recorded per trial.",
  "runs": 3,
@@ -157,11 +165,11 @@
    "files": {
     "BRIEF.md": {
      "from": "1867-design-persona/cases/lp-new/BRIEF.md",
-     "sha256": "ea05aad090c074e98e64240057e851a97b00483ccb7dbbcc737642039821c768"
+     "sha256": "7844486b7b285ce8880ac9b28bb1c63c9e6c989119cfb7002499d0f679c2ba68"
     },
     "inquiries.md": {
      "from": "1867-design-persona/cases/lp-new/inquiries.md",
-     "sha256": "edccb3610031bd716ea0b6bc10883c34441acf7d9f6de78913a3b74216540d1d"
+     "sha256": "1fc5613e50178c8ff0f843ba7ccbcc276be840abf8942d5aa11b0ed11ccc3252"
     },
     "FONTS.md": {
      "from": "1804-design-judgment/cases/FONTS.md",
@@ -243,7 +251,7 @@
     ],
     "metric": "expectReadsAll",
     "min": "2/3",
-    "label": "門の機械の部分（ui02-exhibition）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は人が数える）"
+    "label": "門の機械の部分（ui02-exhibition）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は、条件名を伏せた新しいcontextが数える）"
    },
    {
     "id": "gate-read-lp-new",
@@ -252,7 +260,7 @@
     ],
     "metric": "expectReadsAll",
     "min": "2/3",
-    "label": "門の機械の部分（lp-new）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は人が数える）"
+    "label": "門の機械の部分（lp-new）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は、条件名を伏せた新しいcontextが数える）"
    },
    {
     "id": "gate-read-ui03-dashboard",
@@ -261,7 +269,7 @@
     ],
     "metric": "expectReadsAll",
     "min": "2/3",
-    "label": "門の機械の部分（ui03-dashboard）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は人が数える）"
+    "label": "門の機械の部分（ui03-dashboard）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は、条件名を伏せた新しいcontextが数える）"
    },
    {
     "id": "gate-read-ui08-existing-ds",
@@ -270,7 +278,7 @@
     ],
     "metric": "expectReadsAll",
     "min": "2/3",
-    "label": "門の機械の部分（ui08-existing-ds）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は人が数える）"
+    "label": "門の機械の部分（ui08-existing-ds）：design-creationのSKILL.mdが3回中2回以上読まれる（必要条件。記録の中身は、条件名を伏せた新しいcontextが数える）"
    },
    {
     "id": "written-ui02-exhibition",
@@ -326,7 +334,7 @@
     "label": "報告：design-creationのreference（public-page.mdかbusiness-screen.md）の読込み"
    }
   ],
-  "note": "The gate of the plan (decision-criteria.md) has a machine part and a part a person counts. The harness checks only the machine part in S: per case, the design-creation SKILL.md read (expectReads) in at least 2 of 3 trials. A case whose level fails cannot pass the gate; a case whose level passes still needs the record count. perCondition.S.verdict meets-levels means every case passed the machine part; it is not the gate result (the gate needs 3 judgeable cases of 4, after the record count). The B levels are computed by the harness and not used (B has no design-creation). The report levels (use report) do not enter any verdict. No negative case: rule.negativesRequired false (shared harness #1867)."
+  "note": "The gate of the plan (decision-criteria.md) has a machine part and a part a fresh context counts, blind to the condition (layers/gate-count.json). The harness checks only the machine part in S: per case, the design-creation SKILL.md read (expectReads) in at least 2 of 3 trials. A case whose level fails cannot pass the gate; a case whose level passes still needs the record count. perCondition.S.verdict meets-levels means every case passed the machine part; it is not the gate result (the gate needs 3 judgeable cases of 4, after the record count). The B levels are computed by the harness and not used (B has no design-creation). The report levels (use report) do not enter any verdict. No negative case: rule.negativesRequired false (shared harness #1867)."
  },
  "subsets": {
   "public": {

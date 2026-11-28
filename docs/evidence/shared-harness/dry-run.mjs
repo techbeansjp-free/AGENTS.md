@@ -100,6 +100,14 @@ export function fixtureReferences(cases, condition, conds) {
   return [...new Set(refCases.flatMap((k) => referencesFor(k, condition).map((r) => (k.expect === 'asc' ? r : `../../${k.expect}/references/${r}`))))];
 }
 
+// #1867: the Claude Code entries other than asc that differ between the two conditions, over the Skills both conditions
+// distribute (ascSkillsByCondition may add a Skill to one; that Skill's entry is not compared). entryB/entryS read one
+// entry's text by Skill name.
+export function otherEntriesDiffer(conds, cb, cs, entryB, entryS) {
+  const common = ascSkillsOf(conds, cb).filter((n) => ascSkillsOf(conds, cs).includes(n));
+  return common.filter((n) => n !== 'asc' && entryB(n) !== entryS(n));
+}
+
 // An installed file that may differ between the conditions: listed, or matching a listed entry that starts with ^.
 export const diffAllowed = (p, list) => list.some((e) => (e.startsWith('^') ? new RegExp(e).test(p) : e === p));
 // The files a fixture must hold for its prompts: fixtures.<id>.promptFiles, or the design files and empty directories.
@@ -178,9 +186,7 @@ function main() {
       const b = dirs[`${cb}-${f}`], s = dirs[`${cs}-${f}`];
       const md = (d) => fs.readFileSync(path.join(d, 'CLAUDE.md'), 'utf8');
       const entry = (d, n) => fs.readFileSync(path.join(d, '.claude/skills', n, 'SKILL.md'), 'utf8');
-      // #1867: the entries of the Skills both conditions distribute (ascSkillsByCondition may add a Skill to one).
-      const common = ascSkillsOf(conds, cb).filter((n) => ascSkillsOf(conds, cs).includes(n));
-      const x = {installedDiff: installedDiff(b, s), otherEntriesDiffer: common.filter((n) => n !== 'asc' && entry(b, n) !== entry(s, n))};
+      const x = {installedDiff: installedDiff(b, s), otherEntriesDiffer: otherEntriesDiffer(conds, cb, cs, (n) => entry(b, n), (n) => entry(s, n))};
       if (texts) {
         const descB = description(entry(b, 'asc')), descS = description(entry(s, 'asc'));
         const ascRest = entry(b, 'asc').replace(/^description: .*$/m, '') === entry(s, 'asc').replace(/^description: .*$/m, '');

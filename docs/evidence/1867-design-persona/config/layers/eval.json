@@ -1,0 +1,330 @@
+{
+ "schema": "asc-1867-eval/v1",
+ "note": "#1867の層2（P）と層3（ownerの盲検の比較）の設定（../../EVAL_PLAN.mdの判定2・3と層2）。#1835の道具（../../../1835-design-eval-layers/harness/）に--configで渡す（#1852のconfig/eval.jsonと同じ形）。画面の名前は<case>/<条件>-r<回>/original（layers/layer1-cases.jsonで描画した元の画面。layer-pages.mjsが並べる）。layer3.pairsはケースごとにSの3回×Bの3回の9組（先がS）で、owner-page.mjsが全36組を出す。pPairsは層2の組（同じ回のSとB、ケースごとに3組）で、make-packets.mjsはこの12組だけPの束を作る（#1867で足したfield）。P・評価者・依頼文の冒頭・出力の上限は#1835・#1852と同じ（prompts）。seedsはmake-packets.mjs・owner-page.mjsに--seedで渡す値。budget.capUsdはFableのPの上限で、計画の費用の内訳（20 USD＝生成の台帳12＋門の数え2＋層2のFable 6）による。CodexはCLIが費用を報告しないので、呼出しの回数で抑える（codexCalls）。",
+ "cases": {
+  "ui02-exhibition": {
+   "brief": "1804-design-judgment/cases/ui02-exhibition/BRIEF.md",
+   "shots": {
+    "narrow": "mobile",
+    "wide": "desktop"
+   }
+  },
+  "lp-new": {
+   "brief": "1867-design-persona/cases/lp-new/BRIEF.md",
+   "shots": {
+    "narrow": "mobile",
+    "wide": "desktop"
+   }
+  },
+  "ui03-dashboard": {
+   "brief": "1804-design-judgment/cases/ui03-dashboard/BRIEF.md",
+   "shots": {
+    "narrow": "tablet",
+    "wide": "desktop"
+   }
+  },
+  "ui08-existing-ds": {
+   "brief": "1804-design-judgment/cases/ui08-existing-ds/BRIEF.md",
+   "shots": {
+    "narrow": "mobile",
+    "wide": "desktop"
+   }
+  }
+ },
+ "renderLayout": "l1-{case}/{case}__{trial}__{variant}/{shot}.png",
+ "layer3": {
+  "pairs": {
+   "ui02-exhibition": [
+    [
+     "S-r1",
+     "B-r1"
+    ],
+    [
+     "S-r1",
+     "B-r2"
+    ],
+    [
+     "S-r1",
+     "B-r3"
+    ],
+    [
+     "S-r2",
+     "B-r1"
+    ],
+    [
+     "S-r2",
+     "B-r2"
+    ],
+    [
+     "S-r2",
+     "B-r3"
+    ],
+    [
+     "S-r3",
+     "B-r1"
+    ],
+    [
+     "S-r3",
+     "B-r2"
+    ],
+    [
+     "S-r3",
+     "B-r3"
+    ]
+   ],
+   "lp-new": [
+    [
+     "S-r1",
+     "B-r1"
+    ],
+    [
+     "S-r1",
+     "B-r2"
+    ],
+    [
+     "S-r1",
+     "B-r3"
+    ],
+    [
+     "S-r2",
+     "B-r1"
+    ],
+    [
+     "S-r2",
+     "B-r2"
+    ],
+    [
+     "S-r2",
+     "B-r3"
+    ],
+    [
+     "S-r3",
+     "B-r1"
+    ],
+    [
+     "S-r3",
+     "B-r2"
+    ],
+    [
+     "S-r3",
+     "B-r3"
+    ]
+   ],
+   "ui03-dashboard": [
+    [
+     "S-r1",
+     "B-r1"
+    ],
+    [
+     "S-r1",
+     "B-r2"
+    ],
+    [
+     "S-r1",
+     "B-r3"
+    ],
+    [
+     "S-r2",
+     "B-r1"
+    ],
+    [
+     "S-r2",
+     "B-r2"
+    ],
+    [
+     "S-r2",
+     "B-r3"
+    ],
+    [
+     "S-r3",
+     "B-r1"
+    ],
+    [
+     "S-r3",
+     "B-r2"
+    ],
+    [
+     "S-r3",
+     "B-r3"
+    ]
+   ],
+   "ui08-existing-ds": [
+    [
+     "S-r1",
+     "B-r1"
+    ],
+    [
+     "S-r1",
+     "B-r2"
+    ],
+    [
+     "S-r1",
+     "B-r3"
+    ],
+    [
+     "S-r2",
+     "B-r1"
+    ],
+    [
+     "S-r2",
+     "B-r2"
+    ],
+    [
+     "S-r2",
+     "B-r3"
+    ],
+    [
+     "S-r3",
+     "B-r1"
+    ],
+    [
+     "S-r3",
+     "B-r2"
+    ],
+    [
+     "S-r3",
+     "B-r3"
+    ]
+   ]
+  }
+ },
+ "pPairs": {
+  "ui02-exhibition": [
+   [
+    "S-r1",
+    "B-r1"
+   ],
+   [
+    "S-r2",
+    "B-r2"
+   ],
+   [
+    "S-r3",
+    "B-r3"
+   ]
+  ],
+  "lp-new": [
+   [
+    "S-r1",
+    "B-r1"
+   ],
+   [
+    "S-r2",
+    "B-r2"
+   ],
+   [
+    "S-r3",
+    "B-r3"
+   ]
+  ],
+  "ui03-dashboard": [
+   [
+    "S-r1",
+    "B-r1"
+   ],
+   [
+    "S-r2",
+    "B-r2"
+   ],
+   [
+    "S-r3",
+    "B-r3"
+   ]
+  ],
+  "ui08-existing-ds": [
+   [
+    "S-r1",
+    "B-r1"
+   ],
+   [
+    "S-r2",
+    "B-r2"
+   ],
+   [
+    "S-r3",
+    "B-r3"
+   ]
+  ]
+ },
+ "rounds": [
+  1,
+  2
+ ],
+ "methods": [
+  "P"
+ ],
+ "seeds": {
+  "packets": "18670002",
+  "ownerPage": "18670003"
+ },
+ "prompts": {
+  "note": "run-eval.mjsが読む#1835のprompts/（変えない）。sha256は2026-11-28の値",
+  "P.txt": "a9ac9e76256dee77510ccf6ed83f45f44b3b18249ad56f940da872e4642ffaaa",
+  "common-head.txt": "c50794d54e150bfe788b0b25cb79b0bd6b38d4095995354eb793a95901dd804f",
+  "common-head-codex.txt": "e15cefa2cac51515d6664a3e0397fe798f46cb6a768cdfac561abef467b1d7b4"
+ },
+ "budget": {
+  "capUsd": 6,
+  "projectionLimitUsd": 6,
+  "evaluator": "fable"
+ },
+ "codexCalls": {
+  "max": 24,
+  "retriesPerCallMax": 1,
+  "note": "12組×2回。再試行は1回まで（retries.max）。Codexの費用は報告されないので、20 USDの内訳に入れず、この回数で抑える"
+ },
+ "retries": {
+  "default": 0,
+  "max": 1
+ },
+ "limits": {
+  "reasonMaxChars": 300,
+  "critiqueMaxChars": 800,
+  "fable": {
+   "P": {
+    "maxTurns": 12,
+    "maxOutputTokens": 4000,
+    "maxBudgetUsd": 0.8,
+    "timeoutSec": 420
+   }
+  },
+  "codex": {
+   "P": {
+    "timeoutSec": 420
+   }
+  }
+ },
+ "evaluators": {
+  "fable": {
+   "command": "claude",
+   "model": "fable",
+   "tools": "Read,Glob,Grep"
+  },
+  "codex": {
+   "command": "codex",
+   "model": "gpt-6.2-sol"
+  }
+ },
+ "dryRun": {
+  "usdPerCall": {
+   "P": 0.22
+  }
+ },
+ "decision": {
+  "test": "one-sided binomial",
+  "chance": 0.5,
+  "alpha": 0.05,
+  "minOwnerDecidedPairs": 24,
+  "minOwnerDecidedPairsRule": "ceil(24 × 門で判定できたケースの数 / 4)。4ケースなら24、3ケースなら18",
+  "ownerChoices": [
+   "S側",
+   "B側",
+   "同等",
+   "判断しない"
+  ],
+  "excludedFromN": [
+   "同等",
+   "判断しない"
+  ]
+ }
+}

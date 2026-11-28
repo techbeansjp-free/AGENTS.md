@@ -1,0 +1,39 @@
+{
+ "schema": "asc-1867-gate-count/v1",
+ "note": "#1867の門のうち、記録の中身を数える部分の設定（../../EVAL_PLAN.mdの判定1）。統括がharness/gate-packet.mjsで束を作り、asc host-session claudeで、会話を引き継がない新しいcontextに数えさせる（読取りだけ：host-sessionがRead・Glob・Grepに限り、起動先を束のdirectoryに閉じる）。束は24試行（B・S×4ケース×3回）のout/DESIGN-NOTES.mdだけで、画面は渡さない。条件名・ケース名・試行名を伏せ、乱数のIDと順序にする（seedごと）。記録の本文は変えないので、Sの記録に工程の名前（確認の時点等）やSkill名が出れば、伏せ方は完全ではない。",
+ "model": "opus",
+ "host": "node bin/asc-v05.mjs host-session claude <束のdirectory> --name \"自動: #1867 門の数え <回>\" --model opus --rename-model haiku --prompt-file <束のdirectory>/TASK.md --output-dir <新しいdirectory>",
+ "prompt": "layers/gate-count-prompt.md",
+ "input": {
+  "records": "<runs>/<試行>/work/out/DESIGN-NOTES.md（24試行。置き換えた試行は置き換えの記録）",
+  "screens": false,
+  "blind": "条件名・ケース名・試行名を伏せ、乱数のIDと順序（seed）"
+ },
+ "rounds": [
+  {
+   "round": 1,
+   "seed": "18670011"
+  },
+  {
+   "round": 2,
+   "seed": "18670012"
+  }
+ ],
+ "criteria": {
+  "a": "利用者の像があり、その項目のすべてに根拠（出典）か仮説かが付いている",
+  "b": "デザインの判断のうち3つ以上に、どの利用者のどの要求・状況から選んだかが書かれている"
+ },
+ "output": "試行ごとに(a)・(b)の可否と、該当する箇所の引用（gate-count-prompt.mdの形）",
+ "combine": "独立に2回数える（別のcontext、別のseed）。試行ごとに、(a)と(b)がそれぞれ2回とも「ある」なら「ある」とする。割れたら「無い」。回答が無い・読めない回は「無い」とする",
+ "gate": "Sの試行が門の内容を満たすのは、(a)と(b)がともに「ある」で、かつ機械の部分（judge.jsonのexpectReads：design-creationのSKILL.mdのRead）を満たすとき。ケースは3回中2回以上で判定できる。判定できるケースが3未満なら全体を未判定。Bの結果は報告だけに使う",
+ "retries": {
+  "max": 1,
+  "note": "回答が無い・JSONが読めない回だけ、新しいcontextで1回だけやり直す"
+ },
+ "budget": {
+  "capUsd": 2,
+  "expectUsdPerRound": 0.9,
+  "note": "20 USDの内訳の門の数え。見込み：記録24件（約30〜50k token）を約25回のReadで読み、cacheの読込み約1.2M・書込み約70k・出力約15k token。Opus 5.5（入力4・出力20・cache読込み0.2 USD/1M token）で1回約0.9 USD、2回で約1.8 USD。host-sessionには予算の指定が無いので、結果のtotal_cost_usdを記録し、生成の台帳と合わせて上限を確かめる（EVAL_PLAN.mdの費用）"
+ },
+ "commit": "数えた結果（IDごとの可否と引用）は、ownerの回答と層2の結果を開く前にcommitする。IDと試行の対応表（key）は、ownerの回答の記録をcommitした後に開く"
+}

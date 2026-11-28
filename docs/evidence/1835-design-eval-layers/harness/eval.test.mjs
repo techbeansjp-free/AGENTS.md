@@ -569,3 +569,18 @@ test('--lock: when only dead runs remain after a release, the path stays 000 and
   assert.match(err.join('\n'), /stays mode 000.*no longer alive/s);
   fs.rmSync(f); fs.chmodSync(d, 0o750);
 });
+
+// #1867: pPairs limits the P packets to listed layer-3 pairs; --cases/--gold-add of run-layer1.mjs (the #1867 config is
+// tested in ../../1867-design-persona/harness/harness.test.mjs). Without the fields the #1835 config is unchanged.
+import {mergedCases, mergedGold} from './run-layer1.mjs';
+test('#1867 pPairs: P packets only for the listed layer-3 pairs; an unknown pair is refused; #1835 config unchanged', () => {
+  assert.equal(cfg.pPairs, undefined);
+  const l3 = planItems(cfg).filter((i) => i.layer === 3);
+  const [a, b] = l3[0].id.split(':')[2].split('~');
+  const c = {...cfg, methods: ['P'], pPairs: {[l3[0].case]: [[a, b]]}};
+  const k = buildPackets({cfg: c, renderRoot: render, out: tmp('asc1835-pp-'), seed: 's'});
+  assert.deepEqual(Object.values(k.packets).map((p) => p.item), [l3[0].id, l3[0].id]);
+  assert.throws(() => buildPackets({cfg: {...c, pPairs: {[l3[0].case]: [[b, a]]}}, renderRoot: render, out: tmp('asc1835-pp-'), seed: 's'}), /pPairs not in layer3.pairs/);
+  assert.deepEqual(Object.keys(mergedCases().cases), Object.keys(JSON.parse(fs.readFileSync(path.join(here, '../config/cases.json'), 'utf8')).cases));
+  assert.ok(mergedGold().ui02 && !('lp-new' in mergedGold()));
+});
