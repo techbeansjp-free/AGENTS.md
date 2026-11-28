@@ -20,8 +20,9 @@
 //     (not only the layer-2 harm) differs between the two, the conclusion is 未判定 (review M-2, L-4). Filling is
 //     monotone, so the two extremes cover every filling.
 //   - Layer 3: n and k over the cases the gate judged; n >= gate.minOwnerDecidedPairs; one-sided binomial at alpha.
-//     Business-screen harm: in ui03 or ui08, owner B - owner S >= 3 (owner decision 2026-11-28), where the B wins forced
-//     by a missing S screen count once per missing screen (review M-2 (b); n, k and layer 2 count every pair). All 4 cases.
+//     Business-screen harm: in ui03 or ui08, owner B - owner S >= 3 (owner decision 2026-11-28). All 4 cases.
+//   - The harm rules (layer-3 business harm, layer-2 "owner B more than S") count the wins forced by a missing screen once
+//     per missing screen, on either side (review M-2 (b) and the lead's decision); n and k count every pair.
 //   - Layer 1 harm: axeNoSeriousCritical failing in more S than B trials (of 3) in >= 2 cases.
 //   - Step 0 also covers: the shared harness not-judged, a generation stopped at the stop line without completing (review
 //     High-1: capReached && !complete), the layer-2 cap under 6 USD, Fable over the cap.
@@ -118,17 +119,20 @@ export function layer2({pItems, J, rounds, owner, counts, fill, rule}) {
   return {perCase, pairs, harmCases: CASES.filter((c) => perCase[c].harm)};
 }
 
-// Layer-3 business-screen harm (review M-2, (b) of the lead's decision): owner B and S per case, where the B wins that a
-// missing S screen forced count once per missing screen (not once per pair). The effect (n, k) and layer 2 use the plain
-// counts. Only the forced B wins are compressed (the decision names those; see EVAL_PLAN.md「画面の無い試行」).
-export function businessCounts(items, ownerAll, forced, cases) {
+// The counts of the harm rules (review M-2 (b), and the lead's decision after it): owner S and B per case, where the
+// wins that a missing screen forced count once per missing screen, not once per pair, on either side (a missing S screen
+// gives B 1 win, a missing B screen gives S 1 win). Used by the layer-3 business-screen harm (B - S >= 3) and by the
+// layer-2 "the owner chose B more often than S in the case's 9 pairs". The effect (n, k) counts every pair.
+export function harmCounts(items, ownerAll, forced, cases = CASES) {
   const out = {};
   for (const c of cases) {
     const its = items.filter((i) => i.case === c);
+    const ownerS = its.filter((i) => !forced[i.id] && ownerAll[i.id] === 'first').length;
     const ownerB = its.filter((i) => !forced[i.id] && ownerAll[i.id] === 'second').length;
     const forcedBScreens = [...new Set(its.filter((i) => forced[i.id] === 'second').map((i) => i.first))].sort();
-    const S = its.filter((i) => ownerAll[i.id] === 'first').length;
-    out[c] = {S, B: ownerB + forcedBScreens.length, ownerB, forcedBPairs: its.filter((i) => forced[i.id] === 'second').length, forcedBScreens};
+    const forcedSScreens = [...new Set(its.filter((i) => forced[i.id] === 'first').map((i) => i.second))].sort();
+    out[c] = {S: ownerS + forcedSScreens.length, B: ownerB + forcedBScreens.length, ownerS, ownerB,
+      forcedSPairs: its.filter((i) => forced[i.id] === 'first').length, forcedBPairs: its.filter((i) => forced[i.id] === 'second').length, forcedSScreens, forcedBScreens};
   }
   return out;
 }
@@ -182,8 +186,10 @@ export function decide({cfg, judge, gate, owner, ownerKey, pKey, J, layer1Files,
     for (const r of pKey.rounds) Jf[e][r] = Object.fromEntries(pItems.map((i) => [i.id, forced[i.id] ?? J[e]?.[r]?.[i.id] ?? null]));
   }
   const nulls = EVALUATORS.flatMap((e) => pKey.rounds.flatMap((r) => pItems.filter((i) => Jf[e][r][i.id] === null).map((i) => `${e}/round${r}/${i.id}`)));
-  const fillS = layer2({pItems, J: Jf, rounds: pKey.rounds, owner: ownerAll, counts, fill: 'first', rule: rule.layer2});
-  const fillB = layer2({pItems, J: Jf, rounds: pKey.rounds, owner: ownerAll, counts, fill: 'second', rule: rule.layer2});
+  // the harm rules count a missing screen's forced wins once per screen (review M-2 (b), both sides, layers 2 and 3)
+  const hc = harmCounts(items, ownerAll, forced);
+  const fillS = layer2({pItems, J: Jf, rounds: pKey.rounds, owner: ownerAll, counts: hc, fill: 'first', rule: rule.layer2});
+  const fillB = layer2({pItems, J: Jf, rounds: pKey.rounds, owner: ownerAll, counts: hc, fill: 'second', rule: rule.layer2});
   // layer 1
   const l1 = layer1Counts(layer1Files);
   // layer 3
@@ -192,8 +198,7 @@ export function decide({cfg, judge, gate, owner, ownerKey, pKey, J, layer1Files,
   if (gate.minOwnerDecidedPairs !== undefined && gate.minOwnerDecidedPairs !== minN) throw new Error(`gate.json minOwnerDecidedPairs ${gate.minOwnerDecidedPairs} is not ${minN}`);
   const n = judgeable.reduce((s, c) => s + counts[c].S + counts[c].B, 0), k = judgeable.reduce((s, c) => s + counts[c].S, 0);
   const pValue = n ? binomTail(n, k, rule.chance) : null;
-  const harmCounts = businessCounts(items, ownerAll, forced, rule.layer3Harm.cases);
-  const business = rule.layer3Harm.cases.filter((c) => harmCounts[c].B - harmCounts[c].S >= rule.layer3Harm.minBMinusS);
+  const business = rule.layer3Harm.cases.filter((c) => hc[c].B - hc[c].S >= rule.layer3Harm.minBMinusS);
   // cost
   const gateUsd = (gate.costUsd ?? 0) + (gate.costMissing ?? 0) * gatePerRoundCapUsd;
   const cap = layer2Cap({generationUsd: judge.completion?.spentUsd ?? 0, gateUsd, budget: rule.budget});
@@ -210,7 +215,7 @@ export function decide({cfg, judge, gate, owner, ownerKey, pKey, J, layer1Files,
   if (!cap.start) reasons0.push(`層2の上限${cap.capUsd} USDが${rule.budget.layer2MinUsd} USD未満（費用の超過の見込み）`);
   if (fableSpentUsd > cap.capUsd + 0.01) reasons0.push(`層2のFableの費用${round4(fableSpentUsd)} USDが上限${cap.capUsd} USDを超えた`);
   const harmsL1 = l1.axeWorseCases.length >= rule.layer1Harm.minCases ? [`層1：${rule.layer1Harm.check}の不合格がBより多いケースが${l1.axeWorseCases.length}（${l1.axeWorseCases.join('・')}）`] : [];
-  const harmsL3 = business.length ? [`層3：業務の画面でownerのBがSより${rule.layer3Harm.minBMinusS}以上多い（${business.join('・')}。画面の欠けによるBの勝ちは欠けた画面1つにつき1組）`] : [];
+  const harmsL3 = business.length ? [`層3：業務の画面でownerのBがSより${rule.layer3Harm.minBMinusS}以上多い（${business.join('・')}。画面の欠けによる勝ちは欠けた画面1つにつき1組）`] : [];
   const base = {gate, judgeable, harmsL1, harmsL3, n, k, minN, pValue, alpha: rule.alpha};
   // review L-4: the missing P judgments make the conclusion 未判定 only when the conclusion with every one filled S differs
   // from the conclusion with every one filled B. The conclusion depends on layer 2 only through whether a case has harm,
@@ -232,7 +237,7 @@ export function decide({cfg, judge, gate, owner, ownerKey, pKey, J, layer1Files,
     layer2: {missingJudgments: nulls, undecided: l2Undecided, harmDiffers: !same(fillS.harmCases, fillB.harmCases), conclusionIfFilledS: rS, conclusionIfFilledB: rB,
       harmIfFilledS: fillS.harmCases, harmIfFilledB: fillB.harmCases, perCase: fillS.perCase, perCaseIfFilledB: fillB.perCase, pairs: fillS.pairs},
     layer3: {perCase: counts, judgeableCases: judgeable, n, k, minN, pValue, criticalK: n ? criticalK(n, rule.alpha, rule.chance) : null, effect: pValue !== null && pValue <= rule.alpha,
-      businessHarmCounts: harmCounts, businessHarmCases: business},
+      harmCounts: hc, businessHarmCases: business},
     gate: {gate: gate.gate, judgeableCases: judgeable, perCase: gate.perCase},
     cost: {...cap, fableSpentUsd: round4(fableSpentUsd), pLedgerCapUsd: pLedgerHeader?.capUsd ?? null},
     judge: {verdict: judge.judgement?.verdict ?? null, capReached: !!judge.completion?.capReached, complete: !!judge.completion?.complete, basis: judge.completion?.basis ?? null, stoppedAtCap}};

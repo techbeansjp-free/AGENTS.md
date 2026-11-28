@@ -182,17 +182,26 @@ test('H-1: a missing screen counts as the other side chosen (owner and P), both 
   assert.deepEqual(r.layer3.perCase[c], {S: 1, B: 4, same: 4, skip: 0, unanswered: 0, of: 9});
   assert.equal(r.layer2.pairs[id(c, 1, 1)].alarm, 'B', 'every P judgment of the pair is B');
   assert.equal(r.layer1.perCase[c].S.axeFailing, 1);
-  // review M-2 (b): for the business-screen harm the 3 forced B wins of one missing screen count as 1: B 1+1 vs S 1
-  assert.deepEqual(r.layer3.businessHarmCounts[c], {S: 1, B: 2, ownerB: 1, forcedBPairs: 3, forcedBScreens: [`${c}/S-r1/original`]});
+  // review M-2 (b): for the harm rules the 3 forced B wins of one missing screen count as 1: B 1+1 vs S 1
+  assert.deepEqual(r.layer3.harmCounts[c], {S: 1, B: 2, ownerS: 1, ownerB: 1, forcedSPairs: 0, forcedBPairs: 3, forcedSScreens: [], forcedBScreens: [`${c}/S-r1/original`]});
   assert.deepEqual([r.layer3.businessHarmCases, r.layer3.n, r.layer3.k], [[], 21 + 5, 18 + 1], 'n and k keep every forced pair (ui08: S 1 + B 4)');
   // with 2 more owner B wins the margin is 3: harm
   const r3 = run({missing: [gone], owner: ownerOf({all: GOOD, [c]: 'SSSBB====' }), l1: l1Of({}, [`${c}/S-r1`])});
-  assert.deepEqual([r3.layer3.businessHarmCounts[c].B, r3.layer3.businessHarmCounts[c].S, r3.layer3.businessHarmCases, r3.step], [3, 0, [c], 2]);
-  // two missing S screens of the case: 2, not 6; a forced S win (missing B screen) counts per pair
+  assert.deepEqual([r3.layer3.harmCounts[c].B, r3.layer3.harmCounts[c].S, r3.layer3.businessHarmCases, r3.step], [3, 0, [c], 2]);
+  // two missing S screens of the case: 2, not 6
   const two = run({missing: [gone, `${c}/S-r2/original`], owner: ownerOf({all: GOOD, [c]: 'SSSSSSS==' }), l1: l1Of({}, [`${c}/S-r1`, `${c}/S-r2`])});
-  assert.deepEqual([two.layer3.perCase[c].B, two.layer3.businessHarmCounts[c].B, two.layer3.businessHarmCounts[c].S, two.layer3.businessHarmCases], [6, 2, 1, []]);
+  assert.deepEqual([two.layer3.perCase[c].B, two.layer3.harmCounts[c].B, two.layer3.harmCounts[c].S, two.layer3.businessHarmCases], [6, 2, 1, []]);
+  // symmetric (the lead's decision): the 3 forced S wins of a missing B screen count as 1 too; n and k keep all 3
   const bGone = run({missing: [`${c}/B-r1/original`], owner: ownerOf({all: GOOD, [c]: 'BBBBBBB==' })});
-  assert.deepEqual([bGone.layer3.businessHarmCounts[c].S, bGone.layer3.businessHarmCounts[c].B], [3, 4]);
+  assert.deepEqual([bGone.layer3.perCase[c].S, bGone.layer3.harmCounts[c].S, bGone.layer3.harmCounts[c].B, bGone.layer3.businessHarmCases], [3, 1, 4, [c]]);
+  // layer 2 (the lead's decision): "owner B more than S" uses the same counts. ui02 S-r1 missing makes S-r1~B-r1 a
+  // confirmed harm, S-r2~B-r2 is a second one; owner S 3 vs B 1+3 forced -> B more by pairs, not by screens (S 3, B 2)
+  const u = 'ui02-exhibition';
+  const l2 = run({missing: [`${u}/S-r1/original`], J: jOf({[id(u, 2, 2)]: 'second'}), owner: ownerOf({all: GOOD, [u]: 'SSSSBSS==' }), l1: l1Of({}, [`${u}/S-r1`])});
+  assert.deepEqual([l2.layer2.perCase[u].confirmed, l2.layer3.perCase[u].B, l2.layer3.perCase[u].S, l2.layer2.perCase[u].ownerBMoreThanS, l2.layer2.harmIfFilledS, l2.conclusion],
+    [2, 4, 3, false, [], '採用']);
+  const l2b = run({missing: [`${u}/S-r1/original`], J: jOf({[id(u, 2, 2)]: 'second'}), owner: ownerOf({all: GOOD, [u]: 'SSSBBSB==' }), l1: l1Of({}, [`${u}/S-r1`])});
+  assert.deepEqual([l2b.layer3.harmCounts[u].B, l2b.layer3.harmCounts[u].S, l2b.layer2.harmIfFilledS, l2b.step], [4, 1, [u], 2], 'B 3 + 1 screen vs S 1: harm');
   // both screens of a pair missing: 同等
   const both = run({missing: [gone, `${c}/B-r1/original`]});
   assert.equal(both.forcedPairs[id(c, 1, 1)], 'same');
