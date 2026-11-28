@@ -1126,6 +1126,10 @@ test('#1845 review: codeText regressions (++/-- then division, nested templates,
   assert.equal(dec("function f() { return /x/.test(s) ? 'a' : '0.5'; } // 1.5"), false);
   assert.equal(dec("const u = 'https://a/1.5'; const p = q * 1.1;"), true);
   assert.equal(dec("const u = 'https://a/1.5'; const p = q * 11n / 10n;"), false);
+  // CodeRabbit: a line continuation by CRLF inside a string, and `of` used as an identifier.
+  assert.equal(dec("const s = 'a\\\r\n0.5'; const total = Number(amount);"), false);
+  assert.equal(dec("const s = 'a\\\r\n0.5'; const p = q * 1.1;"), true);
+  assert.equal(dec("const of = 100n; const x = of / 10n; // 0.01"), false);
 });
 
 test('#1845 review M1: calibrate.mjs counts requireFiles and applies scope as score.mjs does', () => {

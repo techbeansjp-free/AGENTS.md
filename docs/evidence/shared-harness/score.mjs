@@ -111,14 +111,15 @@ export function markerTextOf(spec, answer, written, base = null) {
 // template literals; their ${...} expressions stay code) replaced by spaces, the line breaks kept. A regular expression
 // literal stays code but is skipped as one token, so a quote inside it does not open a string. A small scanner, not a
 // parser: `/` is a regular expression after an operator (not `++`/`--`), an opening bracket, a comma, a keyword or the
-// start, else a division (also after `)`: `if (x) /re/` is misread, a known limit). JSX text is code (not left out).
+// start, else a division (also after `)`: `if (x) /re/` is misread, a known limit; `of` is an identifier, so
+// `for (x of /re/g)` is misread too). JSX text is code (not left out).
 // Used by a writes forbid entry with scope "code" (e.g. a decimal literal is a violation in `price * 1.1`, not in
 // `// 1bp = 0.01%` or in `'10.9'`).
 export const CODE_FILE = /\.(c|m)?(j|t)sx?$/i;
 export function codeText(src) {
   const out = src.split('');
   const blank = (a, b) => { for (let i = a; i < b; i++) if (out[i] !== '\n' && out[i] !== '\r') out[i] = ' '; };
-  const KEYWORDS = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
+  const KEYWORDS = new Set(['return', 'typeof', 'instanceof', 'in', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
   let i = 0, prev = '';
   const braces = []; // per open brace: true when it opened a ${ of a template literal
   const template = (start) => { // from the char after a backtick (or the } closing a ${), to the next backtick or ${
@@ -134,7 +135,8 @@ export function codeText(src) {
     if (c === '/' && d === '*') { const e = src.indexOf('*/', i + 2); const end = e < 0 ? src.length : e + 2; blank(i, end); i = end; continue; }
     if (c === '"' || c === "'") {
       let j = i + 1;
-      while (j < src.length && src[j] !== c && src[j] !== '\n') j += src[j] === '\\' ? 2 : 1;
+      // #1845 CodeRabbit: a backslash before CRLF continues the line as one unit.
+      while (j < src.length && src[j] !== c && src[j] !== '\n') j += src[j] !== '\\' ? 1 : src[j + 1] === '\r' && src[j + 2] === '\n' ? 3 : 2;
       blank(i + 1, Math.min(j, src.length)); i = j + 1; prev = 'x'; continue;
     }
     if (c === '`') { i = template(i + 1); continue; }
