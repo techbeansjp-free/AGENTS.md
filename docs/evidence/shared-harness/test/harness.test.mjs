@@ -1848,3 +1848,95 @@ test('PR #1857 re-review L-4: a probe without work/ is read and fails; cleanup f
   const c = probeStepChecks({...inputs, steps: probeSteps('X', ctx), expectedSteps: C44.probeSteps.X}, parseTrace(''), 'X').checks.credentialNotLeaked;
   assert.deepEqual([c.pass, c.detail.checkError, c.detail.workRemoved, c.detail.cleanupErrors], [false, 'boom', 'credential check error', ['tmp: EACCES']]);
 });
+
+// #1858: deductions matched sentence by sentence (opt-in fields), and a config with one condition.
+const {sentencesOf, entryMatches, markerDeductionsOf, conditionCountProblems} = await import('../score.mjs');
+const {judgeScored} = await import('../judge.mjs');
+const C1846 = path.join(EVROOT, '1846-warranty-version/config');
+const C1843 = path.join(EVROOT, '1843-spec-rule-path/config');
+const NOT_PROMISED = '今は『無償で直します』とも『有償です』とも答えません。まず原因を調べます。';
+const FREE = '無償で(修補|修正|対応|直)(いた)?します|無償(修補|対応)の対象です';
+const NEGATED = '(答え|お答えし|約束し|お約束し|言い|申し上げ|お伝えし)ません';
+
+test('#1858 sentences: split at 。！？ and line breaks, not inside 「」『』（）; an unclosed bracket ends at the line', () => {
+  assert.deepEqual(sentencesOf(NOT_PROMISED), ['今は『無償で直します』とも『有償です』とも答えません。', 'まず原因を調べます。']);
+  assert.deepEqual(sentencesOf('「無償で直します。」とお返事します。次に調べます！本当？'), ['「無償で直します。」とお返事します。', '次に調べます！', '本当？']);
+  assert.deepEqual(sentencesOf('（注：以前は10分。）今は15分。'), ['（注：以前は10分。）今は15分。']);
+  assert.deepEqual(sentencesOf('「閉じない\n次の行。'), ['「閉じない', '次の行。']);
+  assert.deepEqual(sentencesOf(''), []);
+});
+
+test('#1858 answerNone sentenceUnless: a quoted promise in a sentence that withholds it is not counted; real promises, quoted or not, are', () => {
+  const k = {answerNone: [{id: 'free-before-check', pattern: FREE, sentenceUnless: NEGATED}]};
+  assert.deepEqual(markerDeductionsOf(k, NOT_PROMISED), [], 'C-m-r1-3 of #1846');
+  assert.deepEqual(markerDeductionsOf(k, NOT_PROMISED.replace(/。/g, '。\n')), [], 'with line breaks');
+  assert.deepEqual(markerDeductionsOf(k, '今は「無償で直します。」とはお約束しません。'), [], 'a 。 inside the quote stays in the sentence');
+  for (const t of ['無償で直します。', '無償修補の対象です。', '『無償で直します』とお返事します。', '「無償で直します。」とお返事します。', '原因を調べます。無償で対応いたします。',
+    `${NOT_PROMISED}ただし、無償で直します。`]) assert.deepEqual(markerDeductionsOf(k, t), ['free-before-check'], t);
+  // Without the new fields the whole text is matched, as before #1858: the fixed #1846 config still counts C-m-r1-3.
+  const fixed = JSON.parse(read('cases.json', C1846)).cases.find((c) => c.id === 'm-r1');
+  assert.ok(!fixed.answerNone.some((g) => typeof g === 'object' && ('sentenceWith' in g || 'sentenceUnless' in g)), 'the #1846 config is not rewritten');
+  assert.ok(markerDeductionsOf(fixed, NOT_PROMISED).includes('free-before-check'), 'the #1846 record (fail by the fixed rule) is reproduced');
+  assert.deepEqual(markerDeductionsOf({answerNone: [FREE, {id: 'x', pattern: FREE}]}, NOT_PROMISED), [FREE, 'x'], 'a string or an entry without the fields: whole text');
+  assert.deepEqual(markerDeductionsOf(k, '『有償です』とは言いませんが、無償で直します。'), [], 'known limit (README): one sentence that withholds and promises is left out');
+  assert.equal(markersOk(k, NOT_PROMISED), true);
+  assert.equal(markersOk(k, '無償で直します。'), false);
+});
+
+test('#1858 writes.forbid sentenceWith: a history marker counts in a sentence about the earlier state, not in a current fact', () => {
+  const FN = 'docs/specs/FN-003.md';
+  const w = {forbid: [{id: 'history-only', pattern: '入力欄だけ|メールアドレスだけ', group: 'history', sentenceWith: '以前|変更前|これまで|だった|でした|していた|から変更|に変更'}]};
+  const check = (text) => writeChecks(w, [FN], () => text).writeViolations;
+  for (const t of ['選択中のタブの入力欄だけを表示する。', '- 登録手段：選択中の手段の入力欄だけが必須である。', '| 画面 | 選択中のタブの入力欄だけを表示する |']) assert.deepEqual(check(t), [], t);
+  for (const t of ['以前はメールアドレスだけだった。', '登録手段はメールアドレスだけでしたが、電話番号を追加した。', '- メールアドレスだけから変更した']) assert.deepEqual(check(t), ['history-only'], t);
+  assert.deepEqual(check('選択中のタブの入力欄だけを表示する。以前は入力欄だけだった。'), ['history-only'], 'one history sentence is enough');
+  assert.deepEqual(writeChecks(w, [FN], () => '選択中のタブの入力欄だけを表示する。').writeFailedGroups, []);
+  // The fixed #1843 entry (no sentenceWith) still matches the current-fact sentence, as recorded for C-s-1-1 / C-s-1-4.
+  const k43 = JSON.parse(read('cases.json', C1843)).cases.find((c) => c.id === 's-1');
+  const fixed = k43.writes.forbid.find((e) => e.id === 'history-only');
+  assert.ok(!('sentenceWith' in fixed) && !('sentenceUnless' in fixed), 'the #1843 config is not rewritten');
+  assert.equal(entryMatches(fixed, '選択中のタブの入力欄だけを表示する。'), true);
+  // scope "code" and sentence matching combine: the code is taken first, then split.
+  const dec = {forbid: [{id: 'decimal', pattern: '\\d\\.\\d', scope: 'code', sentenceUnless: 'BigInt'}]};
+  assert.deepEqual(writeChecks(dec, ['a.ts'], () => '// 1bp = 0.01%\nconst x = 1n;\n').writeViolations, [], 'the comment is not code');
+  assert.deepEqual(writeChecks(dec, ['a.ts'], () => 'const x = price * 1.1;\n').writeViolations, ['decimal']);
+  assert.deepEqual(writeChecks(dec, ['a.ts'], () => 'const x = BigInt(price * 1.1);\n').writeViolations, [], 'sentenceUnless on the code line');
+});
+
+test('#1858 condition count: a comparison needs two conditions, the levels one or two; the existing configs pass; dry-run checks it', () => {
+  for (const dir of [EV, C1823, path.join(EVROOT, '1840-user-environment/config'), C1843, path.join(EVROOT, '1844-rule-read-bash/config'), C1846]) assert.deepEqual(conditionCountProblems(JSON.parse(read('conditions.json', dir))), [], dir);
+  assert.match(conditionCountProblems({cells: {C: {}}})[0], /needs exactly two/);
+  assert.match(conditionCountProblems({cells: {}, rule: {mode: 'levels'}})[0], /0 condition/);
+  assert.match(conditionCountProblems({cells: {A: {}, B: {}, C: {}}, rule: {mode: 'levels'}})[0], /3 condition/);
+  const src = fs.readFileSync(path.join(H, 'dry-run.mjs'), 'utf8');
+  assert.ok(src.includes("add('conditionCount', conditionCountProblems(conds).length === 0, conditionCountProblems(conds));"));
+  assert.ok(fs.readFileSync(path.join(H, 'judge.mjs'), 'utf8').includes('const count = conditionCountProblems(loadConditions());'));
+});
+
+test('#1858 one condition (the shape of #1846): judged from that condition alone, no second condition; two conditions as before', () => {
+  const spec = {cases: [{id: 'm-r1', kind: 'maintenance', expect: 'estimate-and-scope'}, {id: 'n-2', kind: 'negative', expect: null}]};
+  const rule = {mode: 'levels', maxFailureRate: 0.1, levels: [{id: 'sel', cases: ['m-r1'], metric: 'reach', min: 0.8}, {id: 'ans', cases: ['m-r1'], metric: 'markers', min: '2/3'}, {id: 'neg', cases: ['n-2'], metric: 'negativeOk', min: 0.8}]};
+  const row = (c, id, run, ok) => (id === 'n-2' ? {condition: c, case: id, run, kind: 'negative', expect: null, counted: true, overapplication: false, negativeOk: ok} : {condition: c, case: id, run, kind: 'maintenance', expect: 'estimate-and-scope', counted: true, reach: true, bodyRead: true, applied: true, markers: ok});
+  const rows = (c, marks) => [...marks.map((ok, i) => row(c, 'm-r1', i + 1, ok)), ...[1, 2, 3].map((n) => row(c, 'n-2', n, true))];
+  const completion = {basis: 'complete', complete: true, missingPlanned: 0, missingReplacements: []};
+  const one = {cells: {C: {tools: 'W'}}, rule};
+  const r = judgeScored({spec, runs: rows('C', [true, true, false]), completion, conds: one});
+  assert.deepEqual(Object.keys(r.sums), ['C']);
+  assert.deepEqual(Object.keys(r.judgement.perCondition), ['C'], 'no undefined condition');
+  assert.deepEqual([r.judgement.verdict, r.judgement.perCondition.C.verdict], ['levels', 'meets-levels'], 'judged, and as the condition alone');
+  const low = judgeScored({spec, runs: rows('C', [true, false, false]), completion, conds: one});
+  assert.deepEqual([low.judgement.verdict, low.judgement.perCondition.C.verdict], ['levels', 'below-levels']);
+  const none = judgeScored({spec, runs: rows('C', [true, true, true]).filter((x) => x.case !== 'n-2'), completion, conds: one});
+  assert.equal(none.judgement.verdict, 'not-judged');
+  assert.equal(none.judgement.reason, 'C: no valid negative trial; C: no valid trial for n-2', 'the reasons of the one condition, once, none of a missing condition');
+  assert.throws(() => judgeScored({spec, runs: [], completion, conds: {cells: {C: {}}}}), /needs exactly two/, 'a comparison with one condition is refused');
+  // Two conditions: the same result as the pre-#1858 path (levelsVerdict / verdictOf on the two summaries).
+  const two = {cells: {R: {}, C: {}}, rule};
+  const runs2 = [...rows('R', [true, false, false]), ...rows('C', [true, true, true])];
+  const sums2 = {R: summarize(spec, runs2, 'R'), C: summarize(spec, runs2, 'C')};
+  assert.deepEqual(judgeScored({spec, runs: runs2, completion, conds: two}), {sums: sums2, completion, judgement: levelsVerdict(sums2, runs2, {completion, rule, subsets: {}})});
+  const cmp = {cells: {B: {}, S: {}}, rule: {}};
+  const runs3 = [...rows('B', [true, true, true]), ...rows('S', [true, true, true])];
+  const sums3 = {B: summarize(spec, runs3, 'B'), S: summarize(spec, runs3, 'S')};
+  assert.deepEqual(judgeScored({spec, runs: runs3, completion, conds: cmp}).judgement, verdictOf(sums3.B, sums3.S, {completion, subsets: {}, perCase: null, efficiency: null, rule: {}}));
+});

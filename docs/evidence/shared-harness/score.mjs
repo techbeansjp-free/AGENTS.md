@@ -70,8 +70,36 @@ export const groupOk = (g, text) => (g.all ?? [g.pattern]).every((p) => new RegE
 const patternOf = (x) => (typeof x === 'string' ? x : x.pattern);
 // #1840: answerQuota {min, groups: [{id, viewpoint, pattern | all, unless}]}: the groups that pass, by id.
 export const markerGroupsOf = (k, text) => Object.fromEntries((k.answerQuota?.groups ?? []).map((g) => [g.id, groupOk(g, text)]));
-// #1840: the deductions (answerNone: a pattern or {id, pattern}) found in a text, by id (or pattern).
-export const markerDeductionsOf = (k, text) => (k.answerNone ?? []).filter((g) => new RegExp(patternOf(g), 'i').test(text)).map((g) => (typeof g === 'string' ? g : g.id));
+// #1858: the sentences of a text, for the entries that are matched sentence by sentence. A sentence ends at a line break
+// or at 。！？ outside the brackets 「」『』（）, so a quoted reply (「無償で直します。」とお返事します。) stays in the
+// sentence that quotes it. The bracket depth is reset at each line break (an unclosed bracket does not join the lines).
+const OPEN_BRACKETS = '「『（', CLOSE_BRACKETS = '」』）';
+export function sentencesOf(text) {
+  const out = [];
+  let cur = '', depth = 0;
+  for (const ch of String(text)) {
+    if (ch === '\n') { out.push(cur); cur = ''; depth = 0; continue; }
+    cur += ch;
+    if (OPEN_BRACKETS.includes(ch)) depth++;
+    else if (CLOSE_BRACKETS.includes(ch)) depth = Math.max(0, depth - 1);
+    else if (depth === 0 && '。！？'.includes(ch)) { out.push(cur); cur = ''; }
+  }
+  out.push(cur);
+  return out.map((x) => x.trim()).filter(Boolean);
+}
+// #1858: whether a deduction entry (answerNone, writes.forbid) matches a text. An entry without sentenceWith and
+// sentenceUnless (every config before #1858) matches the whole text, as before. With them, the pattern counts only in a
+// sentence (sentencesOf) that also matches sentenceWith and does not match sentenceUnless: e.g. a promise quoted in a
+// sentence that says it is not given (今は『無償で直します』とも『有償です』とも答えません。) is left out by sentenceUnless,
+// and a history marker counts only in a sentence about the earlier state (以前は…だった) with sentenceWith.
+export function entryMatches(e, text) {
+  const re = new RegExp(patternOf(e), 'i');
+  if (typeof e === 'string' || (e.sentenceWith == null && e.sentenceUnless == null)) return re.test(text);
+  const w = e.sentenceWith == null ? null : new RegExp(e.sentenceWith, 'i'), u = e.sentenceUnless == null ? null : new RegExp(e.sentenceUnless, 'i');
+  return sentencesOf(text).some((x) => re.test(x) && (!w || w.test(x)) && !(u && u.test(x)));
+}
+// #1840: the deductions (answerNone: a pattern or {id, pattern, sentenceWith?, sentenceUnless?}) found in a text, by id (or pattern).
+export const markerDeductionsOf = (k, text) => (k.answerNone ?? []).filter((g) => entryMatches(g, text)).map((g) => (typeof g === 'string' ? g : g.id));
 
 export function markersOk(k, text) {
   const low = text.toLowerCase();
@@ -172,6 +200,7 @@ const forbidTextOf = (e, rel, text) => (e.scope === 'code' && CODE_FILE.test(Str
 // {id, pattern, group?, viewpoint?}: the groups name what failed (e.g. facts, history, status) for the separate report.
 // #1840 re-review High: with requireWithoutBase (and a base), the require patterns are matched on the texts without the
 // base lines (a copied template line does not satisfy them); the forbid patterns always see the whole text.
+// #1858: a forbid entry with sentenceWith / sentenceUnless is matched sentence by sentence (entryMatches).
 // #1845: a forbid entry with scope "code" sees only the code of a JavaScript/TypeScript file (forbidTextOf); requireFiles
 // [{id, pattern}] (optional) needs, for each entry, a written file whose path matches (e.g. both FN-003 and SCR-005),
 // the missing ones in writeFilesMissing.
@@ -180,7 +209,7 @@ export function writeChecks(w, files, fileText, {base = null} = {}) {
   const all = texts.filter((x) => typeof x === 'string').map((x) => (w.requireWithoutBase ? withoutBaseLines(x, base) : x)).join('\n');
   const out = {written: files, writeMissingText: texts.some((x) => typeof x !== 'string'),
     writeRequireMissing: (w.require ?? []).filter((e) => !new RegExp(e.pattern, 'i').test(all)).map((e) => e.id),
-    writeViolations: (w.forbid ?? []).filter((e) => texts.some((x, i) => typeof x === 'string' && new RegExp(e.pattern, 'i').test(forbidTextOf(e, files[i], x)))).map((e) => e.id)};
+    writeViolations: (w.forbid ?? []).filter((e) => texts.some((x, i) => typeof x === 'string' && entryMatches(e, forbidTextOf(e, files[i], x)))).map((e) => e.id)};
   if (w.requireFiles) out.writeFilesMissing = w.requireFiles.filter((e) => !files.some((f) => new RegExp(e.pattern).test(f))).map((e) => e.id);
   const entries = [...(w.require ?? []), ...(w.forbid ?? []), ...(w.requireFiles ?? [])];
   if (entries.some((e) => e.group)) {
@@ -793,7 +822,8 @@ export function verdictOf(baseline, candidate, {completion = null, subsets = {},
   const separate = Object.fromEntries(Object.entries(subsets).map(([name, [b, c]]) => [name, {[b.condition]: pick(b), [c.condition]: pick(c), checks: ruleChecks(b, c, opts)}]));
   const perCaseChecks = perCase ? perCaseAppliedChecks(perCase) : null;
   const efficiencyResult = efficiency ? {kinds: efficiency.kinds, [efficiency.b.condition]: efficiency.b.perTrial, [efficiency.c.condition]: efficiency.c.perTrial, checks: efficiencyChecks(efficiency.b, efficiency.c, efficiency.metrics)} : null;
-  if (reasons.length) return {verdict: 'not-judged', reason: reasons.join('; '), completion, separate, perCase: perCaseChecks, efficiency: efficiencyResult};
+  // #1858: one condition is passed as both (levelsVerdict); its reasons are given once.
+  if (reasons.length) return {verdict: 'not-judged', reason: [...new Set(reasons)].join('; '), completion, separate, perCase: perCaseChecks, efficiency: efficiencyResult};
   const checks = ruleChecks(baseline, candidate, opts);
   const all = [...Object.values(checks), ...Object.values(perCaseChecks ?? {}), ...Object.values(efficiencyResult?.checks ?? {})];
   return {verdict: all.every((x) => x.pass) ? 'adoption-candidate' : 'not-a-candidate', basis: completion.basis, completion, checks, perCase: perCaseChecks, efficiency: efficiencyResult, separate,
@@ -851,6 +881,16 @@ export function levelChecks(runs, condition, levels) {
     return [l.id, {metric: l.metric, cases: l.cases, value: `${ok}/${rs.length} >= ${l.min}`, ok, n: rs.length, pass: rs.length > 0 && levelMet(ok, rs.length, l.min), ...(by ? {breakdown: by} : {}),
       ...(rs.length !== all.length ? {notEligible: all.length - rs.length} : {}), ...(l.use ? {use: l.use} : {}), ...(l.label ? {label: l.label} : {})}];
   }));
+}
+// #1858: the number of conditions a rule judges: the comparison (no rule.mode) needs exactly two (the baseline and the
+// candidate, in the order of conditions.json cells); the fixed levels (rule.mode "levels") judge one or two (one, as in
+// #1846, is judged from that condition alone). Returns the problems, empty when the config can be judged; dry-run.mjs
+// refuses a config with a problem and judge.mjs judgeScored throws on it.
+export function conditionCountProblems(conds) {
+  const n = Object.keys(conds.cells ?? {}).length;
+  const levels = conds.rule?.mode === 'levels';
+  if (levels ? n === 1 || n === 2 : n === 2) return [];
+  return [`conditions.json cells has ${n} condition(s): ${levels ? 'rule.mode levels judges one or two conditions' : 'a comparison (no rule.mode levels) needs exactly two, the baseline and the candidate'}`];
 }
 // #1840 review H3: a level with use "report" is computed and shown but does not enter the verdict of the condition.
 export function levelsVerdict(sums, runs, {completion = null, rule = {}, subsets = {}} = {}) {

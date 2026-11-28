@@ -20,7 +20,7 @@ import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {makeFixture, pinned, loadConditions, releasePlaceholders} from './make-fixture.mjs';
 import {applyCondition, NEUTRAL_SUBJECT} from './apply-condition.mjs';
-import {ascSkillsOf, referencesFor} from './score.mjs';
+import {ascSkillsOf, referencesFor, conditionCountProblems} from './score.mjs';
 import {placementProblems} from './guard.mjs';
 import {flags, BUDGET, STOP_LINE_USD, cellOf, promptFor, maxTurnsFor, isolationSettings, probeContext, probeSteps, priorSpendProblems, priorProbeProblems, priorSpentUsd, fixtureOf, tmpDirProblem} from './run-trial.mjs';
 import {plannedTrials, orderProblems, loadOrder, trialName} from './order.mjs';
@@ -196,6 +196,8 @@ function main() {
     add('installedDiffExpected', Object.values(report.compare).every((x) => x.installedDiff.every((p) => diffAllowed(p, dr.installedDiffExpected ?? [])) && (dr.requiredDiff ?? []).every((p) => x.installedDiff.includes(p))),
       Object.fromEntries(Object.entries(report.compare).map(([f, x]) => [f, x.installedDiff])));
   }
+  // #1858: the number of conditions the rule can judge (one or two for rule.mode levels, two for a comparison).
+  add('conditionCount', conditionCountProblems(conds).length === 0, conditionCountProblems(conds));
   add('runOrder', orderProblems(loadOrder(), spec, conds).length === 0, orderProblems(loadOrder(), spec, conds));
   add('priorSpend', priorSpendProblems().length === 0 && priorProbeProblems().length === 0, [...priorSpendProblems(), ...priorProbeProblems()]);
   const plan = trialPlan(conds, spec);
