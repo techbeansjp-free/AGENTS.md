@@ -1,7 +1,7 @@
 import {tempDir} from './helpers/temp-dir.mjs';
 import {setTimeout} from 'node:timers';
 import {Controller} from '../src/controller.mjs';
-import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {prepareMigration,rollbackMigration,createWorktree,gitMetadataNotWritableMessage} from '../src/migration.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {prepareMigration,rollbackMigration,createWorktree,gitMetadataNotWritableMessage,gitWorktreesNotWritableMessage} from '../src/migration.mjs';
 function fixture(t,format='sha1'){
  const root=tempDir('asc-transition-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const source=path.join(root,'legacy');fs.mkdirSync(path.join(source,'.agent-skill-chain'),{recursive:true});
@@ -174,6 +174,96 @@ test('a write probe that cannot be removed is reported with its path and stops c
  fs.closeSync=fd=>{originalClose(fd);throw Object.assign(Error('close failed'),{code:'EIO'});};
  try{assert.throws(()=>createWorktree(f.source,{issue:1731,slug:'probe-close'}),/close failed/);}finally{fs.closeSync=originalClose;}
  assert.deepEqual(fs.readdirSync(path.join(f.source,'.git')).filter(name=>name.startsWith('asc-write-probe-')).length,1,'only the probe whose removal failed remains');
+});
+
+test('worktree creation stops before the branch when .git/worktrees is read-only (#1861)',{skip:process.platform==='win32'||process.getuid?.()===0},t=>{
+ const f=fixture(t),records=path.join(f.source,'.git','worktrees');
+ f.git('worktree','add','-q','-b','existing',path.join(f.root,'existing'));const mode=fs.statSync(records).mode&0o777;
+ const run=()=>execFileSync(process.execPath,[path.resolve('bin/asc-v05.mjs'),'worktree-create',f.source,'1861','fix','records','HEAD'],{encoding:'utf8',stdio:'pipe'});
+ fs.chmodSync(records,0o555);
+ try{
+  assert.throws(run,error=>{
+   assert.equal(error.status,1);const message=String(error.stderr);
+   assert.match(message,/Git worktree records are not writable: .*\.git[\\/]worktrees \(EACCES\)/);
+   assert.match(message,/in their own terminal, outside the sandbox/);assert.match(message,/must not widen its own sandbox/);
+   assert.doesNotMatch(message,/fatal:|could not create/,'no Git stderr (#1734)');
+   assert.doesNotMatch(message,/Migration Git operation failed/,'stopped before Git ran');return true;});
+ }finally{fs.chmodSync(records,mode);}
+ assert(!fs.existsSync(path.join(f.source,'.worktrees')),'no .worktrees directory is left behind');
+ assert.equal(f.git('branch','--list','fix/1861-records'),'','no branch is left behind');
+ assert.deepEqual(fs.readdirSync(records).filter(name=>name.startsWith('asc-write-probe-')),[]);
+ const created=createWorktree(f.source,{issue:1861,type:'fix',slug:'records'});
+ assert.equal(created.branch,'fix/1861-records');
+ assert.deepEqual(fs.readdirSync(records).filter(name=>name.startsWith('asc-write-probe-')),[],'the probe directory is removed after success');
+});
+
+test('a denied .git/worktrees that does not exist yet stops creation, and a created one is removed again (#1861)',t=>{
+ const f=fixture(t),records=path.join(f.source,'.git','worktrees'),original=fs.mkdirSync;
+ assert(!fs.existsSync(records));
+ fs.mkdirSync=(dir,...rest)=>{if(path.resolve(String(dir))===records)throw Object.assign(Error('denied'),{code:'EPERM'});return original(dir,...rest);};
+ try{assert.throws(()=>createWorktree(f.source,{issue:1861,slug:'missing-records'}),error=>error.code==='ASC_GIT_WORKTREES_NOT_WRITABLE'&&/\(EPERM\)/.test(error.message));}
+ finally{fs.mkdirSync=original;}
+ assert(!fs.existsSync(path.join(f.source,'.worktrees')));assert.equal(f.git('branch','--list','feature/1861-missing-records'),'');
+ fs.mkdirSync=(dir,...rest)=>{if(path.basename(String(dir)).startsWith('asc-write-probe-'))throw Object.assign(Error('denied'),{code:'EACCES'});return original(dir,...rest);};
+ try{assert.throws(()=>createWorktree(f.source,{issue:1861,slug:'probe-denied'}),/Git worktree records are not writable/);}finally{fs.mkdirSync=original;}
+ assert(!fs.existsSync(records),'the records directory made for the probe is removed');
+ assert.equal(createWorktree(f.source,{issue:1861,slug:'missing-records'}).branch,'feature/1861-missing-records');
+});
+
+test('a refused removal of the records directory made by the check keeps the explanation (#1861)',t=>{
+ const f=fixture(t),records=path.join(f.source,'.git','worktrees'),originalMkdir=fs.mkdirSync,originalRmdir=fs.rmdirSync;
+ fs.mkdirSync=(dir,...rest)=>{if(path.basename(String(dir)).startsWith('asc-write-probe-'))throw Object.assign(Error('denied'),{code:'EPERM'});return originalMkdir(dir,...rest);};
+ fs.rmdirSync=(dir,...rest)=>{if(path.resolve(String(dir))===records)throw Object.assign(Error('denied'),{code:'EACCES'});return originalRmdir(dir,...rest);};
+ try{assert.throws(()=>createWorktree(f.source,{issue:1861,slug:'records-kept'}),error=>{
+  assert.equal(error.code,'ASC_GIT_WORKTREES_NOT_WRITABLE');
+  assert.match(error.message,/^Git worktree records are not writable: .*\(EPERM\)\./);
+  assert.match(error.message,/The empty .*worktrees made by this check could not be removed \(EACCES\); Git ignores it\.$/);return true;});}
+ finally{fs.mkdirSync=originalMkdir;fs.rmdirSync=originalRmdir;}
+ assert.deepEqual(fs.readdirSync(records),[],'the empty directory is left');
+ assert(!fs.existsSync(path.join(f.source,'.worktrees')));assert.equal(f.git('branch','--list','feature/1861-records-kept'),'');
+});
+
+test('an empty .git/worktrees is kept after the check, and one made by the check stays once it passes (#1861)',t=>{
+ const f=fixture(t),records=path.join(f.source,'.git','worktrees');
+ f.git('branch','feature/1861-taken');
+ const stop=()=>assert.throws(()=>createWorktree(f.source,{issue:1861,slug:'taken'}),/Work branch already exists/);
+ stop();assert.deepEqual(fs.readdirSync(records),[],'made by the check, kept for git worktree add');
+ stop();assert.deepEqual(fs.readdirSync(records),[],'an existing empty directory is kept');
+ assert(!fs.existsSync(path.join(f.source,'.worktrees')));
+});
+
+test('a .git/worktrees that is a file or a broken link stops creation without Git output or side effects (#1861)',{skip:process.platform==='win32'},t=>{
+ const f=fixture(t),records=path.join(f.source,'.git','worktrees');
+ for(const [kind,make,code] of [['file',()=>fs.writeFileSync(records,''),/ENOTDIR/],['link',()=>fs.symlinkSync(path.join(f.root,'missing-records'),records),/ENOENT/]]){
+  make();
+  assert.throws(()=>createWorktree(f.source,{issue:1861,slug:`records-${kind}`}),error=>{
+   assert.match(error.message,code);assert.doesNotMatch(error.message,/fatal:|Migration Git operation failed/);return true;});
+  assert(!fs.existsSync(path.join(f.source,'.worktrees')),kind);assert.equal(f.git('branch','--list',`feature/1861-records-${kind}`),'',kind);
+  assert(!fs.existsSync(path.join(f.root,'missing-records')),'a broken link is not followed into a new directory');
+  fs.rmSync(records);
+ }
+});
+
+test('a records directory removed by another check before the probe is made once more (#1861)',t=>{
+ const f=fixture(t),records=path.join(f.source,'.git','worktrees'),original=fs.mkdirSync;let raced=0;
+ fs.mkdirSync=(dir,...rest)=>{if(!raced&&path.basename(String(dir)).startsWith('asc-write-probe-')){raced=1;fs.rmdirSync(records);throw Object.assign(Error('gone'),{code:'ENOENT'});}return original(dir,...rest);};
+ try{assert.equal(createWorktree(f.source,{issue:1861,slug:'raced'}).branch,'feature/1861-raced');}finally{fs.mkdirSync=original;}
+ assert.equal(raced,1);assert.deepEqual(fs.readdirSync(records).filter(name=>name.startsWith('asc-write-probe-')),[]);
+});
+
+test('a probe that cannot be removed is explained, and nothing is created (#1861)',t=>{
+ const f=fixture(t),records=path.join(f.source,'.git','worktrees'),original=fs.rmdirSync;
+ fs.rmdirSync=(dir,...rest)=>{if(path.basename(String(dir)).startsWith('asc-write-probe-'))throw Object.assign(Error('busy'),{code:'EBUSY'});return original(dir,...rest);};
+ try{assert.throws(()=>createWorktree(f.source,{issue:1861,slug:'probe-busy'}),/write probe left at .*asc-write-probe-.* \(EBUSY\)\. .*git worktree prune/);}
+ finally{fs.rmdirSync=original;}
+ assert.equal(fs.readdirSync(records).filter(name=>name.startsWith('asc-write-probe-')).length,1);
+ assert(!fs.existsSync(path.join(f.source,'.worktrees')));assert.equal(f.git('branch','--list','feature/1861-probe-busy'),'');
+});
+
+test('the read-only worktree records message names the path and leaves Git stderr out (#1861)',()=>{
+ const message=gitWorktreesNotWritableMessage('/srv/repo/.git/worktrees','EPERM');
+ assert.match(message,/^Git worktree records are not writable: \/srv\/repo\/\.git\/worktrees \(EPERM\)\./);
+ assert.match(message,/allowWrite does not lift it/);assert.match(message,/See v05\/USAGE\.md\.$/);
 });
 
 test('worktree creation keeps a trailing space in a separate Git directory path (#1731)',{skip:process.platform==='win32'},t=>{

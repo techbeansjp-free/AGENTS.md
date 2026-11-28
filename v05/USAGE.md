@@ -116,7 +116,7 @@ v0.5.64〜v0.5.66で配布した`fact-record`・`fact-contradict`・`fact-list`�
 
 ### Codexのsandboxで作業場所を作る（#1730）
 
-Codexを`workspace-write`のsandboxで起動すると、書込みを許した領域の中でも`.git`は読み取り専用になる。`worktree-create`は新しいbranchとworktreeの記録をGitの共通の管理領域（`git rev-parse --path-format=absolute --git-common-dir`の結果）に書くため、このままでは作成できない。`worktree-create`は、作成を始める前に、この領域の直下に確認用のファイルを作れるかを確かめる。作れなければ`Git metadata is not writable: <dir>`と対処を示し、終了コード1で止まる。このとき`.worktrees`もbranchも作らない。sandboxのほか、通常のファイル権限や読み取り専用のmountでも同じmessageになる。直下には書けるが、その下の`worktrees`や`refs`だけを書けない場合は、この確認を通り、Git自身のエラーで止まる。その場合は、作業先の`.worktrees`が残り得る。
+Codexを`workspace-write`のsandboxで起動すると、書込みを許した領域の中でも`.git`は読み取り専用になる。`worktree-create`は新しいbranchとworktreeの記録をGitの共通の管理領域（`git rev-parse --path-format=absolute --git-common-dir`の結果）に書くため、このままでは作成できない。`worktree-create`は、作成を始める前に、この領域の直下に確認用のファイルを作れるかを確かめる。作れなければ`Git metadata is not writable: <dir>`と対処を示し、終了コード1で止まる。このとき`.worktrees`もbranchも作らない。sandboxのほか、通常のファイル権限や読み取り専用のmountでも同じmessageになる。直下には書けるが、その下の`worktrees`だけを書けない場合は、次の節（#1861）の確認で同じく作成前に止まる。`refs`だけを書けない場合は、これらの確認を通り、Git自身のエラーで止まる。その場合は、作業先の`.worktrees`が残り得る。
 
 Agentに作業場所の作成とcommitまで任せる場合は、Codexをrepository rootで起動し、この領域を`writable_roots`に加える。
 
@@ -130,6 +130,27 @@ codex -C <repo-root> --sandbox workspace-write -c 'sandbox_workspace_write.writa
 - Codexをworktreeの中で起動すると、そのworktree用の管理領域（`<git-common-dir>/worktrees/<name>`）が読み取り専用のままになり、共通の管理領域を加えてもcommitできなかった。repository rootで起動する。
 - 書込みを許さない場合、Agentは作業場所の作成もcommitもできない。それらは利用者がsandboxの外で行う。
 - 実測はmacOS・codex-cli 0.169.0の`codex sandbox`と`codex exec`で行った。LinuxとWindowsは実機がないため未確認である。ASCの同梱Codex Hostが起動するAgentの設定（#682）とは別の話である。
+
+### Claude Codeのsandboxで作業場所を作る（#1861）
+
+Claude CodeのBashをsandboxの中で動かすと、`.git`の直下に新しいfileを作ることと`refs`への書込みはできるが、`config`と`<git-common-dir>/worktrees`には書けない。`git worktree add`は新しいworktreeの記録をここに作るため、sandboxの中では`worktree-create`は成功しない。`worktree-create`は、作成を始める前にこの場所へ確認用のdirectoryを作れるかを確かめる。作れなければ`Git worktree records are not writable: <dir>`と対処を示し、終了コード1で止まる。このとき`.worktrees`もbranchも作らない（この確認より前の版は、branchを作った後にGitのエラーで止まり、branchと空の`.worktrees`が残った）。
+
+Bashをsandboxの中で動かす場合の手順：
+
+1. 利用者が、Claude Codeの外の自分のterminalで、repository rootから`worktree-create`を実行する。例：
+
+   ```sh
+   node .agent-skill-chain/bin/asc.mjs worktree-create "$PWD" <issue> <type> <slug> <base>
+   ```
+
+   Agentが利用者にこの手順を頼むときは、`<issue>`等を実際の値にした1行を渡す。
+2. 利用者が、作られたworktreeのdirectoryでClaude Codeを起動する。Agentはそこで`start`・実装・commitを行える。
+
+- repository rootで起動したsessionでは、sandboxの外で作ったworktreeでも`start`はできるが、commitは`<git-common-dir>/worktrees/<name>/index.lock`を作れずに失敗した。worktreeの中で起動する。
+- `sandbox.filesystem.allowWrite`に`.git`や`.git/worktrees`を加えても、書込みは許されなかった（Claude Code自身の保護である）。
+- sandboxの外でコマンドを動かす設定（`excludedCommands`等）は案内しない。そのコマンドが実行するASCの本体を、sandboxの中のAgentが書き換えられるためである。
+- Agentは自分のsandboxや権限を広げない。上の手順の1は利用者が行う。
+- 実測はmacOS・Claude Code 2.1.323、試験用のHOMEで行った（モデルは呼ばず、Bash toolに1 commandずつ実行させた。`docs/evidence/1861-sandbox-worktree-create/README.md`）。LinuxとWindowsは未確認である。
 
 移行や隔離実験の独立cloneを使う場合だけ、外部owner入力へ`"workspaceMode": "isolated-clone"`を明記する。未指定はworktree、未知値とrepo配下のサブディレクトリは拒否する。これはGit上の作業場所の確認であり、同時編集者がいないことの証明ではない。cloneの独立した準備はowner責務で、共有object storageの有無まではこの検査で判定しない。従来のclean状態・差分検査は継続する。内部APIを直接使うhost integrationは専用作業場所を自ら用意する。
 

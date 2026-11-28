@@ -52,7 +52,7 @@ test('shared harness: no Issue file in the harness directory, Issue files only t
     assert.doesNotMatch(src, /ASC1820S2_ALLOW_PAID/, f);
   }
   for (const f of ['guard', 'ledger', 'install-asc']) assert.ok(fs.readFileSync(path.join(H, `${f}.mjs`)).equals(fs.readFileSync(path.join(S2, 'harness', `${f}.mjs`))), `${f} is the #1820 copy`);
-  const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && f !== 'dry-run.mjs' && f !== 'calibrate.mjs' && f !== 'sandbox-check.mjs').map((f) => f.replace(/\.mjs$/, '')).sort();
+  const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && f !== 'dry-run.mjs' && f !== 'calibrate.mjs' && f !== 'sandbox-check.mjs' && f !== 'claude-sandbox-bash.mjs').map((f) => f.replace(/\.mjs$/, '')).sort();
   assert.deepEqual(modules, [...HARNESS_MODULES].sort());
   assert.deepEqual(FIXED.filter((f) => f.startsWith('config/')), cfg.CONFIG_FIXED.map((f) => `config/${f}`));
   assert.equal(cfg.configDir(), EV);
@@ -1153,6 +1153,52 @@ test('#1845 review M1: calibrate.mjs counts requireFiles and applies scope as sc
   assert.deepEqual([unnamed.pass, unnamed.violations, unnamed.scopeNotApplied], [false, ['decimal-literal'], true]);
   const cal = {sources: [{case: 'y', condition: 'skill', path: 'docs/evidence/shared-harness/score.mjs', earlierPass: true, note: 'n'}]};
   assert.match(markdown(calibrate(cal, {cases: [{...c, id: 'y'}]})), /scopeは当てない/);
+});
+
+// #1861: the stand-in for the Messages API that lets claude-sandbox-bash.mjs run Bash in Claude Code's sandbox without a model.
+test('claude-sandbox-bash: each Bash turn gets the next command, other requests a text, and results are read back by id', async () => {
+  const {fakeMessagesApi, stepResults, assistantReply, DUMMY_API_KEY} = await import('../claude-sandbox-bash.mjs');
+  const reply = fakeMessagesApi(['echo one', 'echo two']), bash = {tools: [{name: 'Bash'}]};
+  const first = JSON.parse(reply(bash).text), side = JSON.parse(reply({tools: []}).text), second = JSON.parse(reply(bash).text), last = JSON.parse(reply(bash).text);
+  assert.deepEqual([first.stop_reason, first.content[0].input.command, first.content[0].id], ['tool_use', 'echo one', 'toolu_fake1']);
+  assert.deepEqual([side.stop_reason, side.content[0].text], ['end_turn', 'ok']);
+  assert.equal(second.content[0].input.command, 'echo two');
+  assert.equal(last.stop_reason, 'end_turn');
+  const streamed = assistantReply({stream: true}, [{type: 'tool_use', id: 't', name: 'Bash', input: {command: 'x'}}], 'tool_use');
+  assert.equal(streamed.type, 'text/event-stream');
+  assert.deepEqual(streamed.text.match(/^event: (\S+)$/gm).map((l) => l.slice(7)), ['message_start', 'content_block_start', 'content_block_delta', 'content_block_stop', 'message_delta', 'message_stop']);
+  const stream = [JSON.stringify({type: 'user', message: {content: [{type: 'tool_result', tool_use_id: 'toolu_fake1', content: 'exit=128', is_error: false}]}}), 'not json', ''].join('\n');
+  assert.deepEqual(stepResults(stream).get('toolu_fake1'), {isError: false, content: 'exit=128'});
+  assert.match(DUMMY_API_KEY, /^sk-ant-api03-x+ZZZZmodelfree1861ZZZ$/);
+});
+
+// #1861 review L5: the real-HOME guard compares real paths and covers directories under it and --config-dir.
+test('claude-sandbox-bash: a HOME or config directory at or under the real HOME is refused, also through a link', async () => {
+  const {assertNotRealHome, runInClaudeSandbox} = await import('../claude-sandbox-bash.mjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csb-home-')), real = path.join(root, 'real'), other = path.join(root, 'other'), link = path.join(root, 'link');
+  try {
+    fs.mkdirSync(path.join(real, '.claude'), {recursive: true}); fs.mkdirSync(other); fs.symlinkSync(real, link);
+    for (const dir of [real, link, path.join(real, '.claude'), path.join(link, 'not-yet', 'config'), path.join(real, '..test-home'), path.join(link, '..x', 'config')])
+      assert.throws(() => assertNotRealHome(dir, '--home', [real]), /refused: --home is or is under the real HOME/, dir);
+    assert.equal(assertNotRealHome(path.join(other, 'not-yet'), '--config-dir', [real]), path.join(fs.realpathSync.native(other), 'not-yet'));
+    assert.equal(assertNotRealHome(`${real}-sibling`, '--home', [real, null]), `${fs.realpathSync.native(real)}-sibling`, 'a sibling with a shared prefix is accepted');
+    assert.equal(assertNotRealHome(other, '--home', [real]), fs.realpathSync.native(other));
+    assert.equal(assertNotRealHome(path.join(root, '..outside'), '--home', [real]), path.join(fs.realpathSync.native(root), '..outside'), 'a name starting with .. outside HOME is accepted');
+    await assert.rejects(runInClaudeSandbox({claude: 'unused', cwd: other, home: other, tmp: other, commands: [], out: path.join(root, 'out'), configDir: path.join(os.homedir(), '.claude')}), /refused: --config-dir/);
+    assert.ok(!fs.existsSync(path.join(root, 'out')), 'nothing is written before the guard');
+    // CodeRabbit: a test HOME whose .claude or .claude.json links into the real HOME is refused, and the checked paths are the ones passed on.
+    for (const own of ['.claude', '.claude.json']) {
+      const linked = path.join(root, `linked-${own}`); fs.mkdirSync(linked); fs.symlinkSync(path.join(os.homedir(), own), path.join(linked, own));
+      await assert.rejects(runInClaudeSandbox({claude: 'unused', cwd: other, home: linked, tmp: other, commands: [], out: path.join(root, 'out')}), new RegExp(`refused: --home/\\${own} is or is under the real HOME`), own);
+    }
+    const broken = path.join(root, 'broken-home'); fs.mkdirSync(broken); fs.symlinkSync(path.join(real, 'not-yet', '.claude'), path.join(broken, '.claude'));
+    assert.throws(() => assertNotRealHome(path.join(broken, '.claude', 'settings.json'), '--home/.claude', [real]), /refused/, 'a broken link into the real HOME is followed');
+    const seen = path.join(root, 'seen.sh'), fresh = path.join(root, 'fresh-home'); fs.mkdirSync(fresh);
+    fs.writeFileSync(seen, `#!/bin/sh\nprintf '%s\\n' "$HOME" "$CLAUDE_CONFIG_DIR" >> ${JSON.stringify(path.join(root, 'seen.txt'))}\n`, {mode: 0o755});
+    const cwd0 = process.cwd();
+    try { process.chdir(root); await runInClaudeSandbox({claude: seen, cwd: other, home: path.relative(root, fresh) || '.', tmp: other, commands: [], out: path.join(root, 'out2'), configDir: 'rel-config'}); } finally { process.chdir(cwd0); }
+    assert.deepEqual(fs.readFileSync(path.join(root, 'seen.txt'), 'utf8').split('\n').slice(0, 2), [fs.realpathSync.native(fresh), path.join(fs.realpathSync.native(root), 'rel-config')]);
+  } finally { fs.rmSync(root, {recursive: true, force: true}); }
 });
 
 // #1844: a tools level with Bash in the confined sandbox layout, and the rule read with Bash (config 1844-rule-read-bash).

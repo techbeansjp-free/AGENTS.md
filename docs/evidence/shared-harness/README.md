@@ -176,6 +176,10 @@ Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLev
 - L-3：`probeEndState`はprobeなら水準Wでも記録され、Wの`sentinelsAbsent`も試行の終わりの記録で判定する（判定の結果は判定の時点のfileで見る場合と実質同じ）。上の「水準Wと既存の設定の結果は変わらない」は、このfieldの無い記録（#1844と既存のW）についての記述である。
 - L-4（`probe-check.mjs`の`fileInputs`）：`work/`を丸ごと消したprobeも読み、不合格として判定する（`work/`が無ければSkillの一覧は空）。`credentialNotLeaked`の詳細に、記録があれば`cleanupErrors`・`workRemoved`を示す。
 
+## #1861で加えたもの（2026-11-28）
+
+- `claude-sandbox-bash.mjs`：モデルを呼ばずに、Claude Code本体のBash toolに、そのsandboxの中で1 commandずつ実行させる。`ANTHROPIC_BASE_URL`を127.0.0.1の代役（各turnにBashのtool_useを1つ返す）へ向け、API keyはダミーにするので、要求はAnthropicへ届かない。結果は各commandのtool_result（`result.json`）。環境は`env -i`から作り、HOMEは試験用のものだけを受け付ける。設定は試験用のHOMEの`.claude/settings.json`か、`--`の後の`--settings`で渡す。測定の固定の記録が持つmoduleではなく、既存のmoduleは変えていない。使い方と記録は[1861-sandbox-worktree-create](../1861-sandbox-worktree-create/README.md)。対話画面のBash mode（`!command`）はsandboxの外で動くので、この目的には使えない（Claude Code 2.1.323）。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。
