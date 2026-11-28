@@ -70,22 +70,43 @@ export const groupOk = (g, text) => (g.all ?? [g.pattern]).every((p) => new RegE
 const patternOf = (x) => (typeof x === 'string' ? x : x.pattern);
 // #1840: answerQuota {min, groups: [{id, viewpoint, pattern | all, unless}]}: the groups that pass, by id.
 export const markerGroupsOf = (k, text) => Object.fromEntries((k.answerQuota?.groups ?? []).map((g) => [g.id, groupOk(g, text)]));
-// #1858: the sentences of a text, for the entries that are matched sentence by sentence. A sentence ends at a line break
-// or at 。！？ outside the brackets 「」『』（）, so a quoted reply (「無償で直します。」とお返事します。) stays in the
-// sentence that quotes it. The bracket depth is reset at each line break (an unclosed bracket does not join the lines).
-const OPEN_BRACKETS = '「『（', CLOSE_BRACKETS = '」』）';
+// #1858: the sentences of a text, for the entries that are matched sentence by sentence. A sentence ends at a line break,
+// at 。．！？!? outside the brackets 「」『』（）, or at a "." outside them that is followed by a space or the end (an
+// English sentence; 1.1, a.ts and e.g.x do not end one). A quoted reply (「無償で直します。」とお返事します。) stays in the
+// sentence that quotes it. The brackets are counted as one depth whatever their kind (「…）closes 「). The depth is reset
+// at each line break (an unclosed bracket does not join the lines).
+const OPEN_BRACKETS = '「『（', CLOSE_BRACKETS = '」』）', SENTENCE_ENDS = '。．！？!?';
 export function sentencesOf(text) {
   const out = [];
+  const chars = [...String(text)];
   let cur = '', depth = 0;
-  for (const ch of String(text)) {
+  for (const [i, ch] of chars.entries()) {
     if (ch === '\n') { out.push(cur); cur = ''; depth = 0; continue; }
     cur += ch;
     if (OPEN_BRACKETS.includes(ch)) depth++;
     else if (CLOSE_BRACKETS.includes(ch)) depth = Math.max(0, depth - 1);
-    else if (depth === 0 && '。！？'.includes(ch)) { out.push(cur); cur = ''; }
+    else if (depth === 0 && (SENTENCE_ENDS.includes(ch) || (ch === '.' && (i + 1 === chars.length || /\s/.test(chars[i + 1]))))) { out.push(cur); cur = ''; }
   }
   out.push(cur);
   return out.map((x) => x.trim()).filter(Boolean);
+}
+// #1858 review L2: the sentence fields of the deduction entries (answerNone, writes.forbid) of cases.json. Each one that is
+// present must be a non-empty string that compiles as a regular expression: an empty sentenceUnless matches every sentence
+// and would silently switch the entry off. dry-run.mjs refuses a config with a problem (sentenceFields).
+export function sentenceFieldProblems(spec) {
+  const p = [];
+  for (const k of spec.cases ?? []) {
+    for (const e of [...(k.answerNone ?? []), ...(k.writes?.forbid ?? [])]) {
+      if (typeof e !== 'object' || e === null) continue;
+      for (const f of ['sentenceWith', 'sentenceUnless']) {
+        if (!(f in e)) continue;
+        const v = e[f];
+        if (typeof v !== 'string' || v === '') { p.push(`${k.id} ${e.id ?? e.pattern}: ${f} must be a non-empty string`); continue; }
+        try { new RegExp(v, 'i'); } catch (err) { p.push(`${k.id} ${e.id ?? e.pattern}: ${f} is not a regular expression (${err.message})`); }
+      }
+    }
+  }
+  return p;
 }
 // #1858: whether a deduction entry (answerNone, writes.forbid) matches a text. An entry without sentenceWith and
 // sentenceUnless (every config before #1858) matches the whole text, as before. With them, the pattern counts only in a
@@ -819,7 +840,9 @@ export function verdictOf(baseline, candidate, {completion = null, subsets = {},
     if (s.replacementsMissing) reasons.push(`${s.condition}: ${s.replacementsMissing} failed trial(s) without the mandatory replacement`);
   }
   const opts = {minBodyRate: rule.minBodyRate ?? 0.8, negSlack: rule.negSlack ?? 1, bodyVsBaseline: rule.bodyVsBaseline ?? 'gt'};
-  const separate = Object.fromEntries(Object.entries(subsets).map(([name, [b, c]]) => [name, {[b.condition]: pick(b), [c.condition]: pick(c), checks: ruleChecks(b, c, opts)}]));
+  // #1858 review M1: a subset of a single condition (judgeScored with one condition) has one summary; it is reported alone,
+  // without a comparison.
+  const separate = Object.fromEntries(Object.entries(subsets).map(([name, [b, c]]) => [name, c ? {[b.condition]: pick(b), [c.condition]: pick(c), checks: ruleChecks(b, c, opts)} : {[b.condition]: pick(b)}]));
   const perCaseChecks = perCase ? perCaseAppliedChecks(perCase) : null;
   const efficiencyResult = efficiency ? {kinds: efficiency.kinds, [efficiency.b.condition]: efficiency.b.perTrial, [efficiency.c.condition]: efficiency.c.perTrial, checks: efficiencyChecks(efficiency.b, efficiency.c, efficiency.metrics)} : null;
   // #1858: one condition is passed as both (levelsVerdict); its reasons are given once.

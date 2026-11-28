@@ -20,7 +20,7 @@ import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {makeFixture, pinned, loadConditions, releasePlaceholders} from './make-fixture.mjs';
 import {applyCondition, NEUTRAL_SUBJECT} from './apply-condition.mjs';
-import {ascSkillsOf, referencesFor, conditionCountProblems} from './score.mjs';
+import {ascSkillsOf, referencesFor, conditionCountProblems, sentenceFieldProblems} from './score.mjs';
 import {placementProblems} from './guard.mjs';
 import {flags, BUDGET, STOP_LINE_USD, cellOf, promptFor, maxTurnsFor, isolationSettings, probeContext, probeSteps, priorSpendProblems, priorProbeProblems, priorSpentUsd, fixtureOf, tmpDirProblem} from './run-trial.mjs';
 import {plannedTrials, orderProblems, loadOrder, trialName} from './order.mjs';
@@ -198,6 +198,8 @@ function main() {
   }
   // #1858: the number of conditions the rule can judge (one or two for rule.mode levels, two for a comparison).
   add('conditionCount', conditionCountProblems(conds).length === 0, conditionCountProblems(conds));
+  // #1858 review L2: the sentence fields of cases.json are non-empty regular expressions.
+  add('sentenceFields', sentenceFieldProblems(spec).length === 0, sentenceFieldProblems(spec));
   add('runOrder', orderProblems(loadOrder(), spec, conds).length === 0, orderProblems(loadOrder(), spec, conds));
   add('priorSpend', priorSpendProblems().length === 0 && priorProbeProblems().length === 0, [...priorSpendProblems(), ...priorProbeProblems()]);
   const plan = trialPlan(conds, spec);

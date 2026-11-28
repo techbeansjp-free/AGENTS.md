@@ -1850,7 +1850,8 @@ test('PR #1857 re-review L-4: a probe without work/ is read and fails; cleanup f
 });
 
 // #1858: deductions matched sentence by sentence (opt-in fields), and a config with one condition.
-const {sentencesOf, entryMatches, markerDeductionsOf, conditionCountProblems} = await import('../score.mjs');
+const {sentencesOf, entryMatches, markerDeductionsOf, conditionCountProblems, sentenceFieldProblems} = await import('../score.mjs');
+const {templateHits} = await import('../calibrate.mjs');
 const {judgeScored} = await import('../judge.mjs');
 const C1846 = path.join(EVROOT, '1846-warranty-version/config');
 const C1843 = path.join(EVROOT, '1843-spec-rule-path/config');
@@ -1939,4 +1940,70 @@ test('#1858 one condition (the shape of #1846): judged from that condition alone
   const runs3 = [...rows('B', [true, true, true]), ...rows('S', [true, true, true])];
   const sums3 = {B: summarize(spec, runs3, 'B'), S: summarize(spec, runs3, 'S')};
   assert.deepEqual(judgeScored({spec, runs: runs3, completion, conds: cmp}).judgement, verdictOf(sums3.B, sums3.S, {completion, subsets: {}, perCase: null, efficiency: null, rule: {}}));
+});
+
+test('#1858 review L1/L4: sentence ends (．!? and an English "." before a space), nested and mixed brackets, !? inside brackets', () => {
+  assert.deepEqual(sentencesOf('原因は申し上げません!無償で直します!'), ['原因は申し上げません!', '無償で直します!']);
+  assert.deepEqual(sentencesOf('本当?はい．次です。'), ['本当?', 'はい．', '次です。']);
+  assert.deepEqual(sentencesOf('We will not say. We fix it for free.'), ['We will not say.', 'We fix it for free.']);
+  assert.deepEqual(sentencesOf('price * 1.1 in a.ts is kept'), ['price * 1.1 in a.ts is kept'], 'a "." not before a space does not end a sentence');
+  assert.deepEqual(sentencesOf('「『無償です。』と言う！」と書く。次。'), ['「『無償です。』と言う！」と書く。', '次。'], 'nested brackets');
+  assert.deepEqual(sentencesOf('「本当？いいえ!」と答える。次。'), ['「本当？いいえ!」と答える。', '次。'], '!? inside brackets');
+  assert.deepEqual(sentencesOf('「閉じる）ここで。次。'), ['「閉じる）ここで。', '次。'], 'mixed kinds: the depth only');
+  const k = {answerNone: [{id: 'free', pattern: FREE, sentenceUnless: NEGATED}]};
+  assert.deepEqual(markerDeductionsOf(k, '原因は申し上げません!無償で直します!'), ['free'], 'the half-width ! ends the withholding sentence');
+  assert.deepEqual(markerDeductionsOf(k, '『お答えしません』とは言わず、無償で直します。'), [], 'known limit (README): sentenceUnless inside a quote leaves the sentence out');
+});
+
+test('#1858 review L2: sentenceWith / sentenceUnless must be non-empty regular expressions; dry-run checks them; the existing configs pass', () => {
+  const spec = (e) => ({cases: [{id: 'm', answerNone: [e]}]});
+  assert.deepEqual(sentenceFieldProblems(spec({id: 'a', pattern: 'x', sentenceUnless: 'ません'})), []);
+  assert.deepEqual(sentenceFieldProblems(spec('x')), [], 'a string entry has no fields');
+  assert.match(sentenceFieldProblems(spec({id: 'a', pattern: 'x', sentenceUnless: ''}))[0], /^m a: sentenceUnless must be a non-empty string/);
+  assert.match(sentenceFieldProblems(spec({id: 'a', pattern: 'x', sentenceWith: 3}))[0], /sentenceWith must be a non-empty string/);
+  assert.match(sentenceFieldProblems(spec({id: 'a', pattern: 'x', sentenceWith: null}))[0], /sentenceWith must be a non-empty string/);
+  assert.match(sentenceFieldProblems({cases: [{id: 's', writes: {forbid: [{id: 'f', pattern: 'x', sentenceWith: '('}]}}]})[0], /^s f: sentenceWith is not a regular expression/);
+  for (const dir of [EV, C1823, path.join(EVROOT, '1840-user-environment/config'), C1843, path.join(EVROOT, '1844-rule-read-bash/config'), C1846]) assert.deepEqual(sentenceFieldProblems(JSON.parse(read('cases.json', dir))), [], dir);
+  assert.ok(fs.readFileSync(path.join(H, 'dry-run.mjs'), 'utf8').includes("add('sentenceFields', sentenceFieldProblems(spec).length === 0, sentenceFieldProblems(spec));"));
+});
+
+test('#1858 review L3: templateHits matches a writes entry with sentenceWith sentence by sentence, as the scoring does', () => {
+  // The #1843 config at 345c8f4e has three lines with 入力欄だけ (cases.json); fewer are in a sentence that also says 以前.
+  const base = {commit: '345c8f4e', dir: 'docs/evidence/1843-spec-rule-path/config', as: 'c'};
+  const lines = execFileSync('git', ['show', '345c8f4e:docs/evidence/1843-spec-rule-path/config/cases.json'], {cwd: REPO, encoding: 'utf8'}).split('\n');
+  const sentenceEntry = {id: 'history-only', pattern: '入力欄だけ', sentenceWith: '以前'};
+  const k = {writes: {forbid: [sentenceEntry, {id: 'plain', pattern: '入力欄だけ'}]}};
+  const hits = templateHits(k, {t: base});
+  assert.equal(hits.plain.t, 3);
+  const expected = lines.filter((l) => entryMatches(sentenceEntry, l)).length;
+  assert.ok(expected < 3);
+  assert.equal(hits['history-only'].t, expected);
+});
+
+test('#1858 review M1: one condition with subsets is judged (each subset reports the one condition, no comparison)', () => {
+  const spec = {cases: [{id: 'm-r1', kind: 'maintenance', expect: 'estimate-and-scope'}, {id: 'c-1', kind: 'change', expect: 'estimate-and-scope'}, {id: 'n-2', kind: 'negative', expect: null}]};
+  const rule = {mode: 'levels', levels: [{id: 'sel', cases: ['m-r1', 'c-1'], metric: 'reach', min: 0.8}, {id: 'neg', cases: ['n-2'], metric: 'negativeOk', min: 0.8}]};
+  const row = (id, run) => (id === 'n-2' ? {condition: 'C', case: id, run, kind: 'negative', expect: null, counted: true, overapplication: false, negativeOk: true}
+    : {condition: 'C', case: id, run, kind: spec.cases.find((k) => k.id === id).kind, expect: 'estimate-and-scope', counted: true, reach: true, bodyRead: true, applied: true, markers: true});
+  const runs = ['m-r1', 'c-1', 'n-2'].flatMap((id) => [1, 2, 3].map((n) => row(id, n)));
+  const completion = {basis: 'complete', complete: true, missingPlanned: 0, missingReplacements: []};
+  const conds = {cells: {C: {}}, rule, subsets: {change: {kinds: ['change']}, maint: {kinds: ['maintenance']}}};
+  const r = judgeScored({spec, runs, completion, conds});
+  assert.equal(r.judgement.verdict, 'levels');
+  assert.deepEqual(Object.keys(r.judgement.separate), ['change', 'maint']);
+  for (const x of Object.values(r.judgement.separate)) { assert.deepEqual(Object.keys(x), ['C']); assert.equal(x.C.positives, 3); }
+  const none = judgeScored({spec, runs: runs.filter((x) => x.case !== 'n-2'), completion, conds});
+  assert.equal(none.judgement.verdict, 'not-judged');
+  assert.deepEqual(Object.keys(none.judgement.separate.change), ['C']);
+});
+
+test('#1858 review L4: the published two-condition judgements of #1840 and #1843 are reproduced from their runs.json', () => {
+  for (const dir of [path.join(EVROOT, '1840-user-environment/config'), C1843]) {
+    const rd = (f) => JSON.parse(read(f, dir));
+    const j = rd('results/judge.json');
+    const r = judgeScored({spec: rd('cases.json'), runs: rd('results/runs.json'), completion: j.completion, conds: rd('conditions.json')});
+    assert.ok(Object.keys(rd('conditions.json').subsets ?? {}).length > 0, `${dir}: has subsets`);
+    assert.deepEqual(r.sums, j.conditions, dir);
+    assert.deepEqual(r.judgement, j.judgement, dir);
+  }
 });

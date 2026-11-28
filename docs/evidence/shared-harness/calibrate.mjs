@@ -29,7 +29,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {REPO_ROOT, configDir, loadSpec, readCfg} from './config.mjs';
-import {markersOk, markerGroupsOf, markerDeductionsOf, writeChecks, groupOk, baseLinesOf, markerTextOf} from './score.mjs';
+import {markersOk, markerGroupsOf, markerDeductionsOf, writeChecks, groupOk, baseLinesOf, markerTextOf, entryMatches} from './score.mjs';
 
 const show = (commit, p) => {
   if (!commit) return fs.readFileSync(path.join(REPO_ROOT, p), 'utf8');
@@ -126,11 +126,12 @@ export function earlierFromScores(k, scores) {
 
 const isSkill = (c) => /^skill|^version/.test(String(c));
 
-// Template lines (of every base) a marker group or a writes entry matches, per base.
+// Template lines (of every base) a marker group or a writes entry matches, per base. #1858 review L3: a writes entry with
+// sentenceWith / sentenceUnless is matched sentence by sentence in the line (entryMatches), as in the scoring.
 export function templateHits(k, bases) {
   const lines = Object.fromEntries(Object.entries(bases).map(([id, b]) => [id, baseFiles(b).flatMap((f) => f.text.split('\n'))]));
   const entries = [...(k.answerQuota?.groups ?? []).map((g) => ({id: g.id, test: (l) => groupOk({...g, unless: null}, l)})),
-    ...(k.writes ? [...(k.writes.require ?? []), ...(k.writes.forbid ?? [])].map((e) => ({id: e.id, test: (l) => new RegExp(e.pattern, 'i').test(l)})) : [])];
+    ...(k.writes ? [...(k.writes.require ?? []), ...(k.writes.forbid ?? [])].map((e) => ({id: e.id, test: (l) => entryMatches(e, l)})) : [])];
   return Object.fromEntries(entries.map((e) => [e.id, Object.fromEntries(Object.entries(lines).map(([b, ls]) => [b, ls.filter(e.test).length]))]));
 }
 
