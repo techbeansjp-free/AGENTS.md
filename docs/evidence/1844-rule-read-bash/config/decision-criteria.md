@@ -6,7 +6,7 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| 条件 | R（リリース版：測定の時点で最新のGitHub Release。2026-11-28はv0.5.123、対象commit `328a19f4`。固定の前に`gh release list`で確かめる）だけ。#1840と同じく`project-assets --register-claude-skill --apply`で導入し、読む契機`claude-md`を採用する |
+| 条件 | R（リリース版：測定の時点で最新のGitHub Release。固定の直前（2026-11-28）はv0.5.128、対象commit `05a53891`。以前の指定のv0.5.123から更新した）だけ。#1840と同じく`project-assets --register-claude-skill --apply`で導入し、読む契機`claude-md`を採用する |
 | 環境 | 水準X：#1840の水準W（Read・Write・Edit・Glob・Grep・Skill、`acceptEdits`）にBashを足したもの。BashはClaude Codeのsandboxの中だけで動く（`allowUnsandboxedCommands: false`）。配置は共通の仕組みの`confined`（下の「隔離」） |
 | fixtureと依頼 | #1840のfixture Uをそのまま使う。依頼は#1840のu-bill-1・u-bill-2・u-users・u-docs・u-negの5件で、依頼文は1文字も変えない |
 | 回数 | 各3回、計15試行と、probe 1回（不合格なら規則で許される1回だけやり直す） |
@@ -61,7 +61,7 @@ Issueは合否の水準を定めていない。下の`min`は、#1840の水準�
 | 差分が規則に違反しない（書いた試行。`scope`なし） | 4/6 | 5/6 |
 | 該当しない依頼で読まない（u-users・u-docs・u-neg） | 9/9 | 9/9 |
 
-- #1840のRとこの測定のRは版が違う（v0.5.119とv0.5.123）。差はBashの有無だけではない。
+- #1840のRとこの測定のRは版が違う（v0.5.119とv0.5.128）。差はBashの有無だけではない。
 - #1840の差分の違反は、#1845でコメントの中の小数と分かったものを含む（`scope: "code"`なら数えない）。この測定は`scope: "code"`で数えるので、規則の遵守の値は#1840の値と同じ規則では比べられない。
 
 ## 完了と費用の線

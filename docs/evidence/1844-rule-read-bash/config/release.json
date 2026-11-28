@@ -3,11 +3,11 @@
  "note": "The tarball each condition installs (conditions.json cells[c].release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition.",
  "R": {
   "kind": "release",
-  "tag": "v0.5.123",
-  "targetCommit": "328a19f4ffe457a838544e81b2de848ff0af0bd0",
-  "asset": "agent-skill-chain-0.5.123.tgz",
-  "assetSha256": "c910e6b591d79dd19d170cf146f359b70d9c8455ab51b8bf7d0cf0f8ebcbebfd",
-  "verified": "2026-11-28: gh release list shows v0.5.123 as Latest (2026-11-28T01:25:07Z); gh release download v0.5.123; the sha256 equals the asset digest of the release, its SHA256SUMS and the Package SHA256 of the release notes; source-commit.txt names 328a19f4.",
-  "note": "リリース版＝測定の時点で最新のGitHub Release（進行役の指定、2026-11-28。以前の指定はv0.5.121）。測定の前に`gh release list`で最新がv0.5.123のままか確かめ、新しい版が出ていれば固定の前にこのfileを更新する。<scratch>/rel1844-123/にSHA256SUMS・source-commit.txtとともに置く。"
+  "tag": "v0.5.128",
+  "targetCommit": "05a5389187818b93aef6b5fbf1116928afbc4ec4",
+  "asset": "agent-skill-chain-0.5.128.tgz",
+  "assetSha256": "2fd9dcef88d997eb236a4b34a54babb9da3ccabcabd8629a0ba4624f3f74b922",
+  "verified": "2026-11-28: gh release list shows v0.5.128 as Latest (2026-11-28T02:57:03Z); gh release download v0.5.128; the sha256 equals the asset digest of the release, its SHA256SUMS and the Package SHA256 of the release notes; source-commit.txt names 05a53891.",
+  "note": "リリース版＝測定の時点で最新のGitHub Release（進行役の指定、2026-11-28。以前の指定はv0.5.121、v0.5.123）。固定の直前の`gh release list`でv0.5.128がLatestだったので、v0.5.123から更新した。<scratch>/rel1844-128/にSHA256SUMS・source-commit.txtとともに置く。"
  }
 }

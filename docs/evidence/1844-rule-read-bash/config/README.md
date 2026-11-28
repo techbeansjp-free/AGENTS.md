@@ -10,7 +10,7 @@
 
 ## 条件と環境
 
-- R：測定の時点で最新のGitHub Releaseのtarball（進行役の指定）。2026-11-28の`gh release list`ではv0.5.123（Latest、2026-11-28T01:25:07Z、対象commit `328a19f4`）。[release.json](release.json)のsha256 `c910e6b5…ebfd`は、releaseのassetのdigest、`SHA256SUMS`、release notesのPackage SHA256と一致する。配布されるSkillはv0.5.121と同じ17件（tarballの`v05/optional-skills/model-deliberation`は配布されない）。**固定の前に`gh release list`で最新を確かめ、より新しい版があればrelease.jsonと`conditions.json`を更新してからdry runをやり直す。**以前の版（v0.5.121）での確認は、この版の確認に読み替えない。
+- R：測定の時点で最新のGitHub Releaseのtarball（進行役の指定）。固定の直前（2026-11-28）の`gh release list`ではv0.5.128（Latest、2026-11-28T02:57:03Z、対象commit `05a53891`）。[release.json](release.json)のsha256 `2fd9dcef…b922`は、releaseのassetのdigest、`SHA256SUMS`、release notesのPackage SHA256と一致する。配布されるSkillはv0.5.121・v0.5.123と同じ17件（tarballの`v05/optional-skills/model-deliberation`は配布されない）。以前の指定のv0.5.123から、固定の前に更新し、dry runをやり直した（下の「dry run」）。モデルを呼ばない確認（sandbox-check）はv0.5.123のfixtureで行ったもので、v0.5.128では取り直していない（同じ配置はprobeで確かめる）。
 - 導入と認証は#1840と同じ：利用者の手順で導入、試行ごとの空のHOMEと設定directory、認証は`CLAUDE_CODE_OAUTH_TOKEN`だけ（ownerのtoken file `~/.config/asc-eval/claude-oauth-token`をenvへ渡す。中身を表示しない）。
 - 水準X：#1840の水準WにBashを足した（`--tools Bash,Read,Write,Edit,Glob,Grep,Skill`、`acceptEdits`）。BashはClaude Codeのsandboxの中だけで動く。
 
@@ -26,7 +26,7 @@
 
 ### モデルを呼ばない確認（2026-11-28）
 
-[sandbox-check.json](sandbox-check.json)（v0.5.123のfixture、2回目のレビューの是正の後に取り直した）：`shared-harness/sandbox-check.mjs`が、probeの試行と同じ配置を作り、`isolationSettings`が書く設定の読取り・書込みの規則を、公開のsandbox runtime（`@anthropic-ai/sandbox-runtime` 0.0.83、Claude Codeが使うものと同じ系統）に渡して、probeのBashの35操作と、追加の14操作を普通のcommandとして実行した。**49件すべてが期待どおり**（成功すべき15件が成功、拒否されるべき33件が拒否、記録だけの1件）で、sentinelのfileも試行の外へ書こうとしたfileも残らなかった。srtには書込みの許可（`work/`と`tmp/`）を明示して渡すので、Claude Code本体が既定で足す許可は再現しない（probeで確かめる）。
+[sandbox-check.json](sandbox-check.json)（v0.5.123のfixture、2回目のレビューの是正の後に取り直した）：`shared-harness/sandbox-check.mjs`が、probeの試行と同じ配置を作り、`isolationSettings`が書く設定の読取り・書込みの規則を、公開のsandbox runtime（`@anthropic-ai/sandbox-runtime` 0.0.83、Claude Codeが使うものと同じ系統）に渡して、probeのBashの35操作と、追加の14操作を普通のcommandとして実行した。**49件すべてが期待どおり**（成功すべき15件が成功、拒否されるべき33件が拒否、記録だけの1件。成功すべき15件は、下の「成功」の11件と、出力の値で判定する4件（keychainの検索2件・`pbpaste`・`ps`。3回目のレビューL2））で、sentinelのfileも試行の外へ書こうとしたfileも残らなかった。srtには書込みの許可（`work/`と`tmp/`）を明示して渡すので、Claude Code本体が既定で足す許可は再現しない（probeで確かめる）。
 
 - 成功：`work/`への書込み、目印へのsymlinkの作成、`cat CLAUDE.md`、`git status`、写したnode（v20.12.2）、ASC CLIの`--help`・`worktree-create`、`TMPDIR`への書込み、worktreeでの`start --path src/billing/invoice.ts`が`money.md`を選ぶこと、worktreeの`money.md`の読込み、worktreeでのcommit。
 - 拒否：目印fileのpath、実HOMEとrepositoryにある既存のfile（`~/.zshrc`、`AGENTS.md`）、runs rootの別の項目、試行の`settings.json`、fixture、台帳、`/private/tmp`・`/tmp/claude-<uid>`・`/private/var/folders`・`/Volumes`、試行のdirectoryとrepositoryへの`touch`、通信（proxyが403）。main checkoutでの`start`は「Use a dedicated Git worktree」で終了code 1、worktreeでの`--path src/users/store.ts`は`money.md`を選ばない。
@@ -38,7 +38,7 @@
 
 ### dry run（2026-11-28）
 
-`dry-run.mjs`（v0.5.123の本物のtarball、sha256 `c910e6b5…ebfd`）：全15項目が合格。fixture Uに17件の入口と`claude-md`の採用、`cases.json`の`needs`、probe 1回（42操作、`--max-turns 50`）と15試行の起動command、`confinedLayout`（`allowRead`なし、`/Users`とfixtureの禁止、dry runの根が禁止の外）。見込み3.86 USD、計画の単価で5.51 USD（2回目のレビューの是正の後に取り直した）。
+`dry-run.mjs`（v0.5.128の本物のtarball、sha256 `2fd9dcef…b922`。v0.5.123でも同じ結果だった）：全15項目が合格。fixture Uに17件の入口と`claude-md`の採用、`cases.json`の`needs`、probe 1回（42操作、`--max-turns 50`）と15試行の起動command、`confinedLayout`（`allowRead`なし、`/Users`とfixtureの禁止、dry runの根が禁止の外）。見込み3.86 USD、計画の単価で5.51 USD（2回目のレビューの是正の後に取り直した）。
 
 ## 依頼
 
@@ -56,11 +56,11 @@ H=docs/evidence/shared-harness
 EV=docs/evidence/1844-rule-read-bash/config
 ROOT=/private/var/tmp/asc-eval-1844
 LEDGER=$ROOT/ledger/ledger-1844.jsonl
-TGZ=<scratch>/rel1844-123/agent-skill-chain-0.5.123.tgz   # gh release download v0.5.123 で取得し、sha256を照合する
+TGZ=<scratch>/rel1844-128/agent-skill-chain-0.5.128.tgz   # gh release download v0.5.128 で取得し、sha256を照合する
 # 1. 固定（台帳を作り、固定の記録をcommitし、最初の固定のcommitをこのREADMEに書いてcommitする）
 node $H/fixation.mjs init $EV/results/fixation.json --ledger $LEDGER --config $EV
 # 2. fixture
-node $H/make-fixture.mjs R U $TGZ c910e6b591d79dd19d170cf146f359b70d9c8455ab51b8bf7d0cf0f8ebcbebfd $ROOT/fixtures/fixture-R-U $ROOT/tmp --config $EV
+node $H/make-fixture.mjs R U $TGZ 2fd9dcef88d997eb236a4b34a54babb9da3ccabcabd8629a0ba4624f3f74b922 $ROOT/fixtures/fixture-R-U $ROOT/tmp --config $EV
 # 3. 隔離の確認（目印fileは確認の後に消す）。harnessはsandboxの外のshellで実行する
 node $H/markers.mjs create <repo-root> --config $EV
 CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/asc-eval/claude-oauth-token)" ASC_EVAL_ALLOW_PAID=1 node $H/run-trial.mjs $ROOT/runs R probe 1 --fixture $ROOT/fixtures/fixture-R-U --ledger $LEDGER --home-marker <home marker> --repo-marker <repo marker> --run --config $EV
@@ -82,7 +82,7 @@ node $H/judge.mjs $EV/results --runs-root $ROOT/runs --ledger $LEDGER --out $EV/
 ## 限界
 
 - sandboxの中のBashは利用者の環境と同じではない：`PATH`は試行の`bin/`とsystemのdirectoryだけで、実HOMEのcommand（nodenv、Homebrewの一部等）と通信は使えない。`npm install`・`npm test`は依存を取れず失敗する。Bashのtoolの説明文にsandboxの注意が加わる。
-- 禁止していないpath（`/etc`、`/opt`等）は読める。`/private/var/tmp`とruns rootの親・祖父の項目は、試行の起動時にあったものを禁止する。起動の後に作られた項目と、深さ3未満のdirectory（`/private/var/tmp`そのもの等）の項目は読める（#1846等を並行して動かすと、後から作られた評価用directoryが読める）。他のsessionの一時file（`/private/tmp`・`/private/var/folders`）は読取りも書込みも禁止した。
+- 禁止していないpath（`/etc`、`/opt`等）は読める。`/private/var/tmp`とruns rootの親・祖父の項目は、試行の起動時にあったものを禁止する。起動の後に作られた項目と、`/private/var/tmp`の一覧そのもの（`ls /private/var/tmp`）は読める（`/private/var/tmp`は深さ3なので、起動時にあった項目は禁止に入る。深さ3未満の`/private/var`等の項目は列挙しない。3回目のレビューL2）（#1846等を並行して動かすと、後から作られた評価用directoryが読める）。他のsessionの一時file（`/private/tmp`・`/private/var/folders`）は読取りも書込みも禁止した。
 - Bashで読んだfileの数え方は、commandの文字列からの推定である（decision-criteria.mdの「数え方」）。偏りの向きは指標で逆なので、2通りに数える（レビューM1）。
   - rule-read（読むべき）は**厳しく**数える（`bashReadPaths`）。数え漏れ（`node -e`で読む、directoryを渡した検索、展開前のglob等）は「読まない」側に偏り、値は実際より低いことがある。中身の出ない読込み（`> /dev/null`、`grep -q`・`-c`・`-l`、無いpath）は数えない（2回目のレビューL-a）。それでも、中身を見せないcommandへのpipe（`cat money.md | wc -l`）と、読むcommandでないcommandへの`<`（`wc -l < money.md`）は「読んだ」に数え、楽観側に寄る。
   - rule-not-read（読まない）は**広く**数える（`forbiddenReads`）。globとdirectoryは試行の`work/`のfile（fixtureのHEAD・変更したfile・`.worktrees/`の各worktree）に展開し、検索（`grep -r`・`rg`・`git grep`・`find -exec`・`xargs`）はその配下をすべて読んだとみなし、`git show <rev>`・`git log -p`等の中身の分からない出力は「読んだ」とし、commandの文字列が`project/rules`・`rules/money`・`money.md`を含めば（`cd`・`cp`・`node -e`等）読んだとする。誤りは「読んだ」側（不合格の側）に偏る。厳しく数えた値は`forbiddenReadsStrict`に並べて示す。広すぎて落ちる例（自分のcommitの後の`git show`・`git log -p -1`は`money.md`を含まなくても「読んだ」）があるので、judge.jsonの`forbidReadsOk`の水準に`breakdown`（strictで合格した数、中身の分からない出力だけで落ちた数、`bashMention`だけで落ちた数）を並べる（2回目のレビューL-b）。
@@ -91,5 +91,5 @@ node $H/judge.mjs $EV/results --runs-root $ROOT/runs --ledger $LEDGER --out $EV/
 - `start`の実行は、結果の本文に`start`のJSONの出力（`"schema": "asc-worktree/v1"`等）がある場合だけ数える（レビューH1）。pipelineの`| head`、`; echo`、`|| true`で終了codeが0でも、main checkoutで止まった`start`は数えない。出力をfileへ流して別に読んだ場合や`| grep -c`で数だけ見た場合も数えない（「実行しない」側に偏る）。`report.commands`の`attempted`・`exitOk`で別に示す。
 - 水準の`min`は仮置き（`conditions.json`の`rule.minProvisional`）。judge.jsonの各条件に`minProvisional`と`verdictBasis`が付き、`meets-levels`／`below-levels`は仮の水準による（レビューL3）。
 - 認証情報の漏れの検査（`credentialLeakOf`）は、試行のdirectoryの中の64MB未満のfileと、`work/`のrepositoryのgitのobjectだけを見る。64MB以上のfileと、`work/`の中に作られた別のrepository（入れ子の`.git`）の圧縮されたobjectは見ない（2回目のレビューL-e）。試行の外への書込みはsandboxで禁じ、probeで確かめる（M-a）。
-- fileを経ない経路のprobe（M-c）は、その時点の状態に依る：clipboardが空なら`pbpaste | wc -c`は0で、sandboxが止めなくても合格する（`sandbox-check`のbaselineではsandboxなしで754だった）。keychainは`Claude Code-credentials`の項目だけを探し、ほかの項目やsecurityd以外のMach serviceは試していない。processの一覧は`ps`だけを試す（`sysctl`等の別の経路は試していない）。
+- fileを経ない経路のprobe（M-c）は、その時点の状態に依る：clipboardが空なら`pbpaste | wc -c`は0で、sandboxが止めなくても合格する（`sandbox-check`のbaselineではsandboxなしで754だった）。keychainも同じで、probeにはsandboxなしの比較の値が無い：`keychainDefault`はsandboxなしでも44（試行のHOMEの既定の検索先に項目が無い）なのでsandboxの効きを見分けず、`keychainLogin`はprobeの時点で実keychainに項目が無ければ、sandboxが効いていなくても合格する（3回目のレビューL1。比較の値は`sandbox-check`のbaselineだけにある）。keychainは`Claude Code-credentials`の項目だけを探し、ほかの項目やsecurityd以外のMach serviceは試していない。processの一覧は`ps`だけを試す（`sysctl`等の別の経路は試していない）。
 - 各依頼3回。数試行の差は偶然の範囲を出ない。

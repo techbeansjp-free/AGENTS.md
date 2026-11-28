@@ -3,7 +3,7 @@
  "issue": "1844",
  "stage": "rule read with Bash",
  "markerTag": "1844",
- "note": "Fixed before any model run (decision-criteria.md). #1844: does a project rule the user registered in .agent-skill-chain/project/context.json get read where it applies, in a user environment with Bash (the ASC CLI start can run)? ASC is installed the way it reaches a user (the GitHub Release tarball latest at measurement time, v0.5.123, project-assets --register-claude-skill --apply in a dedicated worktree, the read trigger claude-md adopted, as #1840), on fixture U of #1840 unchanged, with the #1840 cases u-bill-1, u-bill-2, u-users, u-docs and u-neg. One condition (R); #1840's no-Bash release results are the published lower bound shown beside it (decision-criteria.md). Tools level X: level W plus Bash, Bash only inside the Claude Code sandbox with the confined layout of the shared harness (run-trial.mjs confinedSettings: no allowRead, no denied ancestor of work/).",
+ "note": "Fixed before any model run (decision-criteria.md). #1844: does a project rule the user registered in .agent-skill-chain/project/context.json get read where it applies, in a user environment with Bash (the ASC CLI start can run)? ASC is installed the way it reaches a user (the GitHub Release tarball latest at measurement time, v0.5.128, project-assets --register-claude-skill --apply in a dedicated worktree, the read trigger claude-md adopted, as #1840), on fixture U of #1840 unchanged, with the #1840 cases u-bill-1, u-bill-2, u-users, u-docs and u-neg. One condition (R); #1840's no-Bash release results are the published lower bound shown beside it (decision-criteria.md). Tools level X: level W plus Bash, Bash only inside the Claude Code sandbox with the confined layout of the shared harness (run-trial.mjs confinedSettings: no allowRead, no denied ancestor of work/).",
  "model": "sonnet",
  "modelNote": "Same alias as #1814-#1840. The resolved model id (init event) is recorded per trial.",
  "runs": 3,
@@ -27,7 +27,7 @@
   "warranty-scope",
   "work-coordination"
  ],
- "ascSkillsNote": "The 17 Skills the v0.5.123 tarball distributes (the install record of the dry run, 2026-11-28: the same 17 as v0.5.121; the tarball also holds v05/optional-skills/model-deliberation, which is optional and not distributed).",
+ "ascSkillsNote": "The 17 Skills the v0.5.128 tarball distributes (the install record of the dry run, 2026-11-28: the same 17 as v0.5.121 and v0.5.123; the tarball also holds v05/optional-skills/model-deliberation, which is optional and not distributed).",
  "maxTurnsByKind": {
   "app": null
  },
@@ -100,7 +100,7 @@
  "settingsNote": "Every trial gets the --settings file of its level (run-trial.mjs isolationSettings; level X: confinedSettings).",
  "conditions": {
   "R": {
-   "label": "リリース版（測定の時点で最新のGitHub Release v0.5.123を導入）",
+   "label": "リリース版（測定の時点で最新のGitHub Release v0.5.128を導入）",
    "release": "R"
   }
  },
