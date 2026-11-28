@@ -16,7 +16,8 @@ const hostEntry=/^(\.agents|\.claude)\/skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL
 // canonical/runtime assets. Retired owned Host entries are removed. The bound rises by the 8 assets #1828 adds
 // (from 305, the v0.5.64-v0.5.66 value), keeping the 8-preimage reserve it had, so a record that also keeps the
 // retired src/repository-facts.mjs stays valid (#1727).
-const maxAssets=313;
+// #1867 candidate (evaluation only, reverted after packing): design-creation adds 8 assets.
+const maxAssets=321;
 const defaultPackage=fileURLToPath(new URL('..',import.meta.url));
 // Exact retired distribution paths, maintained by trusted package releases.
 // src/repository-facts.mjs was distributed by v0.5.64-v0.5.66 and removed by #1727.

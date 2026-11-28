@@ -10,6 +10,7 @@
 | 見積・納期・保守範囲・継続費用と管理責任を判断する | [estimate-and-scope](estimate-and-scope/SKILL.md) | 契約と調査に基づく見積・回答案。過去案件の商慣行を一律に適用しない |
 | 依頼・議事録・チケットの未決事項と判断者を整理する、進めてよいか・誰が決めるかを確かめる | [decision-ownership](decision-ownership/SKILL.md) | 判断者・先出しのリスク・仮置き案を示し、判断は判断者に残す。設計案の比較や見積そのものには使わない |
 | 受託開発で、保証範囲・検収基準・瑕疵対応の条件を顧客と合意する前に揃える | [warranty-scope](warranty-scope/SKILL.md) | 保証範囲の案・未決事項と判断者・説明文の案を仕様書の品質保証範囲に沿って作る。合意後に来た依頼の判定、契約書の条文、法的判断、受託以外の案件には使わない |
+| デザインの無い新規のWebページ・LP・管理画面の見た目と構成を作る | [design-creation](design-creation/SKILL.md) | 利用者の像を根拠と仮説に分けて作り、デザインの判断をそれに結び付ける。既存画面の小さな修正や、配色・文言だけの調整には使わない |
 | CIが重い、CIの費用（GitHub Actionsの課金額等）が増える、runnerの種類（hosted・外部サービス・self-hosted）を選ぶ、重複検査・並列化・結果再利用を見直す、CIのテスト構成（仕事量の削減・影響範囲での絞り込み・shard・後段への移設）を設計する | [verification-optimization](verification-optimization/SKILL.md) | 保証を維持した同等性確認と計測。単なるテスト実行や、契約上の費用負担の判断（estimate-and-scope）とは分ける |
 | 言語・DB・基盤を段階移行・置換する、併存や移行完了を点検する | [migration-assurance](migration-assurance/SKILL.md) | 受入・データ・構築・運用経路の継承。製品本体だけで完了にしない |
 | 利用者が画面から一連の操作を完了できるか確かめる、デモを見せる | [user-journey-acceptance](user-journey-acceptance/SKILL.md) | 実操作・実接続・保存・失敗回復。見た目の確認だけとは分ける |
