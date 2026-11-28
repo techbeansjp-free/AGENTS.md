@@ -1,8 +1,8 @@
 {
  "schema": "asc-1867-gate-count/v1",
- "note": "#1867の門のうち、記録の中身を数える部分の設定（../../EVAL_PLAN.mdの判定1）。統括がharness/gate-packet.mjsで束を作り、asc host-session claudeで、会話を引き継がない新しいcontextに数えさせる（読取りだけ：host-sessionがRead・Glob・Grepに限り、起動先を束のdirectoryに閉じる）。束は24試行（B・S×4ケース×3回）のout/DESIGN-NOTES.mdだけで、画面は渡さない。条件名・ケース名・試行名を伏せ、乱数のIDと順序にする（seedごと）。記録の本文は変えないので、Sの記録に工程の名前（確認の時点等）やSkill名が出れば、伏せ方は完全ではない。",
+ "note": "#1867の門のうち、記録の中身を数える部分の設定（../../EVAL_PLAN.mdの判定1）。統括がharness/gate-packet.mjsで束を作り、claude -pで、会話を引き継がない新しいcontextに数えさせる（読取りだけ：host-sessionのclaudeと同じ起動の制限で、Read・Glob・Grepに限り、起動先を束のdirectoryに閉じる。host-sessionには予算の指定が無いので、--max-budget-usdを付けて直接起動する。レビューのL-1）。束は24試行（B・S×4ケース×3回）のout/DESIGN-NOTES.mdだけで、画面は渡さない。条件名・ケース名・試行名を伏せ、乱数のIDと順序にする（seedごと）。記録の本文は変えないので、Sの記録に工程の名前（確認の時点等）やSkill名が出れば、伏せ方は完全ではない。",
  "model": "opus",
- "host": "node bin/asc-v05.mjs host-session claude <束のdirectory> --name \"自動: #1867 門の数え <回>\" --model opus --rename-model haiku --prompt-file <束のdirectory>/TASK.md --output-dir <新しいdirectory>",
+ "host": "cd <束のdirectory> && claude -p --model opus --output-format json --restricted --permission-mode dontAsk --tools Read,Glob,Grep --strict-mcp-config --settings '{\"disableAllHooks\":true}' --no-session-persistence --max-budget-usd 1.5 < TASK.md > <新しいdirectory>/answer.json（host-session.mjsのclaudeReviewArgumentsと同じ制限。--session-id・名前・--append-system-promptは付けない）",
  "prompt": "layers/gate-count-prompt.md",
  "input": {
   "records": "<runs>/<試行>/work/out/DESIGN-NOTES.md（24試行。置き換えた試行は置き換えの記録）",
@@ -24,16 +24,18 @@
   "b": "デザインの判断のうち3つ以上に、どの利用者のどの要求・状況から選んだかが書かれている"
  },
  "output": "試行ごとに(a)・(b)の可否と、該当する箇所の引用（gate-count-prompt.mdの形）",
- "combine": "独立に2回数える（別のcontext、別のseed）。試行ごとに、(a)と(b)がそれぞれ2回とも「ある」なら「ある」とする。割れたら「無い」。回答が無い・読めない回は「無い」とする",
+ "combine": "独立に2回数える（別のcontext、別のseed）。試行ごとに、(a)と(b)がそれぞれ2回とも「ある」なら「ある」とする。割れたら「無い」。回答が無い・読めない回、やり直しても答えの無いIDは「無い」とする",
  "gate": "Sの試行が門の内容を満たすのは、(a)と(b)がともに「ある」で、かつ機械の部分（judge.jsonのexpectReads：design-creationのSKILL.mdのRead）を満たすとき。ケースは3回中2回以上で判定できる。判定できるケースが3未満なら全体を未判定。Bの結果は報告だけに使う",
  "retries": {
   "max": 1,
-  "note": "回答が無い・JSONが読めない回だけ、新しいcontextで1回だけやり直す"
+  "required": true,
+  "note": "回答が無い、JSONが読めない、一部のIDに(a)・(b)の真偽が無い（gate-packet.mjs checkが1で終わる）回は、必ず新しいcontextで同じ束を1回だけやり直す（レビューのL-2）。やり直した回答をその回の回答とし、やり直しても欠けたIDは「無い」とする。checkが通った回はやり直さない（gate-packet.mjs combineが確かめる）"
  },
  "budget": {
   "capUsd": 2,
+  "perRoundCapUsd": 1.5,
   "expectUsdPerRound": 0.9,
-  "note": "20 USDの内訳の門の数え。見込み：記録24件（約30〜50k token）を約25回のReadで読み、cacheの読込み約1.2M・書込み約70k・出力約15k token。Opus 5.5（入力4・出力20・cache読込み0.2 USD/1M token）で1回約0.9 USD、2回で約1.8 USD。host-sessionには予算の指定が無いので、結果のtotal_cost_usdを記録し、生成の台帳と合わせて上限を確かめる（EVAL_PLAN.mdの費用）"
+  "note": "見込み：記録24件（約30〜50k token）を約25回のReadで読み、cacheの読込み約1.2M・書込み約70k・出力約15k token。Opus 5.5（入力4・出力20・cache読込み0.2 USD/1M token）で1回約0.9 USD、2回で約1.8 USD（capUsdは見込みの割当て）。各回（やり直しを含む）は--max-budget-usd 1.5で起動し、超えたらclaudeが止める（止まった回は回答が無ければやり直しの対象）。claudeが上限をどの時点で確かめるかは確かめていない（未確認）ので、1回が1.5 USDを少し超えることはあり得る。費用は回答のtotal_cost_usdで数え、無ければ1.5 USDで数える。やり直しを含めて最大4回、最大約6 USD。門の数えの実費は層2の上限の式（eval.jsonのdecision.budget）に入るので、超えた分は層2の上限が減る"
  },
  "commit": "数えた結果（IDごとの可否と引用）は、ownerの回答と層2の結果を開く前にcommitする。IDと試行の対応表（key）は、ownerの回答の記録をcommitした後に開く"
 }

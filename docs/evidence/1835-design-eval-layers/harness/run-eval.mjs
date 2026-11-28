@@ -9,7 +9,9 @@
 //        [--prior-ledger <ledger.jsonl>] [--skip-out <file>]       (budget projection and the reduction of plan 5.2)
 // A paid run (no --dry-run) is refused unless ASC1835_ALLOW_PAID=1. --dry-run never starts a model: it builds the same
 // command lines, writes outputs in the CLI's format with a fixed fake answer, and goes through parsing, the ledger and the
-// budget stop. --cap-usd is accepted only with --dry-run (the paid cap is config budget.capUsd).
+// budget stop. --cap-usd is accepted only with --dry-run (the paid cap is config budget.capUsd), except with config
+// budget.capFromArg (#1867: the paid cap is a formula of the costs before layer 2): a paid --cap-usd above 0 and at most
+// budget.capUsd is then the cap of the run.
 // Records: <runs>/<evaluator>/round<r>/<method>/<call>/{prompt.txt, argv.json, attempt-<n>.stdout, attempt-<n>.stderr, status.json}
 // and <runs>/ledger.jsonl (one line per attempt, header line first). A call with status.json is not run again (resume).
 // Retries: none by default; at most 1 (config retries.max), counted in status.json. Invalid answers are recorded as missing.
@@ -229,7 +231,9 @@ export function runEvaluator(o) {
     dryInvalidEvery = 0, dryTrace = 'all', capUsd = cfg.budget.capUsd, priorLedger = null, spawn = spawnSync, log = () => {}} = o;
   if (!['fable', 'codex'].includes(evaluator)) throw new Error('evaluator must be fable or codex');
   if (!dryRun && process.env.ASC1835_ALLOW_PAID !== '1') throw new Error('paid run refused: set ASC1835_ALLOW_PAID=1 (or use --dry-run)');
-  if (!dryRun && capUsd !== cfg.budget.capUsd) throw new Error('--cap-usd is only for --dry-run');
+  if (!dryRun && capUsd !== cfg.budget.capUsd && !(cfg.budget.capFromArg === true && capUsd > 0 && capUsd < cfg.budget.capUsd)) {
+    throw new Error(cfg.budget.capFromArg === true ? `--cap-usd of a paid run must be above 0 and at most ${cfg.budget.capUsd} (budget.capUsd)` : '--cap-usd is only for --dry-run');
+  }
   if (retries > cfg.retries.max || retries < 0) throw new Error(`retries must be 0..${cfg.retries.max}`);
   const ledgerFile = path.join(runs, 'ledger.jsonl');
   fs.mkdirSync(runs, {recursive: true});

@@ -2,17 +2,24 @@
 //   pack:    node harness/gate-packet.mjs pack <runs-root> <out-dir> --seed <s> [--replace <failed>=<replacement>]...
 //            <out-dir>/packet/{TASK.md, index.json, records/<id>.md}: the 24 records (B and S) under random ids in a
 //            random order (seed), nothing else; a missing record is an empty file. <out-dir>/key/key.json maps ids back.
-//            Pass <out-dir>/packet to asc host-session claude as the directory (reads are closed to it).
-//   combine: node harness/gate-packet.mjs combine --round <key.json>=<answer-file> --round <key.json>=<answer-file>
+//            The packet directory is the launch directory of the read-only counting session (gate-count.json host).
+//   check:   node harness/gate-packet.mjs check <packet-dir> <answer-file>
+//            Whether a round's answer must be redone (review L-2): no answer, unreadable JSON, or an id without a/b
+//            booleans -> exit 1 (redo once in a new context). Reads only the packet's ids, never the key.
+//   combine: node harness/gate-packet.mjs combine --round <key.json>=<answer>[+<redo>] --round <key.json>=<answer>[+<redo>]
 //            --runs-json <results/runs.json> --out <gate.json>
-//            A record has (a) / (b) when both rounds say true; split, missing or unreadable -> false. An S trial passes the
-//            gate when (a), (b) and the machine part (runs.json expectReadsAll: the design-creation SKILL.md read) hold;
-//            a case is judgeable with 2 of 3; the gate is "未判定" with fewer than 3 judgeable cases of 4.
+//            The redo of a round is given exactly when check refused its first answer; the redo is the round's answer
+//            and an id it still leaves out is false. A record has (a) / (b) when both rounds say true; split, missing or
+//            unreadable -> false. An S trial passes the gate when (a), (b) and the machine part (runs.json expectReadsAll:
+//            the design-creation SKILL.md read) hold; a case is judgeable with 2 of 3; the gate is "未判定" with fewer
+//            than 3 judgeable cases of 4. The trials of the keys must be the counted rows of runs.json (review L-3).
+//            costUsd: the total_cost_usd of every answer file (an answer is the claude -p --output-format json output,
+//            or a plain text answer, whose cost is unknown).
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {makeRng, shuffle, idAllocator, extractJson, readJson, writeJson} from '../../1835-design-eval-layers/harness/eval-common.mjs';
-import {countedTrials, parseReplacements, argList, workOf, RECORD, CASES} from './trials.mjs';
+import {countedTrials, parseReplacements, argList, workOf, RECORD, CASES, checkCounted} from './trials.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const PROMPT = path.resolve(here, '../config/layers/gate-count-prompt.md');
@@ -40,19 +47,53 @@ export function pack({runs, out, seed, replacements = {}}) {
   return key;
 }
 
-// One round's answers by trial run name: {run: {a, b}} (false where the answer is missing or not a boolean).
-export function roundAnswers(key, text) {
-  const j = extractJson(text);
-  const rec = j && typeof j.records === 'object' && j.records ? j.records : {};
-  return Object.fromEntries(Object.entries(key.records).map(([id, k]) => [k.run, {a: rec[id]?.a === true, b: rec[id]?.b === true, answered: id in rec}]));
+// An answer file: the output of claude -p --output-format json ({type: 'result', result, total_cost_usd, ...}) or a plain text.
+export function answerOf(raw) {
+  let j = null;
+  try { j = JSON.parse(raw); } catch { /* plain text */ }
+  if (j && typeof j === 'object' && j.type === 'result') return {text: typeof j.result === 'string' ? j.result : '', costUsd: typeof j.total_cost_usd === 'number' ? j.total_cost_usd : null, isError: j.is_error === true, subtype: j.subtype ?? null};
+  return {text: typeof raw === 'string' ? raw : '', costUsd: null, isError: false, subtype: null};
+}
+const recordsOf = (text) => { const j = extractJson(text); return j && typeof j.records === 'object' && j.records && !Array.isArray(j.records) ? j.records : null; };
+const answeredId = (rec, id) => typeof rec?.[id]?.a === 'boolean' && typeof rec?.[id]?.b === 'boolean';
+
+// Review L-2: whether a round's answer must be redone once. ids: the packet's index.json.
+export function answerStatus(ids, raw) {
+  const {text, costUsd, isError, subtype} = answerOf(raw);
+  if (!text.trim()) return {ok: false, reason: 'no-answer', missingIds: ids, costUsd, isError, subtype};
+  const rec = recordsOf(text);
+  if (!rec) return {ok: false, reason: 'unreadable', missingIds: ids, costUsd, isError, subtype};
+  const missingIds = ids.filter((id) => !answeredId(rec, id));
+  return {ok: missingIds.length === 0, reason: missingIds.length ? 'partial' : null, missingIds, costUsd, isError, subtype};
 }
 
+// One round's answers by trial run name: {run: {a, b}} (false where the answer is missing or not a boolean).
+export function roundAnswers(key, raw) {
+  const rec = recordsOf(answerOf(raw).text) ?? {};
+  return Object.fromEntries(Object.entries(key.records).map(([id, k]) => [k.run, {a: rec[id]?.a === true, b: rec[id]?.b === true, answered: answeredId(rec, id)}]));
+}
+
+// rounds: [{key, attempts: [answer, redo?]}] ({key, text} is one attempt).
 export function combine({rounds, runsRows}) {
   if (rounds.length !== 2) throw new Error('combine needs exactly 2 rounds');
   const machine = Object.fromEntries(runsRows.map((r) => [`${r.condition}-${r.case}-${r.run}`, r.expectReadsAll === true]));
   const runsOf = rounds.map(({key}) => Object.values(key.records).map((r) => r.run).sort().join());
   if (runsOf[0] !== runsOf[1]) throw new Error('the two rounds do not hold the same trials');
-  const ans = rounds.map(({key, text}) => roundAnswers(key, text));
+  // review L-3: the trials of the key are the counted rows of runs.json
+  const repl = Object.fromEntries(Object.values(rounds[0].key.records).filter((r) => r.run !== `${r.condition}-${r.case}-${r.slot.split('-r')[1]}`).map((r) => [`${r.condition}-${r.case}-${r.slot.split('-r')[1]}`, r.run]));
+  checkCounted(repl, runsRows);
+  const attemptsInfo = rounds.map(({key, attempts, text}, i) => {
+    const at = attempts ?? [text];
+    if (at.length < 1 || at.length > 2) throw new Error(`round ${i + 1}: one answer and at most one redo`);
+    const first = answerStatus(Object.keys(key.records), at[0]);
+    if (!first.ok && at.length === 1) throw new Error(`round ${i + 1}: the answer must be redone once in a new context (${first.reason}; missing ${first.missingIds.length})`);
+    if (first.ok && at.length === 2) throw new Error(`round ${i + 1}: a redo is only for an answer that check refused`);
+    const last = at.length === 2 ? answerStatus(Object.keys(key.records), at[1]) : first;
+    const costs = at.map((x) => answerOf(x).costUsd);
+    return {raw: at[at.length - 1], redone: at.length === 2, firstReason: first.reason, missingAfterRedo: last.ok ? 0 : last.missingIds.length,
+      costUsd: costs.reduce((s, c) => s + (c ?? 0), 0), costMissing: costs.filter((c) => c === null).length};
+  });
+  const ans = rounds.map(({key}, i) => roundAnswers(key, attemptsInfo[i].raw));
   const trials = Object.values(rounds[0].key.records).map((k) => {
     const a = ans.every((x) => x[k.run].a), b = ans.every((x) => x[k.run].b);
     const m = machine[k.run] ?? false;
@@ -67,7 +108,9 @@ export function combine({rounds, runsRows}) {
   const judgeable = Object.entries(perCase).filter(([, v]) => v.judgeable).map(([c]) => c);
   return {schema: 'asc-1867-gate/v1', rule: 'record (a)/(b): both rounds true; S trial: (a) and (b) and the SKILL.md read; case: 2 of 3; overall: 3 of 4 cases',
     trials, perCase, judgeableCases: judgeable, gate: judgeable.length >= 3 ? 'judged' : '未判定',
-    minOwnerDecidedPairs: Math.ceil((24 * judgeable.length) / 4)};
+    minOwnerDecidedPairs: Math.ceil((24 * judgeable.length) / 4),
+    rounds: attemptsInfo.map(({raw, ...x}) => x), costUsd: Number(attemptsInfo.reduce((s, x) => s + x.costUsd, 0).toFixed(4)),
+    costMissing: attemptsInfo.reduce((s, x) => s + x.costMissing, 0)};
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -76,11 +119,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (a[0] === 'pack') {
       const key = pack({runs: path.resolve(a[1]), out: path.resolve(a[2]), seed: opt('--seed'), replacements: parseReplacements(argList(a, '--replace'))});
       console.log(JSON.stringify({records: Object.keys(key.records).length, missing: Object.values(key.records).filter((r) => r.recordMissing).length}));
+    } else if (a[0] === 'check') {
+      const st = answerStatus(readJson(path.join(path.resolve(a[1]), 'index.json')), fs.readFileSync(path.resolve(a[2]), 'utf8'));
+      console.log(JSON.stringify({ok: st.ok, reason: st.reason, missing: st.missingIds.length, costUsd: st.costUsd, isError: st.isError, subtype: st.subtype}));
+      if (!st.ok) process.exitCode = 1;
     } else if (a[0] === 'combine') {
-      const rounds = argList(a, '--round').map((x) => { const [k, f] = x.split('='); return {key: readJson(path.resolve(k)), text: fs.readFileSync(path.resolve(f), 'utf8')}; });
+      const rounds = argList(a, '--round').map((x) => { const [k, f] = x.split('='); return {key: readJson(path.resolve(k)), attempts: f.split('+').map((g) => fs.readFileSync(path.resolve(g), 'utf8'))}; });
       const res = combine({rounds, runsRows: readJson(path.resolve(opt('--runs-json')))});
       writeJson(path.resolve(opt('--out')), res);
-      console.log(JSON.stringify({gate: res.gate, judgeableCases: res.judgeableCases, perCase: res.perCase}));
-    } else { console.error('usage: gate-packet.mjs pack|combine ...'); process.exit(2); }
+      console.log(JSON.stringify({gate: res.gate, judgeableCases: res.judgeableCases, perCase: res.perCase, costUsd: res.costUsd, rounds: res.rounds}));
+    } else { console.error('usage: gate-packet.mjs pack|check|combine ...'); process.exit(2); }
   } catch (e) { console.error(e.message); process.exit(2); }
 }

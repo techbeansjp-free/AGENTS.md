@@ -1,17 +1,20 @@
 // Layer 3 (EVAL_PLAN.md section 8): one local HTML page on which the owner compares the layer-3 pairs blind (#1835: 9, #1852: 36 with --config).
-// Usage: node harness/owner-page.mjs --render-root <dir> --out <dir> --seed <text> [--config <eval.json>]
+// Usage: node harness/owner-page.mjs --render-root <dir> --out <dir> --seed <text> [--config <eval.json>] [--allow-missing]
 // Output: <out>/owner-page.html (screenshots embedded as data: URIs with metadata chunks removed; a CSP blocks every
 // network request) and <out>/owner-key.json (pair id -> item and which screen is A/B; keep it away from the owner until the
 // choices are recorded). The page shows random pair ids in random order, the brief per case, and for each pair
 // A / B / 同等 / 判断しない. The choices are shown as JSON to copy, and can be downloaded as a file. No condition names and no
 // evaluator judgments are on the page.
+// A missing screenshot stops the page (as before) unless --allow-missing (#1867, review H-1): then a screen with a width
+// missing is shown as 「画面なし」 on its side (both widths), and owner-key.json lists it (missingScreens; per pair, missing:
+// the sides A/B without a screen). The decision rule, not the owner's answer, settles such a pair (#1867 decide.mjs).
 import fs from 'node:fs';
 import path from 'node:path';
 import {EVIDENCE, loadConfig, makeRng, shuffle, idAllocator, stripPng, planItems, shotPath, WIDTHS, writeJson} from './eval-common.mjs';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 
-export function buildOwnerPage({cfg = loadConfig(), renderRoot, out, seed}) {
+export function buildOwnerPage({cfg = loadConfig(), renderRoot, out, seed, allowMissing = false}) {
   if (!seed) throw new Error('--seed is required');
   const items = planItems(cfg).filter((i) => i.layer === 3);
   const rnd = makeRng(seed, 'owner-page'), newId = idAllocator(rnd), newImg = idAllocator(rnd, 8);
@@ -21,17 +24,23 @@ export function buildOwnerPage({cfg = loadConfig(), renderRoot, out, seed}) {
     if (!fs.existsSync(f)) { missing.push(`${s} ${w}`); continue; }
     const k = newImg('i'); images[k] = 'data:image/png;base64,' + stripPng(fs.readFileSync(f)).png.toString('base64'); (imgOf[s] ??= {})[w] = k;
   }
-  if (missing.length) throw new Error('missing screenshots:\n  ' + missing.join('\n  '));
+  if (missing.length && !allowMissing) throw new Error('missing screenshots:\n  ' + missing.join('\n  '));
+  // a screen is shown only with both widths; otherwise it is 「画面なし」 (--allow-missing)
+  const absent = new Set(missing.map((m) => m.split(' ')[0]));
   const key = {schema: 'asc-1835-owner-key/v1', seed, pairs: {}};
+  if (allowMissing) key.missingScreens = [...absent].sort();
   const pairs = shuffle(items, rnd).map((it) => {
     const pid = newId('p'), swap = rnd() < 0.5, [A, B] = swap ? [it.second, it.first] : [it.first, it.second];
     key.pairs[pid] = {item: it.id, first: it.first, A, B};
-    return {pid, case: it.case, A: imgOf[A], B: imgOf[B]};
+    const gone = [['A', A], ['B', B]].filter(([, s]) => absent.has(s)).map(([x]) => x);
+    if (allowMissing && gone.length) key.pairs[pid].missing = gone;
+    return {pid, case: it.case, A: absent.has(A) ? null : imgOf[A], B: absent.has(B) ? null : imgOf[B]};
   });
   const briefs = Object.fromEntries(Object.keys(cfg.cases).map((c) => [c, fs.readFileSync(path.join(EVIDENCE, cfg.cases[c].brief), 'utf8')]));
   // the case is shown only as the brief's own title (its first heading), never as the case id
   const caseNo = Object.fromEntries(shuffle(Object.keys(cfg.cases), rnd).map((c, i) => [c, i + 1]));
-  const side = (p, s) => `<div class="side"><h3>${s}</h3>${WIDTHS.map((w) => `<figure><figcaption>${w === 'narrow' ? '狭幅' : '広幅'}</figcaption><img data-img="${p[s][w]}" alt="${s} ${w === 'narrow' ? '狭幅' : '広幅'}"></figure>`).join('')}</div>`;
+  const side = (p, s) => `<div class="side"><h3>${s}</h3>${p[s] === null ? '<p class="none">画面なし（この画面は作られなかった、または描画できなかった）</p>'
+    : WIDTHS.map((w) => `<figure><figcaption>${w === 'narrow' ? '狭幅' : '広幅'}</figcaption><img data-img="${p[s][w]}" alt="${s} ${w === 'narrow' ? '狭幅' : '広幅'}"></figure>`).join('')}</div>`;
   const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>画面の一対比較</title><style>
@@ -41,7 +50,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 system-ui,sans-
 details{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin:8px 0}pre{white-space:pre-wrap}
 .pair{border:1px solid var(--line);border-radius:8px;padding:12px;margin:24px 0}.sides{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .side figure{margin:0 0 8px}.side img{width:100%;height:auto;border:1px solid var(--line)}.choice{display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;font-size:17px}
-textarea{width:100%;min-height:8em;font:13px monospace}@media (max-width:700px){.sides{grid-template-columns:1fr}}
+textarea{width:100%;min-height:8em;font:13px monospace}${absent.size ? '.none{border:2px dashed var(--line);padding:24px;text-align:center}' : ''}@media (max-width:700px){.sides{grid-template-columns:1fr}}
 </style></head><body><main>
 <h1>画面の一対比較</h1>
 <p>各組で、依頼の利用者・目的に、AとBのどちらが合っているかを選んでください。差が無い・優劣を付けられないときは「同等」、判断できない・したくないときは「判断しない」を選びます。画像は全体のscreenshotで、狭幅と広幅の2枚です。組の順番・ID・A/Bの割当ては無作為です。</p>
@@ -70,7 +79,7 @@ document.getElementById('dl').onclick=()=>{const b=new Blob([JSON.stringify(resu
 if (import.meta.url === `file://${process.argv[1]}`) {
   const a = process.argv.slice(2), opt = (n) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : null; };
   try {
-    const r = buildOwnerPage({cfg: opt('--config') ? loadConfig(path.resolve(opt('--config'))) : loadConfig(), renderRoot: path.resolve(opt('--render-root') ?? ''), out: path.resolve(opt('--out') ?? ''), seed: opt('--seed')});
-    console.log(JSON.stringify({pairs: r.pairs, bytes: r.bytes}));
+    const r = buildOwnerPage({cfg: opt('--config') ? loadConfig(path.resolve(opt('--config'))) : loadConfig(), renderRoot: path.resolve(opt('--render-root') ?? ''), out: path.resolve(opt('--out') ?? ''), seed: opt('--seed'), allowMissing: a.includes('--allow-missing')});
+    console.log(JSON.stringify({pairs: r.pairs, bytes: r.bytes, missingScreens: r.key.missingScreens ?? []}));
   } catch (e) { console.error(e.message); process.exit(2); }
 }

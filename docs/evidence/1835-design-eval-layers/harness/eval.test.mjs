@@ -584,3 +584,44 @@ test('#1867 pPairs: P packets only for the listed layer-3 pairs; an unknown pair
   assert.deepEqual(Object.keys(mergedCases().cases), Object.keys(JSON.parse(fs.readFileSync(path.join(here, '../config/cases.json'), 'utf8')).cases));
   assert.ok(mergedGold().ui02 && !('lp-new' in mergedGold()));
 });
+
+// #1867 review H-1 and M-5: owner-page --allow-missing shows a missing screen as 「画面なし」 and lists it in the key
+// (without the option a missing screenshot still stops the page); a paid --cap-usd only with budget.capFromArg, above 0
+// and at most budget.capUsd.
+test('#1867 owner-page --allow-missing: 「画面なし」 on the side, missingScreens and per-pair sides in the key; refused without it', () => {
+  const l3 = planItems(cfg).filter((i) => i.layer === 3);
+  const gone = l3[0].second;
+  const r = fakeRenderRoot();
+  fs.rmSync(shotPath(cfg, r, gone, 'wide'));
+  assert.throws(() => buildOwnerPage({cfg, renderRoot: r, out: tmp('asc1835-om-'), seed: 'owner-test'}), /missing screenshots/);
+  const dir = tmp('asc1835-om-');
+  const res = buildOwnerPage({cfg, renderRoot: r, out: dir, seed: 'owner-test', allowMissing: true});
+  assert.deepEqual(res.key.missingScreens, [gone]);
+  const withGone = Object.values(res.key.pairs).filter((p) => p.A === gone || p.B === gone);
+  assert.equal(withGone.length, l3.filter((i) => i.first === gone || i.second === gone).length);
+  for (const p of withGone) assert.deepEqual(p.missing, [p.A === gone ? 'A' : 'B']);
+  assert.ok(Object.values(res.key.pairs).filter((p) => p.A !== gone && p.B !== gone).every((p) => !('missing' in p)));
+  const page = fs.readFileSync(path.join(dir, 'owner-page.html'), 'utf8');
+  assert.equal(page.match(/画面なし（/g).length, withGone.length);
+  const full = buildOwnerPage({cfg, renderRoot: render, out: tmp('asc1835-om-'), seed: 'owner-test'});
+  assert.ok(!('missingScreens' in full.key) && Object.values(full.key.pairs).every((p) => !('missing' in p)), 'without the option the key is as before');
+});
+
+test('#1867 run-eval: a paid --cap-usd needs budget.capFromArg and 0 < cap <= budget.capUsd', () => {
+  const prev = process.env.ASC1835_ALLOW_PAID; process.env.ASC1835_ALLOW_PAID = '1';
+  try {
+    let spawned = 0;
+    const spawn = () => { spawned++; return {status: 1, stdout: '', stderr: ''}; };
+    const c = {...cfg, budget: {...cfg.budget, capFromArg: true}};
+    for (const capUsd of [0, -1, cfg.budget.capUsd + 0.5]) assert.throws(() => runEvaluator({cfg: c, packetsRoot: pkRoot, runs: tmp('asc1835-r-'), evaluator: 'fable', dryRun: false, capUsd, spawn}), /above 0 and at most/);
+    assert.throws(() => runEvaluator({cfg, packetsRoot: pkRoot, runs: tmp('asc1835-r-'), evaluator: 'fable', dryRun: false, capUsd: 1, spawn}), /dry-run/, 'without capFromArg as before');
+    assert.equal(spawned, 0);
+    // an accepted cap is the run's cap: the ledger header records it (the spawn is a stub; no model is started)
+    const runs = tmp('asc1835-r-');
+    const pk = readJson(path.join(pkRoot, 'index.json')).find((x) => x.method === 'P' && x.round === 1).packet;
+    runEvaluator({cfg: c, packetsRoot: pkRoot, runs, evaluator: 'fable', dryRun: false, capUsd: 0.5, methods: ['P'], rounds: [1], only: new Set([pk]), spawn});
+    assert.equal(readLedger(path.join(runs, 'ledger.jsonl')).find((l) => l.type === 'header').capUsd, 0.5);
+    const argv = readJson(path.join(runs, 'fable', 'round1', 'P', pk, 'argv.json')).args;
+    assert.equal(argv[argv.indexOf('--max-budget-usd') + 1], '0.5000', 'the call budget is limited by the cap');
+  } finally { if (prev === undefined) delete process.env.ASC1835_ALLOW_PAID; else process.env.ASC1835_ALLOW_PAID = prev; }
+});

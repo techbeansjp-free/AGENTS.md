@@ -3,21 +3,28 @@
 //   <pages>/<case>/<condition>-r<rep>/original/index.html (+ the other files next to the page, except *.md)
 //   <pages>/manifest.json (the #1835 degrade manifest format; a trial whose page is missing is listed in missing)
 // The design record (DESIGN-NOTES.md) is never copied, so the screens the evaluators and the owner see carry no record.
-// Usage: node harness/layer-pages.mjs <runs-root> <pages-dir> [--replace <failed>=<replacement>]...   No model call.
+// With runs.json (results/runs.json of collect.mjs; required on the command line, review L-3): the trials taken must be
+// its counted rows, and a counted trial that failed (no valid trial in its slot) is listed in missing, not shown (H-1).
+// Usage: node harness/layer-pages.mjs <runs-root> <pages-dir> --runs-json <results/runs.json> [--replace <failed>=<replacement>]...
+// No model call.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {countedTrials, parseReplacements, argList, workOf, PAGE} from './trials.mjs';
+import {countedTrials, parseReplacements, argList, workOf, PAGE, checkCounted, failedCounted} from './trials.mjs';
+import {readJson} from '../../1835-design-eval-layers/harness/eval-common.mjs';
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
-export function buildPages({runs, out, replacements = {}}) {
+export function buildPages({runs, out, replacements = {}, runsRows = null}) {
   if (fs.existsSync(path.join(out, 'manifest.json'))) throw new Error(`${out} already holds a manifest; use a new directory`);
+  if (runsRows) checkCounted(replacements, runsRows);
+  const failed = runsRows ? failedCounted(runsRows) : new Set();
   const manifest = {schema: 'asc-1835-degrade-manifest/v1', note: '#1867 layer-pages.mjs: original screens only', variants: [], probeFile: null, pages: [], missing: []};
   for (const t of countedTrials(replacements)) {
     const [dir, html] = PAGE[t.case];
     const src = path.join(workOf(runs, t), dir);
     const file = path.join(src, html);
+    if (failed.has(t.name)) { manifest.missing.push({case: t.case, trial: t.slot, run: t.name, reason: 'failed trial (no valid trial in the slot)'}); continue; }
     if (!fs.existsSync(file)) { manifest.missing.push({case: t.case, trial: t.slot, run: t.name, reason: `${dir}/${html} not found`}); continue; }
     const dest = path.join(out, t.case, t.slot, 'original');
     fs.mkdirSync(dest, {recursive: true});
@@ -35,8 +42,10 @@ export function buildPages({runs, out, replacements = {}}) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const a = process.argv.slice(2);
+  const rj = argList(a, '--runs-json')[0];
   try {
-    const m = buildPages({runs: path.resolve(a[0]), out: path.resolve(a[1]), replacements: parseReplacements(argList(a, '--replace'))});
+    if (!rj) throw new Error('--runs-json <results/runs.json> is required (review L-3)');
+    const m = buildPages({runs: path.resolve(a[0]), out: path.resolve(a[1]), replacements: parseReplacements(argList(a, '--replace')), runsRows: readJson(path.resolve(rj))});
     console.log(JSON.stringify({pages: m.pages.length, missing: m.missing}));
   } catch (e) { console.error(e.message); process.exit(2); }
 }

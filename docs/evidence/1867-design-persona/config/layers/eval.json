@@ -1,6 +1,6 @@
 {
  "schema": "asc-1867-eval/v1",
- "note": "#1867の層2（P）と層3（ownerの盲検の比較）の設定（../../EVAL_PLAN.mdの判定2・3と層2）。#1835の道具（../../../1835-design-eval-layers/harness/）に--configで渡す（#1852のconfig/eval.jsonと同じ形）。画面の名前は<case>/<条件>-r<回>/original（layers/layer1-cases.jsonで描画した元の画面。layer-pages.mjsが並べる）。layer3.pairsはケースごとにSの3回×Bの3回の9組（先がS）で、owner-page.mjsが全36組を出す。pPairsは層2の組（同じ回のSとB、ケースごとに3組）で、make-packets.mjsはこの12組だけPの束を作る（#1867で足したfield）。P・評価者・依頼文の冒頭・出力の上限は#1835・#1852と同じ（prompts）。seedsはmake-packets.mjs・owner-page.mjsに--seedで渡す値。budget.capUsdはFableのPの上限で、計画の費用の内訳（20 USD＝生成の台帳12＋門の数え2＋層2のFable 6）による。CodexはCLIが費用を報告しないので、呼出しの回数で抑える（codexCalls）。",
+ "note": "#1867の層2（P）と層3（ownerの盲検の比較）の設定（../../EVAL_PLAN.mdの判定2・3と層2）。#1835の道具（../../../1835-design-eval-layers/harness/）に--configで渡す（#1852のconfig/eval.jsonと同じ形）。画面の名前は<case>/<条件>-r<回>/original（layers/layer1-cases.jsonで描画した元の画面。layer-pages.mjsが並べる）。layer3.pairsはケースごとにSの3回×Bの3回の9組（先がS）で、owner-page.mjsが全36組を出す。pPairsは層2の組（同じ回のSとB、ケースごとに3組）で、make-packets.mjsはこの12組だけPの束を作る（#1867で足したfield）。P・評価者・依頼文の冒頭・出力の上限は#1835・#1852と同じ（prompts）。seedsはmake-packets.mjs・owner-page.mjsに--seedで渡す値。budget.capUsdはFableのPの上限の最大値で、実際の上限はdecision.budgetの式（20 −（生成の台帳＋門の数えの実費）、最大8 USD）でharness/decide.mjs capが求め、run-eval.mjsに--cap-usdで渡す（capFromArg。レビューのM-5）。CodexはCLIが費用を報告しないので、呼出しの回数で抑える（codexCalls）。decisionは計画の判定4・層2の規則で、harness/decide.mjsが読む（レビューのM-4）。",
  "cases": {
   "ui02-exhibition": {
    "brief": "1804-design-judgment/cases/ui02-exhibition/BRIEF.md",
@@ -264,14 +264,17 @@
   "common-head-codex.txt": "e15cefa2cac51515d6664a3e0397fe798f46cb6a768cdfac561abef467b1d7b4"
  },
  "budget": {
-  "capUsd": 6,
-  "projectionLimitUsd": 6,
-  "evaluator": "fable"
+  "capUsd": 8,
+  "projectionLimitUsd": 8,
+  "evaluator": "fable",
+  "capFromArg": true,
+  "note": "capUsdは上限の最大値。実際の上限は decide.mjs cap の値（min(8, 20 −（生成の台帳＋門の数えの実費）)）を --cap-usd で渡す。6 USD未満なら層2を始めずに未判定"
  },
  "codexCalls": {
   "max": 24,
   "retriesPerCallMax": 1,
-  "note": "12組×2回。再試行は1回まで（retries.max）。Codexの費用は報告されないので、20 USDの内訳に入れず、この回数で抑える"
+  "maxWithRetries": 48,
+  "note": "呼出しは12組×2回＝24回。各呼出しの再試行は1回まで（手順で--retries 1）なので、再試行を含めて最大48回。Codexの費用は報告されないので、20 USDの内訳に入れず、この回数で抑える。どの道具もこの回数を守らせてはいない（記録だけ。run-eval.mjsは束の数だけ呼ぶ）"
  },
  "retries": {
   "default": 0,
@@ -325,6 +328,31 @@
   "excludedFromN": [
    "同等",
    "判断しない"
-  ]
+  ],
+  "budget": {
+   "ownerCapUsd": 20,
+   "layer2MaxUsd": 8,
+   "layer2MinUsd": 6,
+   "rule": "層2の上限＝min(8, 20 −（生成の台帳の実費＋門の数えの実費）)。6 USD（これまでの割当て）未満なら層2を始めずに未判定（結論の0）。門の数えの費用の無い回答は、1回の上限（gate-count.jsonのbudget.perRoundCapUsd）で数える"
+  },
+  "layer1Harm": {
+   "check": "axeNoSeriousCritical",
+   "minCases": 2,
+   "rule": "axeNoSeriousCriticalが不合格の試行（3回中。測れなかった試行・画面の無い試行を含む）がSでBより多いケースが2つ以上なら不採用"
+  },
+  "layer2": {
+   "harmMinConfirmed": 2,
+   "requireOwnerBMoreThanS": true,
+   "rule": "警報：両評価者が2回とも同じ側。確かめられた害：Bへの警報で、ownerもその組でBを選んだ。ケースの害：確かめられた害が3組中2組以上で、かつそのケースの層3の9組でownerがBを選んだ組がSを選んだ組より多い（ownerの決定 2026-11-28）。有効な判断の無い呼出しはSとBの両方で埋め、層2の害の有無が変わるときだけ未判定（レビューのM-2）"
+  },
+  "layer3Harm": {
+   "cases": [
+    "ui03-dashboard",
+    "ui08-existing-ds"
+   ],
+   "minBMinusS": 3,
+   "rule": "業務の画面の各ケースで、ownerがBを選んだ組の数がSを選んだ組の数を3以上上回れば不採用（ownerの決定 2026-11-28）"
+  },
+  "missingScreen": "画面（狭幅・広幅のどちらか）の無い試行：層1は不合格。層2・層3は、組の片方だけに無ければ画面のある側を選んだものとし、両方に無ければ同等とする（ownerの回答・Pの判断は使わない。レビューのH-1）"
  }
 }

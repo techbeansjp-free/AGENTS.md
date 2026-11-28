@@ -5,10 +5,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {buildPages} from './layer-pages.mjs';
-import {pack, combine, roundAnswers} from './gate-packet.mjs';
-import {countedTrials, parseReplacements} from './trials.mjs';
+import {pack, combine, roundAnswers, answerStatus, answerOf} from './gate-packet.mjs';
+import {countedTrials, parseReplacements, checkCounted} from './trials.mjs';
+import {promptProblems, TOOLS, REPO} from './stage-check.mjs';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS} from '../../1835-design-eval-layers/harness/eval-common.mjs';
 import {buildPackets} from '../../1835-design-eval-layers/harness/make-packets.mjs';
 import {buildOwnerPage} from '../../1835-design-eval-layers/harness/owner-page.mjs';
@@ -78,13 +80,15 @@ test('gate combine: both rounds true, else false; the machine part; 2 of 3 per c
   const yes = () => ({a: true, b: true});
   // round 2 splits S-lp-new-1 (b false) and S-lp-new-2 (a false): lp-new has 1/3 -> not judgeable
   const r2 = (r) => ({a: r.run !== 'S-lp-new-2', b: r.run !== 'S-lp-new-1'});
-  const rows = countedTrials().map((x) => ({condition: x.condition, case: x.case, run: x.rep, expectReadsAll: x.condition === 'S' && x.name !== 'S-ui02-exhibition-1'}));
+  const rows = countedTrials().map((x) => ({condition: x.condition, case: x.case, run: x.rep, counted: true, expectReadsAll: x.condition === 'S' && x.name !== 'S-ui02-exhibition-1'}));
   const res = combine({rounds: [{key: k1, text: answer(k1, yes)}, {key: k2, text: answer(k2, r2)}], runsRows: rows});
   assert.deepEqual(res.perCase['lp-new'], {S: '1/3', judgeable: false, B: {a: 3, b: 3, of: 3}});
   assert.equal(res.perCase['ui02-exhibition'].S, '2/3', 'machine part fails in S-ui02-exhibition-1');
   assert.deepEqual([res.judgeableCases, res.gate, res.minOwnerDecidedPairs], [['ui02-exhibition', 'ui03-dashboard', 'ui08-existing-ds'], 'judged', 18]);
-  const unread = combine({rounds: [{key: k1, text: 'no json'}, {key: k2, text: answer(k2, yes)}], runsRows: rows});
-  assert.deepEqual([unread.gate, unread.judgeableCases], ['未判定', []]);
+  // review L-2: an unreadable answer must be redone once; after the redo, ids still unanswered are false
+  assert.throws(() => combine({rounds: [{key: k1, text: 'no json'}, {key: k2, text: answer(k2, yes)}], runsRows: rows}), /redone once/);
+  const unread = combine({rounds: [{key: k1, attempts: ['no json', 'still no json']}, {key: k2, text: answer(k2, yes)}], runsRows: rows});
+  assert.deepEqual([unread.gate, unread.judgeableCases, unread.rounds[0].redone, unread.rounds[0].firstReason], ['未判定', [], true, 'unreadable']);
   assert.ok(Object.values(roundAnswers(k1, answer(k1, () => ({a: 'yes', b: 1})))).every((x) => !x.a && !x.b), 'only true counts');
   assert.throws(() => combine({rounds: [{key: k1, text: ''}], runsRows: rows}));
 });
@@ -136,4 +140,66 @@ test('layer 1 settings: lp-new beside the three #1835 cases; gold merged with #1
   const dup = path.join(tmp(t), 'dup.json');
   fs.writeFileSync(dup, JSON.stringify({ui02: {required: []}}));
   assert.throws(() => mergedGold(dup), /already in #1804/);
+});
+
+// ---- review L-2, L-3, H-1, L-5, M-3 ----
+test('gate check (L-2): no answer, unreadable or partial must be redone; the claude -p JSON output is read with its cost', (t) => {
+  const runs = tmp(t);
+  fakeRuns(runs);
+  const k = pack({runs, out: tmp(t), seed: '1'});
+  const ids = Object.keys(k.records);
+  const full = {records: Object.fromEntries(ids.map((id) => [id, {a: true, b: false}]))};
+  const claudeOut = (result, cost = 0.8) => JSON.stringify({type: 'result', subtype: 'success', is_error: false, result, total_cost_usd: cost});
+  assert.deepEqual(answerStatus(ids, claudeOut('```json\n' + JSON.stringify(full) + '\n```')), {ok: true, reason: null, missingIds: [], costUsd: 0.8, isError: false, subtype: 'success'});
+  assert.equal(answerStatus(ids, '').reason, 'no-answer');
+  assert.equal(answerStatus(ids, JSON.stringify({type: 'result', subtype: 'error_max_budget_usd', is_error: true, total_cost_usd: 1.52})).reason, 'no-answer');
+  assert.equal(answerStatus(ids, claudeOut('I could not finish.')).reason, 'unreadable');
+  const part = {records: {...full.records}}; delete part.records[ids[0]]; part.records[ids[1]] = {a: 'yes', b: true};
+  const st = answerStatus(ids, JSON.stringify(part));
+  assert.deepEqual([st.ok, st.reason, st.missingIds], [false, 'partial', [ids[0], ids[1]]]);
+  assert.equal(answerOf('plain').costUsd, null);
+  // combine: a redo only after a refused answer; the costs of every attempt are summed
+  const rows = countedTrials().map((x) => ({condition: x.condition, case: x.case, run: x.rep, counted: true, expectReadsAll: true}));
+  const k2 = pack({runs, out: tmp(t), seed: '2'});
+  const ok2 = claudeOut('```json\n' + JSON.stringify({records: Object.fromEntries(Object.keys(k2.records).map((id) => [id, {a: true, b: true}]))}) + '\n```', 0.9);
+  assert.throws(() => combine({rounds: [{key: k, attempts: [claudeOut(JSON.stringify(full)), claudeOut(JSON.stringify(full))]}, {key: k2, text: ok2}], runsRows: rows}), /only for an answer that check refused/);
+  const r = combine({rounds: [{key: k, attempts: [JSON.stringify({type: 'result', is_error: true, total_cost_usd: 1.5}), claudeOut(JSON.stringify(part), 0.7)]}, {key: k2, text: ok2}], runsRows: rows});
+  assert.deepEqual([r.costUsd, r.costMissing, r.rounds[0].missingAfterRedo], [3.1, 0, 2]);
+  assert.equal(r.trials.find((x) => x.run === k.records[ids[1]].run).aRounds[0], false, 'an id without a boolean after the redo is false');
+});
+
+test('L-3: the trials taken must be the counted rows of runs.json (combine and buildPages); a failed counted trial has no page (H-1)', (t) => {
+  const runs = tmp(t);
+  fakeRuns(runs);
+  const repl = parseReplacements(['S-lp-new-2=S-lp-new-4']);
+  const rows = [...countedTrials().map((x) => ({condition: x.condition, case: x.case, run: x.rep, counted: !(x.name === 'S-lp-new-2'), failure: x.name === 'S-lp-new-2' ? 'no result event' : undefined})),
+    {condition: 'S', case: 'lp-new', run: 4, counted: true, replaces: 2}, {condition: 'B', case: 'probe', run: 1}];
+  assert.ok(checkCounted(repl, rows));
+  assert.throws(() => checkCounted({}, rows), /counted in runs.json but not taken: S-lp-new-4; taken but not counted in runs.json: S-lp-new-2/);
+  assert.throws(() => checkCounted(parseReplacements(['S-lp-new-1=S-lp-new-4']), rows), /replaces 2/);
+  assert.throws(() => buildPages({runs, out: path.join(tmp(t), 'p'), runsRows: rows}), /does not match/);
+  const k1 = pack({runs, out: tmp(t), seed: '1'}), k2 = pack({runs, out: tmp(t), seed: '2'});
+  assert.throws(() => combine({rounds: [{key: k1, text: '{"records":{}}'}, {key: k2, text: '{"records":{}}'}], runsRows: rows}), /does not match/, 'a key without the replacement');
+  // the replacement failed too: the slot is counted as a failure and its page is missing
+  const failedSub = rows.map((r) => (r.case === 'lp-new' && r.run === 4 ? {...r, failure: 'no assistant message'} : r));
+  const m = buildPages({runs, out: path.join(tmp(t), 'p2'), replacements: repl, runsRows: failedSub});
+  assert.deepEqual(m.missing.map((x) => [x.trial, x.run, x.reason]), [['S-r2', 'S-lp-new-4', 'failed trial (no valid trial in the slot)']]);
+  assert.equal(m.pages.length, 23);
+});
+
+test('L-5: the lp-new brief for the evaluators and the owner is BRIEF.md and inquiries.md joined', () => {
+  const read = (f) => fs.readFileSync(path.resolve(here, f), 'utf8');
+  const sep = '\n---\n\n（以下は、依頼のフォルダにある資料 `inquiries.md` の全文。評価で依頼文と一緒に見せるために、ここに写した。）\n\n';
+  assert.equal(read('../config/layers/lp-new-brief-for-evaluation.md'), read('../cases/lp-new/BRIEF.md') + sep + read('../cases/lp-new/inquiries.md'));
+  const fx = JSON.parse(read('../config/conditions.json')).fixtures.LP.files;
+  const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(path.resolve(here, f))).digest('hex');
+  assert.deepEqual([fx['BRIEF.md'].sha256, fx['inquiries.md'].sha256], [sha('../cases/lp-new/BRIEF.md'), sha('../cases/lp-new/inquiries.md')], 'conditions.json pins the case files');
+});
+
+test('M-3 stage-check: the #1835 prompts against eval.json; the tools named exist', (t) => {
+  assert.deepEqual(promptProblems(cfg.prompts, path.resolve(here, '../../1835-design-eval-layers/prompts')), []);
+  const d = tmp(t);
+  fs.writeFileSync(path.join(d, 'P.txt'), 'changed');
+  assert.deepEqual(promptProblems({note: 'x', 'P.txt': cfg.prompts['P.txt'], 'gone.txt': 'a'}, d).map((x) => x.split(':')[0]), ['P.txt', 'gone.txt']);
+  for (const p of TOOLS) assert.ok(fs.existsSync(path.join(REPO, p)), p);
 });

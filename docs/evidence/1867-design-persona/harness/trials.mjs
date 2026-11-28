@@ -35,3 +35,26 @@ export function countedTrials(replacements = {}) {
 export const argList = (argv, flag) => argv.flatMap((x, i) => (x === flag ? [argv[i + 1]] : []));
 export const workOf = (runs, t) => path.join(runs, t.name, 'work');
 export const exists = (f) => fs.existsSync(f);
+
+// #1867 review L-3: the trials taken (countedTrials with the given --replace) must be the shared harness's counted rows of
+// results/runs.json (counted: true; a replacement's replaces = the failed rep). Throws on any difference.
+export function checkCounted(replacements, runsRows) {
+  const rows = runsRows.filter((r) => CONDITIONS.includes(r.condition) && CASES.includes(r.case));
+  const name = (r) => `${r.condition}-${r.case}-${r.run}`;
+  const want = countedTrials(replacements).map((t) => t.name).sort();
+  const have = rows.filter((r) => r.counted === true).map(name).sort();
+  const problems = [];
+  const extra = have.filter((n) => !want.includes(n)), lack = want.filter((n) => !have.includes(n));
+  if (extra.length) problems.push(`counted in runs.json but not taken: ${extra.join(', ')}`);
+  if (lack.length) problems.push(`taken but not counted in runs.json: ${lack.join(', ')}`);
+  for (const [slot, sub] of Object.entries(replacements)) {
+    const r = rows.find((x) => name(x) === sub);
+    const rep = Number(slot.split('-').pop());
+    if (r && r.replaces !== rep) problems.push(`${sub} replaces ${r.replaces ?? 'nothing'} in runs.json, not ${rep}`);
+  }
+  if (problems.length) throw new Error(`--replace does not match results/runs.json: ${problems.join('; ')}`);
+  return true;
+}
+
+// The counted trials that failed (no valid trial in their slot: a failed replacement, or a failed trial left without one).
+export const failedCounted = (runsRows) => new Set(runsRows.filter((r) => r.counted === true && r.failure).map((r) => `${r.condition}-${r.case}-${r.run}`));
