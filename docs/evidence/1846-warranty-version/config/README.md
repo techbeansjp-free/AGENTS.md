@@ -122,3 +122,8 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1846/runs --ledger $LEDGE
 - ownerの目印fileの承認：[#1846のcomment](https://github.com/techbeansjp-free/AGENTS.md/issues/1846#issuecomment-7231490199)（`results/probe-approval.json`）。
 - `results/fixation.json`の最初の記録のcommitは`3e358c132de2a5b60af9354affc7c4fec0d37d47`。台帳idは`289acf03-ba9b-45f3-9984-31f7c9df8768`、台帳は`<scratch>/rel1846/ledger/ledger-1846.jsonl`（新しい台帳、予約0件）。`run-trial.mjs`はこの記載を照合する。
 - 固定の記録は、この設定の5fileと共通の仕組みのmodule 16件のsha256を持つ。測定の終わりまで、設定と共通の仕組みを変えない。
+
+## 測定の経過（2026-11-28）
+
+- dry run、固定（`3e358c13`）、fixture（MN・EC1）、probe 1回（すべての項目が合格、目印fileは消した）、計画の12試行（失敗0件）、必須の置き換え（0件）、`fixation.mjs check`（差なし）、`collect.mjs`、`judge.mjs`の順に行った。結果は[../README.md](../README.md)。
+- `judge.mjs`は`conditions.json`の`cells`を2つと決めて読む（`const [b, c] = Object.keys(conds.cells)`）。条件が1つのこの設定では2つ目が`undefined`になり、全体の判定が`not-judged`になった。固定の後なので仕組みと設定は変えず、`judge.json`はそのまま公開した。Cの`perCondition`は`meets-levels`。
