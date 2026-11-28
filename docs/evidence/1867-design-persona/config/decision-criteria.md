@@ -8,8 +8,8 @@
 - 門の数え：[layers/gate-count.json](layers/gate-count.json)・[layers/gate-count-prompt.md](layers/gate-count-prompt.md)。
 - 層1：[layers/layer1-cases.json](layers/layer1-cases.json)・[layers/layer1-gold.json](layers/layer1-gold.json)。
 - 層2・層3：[layers/eval.json](layers/eval.json)（判定の数値は`decision`）・[layers/lp-new-brief-for-evaluation.md](layers/lp-new-brief-for-evaluation.md)。
-- 道具（sha256では照合しない。固定のcommitで名指し、各段階の前に`../harness/stage-check.mjs`が固定のcommitとの`git diff --exit-code`で照合する）：[../harness/](../harness/)の`trials.mjs`・`layer-pages.mjs`・`gate-packet.mjs`・`decide.mjs`・`stage-check.mjs`、#1835の道具（`run-layer1.mjs`・`make-packets.mjs`・`owner-page.mjs`・`run-eval.mjs`と`prompts/`。`prompts/`は`eval.json`のsha256とも照合する）、#1804の`gold.json`、#1815の`cases.json`。
-- 照合の時点：生成の前（`run-trial.mjs`）と、門の数え・層1・owner-page・層2・集計の各段階の前（`stage-check.mjs <段階>`。`fixation.mjs check`・`git diff`・`prompts/`のsha256の3つ。結果を1行ずつ記録し、通らなければその段階を行わない）。
+- 道具（sha256では照合しない。固定のcommitで名指し、各段階の前に`../harness/stage-check.mjs`が固定のcommitとの`git diff --exit-code`で照合する。`stage-check.mjs`の`TOOLS`と同じ）：[../harness/](../harness/)（`trials.mjs`・`layer-pages.mjs`・`gate-packet.mjs`・`decide.mjs`・`stage-check.mjs`・`power-sim.mjs`）、#1835の`harness/`（`run-layer1.mjs`・`make-packets.mjs`・`owner-page.mjs`・`run-eval.mjs`等）と`prompts/`（`eval.json`のsha256とも照合する）、#1852の`harness/`（`decide.mjs`の二項検定とPの判断をS/Bに戻す処理。第3回レビューのM-1）、#1804の`cases/`（P・ownerに見せる依頼文`BRIEF.md`）と`gold.json`、#1815の`cases.json`。
+- 照合の時点：生成の前（`run-trial.mjs`）と、門の数え・層1・owner-page・層2・集計の各段階の前（`stage-check.mjs <段階>`。`fixation.mjs check`、渡した`--fixed-commit`が`results/fixation.json`の`fixedAtCommit`（README.mdに書く固定のcommit）であること、`git diff`、`prompts/`のsha256の4つ。結果を1行ずつ記録し、通らなければその段階を行わない）。
 
 ## 決まっていること
 
@@ -39,7 +39,8 @@
   - 独立に2回数え、(a)・(b)それぞれ2回とも「ある」なら「ある」、割れたら「無い」とする（`gate-packet.mjs combine`）。
   - 回答が無い、JSONが読めない、一部のIDに(a)・(b)の真偽が無い回（`gate-packet.mjs check`が1で終わる）は、必ず新しいcontextで1回やり直す。やり直した回答をその回の回答とし、やり直しても答えの無いIDは「無い」とする。checkが通った回はやり直さない（`combine`が確かめる）。
   - 数えた結果（各回の回答のfile。試行ごとの可否と、該当する記録の箇所）は、層3のownerの回答と層2の結果を開く前に、記録としてcommitする。IDと試行の対応表（key）は、ownerの回答のcommitの後に開くので、`combine`はそのcommitの後に行う。
-  - `combine`と`layer-pages.mjs`は、置き換え（`--replace`）が`results/runs.json`の`counted: true`の行と一致することを確かめる。
+  - `pack`（`--runs-json`が必須）・`combine`・`layer-pages.mjs`は、置き換え（`--replace`）が`results/runs.json`の`counted: true`の行と一致することを確かめる。
+  - 置き換えも失敗したslot（`counted: true`で`failure`のある行。有効な試行も記録も無い）は、門の数えの束に入れない（keyの`absent`）。門の数えでは「無い」として扱い、(a)・(b)・門のどれも満たさない。`combine`は、束から外したslotが`runs.json`の失敗した行と一致することを確かめる。
 - ケースは、「`SKILL.md`が読まれ、1と2が両方ある」試行が3回中2回以上なら判定できる。判定できるケースが3未満（4ケース中）なら、全体を「未判定」とする。
 - Skill toolで`design-creation`を呼んでも、読み込まれるのはClaude Codeの薄い入口だけで本文ではないので、本文の読込みに数えない（計画。#1815・#1840と同じ）。
 - 共通の仕組みの`perCondition.S.verdict`（`meets-levels`）は、4ケースすべてが機械の部分を満たしたことだけを示し、門の結果ではない。
@@ -57,7 +58,7 @@
 
 - 共通の仕組みの外で、#1835の道具を`layers/eval.json`で動かす（`make-packets.mjs --seed 18670002 --allow-missing`は`pPairs`の12組だけPの束を作る。評価者はFableとCodex、各組2回、`run-eval.mjs --retries 1`）。
 - **警報：** 両評価者が2回とも同じ側を選んだ組。**確かめられた害：** 警報がBを選び、かつownerもその組でBを選んだ組。あるケースで確かめられた害の組が3組中2組以上で、かつそのケースの層3の9組でownerがBを選んだ組がSを選んだ組より多ければ「不採用」（ownerの決定 2026-11-28）。全4ケースに当てる。警報だけの件数は報告する（計画）。
-- **欠けた判断：** 有効な判断の無い呼出しは、全部をSで埋めた場合と全部をBで埋めた場合で層2の害の判定を出し、同じならその判定、変わるときだけ「未判定」（結論の0）。
+- **欠けた判断：** 有効な判断の無い呼出しは、全部をSで埋めた場合と全部をBで埋めた場合で結論（5.の「採用」「不採用」「未判定」）を出し、同じならその結論（理由はSで埋めた場合のもの）、変わるときだけ「未判定」（結論の0。第3回レビューのL-4）。層2の害の有無だけが変わり、結論が同じなら未判定にしない。
 - **画面の無い組：** 片方だけに画面が無ければ、画面のある側を選んだものとし（Pの判断・ownerの回答によらない）、両方に無ければ「同等」。
 - #1852の記録から見積もった誤った警報の率：ownerが「同等」とした11組のうち6組（0.55）で警報が出た（計画）。
 - Pの結果は、ownerの回答をcommitした後に開く。
@@ -66,21 +67,21 @@
 
 - `owner-page.mjs --config layers/eval.json --seed 18670003 --allow-missing`（画面の無い側は「画面なし」の札。その組は上の層2の「画面の無い組」と同じ規則で決まる）。36組（`layer3.pairs`）。見せるのは画面（狭幅・広幅）と依頼文だけで、`DESIGN-NOTES.md`は見せない。順・ID・左右は乱数。選択肢はA・B・同等・判断しない（対応表でS側・B側に直す）。同等と判断しないはnから除く。回答の記録の時刻をcommitし、その後に層2の結果と門の数えの対応表を開く（計画）。
 - 効果：門で判定できたケースの組だけで、nとkを数える。片側の二項検定（偶然0.5、α 0.05）。nの下限は`ceil(24×判定できたケースの数/4)`（4ケースで24、3ケースで18）。届かなければ「未判定」。
-- 害：業務の画面の各ケース（ui03・ui08）で、ownerがBを選んだ組の数がSを選んだ組の数を3以上上回れば「不採用」（ownerの決定 2026-11-28）。全4ケースに当てる（計画）。
+- 害：業務の画面の各ケース（ui03・ui08）で、ownerがBを選んだ組の数がSを選んだ組の数を3以上上回れば「不採用」（ownerの決定 2026-11-28）。全4ケースに当てる（計画）。この害を数えるときだけ、Sの画面が欠けたことでBの勝ちになった組は、欠けた画面1つにつき1組と数える（統括の決定、第3回レビューのM-2の(b)。画面1つの欠けを3対0の差として数えないため）。効果のn・kと層2の「ownerがBを多く選んだ」は、欠けた画面の組を1組ずつ数える。
 - 組は独立ではないので、p値は目安として報告する。
 
 ### 5. 結論
 
-> 次の順に当てはめ、最初に当たったものを結論とする。(0) 共通の仕組みの判定が`not-judged`、生成の停止の線への到達、層2の欠けをSで埋めるかBで埋めるかで層2の害の判定が変わる、費用の超過（層2の上限が6 USD未満、またはFableの実費が上限を超えた）のどれかなら「未判定」。(1) 門で「未判定」なら「未判定」。(2) 層1・層2・層3のどれかで害（「不採用」の条件）に当たれば「不採用」。(3) 層3でnが下限に届かなければ「未判定」。(4) 層3で効果ありなら「採用」、無ければ「不採用」。配布するかはownerが決める。「不採用」は「この規模では効果を示せなかった」という意味である。（計画）
+> 次の順に当てはめ、最初に当たったものを結論とする。(0) 共通の仕組みの判定が`not-judged`、生成が完了せずに停止の線で止まった、層2の欠けを全部Sで埋めるか全部Bで埋めるかで結論が変わる、費用の超過（層2の上限が6 USD未満、またはFableの実費が上限を超えた）のどれかなら「未判定」。(1) 門で「未判定」なら「未判定」。(2) 層1・層2・層3のどれかで害（「不採用」の条件）に当たれば「不採用」。(3) 層3でnが下限に届かなければ「未判定」。(4) 層3で効果ありなら「採用」、無ければ「不採用」。配布するかはownerが決める。「不採用」は「この規模では効果を示せなかった」という意味である。（計画）
 
-`../harness/decide.mjs decide`が、この順で結論（0〜4の段と理由）と各数値を出す。誤った不採用の率と検出力の見積りは計画の「規模と、誤った不採用の率・検出力」。
+`../harness/decide.mjs decide`が、この順で結論（0〜4の段と理由）と各数値を出す。取り違えを防ぐため、ownerの対応表とPのkeyのseed（`eval.json`の`seeds`）、Pのkeyの回（`rounds`）、Pの台帳のheaderの`capUsd`（層2の上限）を照合し、ownerの回答の知らない選択肢とともに、違えば止まる。誤った不採用の率と検出力の見積りは計画の「規模と、誤った不採用の率・検出力」。
 
 ## 完了と費用
 
-- `maxFailureRate`（失敗した試行の率の上限0.1）、必須の置き換え（失敗した試行1件につき1回）、停止の線は、共通の仕組みの`order.mjs`の規則のまま。停止の線に達したら、その時点で止め、結論は「未判定」とする（計画の結論の0）。足りない試行を報告する。
+- `maxFailureRate`（失敗した試行の率の上限0.1）、必須の置き換え（失敗した試行1件につき1回）、停止の線は、共通の仕組みの`order.mjs`の規則のまま。停止の線に達したら、その時点で止め、結論は「未判定」とする（計画の結論の0）。足りない試行を報告する。結論の0に当たるのは、完了せずに止まった場合（`completion.capReached`で`complete`でない）だけである。24試行と必須の置き換えを終えた評価は、台帳が停止の線に近く`capReached`が真でも判定する（第3回レビューのHigh-1）。
 - 置き換えた試行は、失敗した試行の回（r1〜r3）を引き継ぐ（`../harness/`の`--replace <失敗>=<置き換え>`）。
 - 該当しない依頼（negative）は置かない（計画に無い）。共通の仕組みが「該当しない依頼の有効な試行が無い」ことで未判定にしないよう、`rule.negativesRequired`を`false`にした（共通の仕組みの#1867の変更）。
-- 層2の上限＝min(8, 20 −（生成の台帳の実費＋門の数えの実費）)。6 USD未満なら層2を始めずに止め、「未判定」とする（計画の「費用」、`../harness/decide.mjs cap`）。
+- 層2の上限＝min(8, 20 −（生成の台帳の実費＋門の数えの実費）)。6 USD未満なら層2を始めずに止め、「未判定」とする（計画の「費用」、`../harness/decide.mjs cap`）。有料の層2の実行には、FableとCodexのどちらにもこの値の`--cap-usd`が必須（`budget.capFromArg`。第3回レビューのL-6）。
 
 ## この測定で確かめられないこと
 

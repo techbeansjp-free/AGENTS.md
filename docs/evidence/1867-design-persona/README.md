@@ -7,6 +7,6 @@
 - `cases/lp-new/`：このIssueで作った新しいLPのケース（依頼文と、利用者についての資料`inquiries.md`）。
 - `config/`：生成の測定の、共通の仕組み（`../shared-harness/`）の設定。手順と状態は`config/README.md`。
 - `config/layers/`：門の数え・層1・層2・層3の設定（計画とともに固定する）。
-- `harness/`：生の記録から、門の数えの盲検の束（`gate-packet.mjs`）と層1の画面（`layer-pages.mjs`）を作る道具と、その試験。
+- `harness/`：生の記録から、門の数えの盲検の束（`gate-packet.mjs`）と層1の画面（`layer-pages.mjs`）を作る道具、各段階の前の照合（`stage-check.mjs`）、集計と結論（`decide.mjs`）、計画の率の表のMonte Carlo（`power-sim.mjs`）と、その試験。
 
 状態：Skillの案、計画の下書き（ownerの決定と独立レビューの指摘を反映）、生成と層1〜3の設定まで（dry runは合格）。計画の固定の前。有料の実行はしていない。

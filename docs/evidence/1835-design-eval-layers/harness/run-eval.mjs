@@ -10,8 +10,9 @@
 // A paid run (no --dry-run) is refused unless ASC1835_ALLOW_PAID=1. --dry-run never starts a model: it builds the same
 // command lines, writes outputs in the CLI's format with a fixed fake answer, and goes through parsing, the ledger and the
 // budget stop. --cap-usd is accepted only with --dry-run (the paid cap is config budget.capUsd), except with config
-// budget.capFromArg (#1867: the paid cap is a formula of the costs before layer 2): a paid --cap-usd above 0 and at most
-// budget.capUsd is then the cap of the run.
+// budget.capFromArg (#1867: the paid cap is a formula of the costs before layer 2): a paid run then requires --cap-usd
+// (#1867 review L-6; either evaluator, so that the shared ledger header records the cap), above 0 and at most
+// budget.capUsd, and it is the cap of the run; a paid ledger whose header holds another cap is refused.
 // Records: <runs>/<evaluator>/round<r>/<method>/<call>/{prompt.txt, argv.json, attempt-<n>.stdout, attempt-<n>.stderr, status.json}
 // and <runs>/ledger.jsonl (one line per attempt, header line first). A call with status.json is not run again (resume).
 // Retries: none by default; at most 1 (config retries.max), counted in status.json. Invalid answers are recorded as missing.
@@ -228,9 +229,11 @@ export const spentUsd = (lines, evaluator = 'fable') => lines.filter((l) => l.ty
 
 export function runEvaluator(o) {
   const {cfg, packetsRoot, runs, evaluator, dryRun, methods = ORDER, rounds = cfg.rounds, only = null, skip = new Set(), retries = cfg.retries.default,
-    dryInvalidEvery = 0, dryTrace = 'all', capUsd = cfg.budget.capUsd, priorLedger = null, spawn = spawnSync, log = () => {}} = o;
+    dryInvalidEvery = 0, dryTrace = 'all', capUsd: capArg, priorLedger = null, spawn = spawnSync, log = () => {}} = o;
+  const capUsd = capArg ?? cfg.budget.capUsd;
   if (!['fable', 'codex'].includes(evaluator)) throw new Error('evaluator must be fable or codex');
   if (!dryRun && process.env.ASC1835_ALLOW_PAID !== '1') throw new Error('paid run refused: set ASC1835_ALLOW_PAID=1 (or use --dry-run)');
+  if (!dryRun && cfg.budget.capFromArg === true && capArg === undefined) throw new Error('--cap-usd is required for a paid run with budget.capFromArg (the cap of decide.mjs cap)');
   if (!dryRun && capUsd !== cfg.budget.capUsd && !(cfg.budget.capFromArg === true && capUsd > 0 && capUsd < cfg.budget.capUsd)) {
     throw new Error(cfg.budget.capFromArg === true ? `--cap-usd of a paid run must be above 0 and at most ${cfg.budget.capUsd} (budget.capUsd)` : '--cap-usd is only for --dry-run');
   }
@@ -240,6 +243,7 @@ export function runEvaluator(o) {
   const ledger = readLedger(ledgerFile);
   const header = ledger.find((l) => l.type === 'header');
   if (header && header.dryRun !== !!dryRun) throw new Error(`ledger ${ledgerFile} is ${header.dryRun ? 'a dry-run' : 'a paid'} ledger; use another --runs`);
+  if (header && !dryRun && cfg.budget.capFromArg === true && header.capUsd !== capUsd) throw new Error(`ledger ${ledgerFile} was started with --cap-usd ${header.capUsd}, not ${capUsd}`);
   const prior = priorLedger ? readLedger(priorLedger) : [];
   if (prior.some((l) => l.type === 'header' && l.dryRun !== !!dryRun)) throw new Error('--prior-ledger mixes dry-run and paid');
   const append = (x) => { fs.appendFileSync(ledgerFile, JSON.stringify(x) + '\n'); ledger.push(x); };
@@ -429,7 +433,7 @@ function main() {
       only: opt('--only') ? new Set(opt('--only').split(',')) : null,
       skip: opt('--skip-packets') ? new Set(fs.readFileSync(path.resolve(opt('--skip-packets')), 'utf8').split('\n').filter(Boolean)) : new Set(),
       retries: opt('--retries') !== null ? Number(opt('--retries')) : cfg.retries.default, dryInvalidEvery: Number(opt('--dry-invalid-every') ?? 0),
-      capUsd: opt('--cap-usd') !== null ? Number(opt('--cap-usd')) : cfg.budget.capUsd, priorLedger: opt('--prior-ledger') ? path.resolve(opt('--prior-ledger')) : null,
+      capUsd: opt('--cap-usd') !== null ? Number(opt('--cap-usd')) : undefined, priorLedger: opt('--prior-ledger') ? path.resolve(opt('--prior-ledger')) : null,
       log: (s) => console.error(s)});
     console.log(JSON.stringify(summary, null, 1));
     if (summary.stopped) process.exitCode = 5;

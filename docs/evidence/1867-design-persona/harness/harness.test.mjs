@@ -10,7 +10,8 @@ import {fileURLToPath} from 'node:url';
 import {buildPages} from './layer-pages.mjs';
 import {pack, combine, roundAnswers, answerStatus, answerOf} from './gate-packet.mjs';
 import {countedTrials, parseReplacements, checkCounted} from './trials.mjs';
-import {promptProblems, TOOLS, REPO} from './stage-check.mjs';
+import {promptProblems, TOOLS, REPO, CONFIG, stageCheck, fixedCommitProblems} from './stage-check.mjs';
+import {spawnSync} from 'node:child_process';
 import {loadConfig, planItems, screensOf, shotPath, WIDTHS} from '../../1835-design-eval-layers/harness/eval-common.mjs';
 import {buildPackets} from '../../1835-design-eval-layers/harness/make-packets.mjs';
 import {buildOwnerPage} from '../../1835-design-eval-layers/harness/owner-page.mjs';
@@ -19,6 +20,8 @@ import {mergedCases, mergedGold} from '../../1835-design-eval-layers/harness/run
 const here = path.dirname(fileURLToPath(import.meta.url));
 const LAYERS = path.resolve(here, '../config/layers');
 const cfg = loadConfig(path.join(LAYERS, 'eval.json'));
+// runs.json rows of the 24 planned trials, every one counted and valid
+const ROWS = countedTrials().map((x) => ({condition: x.condition, case: x.case, run: x.rep, counted: true, expectReadsAll: true}));
 const tmp = (t) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'asc1867-')); t.after(() => fs.rmSync(d, {recursive: true, force: true})); return d; };
 
 // a raw runs root: every planned trial and S-lp-new-4 (a replacement); S-ui03-dashboard-3 wrote no record
@@ -58,24 +61,25 @@ test('layer-pages: the original screens of the counted trials, the files next to
 test('gate pack: random ids and order, no condition, case or trial name in the packet; the key maps back', (t) => {
   const runs = tmp(t), out = tmp(t);
   fakeRuns(runs);
-  const key = pack({runs, out, seed: '18670011'});
+  const key = pack({runs, out, seed: '18670011', runsRows: ROWS});
   const pk = path.join(out, 'packet');
   const ids = JSON.parse(fs.readFileSync(path.join(pk, 'index.json'), 'utf8'));
   assert.equal(ids.length, 24);
   assert.deepEqual(fs.readdirSync(pk).sort(), ['TASK.md', 'index.json', 'records']);
   for (const n of [...fs.readdirSync(path.join(pk, 'records')), JSON.stringify(ids)]) assert.doesNotMatch(n, /\b[BS]-|ui0|lp-new|exhibition|dashboard/);
   assert.equal(Object.values(key.records).filter((r) => r.recordMissing).map((r) => r.run).join(), 'S-ui03-dashboard-3');
-  const again = pack({runs, out: tmp(t), seed: '18670011'});
+  const again = pack({runs, out: tmp(t), seed: '18670011', runsRows: ROWS});
   assert.deepEqual(Object.keys(again.records), Object.keys(key.records), 'same seed, same ids');
-  const other = pack({runs, out: tmp(t), seed: '18670012'});
+  const other = pack({runs, out: tmp(t), seed: '18670012', runsRows: ROWS});
   assert.notDeepEqual(Object.keys(other.records), Object.keys(key.records));
-  assert.throws(() => pack({runs, out, seed: 'x'}), /exists/);
+  assert.throws(() => pack({runs, out, seed: 'x', runsRows: ROWS}), /exists/);
+  assert.throws(() => pack({runs, out: tmp(t), seed: 'x'}), /--runs-json/);
 });
 
 test('gate combine: both rounds true, else false; the machine part; 2 of 3 per case; 3 of 4 cases', (t) => {
   const runs = tmp(t);
   fakeRuns(runs);
-  const k1 = pack({runs, out: tmp(t), seed: '1'}), k2 = pack({runs, out: tmp(t), seed: '2'});
+  const k1 = pack({runs, out: tmp(t), seed: '1', runsRows: ROWS}), k2 = pack({runs, out: tmp(t), seed: '2', runsRows: ROWS});
   const answer = (key, f) => '```json\n' + JSON.stringify({records: Object.fromEntries(Object.entries(key.records).map(([id, r]) => [id, f(r)]))}) + '\n```';
   const yes = () => ({a: true, b: true});
   // round 2 splits S-lp-new-1 (b false) and S-lp-new-2 (a false): lp-new has 1/3 -> not judgeable
@@ -146,7 +150,7 @@ test('layer 1 settings: lp-new beside the three #1835 cases; gold merged with #1
 test('gate check (L-2): no answer, unreadable or partial must be redone; the claude -p JSON output is read with its cost', (t) => {
   const runs = tmp(t);
   fakeRuns(runs);
-  const k = pack({runs, out: tmp(t), seed: '1'});
+  const k = pack({runs, out: tmp(t), seed: '1', runsRows: ROWS});
   const ids = Object.keys(k.records);
   const full = {records: Object.fromEntries(ids.map((id) => [id, {a: true, b: false}]))};
   const claudeOut = (result, cost = 0.8) => JSON.stringify({type: 'result', subtype: 'success', is_error: false, result, total_cost_usd: cost});
@@ -160,7 +164,7 @@ test('gate check (L-2): no answer, unreadable or partial must be redone; the cla
   assert.equal(answerOf('plain').costUsd, null);
   // combine: a redo only after a refused answer; the costs of every attempt are summed
   const rows = countedTrials().map((x) => ({condition: x.condition, case: x.case, run: x.rep, counted: true, expectReadsAll: true}));
-  const k2 = pack({runs, out: tmp(t), seed: '2'});
+  const k2 = pack({runs, out: tmp(t), seed: '2', runsRows: ROWS});
   const ok2 = claudeOut('```json\n' + JSON.stringify({records: Object.fromEntries(Object.keys(k2.records).map((id) => [id, {a: true, b: true}]))}) + '\n```', 0.9);
   assert.throws(() => combine({rounds: [{key: k, attempts: [claudeOut(JSON.stringify(full)), claudeOut(JSON.stringify(full))]}, {key: k2, text: ok2}], runsRows: rows}), /only for an answer that check refused/);
   const r = combine({rounds: [{key: k, attempts: [JSON.stringify({type: 'result', is_error: true, total_cost_usd: 1.5}), claudeOut(JSON.stringify(part), 0.7)]}, {key: k2, text: ok2}], runsRows: rows});
@@ -178,13 +182,42 @@ test('L-3: the trials taken must be the counted rows of runs.json (combine and b
   assert.throws(() => checkCounted({}, rows), /counted in runs.json but not taken: S-lp-new-4; taken but not counted in runs.json: S-lp-new-2/);
   assert.throws(() => checkCounted(parseReplacements(['S-lp-new-1=S-lp-new-4']), rows), /replaces 2/);
   assert.throws(() => buildPages({runs, out: path.join(tmp(t), 'p'), runsRows: rows}), /does not match/);
-  const k1 = pack({runs, out: tmp(t), seed: '1'}), k2 = pack({runs, out: tmp(t), seed: '2'});
+  const k1 = pack({runs, out: tmp(t), seed: '1', runsRows: ROWS}), k2 = pack({runs, out: tmp(t), seed: '2', runsRows: ROWS});
   assert.throws(() => combine({rounds: [{key: k1, text: '{"records":{}}'}, {key: k2, text: '{"records":{}}'}], runsRows: rows}), /does not match/, 'a key without the replacement');
   // the replacement failed too: the slot is counted as a failure and its page is missing
   const failedSub = rows.map((r) => (r.case === 'lp-new' && r.run === 4 ? {...r, failure: 'no assistant message'} : r));
   const m = buildPages({runs, out: path.join(tmp(t), 'p2'), replacements: repl, runsRows: failedSub});
   assert.deepEqual(m.missing.map((x) => [x.trial, x.run, x.reason]), [['S-r2', 'S-lp-new-4', 'failed trial (no valid trial in the slot)']]);
   assert.equal(m.pages.length, 23);
+});
+
+test('L-1: gate pack checks runs.json as combine; a slot whose replacement failed too is left out of the packet and counted 無い', (t) => {
+  const runs = tmp(t);
+  fakeRuns(runs);
+  const repl = parseReplacements(['S-lp-new-2=S-lp-new-4']);
+  const rows = [...countedTrials().map((x) => ({condition: x.condition, case: x.case, run: x.rep, counted: x.name !== 'S-lp-new-2', expectReadsAll: true, failure: x.name === 'S-lp-new-2' ? 'no result event' : undefined})),
+    {condition: 'S', case: 'lp-new', run: 4, counted: true, replaces: 2, expectReadsAll: true}];
+  // the --replace error is found at pack, before the counting
+  assert.throws(() => pack({runs, out: tmp(t), seed: '1', runsRows: rows}), /does not match/);
+  assert.throws(() => pack({runs, out: tmp(t), seed: '1', replacements: parseReplacements(['S-lp-new-1=S-lp-new-4']), runsRows: rows}), /replaces 2/);
+  const ok = pack({runs, out: tmp(t), seed: '1', replacements: repl, runsRows: rows});
+  assert.deepEqual([Object.keys(ok.records).length, ok.absent], [24, []]);
+  // the replacement failed too: 23 records in the packet, the slot in absent
+  const failedSub = rows.map((r) => (r.case === 'lp-new' && r.run === 4 ? {...r, failure: 'no assistant message'} : r));
+  const outs = [tmp(t), tmp(t)];
+  const [k1, k2] = ['1', '2'].map((seed, i) => pack({runs, out: outs[i], seed, replacements: repl, runsRows: failedSub}));
+  assert.deepEqual([Object.keys(k1.records).length, k1.absent.map((r) => [r.slot, r.run])], [23, [['S-r2', 'S-lp-new-4']]]);
+  const ids = JSON.parse(fs.readFileSync(path.join(outs[0], 'packet/index.json'), 'utf8'));
+  assert.deepEqual([ids.length, fs.readdirSync(path.join(outs[0], 'packet/records')).length], [23, 23]);
+  assert.ok(!Object.values(k1.records).some((r) => r.run === 'S-lp-new-4'));
+  const yes = (key) => JSON.stringify({records: Object.fromEntries(Object.keys(key.records).map((id) => [id, {a: true, b: true}]))});
+  const g = combine({rounds: [{key: k1, text: yes(k1)}, {key: k2, text: yes(k2)}], runsRows: failedSub});
+  const slot = g.trials.find((x) => x.run === 'S-lp-new-4');
+  assert.deepEqual([slot.a, slot.b, slot.gate, slot.absent, g.perCase['lp-new'].S, g.perCase['lp-new'].judgeable], [false, false, false, 'failed trial (no valid trial in the slot)', '2/3', true]);
+  assert.equal(g.trials.length, 24);
+  // combine refuses a key whose left-out slots are not the failed rows of runs.json
+  assert.throws(() => combine({rounds: [{key: k1, text: yes(k1)}, {key: k2, text: yes(k2)}], runsRows: rows}), /not the failed counted rows/);
+  assert.throws(() => combine({rounds: [{key: ok, text: yes(ok)}, {key: k2, text: yes(k2)}], runsRows: failedSub}), /same trials|same slots/);
 });
 
 test('L-5: the lp-new brief for the evaluators and the owner is BRIEF.md and inquiries.md joined', () => {
@@ -202,4 +235,60 @@ test('M-3 stage-check: the #1835 prompts against eval.json; the tools named exis
   fs.writeFileSync(path.join(d, 'P.txt'), 'changed');
   assert.deepEqual(promptProblems({note: 'x', 'P.txt': cfg.prompts['P.txt'], 'gone.txt': 'a'}, d).map((x) => x.split(':')[0]), ['P.txt', 'gone.txt']);
   for (const p of TOOLS) assert.ok(fs.existsSync(path.join(REPO, p)), p);
+});
+
+test('M-1: the stage check covers the #1852 harness and the #1804 cases', () => {
+  for (const p of ['docs/evidence/1852-p-good-pairs/harness', 'docs/evidence/1804-design-judgment/cases']) assert.ok(TOOLS.includes(p), p);
+  assert.ok(fs.existsSync(path.join(REPO, 'docs/evidence/1852-p-good-pairs/harness/decide.mjs')));
+});
+
+test('L-5 stage-check on a temporary repository: the fixed commit must be a fixation commit; a changed or untracked tool fails; the fixation check fails', (t) => {
+  const repo = tmp(t);
+  const git = (...a) => { const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...a], {cwd: repo, encoding: 'utf8'}); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
+  git('init', '-q');
+  for (const p of TOOLS) {
+    const f = path.extname(p) === '.json' ? path.join(repo, p) : path.join(repo, p, 'x.mjs');
+    fs.mkdirSync(path.dirname(f), {recursive: true});
+    fs.writeFileSync(f, `// ${p}\n`);
+  }
+  fs.mkdirSync(path.join(repo, CONFIG, 'layers'), {recursive: true});
+  fs.writeFileSync(path.join(repo, CONFIG, 'layers/eval.json'), JSON.stringify({prompts: {note: 'none'}}));
+  git('add', '-A'); git('commit', '-q', '-m', 'fixed');
+  const c1 = git('rev-parse', 'HEAD');
+  fs.mkdirSync(path.join(repo, CONFIG, 'results'), {recursive: true});
+  fs.writeFileSync(path.join(repo, CONFIG, 'results/fixation.json'), JSON.stringify({records: [{fixedAtCommit: c1}]}));
+  git('add', '-A'); git('commit', '-q', '-m', 'fixation record');
+  const c2 = git('rev-parse', 'HEAD');
+  const pass = () => ({code: 0, out: '{"ok":true}'}), fail = () => ({code: 1, out: '{"ok":false}'});
+  const chk = (fixedCommit, fixationCheck = pass) => stageCheck({stage: 'decide', fixedCommit, repo, fixationCheck});
+  const ok = chk(c1);
+  assert.deepEqual([ok.ok, ok.fixation.ok, ok.commit.ok, ok.diff.ok, ok.prompts.ok, ok.resolvedCommit, ok.head], [true, true, true, true, true, c1, c2]);
+  assert.equal(chk(c1.slice(0, 8)).ok, true, 'a short hash resolves');
+  // review L-5: another commit (here the commit of the fixation record) or an unknown one is refused
+  const other = chk(c2);
+  assert.deepEqual([other.ok, other.commit.ok, other.diff.ok], [false, false, true]);
+  assert.match(other.commit.problems[0], /not a fixedAtCommit/);
+  assert.deepEqual([chk('deadbeef').ok, chk('deadbeef').commit.problems], [false, ['--fixed-commit does not name a commit']]);
+  // the fixation part
+  const fx = chk(c1, fail);
+  assert.deepEqual([fx.ok, fx.fixation.ok, fx.commit.ok], [false, false, true]);
+  // the git part: a tool changed after the fixed commit, then an untracked file under a tool
+  const tool = path.join(repo, 'docs/evidence/1852-p-good-pairs/harness/x.mjs');
+  fs.writeFileSync(tool, '// changed\n');
+  const ch = chk(c1);
+  assert.deepEqual([ch.ok, ch.diff.ok], [false, false]);
+  assert.match(ch.diff.changed, /1852-p-good-pairs\/harness\/x\.mjs/);
+  git('checkout', '-q', '--', '.');
+  fs.writeFileSync(path.join(repo, 'docs/evidence/1804-design-judgment/cases/new.md'), 'new');
+  const un = chk(c1);
+  assert.deepEqual([un.ok, un.diff.ok], [false, false]);
+  assert.match(un.diff.untracked, /1804-design-judgment\/cases\/new\.md/);
+  fs.rmSync(path.join(repo, 'docs/evidence/1804-design-judgment/cases/new.md'));
+  // a change committed after the fixed commit is also a difference
+  fs.writeFileSync(tool, '// committed change\n'); git('commit', '-q', '-am', 'change a tool');
+  assert.equal(chk(c1).diff.ok, false);
+  // no fixation record
+  fs.rmSync(path.join(repo, CONFIG, 'results/fixation.json'));
+  assert.deepEqual(chk(c1).commit.problems, ['results/fixation.json is missing or unreadable']);
+  assert.deepEqual([fixedCommitProblems({records: []}, c1), fixedCommitProblems({records: [{fixedAtCommit: c1}, {fixedAtCommit: c2}]}, c2)], [['results/fixation.json has no fixedAtCommit'], []]);
 });

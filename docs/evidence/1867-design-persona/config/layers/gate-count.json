@@ -1,6 +1,6 @@
 {
  "schema": "asc-1867-gate-count/v1",
- "note": "#1867の門のうち、記録の中身を数える部分の設定（../../EVAL_PLAN.mdの判定1）。統括がharness/gate-packet.mjsで束を作り、claude -pで、会話を引き継がない新しいcontextに数えさせる（読取りだけ：host-sessionのclaudeと同じ起動の制限で、Read・Glob・Grepに限り、起動先を束のdirectoryに閉じる。host-sessionには予算の指定が無いので、--max-budget-usdを付けて直接起動する。レビューのL-1）。束は24試行（B・S×4ケース×3回）のout/DESIGN-NOTES.mdだけで、画面は渡さない。条件名・ケース名・試行名を伏せ、乱数のIDと順序にする（seedごと）。記録の本文は変えないので、Sの記録に工程の名前（確認の時点等）やSkill名が出れば、伏せ方は完全ではない。",
+ "note": "#1867の門のうち、記録の中身を数える部分の設定（../../EVAL_PLAN.mdの判定1）。統括がharness/gate-packet.mjsで束を作り、claude -pで、会話を引き継がない新しいcontextに数えさせる（読取りだけ：host-sessionのclaudeと同じ起動の制限で、Read・Glob・Grepに限り、起動先を束のdirectoryに閉じる。host-sessionには予算の指定が無いので、--max-budget-usdを付けて直接起動する。レビューのL-1）。束は24試行（B・S×4ケース×3回）のout/DESIGN-NOTES.mdだけで、画面は渡さない（置き換えも失敗したslotは束に入れず、門では「無い」とする。第3回レビューのL-1）。条件名・ケース名・試行名を伏せ、乱数のIDと順序にする（seedごと）。記録の本文は変えないので、Sの記録に工程の名前（確認の時点等）やSkill名が出れば、伏せ方は完全ではない。",
  "model": "opus",
  "host": "cd <束のdirectory> && claude -p --model opus --output-format json --restricted --permission-mode dontAsk --tools Read,Glob,Grep --strict-mcp-config --settings '{\"disableAllHooks\":true}' --no-session-persistence --max-budget-usd 1.5 < TASK.md > <新しいdirectory>/answer.json（host-session.mjsのclaudeReviewArgumentsと同じ制限。--session-id・名前・--append-system-promptは付けない）",
  "prompt": "layers/gate-count-prompt.md",

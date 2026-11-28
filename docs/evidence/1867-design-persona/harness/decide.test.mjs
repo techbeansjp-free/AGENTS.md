@@ -36,10 +36,14 @@ const ownerKeyOf = (missing = []) => ({seed: cfg.seeds.ownerPage, missingScreens
 const GOOD = 'SSSSSB==S'; // 6 S, 1 B per case: n 28, k 24
 function run(o = {}) {
   const missing = o.missing ?? [];
-  return decide({cfg, judge: o.judge ?? {judgement: {verdict: 'meets-levels'}, completion: {spentUsd: 8, capReached: false}},
-    gate: o.gate ?? {gate: 'judged', judgeableCases: CASES, minOwnerDecidedPairs: 24, costUsd: 1.8, costMissing: 0},
-    owner: o.owner ?? ownerOf({all: GOOD}), ownerKey: ownerKeyOf(missing), pKey: {rounds: [1, 2], missing: (o.pMissing ?? missing).map((s) => ({screen: s, width: 'wide'}))},
-    J: o.J ?? jOf(), layer1Files: o.l1 ?? l1Of(), fableSpentUsd: o.fable ?? 5, gatePerRoundCapUsd: gateCfg.budget.perRoundCapUsd});
+  const judge = o.judge ?? {judgement: {verdict: 'meets-levels'}, completion: {spentUsd: 8, capReached: false}};
+  const gate = o.gate ?? {gate: 'judged', judgeableCases: CASES, minOwnerDecidedPairs: 24, costUsd: 1.8, costMissing: 0};
+  // the P ledger header as run-eval.mjs writes it with --cap-usd <decide.mjs cap>
+  const capUsd = layer2Cap({generationUsd: judge.completion?.spentUsd ?? 0, gateUsd: (gate.costUsd ?? 0) + (gate.costMissing ?? 0) * gateCfg.budget.perRoundCapUsd, budget: cfg.decision.budget}).capUsd;
+  return decide({cfg, judge, gate,
+    owner: o.owner ?? ownerOf({all: GOOD}), ownerKey: o.ownerKey ?? ownerKeyOf(missing), pKey: o.pKey ?? {seed: cfg.seeds.packets, rounds: [1, 2], missing: (o.pMissing ?? missing).map((s) => ({screen: s, width: 'wide'}))},
+    J: o.J ?? jOf(), layer1Files: o.l1 ?? l1Of(), fableSpentUsd: o.fable ?? 5, gatePerRoundCapUsd: gateCfg.budget.perRoundCapUsd,
+    pLedgerHeader: 'header' in o ? o.header : {type: 'header', dryRun: false, capUsd, at: '2026-11-28T00:00:00Z'}});
 }
 
 test('step 4: 採用 with a clear S preference; 不採用 when the test fails (the meaning: not shown at this scale)', () => {
@@ -63,6 +67,7 @@ test('step 1: the gate 未判定; step 0 comes first (judge not-judged, the stop
   assert.deepEqual([run({gate: {gate: '未判定', judgeableCases: ['lp-new'], minOwnerDecidedPairs: 6, costUsd: 1}}).step, run({gate: {gate: '未判定', judgeableCases: [], minOwnerDecidedPairs: 0, costUsd: 1}}).conclusion], [1, '未判定']);
   assert.equal(run({judge: {judgement: {verdict: 'not-judged', reason: 'failure rate'}, completion: {spentUsd: 8}}}).step, 0);
   assert.equal(run({judge: {judgement: {verdict: 'meets-levels'}, completion: {spentUsd: 11.6, capReached: true}}}).step, 0);
+  assert.equal(run({judge: {judgement: {verdict: 'meets-levels'}, completion: {spentUsd: 11.6, capReached: true, complete: false, basis: 'cap-reached'}}}).step, 0);
   const cost = run({judge: {judgement: {verdict: 'meets-levels'}, completion: {spentUsd: 11.5, capReached: false}}, gate: {gate: 'judged', judgeableCases: CASES, minOwnerDecidedPairs: 24, costUsd: 2.6, costMissing: 0}});
   assert.deepEqual([cost.step, cost.cost.capUsd, cost.cost.start], [0, 5.9, false]);
   assert.equal(run({fable: 8.5}).step, 0, 'Fable over the cap');
@@ -127,16 +132,67 @@ test('M-2: a missing P judgment is filled with S and with B; 未判定 only when
   assert.deepEqual([none.layer2.missingJudgments.length, none.layer2.undecided, none.conclusion], [48, false, '採用']);
 });
 
+test('L-4: the missing P judgments are 未判定 only when the conclusion (not only the layer-2 harm) differs between the fillings', () => {
+  const c = 'ui02-exhibition';
+  const J = jOf({[id(c, 1, 1)]: 'second', [id(c, 2, 2)]: ['second', null, 'second', 'second']});
+  // the layer-2 harm differs (none filled S, ui02 filled B), but ui08 has the business-screen harm: 不採用 either way
+  const harm3 = run({J, owner: ownerOf({all: GOOD, [c]: 'BBBSBS===', 'ui08-existing-ds': 'BBB======' })});
+  assert.deepEqual([harm3.layer2.harmDiffers, harm3.layer2.undecided, harm3.conclusion, harm3.step], [true, false, '不採用', 2]);
+  assert.match(harm3.why.join(), /^層3：/, 'the reason that holds for every filling comes first');
+  assert.match(harm3.why.at(-1), /全部Bで埋めた場合も結論は「不採用」/);
+  // the gate is 未判定 either way: step 1, not step 0
+  const gate = run({J, owner: ownerOf({all: GOOD, [c]: 'BBBSBS===' }), gate: {gate: '未判定', judgeableCases: ['lp-new'], minOwnerDecidedPairs: 6, costUsd: 1.8, costMissing: 0}});
+  assert.deepEqual([gate.layer2.harmDiffers, gate.step, gate.conclusion], [true, 1, '未判定']);
+  // the S filling 採用, the B filling 不採用: 未判定 (step 0)
+  const und = run({J, owner: ownerOf({all: GOOD, [c]: 'BBBSBS===' })});
+  assert.deepEqual([und.layer2.conclusionIfFilledS.conclusion, und.layer2.conclusionIfFilledB.conclusion, und.step], ['採用', '不採用', 0]);
+  // n under the bound with S, harm with B: both 不採用? no, 未判定 vs 不採用 differ -> 未判定
+  const few = run({J, owner: ownerOf({all: 'SSSSS====', [c]: 'BBBSBS===' })});
+  assert.deepEqual([few.layer2.conclusionIfFilledS.step, few.layer2.conclusionIfFilledB.step, few.step, few.conclusion], [3, 2, 0, '未判定']);
+});
+
+test('High-1: a complete run with capReached true (ledger near the stop line) is judged; only a stop without completing is step 0', () => {
+  const done = run({judge: {judgement: {verdict: 'meets-levels'}, completion: {spentUsd: 10.2, complete: true, capReached: true, basis: 'complete'}}});
+  assert.deepEqual([done.step, done.conclusion, done.judge.stoppedAtCap], [4, '採用', false]);
+  const stop = run({judge: {judgement: {verdict: 'meets-levels'}, completion: {spentUsd: 10.2, complete: false, capReached: true, basis: 'cap-reached'}}});
+  assert.deepEqual([stop.step, stop.why, stop.judge.stoppedAtCap], [0, ['生成が完了せずに停止の線で止まった'], true]);
+});
+
+test('L-2: the key seeds, the P rounds and the P ledger cap are those of the config; L-3: an unknown owner choice stops', () => {
+  const pk = {seed: cfg.seeds.packets, rounds: [1, 2], missing: []};
+  assert.throws(() => run({ownerKey: {...ownerKeyOf(), seed: 'x'}}), /seeds.ownerPage/);
+  assert.throws(() => run({pKey: {...pk, seed: cfg.seeds.ownerPage}}), /seeds.packets/);
+  assert.throws(() => run({pKey: {...pk, rounds: [1]}}), /rounds/);
+  assert.throws(() => run({header: {type: 'header', dryRun: false, capUsd: 7}}), /capUsd 7 is not the layer-2 cap 8/);
+  assert.throws(() => run({header: null}), /no header/);
+  // layer 2 never started (cap under 6): no P ledger is needed, and the conclusion is 未判定
+  const noL2 = run({header: null, judge: {judgement: {verdict: 'meets-levels'}, completion: {spentUsd: 11.5, capReached: false}}, gate: {gate: 'judged', judgeableCases: CASES, minOwnerDecidedPairs: 24, costUsd: 2.6, costMissing: 0}});
+  assert.deepEqual([noL2.step, noL2.cost.start], [0, false]);
+  const own = ownerOf({all: GOOD});
+  own[Object.keys(own)[0]] = null; // loadOwner gives null for a choice other than A, B, 同等, 判断しない
+  assert.throws(() => run({owner: own}), /unknown choice/);
+});
+
 test('H-1: a missing screen counts as the other side chosen (owner and P), both missing as 同等; layer 1 fails it', () => {
   assert.deepEqual([forcedSide(items[0], new Set([items[0].first])), forcedSide(items[0], new Set([items[0].second])), forcedSide(items[0], new Set([items[0].first, items[0].second])), forcedSide(items[0], new Set())], ['second', 'first', 'same', null]);
   const c = 'ui08-existing-ds', gone = `${c}/S-r1/original`;
-  // the owner chose S on S-r1's pairs; the rule makes them B: ui08 then B 3+1 vs S 3 -> margin 1, no business harm
+  // the owner chose S on S-r1's pairs; the rule makes them B: ui08 then B 3+1 vs S 1 in n and k
   const r = run({missing: [gone], owner: ownerOf({all: GOOD, [c]: 'SSSBS====' }), l1: l1Of({}, [`${c}/S-r1`])});
   assert.deepEqual(Object.entries(r.forcedPairs), [[id(c, 1, 1), 'second'], [id(c, 1, 2), 'second'], [id(c, 1, 3), 'second']]);
   assert.deepEqual(r.layer3.perCase[c], {S: 1, B: 4, same: 4, skip: 0, unanswered: 0, of: 9});
   assert.equal(r.layer2.pairs[id(c, 1, 1)].alarm, 'B', 'every P judgment of the pair is B');
-  assert.deepEqual(r.layer3.businessHarmCases, [c], 'B 4 vs S 1');
   assert.equal(r.layer1.perCase[c].S.axeFailing, 1);
+  // review M-2 (b): for the business-screen harm the 3 forced B wins of one missing screen count as 1: B 1+1 vs S 1
+  assert.deepEqual(r.layer3.businessHarmCounts[c], {S: 1, B: 2, ownerB: 1, forcedBPairs: 3, forcedBScreens: [`${c}/S-r1/original`]});
+  assert.deepEqual([r.layer3.businessHarmCases, r.layer3.n, r.layer3.k], [[], 21 + 5, 18 + 1], 'n and k keep every forced pair (ui08: S 1 + B 4)');
+  // with 2 more owner B wins the margin is 3: harm
+  const r3 = run({missing: [gone], owner: ownerOf({all: GOOD, [c]: 'SSSBB====' }), l1: l1Of({}, [`${c}/S-r1`])});
+  assert.deepEqual([r3.layer3.businessHarmCounts[c].B, r3.layer3.businessHarmCounts[c].S, r3.layer3.businessHarmCases, r3.step], [3, 0, [c], 2]);
+  // two missing S screens of the case: 2, not 6; a forced S win (missing B screen) counts per pair
+  const two = run({missing: [gone, `${c}/S-r2/original`], owner: ownerOf({all: GOOD, [c]: 'SSSSSSS==' }), l1: l1Of({}, [`${c}/S-r1`, `${c}/S-r2`])});
+  assert.deepEqual([two.layer3.perCase[c].B, two.layer3.businessHarmCounts[c].B, two.layer3.businessHarmCounts[c].S, two.layer3.businessHarmCases], [6, 2, 1, []]);
+  const bGone = run({missing: [`${c}/B-r1/original`], owner: ownerOf({all: GOOD, [c]: 'BBBBBBB==' })});
+  assert.deepEqual([bGone.layer3.businessHarmCounts[c].S, bGone.layer3.businessHarmCounts[c].B], [3, 4]);
   // both screens of a pair missing: 同等
   const both = run({missing: [gone, `${c}/B-r1/original`]});
   assert.equal(both.forcedPairs[id(c, 1, 1)], 'same');
@@ -146,4 +202,14 @@ test('H-1: a missing screen counts as the other side chosen (owner and P), both 
 test('owner choices: 同等, 判断しない and unanswered are outside n', () => {
   const r = run({owner: ownerOf({all: 'SSSSSSB=-', 'lp-new': 'SSSSSSB..'})});
   assert.deepEqual([r.layer3.n, r.layer3.perCase['lp-new'].unanswered, r.layer3.perCase['ui02-exhibition'].skip], [28, 2, 1]);
+});
+
+test('L-7 power-sim: decide.mjs itself on synthetic records; reproducible with the seed; the shares add up', async () => {
+  const {simulate} = await import('./power-sim.mjs');
+  const a = simulate({runs: 300, seed: 7, sRate: 0.8}), b = simulate({runs: 300, seed: 7, sRate: 0.8});
+  assert.deepEqual(a, b);
+  assert.ok(Math.abs(a.adopt + a.reject + a.undecided - 1) < 0.005);
+  assert.ok(a.adopt > 0.4 && a.binomialOnly >= a.adopt);
+  const m = simulate({runs: 200, seed: 7, sRate: 0.5, pMissing: 0.2, screenMissing: 0.1});
+  assert.ok(m.undecidedStep0 > 0 && m.harmLayer1 > 0, 'missing judgments and screens reach step 0 and layer 1');
 });

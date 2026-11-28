@@ -1,8 +1,12 @@
 // #1867 gate, the part that reads the design records (config/layers/gate-count.json). No model call.
-//   pack:    node harness/gate-packet.mjs pack <runs-root> <out-dir> --seed <s> [--replace <failed>=<replacement>]...
-//            <out-dir>/packet/{TASK.md, index.json, records/<id>.md}: the 24 records (B and S) under random ids in a
-//            random order (seed), nothing else; a missing record is an empty file. <out-dir>/key/key.json maps ids back.
-//            The packet directory is the launch directory of the read-only counting session (gate-count.json host).
+//   pack:    node harness/gate-packet.mjs pack <runs-root> <out-dir> --seed <s> --runs-json <results/runs.json>
+//            [--replace <failed>=<replacement>]...
+//            <out-dir>/packet/{TASK.md, index.json, records/<id>.md}: the records of the 24 slots (B and S) under random
+//            ids in a random order (seed), nothing else; a valid trial without a record is an empty file. <out-dir>/key/
+//            key.json maps ids back. The packet directory is the launch directory of the read-only counting session
+//            (gate-count.json host). Review L-1: the trials taken must be the counted rows of runs.json (checkCounted, as
+//            combine), and a slot without a valid trial (its replacement failed too, or no replacement was run) is not
+//            in the packet: the key lists it in absent, and combine counts it as 無い ((a), (b) and the gate false).
 //   check:   node harness/gate-packet.mjs check <packet-dir> <answer-file>
 //            Whether a round's answer must be redone (review L-2): no answer, unreadable JSON, or an id without a/b
 //            booleans -> exit 1 (redo once in a new context). Reads only the packet's ids, never the key.
@@ -19,20 +23,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {makeRng, shuffle, idAllocator, extractJson, readJson, writeJson} from '../../1835-design-eval-layers/harness/eval-common.mjs';
-import {countedTrials, parseReplacements, argList, workOf, RECORD, CASES, checkCounted} from './trials.mjs';
+import {countedTrials, parseReplacements, argList, workOf, RECORD, CASES, checkCounted, failedCounted} from './trials.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const PROMPT = path.resolve(here, '../config/layers/gate-count-prompt.md');
 
-export function pack({runs, out, seed, replacements = {}}) {
+export function pack({runs, out, seed, replacements = {}, runsRows}) {
   if (!seed) throw new Error('--seed is required');
+  if (!Array.isArray(runsRows)) throw new Error('--runs-json <results/runs.json> is required (review L-1)');
   const pk = path.join(out, 'packet');
   if (fs.existsSync(pk)) throw new Error(`${pk} exists; use a new directory`);
-  const trials = countedTrials(replacements);
+  checkCounted(replacements, runsRows);
+  const failed = failedCounted(runsRows);
+  const all = countedTrials(replacements);
+  const trials = all.filter((t) => !failed.has(t.name));
   const newId = idAllocator(makeRng(seed, 'gate-ids'), 6);
   const order = shuffle(trials, makeRng(seed, 'gate-order'));
   fs.mkdirSync(path.join(pk, 'records'), {recursive: true});
-  const key = {schema: 'asc-1867-gate-key/v1', seed, records: {}};
+  const key = {schema: 'asc-1867-gate-key/v1', seed, records: {},
+    absent: all.filter((t) => failed.has(t.name)).map((t) => ({condition: t.condition, case: t.case, slot: t.slot, run: t.name, reason: 'failed trial (no valid trial in the slot)'}))};
   const ids = order.map((t) => {
     const id = newId('r');
     const f = path.join(workOf(runs, t), RECORD);
@@ -77,11 +86,17 @@ export function roundAnswers(key, raw) {
 export function combine({rounds, runsRows}) {
   if (rounds.length !== 2) throw new Error('combine needs exactly 2 rounds');
   const machine = Object.fromEntries(runsRows.map((r) => [`${r.condition}-${r.case}-${r.run}`, r.expectReadsAll === true]));
-  const runsOf = rounds.map(({key}) => Object.values(key.records).map((r) => r.run).sort().join());
+  const absentOf = (key) => key.absent ?? [];
+  const runsOf = rounds.map(({key}) => [...Object.values(key.records), ...absentOf(key)].map((r) => r.run).sort().join());
   if (runsOf[0] !== runsOf[1]) throw new Error('the two rounds do not hold the same trials');
-  // review L-3: the trials of the key are the counted rows of runs.json
-  const repl = Object.fromEntries(Object.values(rounds[0].key.records).filter((r) => r.run !== `${r.condition}-${r.case}-${r.slot.split('-r')[1]}`).map((r) => [`${r.condition}-${r.case}-${r.slot.split('-r')[1]}`, r.run]));
+  if (rounds.map(({key}) => absentOf(key).map((r) => r.run).sort().join()).some((x, _, xs) => x !== xs[0])) throw new Error('the two rounds do not leave out the same slots');
+  // review L-3: the trials of the key are the counted rows of runs.json; L-1: the slots left out are its failed counted rows
+  const slotsOf = [...Object.values(rounds[0].key.records), ...absentOf(rounds[0].key)];
+  const repl = Object.fromEntries(slotsOf.filter((r) => r.run !== `${r.condition}-${r.case}-${r.slot.split('-r')[1]}`).map((r) => [`${r.condition}-${r.case}-${r.slot.split('-r')[1]}`, r.run]));
   checkCounted(repl, runsRows);
+  const failed = failedCounted(runsRows);
+  const absentRuns = absentOf(rounds[0].key).map((r) => r.run).sort().join(), wantAbsent = slotsOf.filter((r) => failed.has(r.run)).map((r) => r.run).sort().join();
+  if (absentRuns !== wantAbsent) throw new Error(`the slots left out of the packet [${absentRuns}] are not the failed counted rows of runs.json [${wantAbsent}]`);
   const attemptsInfo = rounds.map(({key, attempts, text}, i) => {
     const at = attempts ?? [text];
     if (at.length < 1 || at.length > 2) throw new Error(`round ${i + 1}: one answer and at most one redo`);
@@ -94,12 +109,13 @@ export function combine({rounds, runsRows}) {
       costUsd: costs.reduce((s, c) => s + (c ?? 0), 0), costMissing: costs.filter((c) => c === null).length};
   });
   const ans = rounds.map(({key}, i) => roundAnswers(key, attemptsInfo[i].raw));
-  const trials = Object.values(rounds[0].key.records).map((k) => {
+  const trials = [...Object.values(rounds[0].key.records).map((k) => {
     const a = ans.every((x) => x[k.run].a), b = ans.every((x) => x[k.run].b);
     const m = machine[k.run] ?? false;
     return {condition: k.condition, case: k.case, slot: k.slot, run: k.run, a, b, aRounds: ans.map((x) => x[k.run].a), bRounds: ans.map((x) => x[k.run].b),
       unanswered: ans.map((x) => !x[k.run].answered), recordMissing: k.recordMissing, machine: m, gate: a && b && m};
-  }).sort((x, y) => (x.run < y.run ? -1 : 1));
+  }), ...absentOf(rounds[0].key).map((k) => ({condition: k.condition, case: k.case, slot: k.slot, run: k.run, a: false, b: false, aRounds: [false, false], bRounds: [false, false],
+    unanswered: [true, true], recordMissing: true, absent: k.reason, machine: false, gate: false}))].sort((x, y) => (x.run < y.run ? -1 : 1));
   const perCase = Object.fromEntries(CASES.map((c) => {
     const s = trials.filter((t) => t.condition === 'S' && t.case === c);
     const pass = s.filter((t) => t.gate).length;
@@ -117,8 +133,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const a = process.argv.slice(2), opt = (n) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : null; };
   try {
     if (a[0] === 'pack') {
-      const key = pack({runs: path.resolve(a[1]), out: path.resolve(a[2]), seed: opt('--seed'), replacements: parseReplacements(argList(a, '--replace'))});
-      console.log(JSON.stringify({records: Object.keys(key.records).length, missing: Object.values(key.records).filter((r) => r.recordMissing).length}));
+      if (!opt('--runs-json')) throw new Error('--runs-json <results/runs.json> is required (review L-1)');
+      const key = pack({runs: path.resolve(a[1]), out: path.resolve(a[2]), seed: opt('--seed'), replacements: parseReplacements(argList(a, '--replace')), runsRows: readJson(path.resolve(opt('--runs-json')))});
+      console.log(JSON.stringify({records: Object.keys(key.records).length, missing: Object.values(key.records).filter((r) => r.recordMissing).length, absent: key.absent.map((r) => r.run)}));
     } else if (a[0] === 'check') {
       const st = answerStatus(readJson(path.join(path.resolve(a[1]), 'index.json')), fs.readFileSync(path.resolve(a[2]), 'utf8'));
       console.log(JSON.stringify({ok: st.ok, reason: st.reason, missing: st.missingIds.length, costUsd: st.costUsd, isError: st.isError, subtype: st.subtype}));

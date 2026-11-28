@@ -16,12 +16,17 @@
 //   - Layer 2: a pair is an alarm when both evaluators chose the same side in both rounds. A confirmed harm is an alarm
 //     for B on a pair where the owner chose B. A case has layer-2 harm when confirmed harms >= 2 of 3 and, in its 9
 //     layer-3 pairs, the owner chose B more often than S (owner decision 2026-11-28). A P judgment without a valid answer
-//     (failed, invalid, images not viewed, isolation, the budget stop) is filled with S and with B; when the layer-2
-//     harm (any case) differs between the two, the conclusion is 未判定 (review M-2). Filling is monotone, so the two
-//     extremes cover every filling.
+//     (failed, invalid, images not viewed, isolation, the budget stop) is filled with S and with B; when the conclusion
+//     (not only the layer-2 harm) differs between the two, the conclusion is 未判定 (review M-2, L-4). Filling is
+//     monotone, so the two extremes cover every filling.
 //   - Layer 3: n and k over the cases the gate judged; n >= gate.minOwnerDecidedPairs; one-sided binomial at alpha.
-//     Business-screen harm: in ui03 or ui08, owner B - owner S >= 3 (owner decision 2026-11-28). All 4 cases.
+//     Business-screen harm: in ui03 or ui08, owner B - owner S >= 3 (owner decision 2026-11-28), where the B wins forced
+//     by a missing S screen count once per missing screen (review M-2 (b); n, k and layer 2 count every pair). All 4 cases.
 //   - Layer 1 harm: axeNoSeriousCritical failing in more S than B trials (of 3) in >= 2 cases.
+//   - Step 0 also covers: the shared harness not-judged, a generation stopped at the stop line without completing (review
+//     High-1: capReached && !complete), the layer-2 cap under 6 USD, Fable over the cap.
+//   - Checks (review L-2, L-3): the owner-key and P-key seeds and the P rounds are those of eval.json, the P ledger header
+//     capUsd is the layer-2 cap, and an unknown owner choice stops.
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -113,9 +118,45 @@ export function layer2({pItems, J, rounds, owner, counts, fill, rule}) {
   return {perCase, pairs, harmCases: CASES.filter((c) => perCase[c].harm)};
 }
 
-export function decide({cfg, judge, gate, owner, ownerKey, pKey, J, layer1Files, fableSpentUsd = 0, gatePerRoundCapUsd}) {
+// Layer-3 business-screen harm (review M-2, (b) of the lead's decision): owner B and S per case, where the B wins that a
+// missing S screen forced count once per missing screen (not once per pair). The effect (n, k) and layer 2 use the plain
+// counts. Only the forced B wins are compressed (the decision names those; see EVAL_PLAN.md「画面の無い試行」).
+export function businessCounts(items, ownerAll, forced, cases) {
+  const out = {};
+  for (const c of cases) {
+    const its = items.filter((i) => i.case === c);
+    const ownerB = its.filter((i) => !forced[i.id] && ownerAll[i.id] === 'second').length;
+    const forcedBScreens = [...new Set(its.filter((i) => forced[i.id] === 'second').map((i) => i.first))].sort();
+    const S = its.filter((i) => ownerAll[i.id] === 'first').length;
+    out[c] = {S, B: ownerB + forcedBScreens.length, ownerB, forcedBPairs: its.filter((i) => forced[i.id] === 'second').length, forcedBScreens};
+  }
+  return out;
+}
+
+// The conclusion 1-4 given the layer-2 harm cases of one filling (step 0 is decided before, by the caller).
+function conclude({gate, judgeable, harmsL1, l2Cases, harmsL3, n, k, minN, pValue, alpha}) {
+  const harms = [...harmsL1, ...(l2Cases.length ? [`層2：確かめられた害（${l2Cases.join('・')}）`] : []), ...harmsL3];
+  if (gate.gate !== 'judged') return {step: 1, conclusion: '未判定', why: [`門で判定できたケースが${judgeable.length}（3未満）`]};
+  if (harms.length) return {step: 2, conclusion: '不採用', why: harms};
+  if (n < minN) return {step: 3, conclusion: '未判定', why: [`ownerが優劣を付けた組n=${n}が下限${minN}に届かない`]};
+  if (pValue <= alpha) return {step: 4, conclusion: '採用', why: [`k=${k}/n=${n}、p=${pValue.toFixed(4)} ≤ ${alpha}`]};
+  return {step: 4, conclusion: '不採用', why: [`k=${k}/n=${n}、p=${pValue.toFixed(4)} > ${alpha}（この規模では効果を示せなかった）`]};
+}
+
+const OWNER_VALUES = ['first', 'second', 'same', 'skip'];
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// pLedgerHeader: the header line of <p-runs>/ledger.jsonl (review L-2); required when layer 2 may start.
+export function decide({cfg, judge, gate, owner, ownerKey, pKey, J, layer1Files, fableSpentUsd = 0, gatePerRoundCapUsd, pLedgerHeader = null}) {
   const rule = cfg.decision;
   const reasons0 = [];
+  // review L-2: the keys and the P ledger are those of this config
+  if (ownerKey.seed !== cfg.seeds.ownerPage) throw new Error(`owner-key.json seed ${ownerKey.seed} is not eval.json seeds.ownerPage ${cfg.seeds.ownerPage}`);
+  if (pKey.seed !== cfg.seeds.packets) throw new Error(`P key seed ${pKey.seed} is not eval.json seeds.packets ${cfg.seeds.packets}`);
+  if (!same(pKey.rounds, cfg.rounds)) throw new Error(`P key rounds ${JSON.stringify(pKey.rounds)} are not eval.json rounds ${JSON.stringify(cfg.rounds)}`);
+  // review L-3: an unknown owner choice stops (as #1852 decide)
+  const bad = Object.entries(owner).filter(([, v]) => !OWNER_VALUES.includes(v));
+  if (bad.length) throw new Error(`owner answers with an unknown choice: ${bad.map(([k]) => k).join(', ')}`);
   // every layer-3 pair has S first (eval.json)
   const items = planItems(cfg).filter((i) => i.layer === 3);
   if (!items.every((i) => parseScreen(i.first).trial.startsWith('S-') && parseScreen(i.second).trial.startsWith('B-'))) throw new Error('every layer-3 pair must be [S, B]');
@@ -133,7 +174,6 @@ export function decide({cfg, judge, gate, owner, ownerKey, pKey, J, layer1Files,
   // owner, with H-1
   const ownerAll = {...owner};
   for (const [id, side] of Object.entries(forced)) ownerAll[id] = side;
-  for (const [id, v] of Object.entries(ownerAll)) if (v === null || v === undefined) delete ownerAll[id];
   const counts = ownerCounts(items, ownerAll);
   // P, with H-1; null = no valid judgment (M-2)
   const Jf = {};
@@ -144,7 +184,6 @@ export function decide({cfg, judge, gate, owner, ownerKey, pKey, J, layer1Files,
   const nulls = EVALUATORS.flatMap((e) => pKey.rounds.flatMap((r) => pItems.filter((i) => Jf[e][r][i.id] === null).map((i) => `${e}/round${r}/${i.id}`)));
   const fillS = layer2({pItems, J: Jf, rounds: pKey.rounds, owner: ownerAll, counts, fill: 'first', rule: rule.layer2});
   const fillB = layer2({pItems, J: Jf, rounds: pKey.rounds, owner: ownerAll, counts, fill: 'second', rule: rule.layer2});
-  const l2Undecided = (fillS.harmCases.length > 0) !== (fillB.harmCases.length > 0);
   // layer 1
   const l1 = layer1Counts(layer1Files);
   // layer 3
@@ -153,37 +192,50 @@ export function decide({cfg, judge, gate, owner, ownerKey, pKey, J, layer1Files,
   if (gate.minOwnerDecidedPairs !== undefined && gate.minOwnerDecidedPairs !== minN) throw new Error(`gate.json minOwnerDecidedPairs ${gate.minOwnerDecidedPairs} is not ${minN}`);
   const n = judgeable.reduce((s, c) => s + counts[c].S + counts[c].B, 0), k = judgeable.reduce((s, c) => s + counts[c].S, 0);
   const pValue = n ? binomTail(n, k, rule.chance) : null;
-  const business = rule.layer3Harm.cases.filter((c) => counts[c].B - counts[c].S >= rule.layer3Harm.minBMinusS);
+  const harmCounts = businessCounts(items, ownerAll, forced, rule.layer3Harm.cases);
+  const business = rule.layer3Harm.cases.filter((c) => harmCounts[c].B - harmCounts[c].S >= rule.layer3Harm.minBMinusS);
   // cost
   const gateUsd = (gate.costUsd ?? 0) + (gate.costMissing ?? 0) * gatePerRoundCapUsd;
   const cap = layer2Cap({generationUsd: judge.completion?.spentUsd ?? 0, gateUsd, budget: rule.budget});
-  // conclusion
+  if (cap.start) {
+    if (!pLedgerHeader) throw new Error('the P ledger (<p-runs>/ledger.jsonl) has no header line');
+    if (typeof pLedgerHeader.capUsd !== 'number' || Math.abs(pLedgerHeader.capUsd - cap.capUsd) > 1e-6) throw new Error(`the P ledger header capUsd ${pLedgerHeader.capUsd} is not the layer-2 cap ${cap.capUsd}`);
+  }
+  // conclusion, step 0
+  // review High-1: only a run stopped at the stop line without completing (basis cap-reached); a complete run whose
+  // ledger is near the line (capReached: true, complete: true, basis complete) is judged
+  const stoppedAtCap = judge.completion?.capReached === true && judge.completion?.complete !== true;
   if (judge.judgement?.verdict === 'not-judged') reasons0.push(`共通の仕組みの判定がnot-judged（${judge.judgement.reason ?? ''}）`);
-  if (judge.completion?.capReached) reasons0.push('生成が停止の線に達した');
+  if (stoppedAtCap) reasons0.push('生成が完了せずに停止の線で止まった');
   if (!cap.start) reasons0.push(`層2の上限${cap.capUsd} USDが${rule.budget.layer2MinUsd} USD未満（費用の超過の見込み）`);
   if (fableSpentUsd > cap.capUsd + 0.01) reasons0.push(`層2のFableの費用${round4(fableSpentUsd)} USDが上限${cap.capUsd} USDを超えた`);
-  if (l2Undecided) reasons0.push(`層2の欠け（${nulls.length}件）をSで埋めるかBで埋めるかで、層2の害の判定が変わる`);
-  const harms = [];
-  if (l1.axeWorseCases.length >= rule.layer1Harm.minCases) harms.push(`層1：${rule.layer1Harm.check}の不合格がBより多いケースが${l1.axeWorseCases.length}（${l1.axeWorseCases.join('・')}）`);
-  // when decided, both fillings agree on whether there is harm (the cases of the B filling include those of the S filling)
-  if (!l2Undecided && fillB.harmCases.length > 0) harms.push(`層2：確かめられた害（${fillB.harmCases.join('・')}）`);
-  if (business.length) harms.push(`層3：業務の画面でownerのBがSより${rule.layer3Harm.minBMinusS}以上多い（${business.join('・')}）`);
+  const harmsL1 = l1.axeWorseCases.length >= rule.layer1Harm.minCases ? [`層1：${rule.layer1Harm.check}の不合格がBより多いケースが${l1.axeWorseCases.length}（${l1.axeWorseCases.join('・')}）`] : [];
+  const harmsL3 = business.length ? [`層3：業務の画面でownerのBがSより${rule.layer3Harm.minBMinusS}以上多い（${business.join('・')}。画面の欠けによるBの勝ちは欠けた画面1つにつき1組）`] : [];
+  const base = {gate, judgeable, harmsL1, harmsL3, n, k, minN, pValue, alpha: rule.alpha};
+  // review L-4: the missing P judgments make the conclusion 未判定 only when the conclusion with every one filled S differs
+  // from the conclusion with every one filled B. The conclusion depends on layer 2 only through whether a case has harm,
+  // which is monotone in the filling, so the two extremes cover every filling.
+  const rS = conclude({...base, l2Cases: fillS.harmCases}), rB = conclude({...base, l2Cases: fillB.harmCases});
+  const l2Undecided = rS.conclusion !== rB.conclusion;
   let step, conclusion, why;
   if (reasons0.length) [step, conclusion, why] = [0, '未判定', reasons0];
-  else if (gate.gate !== 'judged') [step, conclusion, why] = [1, '未判定', [`門で判定できたケースが${judgeable.length}（3未満）`]];
-  else if (harms.length) [step, conclusion, why] = [2, '不採用', harms];
-  else if (n < minN) [step, conclusion, why] = [3, '未判定', [`ownerが優劣を付けた組n=${n}が下限${minN}に届かない`]];
-  else if (pValue <= rule.alpha) [step, conclusion, why] = [4, '採用', [`k=${k}/n=${n}、p=${pValue.toFixed(4)} ≤ ${rule.alpha}`]];
-  else [step, conclusion, why] = [4, '不採用', [`k=${k}/n=${n}、p=${pValue.toFixed(4)} > ${rule.alpha}（この規模では効果を示せなかった）`]];
+  else if (l2Undecided) [step, conclusion, why] = [0, '未判定', [`層2の欠け（${nulls.length}件）を全部Sで埋めると「${rS.conclusion}」（段${rS.step}）、全部Bで埋めると「${rB.conclusion}」（段${rB.step}）で、結論が変わる`]];
+  else {
+    // the S filling has the fewest layer-2 harms: what it finds holds for every filling
+    [step, conclusion, why] = [rS.step, rS.conclusion, rS.why];
+    if (rB.step !== rS.step || !same(rB.why, rS.why)) why = [...why, `（層2の欠けを全部Bで埋めた場合も結論は「${rB.conclusion}」：段${rB.step}、${rB.why.join('；')}）`];
+  }
   return {schema: 'asc-1867-decision/v1', conclusion, step, why,
     note: '「不採用」は「この規模では効果を示せなかった」という意味を含む。組は独立ではないので、p値は目安（計画）',
     missingScreens: [...missing].sort(), forcedPairs: forced,
     layer1: l1,
-    layer2: {missingJudgments: nulls, undecided: l2Undecided, harmIfFilledS: fillS.harmCases, harmIfFilledB: fillB.harmCases, perCase: fillS.perCase, perCaseIfFilledB: fillB.perCase, pairs: fillS.pairs},
-    layer3: {perCase: counts, judgeableCases: judgeable, n, k, minN, pValue, criticalK: n ? criticalK(n, rule.alpha, rule.chance) : null, effect: pValue !== null && pValue <= rule.alpha, businessHarmCases: business},
+    layer2: {missingJudgments: nulls, undecided: l2Undecided, harmDiffers: !same(fillS.harmCases, fillB.harmCases), conclusionIfFilledS: rS, conclusionIfFilledB: rB,
+      harmIfFilledS: fillS.harmCases, harmIfFilledB: fillB.harmCases, perCase: fillS.perCase, perCaseIfFilledB: fillB.perCase, pairs: fillS.pairs},
+    layer3: {perCase: counts, judgeableCases: judgeable, n, k, minN, pValue, criticalK: n ? criticalK(n, rule.alpha, rule.chance) : null, effect: pValue !== null && pValue <= rule.alpha,
+      businessHarmCounts: harmCounts, businessHarmCases: business},
     gate: {gate: gate.gate, judgeableCases: judgeable, perCase: gate.perCase},
-    cost: {...cap, fableSpentUsd: round4(fableSpentUsd)},
-    judge: {verdict: judge.judgement?.verdict ?? null, capReached: !!judge.completion?.capReached}};
+    cost: {...cap, fableSpentUsd: round4(fableSpentUsd), pLedgerCapUsd: pLedgerHeader?.capUsd ?? null},
+    judge: {verdict: judge.judgement?.verdict ?? null, capReached: !!judge.completion?.capReached, complete: !!judge.completion?.complete, basis: judge.completion?.basis ?? null, stoppedAtCap}};
 }
 
 function main() {
@@ -209,10 +261,11 @@ function main() {
   const ledgerFile = path.join(runs, 'ledger.jsonl');
   const ledger = fs.existsSync(ledgerFile) ? fs.readFileSync(ledgerFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
   const fableSpentUsd = ledger.filter((l) => l.type === 'call' && l.evaluator === 'fable').reduce((s, l) => s + (l.chargedUsd ?? 0), 0);
+  const pLedgerHeader = ledger.find((l) => l.type === 'header') ?? null;
   const l1 = all('--layer1').map((f) => readJson(path.resolve(f)));
   if (l1.length !== CASES.length) throw new Error(`--layer1: one layer1.json per case (${CASES.length})`);
   const res = decide({cfg, judge: readJson(need('--judge')), gate: readJson(need('--gate')), owner: loadOwner(need('--owner'), need('--owner-key')), ownerKey,
-    pKey, J: pJudgments({key: pKey, runs}), layer1Files: l1, fableSpentUsd, gatePerRoundCapUsd: gateCfg.budget.perRoundCapUsd});
+    pKey, J: pJudgments({key: pKey, runs}), layer1Files: l1, fableSpentUsd, gatePerRoundCapUsd: gateCfg.budget.perRoundCapUsd, pLedgerHeader});
   writeJson(need('--out'), res);
   console.log(JSON.stringify({conclusion: res.conclusion, step: res.step, why: res.why, n: res.layer3.n, k: res.layer3.k, minN: res.layer3.minN, pValue: res.layer3.pValue}, null, 1));
 }

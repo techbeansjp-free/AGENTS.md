@@ -607,7 +607,7 @@ test('#1867 owner-page --allow-missing: 「画面なし」 on the side, missingS
   assert.ok(!('missingScreens' in full.key) && Object.values(full.key.pairs).every((p) => !('missing' in p)), 'without the option the key is as before');
 });
 
-test('#1867 run-eval: a paid --cap-usd needs budget.capFromArg and 0 < cap <= budget.capUsd', () => {
+test('#1867 run-eval: a paid --cap-usd needs budget.capFromArg and 0 < cap <= budget.capUsd; with capFromArg a paid run needs it (L-6)', () => {
   const prev = process.env.ASC1835_ALLOW_PAID; process.env.ASC1835_ALLOW_PAID = '1';
   try {
     let spawned = 0;
@@ -623,5 +623,16 @@ test('#1867 run-eval: a paid --cap-usd needs budget.capFromArg and 0 < cap <= bu
     assert.equal(readLedger(path.join(runs, 'ledger.jsonl')).find((l) => l.type === 'header').capUsd, 0.5);
     const argv = readJson(path.join(runs, 'fable', 'round1', 'P', pk, 'argv.json')).args;
     assert.equal(argv[argv.indexOf('--max-budget-usd') + 1], '0.5000', 'the call budget is limited by the cap');
+    // review L-6: with capFromArg a paid run without --cap-usd is refused (either evaluator), before any call
+    const before = spawned;
+    for (const evaluator of ['fable', 'codex']) assert.throws(() => runEvaluator({cfg: c, packetsRoot: pkRoot, runs: tmp('asc1835-r-'), evaluator, dryRun: false, spawn}), /--cap-usd is required/);
+    // the ledger of this run was started with 0.5: another cap on it is refused (the codex run takes the same cap)
+    assert.throws(() => runEvaluator({cfg: c, packetsRoot: pkRoot, runs, evaluator: 'codex', dryRun: false, capUsd: 0.6, methods: ['P'], rounds: [1], only: new Set([pk]), spawn}), /started with --cap-usd 0.5/);
+    assert.equal(spawned, before);
+    // without capFromArg the cap is budget.capUsd when --cap-usd is not given (as before); a dry run needs no --cap-usd
+    assert.doesNotThrow(() => runEvaluator({cfg, packetsRoot: pkRoot, runs: tmp('asc1835-r-'), evaluator: 'fable', dryRun: false, methods: ['P'], rounds: [1], only: new Set([pk]), spawn}));
+    const dry = tmp('asc1835-r-');
+    runEvaluator({cfg: c, packetsRoot: pkRoot, runs: dry, evaluator: 'fable', dryRun: true, methods: ['P'], rounds: [1], only: new Set([pk])});
+    assert.equal(readLedger(path.join(dry, 'ledger.jsonl')).find((l) => l.type === 'header').capUsd, cfg.budget.capUsd);
   } finally { if (prev === undefined) delete process.env.ASC1835_ALLOW_PAID; else process.env.ASC1835_ALLOW_PAID = prev; }
 });

@@ -54,18 +54,18 @@
 
 ```text
 node --test docs/evidence/shared-harness/test/              # 59件すべて合格（#1867で足した7件を含む）
-node --test docs/evidence/1835-design-eval-layers/harness/   # 41件合格、1件skip（描画の差の試験。Dockerの結果が要る。#1867のowner-page --allow-missingと有料の--cap-usdの2件を含む）
+node --test docs/evidence/1835-design-eval-layers/harness/   # 41件合格、1件skip（描画の差の試験。Dockerの結果が要る。#1867のowner-page --allow-missingと有料の--cap-usd（capFromArgでは必須。第3回のL-6）の2件を含む）
 node --test docs/evidence/1852-p-good-pairs/harness/         # 9件すべて合格
-node --test docs/evidence/1867-design-persona/harness/       # 20件すべて合格（decide.test.mjsの10件、harness.test.mjsの10件）
-node docs/evidence/shared-harness/dry-run.mjs <scratch>/rel1867/run1867dry3 \
+node --test docs/evidence/1867-design-persona/harness/       # 27件すべて合格（decide.test.mjsの14件、harness.test.mjsの13件。第3回レビューの対応で7件を足した）
+node docs/evidence/shared-harness/dry-run.mjs <scratch>/rel1867/run1867dry4 \
   --tarball-B <scratch>/rel1867/release/agent-skill-chain-0.5.131.tgz \
   --tarball-S <scratch>/rel1867/candidate/agent-skill-chain-0.5.131.tgz \
-  --config docs/evidence/1867-design-persona/config --out <scratch>/rel1867/run1867dry3.json
+  --config docs/evidence/1867-design-persona/config --out <scratch>/rel1867/run1867dry4.json
 ```
 
-dry run（2回目のレビューの指摘を直した後。`inquiries.md`を直したのでfixtureを作り直した。fixtureの`inquiries.md`は`b463bdf5…`。tarballはB `e8135f4a…`・S `a37e90c0…`のまま（ケースはtarballに入らない。Sのtarballに`docs/evidence`のentryは0件））：`pass: true`（16の照合すべて）。入口はBが17件、Sが18件。Sのfixtureに`design-creation`の本文とreferences 2件があり、候補とbyte単位で一致する。導入後の差は`design-creation`のfile（本文・reference・その写し・Claude Codeの入口）、`skills/README.md`とその写し、`distribution.json`、`managed-runtime/`の`package.json`・`src/runtime-files.json`・`src/project-assets.mjs`だけで、他の17件の入口は同じ（2回目のdry runも同じ13件）。tarballでは`release-identity.json`も違う（上の「条件」）が、導入後の`managed-runtime/`には`release-identity.json`が置かれない（両条件とも）。`conditions.json`の`dryRun.installedDiffExpected`は、違ってもよいものとしてそれを含む（違うことは求めない）。計画24試行、`--max-turns`なし、`--max-budget-usd 1.5`。
+dry run（3回目のレビューの指摘を直した後にも`run1867dry4`で`pass: true`（16の照合すべて）。以下は2回目のレビューの指摘を直した後の記録で、同じ結果。`inquiries.md`を直したのでfixtureを作り直した。fixtureの`inquiries.md`は`b463bdf5…`。tarballはB `e8135f4a…`・S `a37e90c0…`のまま（ケースはtarballに入らない。Sのtarballに`docs/evidence`のentryは0件））：`pass: true`（16の照合すべて）。入口はBが17件、Sが18件。Sのfixtureに`design-creation`の本文とreferences 2件があり、候補とbyte単位で一致する。導入後の差は`design-creation`のfile（本文・reference・その写し・Claude Codeの入口）、`skills/README.md`とその写し、`distribution.json`、`managed-runtime/`の`package.json`・`src/runtime-files.json`・`src/project-assets.mjs`だけで、他の17件の入口は同じ（2回目のdry runも同じ13件）。tarballでは`release-identity.json`も違う（上の「条件」）が、導入後の`managed-runtime/`には`release-identity.json`が置かれない（両条件とも）。`conditions.json`の`dryRun.installedDiffExpected`は、違ってもよいものとしてそれを含む（違うことは求めない）。計画24試行、`--max-turns`なし、`--max-budget-usd 1.5`。
 
-層2・層3と集計の道具のdry run（モデルを呼ばない。`eval.json`で、合成の画面を置き、`ui08-existing-ds/S-r1`の画面を欠いた）：`owner-page.mjs --allow-missing`は36組（`missingScreens`が1）、`make-packets.mjs --allow-missing`は各回11束（欠けた画面を含む3組を除き、Pの組は11）、`run-eval.mjs run --dry-run --retries 1 --cap-usd 8 --dry-invalid-every 7`は両評価者とも22回すべて有効（再試行3回）、`decide.mjs decide`は結論「採用」（4段、n 32・k 29）で、欠けた画面の3組をB側として数えた（`forcedPairs`）。`decide.mjs cap`は台帳8.2・門2.45（費用の無い回答1件を1.5で数えた）で上限8、台帳11.5で上限6.05。
+層2・層3と集計の道具のdry run（第3回レビューの指摘を直した後。モデルを呼ばない。`eval.json`で、合成の生の記録（24試行と、失敗した`S-lp-new-2`を置き換えた`S-lp-new-4`）と`runs.json`、合成の画面を置き、`ui08-existing-ds/S-r1`の画面を欠いた。`judge.json`は完了かつ`capReached: true`（台帳10.2 USD）にした）：`gate-packet.mjs pack --runs-json --replace S-lp-new-2=S-lp-new-4`は各回24件（`absent`なし）、`check`は両回とも合格、`combine`は門`judged`（4ケース）・費用1.8 USD。`decide.mjs cap`は上限8 USD（20−10.2−1.8）。`owner-page.mjs --allow-missing`は36組（`missingScreens`が1）、`make-packets.mjs --allow-missing`は各回11束、`run-eval.mjs run --dry-run --retries 1 --cap-usd 8 --dry-invalid-every 7`はFable・Codexとも22回すべて有効（再試行3回）。`decide.mjs decide`は結論「採用」（4段、n 36・k 29）で、完了した生成を停止の線とみなさず（High-1）、欠けた画面の3組をB側として数え（`forcedPairs`）、業務の画面の害の数えではその3組を1組とした（ui08：B 2・S 5。M-2）。Pの台帳のheaderの`capUsd`（8）と上限、keyのseedと回の照合も通った（L-2）。
 
 ## 層1〜3と門の数えの設定（`layers/`）
 
@@ -79,11 +79,11 @@ dry run（2回目のレビューの指摘を直した後。`inquiries.md`を直�
 
 #1835の道具に足したもの（どれもfieldか引数で働き、無ければ従来どおり。#1835・#1852の試験はすべて通る）：`run-layer1.mjs`の`--cases`（`config/cases.json`の代わり）と`--gold-add`（#1804の`gold.json`にケースを足す。同じkeyは拒否）、`make-packets.mjs`の`pPairs`（Pの束を、層3の組のうち挙げた組だけにする。層3に無い組は拒否）、`owner-page.mjs`の`--allow-missing`（欠けた画面を「画面なし」の札で示し、`owner-key.json`の`missingScreens`と組の`missing`に書く。無ければ従来どおり止まる。レビュー2回目のH-1）、`run-eval.mjs`の有料の`--cap-usd`（`budget.capFromArg`があるときだけ、0より大きく`budget.capUsd`以下を受ける。M-5）。試験は`eval.test.mjs`の`#1867`と[../harness/harness.test.mjs](../harness/harness.test.mjs)・[../harness/decide.test.mjs](../harness/decide.test.mjs)。
 
-[../harness/](../harness/)に足したもの（レビュー2回目）：`decide.mjs`（`cap`：層2の上限と始めてよいか。`decide`：結論の0〜4と各数値。M-4・M-5）、`stage-check.mjs`（各段階の前の照合と記録。M-3）、`gate-packet.mjs check`（やり直しの要否。L-2）、`combine`・`layer-pages.mjs`の`runs.json`との照合（L-3）。
+[../harness/](../harness/)に足したもの（レビュー2回目。3回目で`power-sim.mjs`（計画の率の表を`decide.mjs`そのもので再現するMonte Carlo）を足した）：`decide.mjs`（`cap`：層2の上限と始めてよいか。`decide`：結論の0〜4と各数値。M-4・M-5）、`stage-check.mjs`（各段階の前の照合と記録。M-3）、`gate-packet.mjs check`（やり直しの要否。L-2）、`combine`・`layer-pages.mjs`の`runs.json`との照合（L-3）。
 
 ## 測定の前に残っていること
 
-1. 計画（[../EVAL_PLAN.md](../EVAL_PLAN.md)）と、この設定の独立レビュー。1回目の指摘（H1〜H4・M1〜M6・L1〜L6）と2回目の指摘（H-1・H-2・M-1〜M-5・L-1〜L-8）は直した。1回目のL7（「下書き」の表記）は固定のcommitで直す。
+1. 計画（[../EVAL_PLAN.md](../EVAL_PLAN.md)）と、この設定の独立レビュー。1回目の指摘（H1〜H4・M1〜M6・L1〜L6）、2回目の指摘（H-1・H-2・M-1〜M-5・L-1〜L-8）、3回目の指摘（High-1・M-1・M-2・L-1〜L-7）は直した。1回目のL7（「下書き」の表記）は固定のcommitで直す。
 2. ownerの目印fileの承認を`results/probe-approval.json`に記録してcommitする。
 3. 固定：`node docs/evidence/shared-harness/fixation.mjs init $EV/results/fixation.json --ledger $LEDGER --config $EV`（#1843の手順と同じ）。最初の固定の記録のcommitを、この節の下に書く（`run-trial.mjs`が照合する）。
 
@@ -122,8 +122,8 @@ node $H/judge.mjs $EV/results --runs-root <scratch>/run1867/runs --ledger $LEDGE
 P67=docs/evidence/1867-design-persona/harness; G=<scratch>/run1867/gate; FIX=<固定のcommit>
 # 門の数え（2回、別のseed）。置き換えた試行があれば、judge.jsonの置き換え（runs.jsonのreplaces）どおりに --replace <失敗>=<置き換え> を付ける
 node $P67/stage-check.mjs gate --fixed-commit $FIX --log $EV/results/stage-checks.jsonl
-node $P67/gate-packet.mjs pack <scratch>/run1867/runs $G/r1 --seed 18670011
-node $P67/gate-packet.mjs pack <scratch>/run1867/runs $G/r2 --seed 18670012
+node $P67/gate-packet.mjs pack <scratch>/run1867/runs $G/r1 --seed 18670011 --runs-json $EV/results/runs.json [--replace ...]
+node $P67/gate-packet.mjs pack <scratch>/run1867/runs $G/r2 --seed 18670012 --runs-json $EV/results/runs.json [--replace ...]
 mkdir $G/out1 $G/out2
 (cd $G/r1/packet && claude -p --model opus --output-format json --restricted --permission-mode dontAsk --tools Read,Glob,Grep --strict-mcp-config --settings '{"disableAllHooks":true}' --no-session-persistence --max-budget-usd 1.5 < TASK.md > $G/out1/answer.json)
 (cd $G/r2/packet && claude -p --model opus --output-format json --restricted --permission-mode dontAsk --tools Read,Glob,Grep --strict-mcp-config --settings '{"disableAllHooks":true}' --no-session-persistence --max-budget-usd 1.5 < TASK.md > $G/out2/answer.json)
@@ -147,7 +147,7 @@ node $X/owner-page.mjs --config $C --render-root <scratch>/run1867/r --out <scra
 node $P67/stage-check.mjs layer2 --fixed-commit $FIX --log $EV/results/stage-checks.jsonl
 node $X/make-packets.mjs --config $C --render-root <scratch>/run1867/r --out <scratch>/run1867/eval --seed 18670002 --allow-missing
 ASC1835_ALLOW_PAID=1 node $X/run-eval.mjs run --config $C --packets <scratch>/run1867/eval/packets --runs <scratch>/run1867/pruns --evaluator fable --methods P --retries 1 --cap-usd $CAP --lock <scratch>/run1867/eval/key --lock <scratch>/run1867/owner --lock $G/r1/key --lock $G/r2/key
-ASC1835_ALLOW_PAID=1 node $X/run-eval.mjs run --config $C --packets <scratch>/run1867/eval/packets --runs <scratch>/run1867/pruns --evaluator codex --methods P --retries 1 --lock <scratch>/run1867/eval/key --lock <scratch>/run1867/owner --lock $G/r1/key --lock $G/r2/key
+ASC1835_ALLOW_PAID=1 node $X/run-eval.mjs run --config $C --packets <scratch>/run1867/eval/packets --runs <scratch>/run1867/pruns --evaluator codex --methods P --retries 1 --cap-usd $CAP --lock <scratch>/run1867/eval/key --lock <scratch>/run1867/owner --lock $G/r1/key --lock $G/r2/key
 # ownerの回答（owner-answers.json）を $EV/results/ にcommitする。その後に、門のkey・owner-key・Pの結果を開く
 # 集計
 node $P67/stage-check.mjs decide --fixed-commit $FIX --log $EV/results/stage-checks.jsonl
@@ -157,9 +157,11 @@ node $P67/decide.mjs decide --judge $EV/results/judge.json --gate $EV/results/ga
   --layer1 <scratch>/run1867/r/l1-ui03-dashboard/layer1.json --layer1 <scratch>/run1867/r/l1-ui08-existing-ds/layer1.json --out $EV/results/decision.json
 ```
 
-- 層2を始める前に`decide.mjs cap`で上限＝min(8, 20 −（生成の台帳の実費＋門の数えの実費）)を求め、6 USD未満なら止めて未判定（計画の「費用」）。Fableには`--cap-usd`でその値を渡す（`eval.json`の`budget.capFromArg`）。
+- 層2を始める前に`decide.mjs cap`で上限＝min(8, 20 −（生成の台帳の実費＋門の数えの実費）)を求め、6 USD未満なら止めて未判定（計画の「費用」）。FableとCodexには`--cap-usd`でその値を渡す（`eval.json`の`budget.capFromArg`。付けなければ有料の実行は止まる）。
 - 層2の警報・確かめられた害、層3の効果・害、層1の害、結論の0〜4は`decide.mjs decide`が出す（画面の無い組、欠けた判断、nの下限を含む。規則は計画と`eval.json`の`decision`）。
-- `stage-check.mjs`は`fixation.mjs check`、固定のcommitとの`git diff --exit-code`（`1867-design-persona/harness`・#1835の`harness`と`prompts`・#1804の`gold.json`・#1815の`cases.json`。未追跡のfileも見る）、#1835の`prompts/`のsha256と`eval.json`の照合を行う。
+- `stage-check.mjs`は`fixation.mjs check`、`--fixed-commit`が`results/fixation.json`の`fixedAtCommit`（この節の下に書く固定のcommit）であること、固定のcommitとの`git diff --exit-code`（`1867-design-persona/harness`・#1835の`harness`と`prompts`・#1852の`harness`・#1804の`cases`と`gold.json`・#1815の`cases.json`。未追跡のfileも見る。[decision-criteria.md](decision-criteria.md)の冒頭の「道具」と同じ）、#1835の`prompts/`のsha256と`eval.json`の照合を行う。
+- `gate-packet.mjs pack`は`--runs-json`が必須で、置き換えを`runs.json`と照合する。置き換えも失敗したslotは束に入れず（keyの`absent`）、門の数えでは「無い」とする。
+- `run-eval.mjs`の有料の実行には、`capFromArg`のある`eval.json`では`--cap-usd`が必須（FableとCodexの両方に`decide.mjs cap`の値を渡す）。
 
 - `--run`を付けない`run-trial.mjs`・`run-all.mjs`は、起動するcommandや試行の一覧を出すだけでモデルを呼ばない。
 - 台帳とtarballと生の記録は`<scratch>`に置く。scratchが消えると判定（生の記録からの作り直し）ができないので、評価の終わりまで消さない。層1〜3は生の記録の`work/`の画面を使う。
