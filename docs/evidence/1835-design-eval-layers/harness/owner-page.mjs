@@ -1,5 +1,5 @@
 // Layer 3 (EVAL_PLAN.md section 8): one local HTML page on which the owner compares the 9 natural pairs blind.
-// Usage: node harness/owner-page.mjs --render-root <dir> --out <dir> --seed <text>
+// Usage: node harness/owner-page.mjs --render-root <dir> --out <dir> --seed <text> [--config <eval.json>]
 // Output: <out>/owner-page.html (screenshots embedded as data: URIs with metadata chunks removed; a CSP blocks every
 // network request) and <out>/owner-key.json (pair id -> item and which screen is A/B; keep it away from the owner until the
 // choices are recorded). The page shows random pair ids in random order, the brief per case, and for each pair
@@ -70,7 +70,7 @@ document.getElementById('dl').onclick=()=>{const b=new Blob([JSON.stringify(resu
 if (import.meta.url === `file://${process.argv[1]}`) {
   const a = process.argv.slice(2), opt = (n) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : null; };
   try {
-    const r = buildOwnerPage({renderRoot: path.resolve(opt('--render-root') ?? ''), out: path.resolve(opt('--out') ?? ''), seed: opt('--seed')});
+    const r = buildOwnerPage({cfg: opt('--config') ? loadConfig(path.resolve(opt('--config'))) : loadConfig(), renderRoot: path.resolve(opt('--render-root') ?? ''), out: path.resolve(opt('--out') ?? ''), seed: opt('--seed')});
     console.log(JSON.stringify({pairs: r.pairs, bytes: r.bytes}));
   } catch (e) { console.error(e.message); process.exit(2); }
 }
