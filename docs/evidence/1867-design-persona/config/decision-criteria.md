@@ -34,7 +34,7 @@
 - ケースは、「`SKILL.md`が読まれ、1と2が両方ある」試行が3回中2回以上なら判定できる。判定できるケースが3未満（4ケース中）なら、全体を「未判定」とする。
 - 共通の仕組みの`perCondition.S.verdict`（`meets-levels`）は、4ケースすべてが機械の部分を満たしたことだけを示し、門の結果ではない。
 - Bの水準（`perCondition.B`）は計算されるが使わない。Bは`design-creation`を持たないので、読込みは構造上0件である。
-- 報告するだけのもの（判定に使わない）：referenceの読込み（`reference-read`）、成果物と記録の両方を書いた試行（`written-<ケース>`、`writeOk`）、各試行の`report`（入口・本文・各referenceの読込み、ascの本文の読込み、lp-newの`inquiries.md`の読込み、書いたfileの一覧）、`writesReport`（記録に「仮説」「根拠・出典」「ペルソナ・利用者の像」の語があるか。人が数えるときの手掛かりで、門ではない）。
+- 報告するだけのもの（判定に使わない）：referenceの読込み（`reference-read`）、成果物と記録の両方を書いた試行（`written-<ケース>`、`writeOk`）、各試行の`report`（入口・本文・各referenceの読込み、ascの本文の読込み、lp-newの`inquiries.md`の読込み、書いたfileの一覧）、`writesReport`（記録に「仮説」「根拠・出典」「ペルソナ・利用者の像」の語があるか。記録の中身を数えるときの手掛かりで、門ではない）。
 
 ### 2. 層1（機械の判定）
 

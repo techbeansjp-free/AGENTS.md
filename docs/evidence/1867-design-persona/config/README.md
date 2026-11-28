@@ -6,7 +6,7 @@
 
 ## 目的
 
-評価の計画のうち、**生成**（B・Sの24試行とprobe 2回）を、共通の仕組みで行う。共通の仕組みが数えるのは機械で数えられる部分だけである：Sで`design-creation`の`SKILL.md`とreferenceが読まれたか、依頼の成果物と記録（`out/DESIGN-NOTES.md`）が書かれたか。記録の中身（利用者の像と根拠・仮説の区別、判断と利用者の対応）は、`collect.mjs`の後に人（統括または親）が数える。層1・層2・層3は共通の仕組みの外で、#1835・#1852の道具で行う。判定の規則は[decision-criteria.md](decision-criteria.md)。
+評価の計画のうち、**生成**（B・Sの24試行とprobe 2回）を、共通の仕組みで行う。共通の仕組みが数えるのは機械で数えられる部分だけである：Sで`design-creation`の`SKILL.md`とreferenceが読まれたか、依頼の成果物と記録（`out/DESIGN-NOTES.md`）が書かれたか。記録の中身（利用者の像と根拠・仮説の区別、判断と利用者の対応）は、`collect.mjs`の後に、条件名を伏せた新しいcontextが数える。層1・層2・層3は共通の仕組みの外で、#1835・#1852の道具で行う。判定の規則は[decision-criteria.md](decision-criteria.md)。
 
 ## 条件
 
@@ -96,7 +96,7 @@ CLAUDE_CODE_OAUTH_TOKEN="$(cat <ownerのfile>)" ASC_EVAL_ALLOW_PAID=1 node $H/ru
 node $H/fixation.mjs check $EV/results/fixation.json --config $EV
 node $H/collect.mjs <scratch>/run1867/runs $EV/results --ledger $LEDGER --config $EV
 node $H/judge.mjs $EV/results --runs-root <scratch>/run1867/runs --ledger $LEDGER --out $EV/results/judge.json --config $EV
-# この後、Sの試行のout/DESIGN-NOTES.md（<scratch>/run1867/runs/S-*/work/）を人が数え（decision-criteria.mdの門）、層1・層2・層3へ進む
+# この後、Sの試行のout/DESIGN-NOTES.md（<scratch>/run1867/runs/S-*/work/）を、条件名を伏せた新しいcontextが数え（decision-criteria.mdの門。Bも含む24試行）、層1・層2・層3へ進む
 ```
 
 - `--run`を付けない`run-trial.mjs`・`run-all.mjs`は、起動するcommandや試行の一覧を出すだけでモデルを呼ばない。
