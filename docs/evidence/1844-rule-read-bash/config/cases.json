@@ -1,0 +1,281 @@
+{
+ "schema": "asc-eval-cases/v1",
+ "note": "Fixed before any model run (decision-criteria.md). #1844: the five goal-2 cases of #1840 on fixture U (prompts unchanged, byte for byte), for a user environment with Bash. Changes from #1840: the money-rule forbid entries have scope \"code\" (#1845: only the code of a JavaScript/TypeScript file, not comments or strings); expectCommands needs the ASC CLI start run in the change cases; a Read or a reading Bash command (score.mjs bashReadPaths) counts as a read; with Bash, the files a trial changed (meta.json workFiles, any tool) count as written. The rule-file patterns also match the file in a worktree under .worktrees/ (the ASC CLI start runs only in a dedicated worktree; checked without a model, start-selection.json).",
+ "pathBase": "Tool paths are resolved against the session cwd from the init event (the sample project root), normalised, and matched relative to that root; a path outside the root never matches. A Bash command's file operands are resolved against the same root (a cd inside the command is followed).",
+ "entryPattern": "^\\.claude/skills/<skill>/SKILL\\.md$",
+ "bodyPattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/SKILL\\.md$",
+ "referencePattern": "^\\.agent-skill-chain/(managed-runtime/)?skills/<skill>/references/<ref>$",
+ "report": {
+  "reads": [
+   {
+    "id": "context-json",
+    "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/context\\.json$"
+   },
+   {
+    "id": "money-rule",
+    "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$"
+   }
+  ],
+  "commands": [
+   {
+    "id": "start",
+    "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b"
+   },
+   {
+    "id": "start-path-billing",
+    "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b.*--path[ =]['\"]?(\\./)?src/billing"
+   },
+   {
+    "id": "worktree-create",
+    "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+worktree-create\\b"
+   },
+   {
+    "id": "git-commit",
+    "pattern": "\\bgit\\s+(-C\\s+\\S+\\s+)?commit\\b"
+   }
+  ],
+  "answer": [
+   {
+    "id": "start-mentioned",
+    "pattern": "asc-v05|\\bstart\\b"
+   }
+  ],
+  "writtenFiles": true
+ },
+ "reportNote": "Reported per trial, never used for a level: whether context.json and money.md were read, which ASC CLI commands ran (start, start with --path src/billing, worktree-create) and whether a commit was made, whether the answer mentions start, and every file written.",
+ "cases": [
+  {
+   "id": "u-bill-1",
+   "goal": 2,
+   "origin": "#1840 u-bill-1",
+   "kind": "change",
+   "fixture": "U",
+   "expect": "asc",
+   "references": [],
+   "expectReads": [
+    {
+     "id": "money-rule",
+     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$"
+    }
+   ],
+   "prompt": "請求書の金額計算で、得意先ごとの割引率（例：10%）を小計に適用できるようにして。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?src/billing/",
+    "mustWrite": true,
+    "forbid": [
+     {
+      "id": "decimal-literal",
+      "pattern": "\\b\\d+\\.\\d+\\b",
+      "scope": "code"
+     },
+     {
+      "id": "float-function",
+      "pattern": "parseFloat|toFixed|Math\\.(round|floor|ceil|trunc)",
+      "scope": "code"
+     },
+     {
+      "id": "number-conversion",
+      "pattern": "\\bNumber\\(",
+      "scope": "code"
+     }
+    ]
+   },
+   "viewpoints": [
+    "規則が読まれる",
+    "差分が規則に違反しない"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": ".agent-skill-chain/project/rules/money.md",
+     "includes": []
+    }
+   ],
+   "expectCommands": [
+    {
+     "id": "start",
+     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b"
+    }
+   ]
+  },
+  {
+   "id": "u-bill-2",
+   "goal": 2,
+   "origin": "#1840 u-bill-2",
+   "kind": "change",
+   "fixture": "U",
+   "expect": "asc",
+   "references": [],
+   "expectReads": [
+    {
+     "id": "money-rule",
+     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$"
+    }
+   ],
+   "prompt": "請求書の小計に消費税（10%、1円未満は切り捨て）を加えて、税込の合計を返す関数を追加して。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?src/billing/",
+    "mustWrite": true,
+    "forbid": [
+     {
+      "id": "decimal-literal",
+      "pattern": "\\b\\d+\\.\\d+\\b",
+      "scope": "code"
+     },
+     {
+      "id": "float-function",
+      "pattern": "parseFloat|toFixed|Math\\.(round|floor|ceil|trunc)",
+      "scope": "code"
+     },
+     {
+      "id": "number-conversion",
+      "pattern": "\\bNumber\\(",
+      "scope": "code"
+     }
+    ]
+   },
+   "viewpoints": [
+    "規則が読まれる",
+    "差分が規則に違反しない"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": ".agent-skill-chain/project/rules/money.md",
+     "includes": []
+    }
+   ],
+   "expectCommands": [
+    {
+     "id": "start",
+     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b"
+    }
+   ]
+  },
+  {
+   "id": "u-users",
+   "goal": 2,
+   "origin": "#1840 u-users",
+   "kind": "change",
+   "fixture": "U",
+   "expect": "asc",
+   "references": [],
+   "forbidReads": [
+    {
+     "id": "money-rule",
+     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$"
+    }
+   ],
+   "forbidSkills": [
+    "invoice-format",
+    "quote-format"
+   ],
+   "prompt": "利用者一覧の名前検索で、大文字と小文字を区別しないようにして。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?src/users/",
+    "mustWrite": true
+   },
+   "viewpoints": [
+    "該当しない規則を読まない"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": ".agent-skill-chain/project/rules/money.md",
+     "includes": []
+    }
+   ],
+   "expectCommands": [
+    {
+     "id": "start",
+     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b"
+    }
+   ]
+  },
+  {
+   "id": "u-docs",
+   "goal": 2,
+   "origin": "#1840 u-docs",
+   "kind": "change",
+   "fixture": "U",
+   "expect": "asc",
+   "references": [],
+   "forbidReads": [
+    {
+     "id": "money-rule",
+     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$"
+    }
+   ],
+   "forbidSkills": [
+    "invoice-format",
+    "quote-format"
+   ],
+   "prompt": "開発の始め方の手順書に、テストの実行方法（npm test）を書き足して。",
+   "writes": {
+    "pathPattern": "^(\\.worktrees/[^/]+/)?docs/",
+    "mustWrite": true,
+    "require": [
+     {
+      "id": "npm-test",
+      "pattern": "npm test"
+     }
+    ]
+   },
+   "viewpoints": [
+    "該当しない規則を読まない"
+   ],
+   "answerAll": [],
+   "answerAny": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": ".agent-skill-chain/project/rules/money.md",
+     "includes": []
+    }
+   ],
+   "expectCommands": [
+    {
+     "id": "start",
+     "pattern": "(asc-v05|asc)\\.mjs['\"]?\\s+start\\b"
+    }
+   ]
+  },
+  {
+   "id": "u-neg",
+   "goal": 2,
+   "origin": "#1840 u-neg",
+   "kind": "negative",
+   "fixture": "U",
+   "expect": null,
+   "references": [],
+   "forbidReads": [
+    {
+     "id": "money-rule",
+     "pattern": "^(\\.worktrees/[^/]+/)?\\.agent-skill-chain/project/rules/money\\.md$"
+    }
+   ],
+   "forbidSkills": [
+    "invoice-format",
+    "quote-format"
+   ],
+   "prompt": "「請求書を送付しました」を英語に訳して。",
+   "answerAny": [
+    "invoice"
+   ],
+   "answerAll": [],
+   "answerGroups": [],
+   "needs": [
+    {
+     "file": ".agent-skill-chain/project/rules/money.md",
+     "includes": []
+    }
+   ]
+  }
+ ]
+}

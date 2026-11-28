@@ -84,17 +84,34 @@ export function git(args, cwd) {
 // #1840 review M2: the files of a sample project that differ from its HEAD (changed, added, ignored or deleted), each with
 // its sha256 (null: deleted), sorted by path. run-trial.mjs records it in meta.json at the end of a trial; collect.mjs
 // compares it with the work/ copy again, so a file changed after the trial is detected.
-export function workChanges(work) {
-  const r = spawnSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored=matching', '--no-renames'], {cwd: work, env: gitEnv(work), encoding: 'utf8'});
+// #1844 (a level with Bash; run-trial.mjs meta.json workFilesOptions): with base (the HEAD the trial started from), the
+// files of the commits made since (git diff base HEAD) are included too; with worktrees, a directory holding a .git file
+// (a linked worktree, e.g. the one the ASC CLI worktree-create made under .worktrees/) is not listed file by file but by
+// its own changes against base, under its path. Without options the result is as before.
+export function workChanges(work, {base = null, worktrees = false} = {}) {
+  const g = (args) => spawnSync('git', args, {cwd: work, env: gitEnv(work), encoding: 'utf8'});
+  const r = g(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored=matching', '--no-renames']);
   if (r.status !== 0) throw new Error(`git status failed in ${work}: ${r.stderr}`);
   const out = {};
   const add = (rel) => {
     const f = path.join(work, rel);
     const st = fs.existsSync(f) ? fs.statSync(f) : null;
+    if (st?.isDirectory() && worktrees && fs.existsSync(path.join(f, '.git')) && fs.statSync(path.join(f, '.git')).isFile()) {
+      for (const [k, v] of Object.entries(workChanges(f, {base, worktrees}))) out[path.posix.join(rel.replace(/\/$/, ''), k)] = v;
+      return;
+    }
     if (st?.isDirectory()) { for (const e of fs.readdirSync(f)) add(path.posix.join(rel, e)); return; }
     out[rel.replace(/\/$/, '')] = st?.isFile() ? sha(fs.readFileSync(f)) : null;
   };
   for (const e of r.stdout.split('\0').filter(Boolean)) add(e.slice(3));
+  if (base) {
+    const head = g(['rev-parse', 'HEAD']).stdout.trim();
+    if (head !== base) {
+      const d = g(['diff', '-z', '--name-only', '--no-renames', base, 'HEAD']);
+      if (d.status !== 0) throw new Error(`git diff ${base} HEAD failed in ${work}: ${d.stderr}`);
+      for (const rel of d.stdout.split('\0').filter(Boolean)) if (!(rel in out)) add(rel);
+    }
+  }
   return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 

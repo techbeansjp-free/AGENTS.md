@@ -1,0 +1,13 @@
+{
+ "schema": "asc-eval-release/v1",
+ "note": "The tarball each condition installs (conditions.json cells[c].release and .source). make-fixture.mjs and run-trial.mjs accept a tarball only by the sha256 pinned here for that condition.",
+ "R": {
+  "kind": "release",
+  "tag": "v0.5.121",
+  "targetCommit": "599a2b09184ef3d7bc0a0ca6704c435ecf581433",
+  "asset": "agent-skill-chain-0.5.121.tgz",
+  "assetSha256": "2eede114e558fafec81ba9bbcde59cfbb6749320c3a2915b091b55a8dc794e1a",
+  "verified": "2026-11-28: gh release download v0.5.121; the sha256 equals the asset digest of the release, its SHA256SUMS and the Package SHA256 of the release notes; source-commit.txt names 599a2b09.",
+  "note": "リリース版（進行役の指定、2026-11-28）。GitHub Releaseの最新はv0.5.123（2026-11-28T01:25Z）で、v0.5.121はその2つ前。<scratch>/rel1844/release/にSHA256SUMSとともに置く。"
+ }
+}

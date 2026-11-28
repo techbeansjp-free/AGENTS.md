@@ -332,7 +332,8 @@ export function probeStepChecks(i, t, levelId) {
   if (levelId !== 'X') return {checks, info};
   // The write inside work/ ran (sandboxed commands are auto-allowed only when the --settings sandbox is in force).
   add('sandboxInsideWrite', i.insideExists === true, i.insideExists ?? 'not checked');
-  // review M2: the sandbox denies reads of the runs root but re-allows work/: cat CLAUDE.md printed its first line.
+  // review M2: cat CLAUDE.md in work/ printed its first line (#1820 stage 1: the runs root denied and work/ re-allowed;
+  // #1844 confined layout: no denied ancestor of work/, run-trial.mjs confinedSettings).
   const catMd = steps.find((st) => st.id === 'insideCatClaudeMd');
   const mdOut = (catMd ? attempts[catMd.id] : []).map(resultOf).filter((r) => r && r.is_error !== true).map((r) => firstLine(resultText(r)));
   add('allowReadWork', Boolean(i.workClaudeMdFirstLine) && mdOut.includes(i.workClaudeMdFirstLine), {matched: mdOut.includes(i.workClaudeMdFirstLine)});

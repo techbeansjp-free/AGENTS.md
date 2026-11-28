@@ -1,0 +1,14 @@
+{
+ "schema": "asc-eval-run-order/v1",
+ "note": "Fixed before any model run. Reps outermost (1..conditions.json runs); within a rep the 5 cases in caseOrder (the negative case never last); one condition (R).",
+ "caseOrder": [
+  "u-bill-1",
+  "u-users",
+  "u-bill-2",
+  "u-neg",
+  "u-docs"
+ ],
+ "conditionOrder": [
+  "R"
+ ]
+}

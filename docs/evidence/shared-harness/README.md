@@ -112,6 +112,18 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 - 金額の規則のような、コードについての禁止は`scope: "code"`にする。
 - `decision-criteria.md`に、観点が求めないもの（#1840のm-r7は合意の版を求めない）と、水準の分子が数えるもの（#1840のg2-rule-readは`money.md`の読取りだけ）を書く。
 
+## #1844で加えたもの（2026-11-28）
+
+Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLevels.<id>.sandbox`のfieldで加えた。そのfieldの無い水準（試験用の設定、#1823、#1840の水準W）の設定・起動・採点・照合は変えない（試験で確かめる）。#1840と#1823の測定は終わっていて、それぞれの`fixedAtCommit`の共通の仕組みで照合する（上の#1845と同じ扱い）。
+
+- `run-trial.mjs`の`confinedSettings`（`sandbox.layout: "confined"`）：`allowRead`を使わない`--settings`。#1820の段階1の水準Xは、`--settings`の`allowRead`が同じ`--settings`の`denyRead`を開け直さず（Claude Code 2.1.323）、`work/`を読めずに不合格だった。この配置では、`work/`と試行の`tmp/`の祖先を禁止しない。読取りと書込みを禁じるのは、`/Users`、`denyReadRoots`、fixture、台帳のdirectory、runs rootの他の項目（起動時に列挙）、試行の記録のfile（`TRIAL_RECORD_FILES`）。書込みは、試行の`home/`・`config/`・`bin/`も禁じる。禁止が`work/`か`tmp/`を覆う配置（例：runs rootが`/private/tmp`の下で、`/private/tmp`を禁じる）は、予約の前に拒否する。
+- `trialEnv`：Claude Codeの一時directory（`CLAUDE_CODE_TMPDIR`。sandboxの中の`TMPDIR`）を試行の`tmp/`にし、Bashの`PATH`を試行の`bin/`（`copyNode`：harnessのnodeの写し。起動の前に1回実行する）と`pathDirs`だけにする。`claude`はharnessの`PATH`から絶対pathで起動する。試行の後に`bin/`と`tmp/`を消す。
+- probe（`probeSteps('X')`、`bashProbeSteps`）：Wの6操作に、Bashの操作（`work/`の中の書込み・`cat CLAUDE.md`・`git status`・node・ASC CLIの`--help`と`worktree-create`・`TMPDIR`への書込みが成功、目印・runs rootの別の項目`probe-sibling/record.txt`（probeの前に作る）・試行の`settings.json`・fixture・台帳・`denyReadRoots`の各項目の読取り、試行のdirectoryとrepositoryへの`touch`、通信が拒否）を足した。`probeContext`は水準を受け取り、confinedの水準だけ`siblingRecord`・`deniedRoots`を加える。判定は`probe-check.mjs`の水準Xの項目（#1820の段階1から残っていたもの）を使う。
+- `meta.json`（confinedの水準だけ）：`sandboxLayout`、`nodeVersion`、`endHead`（Bashはcommitできる）、`workFilesOptions`（`make-fixture.mjs`の`workChanges`の`base`：開始のHEADからのcommitの変更も含める、`worktrees`：`.git`がfileのdirectory（linked worktree）はその中の変更だけを列挙する）。`collect.mjs`は、`workFilesOptions`のある試行では`work/`のHEADが`endHead`であることと、同じoptionsでの`workFiles`の一致を確かめ、変更・作成されたfileを書いたfileとして採点に渡す（`changedFiles`）。
+- `score.mjs`（`level.sandbox`の水準だけ）：成功したBashの読むcommandの引数を読込みに数える（`bashReadsOf`・`bashReadPaths`。数え方と数えないものは`score.mjs`の注記）。`cases.json`の`expectCommands`（成功したBashのcommandに合う正規表現。指標`commandsAll`）と、`report.commands`（試みたか、成功したか）を加えた。書いたfile（`writtenFiles`）は、toolの書込みに`changedFiles`を足したもの。
+- `dry-run.mjs`：起動の引数とprobeの操作の数を、各条件の水準で確かめる（従来はWに固定）。confinedの水準には`confinedLayout`の項目を加えた。
+- `sandbox-check.mjs`（固定しないtool）：probeと同じ配置を作り、`isolationSettings`の読取り・書込みの規則を公開のsandbox runtime（`@anthropic-ai/sandbox-runtime`）に渡して、probeのBashの操作をモデルなしで実行する。Claude Codeの本体のruntimeでの確認ではないので、probeの代わりにしない。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。

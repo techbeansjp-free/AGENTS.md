@@ -52,7 +52,7 @@ test('shared harness: no Issue file in the harness directory, Issue files only t
     assert.doesNotMatch(src, /ASC1820S2_ALLOW_PAID/, f);
   }
   for (const f of ['guard', 'ledger', 'install-asc']) assert.ok(fs.readFileSync(path.join(H, `${f}.mjs`)).equals(fs.readFileSync(path.join(S2, 'harness', `${f}.mjs`))), `${f} is the #1820 copy`);
-  const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && f !== 'dry-run.mjs' && f !== 'calibrate.mjs').map((f) => f.replace(/\.mjs$/, '')).sort();
+  const modules = fs.readdirSync(H).filter((f) => f.endsWith('.mjs') && f !== 'dry-run.mjs' && f !== 'calibrate.mjs' && f !== 'sandbox-check.mjs').map((f) => f.replace(/\.mjs$/, '')).sort();
   assert.deepEqual(modules, [...HARNESS_MODULES].sort());
   assert.deepEqual(FIXED.filter((f) => f.startsWith('config/')), cfg.CONFIG_FIXED.map((f) => `config/${f}`));
   assert.equal(cfg.configDir(), EV);
@@ -130,7 +130,8 @@ test('launch: level W flags for every trial; no --max-turns on fixture A, 3 on t
   const s = isolationSettings({work: '/t/r/S-d-ui03-1/work', runsRoot: '/t/r', fixture: '/t/f/fixture-S-D3', ledger: '/t/l/ledger.jsonl'});
   assert.deepEqual(s.sandbox.filesystem, {denyRead: ['/Users', '/t/r', '/t/f/fixture-S-D3', '/t/l'], allowRead: ['/t/r/S-d-ui03-1/work'], denyWrite: ['/t/f/fixture-S-D3', '/t/l']});
   assert.equal(probeSteps('W', {homeMarker: '/h', repoMarker: '/r/x', sentinels: {trial: '/t', repo: '/r/y'}}).length, CONDS.probeSteps.W);
-  assert.throws(() => probeSteps('X', {}), /only tools level W/);
+  assert.throws(() => probeSteps('Y', {}), /only tools levels W and X/);
+  assert.throws(() => probeSteps('X', {}), /needs the probe context of a confined level/, '#1844: level X only with the confined layout');
 });
 
 test('run order: 136 planned trials, reps outermost, B then S, design and negative cases interleaved; counterexamples refused', () => {
@@ -888,7 +889,8 @@ test('#1840 written-file digests (M2): run-trial records the changed files; coll
   assert.match(workFilesProblem(dir), /extra\.md/);
   fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({}));
   assert.equal(workFilesProblem(dir), null, 'a meta.json without workFiles (earlier configs) is not checked');
-  assert.match(fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8'), /meta\.workFiles = workChanges\(work\)/);
+  assert.match(fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8'), /meta\.workFiles = workChanges\(work, meta\.workFilesOptions\)/);
+  assert.deepEqual(workChanges(work, undefined), workChanges(work), '#1844: without options (level W, no workFilesOptions) as before');
 });
 
 test('#1840 probe on the user\'s fixture (M3): only ascSkills count as ASC entries; the user\'s Skills must be listed and quoted', (t) => {
@@ -1146,4 +1148,175 @@ test('#1845 review M1: calibrate.mjs counts requireFiles and applies scope as sc
   assert.deepEqual([unnamed.pass, unnamed.violations, unnamed.scopeNotApplied], [false, ['decimal-literal'], true]);
   const cal = {sources: [{case: 'y', condition: 'skill', path: 'docs/evidence/shared-harness/score.mjs', earlierPass: true, note: 'n'}]};
   assert.match(markdown(calibrate(cal, {cases: [{...c, id: 'y'}]})), /scopeは当てない/);
+});
+
+// #1844: a tools level with Bash in the confined sandbox layout, and the rule read with Bash (config 1844-rule-read-bash).
+const C44DIR = path.join(EVROOT, '1844-rule-read-bash/config');
+const C44 = JSON.parse(read('conditions.json', C44DIR));
+const SPEC44 = JSON.parse(read('cases.json', C44DIR));
+const k44 = (id) => SPEC44.cases.find((c) => c.id === id);
+const X44 = C44.toolLevels.X;
+const {confinedSettings, probeContext, bashProbeSteps, probePrompt, trialEnv, TRIAL_RECORD_FILES, PROBE_SIBLING} = await import('../run-trial.mjs');
+const {bashReadsOf, bashReadPaths, okCommands, LEVEL_METRICS} = await import('../score.mjs');
+
+test('#1844 confined settings: no allowRead, work/ and tmp/ under no denied path; level W settings unchanged', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  const runs = path.join(d, 'runs'), work = path.join(runs, 'R-u-bill-1-1', 'work');
+  fs.mkdirSync(work, {recursive: true}); fs.mkdirSync(path.join(runs, 'R-probe-1')); fs.writeFileSync(path.join(runs, 'probe-compare.json'), '{}');
+  const args = {work, runsRoot: runs, fixture: path.join(d, 'fixtures/R-U'), ledger: path.join(d, 'ledger/ledger.jsonl')};
+  const sb = {layout: 'confined', denyReadRoots: ['/nowhere-a'], copyNode: true, pathDirs: ['/usr/bin', '/bin']};
+  const s = isolationSettings(args, {...X44, sandbox: sb});
+  const fsr = s.sandbox.filesystem, trial = path.dirname(work);
+  assert.ok(!('allowRead' in fsr), 'no allowRead (#1820 stage 1: a --settings allowRead does not re-open a --settings denyRead)');
+  assert.deepEqual(fsr.denyRead, ['/Users', '/nowhere-a', args.fixture, path.join(d, 'ledger'), path.join(runs, 'R-probe-1'), path.join(runs, 'probe-compare.json'), ...TRIAL_RECORD_FILES.map((f) => path.join(trial, f))]);
+  assert.deepEqual(fsr.denyWrite, [args.fixture, path.join(d, 'ledger'), path.join(runs, 'R-probe-1'), path.join(runs, 'probe-compare.json'), ...TRIAL_RECORD_FILES.map((f) => path.join(trial, f)), ...['home', 'config', 'bin'].map((f) => path.join(trial, f))]);
+  assert.equal(s.sandbox.allowUnsandboxedCommands, false);
+  assert.deepEqual(s.sandbox.network, {allowedDomains: []});
+  assert.throws(() => confinedSettings(args, {...sb, denyReadRoots: [d]}), /outside every denied path/, 'a runs root under a denied root is refused');
+  assert.throws(() => confinedSettings({...args, ledger: path.join(trial, 'l.jsonl')}, sb), /outside every denied path/, 'a ledger directory that is the trial directory is refused');
+  assert.throws(() => confinedSettings({...args, work: path.join(d, 'w')}, sb), /<runs-root>\/<trial>\/work/);
+  assert.deepEqual(isolationSettings(args, W), isolationSettings(args), 'level W (no sandbox field): the stage-1 settings as before');
+  assert.deepEqual(isolationSettings(args).sandbox.filesystem.allowRead, [work]);
+  assert.deepEqual(trialEnv('/r/T', sb), {PATH: '/r/T/bin:/usr/bin:/bin', CLAUDE_CODE_TMPDIR: '/r/T/tmp'});
+  assert.equal(trialEnv('/r/T', {layout: 'confined'}).PATH, '/usr/bin:/bin:/usr/sbin:/sbin');
+});
+
+test('#1844 probe of level X: the W steps and the Bash steps of the confined layout; level W context unchanged', () => {
+  const base = {dir: '/r/runs/R-probe-1', runsRoot: '/r/runs', fixture: '/r/fx', ledger: '/r/l/ledger.jsonl', homeMarker: '/h/m', repoMarker: '/repo/.agent-skill-chain/local/m'};
+  const w = probeContext(base), x = probeContext(base, X44);
+  assert.deepEqual(Object.keys(w).sort(), ['fixture', 'homeMarker', 'ledgerDir', 'repoMarker', 'runsRoot', 'sentinels', 'trialDir']);
+  assert.equal(x.siblingRecord, path.join('/r/runs', PROBE_SIBLING, 'record.txt'));
+  assert.deepEqual(x.deniedRoots, X44.sandbox.denyReadRoots);
+  const steps = probeSteps('X', x);
+  assert.equal(steps.length, C44.probeSteps.X);
+  assert.ok(C44.probeSteps.X + 2 <= C44.probeMaxTurns);
+  assert.deepEqual(steps.slice(0, 6), probeSteps('W', x), 'the six W steps first');
+  const byId = Object.fromEntries(steps.map((s) => [s.id, s]));
+  for (const id of ['insideWrite', 'insideCatClaudeMd', 'insideGitStatus', 'insideNode', 'insideAscHelp', 'insideWorktreeCreate', 'insideTmpWrite']) assert.equal(byId[id].expect, 'ok', id);
+  for (const id of ['catHomeMarker', 'catRepoMarker', 'catSiblingRecord', 'catTrialSettings', 'lsFixture', 'catFixtureClaudeMd', 'lsLedgerDir', 'lsDeniedRoot1', 'touchTrialDir', 'touchRepo', 'network']) assert.equal(byId[id].expect, 'refused', id);
+  assert.equal(byId.catHomeMarker.command, 'cat /h/m');
+  assert.deepEqual(bashProbeSteps(x).map((s) => s.tool), Array(C44.probeSteps.X - 6).fill('Bash'));
+  assert.match(probePrompt('X', x), /Bashで次のcommandを実行する：node \.agent-skill-chain\/managed-runtime\/bin\/asc-v05\.mjs --help/);
+});
+
+test('#1844 Bash reads: the operands of reading commands, after cd, not here-documents, redirections or ls', () => {
+  const R = '/w/work';
+  assert.deepEqual(bashReadsOf('cat .agent-skill-chain/project/rules/money.md', R), ['.agent-skill-chain/project/rules/money.md']);
+  assert.deepEqual(bashReadsOf('cd .worktrees/x && head -n 20 .agent-skill-chain/project/rules/money.md 2>/dev/null', R), ['.worktrees/x/.agent-skill-chain/project/rules/money.md']);
+  assert.deepEqual(bashReadsOf(`cat ${R}/src/billing/invoice.ts | grep -n bigint`, R), ['src/billing/invoice.ts', 'bigint']);
+  assert.deepEqual(bashReadsOf("cat > src/billing/tax.ts << 'EOF'\nconst a = 1n;\ncat .agent-skill-chain/project/rules/money.md\nEOF\necho done", R), [], 'a here-document is text');
+  assert.deepEqual(bashReadsOf('ls .agent-skill-chain/project/rules/ && wc -l src/a.ts && test -f x', R), [], 'existence checks are not reads');
+  assert.deepEqual(bashReadsOf('node x.mjs < input.txt', R), ['input.txt']);
+  assert.deepEqual(bashReadsOf('cat /etc/hosts src/*.ts', R), [], 'outside the root and globs are not counted');
+  assert.deepEqual(bashReadsOf('sed -n 1,5p "docs/開発の始め方.md"', R).includes('docs/開発の始め方.md'), true);
+});
+
+test('#1844 scoring with Bash: rule read by cat in the worktree, start run, files changed by Bash, scope code; gated on the level', () => {
+  const RULE = '.worktrees/20261128_000000-1844-x/.agent-skill-chain/project/rules/money.md';
+  const START = 'node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs start .worktrees/20261128_000000-1844-x --path src/billing/invoice.ts';
+  const tools = X44.tools.split(',');
+  const T = (msgs, extra = {}) => trace({messages: msgs, tools, cwd: '/r/w', ...extra});
+  const written = '.worktrees/20261128_000000-1844-x/src/billing/tax.ts';
+  const files = {[written]: '// 税率10% (0.1) は使わない\nexport const tax = (a: bigint) => a * 10n / 100n;\n'};
+  const fileText = (rel) => files[rel] ?? null;
+  const opts = {level: X44, condition: 'R', fileText, ...NOBASE, skills: C44.ascSkills, changedFiles: [written]};
+  const good = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], [['Bash', {command: START}]], [['Bash', {command: `cat ${RULE}`}]], [['Bash', {command: `cat > ${written} << 'EOF'\nx\nEOF`}]], []]), opts);
+  assert.deepEqual([good.reach, good.expectReadsAll, good.commandsAll, good.writeOk, good.applied], [true, true, true, true, true], JSON.stringify(good));
+  assert.deepEqual(good.written, [written], 'the file written by Bash comes from changedFiles (meta.json workFiles)');
+  assert.deepEqual(good.bashReadPaths, [RULE]);
+  assert.equal(good.report.commands.start.ok, true);
+  const failedStart = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], [['Bash', {command: 'node .agent-skill-chain/bin/asc.mjs start . --path src/billing/invoice.ts'}, true]], []]), opts);
+  assert.deepEqual([failedStart.commandsAll, failedStart.report.commands.start], [false, {attempted: true, ok: false}], 'a start that exited non-zero (main checkout) is attempted, not run');
+  files[written] = 'export const tax = (a: bigint) => BigInt(Math.floor(Number(a) * 0.1));\n';
+  const bad = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], []]), opts);
+  assert.deepEqual(bad.writeViolations, ['decimal-literal', 'float-function', 'number-conversion']);
+  const users = scoreRun(SPEC44, k44('u-users'), T([[['Read', {file_path: BODY}]], [['Bash', {command: `head -5 ${RULE}`}]], []]), {...opts, changedFiles: []});
+  assert.deepEqual(users.forbiddenReads, ['money-rule'], 'a Bash read of a rule that does not apply is a forbidden read');
+  const asW = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], [['Bash', {command: `cat ${RULE}`}]], []]), {...opts, level: {...X44, sandbox: undefined}, changedFiles: null});
+  assert.equal(asW.expectReadsAll, false, 'without a sandbox level, Bash reads are not counted (earlier configs unchanged)');
+  assert.ok(!('bashReadPaths' in asW));
+  assert.equal(LEVEL_METRICS.commandsAll({commandsAll: true}), true);
+  assert.deepEqual(okCommands(T([[['Bash', {command: 'a'}], ['Bash', {command: 'b'}, true]]])), ['a']);
+  assert.deepEqual(bashReadPaths(T([[['Bash', {command: 'cat README.md'}, true]]])), [], 'a failed command reads nothing');
+});
+
+test('#1844 workChanges with Bash: commits since the start and a linked worktree by its own changes', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  const work = path.join(d, 'T-x-1', 'work');
+  fs.mkdirSync(path.join(work, 'src'), {recursive: true});
+  fs.writeFileSync(path.join(work, 'src/a.ts'), 'a'); fs.writeFileSync(path.join(work, 'b.md'), 'b');
+  const g = (args, cwd = work) => spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd, encoding: 'utf8'});
+  g(['init', '-q']); g(['add', '-A']); g(['commit', '-q', '-m', 'i']);
+  const base = g(['rev-parse', 'HEAD']).stdout.trim();
+  g(['worktree', 'add', '-q', '-b', 'f/1', '.worktrees/w1', 'HEAD']);
+  const wt = path.join(work, '.worktrees/w1');
+  fs.writeFileSync(path.join(wt, 'src/a.ts'), 'changed in the worktree');
+  fs.writeFileSync(path.join(wt, 'src/new.ts'), 'new'); g(['add', 'src/new.ts'], wt); g(['commit', '-q', '-m', 'w'], wt);
+  fs.writeFileSync(path.join(work, 'b.md'), 'committed on main'); g(['commit', '-q', '-am', 'm']);
+  const opts = {base, worktrees: true};
+  assert.deepEqual(Object.keys(workChanges(work, opts)), ['.worktrees/w1/src/a.ts', '.worktrees/w1/src/new.ts', 'b.md']);
+  assert.ok(Object.keys(workChanges(work)).some((f) => f.startsWith('.worktrees/w1/') && f.endsWith('b.md')), 'without options the worktree is listed file by file (as before)');
+  const dir = path.dirname(work);
+  const endHead = g(['rev-parse', 'HEAD']).stdout.trim();
+  const meta = (m) => fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(m));
+  meta({workFiles: workChanges(work, opts), sampleHead: base, endHead, workFilesOptions: opts});
+  assert.equal(workFilesProblem(dir), null, 'a commit made by the trial is accepted at endHead');
+  meta({workFiles: workChanges(work, opts), sampleHead: base, workFilesOptions: opts});
+  assert.match(workFilesProblem(dir), /no endHead/);
+  meta({workFiles: workChanges(work, opts), sampleHead: base, endHead: base, workFilesOptions: opts});
+  assert.match(workFilesProblem(dir), /is not meta\.json endHead/);
+  meta({workFiles: workChanges(work), sampleHead: base});
+  assert.match(workFilesProblem(dir), /is not meta\.json sampleHead/, 'level W: a moved HEAD is still refused');
+});
+
+test('#1844 config: the five #1840 goal-2 cases with their prompts unchanged, Bash level X, one release condition, cap 10 USD', () => {
+  const ids = ['u-bill-1', 'u-bill-2', 'u-users', 'u-docs', 'u-neg'];
+  assert.deepEqual(SPEC44.cases.map((c) => c.id), ids);
+  for (const id of ids) assert.equal(k44(id).prompt, k40(id).prompt, `${id}: the #1840 prompt`);
+  assert.deepEqual(C44.fixtures.U, C40.fixtures.U, 'fixture U of #1840 unchanged');
+  for (const id of ['u-bill-1', 'u-bill-2']) {
+    assert.ok(k44(id).writes.forbid.every((f) => f.scope === 'code'), `${id}: the money rule on the code only (#1845)`);
+    assert.deepEqual(k44(id).writes.forbid.map((f) => [f.id, f.pattern]), k40(id).writes.forbid.map((f) => [f.id, f.pattern]));
+    assert.ok(new RegExp(k44(id).expectReads[0].pattern).test('.worktrees/20261128_000000-1-x/.agent-skill-chain/project/rules/money.md'));
+    assert.ok(new RegExp(k44(id).expectReads[0].pattern).test('.agent-skill-chain/project/rules/money.md'));
+  }
+  for (const id of ['u-bill-1', 'u-bill-2', 'u-users', 'u-docs']) for (const c of ['node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs start .worktrees/x --path src/a.ts', 'node .agent-skill-chain/bin/asc.mjs start .']) assert.ok(new RegExp(k44(id).expectCommands[0].pattern).test(c), `${id}: ${c}`);
+  assert.ok(!k44('u-neg').expectCommands);
+  assert.deepEqual(Object.keys(C44.cells), ['R']);
+  assert.equal(C44.cells.R.tools, 'X');
+  assert.equal(X44.tools, 'Bash,Read,Write,Edit,Glob,Grep,Skill');
+  assert.doesNotMatch(X44.disallowed, /Bash/);
+  assert.equal(X44.sandbox.layout, 'confined');
+  assert.deepEqual([C44.budget.ownerCapUsd, C44.budget.capUsd, C44.budget.safetyMarginUsd], [10, 10, 1]);
+  assert.deepEqual(orderProblems(JSON.parse(read('run-order.json', C44DIR)), SPEC44, C44), []);
+  assert.equal(plannedTrials(JSON.parse(read('run-order.json', C44DIR)), C44.runs).length, 15);
+  const rel = JSON.parse(read('release.json', C44DIR));
+  assert.deepEqual([pinned('R', rel, C44).kind, pinned('R', rel, C44).tag, pinned('R', rel, C44).assetSha256], ['release', 'v0.5.121', '2eede114e558fafec81ba9bbcde59cfbb6749320c3a2915b091b55a8dc794e1a']);
+  for (const l of C44.rule.levels) { assert.ok(LEVEL_METRICS[l.metric], l.metric); for (const id of l.cases) assert.ok(k44(id), `${l.id}: ${id}`); }
+  assert.equal(ascSkillsOf(C44).length, 17);
+});
+
+test('#1844 probe check of level X: every Bash step with its expected result passes; work/ unreadable or a sentinel left fails', async () => {
+  const {probeStepChecks} = await import('../probe-check.mjs');
+  const ctx = probeContext({dir: '/r/runs/R-probe-1', runsRoot: '/r/runs', fixture: '/r/fx', ledger: '/r/l/ledger.jsonl', homeMarker: '/h/m', repoMarker: '/repo/.agent-skill-chain/local/m'}, X44);
+  const steps = probeSteps('X', ctx);
+  const out = (s) => (s.id === 'insideCatClaudeMd' ? '# 請求管理（社内）' : s.id === 'network' ? '000' : 'x');
+  const T = (bad = {}) => {
+    const lines = [ev({type: 'system', subtype: 'init', cwd: '/r/runs/R-probe-1/work', tools: X44.tools.split(','), permissionMode: 'acceptEdits', mcp_servers: [], model: 'm'})];
+    steps.forEach((s, i) => {
+      const input = s.tool === 'Bash' ? {command: s.command} : s.tool === 'Read' || s.tool === 'Write' ? {file_path: s.path} : {path: s.path, pattern: s.pattern};
+      lines.push(ev({type: 'assistant', message: {id: `m${i}`, content: [{type: 'tool_use', id: `u${i}`, name: s.tool, input}]}}));
+      const refused = (s.expect === 'refused') !== Boolean(bad[s.id]);
+      lines.push(ev({type: 'user', message: {content: [{type: 'tool_result', tool_use_id: `u${i}`, is_error: refused && s.id !== 'network', content: refused ? (s.id === 'network' ? '000' : 'Operation not permitted') : out(s)}]}}));
+    });
+    lines.push(ev({type: 'result', subtype: 'success', is_error: false, result: 'done', total_cost_usd: 0.1, num_turns: steps.length}));
+    return parseTrace(lines.join('\n'));
+  };
+  const i = {steps, expectedSteps: C44.probeSteps.X, sentinelExists: {trial: false, repo: false}, insideExists: true, workClaudeMdFirstLine: '# 請求管理（社内）'};
+  const pass = (r) => Object.values(r.checks).every((c) => c.pass);
+  assert.equal(pass(probeStepChecks(i, T(), 'X')), true, JSON.stringify(probeStepChecks(i, T(), 'X').checks));
+  assert.equal(pass(probeStepChecks(i, T({insideCatClaudeMd: true}), 'X')), false, '#1820 stage 1 failure: cat CLAUDE.md in work/ refused');
+  assert.equal(pass(probeStepChecks(i, T({catSiblingRecord: true}), 'X')), false, 'another runs-root entry readable');
+  assert.equal(pass(probeStepChecks(i, T({insideNode: true}), 'X')), false, 'node not runnable in the sandbox');
+  assert.equal(pass(probeStepChecks({...i, sentinelExists: {trial: true, repo: false}}, T(), 'X')), false, 'a sentinel left in the trial directory');
 });

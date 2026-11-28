@@ -189,6 +189,8 @@ export function writeChecks(w, files, fileText, {base = null} = {}) {
 }
 
 // #1840: the files a trial wrote (a Write, Edit or MultiEdit with a non-error result), project-relative, in order.
+// #1844: with a level that has Bash, the trace object also carries changedFiles (collect.mjs: every file the trial changed
+// or created by any tool, from meta.json workFiles); they are added after the tool writes.
 export function writtenFiles(t) {
   const out = [];
   for (const u of t.uses) {
@@ -197,8 +199,43 @@ export function writtenFiles(t) {
     const rel = r && !r.is_error ? projectRelative(String(u.input?.file_path ?? ''), t.cwd) : null;
     if (rel && !out.includes(rel)) out.push(rel);
   }
+  for (const f of t.changedFiles ?? []) if (!out.includes(f)) out.push(f);
   return out;
 }
+
+// #1844: the Bash commands of a trace whose result is present and not an error (a command that exited 0).
+export const okCommands = (t) => t.uses.filter((u) => u.name === 'Bash' && t.results.has(u.id) && !t.results.get(u.id).is_error).map((u) => String(u.input?.command ?? ''));
+// #1844: the project-relative files a successful Bash command read, as #1820 stage 1 counted them: the operands of cat, head,
+// tail, sed, awk, less, more, grep, rg, nl, bat, view, strings and jq (and a < redirection), in each part of the command
+// split at ;, &&, ||, | and new lines, resolved against the session cwd and a preceding `cd <dir>` of the same command.
+// Not counted: ls, test, stat, wc and the like (existence), a directory operand (grep -r), an unexpanded glob, a file read
+// by a program (node -e, git show). A small splitter, not a shell parser: quotes are removed, not interpreted.
+export const READ_COMMANDS = new Set(['cat', 'head', 'tail', 'sed', 'awk', 'less', 'more', 'grep', 'egrep', 'fgrep', 'rg', 'nl', 'bat', 'view', 'strings', 'jq']);
+export function bashReadsOf(command, root) {
+  const out = [];
+  let dir = root;
+  // A here-document's body is text, not commands.
+  const text = String(command).replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2\s*(?=\n|$)/g, (m) => m.split('\n')[0].replace(/<<-?.*$/, ''));
+  for (const part of text.split(/&&|\|\||;|\||\n/)) {
+    const words = (part.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? []).map((w) => w.replace(/^["']|["']$/g, ''));
+    while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift();
+    if (!words.length) continue;
+    const cmd = path.posix.basename(words[0].replace(/^\(+/, ''));
+    if (cmd === 'cd' && words[1]) { dir = path.posix.resolve(dir, words[1]); continue; }
+    // An input redirection (< f, <f) is a read for any command; an output redirection and its target are not operands.
+    const redirect = (w) => /^[0-9&]*(>>?|<)/.test(w);
+    const operands = words.slice(1).flatMap((w, i, xs) => (w === '<' ? [] : xs[i - 1] === '<' ? [w] : /^<[^<]/.test(w) ? [w.slice(1)]
+      : redirect(w) || /^[0-9&]*>>?$/.test(xs[i - 1] ?? '') ? [] : READ_COMMANDS.has(cmd) && !w.startsWith('-') && !/^\d+$/.test(w) ? [w] : []));
+    for (const w of operands) {
+      const p = w.replace(/[)]+$/, '');
+      if (!p || /[*?[\]]/.test(p)) continue;
+      const rel = projectRelative(path.posix.resolve(dir, p), root);
+      if (rel && !out.includes(rel)) out.push(rel);
+    }
+  }
+  return out;
+}
+export const bashReadPaths = (t) => [...new Set(t.uses.filter((u) => u.name === 'Bash' && t.results.has(u.id) && !t.results.get(u.id).is_error).flatMap((u) => bashReadsOf(u.input?.command ?? '', t.cwd)))];
 
 // #1840: the case-level checks beyond the Skill body (all optional; a case without them gets none of these fields):
 // - expectReads [{id, pattern}]: each pattern (a regular expression on the project-relative path) matched by a counted Read;
@@ -212,6 +249,8 @@ export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS, bas
   const hit = (p) => rel.some((r) => new RegExp(p).test(r));
   if (k.expectReads) { out.expectReads = Object.fromEntries(k.expectReads.map((e) => [e.id, hit(e.pattern)])); out.expectReadsAll = Object.values(out.expectReads).every(Boolean); }
   if (k.forbidReads) { out.forbiddenReads = k.forbidReads.filter((e) => hit(e.pattern)).map((e) => e.id); out.forbidReadsOk = out.forbiddenReads.length === 0; }
+  // #1844: expectCommands [{id, pattern}]: each pattern matched by a Bash command that succeeded (okCommands).
+  if (k.expectCommands) { const ok = okCommands(t); out.expectCommands = Object.fromEntries(k.expectCommands.map((e) => [e.id, ok.some((c) => new RegExp(e.pattern).test(c))])); out.commandsAll = Object.values(out.expectCommands).every(Boolean); }
   if (k.forbidSkills) {
     out.forbiddenSkills = k.forbidSkills.filter((s) => t.skills.some((c) => same(c, s)) || rel.some((r) => r === `.claude/skills/${s}/SKILL.md` || (skills.includes(s) && new RegExp(`^\\.agent-skill-chain/(managed-runtime/)?skills/${esc(s)}/SKILL\\.md$`).test(r))));
     out.forbidSkillsOk = out.forbiddenSkills.length === 0;
@@ -225,7 +264,7 @@ export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS, bas
     if (!files.length && (w.require ?? []).length) out.writeRequireInAnswer = w.require.filter((e) => new RegExp(e.pattern, 'i').test(t.text)).map((e) => e.id);
   }
   // A case without these fields gets no field at all (so the rows of earlier configs are byte-identical).
-  if (Object.keys(out).length) out.caseChecksOk = [out.expectReadsAll, out.forbidReadsOk, out.forbidSkillsOk, out.writeOk].every((x) => x !== false);
+  if (Object.keys(out).length) out.caseChecksOk = [out.expectReadsAll, out.forbidReadsOk, out.forbidSkillsOk, out.writeOk, out.commandsAll].every((x) => x !== false);
   // #1840 review H1: writesReport {pathPattern, require, forbid} is reported only (e.g. history in the change log), never in
   // caseChecksOk or a level.
   if (k.writesReport) {
@@ -242,6 +281,8 @@ export function reportOf(report, rel, t) {
   if (report.reads) out.reads = Object.fromEntries(report.reads.map((e) => [e.id, rel.some((r) => new RegExp(e.pattern).test(r))]));
   if (report.answer) out.answer = Object.fromEntries(report.answer.map((e) => [e.id, new RegExp(e.pattern, 'i').test(t.text)]));
   if (report.writtenFiles) out.writtenFiles = writtenFiles(t);
+  // #1844: per pattern, whether a Bash command matched it (attempted) and whether such a command succeeded (ok).
+  if (report.commands) { const all = t.uses.filter((u) => u.name === 'Bash').map((u) => String(u.input?.command ?? '')), ok = okCommands(t); out.commands = Object.fromEntries(report.commands.map((e) => [e.id, {attempted: all.some((c) => new RegExp(e.pattern).test(c)), ok: ok.some((c) => new RegExp(e.pattern).test(c))}])); }
   return out;
 }
 
@@ -287,10 +328,13 @@ export const inputTokensOf = (u) => (u ? (u.input ?? 0) + (u.cacheRead ?? 0) + (
 // .claude/skills/ is not an ASC file).
 const ascFile = (r, skills) => /^\.agent-skill-chain\//.test(r) || skills.some((s) => r.startsWith(`.claude/skills/${s}/`));
 
-export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = null, fileText = null, priorTexts = null, priorFiles = null, skills = ASC_SKILLS} = {}) {
+export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = null, fileText = null, priorTexts = null, priorFiles = null, skills = ASC_SKILLS, changedFiles = null} = {}) {
   const pat = (key, s, r = '') => new RegExp(spec[key].replace('<skill>', esc(s)).replace('<ref>', esc(r)));
+  if (changedFiles) t = {...t, changedFiles};
   const reads = countedReads(k, t);
-  const rel = reads.map((r) => r.path);
+  // #1844: with a level that has Bash (toolLevels.<id>.sandbox), a reading Bash command counts as a read too.
+  const bashRel = level?.sandbox ? bashReadPaths(t) : null;
+  const rel = [...new Set([...reads.map((r) => r.path), ...(bashRel ?? [])])];
   const ascBodies = skills.filter((s) => rel.some((r) => pat('bodyPattern', s).test(r)));
   const ascEntries = skills.filter((s) => rel.some((r) => pat('entryPattern', s).test(r)));
   const ascCalls = t.skills.filter((c) => skills.some((s) => same(c, s)));
@@ -299,6 +343,7 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
     costUsd: t.result?.total_cost_usd ?? null, turns: t.result?.num_turns ?? null, durationMs: t.result?.duration_ms ?? null,
     usage: t.result?.usage ? {input: t.result.usage.input_tokens, output: t.result.usage.output_tokens, cacheRead: t.result.usage.cache_read_input_tokens, cacheWrite: t.result.usage.cache_creation_input_tokens} : null};
   row.inputTokens = inputTokensOf(row.usage);
+  if (bashRel) { row.bashReadPaths = bashRel; row.bashCommands = t.uses.filter((u) => u.name === 'Bash').length; }
   const ascFiles = [...new Set(rel.filter((r) => ascFile(r, skills)))].sort();
   row.ascFilesRead = ascFiles.length;
   row.ascBytesRead = sizeOf ? ascFiles.reduce((a, r) => a + (sizeOf(r) ?? 0), 0) : null;
@@ -400,7 +445,7 @@ export function scoreTrials(spec, entries, conds = loadConditions()) {
     if (e.failure || e.text === null || e.text === undefined) { runs.push({...base, failure: e.failure ?? 'missing trace'}); continue; }
     let t;
     try { t = parseTrace(e.text); } catch (err) { runs.push({...base, failure: `unreadable trace: ${err.message}`}); continue; }
-    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, priorTexts: e.priorTexts ?? null, priorFiles: e.priorFiles ?? null, skills: ascSkillsOf(conds)})});
+    runs.push({condition, run: Number(n), ...scoreRun(spec, k, t, {level: conds.toolLevels[conds.cells[condition].tools], condition, sizeOf: e.sizeOf ?? null, fileText: e.fileText ?? null, priorTexts: e.priorTexts ?? null, priorFiles: e.priorFiles ?? null, skills: ascSkillsOf(conds), changedFiles: e.changedFiles ?? null})});
   }
   return selectCounted(runs, conds.runs);
 }
@@ -512,6 +557,8 @@ export const LEVEL_METRICS = {
   reach: (r) => r.expect && r.reach, bodyRead: (r) => r.expect && r.bodyRead, referenceRead: (r) => r.expect && r.reach && r.referenceRead,
   expectReadsAll: (r) => r.expectReadsAll === true, markers: (r) => r.markers === true, writeOk: (r) => r.writeOk === true, applied: (r) => r.expect && r.applied,
   forbidReadsOk: (r) => r.forbidReadsOk === true, forbidSkillsOk: (r) => r.forbidSkillsOk === true,
+  // #1844: every expectCommands pattern matched by a successful Bash command (the ASC CLI start).
+  commandsAll: (r) => r.commandsAll === true,
   negativeOk: (r) => !r.expect && (r.negativeOk ?? !r.overapplication), notOverapplied: (r) => !r.expect && !r.overapplication,
   // #1840 review H3: among the trials that wrote a file under the case's pathPattern, no rule violation (the trials that
   // wrote nothing are left out of the rate and counted as notEligible).

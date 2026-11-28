@@ -1,0 +1,247 @@
+{
+ "schema": "asc-eval-conditions/v1",
+ "issue": "1844",
+ "stage": "rule read with Bash",
+ "markerTag": "1844",
+ "note": "Fixed before any model run (decision-criteria.md). #1844: does a project rule the user registered in .agent-skill-chain/project/context.json get read where it applies, in a user environment with Bash (the ASC CLI start can run)? ASC is installed the way it reaches a user (the GitHub Release v0.5.121 tarball, project-assets --register-claude-skill --apply in a dedicated worktree, the read trigger claude-md adopted, as #1840), on fixture U of #1840 unchanged, with the #1840 cases u-bill-1, u-bill-2, u-users, u-docs and u-neg. One condition (R); #1840's no-Bash release results are the published lower bound shown beside it (decision-criteria.md). Tools level X: level W plus Bash, Bash only inside the Claude Code sandbox with the confined layout of the shared harness (run-trial.mjs confinedSettings: no allowRead, no denied ancestor of work/).",
+ "model": "sonnet",
+ "modelNote": "Same alias as #1814-#1840. The resolved model id (init event) is recorded per trial.",
+ "runs": 3,
+ "runsNote": "Planned repetitions per case (5 cases, 15 trials), as #1840 (u-bill-1/2: 6 trials, the denominator of #1840's R 1/6). Only reps 1..runs are scored; a later rep counts only as the one mandatory replacement of a failed trial.",
+ "ascSkills": [
+  "asc",
+  "contract-enforcement",
+  "decision-ownership",
+  "engineering-judgment",
+  "estimate-and-scope",
+  "execution-recovery",
+  "migration-assurance",
+  "project-foundation",
+  "research-to-implementation",
+  "review-and-remediation",
+  "security-evidence",
+  "subagent-model-selection",
+  "tracker-issue-writing",
+  "user-journey-acceptance",
+  "verification-optimization",
+  "warranty-scope",
+  "work-coordination"
+ ],
+ "ascSkillsNote": "The 17 Skills the v0.5.121 tarball distributes (checked by listing the tarball, 2026-11-28).",
+ "maxTurnsByKind": {
+  "app": null
+ },
+ "maxTurnsNote": "No --max-turns (the written files need the final state); the per-trial budget bounds the cost.",
+ "probeMaxTurns": 40,
+ "probeSteps": {
+  "X": 26
+ },
+ "probeFixture": "U",
+ "probeFixtureNote": "The probe runs on fixture U (as #1840): the 17 ASC entries and the user's Skills (invoice-format, quote-format) are checked (userSkillsListed).",
+ "budget": {
+  "ownerCapUsd": 10,
+  "capUsd": 10,
+  "safetyMarginUsd": 1,
+  "perTrialUsd": 0.8,
+  "probeUsd": 0.6,
+  "plan": {
+   "perKindUsd": {
+    "change": 0.4,
+    "negative": 0.06
+   },
+   "probeUsd": 0.4
+  },
+  "expect": {
+   "perKindUsd": {
+    "change": 0.28,
+    "negative": 0.04
+   },
+   "probeUsd": 0.25,
+   "perKindInputTokens": {
+    "change": 220000,
+    "negative": 20000
+   },
+   "probeInputTokens": 160000,
+   "perKindOutputTokens": {
+    "change": 4000,
+    "negative": 500
+   },
+   "probeOutputTokens": 4000
+  },
+  "note": "Owner cap: 20 USD over #1843, #1844 and #1846 (owner, 2026-11-28, Issue #1844 comment 7227036027); this Issue's allocation 10 USD (coordinator, comment 7227522588). Stop line = 10 - 1 = 9 USD: run-trial.mjs refuses a trial when the ledger total + its budget exceeds it. perTrialUsd is the --max-budget-usd of every trial. expect: #1840 R/C means (change 0.11-0.21, negative 0.025) scaled up for start, its output and the Bash calls; plan = expect x about 1.4. The X probe has 22 steps (#1820 stage 1 X probe of 19 steps: 0.19 USD)."
+ },
+ "adopt": "claude-md",
+ "toolLevels": {
+  "X": {
+   "label": "書込み＋Bash（Bashはsandboxの中だけ。読取りと書込みはfixtureの写しの中に限る）",
+   "tools": "Bash,Read,Write,Edit,Glob,Grep,Skill",
+   "disallowed": "NotebookEdit,WebFetch,WebSearch,Agent,Task",
+   "permissionMode": "acceptEdits",
+   "initPermissionMode": "acceptEdits",
+   "sandbox": {
+    "layout": "confined",
+    "denyReadRoots": [
+     "/private/tmp",
+     "/private/var/folders",
+     "/Volumes"
+    ],
+    "pathDirs": [
+     "/Library/Developer/CommandLineTools/usr/bin",
+     "/usr/bin",
+     "/bin",
+     "/usr/sbin",
+     "/sbin"
+    ],
+    "copyNode": true
+   }
+  }
+ },
+ "toolsNote": "Level X of #1820 (W + Bash) failed its probe because a --settings allowRead does not re-open a --settings denyRead in Claude Code 2.1.323 (work/ under the denied runs root was unreadable, git exited 128). The confined layout (run-trial.mjs confinedSettings) needs no allowRead: work/ has no denied ancestor; the real HOME and the repository (/Users), the denyReadRoots, the fixture, the ledger directory, every other entry of the runs root and the harness files of the trial are denied; writes go only to work/ and the trial's own CLAUDE_CODE_TMPDIR. Bash gets a PATH of the trial's bin/ (a copy of the harness node, so start runs without the real HOME) and the system directories. The runs root, the fixtures and the ledger must not lie under a denyReadRoots entry (run-trial.mjs refuses).",
+ "settingsNote": "Every trial gets the --settings file of its level (run-trial.mjs isolationSettings; level X: confinedSettings).",
+ "conditions": {
+  "R": {
+   "label": "リリース版（GitHub Release v0.5.121を導入）",
+   "release": "R"
+  }
+ },
+ "cells": {
+  "R": {
+   "tools": "X",
+   "release": "R",
+   "source": "release"
+  }
+ },
+ "cellsNote": "One condition. The lower bound without Bash is #1840's published R (v0.5.119, level W); it is shown beside, not run again.",
+ "probeCells": [
+  "R"
+ ],
+ "probeNote": "One isolation probe on fixture U (a second one only as the replacement of a failed probe). probe-check.mjs judges it against level X.",
+ "nonAdjacentKinds": [
+  "negative"
+ ],
+ "fixtures": {
+  "U": {
+   "label": "利用者のproject（社内の請求管理。ASCの導入の後に、利用者が固有ルール（context.jsonでsrc/billingに登録した金額の規則）と固有Skill2件（請求書・見積書の書式）を置いた）",
+   "kind": "app",
+   "appFiles": false,
+   "baseClaudeMd": "# 請求管理（社内）\n\n社内の請求管理システム（TypeScript/Express）。`src/billing/`に請求、`src/users/`に利用者管理、`docs/`に開発の手順がある。\n",
+   "extraFiles": {
+    "README.md": "# billing-admin\n\n社内の請求管理システム（TypeScript/Express）。\n\n- `npm run dev`：開発サーバー\n",
+    "package.json": "{\n  \"name\": \"billing-admin\",\n  \"version\": \"0.4.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"dev\": \"tsx src/app.ts\",\n    \"build\": \"tsc\",\n    \"test\": \"node --test\"\n  },\n  \"dependencies\": {\n    \"express\": \"^4.19.2\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5.4.0\",\n    \"tsx\": \"^4.7.0\",\n    \"@types/express\": \"^4.17.21\"\n  }\n}\n",
+    "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"strict\": true,\n    \"outDir\": \"dist\"\n  },\n  \"include\": [\n    \"src\"\n  ]\n}\n",
+    "src/app.ts": "import express from 'express';\nimport {users} from './users/routes.js';\nimport {invoices} from './billing/routes.js';\n\nconst app = express();\napp.use(express.json());\napp.use('/users', users);\napp.use('/invoices', invoices);\napp.listen(Number(process.env.PORT ?? 3000));\n",
+    "src/billing/invoice.ts": "export type Line = {item: string; quantity: bigint; unitPriceYen: bigint};\nexport type Invoice = {id: string; customer: string; lines: Line[]};\n\nexport function lineAmount(line: Line): bigint {\n  return line.quantity * line.unitPriceYen;\n}\n\nexport function subtotal(invoice: Invoice): bigint {\n  return invoice.lines.reduce((sum, line) => sum + lineAmount(line), 0n);\n}\n",
+    "src/billing/routes.ts": "import {Router} from 'express';\nimport {subtotal, type Invoice} from './invoice.js';\n\nconst rows = new Map<string, Invoice>();\nexport const invoices = Router();\n\ninvoices.get('/:id', (req, res) => {\n  const inv = rows.get(req.params.id);\n  if (!inv) return res.status(404).end();\n  res.json({...inv, lines: inv.lines.map((l) => ({...l, quantity: String(l.quantity), unitPriceYen: String(l.unitPriceYen)})), subtotalYen: String(subtotal(inv))});\n});\n",
+    "src/users/store.ts": "export type User = {id: string; name: string; email: string};\nconst rows = new Map<string, User>();\nexport const store = {\n  list: (q?: string) => [...rows.values()].filter((u) => !q || u.name.includes(q)),\n  put: (u: User) => { rows.set(u.id, u); return u; },\n};\n",
+    "src/users/routes.ts": "import {Router} from 'express';\nimport {store} from './store.js';\n\nexport const users = Router();\nusers.get('/', (req, res) => {\n  res.json(store.list(typeof req.query.q === 'string' ? req.query.q : undefined));\n});\n",
+    "docs/開発の始め方.md": "# 開発の始め方\n\n1. Node.js 22を入れる。\n2. `npm install`で依存を入れる。\n3. `npm run dev`で開発サーバーを起動する（http://localhost:3000）。\n"
+   },
+   "afterInstallFiles": {
+    ".agent-skill-chain/project/context.json": "{\n  \"schema\": \"asc-project-context/v1\",\n  \"rules\": [\n    {\n      \"path\": \".agent-skill-chain/project/rules/money.md\",\n      \"appliesTo\": [\n        \"src/billing\"\n      ]\n    }\n  ]\n}\n",
+    ".agent-skill-chain/project/rules/money.md": "# 金額の扱い（請求）\n\n- 金額は整数の円で扱い、浮動小数点を使わない。TypeScriptでは`bigint`（例：`1200n`）で持つ。\n- 率（割引率・税率）は百分率の整数（`bigint`。10%は`10n`）で持ち、`金額 * 率 / 100n`で計算する。端数は切り捨て（`bigint`の除算）とする。\n- 金額の計算に、小数のリテラル、`Number()`・`parseFloat`・`toFixed`・`Math.round`等を使わない。\n",
+    ".claude/skills/invoice-format/SKILL.md": "---\nname: invoice-format\ndescription: 社内の請求書の書式（番号の付け方・記載項目・表記）を案内する。請求書を作る・直すときに使う。\n---\n\n# 請求書の書式（社内）\n\n請求書は`docs/invoices/<請求番号>.md`にMarkdownで作る。\n\n- 請求番号：`INV-<発行年月YYYYMM>-<3桁の連番>`（その月の最初は`001`）。\n- 宛名：会社名に「御中」を付ける。\n- 記載項目（この順）：請求番号、発行日、宛名、件名、明細（品目・数量・単価・金額の表）、小計、消費税（10%、1円未満切り捨て）、合計、支払期限（発行月の翌月末日）、振込先。\n- 振込先：「さくら銀行 本店営業部 普通 1234567 カ）テックサンプル」。\n- 金額は3桁ごとにカンマで区切り、末尾に「円」を付ける。\n",
+    ".claude/skills/quote-format/SKILL.md": "---\nname: quote-format\ndescription: 社内の見積書の書式（番号・記載項目・有効期限・端数）を案内する。顧客に出す見積書を作るときに使う。\n---\n\n# 見積書の書式（社内）\n\n見積書は`docs/quotes/<見積番号>.md`にMarkdownで作る。\n\n- 見積番号：`Q-<発行年月YYYYMM>-<3桁の連番>`（その月の最初は`001`）。\n- 宛名：会社名に「御中」を付ける。\n- 記載項目（この順）：見積番号、発行日、宛名、件名、明細（作業・人日・単価・金額の表）、小計、消費税（10%、1円未満切り捨て）、合計、有効期限（発行日から30日）、前提条件。\n- 前提条件には、見積に含めない作業を1行以上書く。\n- 金額は3桁ごとにカンマで区切り、末尾に「円」を付ける。\n"
+   },
+   "promptFiles": [
+    "src/billing/invoice.ts",
+    "src/users/store.ts",
+    "docs/開発の始め方.md",
+    ".agent-skill-chain/project/context.json",
+    ".agent-skill-chain/project/rules/money.md",
+    ".claude/skills/invoice-format/SKILL.md",
+    ".claude/skills/quote-format/SKILL.md"
+   ]
+  }
+ },
+ "rule": {
+  "name": "#1844 fixed levels",
+  "mode": "levels",
+  "maxFailureRate": 0.1,
+  "levels": [
+   {
+    "id": "rule-read",
+    "cases": [
+     "u-bill-1",
+     "u-bill-2"
+    ],
+    "metric": "expectReadsAll",
+    "min": "5/6",
+    "label": "固有ルールmoney.mdの読込み（Read、またはBashの読むcommand）"
+   },
+   {
+    "id": "start-ran",
+    "cases": [
+     "u-bill-1",
+     "u-bill-2",
+     "u-users",
+     "u-docs"
+    ],
+    "metric": "commandsAll",
+    "min": "2/3",
+    "label": "ASC CLIのstartの実行（成功した結果のあるBash）"
+   },
+   {
+    "id": "rule-comply",
+    "cases": [
+     "u-bill-1",
+     "u-bill-2"
+    ],
+    "metric": "writeCleanWhenWritten",
+    "min": 1,
+    "label": "src/billing/の差分に規則の違反（scope code）が無い"
+   },
+   {
+    "id": "rule-not-read",
+    "cases": [
+     "u-users",
+     "u-docs",
+     "u-neg"
+    ],
+    "metric": "forbidReadsOk",
+    "min": "7/9",
+    "label": "該当しない変更・依頼でmoney.mdを読まない"
+   },
+   {
+    "id": "asc-select",
+    "cases": [
+     "u-bill-1",
+     "u-bill-2",
+     "u-users",
+     "u-docs"
+    ],
+    "metric": "reach",
+    "min": "5/6",
+    "use": "report",
+    "label": "ASCが選ばれる（報告だけ）"
+   },
+   {
+    "id": "negative",
+    "cases": [
+     "u-neg"
+    ],
+    "metric": "negativeOk",
+    "min": "2/3",
+    "use": "report",
+    "label": "該当しない依頼（報告だけ）"
+   }
+  ],
+  "note": "decision-criteria.md. The fraction mins are compared in integers (score.mjs levelMet)."
+ },
+ "subsets": {
+  "change": {
+   "kinds": [
+    "change"
+   ]
+  },
+  "negative": {
+   "kinds": [
+    "negative"
+   ]
+  }
+ },
+ "dryRun": {
+  "installedDiffExpected": [],
+  "requiredDiff": [],
+  "note": "One condition: no comparison of installed projects."
+ }
+}

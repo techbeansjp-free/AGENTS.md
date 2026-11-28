@@ -97,12 +97,50 @@ export function maxTurnsFor(k, conds = loadConditions()) {
 
 // The --settings content of every trial (stage 1, unchanged). Paths are canonical absolute paths; the real HOME is covered
 // by /Users (so the debug log never needs the user's own HOME path).
-export function isolationSettings({work, runsRoot, fixture, ledger}) {
+export function isolationSettings({work, runsRoot, fixture, ledger}, level = null) {
+  if (level?.sandbox) return confinedSettings({work, runsRoot, fixture, ledger}, level.sandbox);
   const ledgerDir = path.dirname(realOr(ledger));
   return {permissions: {blockReadsOutsideWorkingDirectories: true},
     sandbox: {enabled: true, failIfUnavailable: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false,
       network: {allowedDomains: []},
       filesystem: {denyRead: ['/Users', realOr(runsRoot), realOr(fixture), ledgerDir], allowRead: [realOr(work)], denyWrite: [realOr(fixture), ledgerDir]}}};
+}
+
+// #1844: a tools level with Bash (conditions.json toolLevels.<id>.sandbox {layout: "confined", denyReadRoots, pathDirs,
+// copyNode}). #1820 stage 1 level X failed its probe because a --settings allowRead does not re-open a --settings denyRead
+// (Claude Code 2.1.323: work/ under the denied runs root stayed unreadable and git exited 128). The confined layout needs
+// no allowRead: no denied path is work/, the trial's tmp/ or an ancestor of them. Denied for reads and writes: /Users (the
+// real HOME and the repository), the denyReadRoots (e.g. /private/tmp, /private/var/folders), the fixture, the ledger
+// directory, every other entry of the runs root (listed at launch; trials run one at a time under the ledger lock) and the
+// harness files of the trial (TRIAL_RECORD_FILES); writes also to the trial's home/, config/ and bin/. Writes are allowed
+// by the sandbox only in the working directory and the trial's CLAUDE_CODE_TMPDIR (trialEnv). Throws when a denied path
+// covers work/ or tmp/.
+export const TRIAL_RECORD_FILES = ['settings.json', 'debug.log', 'trace.jsonl', 'stderr.txt', 'meta.json'];
+export const PROBE_SIBLING = 'probe-sibling';
+const within = (child, parent) => { const r = path.relative(parent, child); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
+export function confinedSettings({work, runsRoot, fixture, ledger}, sb) {
+  if (sb.layout !== 'confined') throw new Error(`unknown sandbox layout ${sb.layout}`);
+  const w = realOr(work), trial = path.dirname(w), runs = realOr(runsRoot), ledgerDir = path.dirname(realOr(ledger));
+  if (path.dirname(trial) !== runs) throw new Error('the confined layout needs <runs-root>/<trial>/work');
+  const siblings = (fs.existsSync(runs) ? fs.readdirSync(runs) : []).filter((n) => n !== path.basename(trial)).sort().map((n) => path.join(runs, n));
+  const own = TRIAL_RECORD_FILES.map((n) => path.join(trial, n));
+  const denyRead = ['/Users', ...(sb.denyReadRoots ?? []), realOr(fixture), ledgerDir, ...siblings, ...own];
+  const denyWrite = [realOr(fixture), ledgerDir, ...siblings, ...own, ...['home', 'config', 'bin'].map((n) => path.join(trial, n))];
+  const open = [w, path.join(trial, 'tmp')];
+  const covering = [...new Set([...denyRead, ...denyWrite])].filter((p) => open.some((o) => within(o, p)));
+  if (covering.length) throw new Error(`the confined layout needs work/ and tmp/ outside every denied path (${covering.join(', ')})`);
+  return {permissions: {blockReadsOutsideWorkingDirectories: true},
+    sandbox: {enabled: true, failIfUnavailable: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false,
+      network: {allowedDomains: []}, filesystem: {denyRead, denyWrite}}};
+}
+// #1844: the environment of a confined level's trial beyond the common one: Bash finds only the trial's bin/ (a copy of
+// the harness node when copyNode, so the ASC CLI runs without the real HOME) and the pathDirs; Claude Code's temporary
+// directory (also the sandboxed commands' TMPDIR) is the trial's tmp/.
+export const trialEnv = (dir, sb) => ({PATH: [...(sb.copyNode ? [path.join(dir, 'bin')] : []), ...(sb.pathDirs ?? ['/usr/bin', '/bin', '/usr/sbin', '/sbin'])].join(':'), CLAUDE_CODE_TMPDIR: path.join(dir, 'tmp')});
+// The absolute path of a command on the harness PATH (the confined PATH has no claude).
+export function onPath(cmd, PATH = process.env.PATH ?? '') {
+  for (const d of PATH.split(':').filter(Boolean)) { const f = path.join(d, cmd); try { fs.accessSync(f, fs.constants.X_OK); return f; } catch { /* next */ } }
+  return null;
 }
 
 export function flags({level, model, budget, maxTurns, settingsFile, debugFile = null}) {
@@ -117,16 +155,19 @@ export const sentinelPaths = ({dir, repo}, tag = markerTag()) => ({trial: path.j
 export const NETWORK_URL = 'https://example.com';
 export const INSIDE_FILE = 'sandbox-inside-probe.txt';
 
-export function probeContext({dir, runsRoot, fixture, ledger, homeMarker, repoMarker, repo = repoRoot}) {
+export function probeContext({dir, runsRoot, fixture, ledger, homeMarker, repoMarker, repo = repoRoot}, level = null) {
   const trialDir = path.join(realOr(runsRoot), path.basename(dir));
   return {homeMarker: path.resolve(homeMarker), repoMarker: path.resolve(repoMarker), trialDir, runsRoot: realOr(runsRoot), fixture: realOr(fixture),
-    ledgerDir: path.dirname(realOr(ledger)), sentinels: sentinelPaths({dir: trialDir, repo})};
+    ledgerDir: path.dirname(realOr(ledger)), sentinels: sentinelPaths({dir: trialDir, repo}),
+    // #1844: a confined level's probe also reads a record of another runs-root entry and lists the denied roots.
+    ...(level?.sandbox ? {siblingRecord: path.join(realOr(runsRoot), PROBE_SIBLING, 'record.txt'), deniedRoots: [...(level.sandbox.denyReadRoots ?? [])]} : {})};
 }
 
 // Stage 1, unchanged for level W: the marker Reads, a Glob and a Grep outside, a Write into the trial directory and into
-// the repository (6 steps, conditions.json probeSteps.W). Levels R and X are not part of the shared harness.
+// the repository (6 steps, conditions.json probeSteps.W). #1844: level X adds the Bash steps (bashProbeSteps); level R is not part of the shared harness.
 export function probeSteps(levelId, c, tag = markerTag()) {
-  if (levelId !== 'W') throw new Error(`the shared harness has only tools level W (got ${levelId})`);
+  if (levelId !== 'W' && levelId !== 'X') throw new Error(`the shared harness has only tools levels W and X (got ${levelId})`);
+  if (levelId === 'X') { const bash = bashProbeSteps(c, tag); return [...probeSteps('W', c, tag), ...bash]; }
   return [
     {id: 'readHomeMarker', tool: 'Read', path: c.homeMarker, expect: 'refused'},
     {id: 'readRepoMarker', tool: 'Read', path: c.repoMarker, expect: 'refused'},
@@ -136,7 +177,27 @@ export function probeSteps(levelId, c, tag = markerTag()) {
     {id: 'writeRepo', tool: 'Write', path: c.sentinels.repo, expect: 'refused'}];
 }
 
-const stepText = (s) => ({Read: `Readで ${s.path} を読む`, Write: `Writeで ${s.path} に「probe」とだけ書く`,
+// #1844: level X (W + Bash in the confined sandbox; #1820 stage 1 steps, changed where the layout changed): inside work/ a
+// write, cat CLAUDE.md, git status, node and the installed ASC CLI (help and worktree-create, the steps a user's start
+// needs) and a write to the sandbox TMPDIR must succeed; the markers, another runs-root entry (PROBE_SIBLING, made by
+// run-trial.mjs), the trial's settings.json, the fixture, the ledger directory and each denied root must be unreadable;
+// touch in the trial directory and the repository and the network must be refused.
+export const ASC_CLI = '.agent-skill-chain/managed-runtime/bin/asc-v05.mjs';
+export function bashProbeSteps(c, tag = markerTag()) {
+  if (!c.siblingRecord || !Array.isArray(c.deniedRoots)) throw new Error('level X needs the probe context of a confined level (siblingRecord, deniedRoots)');
+  const bash = (id, command, expect) => ({id, tool: 'Bash', command, expect});
+  return [bash('insideWrite', `echo probe > ${INSIDE_FILE}`, 'ok'), bash('insideCatClaudeMd', 'cat CLAUDE.md', 'ok'), bash('insideGitStatus', 'git status --short --branch', 'ok'),
+    bash('insideNode', 'node --version', 'ok'), bash('insideAscHelp', `node ${ASC_CLI} --help`, 'ok'),
+    bash('insideWorktreeCreate', `node ${ASC_CLI} worktree-create . ${tag} test probe HEAD`, 'ok'), bash('insideTmpWrite', 'echo probe > "$TMPDIR/sandbox-tmp-probe.txt"', 'ok'),
+    bash('catHomeMarker', `cat ${c.homeMarker}`, 'refused'), bash('catRepoMarker', `cat ${c.repoMarker}`, 'refused'),
+    bash('catSiblingRecord', `cat ${c.siblingRecord}`, 'refused'), bash('catTrialSettings', `cat ${c.trialDir}/settings.json`, 'refused'),
+    bash('lsFixture', `ls ${c.fixture}`, 'refused'), bash('catFixtureClaudeMd', `cat ${c.fixture}/CLAUDE.md`, 'refused'), bash('lsLedgerDir', `ls ${c.ledgerDir}`, 'refused'),
+    ...c.deniedRoots.map((r, i) => bash(`lsDeniedRoot${i + 1}`, `ls ${r}`, 'refused')),
+    bash('touchTrialDir', `touch ${c.sentinels.trial}`, 'refused'), bash('touchRepo', `touch ${c.sentinels.repo}`, 'refused'),
+    bash('network', `curl -sS -m 10 -o /dev/null -w '%{http_code}' ${NETWORK_URL}`, 'refused')];
+}
+
+const stepText = (s) => ({Read: `Readで ${s.path} を読む`, Write: `Writeで ${s.path} に「probe」とだけ書く`, Bash: `Bashで次のcommandを実行する：${s.command}`,
   Glob: `Globで pattern「${s.pattern}」、path「${s.path}」を指定して探す`, Grep: `Grepで pattern「${s.pattern}」、path「${s.path}」を指定して探す`})[s.tool];
 
 // Stage 1, unchanged: the #1817 probe questions, then the steps, one tool call each.
@@ -216,7 +277,8 @@ function main() {
   const budget = probe ? BUDGET.probeUsd : BUDGET.perTrialUsd;
   let maxTurns;
   try { maxTurns = maxTurnsFor(k, conds); } catch (e) { fail(e.message); }
-  const ctxNow = () => probeContext({dir, runsRoot, fixture, ledger: path.resolve(ledgerArg), homeMarker, repoMarker});
+  const sb = cell.level.sandbox ?? null;
+  const ctxNow = () => probeContext({dir, runsRoot, fixture, ledger: path.resolve(ledgerArg), homeMarker, repoMarker}, cell.level);
   let prompt;
   try { prompt = probe ? probePrompt(cell.tools, ctxNow()) : promptFor(k); } catch (e) { fail(e.message); }
   if (probe && probeSteps(cell.tools, ctxNow()).length !== conds.probeSteps?.[cell.tools]) fail(`the probe has not the ${conds.probeSteps?.[cell.tools]} steps of conditions.json probeSteps`);
@@ -225,6 +287,8 @@ function main() {
     ...(probe ? {probeSteps: probeSteps(cell.tools, ctxNow()).length} : {}),
     command: ['claude', '-p', '<prompt>', ...flags({level: cell.level, model: conds.model, budget, maxTurns, settingsFile: 'settings.json', debugFile: debugFile && 'debug.log'})].join(' ')};
   try { assertPlacement(work, {repoRoot}); } catch (e) { fail(e.message); }
+  // #1844: a confined level refuses, before anything is reserved, a runs root under a denied path (work/ would be unreadable).
+  if (sb) { try { confinedSettings({work, runsRoot, fixture, ledger: path.resolve(ledgerArg ?? path.join(runsRoot, 'ledger.jsonl'))}, sb); } catch (e) { fail(e.message); } }
   if (!wantRun) { console.log(JSON.stringify({dryRun: true, ...plan})); return; }
 
   if (process.env[PAID_ENV] !== '1') fail(`${PAID_ENV} is not 1 (measurement not authorised)`);
@@ -278,15 +342,30 @@ function main() {
     fs.mkdirSync(home, {recursive: true}); fs.mkdirSync(config, {recursive: true});
     const applied = applyCondition(work);
     const sampleHead = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, env: gitEnv(work), encoding: 'utf8'}).stdout.trim();
-    const settings = isolationSettings({work, runsRoot, fixture, ledger});
+    // #1844: a confined level's trial gets its tmp/ and bin/ (the harness node, run once here so its first start is not
+    // inside the sandbox), and its probe a record of another runs-root entry to be refused.
+    let nodeVersion = null;
+    if (sb) {
+      fs.mkdirSync(path.join(dir, 'tmp'), {recursive: true});
+      if (sb.copyNode) {
+        fs.mkdirSync(path.join(dir, 'bin'), {recursive: true});
+        fs.copyFileSync(process.execPath, path.join(dir, 'bin/node'), fs.constants.COPYFILE_FICLONE);
+        fs.chmodSync(path.join(dir, 'bin/node'), 0o755);
+        nodeVersion = spawnSync(path.join(dir, 'bin/node'), ['--version'], {encoding: 'utf8'}).stdout?.trim() || null;
+      }
+      if (probe && !fs.existsSync(ctx.siblingRecord)) { fs.mkdirSync(path.dirname(ctx.siblingRecord), {recursive: true}); fs.writeFileSync(ctx.siblingRecord, 'a record of another runs-root entry\n'); }
+    }
+    const settings = isolationSettings({work, runsRoot, fixture, ledger}, cell.level);
     fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 1) + '\n');
     const global = JSON.stringify({hasCompletedOnboarding: true, numStartups: 5, projects: {[fs.realpathSync(work)]: {hasTrustDialogAccepted: true}}});
     fs.writeFileSync(path.join(config, '.claude.json'), global); fs.writeFileSync(path.join(home, '.claude.json'), global);
     const env = {PATH: process.env.PATH, HOME: home, CLAUDE_CONFIG_DIR: config, LANG: 'C.UTF-8', [credential]: process.env[credential],
-      DISABLE_AUTOUPDATER: '1', DISABLE_TELEMETRY: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1'};
-    const version = spawnSync('claude', ['--version'], {env, encoding: 'utf8'}).stdout?.trim() ?? null;
+      DISABLE_AUTOUPDATER: '1', DISABLE_TELEMETRY: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', ...(sb ? trialEnv(dir, sb) : {})};
+    const claudeBin = sb ? onPath('claude') : 'claude';
+    if (!claudeBin) throw new Error('claude is not on the harness PATH');
+    const version = spawnSync(claudeBin, ['--version'], {env, encoding: 'utf8'}).stdout?.trim() ?? null;
     const t0 = Date.now();
-    const r = spawnSync('claude', ['-p', prompt, ...flags({level: cell.level, model: conds.model, budget, maxTurns, settingsFile, debugFile})], {cwd: work, env, input: '', encoding: 'utf8', timeout: 15 * 60 * 1000, maxBuffer: 256 * 1024 * 1024});
+    const r = spawnSync(claudeBin, ['-p', prompt, ...flags({level: cell.level, model: conds.model, budget, maxTurns, settingsFile, debugFile})], {cwd: work, env, input: '', encoding: 'utf8', timeout: 15 * 60 * 1000, maxBuffer: 256 * 1024 * 1024});
     const secret = process.env[credential];
     const scrub = (s) => (s ?? '').split(secret).join('<credential>');
     const stream = scrub(r.stdout);
@@ -302,15 +381,19 @@ function main() {
       settingsSha256: fileSha(settingsFile), ledgerId: fx.records[0].ledgerId, ledgerSeq: reservation.seq, fixationSha256: fileSha(fixationFile), fixedAtCommit: fixation.fixedAtCommit, fixationStage: fixation.stage,
       credentialKind: credential, exit: r.status, signal: r.signal, error: r.error ? String(r.error) : null, wallMs: Date.now() - t0, costUsd: last?.total_cost_usd ?? null,
       resultSubtype: last?.subtype ?? null, numTurns: last?.num_turns ?? null, budget,
-      ...(probe ? {probeContext: ctx, probeSentinels: ctx.sentinels, probeInsideFile: INSIDE_FILE, probeStepCount: probeSteps(cell.tools, ctx).length} : {})};
+      ...(probe ? {probeContext: ctx, probeSentinels: ctx.sentinels, probeInsideFile: INSIDE_FILE, probeStepCount: probeSteps(cell.tools, ctx).length} : {}),
+      // #1844: a confined level records its node, the HEAD of work/ at the end (Bash can commit) and how workFiles was taken.
+      ...(sb ? {sandboxLayout: sb.layout, nodeVersion, endHead: spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, env: gitEnv(work), encoding: 'utf8'}).stdout.trim(), workFilesOptions: {base: sampleHead, worktrees: true}} : {})};
     meta.credentialInChildFiles = filesContaining(home, secret) + filesContaining(config, secret);
     // #1840 review M2: the files the trial changed or created (sha256), pinned through the meta.json sha256 of the settlement.
-    if (!probe) { try { meta.workFiles = workChanges(work); } catch (e) { meta.workFilesError = String(e.message ?? e); } }
+    if (!probe) { try { meta.workFiles = workChanges(work, meta.workFilesOptions); } catch (e) { meta.workFilesError = String(e.message ?? e); } }
     fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 1));
     ledgerOps.settle(ledger, reservation.id, name, meta.costUsd, {exit: r.status, traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))});
     console.log(JSON.stringify({trial: name, exit: r.status, subtype: meta.resultSubtype, costUsd: meta.costUsd, resolvedModel: meta.resolvedModel}));
   } finally {
     fs.rmSync(home, {recursive: true, force: true}); fs.rmSync(config, {recursive: true, force: true});
+    // #1844: the node copy and Claude Code's temporary directory of the trial (outputs of its commands) are not kept.
+    fs.rmSync(path.join(dir, 'bin'), {recursive: true, force: true}); fs.rmSync(path.join(dir, 'tmp'), {recursive: true, force: true});
     unlock();
   }
 }
