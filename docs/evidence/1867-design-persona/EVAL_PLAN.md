@@ -1,6 +1,6 @@
-# 評価の計画（下書き。固定の前）
+# 評価の計画（固定）
 
-**状態：下書き。** ownerの決定（2026-11-28、[#1867のコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1867#issuecomment-7236994722)と[害の規則・規模の決定](https://github.com/techbeansjp-free/AGENTS.md/issues/1867#issuecomment-7238324830)）を反映した。道具とdry runを整え、独立レビューを経てから固定のcommitを作る。固定より前に有料の実行はしない。
+**状態：固定（2026-11-28）。** ownerの決定（2026-11-28、[#1867のコメント](https://github.com/techbeansjp-free/AGENTS.md/issues/1867#issuecomment-7236994722)と[害の規則・規模の決定](https://github.com/techbeansjp-free/AGENTS.md/issues/1867#issuecomment-7238324830)）を反映した。独立レビュー3回の指摘を直し、dry runが通った後に固定した。固定のcommitは`config/README.md`に書く。固定の後は、判定の規則と固定の対象を変えない。
 
 ## 問い
 

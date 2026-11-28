@@ -1,6 +1,6 @@
 {
- "ownerConfirmed": false,
- "at": "",
- "reference": "",
- "note": "仮の値（#1867）。ownerがHOMEとrepoに一時的な目印のfileを置くこと（probe）を承認したら、統括がownerConfirmed・at・reference（承認を記録したIssueのcommentのURL）を埋めてcommitする。それまでmarkers.mjs createは拒否する。"
+ "ownerConfirmed": true,
+ "at": "2026-11-28",
+ "reference": "https://github.com/techbeansjp-free/AGENTS.md/issues/1867#issuecomment-7237604640",
+ "note": "ownerが会話で、#1867の測定でHOMEとrepoに一時的な目印のfileを置くことと、認証にtoken fileを使うこと（pathだけ渡す）を承認した（原文「目印のファイルとtoken fileの使用を承認します」）。統括がIssueに記録した。"
 }
