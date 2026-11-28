@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。通常のASC実行時に読み込ませない。測定の仕組みは共通のもの（[../../shared-harness/](../../shared-harness/)）を使い、このdirectoryには設定だけを置く。
 
-**状態：固定済み（2026-11-28）。** 最初の固定の記録は`59dc321d9461147e6583b3ed8e011b8f18ad76c1`（[results/fixation.json](results/fixation.json)、設定と共通の仕組みの21file、新しい台帳）。結果は[../README.md](../README.md)。
+**状態：固定済み（2026-11-28）。** 最初の固定の記録は`59dc321d9461147e6583b3ed8e011b8f18ad76c1`（[results/fixation.json](results/fixation.json)、設定と共通の仕組みの21file、新しい台帳）。probeの1回目が不合格で、測定はしていない。結果と原因は[../README.md](../README.md)。
 
 ## 目的
 
