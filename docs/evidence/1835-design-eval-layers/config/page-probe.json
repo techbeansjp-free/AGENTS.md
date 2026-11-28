@@ -1,0 +1,894 @@
+{
+ "schema": "asc-1835-page-probe/v1",
+ "note": "harness/probe.mjsの出力（asc-1807-tools:1、広幅、時計はfixedNow）。degrade.mjsのcontrastとinconsistencyが読む。",
+ "pages": {
+  "ui02-exhibition/A-r1": {
+   "dominant": {
+    "color": "rgb(27, 42, 48)",
+    "bg": "rgb(236, 228, 211)",
+    "chars": 1272,
+    "share": 0.645
+   },
+   "peers": {
+    "selector": "#events li",
+    "count": 3,
+    "path": "#events > div:nth-child(1) > ol:nth-child(2) > li:nth-child(2)",
+    "radius": 6,
+    "text": "5月 15 土 海苔すき体験 10:00〜 ／ 小学生以上"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 3
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "9afa02cca070c9695eca41c4ab442cbdd29688486f11b91ca050545fa951d1d6"
+  },
+  "ui02-exhibition/A-r2": {
+   "dominant": {
+    "color": "rgb(28, 42, 46)",
+    "bg": "rgb(236, 228, 210)",
+    "chars": 1055,
+    "share": 0.515
+   },
+   "peers": {
+    "selector": "#events li",
+    "count": 3,
+    "path": "#events > div:nth-child(1) > ol:nth-child(3) > li:nth-child(2)",
+    "radius": 4.8,
+    "text": "5月15日 (土) 10:00〜 海苔すき体験 小学生以上が対象です。 Nori"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 3
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "f180dccbd582710d0ff84844409d1d9256cc15f2531489b5e1916ad4a9d5d529"
+  },
+  "ui02-exhibition/A-r3": {
+   "dominant": {
+    "color": "rgb(29, 43, 42)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 1100,
+    "share": 0.571
+   },
+   "peers": {
+    "selector": "#events li",
+    "count": 3,
+    "path": "#events > ol:nth-child(3) > li:nth-child(2)",
+    "radius": 4,
+    "text": "5月 15 土 海苔すき体験 5月15日（土）10:00〜 小学生以上が対象です"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 3
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "e11bf18e70d71d52592d8d47eaf752003eff6197767fdfc4ab2164731d6ed226"
+  },
+  "ui02-exhibition/B-r1": {
+   "dominant": {
+    "color": "rgb(27, 40, 36)",
+    "bg": "rgb(251, 251, 247)",
+    "chars": 1259,
+    "share": 0.714
+   },
+   "peers": {
+    "selector": "#events li",
+    "count": 3,
+    "path": "#events > ul:nth-child(3) > li:nth-child(2)",
+    "radius": 0,
+    "text": "5/15 土曜 10:00〜 海苔すき体験 小学生以上"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 3
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "608186f8fa9112db64d7657464414de36b3a320ae918012d9339205ff93de119"
+  },
+  "ui02-exhibition/B-r2": {
+   "dominant": {
+    "color": "rgb(255, 255, 255)",
+    "bg": "rgb(20, 48, 74)",
+    "chars": 1055,
+    "share": 0.582
+   },
+   "peers": {
+    "selector": "#events li",
+    "count": 5,
+    "path": "#events > div:nth-child(1) > ul:nth-child(3) > li:nth-child(2)",
+    "radius": 0,
+    "text": "5月 15日（土） 海苔すき体験 10:00〜 小学生以上が対象です。"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 5
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "9c6e3143d38e4bf2fc165a7bf1c2c6ce176768f5e2e1cc2f1d72b34c43151027"
+  },
+  "ui02-exhibition/B-r3": {
+   "dominant": {
+    "color": "rgb(18, 48, 58)",
+    "bg": "rgb(247, 249, 247)",
+    "chars": 1467,
+    "share": 0.796
+   },
+   "peers": {
+    "selector": "#events li",
+    "count": 3,
+    "path": "#events > ul:nth-child(3) > li:nth-child(2)",
+    "radius": 0,
+    "text": "5月15日（土）10:00〜 海苔すき体験 小学生以上"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 3
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "41cdaf68b2d150c25d897f669858f0215b866e9cf08066b75b725ce3bdd4a140"
+  },
+  "ui02-exhibition/D-r1": {
+   "dominant": {
+    "color": "rgb(28, 42, 38)",
+    "bg": "rgb(233, 227, 211)",
+    "chars": 1083,
+    "share": 0.599
+   },
+   "peers": {
+    "selector": "#events li",
+    "count": 3,
+    "path": "#events > div:nth-child(1) > ol:nth-child(3) > li:nth-child(2)",
+    "radius": 0,
+    "text": "5月 15 土 海苔すき体験 10:00〜 ／ 小学生以上"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 3
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "32c6e4f7156fed31207c63e126527a7e07d55139a18f0b36ae17177207c27330"
+  },
+  "ui02-exhibition/D-r2": {
+   "dominant": {
+    "color": "rgb(43, 42, 38)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 1063,
+    "share": 0.61
+   },
+   "peers": {
+    "selector": "#events li",
+    "count": 3,
+    "path": "#events > ol:nth-child(3) > li:nth-child(2)",
+    "radius": 6,
+    "text": "5/15土 10:00〜 海苔すき体験 小学生以上が対象です。"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 3
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "84891e68e2b8d9c9b29472ed45944d0b95d70a071d99e5a10b1b5a326aaa218d"
+  },
+  "ui02-exhibition/D-r3": {
+   "dominant": {
+    "color": "rgb(245, 241, 230)",
+    "bg": "rgb(23, 58, 68)",
+    "chars": 1225,
+    "share": 0.609
+   },
+   "peers": {
+    "selector": "main li",
+    "count": 7,
+    "path": "#main > section:nth-child(1) > ul:nth-child(3) > li:nth-child(2)",
+    "radius": 0,
+    "text": "海苔すき道具 手仕事の道具"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 0
+    },
+    {
+     "selector": "#events article",
+     "visible": 0
+    },
+    {
+     "selector": ".event",
+     "visible": 0
+    },
+    {
+     "selector": "main li",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "c19138776d7231aec41f2f25bc79d2bb2120d17305426345123b1acb45e13c64"
+  },
+  "ui02-exhibition/E-r1": {
+   "dominant": {
+    "color": "rgb(29, 42, 44)",
+    "bg": "rgb(236, 228, 211)",
+    "chars": 1181,
+    "share": 0.614
+   },
+   "peers": {
+    "selector": "main li",
+    "count": 15,
+    "path": "#main > div:nth-child(1) > section:nth-child(2) > ul:nth-child(3) > li:nth-child(2)",
+    "radius": 999,
+    "text": "海苔すき道具"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 0
+    },
+    {
+     "selector": "#events article",
+     "visible": 0
+    },
+    {
+     "selector": ".event",
+     "visible": 0
+    },
+    {
+     "selector": "main li",
+     "visible": 15
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "7911ef07ad667d2f7cd5531fbb3810c7f4c04886565d18db4391af885bd732ad"
+  },
+  "ui02-exhibition/E-r2": {
+   "dominant": {
+    "color": "rgb(255, 255, 255)",
+    "bg": "rgb(15, 45, 56)",
+    "chars": 1023,
+    "share": 0.561
+   },
+   "peers": {
+    "selector": "#events li",
+    "count": 3,
+    "path": "#events > ol:nth-child(3) > li:nth-child(2)",
+    "radius": 0,
+    "text": "5月15日 （土）10:00〜 海苔すき体験 小学生以上"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 3
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "c048cc503e7e988a9a4a74a4d463774c71bdee755a438658c7f95df6c80f2263"
+  },
+  "ui02-exhibition/E-r3": {
+   "dominant": {
+    "color": "rgb(28, 42, 46)",
+    "bg": "rgb(255, 253, 248)",
+    "chars": 1133,
+    "share": 0.668
+   },
+   "peers": {
+    "selector": "#events li",
+    "count": 3,
+    "path": "#events > ol:nth-child(3) > li:nth-child(2)",
+    "radius": 0,
+    "text": "5月 15 土 海苔すき体験 10:00〜 ／ 小学生以上"
+   },
+   "peersTried": [
+    {
+     "selector": "#events li",
+     "visible": 3
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "83d995d8aea3104d4d9387769fbe5be02bbf8ecc66b442c865edf4954d71d55d"
+  },
+  "ui03-dashboard/A-r1": {
+   "dominant": {
+    "color": "rgb(27, 36, 48)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 392,
+    "share": 0.409
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpis > div:nth-child(2)",
+    "radius": 6,
+    "text": "出荷進捗率 61.2% 目標 64% 下限 58%"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "7902107639bf7a0863a15d9c93f3a87d62d99904e52613c8a869516aa858f2de"
+  },
+  "ui03-dashboard/A-r2": {
+   "dominant": {
+    "color": "rgb(85, 93, 104)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 315,
+    "share": 0.311
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpis > li:nth-child(2)",
+    "radius": 6,
+    "text": "出荷進捗率 ✓ 範囲内 61.2% 目標 64% ／ しきい値 ≥ 58%"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "bf6c915aaf9ac6bc9bcdc1772f9c2aa37e26e32ce6e6e229af79a35c73cb70d4"
+  },
+  "ui03-dashboard/A-r3": {
+   "dominant": {
+    "color": "rgb(27, 31, 36)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 351,
+    "share": 0.321
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpis > li:nth-child(2)",
+    "radius": 6,
+    "text": "出荷進捗率 61.2% 目標 64% ✓ 正常（基準 58% 以上）"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "2152b33664856664bbe6af9ec9ecc8119a5b64a361b48130f37dee25cd08e358"
+  },
+  "ui03-dashboard/B-r1": {
+   "dominant": {
+    "color": "rgb(23, 33, 43)",
+    "bg": "rgb(251, 251, 249)",
+    "chars": 239,
+    "share": 0.209
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpi-progress",
+    "radius": 0,
+    "text": "出荷進捗率 61.2% 目標 64.0% 下限 58.0% ✓ 範囲内"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "23f8f4470a28fe306187a820be129c2f71f13361980a4828e2207f51bdba31fb"
+  },
+  "ui03-dashboard/B-r2": {
+   "dominant": {
+    "color": "rgb(75, 90, 102)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 377,
+    "share": 0.304
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpi-progress",
+    "radius": 0,
+    "text": "出荷進捗率 61.2% 目標 64.0% 下限 58.0% ✓ 範囲内"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "a15740e014af11d63ab789daf0cf03fc94eaab98ba741b899b3f6fc5959becdc"
+  },
+  "ui03-dashboard/B-r3": {
+   "dominant": {
+    "color": "rgb(74, 91, 101)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 338,
+    "share": 0.293
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpis > li:nth-child(2)",
+    "radius": 0,
+    "text": "出荷進捗率 61.2% 目標 64.0% ／ 下限 58.0% ✔ 範囲内"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "ec59cf04507d7c09c376fb9016a2eedd07abe47550ef5d11710b642f2b3d1f27"
+  },
+  "ui03-dashboard/D-r1": {
+   "dominant": {
+    "color": "rgb(29, 35, 41)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 340,
+    "share": 0.291
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpi-progress",
+    "radius": 4,
+    "text": "出荷進捗率 61.2% 目標 64% ／ しきい値 ≥ 58% ✓ 範囲内"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "ed70ba7e8ed8fd65dacfec70bfe8c901e623f519c2314e0ed69dc83c536c1379"
+  },
+  "ui03-dashboard/D-r2": {
+   "dominant": {
+    "color": "rgb(27, 36, 48)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 307,
+    "share": 0.257
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpis > div:nth-child(2)",
+    "radius": 6,
+    "text": "出荷進捗率 61.2% ✔ 範囲内 目標 64.0%／基準 58.0%以上"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "c643dfbc033145f90c7c6068be628a139681284a1898f5e26f0637445d211855"
+  },
+  "ui03-dashboard/D-r3": {
+   "dominant": {
+    "color": "rgb(233, 238, 243)",
+    "bg": "rgb(27, 34, 43)",
+    "chars": 277,
+    "share": 0.228
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpis > div:nth-child(2)",
+    "radius": 6,
+    "text": "出荷進捗率 61.2% 目標 64.0% 基準 ≥ 58.0% ✓ 基準内"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "441f259196d2720f142af4423414123d1c49791e32554993e3c400857558da9c"
+  },
+  "ui03-dashboard/E-r1": {
+   "dominant": {
+    "color": "rgb(74, 83, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 538,
+    "share": 0.459
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpis > div:nth-child(2)",
+    "radius": 6,
+    "text": "出荷進捗率 61.2% 目標 64%／しきい値 58% 以上 ✓ 範囲内"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "8040f8cb0fa01c04ae687ce1c2a18596739bfda8ff7f5b40feca24254e12dcbb"
+  },
+  "ui03-dashboard/E-r2": {
+   "dominant": {
+    "color": "rgb(88, 98, 111)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 275,
+    "share": 0.304
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpis > div:nth-child(2)",
+    "radius": 6,
+    "text": "出荷進捗率 61.2% 目標 64% ／ しきい値 ≥ 58% ✓ 正常"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "e2eea384c1378e22486516bd70878ac6c986885b23a41f1e09a797f270a10bfd"
+  },
+  "ui03-dashboard/E-r3": {
+   "dominant": {
+    "color": "rgb(86, 98, 114)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 328,
+    "share": 0.293
+   },
+   "peers": {
+    "selector": "#kpis > *",
+    "count": 6,
+    "path": "#kpis > div:nth-child(2)",
+    "radius": 6,
+    "text": "出荷進捗率 61.2% 目標 64.0% ／ しきい値 ≥ 58.0%"
+   },
+   "peersTried": [
+    {
+     "selector": "#kpis > *",
+     "visible": 6
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "04d4c5aa1f983a31b4924ffa4d0fe18f0b5d97e7bcff7fb3bc54f6d51898b899"
+  },
+  "ui08-existing-ds/A-r1": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 114,
+    "share": 0.616
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#fields > div:nth-child(3)",
+    "radius": 0,
+    "text": "部署名 （任意）"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "853901f58788f8ba3a42cb59da7f4eb856ebd26d89f897771b11a2679d5854a1"
+  },
+  "ui08-existing-ds/A-r2": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 84,
+    "share": 0.56
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#billing-form > div:nth-child(3)",
+    "radius": 0,
+    "text": "部署名 （任意）"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "5d68c2367f8f1e0ed29337309af7f74fa75e59cb04970a1057d16bbabd17ba57"
+  },
+  "ui08-existing-ds/A-r3": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 83,
+    "share": 0.561
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#billing-form > div:nth-child(2)",
+    "radius": 0,
+    "text": "部署名 （任意）"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "1ff79aab0430d72d08182bcf1738afdda593d20c9fc14887a2d548fcf25d31fa"
+  },
+  "ui08-existing-ds/B-r1": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 72,
+    "share": 0.49
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#form > div:nth-child(2)",
+    "radius": 0,
+    "text": "部署名任意"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "d932cb0c3710941494df879cac3eb786afac0a4616aaf53dafa95cd5145d830f"
+  },
+  "ui08-existing-ds/B-r2": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 70,
+    "share": 0.56
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#billing-form > div:nth-child(2)",
+    "radius": 0,
+    "text": "部署名任意"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "cf96564b7169e5bccf1ec2eed0d91406c2748b103b8d4976a105c375ecf950db"
+  },
+  "ui08-existing-ds/B-r3": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 89,
+    "share": 0.618
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#form > div:nth-child(2)",
+    "radius": 0,
+    "text": "部署名"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "3499a66d515022760fc5053a18f4a60ffd602a28acd92d49ee2d34819979c946"
+  },
+  "ui08-existing-ds/D-r1": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 90,
+    "share": 0.552
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#form > div:nth-child(2)",
+    "radius": 0,
+    "text": "部署名（任意）"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "bb2bac4704b8bdb3e145143855bd0ca26097b17ff517fee72fb6bdbc3b2cedc1"
+  },
+  "ui08-existing-ds/D-r2": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 85,
+    "share": 0.607
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#form > div:nth-child(2)",
+    "radius": 0,
+    "text": "部署名任意"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "04d92d3bf46bc0a8826895b6bc179b719e198bb1cc11280133ca3bfbf8d036c6"
+  },
+  "ui08-existing-ds/D-r3": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 65,
+    "share": 0.5
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#billing-form > div:nth-child(2)",
+    "radius": 0,
+    "text": "部署名 （任意）"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "37085a0db0e3171cd5fe9948b962c675b46d97ae4d7319428fba8904ca7ed0b6"
+  },
+  "ui08-existing-ds/E-r1": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 85,
+    "share": 0.578
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#fields > div:nth-child(3)",
+    "radius": 0,
+    "text": "部署名任意"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "29f99327b577a2a860d7e94db73602bdbd9c83d07d64cc7a6a10c09471240440"
+  },
+  "ui08-existing-ds/E-r2": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 70,
+    "share": 0.455
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#form > div:nth-child(2)",
+    "radius": 0,
+    "text": "部署名任意"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "2fc90278446b8bc50b0f1007b00154484ad2b072340e5c127e353451295bee26"
+  },
+  "ui08-existing-ds/E-r3": {
+   "dominant": {
+    "color": "rgb(90, 102, 96)",
+    "bg": "rgb(255, 255, 255)",
+    "chars": 94,
+    "share": 0.631
+   },
+   "peers": {
+    "selector": ".field",
+    "count": 7,
+    "path": "#billing-form > div:nth-child(3)",
+    "radius": 0,
+    "text": "部署名 任意"
+   },
+   "peersTried": [
+    {
+     "selector": ".field",
+     "visible": 7
+    }
+   ],
+   "external": 0,
+   "pageErrors": [],
+   "sourceSha256": "11627507f1e20ccac218feecf7d1f6ddc5b53c9fc1a955c02c14ee308500f9ef"
+  }
+ }
+}
