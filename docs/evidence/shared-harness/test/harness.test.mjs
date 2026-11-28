@@ -20,7 +20,7 @@ const S1 = path.resolve(S2, '..');
 const EVROOT = path.resolve(H, '..');
 const REPO = path.resolve(EVROOT, '../..');
 const C1823 = path.join(EVROOT, '1823-slim-always-read/config');
-const {parseTrace, scoreRun, selectCounted, summarize, judge1820s2, ruleChecks, initProblems, verdictOf, referencesFor, markersOk} = await import('../score.mjs');
+const {parseTrace, scoreRun, scoreTrials, selectCounted, summarize, judge1820s2, ruleChecks, initProblems, verdictOf, referencesFor, markersOk} = await import('../score.mjs');
 const {plannedTrials, orderProblems, orderRefusal, probeRefusal, completionStatus, loadOrder} = await import('../order.mjs');
 const {flags, isolationSettings, promptFor, cellOf, maxTurnsFor, probeGateProblems, installProblems, probeSteps, priorSpendProblems, STOP_LINE_USD, INSIDE_FILE} = await import('../run-trial.mjs');
 const {approvalProblems, markerPaths} = await import('../markers.mjs');
@@ -1362,7 +1362,7 @@ test('#1844 scoring with Bash: rule read by cat in the worktree, start run, file
   assert.deepEqual(good.bashReadPaths, [RULE]);
   assert.equal(good.report.commands.start.ok, true);
   const failedStart = scoreRun(SPEC44, k44('u-bill-2'), T([[['Read', {file_path: BODY}]], [['Bash', {command: 'node .agent-skill-chain/bin/asc.mjs start . --path src/billing/invoice.ts'}, true]], []]), opts);
-  assert.deepEqual([failedStart.commandsAll, failedStart.report.commands.start], [false, {attempted: true, exitOk: false, ok: false}], 'a start that exited non-zero (main checkout) is attempted, not run');
+  assert.deepEqual([failedStart.commandsAll, failedStart.report.commands.start], [false, {attempted: true, exitOk: false, outputSchema: false, ok: false}], 'a start that exited non-zero (main checkout) is attempted, not run');
   // review H1: a pipeline exits with its last command; start ran only when its JSON output is in the result.
   const REFUSED = 'Error: Use a dedicated Git worktree, or explicitly select isolated-clone';
   for (const [cmd, out] of [[`${START} 2>&1 | head -50`, REFUSED], [`${START}; echo done`, `${REFUSED}\ndone`], [`${START} || true`, REFUSED], [`${START} 2>/dev/null | grep -c money`, '0'],
@@ -2129,23 +2129,47 @@ test('#1866 commandRan with resultPattern: the command and its output are bound;
   const CLI = 'node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs';
   const OUT = '{"schema": "asc-worktree/v1", "context": {"schema": "asc-project-context-selection/v1"}}';
   const T = (cmd, out = OUT, err = false) => trace({messages: [[['Bash', {command: cmd}, err, out]]], tools: X44.tools.split(',')});
+  // The calls after another that may have saved a copy of the output (an earlier Write of the JSON).
+  const TS = (cmd) => trace({messages: [[['Write', {file_path: '/tmp/w/saved.json', content: OUT}]], [['Bash', {command: cmd}, false, OUT]]], tools: X44.tools.split(',')});
   for (const cmd of [`${CLI} start . --path src/billing/invoice.ts`, `cd /r/w/.worktrees/x && ${CLI} start . --path src/billing/invoice.ts 2>&1 | head -40`, `${CLI} start . | jq '.context'`,
     `${CLI} start .; echo "exit=$?"`, `set -o pipefail; ${CLI} start . | grep -A3 schema | head`, '.agent-skill-chain/managed-runtime/bin/asc-v05.mjs start .', `node --no-warnings ${CLI.slice(5)} start .`,
-    `W=/r/w ${CLI} start . 2>/dev/null`, `${CLI} start . | tee /tmp/x.json`])
-    assert.equal(commandRan(E, T(cmd)), true, cmd);
-  // The false positive of the PR #1857 handoff: start quoted, the JSON from a saved file.
+    `W=/r/w ${CLI} start . 2>/dev/null`, `sh -c '${CLI} start .'`])
+    for (const t of [T(cmd), TS(cmd)]) assert.equal(commandRan(E, t), true, cmd);
+  // PR #1875 review M2: #1844 decision-criteria.md counts the call whose result has the JSON output of start; other parts
+  // that print do not stop it while no copy of the output can exist (the review's examples).
+  const beside = [`${CLI} start . --path src/billing/invoice.ts && cat ../../.agent-skill-chain/project/rules/money.md`, `git status && ${CLI} start .`, `ls; ${CLI} start .`,
+    `cd "$(git rev-parse --show-toplevel)" && ${CLI} start .`, `${CLI} start . | python3 -m json.tool`, `${CLI} start . | cat - saved.json`, `cat <<'EOF' > n.md\n${CLI} start .\nEOF\n${CLI} start .`];
+  for (const cmd of beside) assert.equal(commandRan(E, T(cmd)), true, cmd);
+  // Once a copy may exist, the strict binding: every other part quiet, filters without a file operand, no substitution.
+  for (const cmd of beside) assert.equal(commandRan(E, TS(cmd)), false, `saved copy: ${cmd}`);
+  assert.equal(score66.boundCommandRan(E, `git status && ${CLI} start .`), false, 'without the trace: strict');
+  // A copy saved in the same call or an earlier one: start sent to a file or tee, the schema text written by Bash or Edit.
+  const saved = (uses) => score66.savedCopy(E, uses.map((u) => ({name: u[0], input: u[1]})));
+  assert.equal(saved([['Bash', {command: `${CLI} start . > s.json`}]]), true);
+  assert.equal(saved([['Bash', {command: `${CLI} start . | jq . > s.json`}]]), true);
+  assert.equal(saved([['Bash', {command: `${CLI} start . | tee /tmp/x.json`}]]), true);
+  assert.equal(saved([['Bash', {command: `cat > s.json <<'EOF'\n${OUT}\nEOF`}]]), true);
+  assert.equal(saved([['Edit', {file_path: 'a', old_string: 'x', new_string: OUT}]]), true);
+  assert.equal(saved([['MultiEdit', {file_path: 'a', edits: [{old_string: 'x', new_string: OUT}]}]]), true);
+  assert.equal(saved([['Bash', {command: `${CLI} start . 2>err.txt | head`}], ['Bash', {command: 'git status > s.txt'}], ['Write', {file_path: 'a', content: 'x'}]]), false);
+  assert.equal(commandRan(E, trace({messages: [[['Bash', {command: `${CLI} start . | tee /tmp/x.json`}, false, OUT]], [['Bash', {command: `git status && ${CLI} start .`}, false, OUT]]], tools: X44.tools.split(',')})), true, 'the first call is bound (tee has no file to print)');
+  // The false positive of the PR #1857 handoff: start quoted, the JSON from a saved file; and those that make the schema up
+  // (PR #1875 review L1): printf with %, echo with expanded text or a backslash, a dump of the variables, eval.
   for (const cmd of [`echo '${CLI} start . --path src/billing'; cat .asc-start.json`, `echo "ran ${CLI} start ."; cat saved.json`, `${CLI} start . > s.json; cat s.json`,
     `${CLI} start . > s.json && jq . s.json`, `echo "$(cat s.json)"; ${CLI} start .`, `node -e "require('child_process'); /* asc-v05.mjs start */" ; cat s.json`,
-    `${CLI} start . | cat - saved.json`, `printf '%s' '{"schema": "asc-worktree/v1"}'`, `${CLI} start .; printf '{"schema": "asc-worktree/v1"}'`, `${CLI} start --help`, `sh -c '${CLI} start .'`])
+    `printf '%s' '{"schema": "asc-worktree/v1"}'`, `${CLI} start .; printf '{"schema": "asc-worktree/v1"}'`, `${CLI} start --help`,
+    `printf '"schema": "%s"' asc-worktree/v1; ${CLI} start .; true`, `S='x'; echo "$S"; ${CLI} start .`, `echo -e '\\x22schema'; ${CLI} start .`, `set; ${CLI} start .`, `export -p; ${CLI} start .`,
+    `env; ${CLI} start .`, `eval "$X"; ${CLI} start .`, `${CLI} start .; sh -c 'cat s.json'`, `${CLI} start .; node -e 'console.log(1)'`, `${CLI} start .; python3 -c 'print(1)'`, `${CLI} start . | xargs echo \${A}`])
     assert.equal(commandRan(E, T(cmd)), false, cmd);
   assert.equal(commandRan(E, T(`${CLI} start .`, OUT, true)), false, 'an error result');
   assert.equal(commandRan(E, T(`${CLI} start .`, 'Error: Use a dedicated Git worktree')), false, 'no JSON output');
-  assert.equal(score66.boundCommandRan(E, `cat <<'EOF' > n.md\n${CLI} start .\nEOF\n${CLI} start .`), false, 'a here-document is text; cat > file is another printing part');
+  assert.equal(score66.boundCommandRan(E, `cat <<'EOF' > n.md\n${CLI} start .\nEOF\n${CLI} start .`), false, 'strict: a here-document is text; cat > file is another printing part');
   // Without resultPattern: as before (the pattern on the whole command text).
   assert.equal(commandRan({pattern: 'asc-v05\\.mjs start'}, T(`echo '${CLI} start .'`)), true);
-  // report.commands shares commandRan for ok.
+  // report.commands shares commandRan for ok, and shows outputSchema (the count without the binding) beside it.
   const r = reportOf({commands: [E]}, [], T(`echo '${CLI} start .'; cat saved.json`));
-  assert.deepEqual(r.commands.start, {attempted: true, exitOk: true, ok: false});
+  assert.deepEqual(r.commands.start, {attempted: true, exitOk: true, outputSchema: true, ok: false});
+  assert.deepEqual(reportOf({commands: [{id: 'c', pattern: 'git commit'}]}, [], T('git commit -m x')).commands.c, {attempted: true, exitOk: true, ok: true}, 'no outputSchema without resultPattern');
 });
 
 test('#1866 PR #1873 Lows: a sentence field where it is not used is a problem; an empty-matching pattern does not throw and is a problem', () => {
@@ -2216,6 +2240,7 @@ test('#1866 PR #1864 Lows: a broken relative link is resolved component by compo
 test('#1866 config extends: conditions merged, other files from the base, fixation fixes the base files too; refusals', async (t) => {
   const {baseDirOf, mergeConditions, cfgPath, readCfg} = cfg;
   assert.deepEqual(mergeConditions({a: 1, b: {c: 1, d: [1, 2]}, e: 1, f: {g: 1}}, {extends: 'x', b: {d: [3]}, e: null, f: {h: 2}, i: 4}), {a: 1, b: {c: 1, d: [3]}, f: {g: 1, h: 2}, i: 4});
+  assert.deepEqual(mergeConditions({a: {extends: 1}}, {extends: 'x', b: {extends: 2}, a: {extends: 3}}), {a: {extends: 3}, b: {extends: 2}}, 'PR #1875 review L3: a nested extends is kept');
   assert.equal(baseDirOf(C66DIR), C44DIR);
   assert.equal(baseDirOf(C44DIR), null, '#1844 extends nothing');
   for (const f of ['cases.json', 'run-order.json', 'decision-criteria.md']) assert.equal(cfgPath(f, C66DIR), path.join(C44DIR, f), f);
@@ -2252,10 +2277,10 @@ test('#1866 config extends: conditions merged, other files from the base, fixati
   assert.throws(() => baseDirOf(own), /one level only/);
 });
 
-test('#1866 config: #1844 extended, v0.5.133, the cap of the owner (10 - 0.58 = 9.42 over both #1844 ledgers), probes max 2 with none prior', () => {
+test('#1866 config: #1844 extended, v0.5.134 (the latest at the fixation), the cap of the owner (10 - 0.58 = 9.42 over both #1844 ledgers), probes max 2 with none prior', () => {
   const c = cfg.readCfg('conditions.json', C66DIR);
   const rel = cfg.readCfg('release.json', C66DIR);
-  assert.deepEqual([rel.R.tag, rel.R.assetSha256], ['v0.5.133', '05cdf910e657aa6ae1237aa18922dc1013d2ddb2162992c0a58ba5a86d2281cd']);
+  assert.deepEqual([rel.R.tag, rel.R.assetSha256], ['v0.5.134', 'a5245996a2098d267af3e9aebb0eae02bf9f30d97735f025fbeb9424ad82f0e9']);
   assert.deepEqual(run66.priorSpendProblems(c.budget, C66DIR), []);
   assert.ok(Math.abs(run66.priorSpentUsd(c.budget) - 0.579093) < 1e-6);
   assert.equal(c.budget.capUsd, Math.floor((c.budget.ownerCapUsd - run66.priorSpentUsd(c.budget)) * 100) / 100);
@@ -2379,6 +2404,59 @@ test('#1866 scoring of a trial started in the start worktree: paths relative to 
   assert.deepEqual(w.written, [`${WT}/src/billing/tax.ts`]);
   // Without startDir: as before (the cwd is the root).
   assert.deepEqual(scoreRun(SPEC44, k44('u-bill-1'), T([[['Bash', {command: `cat ${RULE}`}]], []], ROOT), {...opts, startDir: null}).bashReadPaths, [RULE]);
+  // PR #1875 review M1: the Skill files read in the worktree (Read or Bash) are the project's ASC files and user Skills.
+  const BODY = '.agent-skill-chain/skills/asc/SKILL.md', ENTRY = '.claude/skills/asc/SKILL.md', OWN = '.claude/skills/invoice-format/SKILL.md';
+  const sizes = {opts: {...opts, priorFiles: () => [RULE, 'src/billing/invoice.ts', BODY, ENTRY, OWN], sizeOf: (r) => ({[BODY]: 100, [ENTRY]: 10})[r] ?? null}};
+  for (const [label, use] of [['Read', ['Read', {file_path: `${CWD}/${BODY}`}]], ['Bash', ['Bash', {command: `cat ${BODY}`}]], ['Bash ../../', ['Bash', {command: `cat ../../${BODY}`}]]]) {
+    const b = scoreRun(SPEC44, k44('u-bill-1'), T([[use], []]), sizes.opts);
+    assert.deepEqual([b.ascBodies, b.bodyRead, b.reach, b.ascFilesRead, b.ascBytesRead], [['asc'], true, true, 1, 100], `the ASC body by ${label}`);
+  }
+  const en = scoreRun(SPEC44, k44('u-bill-1'), T([[['Read', {file_path: `${CWD}/${ENTRY}`}]], []]), sizes.opts);
+  assert.deepEqual([en.ascEntries, en.entryHop, en.ascBytesRead], [['asc'], true, 10], 'the ASC entry in the worktree');
+  const both = scoreRun(SPEC44, k44('u-bill-1'), T([[['Read', {file_path: `${CWD}/${BODY}`}], ['Bash', {command: `cat ../../${BODY}`}]], []]), sizes.opts);
+  assert.deepEqual([both.ascFilesRead, both.ascBytesRead], [1, 100], 'the same file in the worktree and the main checkout is counted once');
+  for (const use of [['Read', {file_path: `${CWD}/${OWN}`}], ['Bash', {command: `cat ${OWN}`}]]) {
+    const n = scoreRun(SPEC44, k44('u-neg'), T([[use], []]), sizes.opts);
+    assert.deepEqual([n.forbiddenSkills, n.forbidSkillsOk, n.negativeOk], [['invoice-format'], false, false], `the user's Skill read in the worktree (${use[0]})`);
+  }
+  const ok = scoreRun(SPEC44, k44('u-neg'), T([[['Read', {file_path: `${CWD}/src/users/list.ts`}]], []]), opts);
+  assert.deepEqual([ok.forbidSkillsOk, ok.negativeOk], [true, true]);
+  // Without startDir the .worktrees/ paths are not mapped (level W and #1844 unchanged).
+  const w0 = scoreRun(SPEC44, k44('u-bill-1'), T([[['Read', {file_path: `${ROOT}/${WT}/${BODY}`}]], []], ROOT), {...opts, startDir: null});
+  assert.deepEqual([w0.ascBodies, w0.bodyRead], [[], false]);
+});
+
+// PR #1875 review L5: a measured trial started in the start worktree, from its directory: collectTrial passes startDir,
+// scoreTrials maps the worktree's paths (rule, ASC body, written file), and workFilesProblem sees a change under .worktrees/.
+test('#1866 collectTrial and scoreTrials of a trial started in the start worktree; workFilesProblem under .worktrees/', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  const runs = path.join(d, 'runs'), dir = path.join(runs, 'R-u-bill-1-1'), work = path.join(dir, 'work');
+  const WT = '.worktrees/20261128_000000-1866-trial', wt = path.join(work, WT);
+  const RULE = '.agent-skill-chain/project/rules/money.md', ABODY = '.agent-skill-chain/skills/asc/SKILL.md', TAX = 'src/billing/tax.ts';
+  const g = (args, cwd = work) => { const r = spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd, encoding: 'utf8'}); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
+  for (const [f, x] of [[RULE, '# money\n'], [ABODY, '# asc\n'], ['src/billing/invoice.ts', 'export const a = 1n;\n'], ['CLAUDE.md', '# c\n']]) { fs.mkdirSync(path.dirname(path.join(work, f)), {recursive: true}); fs.writeFileSync(path.join(work, f), x); }
+  g(['init', '-q', '-b', 'main']); g(['add', '-A']); g(['commit', '-q', '-m', 'i']);
+  const head = g(['rev-parse', 'HEAD']);
+  g(['worktree', 'add', '-q', '-b', 'test/1866-trial', WT, 'HEAD']);
+  fs.writeFileSync(path.join(wt, TAX), 'export const tax = (a: bigint) => a * 10n / 100n;\n');
+  const OUT = '{"schema": "asc-worktree/v1"}';
+  const lines = [{type: 'system', subtype: 'init', cwd: wt, tools: X44.tools.split(','), permissionMode: 'acceptEdits', mcp_servers: [], model: 'm'}];
+  const use = (id, name, input, content = 'x') => lines.push({type: 'assistant', message: {id: `m${id}`, content: [{type: 'tool_use', id: `u${id}`, name, input}]}}, {type: 'user', message: {content: [{type: 'tool_result', tool_use_id: `u${id}`, is_error: false, content}]}});
+  use(1, 'Read', {file_path: path.join(wt, ABODY)});
+  use(2, 'Bash', {command: 'node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs start . --path src/billing/invoice.ts && cat .agent-skill-chain/project/rules/money.md'}, `${OUT}\n# money`);
+  use(3, 'Write', {file_path: path.join(wt, TAX), content: 'x'});
+  lines.push({type: 'assistant', message: {id: 'm4', content: [{type: 'text', text: 'ok'}]}}, {type: 'result', subtype: 'success', is_error: false, result: 'ok', total_cost_usd: 0.05, num_turns: 4});
+  fs.writeFileSync(path.join(dir, 'trace.jsonl'), lines.map(ev).join('\n') + '\n');
+  const opts = {base: head, worktrees: true};
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({case: 'u-bill-1', sampleHead: head, endHead: head, workFilesOptions: opts, workFiles: workChanges(work, opts), startDir: WT, startWorktree: {branch: 'test/1866-trial'}}));
+  assert.equal(workFilesProblem(dir), null);
+  const c = collectTrial(runs, 'R-u-bill-1-1', {conds: C44});
+  assert.deepEqual([c.entry.startDir, c.row.startDir, c.row.startBranch, c.entry.changedFiles], [WT, WT, 'test/1866-trial', [`${WT}/${TAX}`]]);
+  const row = scoreTrials(SPEC44, [c.entry], C44).find((r) => r.case === 'u-bill-1' && r.run === 1);
+  assert.deepEqual([row.failure, row.bodyRead, row.expectReadsAll, row.commandsAll, row.written, row.writeOk, row.bashReadPaths, row.ascBytesRead], [undefined, true, true, true, [`${WT}/${TAX}`], true, [`${WT}/${RULE}`], 6 + 8], 'the ASC files: the body and the rule (.agent-skill-chain/), each once');
+  // A change after the trial under .worktrees/ is a problem.
+  fs.appendFileSync(path.join(wt, TAX), '// later\n');
+  assert.match(workFilesProblem(dir), /work\/ differs from the files recorded at the end of the trial \(\.worktrees\/20261128_000000-1866-trial\/src\/billing\/tax\.ts\)/);
 });
 
 // #1866 (PR #1857 handoff L9: main changed, so it is run for real): run-trial.mjs main for a probe of a level with
@@ -2455,7 +2533,7 @@ test('#1866 run-trial main (real run, stand-in claude and CLI): the worktree is 
   const s = JSON.parse(fs.readFileSync(seen, 'utf8'));
   assert.deepEqual([s.cwd, s.trusted, s.tmp, s.path.split(':')[0]], [fs.realpathSync(wt), [fs.realpathSync(wt)], path.join(dir, 'tmp'), path.join(dir, 'bin')]);
   const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
-  assert.deepEqual([meta.startDir, meta.startWorktree.branch, meta.startWorktree.endHead, meta.cwd], ['.worktrees/20261128_000000-9866-trial', 'test/9866-trial', git(['rev-parse', 'HEAD'], wt), 'work/.worktrees/<test/9866-trial>']);
+  assert.deepEqual([meta.startDir, meta.startWorktree.branch, meta.startWorktree.endHead, meta.cwd], ['.worktrees/20261128_000000-9866-trial', 'test/9866-trial', git(['rev-parse', 'HEAD'], wt), 'work/.worktrees/<YYYYMMDD_HHMMSS>-9866-trial']);
   assert.equal(meta.probeContext.startDir, fs.realpathSync(wt));
   assert.deepEqual(meta.probeEndState.worktreeCreateLeft, {branch: false, dirs: [], otherWorktrees: []});
   assert.equal(meta.probeEndState.insideExists, true, 'the inside file in the worktree');

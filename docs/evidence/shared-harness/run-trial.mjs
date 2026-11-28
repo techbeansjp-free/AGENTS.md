@@ -561,7 +561,7 @@ function main() {
   try { prompt = probe ? probePrompt(cell.tools, ctxNow()) : promptFor(k); } catch (e) { fail(e.message); }
   if (probe && probeSteps(cell.tools, ctxNow()).length !== conds.probeSteps?.[cell.tools]) fail(`the probe has not the ${conds.probeSteps?.[cell.tools]} steps of conditions.json probeSteps`);
   const plan = {trial: name, condition: cellId, tools: cell.tools, fixture: fixtureId, case: caseId, kind: probe ? 'probe' : k.kind, model: conds.model, budgetUsd: budget, maxTurns,
-    cwd: sw ? `work/.worktrees/<${sw.type}/${sw.issue}-${sw.slug}>` : 'work/', home: 'home/', configDir: 'config/', promptText: probe ? '<probe prompt>' : prompt,
+    cwd: sw ? `work/.worktrees/<YYYYMMDD_HHMMSS>-${sw.issue}-${sw.slug}` : 'work/', home: 'home/', configDir: 'config/', promptText: probe ? '<probe prompt>' : prompt,
     ...(probe ? {probeSteps: probeSteps(cell.tools, ctxNow()).length} : {}),
     command: ['claude', '-p', '<prompt>', ...flags({level: cell.level, model: conds.model, budget, maxTurns, settingsFile: 'settings.json', debugFile: debugFile && 'debug.log'})].join(' ')};
   try { assertPlacement(work, {repoRoot}); } catch (e) { fail(e.message); }

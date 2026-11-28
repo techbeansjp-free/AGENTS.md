@@ -56,12 +56,13 @@ export function baseDirOf(dir = configDir()) {
   return base;
 }
 const plain = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
-export function mergeConditions(base, own) {
+// PR #1875 review L3: only the top-level "extends" is the base; a key of that name deeper down is merged like the other keys.
+export function mergeConditions(base, own, top = true) {
   const out = {...base};
   for (const [k, v] of Object.entries(own)) {
-    if (k === 'extends') continue;
+    if (top && k === 'extends') continue;
     if (v === null) delete out[k];
-    else if (plain(v) && plain(out[k])) out[k] = mergeConditions(out[k], v);
+    else if (plain(v) && plain(out[k])) out[k] = mergeConditions(out[k], v, false);
     else out[k] = v;
   }
   return out;

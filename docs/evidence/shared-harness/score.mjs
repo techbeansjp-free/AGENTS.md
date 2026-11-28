@@ -346,34 +346,46 @@ const resultTextOf = (r) => (typeof r?.content === 'string' ? r.content : Array.
 // and not exclude, its result is present and not an error, and (with resultPattern) the result text matches resultPattern.
 // The exit status alone is not enough: a pipeline exits with its last command (`start … | head` exits 0 when start
 // stopped in the main checkout), so cases.json asks for the schema of the start output in the result.
-// PR #1857 handoff (#1866): with resultPattern, the command and its output are bound (boundCommandRan): the pattern must
-// be the program run by a part of the call (not text quoted in it, e.g. `echo 'asc-v05.mjs start …'`), and no other part
-// of the call may print something else (e.g. `cat saved-start.json`), so the output that matches resultPattern is the
-// output of that command. Without resultPattern as before (the pattern on the whole command text).
+// PR #1857 handoff (#1866), with resultPattern, as #1844 decision-criteria.md says ("the result of the start Bash call is not
+// an error and its text has the JSON output of start"; output sent to a file is not counted): the command and its output are
+// bound (boundCommandRan). The pattern must be the program run by a part of the call (not text quoted in it, e.g.
+// `echo 'asc-v05.mjs start …'`, not node -e), with its standard output not sent to a file; and the schema in the result
+// must be able to come only from that program: no other part may make it up (fabricates: echo/printf of the schema or of
+// expanded text, a dump of the variables, eval, sh -c or node -e that is not the command). Other parts that print (git
+// status && start, start && cat money.md, start | python3 -m json.tool) do not stop the count, as the criteria count the
+// call: the fixture holds no file with the schema in JSON form and start writes none, so only a copy the trial saved
+// (savedCopy: start's output sent to a file or tee, or the schema text written by a tool, in this or an earlier call) can
+// put it there; once one may exist the strict binding applies (every other part is quiet, the filters after it have no
+// file operand, no command substitution). Without resultPattern as before (the pattern on the whole command text).
 export function commandRan(e, t) {
-  return t.uses.some((u) => {
+  return t.uses.some((u, i) => {
     if (u.name !== 'Bash') return false;
     const c = String(u.input?.command ?? ''), r = t.results.get(u.id);
     if (!r || r.is_error) return false;
     if (!e.resultPattern) return new RegExp(e.pattern).test(c) && !(e.exclude && new RegExp(e.exclude).test(c));
-    return boundCommandRan(e, c) && new RegExp(e.resultPattern).test(resultTextOf(r));
+    return new RegExp(e.resultPattern).test(resultTextOf(r)) && boundCommandRan(e, c, {saved: savedCopy(e, t.uses.slice(0, i + 1))});
   });
 }
-// The parts of a Bash call that may stand beside the bound command: before or after it (joined by ;, && or ||), commands
-// that print nothing or only their own literal words; in the pipeline after it, filters of its output with no file operand.
+// The parts of a Bash call that may stand beside the bound command under the strict binding: before or after it (joined by
+// ;, && or ||), commands that print nothing or only their own literal words; in the pipeline after it, filters of its
+// output with no file operand.
 const QUIET_PARTS = new Set(['cd', 'pushd', 'popd', 'export', 'set', 'unset', 'true', 'false', ':', 'echo', 'printf', 'pwd', 'sleep', 'test', '[']);
 const OUTPUT_FILTERS = new Set(['head', 'tail', 'grep', 'egrep', 'fgrep', 'jq', 'sed', 'awk', 'cat', 'tee', 'less', 'more', 'sort', 'uniq', 'nl', 'cut', 'column', 'fold', 'tr', 'wc']);
 const SCRIPT_FIRST = new Set(['grep', 'egrep', 'fgrep', 'jq', 'sed', 'awk', 'tr']);
 const NODE_EVAL = /^(-e|-p|-pe|--eval|--print|-i|--interactive)(=|$)/;
 const headWords = (args) => { const a = [...args]; while (a.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(a[0]) || WRAPPERS.has(path.posix.basename(a[0])) || a[0] === '!')) a.shift(); return a; };
 const programOf = (a) => path.posix.basename(String(a[0] ?? '').replace(/^[({]+/, ''));
-// Whether a part runs the program the entry names: its words (quotes removed) after env assignments and wrappers, and
-// after node and its options (node -e/-p evaluates text: not a program run), begin with a word in which the pattern's
-// match starts; the part's standard output is not sent to a file; exclude does not match the part.
-function runsProgram(e, part, args, outFile) {
+// sh -c '<script>': the words of the script (the splitter does not keep quotes, so the script may come as one word or many).
+const shellScript = (a) => (SHELLS.has(programOf(a)) && a[1] === '-c' ? (a.length === 3 && /\s/.test(a[2]) ? wordsOf(a[2]) : a.slice(2)) : null);
+// Whether a part runs the program the entry names: its words (quotes removed) after env assignments and wrappers, after
+// sh -c, and after node and its options (node -e/-p evaluates text: not a program run), begin with a word in which the
+// pattern's match starts; the part's standard output is not sent to a file; exclude does not match the part.
+function runsProgram(e, part, args, outFile, {ignoreOutFile = false} = {}) {
   let a = headWords(args);
+  const script = shellScript(a);
+  if (script) a = headWords(script);
   if (['node', 'nodejs'].includes(programOf(a))) { a = a.slice(1); while (a.length && a[0].startsWith('-')) { if (NODE_EVAL.test(a[0])) return false; a = a.slice(/^(-r|--require|--import|--loader)$/.test(a[0]) ? 2 : 1); } }
-  if (!a.length || outFile) return false;
+  if (!a.length || (outFile && !ignoreOutFile)) return false;
   const m = new RegExp(e.pattern).exec(a.join(' '));
   return Boolean(m) && m.index < a[0].length && !(e.exclude && new RegExp(e.exclude).test(part));
 }
@@ -393,23 +405,69 @@ function filterOk(args) {
   }
   return ops.length <= (SCRIPT_FIRST.has(cmd) && !pattern ? 1 : 0);
 }
-export function boundCommandRan(e, command) {
-  const text = stripHeredocs(command);
-  // A command substitution can print anything (echo "$(cat saved.json)"): not bound.
-  if (/\$\(|`/.test(text)) return false;
-  const tokens = text.split(/(&&|\|\||;|\|&?|\n|(?<![>&<0-9])&(?![>&]))/);
+// PR #1875 review L1: a part that can print the schema without the command: echo/printf of the schema, or of text the shell
+// expands or the command decodes (a $ before a name, brace or parenthesis, a backtick, a backslash; % in printf); a dump
+// of the variables (set, export, declare, typeset, env, printenv without operands; export/declare -p); eval, source;
+// sh -c, node -e/-p, python -c, perl/ruby -e (text evaluated); the command xargs runs. $? and the like are not expanded text.
+const EVALUATES = {python: '-c', python3: '-c', perl: '-e', ruby: '-e'};
+function fabricates(e, args) {
+  const bare = args.filter((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
+  if (bare.length === 1 && programOf(bare) === 'env') return true;
+  const a = headWords(args), cmd = programOf(a), rest = a.slice(1);
+  if (!a.length) return false;
+  if (cmd === 'xargs') { const r = [...rest]; while (r.length && r[0].startsWith('-')) r.shift(); return fabricates(e, r); }
+  if (['echo', 'printf'].includes(cmd)) {
+    const text = rest.join(' ');
+    return new RegExp(e.resultPattern).test(text) || /\$[A-Za-z_{(]|`|\\/.test(text) || (cmd === 'printf' && /%/.test(text));
+  }
+  if (['set', 'export', 'declare', 'typeset', 'env', 'printenv'].includes(cmd)) return rest.every((w) => w === '-p');
+  if (['eval', 'source', '.'].includes(cmd)) return true;
+  if (shellScript(a)) return true;
+  if (['node', 'nodejs'].includes(cmd)) return rest.some((w) => NODE_EVAL.test(w));
+  if (EVALUATES[cmd]) return rest.includes(EVALUATES[cmd]);
+  return false;
+}
+const partsOf = (command) => {
+  const tokens = stripHeredocs(command).split(/(&&|\|\||;|\|&?|\n|(?<![>&<0-9])&(?![>&]))/);
   const parts = [];
   for (let i = 0; i < tokens.length; i += 2) parts.push({part: tokens[i], sep: tokens[i - 1] ?? null, ...splitRedirects(wordsOf(tokens[i]))});
+  return parts;
+};
+// Whether a copy of the command's output may exist by the end of these tool uses: a Bash call that ran the command with its
+// standard output (or a part of its pipeline) sent to a file or into tee, a Bash call whose text has the schema (echo … >
+// f, a here-document), or a Write, Edit, MultiEdit or NotebookEdit whose new text has it.
+export function savedCopy(e, uses) {
+  const re = new RegExp(e.resultPattern);
+  return uses.some((u) => {
+    const i = u.input ?? {};
+    if (u.name !== 'Bash') return [i.content, i.new_string, i.new_source, ...(Array.isArray(i.edits) ? i.edits.map((x) => x?.new_string) : [])].some((x) => typeof x === 'string' && re.test(x));
+    const c = String(i.command ?? '');
+    if (re.test(c)) return true;
+    let inPipe = false;
+    for (const p of partsOf(c)) {
+      const piped = p.sep === '|' || p.sep === '|&';
+      if (!piped) inPipe = false;
+      if (!inPipe && runsProgram(e, p.part, p.args, p.outFile, {ignoreOutFile: true})) inPipe = true;
+      if (inPipe && (p.outFile || (programOf(headWords(p.args)) === 'tee' && headWords(p.args).slice(1).some((w) => !w.startsWith('-'))))) return true;
+    }
+    return false;
+  });
+}
+// saved: whether a copy of the output may exist (savedCopy); without the trace, the strict binding.
+export function boundCommandRan(e, command, {saved = true} = {}) {
+  const text = stripHeredocs(command);
+  // Under the strict binding a command substitution can print a saved copy (echo "$(cat saved.json)"): not bound.
+  if (saved && /\$\(|`/.test(text)) return false;
   let ran = false, fromProgram = false;
-  for (const p of parts) {
+  for (const p of partsOf(command)) {
     const piped = p.sep === '|' || p.sep === '|&';
     if (!piped) fromProgram = false;
+    if (e.resultPattern && fabricates(e, p.args) && !runsProgram(e, p.part, p.args, p.outFile)) return false;
     if (!headWords(p.args).length) continue;
     if (runsProgram(e, p.part, p.args, p.outFile)) { ran = true; fromProgram = true; continue; }
+    if (!saved) continue;
     if (piped && fromProgram) { if (filterOk(p.args)) continue; return false; }
-    const cmd = programOf(headWords(p.args));
-    if (!QUIET_PARTS.has(cmd)) return false;
-    if (['echo', 'printf'].includes(cmd) && e.resultPattern && new RegExp(e.resultPattern).test(p.args.join(' '))) return false;
+    if (!QUIET_PARTS.has(programOf(headWords(p.args)))) return false;
   }
   return ran;
 }
@@ -688,7 +746,7 @@ export function projectFilesOf({priorFiles = null, changedFiles = null, worktree
 // #1844 review M1: with a level that has Bash, bash {possible, unbounded, commands} (bashTraceReads): a forbidden read is
 // also a possible Bash read, any read when a call's output is unbounded, or a call whose text matches the entry's
 // bashMention; forbiddenReadsStrict keeps the strict count beside it. Without it (level W) as before.
-export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS, base = null, bash = null} = {}) {
+export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS, base = null, bash = null, skillPath = (r) => r} = {}) {
   const out = {};
   const hit = (p) => rel.some((r) => new RegExp(p).test(r));
   const loose = bash ? [...new Set([...rel, ...bash.possible])] : rel;
@@ -706,7 +764,8 @@ export function caseChecks(k, rel, t, {fileText = null, skills = ASC_SKILLS, bas
   // #1844: expectCommands [{id, pattern, exclude?, resultPattern?}]: each entry ran (commandRan; review H1).
   if (k.expectCommands) { out.expectCommands = Object.fromEntries(k.expectCommands.map((e) => [e.id, commandRan(e, t)])); out.commandsAll = Object.values(out.expectCommands).every(Boolean); }
   if (k.forbidSkills) {
-    out.forbiddenSkills = k.forbidSkills.filter((s) => t.skills.some((c) => same(c, s)) || (bash?.unbounded > 0) || loose.some((r) => r === `.claude/skills/${s}/SKILL.md` || (skills.includes(s) && new RegExp(`^\\.agent-skill-chain/(managed-runtime/)?skills/${esc(s)}/SKILL\\.md$`).test(r))));
+    // PR #1875 review M1: skillPath maps a file of the start worktree to the project file (scoreRun startDir).
+    out.forbiddenSkills = k.forbidSkills.filter((s) => t.skills.some((c) => same(c, s)) || (bash?.unbounded > 0) || loose.map(skillPath).some((r) => r === `.claude/skills/${s}/SKILL.md` || (skills.includes(s) && new RegExp(`^\\.agent-skill-chain/(managed-runtime/)?skills/${esc(s)}/SKILL\\.md$`).test(r))));
     out.forbidSkillsOk = out.forbiddenSkills.length === 0;
   }
   if (k.writes) {
@@ -740,7 +799,13 @@ export function reportOf(report, rel, t) {
   if (report.answer) out.answer = Object.fromEntries(report.answer.map((e) => [e.id, new RegExp(e.pattern, 'i').test(t.text)]));
   if (report.writtenFiles) out.writtenFiles = writtenFiles(t);
   // #1844: per entry, whether a Bash command matched it (attempted), exited 0 (exitOk) and ran (ok: commandRan, review H1).
-  if (report.commands) { const all = t.uses.filter((u) => u.name === 'Bash').map((u) => String(u.input?.command ?? '')), ok = okCommands(t); out.commands = Object.fromEntries(report.commands.map((e) => [e.id, {attempted: all.some((c) => new RegExp(e.pattern).test(c)), exitOk: ok.some((c) => new RegExp(e.pattern).test(c)), ok: commandRan(e, t)}])); }
+  // PR #1875 review M2: with resultPattern also outputSchema, a call matching the pattern whose result is not an error and has
+  // the schema (the count before the binding), so a call the binding left out is seen beside ok.
+  if (report.commands) {
+    const all = t.uses.filter((u) => u.name === 'Bash').map((u) => String(u.input?.command ?? '')), ok = okCommands(t);
+    const schemaIn = (e) => t.uses.some((u) => u.name === 'Bash' && new RegExp(e.pattern).test(String(u.input?.command ?? '')) && !(e.exclude && new RegExp(e.exclude).test(String(u.input?.command ?? ''))) && t.results.has(u.id) && !t.results.get(u.id).is_error && new RegExp(e.resultPattern).test(resultTextOf(t.results.get(u.id))));
+    out.commands = Object.fromEntries(report.commands.map((e) => [e.id, {attempted: all.some((c) => new RegExp(e.pattern).test(c)), exitOk: ok.some((c) => new RegExp(e.pattern).test(c)), ...(e.resultPattern ? {outputSchema: schemaIn(e)} : {}), ok: commandRan(e, t)}]));
+  }
   return out;
 }
 
@@ -806,8 +871,15 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
   const bash = level?.sandbox ? bashTraceReads(t, projectFilesOf({priorFiles, changedFiles, worktrees}), {existing: Boolean(priorFiles)}) : null;
   const bashRel = bash ? bash.reads : null;
   const rel = [...new Set([...reads.map((r) => r.path), ...(bashRel ?? [])])];
-  const ascBodies = skills.filter((s) => rel.some((r) => pat('bodyPattern', s).test(r)));
-  const ascEntries = skills.filter((s) => rel.some((r) => pat('entryPattern', s).test(r)));
+  // PR #1875 review M1 (#1866): with startDir the Skill files (bodyPattern, entryPattern, referencePattern, the user's own
+  // .claude/skills/<name>/SKILL.md, the ASC files) are matched on the paths with a leading .worktrees/<name>/ removed: a
+  // worktree is a checkout of the same commit, so its .agent-skill-chain/ and .claude/skills/ are the project's (the
+  // patterns of cases.json, which an extending config cannot change, have no .worktrees/). The read and forbid patterns of
+  // the rule files already allow .worktrees/<name>/ and get rel unchanged. Without startDir (level W, #1844) unchanged.
+  const skillPath = startDir ? (r) => r.replace(/^\.worktrees\/[^/]+\//, '') : (r) => r;
+  const srel = [...new Set(rel.map(skillPath))];
+  const ascBodies = skills.filter((s) => srel.some((r) => pat('bodyPattern', s).test(r)));
+  const ascEntries = skills.filter((s) => srel.some((r) => pat('entryPattern', s).test(r)));
   const ascCalls = t.skills.filter((c) => skills.some((s) => same(c, s)));
   const row = {case: k.id, kind: k.kind, fixture: k.fixture ?? 'A', expect: k.expect, skills: t.skills, ascEntries, ascBodies, readAttempts: t.readAttempts, toolUses: t.uses.length,
     messages: t.messages.length, model: t.init?.model ?? null, initTools: t.init?.tools ?? null, permissionMode: t.init?.permissionMode ?? null,
@@ -821,7 +893,7 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
     row.bashPossibleReadPaths = bash.possible.filter((r) => !rel.includes(r) && named.some((re) => re.test(r)));
     row.bashUnboundedReads = bash.unbounded;
   }
-  const ascFiles = [...new Set(rel.filter((r) => ascFile(r, skills)))].sort();
+  const ascFiles = [...new Set(srel.filter((r) => ascFile(r, skills)))].sort();
   row.ascFilesRead = ascFiles.length;
   row.ascBytesRead = sizeOf ? ascFiles.reduce((a, r) => a + (sizeOf(r) ?? 0), 0) : null;
   if (!t.init) return {...row, failure: 'no init event'};
@@ -848,7 +920,7 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
   if ((k.answerNone ?? []).length) row.markerDeductions = markerDeductionsOf(k, markerText);
   row.resultMissing = reads.some((r) => r.resultMissing);
   const touched = ascCalls.length > 0 || ascEntries.length > 0 || ascBodies.length > 0;
-  const extra = caseChecks(k, rel, t, {fileText, skills, base, bash});
+  const extra = caseChecks(k, rel, t, {fileText, skills, base, bash, skillPath});
   Object.assign(row, extra);
   if (spec.report) row.report = reportOf(spec.report, rel, t);
   // #1840 review M3: whether the session's Skill list (init) holds the user's own Skills the case names.
@@ -860,21 +932,21 @@ export function scoreRun(spec, k, t, {level = null, condition = null, sizeOf = n
     // tool loads; its Skill call or a Read of that file is the body.
     // #1845: only a Skill call whose result is not an error (okSkills; a trace object without it: skills) or a successful
     // Read (rel) counts as the body.
-    const ownBody = k.userSkill === true && ((t.okSkills ?? t.skills).some((s) => same(s, e)) || rel.includes(`.claude/skills/${e}/SKILL.md`));
+    const ownBody = k.userSkill === true && ((t.okSkills ?? t.skills).some((s) => same(s, e)) || srel.includes(`.claude/skills/${e}/SKILL.md`));
     row.entryHop = t.skills.some((s) => same(s, e)) || ascEntries.includes(e);
     row.bodyRead = k.userSkill === true ? ownBody : ascBodies.includes(e);
     row.reach = row.entryHop || row.bodyRead;
     const refs = referencesFor(k, condition);
     row.references = refs;
-    row.ascReferencesRead = [...new Set(rel.map((p) => new RegExp(spec.referencePattern.replace('<skill>', esc(e)).replace('<ref>', '(.+)')).exec(p)?.at(-1)).filter(Boolean))].sort();
-    row.referenceRead = refs.length === 0 || refs.some((r) => rel.some((p) => pat('referencePattern', e, r).test(p)));
+    row.ascReferencesRead = [...new Set(srel.map((p) => new RegExp(spec.referencePattern.replace('<skill>', esc(e)).replace('<ref>', '(.+)')).exec(p)?.at(-1)).filter(Boolean))].sort();
+    row.referenceRead = refs.length === 0 || refs.some((r) => srel.some((p) => pat('referencePattern', e, r).test(p)));
     row.applied = row.bodyRead && row.referenceRead && row.markers && extra.caseChecksOk !== false;
     row.markersWithoutReference = row.markersApplicable && row.markers && refs.length > 0 && !row.referenceRead;
     row.misselect = !row.reach && (t.skills.length > 0 || ascEntries.length > 0 || ascBodies.length > 0);
     row.unselected = !row.reach && t.skills.length === 0 && ascEntries.length === 0 && ascBodies.length === 0;
     row.secondaryRead = Object.fromEntries((k.secondary ?? []).map((s) => [s, ascBodies.includes(s)]));
     if (isDesign(k)) {
-      const first = reads.find((r) => pat('bodyPattern', e).test(r.path));
+      const first = reads.find((r) => pat('bodyPattern', e).test(skillPath(r.path)));
       row.bodyReadMessage = first ? first.message : null;
       const writeAt = t.messages.findIndex((m) => m.uses.some((u) => u.name === 'Write' || u.name === 'Edit'));
       row.writeBeforeBody = writeAt >= 0 && (!first || writeAt + 1 < first.message);

@@ -19,10 +19,27 @@ Issueは「#1844の設定を、このIssueのためにコピーすること」�
 
 ## 条件と環境
 
-- R：v0.5.133（PR #1864のworktree-createの確認と新しいmessageを含む最初のrelease。進行役の指定、2026-11-28）。tarballのsha256 `05cdf910…81cd`は、`SHA256SUMS`の行、releaseのassetのdigest、release notesのPackage SHA256と一致した（Source `4284bf95`、Verified PR #1864）。配布されるSkillはv0.5.128と同じ17件。2026-11-28T12:12:18Zにv0.5.134（#1873）がLatestになったが、v0.5.133との差は`docs/evidence`（配布されない）とversionだけである。#1844の`decision-criteria.md`は「測定の時点で最新のGitHub Release」と書くので、v0.5.134に替えるかはowner・進行役が固定の前に決める（替えるなら`release.json`だけを直し、dry runをやり直す）。
+- R：v0.5.134（固定の時点で最新のGitHub Release。#1844の`decision-criteria.md`の「測定の時点で最新のGitHub Release」に従う。進行役の決定、2026-11-28、PR #1875の独立レビューM3）。2026-11-28の`gh release list`でLatest。tarballのsha256 `a5245996…f0e9`は、`SHA256SUMS`の行、releaseのassetのdigest、release notesのPackage SHA256と一致した（Source `a63c1cb6`、Verified PR #1873、Tested HEAD `7b07bde8`、`source-commit.txt`も`a63c1cb6`）。PR #1864のworktree-createの確認と新しいmessageを含む。v0.5.133（`05cdf910…81cd`、PR #1864を含む最初のrelease）と展開して比べると、165 fileのうち違うのは`package.json`（version）と`release-identity.json`（versionと`distributionManifestSha256`）だけで、配布されるSkillは同じ17件、ASC CLIも同じである。固定の前に新しいreleaseがLatestになれば、`release.json`を直してdry runをやり直す。
 - 環境：#1844の水準X（W＋Bash、Bashは`confined`のsandboxの中だけ）、fixture U、認証は`CLAUDE_CODE_OAUTH_TOKEN`だけ。
 - **試行の前のworktree**（`toolLevels.X.sandbox.startWorktree`、`run-trial.mjs`の`createStartWorktree`）：`run-trial.mjs`は、中立のcommitの後、台帳の予約の前に、導入されたASC CLIで`worktree-create <work> 1866 test trial HEAD`をsandboxの外で実行する（利用者が自分のterminalで行うのと同じ）。Claude Codeはそのworktree（`work/.worktrees/<YYYYMMDD_HHMMSS>-1866-trial`、branch `test/1866-trial`）で起動する（cwd、trustの項目）。sandboxの配置（`confinedSettings`）は#1844と同じで、`work/`の全体が読める。書込みはClaude Codeの許可（起動したworktreeと`CLAUDE_CODE_TMPDIR`、本体が許すそのworktreeのGitの記録）に任される。`worktree-create`が失敗すれば、予約の前に拒否する。`meta.json`に`startDir`・`startWorktree`（branch・base・試行の終わりのHEAD）を記録する。
 - 採点：`score.mjs`の`scoreRun`は`startDir`を受け取り、pathは従来どおりproject（`work/`）からの相対で数える（worktreeのfileは`.worktrees/<名前>/<path>`、worktreeから`../../.agent-skill-chain/…`で読んだmain checkoutのfileはprojectのfile）。Bashはworktreeから始まり、worktreeの外で終わった`cd`は次の呼出しでworktreeに戻る（Claude Codeの動作）。
+- Skillのfileの照合（PR #1875の独立レビューM1）：#1844の`cases.json`の`bodyPattern`・`entryPattern`・`referencePattern`は`^\.agent-skill-chain/…`・`^\.claude/skills/…`で、`.worktrees/<名前>/`を許さない（`extends`では`cases.json`を変えられない）。そこで`startDir`のある採点では、ASCのSkillの本文・入口・reference、利用者のSkill（`forbidSkills`、`userSkill`）、ASCのfileの数と大きさを、先頭の`.worktrees/<名前>/`を外したpathで照合する（worktreeは同じcommitのcheckoutなので同じfile）。これで、worktreeでSKILL.mdをReadした試行の`bodyRead`・`reach`・`ascBytesRead`と、u-negで`.worktrees/<名前>/.claude/skills/invoice-format/SKILL.md`を読んだ試行の`forbidSkillsOk`・`negativeOk`が、#1844の`decision-criteria.md`の「`reach`・`negativeOk`は#1840と同じ」のとおりに数えられる。判定に使う4つの水準の規則のfileの型はもともと`.worktrees/`を許すので、変わらない。
+
+## `start`の実行の数え方と#1844の判定の規則（PR #1875の独立レビューM2）
+
+ownerの決定で判定の規則（#1844の[decision-criteria.md](../../1844-rule-read-bash/config/decision-criteria.md)）は変えない。最初の版の`boundCommandRan`は「同じ呼出しの他の部分が別の出力を出さない」ことも要った。これは規則の文に無い条件で、`git status && start`のように`start`のJSONが結果にある呼出しを数えず、規則より厳しかった（規則と食い違う偽陰性）。そこで数え方を規則の文に合わせた。規則の文（35行目）と実装（`score.mjs`の`commandRan`・`boundCommandRan`・`savedCopy`・`fabricates`）の対応は次のとおり。
+
+| 規則の文 | 実装 |
+| --- | --- |
+| `asc-v05.mjs start`か`asc.mjs start`のBash（`--help`・`-h`を除く） | `pattern`（`cases.json`）が、呼出しのある部分のprogramとして実行されていること（環境変数・wrapper・`sh -c`・`node`のoptionの後）。`exclude`で`--help`・`-h`を除く。`echo '… start …'`・`node -e`・here-documentの中の文は`start`のBashではない |
+| 結果がerrorでなく | tool_resultの`is_error`がfalse |
+| その本文に`start`のJSONの出力（3つのschema）があること | 結果の文が`resultPattern`に当たり、その文が`start`の出力であること：他の部分がその文を作れない（`echo`/`printf`の展開する文・`%`・`\`、変数の一覧、`eval`・`sh -c`・`node -e`等。`fabricates`）。fixtureにその形の文を持つfileは無く（v0.5.134のdry runのfixtureと写しで`resultPattern`に当たるfileは0件、2026-11-28）`start`はfileを書かないので、保存した写し（`savedCopy`）がありうるときだけ、他の部分が出力を出さないことを要る |
+| 終了codeだけでは数えない（`start … \| head`・`; echo done`・`\|\| true`） | 終了codeは使わない。main checkoutで止まった`start`の結果にはschemaが無いので数えない |
+| 出力をfileへ流した、`\| grep -c`で数だけ見た等は数えない | `start`の部分の標準出力がfileへ流れていれば数えない（`> s.json; cat s.json`も）。`\| grep -c`・`\| wc`の結果にはschemaが無い |
+| `--path`、`worktree-create`、commitは`report.commands`に記録（合否に使わない） | 変えていない。加えて`report.commands`の各項目に`outputSchema`（結び付けの前の数え方）を`ok`と並べる（報告だけ） |
+
+- 規則に合わせて数える形（試験で固定）：`start --path src/billing/invoice.ts && cat ../../.agent-skill-chain/project/rules/money.md`、`git status && start .`、`ls; start .`、`cd "$(git rev-parse --show-toplevel)" && start .`、`start . | python3 -m json.tool`、`sh -c '… start .'`。
+- 数えない形（試験で固定）：引用した文と保存したJSONの表示（`echo '…start…'; cat saved.json`、`start . > s.json; cat s.json`）、文を作る部分のある呼出し（PR #1875のレビューL1：`printf '"schema": "%s"' …; start .; true`、`S=…; echo "$S"; start .`、`echo -e '\x22…'`、`set`・`export -p`）、保存した写しがありうる後の呼出しの他の出力（例：前のWriteがschemaの文を書いた後の`git status && start .`）。
 
 ## probe（隔離の確認）
 
@@ -42,7 +59,9 @@ Issueは「#1844の設定を、このIssueのためにコピーすること」�
 
 いずれも費用0（モデルを呼ばない）。
 
-1. **dry run**（`dry-run.mjs`、v0.5.133の本物のtarball、`--runs-root /var/tmp/r1866`）：19項目すべて合格。fixture Uに17件の入口と`claude-md`の採用、`cases.json`の`needs`、`startWorktree`（中立のcommitの後の写しで`worktree-create`がworktreeを作り、HEAD・ASC CLI・`CLAUDE.md`・`context.json`が同じ、branch `test/1866-trial`）、`priorSpend`（2つの台帳）、`budget`、`confinedLayout`、`runsRootTmpDir`、probe 43操作（`insideWorktreeCreateStops`を含む）。
+1. **dry run**（`dry-run.mjs`、v0.5.134の本物のtarball、`--runs-root /var/tmp/r1866`。PR #1875の是正の後にやり直した。最初はv0.5.133で同じく19項目合格）：19項目すべて合格（`sameRuntimeVersion` 0.5.134）。fixture Uに17件の入口と`claude-md`の採用、`cases.json`の`needs`、`startWorktree`（中立のcommitの後の写しで`worktree-create`がworktreeを作り、HEAD・ASC CLI・`CLAUDE.md`・`context.json`が同じ、branch `test/1866-trial`）、`priorSpend`（2つの台帳）、`budget`、`confinedLayout`、`runsRootTmpDir`、probe 43操作（`insideWorktreeCreateStops`を含む）。
+以下の2・3は是正の前にv0.5.133のfixtureで行った。v0.5.134の配布fileとの違いはversionの記録だけで、probeの操作と試行の前のworktreeの動作もPR #1875の是正で変えていないので、やり直していない（是正は採点・設定の読込み・計画の`cwd`の文字列だけ）。
+
 2. **sandbox-check**（[sandbox-check.json](sandbox-check.json)、公開のsandbox runtime srt 0.0.83、Claude Code本体のruntimeではない）：50件すべて期待どおり。srtには書込みの許可（起動したworktreeと`tmp/`）だけを渡すので、`work/.git`全体が書けず、`worktree-create`は#1730の確認（`Git metadata is not writable`）で止まる（どちらの止まり方も合格にした。Claude Codeでは次の3のとおり新しいmessageで止まる）。worktreeでのcommitもsrtでは`index.lock`で失敗する（記録だけ。srtには本体のような「自分のworktreeの記録」の例外が無い）。何も残らなかった（branch・`.worktrees`・目印・試行の外のfile）。
 3. **Claude Code本体のsandbox**（[claude-sandbox-check.json](claude-sandbox-check.json)、Claude Code 2.1.323、`claude-sandbox-bash.mjs`の代役のAPI、ダミーのkey）：
    - probeのBashの全36操作と追加の6操作を、`run-trial.mjs`と同じ関数で作った配置（試行の前のworktreeで起動、水準Xの`--settings`）で実行した。`worktree-create`は`Git worktree records are not writable: <runs-root>/R-probe-1/work/.git/worktrees (EPERM)`で止まり、branchも`.worktrees`も作らなかった。拒否されるべき操作はすべて拒否された（pathが文字列に無い操作はsandboxの拒否）。`start . --path src/billing/invoice.ts`は成功して`money.md`を選び、`../../`のmain checkoutの規則も読めた。main checkoutへの`touch`は拒否された。`ps`は許可の層の拒否（#1844と同じく合格に数える）。worktreeでのcommitは`git add`と`git commit`を別の呼出しにすると成功した（`git -c … commit`を1つの呼出しに繋ぐと、許可の層が承認を求めて止める）。
@@ -58,11 +77,11 @@ EV=docs/evidence/1866-rule-read-worktree/config
 ROOT=/private/var/tmp/asc-eval-1866
 RUNS=/var/tmp/r1866          # <RUNS>/<試行>/tmp/claude-<uid>が44 byte以内（run-trial.mjs tmpDirProblem）
 LEDGER=$ROOT/ledger/ledger-1866.jsonl
-TGZ=<scratch>/rel133/agent-skill-chain-0.5.133.tgz   # gh release download v0.5.133 で取得し、sha256を照合する
+TGZ=<scratch>/rel134/agent-skill-chain-0.5.134.tgz   # gh release download v0.5.134 で取得し、sha256を照合する（固定の時点で最新のrelease）
 # 1. 固定（台帳を作り、固定の記録をcommitし、最初の固定のcommitをこのREADMEに書いてcommitする）
 node $H/fixation.mjs init $EV/results/fixation.json --ledger $LEDGER --config $EV
 # 2. fixture
-node $H/make-fixture.mjs R U $TGZ 05cdf910e657aa6ae1237aa18922dc1013d2ddb2162992c0a58ba5a86d2281cd $ROOT/fixtures/fixture-R-U $ROOT/tmp --config $EV
+node $H/make-fixture.mjs R U $TGZ a5245996a2098d267af3e9aebb0eae02bf9f30d97735f025fbeb9424ad82f0e9 $ROOT/fixtures/fixture-R-U $ROOT/tmp --config $EV
 # 3. 隔離の確認（目印fileは確認の後に消す）。harnessはsandboxの外のshellで実行する
 node $H/markers.mjs create <repo-root> --config $EV
 CLAUDE_CODE_OAUTH_TOKEN="$(cat ~/.config/asc-eval/claude-oauth-token)" ASC_EVAL_ALLOW_PAID=1 node $H/run-trial.mjs $RUNS R probe 1 --fixture $ROOT/fixtures/fixture-R-U --ledger $LEDGER --home-marker <home marker> --repo-marker <repo marker> --run --config $EV 2> $ROOT/run-trial-probe-1.stderr.txt
@@ -88,5 +107,6 @@ node $H/judge.mjs $EV/results --runs-root $RUNS --ledger $LEDGER --out $EV/resul
 
 - 試行の前のworktreeは、harnessが`worktree-create`で作る。利用者が名前（Issue番号・slug）を選ぶ場面と、worktreeを作ってからClaude Codeを起動するまでの操作は測らない。依頼文は#1840のままで、worktreeの存在に触れない。
 - main checkout（`work/`）はBashで読める（`confined`の配置）。worktreeの外のfileを読んだ場合も、projectのfileとして数える（`forbidReads`のpathは`.worktrees/<名前>/`の有無を問わない）。
-- `start`の実行（`commandsAll`）は、commandとその出力を結び付けて数える（PR #1857の引継ぎ）：`start`がその部分のprogramとして実行され（引用した文や`node -e`の中の文字列は数えない）、同じ呼出しの他の部分が別の出力を出さない（`cd`・`echo`等の短いcommandと、`start`の出力を受けるfilterだけ）場合だけ数える。`$(…)`を含む呼出し、`sh -c`の中、変数で書いたCLIのpath（`node "$CLI" start`）は数えない（「実行しない」側に偏る）。
+- `start`の実行（`commandsAll`）は、commandとその出力を結び付けて数える（PR #1857の引継ぎ、上の節）。変数で書いたCLIのpath（`node "$CLI" start`）は、規則の文（`asc-v05.mjs start`）にも当たらないので数えない。文を作る部分の判定（`fabricates`）は、`awk 'BEGIN{print …}'`のように他のprogramが文を作る形を見ない（楽観側。モデルが自然に書く形ではない）。保存した写しがありうるときの厳しい結び付けは「実行しない」側に偏る。
+- sessionのcwdは`work/.worktrees/<名前>`なので、Claude Codeは祖先の`work/CLAUDE.md`も読む（worktreeの`CLAUDE.md`と同じ文が2回入る。PR #1875のレビューL2）。利用者がworktreeで起動する手順と同じ条件なので変えない。probeの問1（Contextの指示file）の答えには指示fileが2つ挙がりうる。#1840と同じ項目の照合で不合格になれば、その差として読む。
 - 失敗した`cd …&& …`の後の作業directoryは、2つの候補（前の値と`cd`の先）で数える（PR #1857の最後のレビューM-A）。候補が8を超えるか、失敗した呼出しに`cd`が2つ以上あると不明として扱い、従来どおり深い検索は「全てを読んだ」（`unbounded`）になる。判定の前に`forbidReadsOk`の`breakdown.onlyUnbounded`を確かめる。

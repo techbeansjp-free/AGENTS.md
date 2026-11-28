@@ -55,11 +55,11 @@ node --test docs/evidence/shared-harness/test/harness.test.mjs
 
 試験用の設定（`test/config/`：#1820の段階2の計画をこの形にしたもの。有料の実行には使わない）と、#1823の設定を使う。#1820の段階2の試験を移したものに、設定の解決、仮の値の拒否、merge場面の目印と採点、条件ごとのreference、#1823の規則、生のtraceを公開しない`collect`と作り直しの照合の試験を加えた。`test/config/results/probe-approval.json`がcommitされていないと、承認の試験は失敗する。
 
-## 大きさ（2026-11-26）
+## 大きさ（2026-11-28）
 
-- この仕組み：module 17件（`dry-run.mjs`を含む）と試験1件、計3,048行（moduleは2,457行）。
+- この仕組み：module 20件（`dry-run.mjs`・`sandbox-check.mjs`・`claude-sandbox-bash.mjs`を含む）と試験1件、計7,172行（moduleは4,622行）。2026-11-26は17件、3,048行（moduleは2,457行）だった。
 - 設定の例（#1823）：7file、約1,050行（大半は`cases.json`）。
-- 過去の写し：`docs/evidence/`の他の`.mjs`は240件、23,346行（#1820の段階2の写しは17件、2,735行）。
+- 過去の写し：`docs/evidence/`の他の`.mjs`は261件、26,171行（#1820の段階2の写しは17件、2,735行）。
 
 ## #1840で加えたもの（2026-11-27）
 
@@ -224,23 +224,27 @@ Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLev
 
 #1866の測定の前提（PR #1857の最後の再レビューのM-A・L-A・L-B、PR #1864のLow 2件、PR #1873のLow 2件、上の「#1866へ引き継ぐこと」）を直し、試行の前に作るworktreeを加えた。新しいfield（`extends`、`priorSpend`の一覧、`sandbox.startWorktree`、`meta.json`の`startDir`）の無い設定（試験用、#1823、#1840、#1843、#1844、#1846）の起動・採点・判定は、下の「既存の記録への影響」の点を除いて変えない（試験で確かめる）。
 
-- **設定の土台**（`config.mjs`の`baseDirOf`・`mergeConditions`・`cfgPath`・`readCfg`）：`conditions.json`の`extends`（設定からの相対のdirectory。harnessの外、`conditions.json`があり、それ自身は`extends`を持たない）で、別の設定を写さずに使う。`conditions.json`は土台のものに自分のものを重ねる（objectは項目ごと、それ以外（配列を含む）は置き換え、`null`は項目を消す）。他の設定file（`cases.json`・`run-order.json`・`release.json`・`decision-criteria.md`・`calibration.json`）は、自分に無ければ土台のものを読む。`README.md`と`results/`は常に自分のもの。`fixation.mjs`の`fixedNames`は、`config/<file>`（読んだとおりのfile）に加えて`base/<file>`（土台の5file）を固定する。
+- **設定の土台**（`config.mjs`の`baseDirOf`・`mergeConditions`・`cfgPath`・`readCfg`）：`conditions.json`の`extends`（設定からの相対のdirectory。harnessの外、`conditions.json`があり、それ自身は`extends`を持たない）で、別の設定を写さずに使う。`conditions.json`は土台のものに自分のものを重ねる（objectは項目ごと、それ以外（配列を含む）は置き換え、`null`は項目を消す。捨てるのは最上位の`extends`だけ。PR #1875のレビューL3）。他の設定file（`cases.json`・`run-order.json`・`release.json`・`decision-criteria.md`・`calibration.json`）は、自分に無ければ土台のものを読む。`README.md`と`results/`は常に自分のもの。`fixation.mjs`の`fixedNames`は、`config/<file>`（読んだとおりのfile）に加えて`base/<file>`（土台の5file）を固定する。
 - **`priorSpend`の一覧**（`run-trial.mjs`の`priorSpendEntries`・`priorSpentUsd`・`priorSpendProblems`）：以前の段階の台帳を複数書ける（#1844の2つの台帳）。各台帳のsha256と合計を確かめ、合計を引いた残りを上限にする。1つのobjectの形は従来どおり。`priorProbes`は1つの台帳だけと組む（同じ測定の固定のやり直し）。
 - **試行の前のworktree**（`toolLevels.<id>.sandbox.startWorktree {issue, type, slug}`、`run-trial.mjs`の`startWorktreeProblems`・`createStartWorktree`）：中立のcommitの後、台帳の予約の前に、導入されたASC CLIの`worktree-create <work> <issue> <type> <slug> HEAD`をsandboxの外で実行し（#1861の支持する手順。modelは実行しない）、Claude Codeをそのworktreeで起動する（cwd、trustの項目）。失敗すれば予約の前に拒否する。`meta.json`に`startDir`（`.worktrees/<名前>`）と`startWorktree`（branch・base・終わりのHEAD）を記録し、`collect.mjs`は`startDir`を採点へ渡す。sandboxの配置（`confinedSettings`）は変えない。
 - **probeの置き換え**（`probeContext`の`startDir`・`probeWorktree`、`bashProbeSteps`、`probeEndStateOf`・`worktreeCreateLeftOf`、`probe-check.mjs`の`probeStepResultText`・`worktreeCreateStopped`）：`startWorktree`の水準では、`insideWorktreeCreate`（成功を要る）を`insideWorktreeCreateStops`（同じcommandが拒否され、結果に`Git worktree records are not writable`がある）に置き換え、probeの終わりに`test/<tag>-probe`のbranch、`-<tag>-probe`で終わる`.worktrees/`の下のdirectory、他のGitのworktreeが無いことを記録して判定する。操作の数は変わらない。symlinkのReadと`insideWrite`のfileは起動したworktreeの中、`cwd`の確認は起動したworktreeとの照合になる。`startDir`の無い#1844のprobeは、操作も判定も変わらない（`recheckProbe`の結果も同じ）。
-- **採点の起点**（`score.mjs`の`scoreRun`の`startDir`、`bashTraceReads`の`startCwd`）：sessionのcwdが起動したworktreeでも、pathはproject（`work/`）からの相対で数える。Bashはworktreeから始まり、worktreeの外で終わった`cd`は次の呼出しでworktreeに戻る。sessionのcwdが`startDir`でなければ、その試行は失敗にする。
+- **採点の起点**（`score.mjs`の`scoreRun`の`startDir`、`bashTraceReads`の`startCwd`）：sessionのcwdが起動したworktreeでも、pathはproject（`work/`）からの相対で数える。Bashはworktreeから始まり、worktreeの外で終わった`cd`は次の呼出しでworktreeに戻る。sessionのcwdが`startDir`でなければ、その試行は失敗にする。Skillのfile（`cases.json`の`bodyPattern`・`entryPattern`・`referencePattern`、利用者のSkillの`.claude/skills/<名前>/SKILL.md`、`forbidSkills`、ASCのfileの数と大きさ）は、先頭の`.worktrees/<名前>/`を外したpathで照合する（PR #1875の独立レビューM1。worktreeは同じcommitのcheckoutで、`cases.json`の型は`extends`で変えられない）。規則のfileの`expectReads`・`forbidReads`の型はもともと`.worktrees/<名前>/`を許すので、そのまま照合する。`startDir`の無い採点（水準W、#1844）は変わらない。
 - **M-A**（`bashTraceReads`、`MAX_CWD_CANDIDATES`）：失敗した呼出しが`cd`を1つと他のcommandを含むなら、作業directoryを「前の値」と「`cd`の先」の候補にし、後の呼出しを各候補から数える：厳しい数え方はすべての候補で見つかった読込みだけ、広い数え方はどれかの候補で見つかった読込み、`unbounded`はどれかの候補で（既知の候補からの深い検索は展開する）。`cd`が2つ以上、計算した先、`||`の後の`cd`、候補が8を超える場合は従来どおり不明（`null`）。
-- **`commandRan`の結び付け**（`score.mjs`の`boundCommandRan`。上の引継ぎの最後の項）：`resultPattern`のある項目は、`pattern`がcommandの部分のprogramとして実行されたこと（環境変数・wrapper・`node`とそのoptionの後の最初の語で一致が始まる。`node -e`・引用した文・here-documentは数えない。標準出力をfileへ流した部分は数えない）と、同じ呼出しの他の部分が別の出力を出さないこと（前後には`cd`・`export`・`set`・`true`・`echo`/`printf`（`resultPattern`に当たらない文字列）等だけ、pipelineの後ろにはfile引数の無いfilter（`head`・`grep`・`jq`等））を要る。`$(…)`・backquoteを含む呼出しは数えない。`resultPattern`の無い項目は従来どおり。
+- **`commandRan`の結び付け**（`score.mjs`の`boundCommandRan`・`savedCopy`・`fabricates`。上の引継ぎの最後の項。PR #1875の独立レビューM2・L1で、#1844の`decision-criteria.md`の文に合わせて直した）：`resultPattern`のある項目は、結果がerrorでなく`resultPattern`に当たることに加えて、次を要る。
+  - `pattern`がcommandの部分のprogramとして実行されたこと（環境変数・wrapper・`sh -c`・`node`とそのoptionの後の最初の語で一致が始まる。`node -e`・引用した文・here-documentは数えない）。その部分の標準出力をfileへ流していないこと。
+  - 他の部分が`resultPattern`の文を作れないこと（`fabricates`）：`echo`/`printf`の引数が`resultPattern`に当たる、展開・解釈される文（`$`の後の名前・`{`・`(`、backquote、`\`、`printf`の`%`）を含む。引数の無い`set`・`export`・`declare`・`env`・`printenv`（`-p`だけを含む）。`eval`・`source`、`sh -c`・`node -e`・`python -c`・`perl -e`等。`xargs`が実行するcommand。`$?`等は数える。
+  - 他の部分が出力を出すこと（`git status && start`、`start && cat money.md`、`start | python3 -m json.tool`、`cd "$(…)" && start`）は妨げない（判定の規則は呼出しの結果で数える）。fixtureには`resultPattern`の形（JSONの`"schema": "asc-…/v1"`）の文を持つfileが無く、`start`はfileを書かないので、結果の文が他の部分から来るのは、試行が出力を保存した場合だけである。そこで、その呼出しまでに写しがありうる（`savedCopy`：`start`の出力やそのpipelineをfileへ流した・`tee`に渡した呼出し、`resultPattern`に当たる文を含むBashの呼出し、Write・Edit・MultiEdit・NotebookEditの新しい文）なら、厳しい結び付け（前後には`cd`・`export`・`set`・`true`・`echo`/`printf`等だけ、pipelineの後ろにはfile引数の無いfilter、`$(…)`・backquoteなし）に切り替える。
+  - `report.commands`の項目には`outputSchema`（結び付けの前の数え方：`pattern`に当たる呼出しの結果がerrorでなく`resultPattern`に当たる）を`ok`と並べる（報告だけ）。`resultPattern`の無い項目は従来どおり。
 - **L-A**（`removeCredentialCopies`）：probeで`work`か`tmp`そのものが読めない（`credentialUnreadable`）なら、`work/`と`tmp/`を丸ごと消し、`workRemoved`に`work/ unreadable`・`tmp/ unreadable`と記録する。
 - **L-B**（`recordCleanupLeft`、`CLEANUP_LEFT_FILE`）：`finally`で消せなかったpathを、標準エラーに加えて試行のdirectoryの`cleanup-left.txt`に追記する（精算の後。記録のfileではない）。
 - **PR #1864のLow**（`claude-sandbox-bash.mjs`の`realish`・`resolveLinkTarget`、`runInClaudeSandbox`）：壊れたlinkの先は、linkのdirectoryの実pathから成分ごとに解く（`..`は辿り着いた実directoryから上がり、途中のlinkは辿る）。`--config-dir`の中の項目（`settings.json`・`.claude.json`・`CLAUDE.md`とあるものすべて）も実HOMEの外であることを確かめる。
 - **PR #1873のLow**（`score.mjs`の`sentenceFieldProblems`・`sentenceHasMatch`）：`answerNone`・`writes.forbid`・`writesReport.forbid`以外（`answerQuota.groups`、`expectReads`、`report`の項目、cases.jsonの上の階層等）に書いた`sentenceWith`・`sentenceUnless`は、黙って無視せず問題として示す（`dry-run.mjs`の`sentenceFields`が拒否する）。文のfieldのある項目の`pattern`が空の文字列に当たるなら問題とする。空の一致が文の末尾にあっても例外を投げない（最後の文字の単位に属するとする）。
 - `dry-run.mjs`：`startWorktree`の水準では、中立のcommitの後の写しで`createStartWorktree`を実行し、HEAD・ASC CLI・`CLAUDE.md`・`context.json`がprojectと同じであることを確かめる（`startWorktree`）。`sandbox-check.mjs`：`startWorktree`の水準ではworktreeを作ってその中で実行し、srtには起動したworktreeと`tmp/`の書込みだけを許す（srtでは`work/.git`全体が書けないので、`worktree-create`が#1730の確認で止まる場合も合格にする）。
-- 試験：上のそれぞれに加えて、`run-trial.mjs`の`main`を実際に動かす試験（引継ぎL9）：代役の`claude`（cwd・trustの項目を記録し、stream-jsonを出す）と代役のASC CLIで、`startWorktree`の水準のprobeを`--run`で実行し、worktreeが予約の前に作られ、sessionがそこで始まり、`meta.json`と`probeEndState`が記録され、`home/`等が消えることと、`worktree-create`が失敗すれば何も予約されないことを確かめる。
+- 試験：上のそれぞれに加えて、起動したworktreeでの測定の試行のdirectoryから`collectTrial`→`scoreTrials`を通す試験（`startDir`、worktreeの規則・ASCの本文・書いたfile、`.worktrees/`の下の`workFilesProblem`。PR #1875のレビューL5）と、`run-trial.mjs`の`main`を実際に動かす試験（引継ぎL9）：代役の`claude`（cwd・trustの項目を記録し、stream-jsonを出す）と代役のASC CLIで、`startWorktree`の水準のprobeを`--run`で実行し、worktreeが予約の前に作られ、sessionがそこで始まり、`meta.json`と`probeEndState`が記録され、`home/`等が消えることと、`worktree-create`が失敗すれば何も予約されないことを確かめる。
 
 ### 既存の記録への影響（2026-11-28）
 
-- `commandRan`（`resultPattern`のある項目）と`bashTraceReads`（失敗した`cd`の後）は、定義が変わった。`resultPattern`は#1844の`cases.json`にだけあり、#1844には測定の試行が無い。失敗した`cd`の後の数え方は、#1844（試行なし）と水準Xだけで使われる。#1823・#1840・#1843・#1846の水準Wの採点は変わらない。
+- `commandRan`（`resultPattern`のある項目）・`report.commands`の`outputSchema`・`bashTraceReads`（失敗した`cd`の後）・`startDir`のあるSkillのfileの照合は、定義が変わった。`resultPattern`は#1844の`cases.json`にだけあり、#1844には測定の試行が無い。失敗した`cd`の後の数え方は、#1844（試行なし）と水準Xだけで使われる。#1823・#1840・#1843・#1846の水準Wの採点は変わらない。
 - `sentenceFieldProblems`は、既存の設定（#1840・#1843・#1844・#1846）で問題を示さない（試験）。
 - #1844の設定と記録は変えていない。#1844のprobeの照合（`recheckProbe`）は、`meta.json`に`startDir`が無いので操作も判定も従来どおりである。これまでどおり、各測定の照合は`results/fixation.json`の`fixedAtCommit`の共通の仕組みで行う。
 

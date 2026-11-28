@@ -5,8 +5,8 @@
  "issue": "1866",
  "stage": "rule read in a worktree made before the trial",
  "markerTag": "1866",
- "note": "Fixed before any model run (#1844 decision-criteria.md, unchanged by the owner's decision of 2026-11-28). #1866: does a project rule the user registered in .agent-skill-chain/project/context.json get read where it applies, when the user makes the worktree in their own terminal (worktree-create outside the sandbox) and starts Claude Code in it (the procedure of #1861, v05/USAGE.md)? As #1844 (fixture U, the five #1840 cases, level X with Bash in the confined sandbox) except: the release is v0.5.133 (the first release with PR #1864's worktree-create check), and before each trial the harness runs the installed ASC CLI worktree-create outside the sandbox (toolLevels.X.sandbox.startWorktree) and starts Claude Code in that worktree. The probe's worktree-create inside the sandbox must stop with 'Git worktree records are not writable' and make neither a branch nor a directory under .worktrees (run-trial.mjs startWorktreeProbeSteps).",
- "ascSkillsNote": "The 17 Skills the v0.5.133 tarball distributes (skills/ of the tarball, 2026-11-28: the same 17 as v0.5.128).",
+ "note": "Fixed before any model run (#1844 decision-criteria.md, unchanged by the owner's decision of 2026-11-28). #1866: does a project rule the user registered in .agent-skill-chain/project/context.json get read where it applies, when the user makes the worktree in their own terminal (worktree-create outside the sandbox) and starts Claude Code in it (the procedure of #1861, v05/USAGE.md)? As #1844 (fixture U, the five #1840 cases, level X with Bash in the confined sandbox) except: the release is the latest at the fixation, v0.5.134 on 2026-11-28 (it has PR #1864's worktree-create check; #1844 decision-criteria.md, coordinator's decision on PR #1875 review M3), and before each trial the harness runs the installed ASC CLI worktree-create outside the sandbox (toolLevels.X.sandbox.startWorktree) and starts Claude Code in that worktree. The probe's worktree-create inside the sandbox must stop with 'Git worktree records are not writable' and make neither a branch nor a directory under .worktrees (run-trial.mjs startWorktreeProbeSteps).",
+ "ascSkillsNote": "The 17 Skills the v0.5.134 tarball distributes (skills/ of the tarball, 2026-11-28: the same 17 as v0.5.128 and v0.5.133).",
  "probeFixtureNote": "The probe runs on fixture U (as #1844), in the worktree the harness made before it: the 17 ASC entries and the user's Skills (invoice-format, quote-format) are checked (userSkillsListed).",
  "budget": {
   "ownerCapUsd": 10,
@@ -39,7 +39,7 @@
  "startWorktreeNote": "toolLevels.X.sandbox.startWorktree: before the model is started, run-trial.mjs runs the installed ASC CLI (node <work>/.agent-skill-chain/managed-runtime/bin/asc-v05.mjs worktree-create <work> 1866 test trial HEAD) outside the sandbox, as the user does in their terminal (#1861, v05/USAGE.md), and starts Claude Code in the worktree it made (meta.json startDir, startWorktree). The sandbox layout is unchanged (work/ is the project with its .git; the session cwd is the worktree under work/.worktrees/).",
  "conditions": {
   "R": {
-   "label": "リリース版（v0.5.133。PR #1864のworktree-createの確認を含む最初のrelease）を導入し、試行の前にsandboxの外で作ったworktreeで起動する"
+   "label": "リリース版（固定の時点で最新のv0.5.134。PR #1864のworktree-createの確認を含む）を導入し、試行の前にsandboxの外で作ったworktreeで起動する"
   }
  },
  "cellsNote": "One condition. The lower bound without Bash is #1840's published R (v0.5.119, level W); it is shown beside, not run again. #1844 measured nothing (未判定).",
