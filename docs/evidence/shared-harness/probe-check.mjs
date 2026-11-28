@@ -389,7 +389,9 @@ export function probeStepChecks(i, t, levelId) {
   if (i.outsideExists) add('outsideWritesAbsent', Object.values(i.outsideExists).every((x) => x === false), i.outsideExists);
   // #1844 review M3: no copy of the credential in the trial's files, git objects or records (run-trial.mjs credentialLeakOf),
   // and whether Bash sees it (the length printed by the credentialLength step; recorded, not judged).
-  if ('credentialLeak' in i) add('credentialNotLeaked', i.credentialLeak === false, {files: i.credentialFiles?.length ?? null, inGitObjects: i.credentialInGitObjects ?? null, inRecords: i.credentialInRecords ?? null});
+  if ('credentialLeak' in i) add('credentialNotLeaked', i.credentialLeak === false, {files: i.credentialFiles?.length ?? null, inGitObjects: i.credentialInGitObjects ?? null, inRecords: i.credentialInRecords ?? null,
+    // PR #1857 review L7: only when recorded, so the details of an earlier probe (#1844's) are unchanged.
+    ...(i.credentialUnreadable ? {unreadable: i.credentialUnreadable} : {}), ...(i.credentialCheckError ? {checkError: i.credentialCheckError} : {})});
   const cl = steps.find((st) => st.id === 'credentialLength');
   if (cl) { const n = (attempts[cl.id] ?? []).map(resultOf).filter((r) => r && r.is_error !== true).map((r) => Number(firstLine(resultText(r)))).find((x) => Number.isFinite(x)); info.credentialVisibleToBash = n === undefined ? null : n > 1; }
   return {checks, info};
@@ -455,7 +457,8 @@ export function fileInputs(dirArg, condition, repoRoot, conds = loadRawCondition
     // PR #1857 review: the state at the probe's end as run-trial.mjs recorded it in meta.json (probeEndState); a probe
     // recorded before that field (e.g. #1844's R-probe-1 and R-probe-2) is read from the files now, as before.
     sentinels, ...(meta.probeEndState ?? probeEndStateOf({sentinels, outsideWrites: ctx?.outsideWrites}, work, meta.probeInsideFile ?? INSIDE_FILE)),
-    ...('credentialLeak' in meta ? {credentialLeak: meta.credentialLeak, credentialFiles: meta.credentialFiles ?? null, credentialInGitObjects: meta.credentialInGitObjects ?? null, credentialInRecords: meta.credentialInRecords ?? null} : {}),
+    ...('credentialLeak' in meta ? {credentialLeak: meta.credentialLeak, credentialFiles: meta.credentialFiles ?? null, credentialInGitObjects: meta.credentialInGitObjects ?? null, credentialInRecords: meta.credentialInRecords ?? null,
+      ...(meta.credentialUnreadable ? {credentialUnreadable: meta.credentialUnreadable} : {}), ...(meta.credentialCheckError ? {credentialCheckError: meta.credentialCheckError} : {})} : {}),
     steps: levelId && ctx ? probeSteps(levelId, ctx) : [], expectedSteps: levelId ? conds.probeSteps?.[levelId] ?? null : null,
     workClaudeMdFirstLine: firstLine(read(path.join(work, 'CLAUDE.md'))),
     trialName: path.basename(dir), traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))}};

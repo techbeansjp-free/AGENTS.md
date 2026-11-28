@@ -315,8 +315,8 @@ export function bashScan(command, root, start = root, files = []) {
       if (abs === null) { if (!isGlob(x)) literal(null, x, false); else unbounded = true; continue; }
       const rel = relOf(abs);
       if (rel === null) continue;
-      // PR #1857 review: a glob that is no regular expression (e.g. the range [z-a]) is not expanded; its call is unbounded.
-      if (isGlob(rel)) { let re; try { re = globRegExp(rel, {prefix: deep}); } catch { unbounded = true; continue; } for (const f of files) if (re.test(f)) push(possible, f); continue; }
+      // PR #1857 review: a glob that is no regular expression (e.g. the range [z-a]) matches no file, as in bash (L5).
+      if (isGlob(rel)) { let re; try { re = globRegExp(rel, {prefix: deep}); } catch { continue; } for (const f of files) if (re.test(f)) push(possible, f); continue; }
       if (rel) push(possible, rel);
       if (deep) for (const f of files) if (rel === '' || f.startsWith(`${rel}/`)) { const below = rel ? f.slice(rel.length + 1) : f; if (!skipHidden || !below.split('/').some((s) => s.startsWith('.'))) push(possible, f); }
     }
@@ -360,7 +360,7 @@ export function bashScan(command, root, start = root, files = []) {
       return;
     }
     if (cmd === 'popd') { dir = null; if (!sub) kept = dir; cds += 1; return; }
-    if (SHELLS.has(cmd) && a.includes('-c')) { const inner = a[a.indexOf('-c') + 1]; if (inner) { const s = bashScan(inner, root, dir, files); for (const r of s.reads) push(reads, r); for (const r of s.possible) push(possible, r); unbounded ||= s.unbounded; } return; }
+    if (SHELLS.has(cmd) && a.includes('-c')) { const inner = a[a.indexOf('-c') + 1]; if (inner) { const s = bashScan(inner, root, dir, files); for (const r of s.reads) push(cond ? possible : reads, r); for (const r of s.possible) push(possible, r); unbounded ||= s.unbounded; } return; }
     if (cmd === 'xargs') { const rest = a.slice(1); let i = 0; while (i < rest.length && rest[i].startsWith('-')) i += /^-[IdELnPs]$/.test(rest[i]) ? 2 : 1; a = rest.slice(i); cmd = cmdOf(a); if (!a.length) return; }
     if (xargsReader) for (const w of a.slice(1)) if (!w.startsWith('-')) loose(dir, w, {deep: true});
     if (cmd === 'git') {
@@ -375,7 +375,7 @@ export function bashScan(command, root, start = root, files = []) {
       const wtRoot = () => { const r = gdir === null ? null : relOf(gdir); if (gdir !== null && r === null) return gdir; const m = r === null ? null : /^(\.worktrees\/[^/]+)(\/|$)/.exec(r); return m ? path.posix.join(root, m[1]) : root; };
       const noPatch = rest.some((w) => /^(--stat|--name-only|--name-status|-s|--no-patch|--shortstat|--numstat|--summary|--raw)$/.test(w));
       if (subc === 'show' || subc === 'cat-file') {
-        for (const w of ops) { const m = /^[^:]*:(.+)$/.exec(w); if (m) literal(m[1].startsWith('./') || m[1].startsWith('../') ? gdir : wtRoot(), m[1], true); else if (!noPatch && !/^(blob|tree|commit|tag)$/.test(w)) unbounded = true; }
+        for (const w of ops) { const m = /^[^:]*:(.+)$/.exec(w); if (m) literal(gdir === null || m[1].startsWith('./') || m[1].startsWith('../') ? gdir : wtRoot(), m[1], true); else if (!noPatch && !/^(blob|tree|commit|tag)$/.test(w)) unbounded = true; }
         if (subc === 'show' && !ops.length && !noPatch) unbounded = true;
       } else if (subc === 'log' && rest.some((w) => /^(-p|-u|--patch|--full-diff|-L.*)$/.test(w)) && !noPatch) unbounded = true;
       else if (subc === 'diff' && !noPatch && ops.some((w) => /\.\.|^(HEAD|@)[~^]|^[0-9a-f]{7,40}$|^(origin\/|main$|master$)/.test(w))) unbounded = true;
@@ -420,8 +420,9 @@ export function bashScan(command, root, start = root, files = []) {
     }
     if (recursive && !ops.length) loose(dir, '.', {deep: true, skipHidden});
   }
-  // cdOnly: every part of the command is a cd/pushd/popd (a failed call left the cwd as it was).
-  return {reads, possible, unbounded, dir: kept, moved: cds > 0, cdOnly: cds > 0 && all.every(({args}) => !head(args).length || ['cd', 'pushd', 'popd'].includes(cmdOf(head(args))))};
+  // cdOnly: the command is a single cd/pushd/popd (a failed call left the cwd as it was). PR #1857 review L3: with more
+  // than one (`cd src && cd nope`) an earlier one may have run, so the cwd is unknown.
+  return {reads, possible, unbounded, dir: kept, moved: cds > 0, cdOnly: cds === 1 && all.every(({args}) => !head(args).length || ['cd', 'pushd', 'popd'].includes(cmdOf(head(args))))};
 }
 export const bashReadsOf = (command, root, start = root) => bashScan(command, root, start).reads;
 

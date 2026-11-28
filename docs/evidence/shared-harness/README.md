@@ -152,13 +152,17 @@ Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLev
 
 #1844の測定は終わっている（未判定。15試行は行っていない）。次の直しは、#1844の記録した結果を変えない：probeの指示の文は同じ（pathに空白等が無いので、引用の直しは文字を変えない）で、`R-probe-2`を作り直した照合（`recheckProbe`）は直す前と一致した。採点（`score.mjs`）は測定の試行が無いので使っていない。#1844の照合は、`results/fixation.json`の`fixedAtCommit`の共通の仕組みで行う（上の#1845と同じ扱い）。
 
-- `score.mjs`：`||`の後の部分（`;`か改行まで）の読込みは広い数え方だけにし、そこの`cd`は作業directoryを不明にする。`git -C <dir>`は、そのcommandの中だけ`<dir>`からpathを解く。失敗した呼出しは、`cd`だけなら前の作業directoryを保ち、`cd`と他のcommandなら不明にする。正規表現にできないglob（`[z-a]`）は展開せず、その呼出しを`unbounded`に数える（採点を止めない）。`markerBase`は、linked worktreeに書いたfile（`.worktrees/<name>/<rel>`）にもfixtureのHEADの`<rel>`の旧版を使う。
+- `score.mjs`：`||`の後の部分（`;`か改行まで）の読込みは広い数え方だけにし、そこの`cd`は作業directoryを不明にする。`git -C <dir>`は、そのcommandの中だけ`<dir>`からpathを解く。失敗した呼出しは、`cd`だけなら前の作業directoryを保ち、`cd`と他のcommandなら不明にする。正規表現にできないglob（`[z-a]`）は、bashと同じく何にも合わないとする（`unbounded`に数えない。採点を止めない）。`||`の後の`sh -c`の中の読込みも広い数え方だけにする。`git -C`の先が変数等で不明なら、`<rev>:<path>`は広い数え方だけにする。失敗した呼出しが`cd`を2つ以上含む（`cd src && cd nope`）なら、作業directoryを不明にする。`markerBase`は、linked worktreeに書いたfile（`.worktrees/<name>/<rel>`）にもfixtureのHEADの`<rel>`の旧版を使う。
 - `collect.mjs`：`.worktrees`が通常のfileなら、worktreeの一覧を空にする。
-- `run-trial.mjs`：`claude`の実行fileを、試行のdirectoryと台帳の予約の前に探す。置き換えた`debug.log`も`<credential>`の検査に渡す。認証情報の検査で読めないfileは`credentialUnreadable`として漏れに数え、検査自体の失敗は`credentialCheckError`として漏れに数える（どちらも従来どおり隔離して精算する）。probeの終わりの目印・`work/`の中のfile・試行の外への書込みの有無を`meta.json`の`probeEndState`に記録し、`probe-check.mjs`はそれで判定する（その記録の無い以前のprobeは、従来どおり判定の時点のfileを見る）。probeのBashのpathの引数は1語として引用する（`shq`。`sandbox-check.mjs`も同じ）。
+- `run-trial.mjs`：`claude`の実行fileを、試行のdirectoryと台帳の予約の前に探す。置き換えた`debug.log`も`<credential>`の検査に渡す。認証情報の検査で読めないfileとdirectoryは、それぞれ`credentialUnreadable`として漏れに数え、検査を続ける。検査自体の失敗は`credentialCheckError`として漏れに数え、probeでも`work/`を丸ごと消す（どちらも従来どおり隔離して精算する。読めないdirectoryも権限を戻して消す）。`probe-check.mjs`の`credentialNotLeaked`の詳細は、この2つが記録されていれば`unreadable`・`checkError`として示す（記録の無い#1844のprobeの詳細は変わらない）。probeの終わりの目印・`work/`の中のfile・試行の外への書込みの有無を`meta.json`の`probeEndState`に記録し、`probe-check.mjs`はそれで判定する（その記録の無い以前のprobeは、従来どおり判定の時点のfileを見る）。probeのBashのpathの引数は1語として引用する（`shq`。`sandbox-check.mjs`も同じ）。
 - 試験：祖父のdirectoryを列挙する試験は、`os.tmpdir()`が`/tmp`でも深さ3以上になるよう1階層深くした。
 
 #### #1866（この仕組みと設定を使う次の測定）へ引き継ぐこと
 
+- 既知の限界（L2）：`||`の条件は`;`か改行で解けるので、`false || { cat a.md; cat b.md; }`や`if … then … fi`の中では、`b.md`を厳しい数え方に数える（期待する読込みの偽陽性の方向）。
+- 既知の限界（L6）：`probe-check.mjs`の`stepPathsOf`・`isProbeStepLine`のpathは空白で止まり、`unquote`は`'\''`の`\`を残す。空白や`'`を含むpathのprobeは不合格の方向に外れる（#1844のpathには無い）。probeのpathにそれらを使うなら、先に`shq`と揃える。
+- 確認（L8）：`debug.log`を認証情報の検査に加えた影響は、#1844の照合（記録済みの`credentialLeak`を使う）では確かめていない。#1866のprobeの前に、Claude Codeの`debug.log`に認証情報が通常から現れないかを1回確かめる（現れるなら全probeが誤って不合格になる）。
+- 限界（L9）：`run-trial.mjs`の`main`の配線（`debug.log`を検査に渡すこと、`claude`を予約の前に探すこと、`probeEndState`の記録）の試験は、sourceの文字列の照合にとどまる。#1866で`main`を変えるなら、実際の実行で確かめる試験を足す。
 - `cases.json`の`expectCommands`・`report.commands`（`commandRan`）は、Bashの呼出し全体の文字列に`pattern`を、結果全体に`resultPattern`を当てる。引用した文（`echo 'asc-v05.mjs start …'`）と、保存した`start`のJSONの表示を1つの呼出しで行うと、`start`を実行しなくても「実行した」に数えられる。#1844では測定の試行が無いので結果に影響しない。#1866で`start`の実行を指標にするなら、測定の前に、command（`node <asc-v05.mjs> start`の部分）と、その出力に結び付けて判定する形を加え、試験を足す（設定の`pattern`は引用したpathも許すので、引用した文を除くだけでは足りない）。
 
 ## 変更するとき

@@ -100,7 +100,10 @@ export function credentialLeakOf({dir, work, secret, records = []}) {
   const placeholders = records.reduce((n, x) => n + String(x ?? '').split('<credential>').length - 1, 0);
   const files = [];
   const walk = (d) => {
-    for (const e of fs.existsSync(d) ? fs.readdirSync(d, {withFileTypes: true}) : []) {
+    // PR #1857 review M1: a directory that cannot be listed is recorded (credentialUnreadable, a leak) and the search goes on.
+    let entries;
+    try { entries = fs.existsSync(d) ? fs.readdirSync(d, {withFileTypes: true}) : []; } catch { unreadable.push(path.relative(dir, d) || '.'); return; }
+    for (const e of entries) {
       const f = path.join(d, e.name), rel = path.relative(dir, f);
       if (d === dir && (e.name === 'home' || e.name === 'config')) continue;
       if (e.isDirectory()) walk(f);
@@ -116,6 +119,35 @@ export function credentialLeakOf({dir, work, secret, records = []}) {
   const inGit = !secret ? false : g && g.status === 0 ? g.stdout.includes(secret) : null;
   return {credentialInRecords: placeholders, credentialFiles: files.sort(), credentialInGitObjects: inGit, ...(unreadable.length ? {credentialUnreadable: unreadable.sort()} : {}),
     credentialLeak: placeholders > 0 || files.length > 0 || unreadable.length > 0 || inGit !== false};
+}
+
+// PR #1857 review: the search of credentialLeakOf; a search that fails is recorded as a leak (credentialCheckError).
+export function credentialCheckOf(args, leakOf = credentialLeakOf) {
+  try { return leakOf(args); } catch (e) { return {credentialCheckError: String(e.message ?? e), credentialLeak: true}; }
+}
+
+// #1844 review M3: the copies of the credential of a leaking trial are removed: a measured trial's work/ entirely, the
+// probe's files and work/.git. PR #1857 review M1: a probe whose search failed has its whole work/ removed (where a copy
+// could be is not known), and an unreadable directory is removed with what is in it.
+export function removeCredentialCopies(meta, {dir, work, probe}) {
+  try {
+    if (!probe) { removeTree(work); meta.workRemoved = 'credential leak'; }
+    else if (meta.credentialCheckError) { removeTree(work); meta.workRemoved = 'credential check error'; }
+    else { for (const f of [...(meta.credentialFiles ?? []), ...(meta.credentialUnreadable ?? [])]) removeTree(f === '.' ? work : path.join(dir, f)); if (meta.credentialInGitObjects !== false) removeTree(path.join(work, '.git')); }
+  } catch (e) { meta.credentialCleanupError = String(e.message ?? e); }
+  return meta;
+}
+
+// PR #1857 review M1: removes a file or directory, also one the trial made unreadable (chmod 000): the owner's permissions
+// are restored before it is listed and removed. A symbolic link is removed, not followed.
+export function removeTree(p) {
+  let st;
+  try { st = fs.lstatSync(p); } catch { return; }
+  if (st.isDirectory()) {
+    try { fs.chmodSync(p, 0o700); } catch { /* not ours: listing it below fails and is reported */ }
+    for (const e of fs.readdirSync(p)) removeTree(path.join(p, e));
+    fs.rmdirSync(p);
+  } else fs.rmSync(p, {force: true});
 }
 
 export function filesContaining(dir, secret) {
@@ -539,14 +571,10 @@ function main() {
       // #1844 review M3: the credential anywhere the trial could write; a leaking trial is a failure (collect.mjs) and its
       // copies of the credential are removed (a measured trial's work/ entirely, the probe's files and work/.git).
       // PR #1857 review: the scrubbed debug.log is searched for the placeholder too, and a search that fails (e.g. an
-      // unreadable file) is recorded as a leak (credentialCheckError), so the trial is still isolated and settled.
-      try { Object.assign(meta, credentialLeakOf({dir, work, secret, records: [stream, scrub(r.stderr), debugText]})); } catch (e) { Object.assign(meta, {credentialCheckError: String(e.message ?? e), credentialLeak: true}); }
-      if (meta.credentialLeak) {
-        try {
-          if (!probe) { fs.rmSync(work, {recursive: true, force: true}); meta.workRemoved = 'credential leak'; }
-          else { for (const f of [...(meta.credentialFiles ?? []), ...(meta.credentialUnreadable ?? [])]) fs.rmSync(path.join(dir, f), {force: true}); if (meta.credentialInGitObjects !== false) fs.rmSync(path.join(work, '.git'), {recursive: true, force: true}); }
-        } catch (e) { meta.credentialCleanupError = String(e.message ?? e); }
-      }
+      // unreadable file or directory is credentialUnreadable) is recorded as a leak (credentialCheckError), so the trial is
+      // still isolated and settled (credentialCheckOf, removeCredentialCopies).
+      Object.assign(meta, credentialCheckOf({dir, work, secret, records: [stream, scrub(r.stderr), debugText]}));
+      if (meta.credentialLeak) removeCredentialCopies(meta, {dir, work, probe});
     }
     fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 1));
     ledgerOps.settle(ledger, reservation.id, name, meta.costUsd, {exit: r.status, traceSha256: fileSha(path.join(dir, 'trace.jsonl')), metaSha256: fileSha(path.join(dir, 'meta.json'))});

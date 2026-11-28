@@ -1161,7 +1161,7 @@ const C44 = JSON.parse(read('conditions.json', C44DIR));
 const SPEC44 = JSON.parse(read('cases.json', C44DIR));
 const k44 = (id) => SPEC44.cases.find((c) => c.id === id);
 const X44 = C44.toolLevels.X;
-const {confinedSettings, probeContext, bashProbeSteps, probePrompt, trialEnv, TRIAL_RECORD_FILES, PROBE_SIBLING, credentialLeakOf, LINK_FILE, probeEndStateOf, shq} = await import('../run-trial.mjs');
+const {confinedSettings, probeContext, bashProbeSteps, probePrompt, trialEnv, TRIAL_RECORD_FILES, PROBE_SIBLING, credentialLeakOf, credentialCheckOf, removeCredentialCopies, LINK_FILE, probeEndStateOf, shq} = await import('../run-trial.mjs');
 const {bashReadsOf, bashReadPaths, bashScan, bashTraceReads, projectFilesOf, globRegExp, okCommands, commandRan, LEVEL_METRICS} = await import('../score.mjs');
 const {unreachedChanges} = await import('../make-fixture.mjs');
 const {collectTrial} = await import('../collect.mjs');
@@ -1471,6 +1471,10 @@ test('#1844 probe check of level X: every Bash step with its expected result pas
   assert.equal(pass(probeStepChecks({...i, credentialLeak: false}, T(), 'X')), true);
   assert.equal(probeStepChecks({...i, credentialLeak: true, credentialFiles: ['work/env.txt']}, T(), 'X').checks.credentialNotLeaked.pass, false);
   assert.ok(!('credentialNotLeaked' in probeStepChecks(i, T(), 'X').checks), 'a meta.json without the field (earlier configs): no check');
+  // PR #1857 review L7: the details name an unreadable path and a failed search; without them the details are as before.
+  const ur = probeStepChecks({...i, credentialLeak: true, credentialFiles: [], credentialUnreadable: ['work/x'], credentialCheckError: 'boom'}, T(), 'X').checks.credentialNotLeaked;
+  assert.deepEqual([ur.pass, ur.detail.unreadable, ur.detail.checkError], [false, ['work/x'], 'boom']);
+  assert.deepEqual(Object.keys(probeStepChecks({...i, credentialLeak: false, credentialFiles: []}, T(), 'X').checks.credentialNotLeaked.detail), ['files', 'inGitObjects', 'inRecords']);
   const w = probeStepChecks({steps: probeSteps('W', ctx), expectedSteps: 6, sentinelExists: {trial: false, repo: false}}, T(), 'W');
   assert.ok(!('sandboxRefusal' in w.checks) && !('refusalKind' in w.info) && !('refusedNotMissing' in w.checks) && !('probeStepOutputs' in w.checks) && !('outsideWritesAbsent' in w.checks), 'level W: no new check');
 });
@@ -1494,13 +1498,35 @@ test('#1844 review M3: the credential in the trial files, the git objects or the
   assert.deepEqual([leak().credentialFiles, leak().credentialInGitObjects, leak().credentialLeak], [[], true, true], 'committed and removed: still in the git objects');
   const src = fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8');
   // PR #1857 review: the scrubbed debug.log is a record too, and a failed search is recorded as a leak.
-  assert.match(src, /credentialLeakOf\(\{dir, work, secret, records: \[stream, scrub\(r\.stderr\), debugText\]\}\)/);
-  assert.match(src, /catch \(e\) \{ Object\.assign\(meta, \{credentialCheckError: [^}]*credentialLeak: true\}\); \}/);
+  assert.match(src, /credentialCheckOf\(\{dir, work, secret, records: \[stream, scrub\(r\.stderr\), debugText\]\}\)/);
+  assert.equal(leak(['', '', 'debug <credential> line']).credentialLeak, true, 'the scrubbed debug.log is a record');
+  // PR #1857 review M1: a search that throws is a leak (credentialCheckError), and a probe then loses its whole work/.
+  const failed = credentialCheckOf({}, () => { throw new Error('boom'); });
+  assert.deepEqual(failed, {credentialCheckError: 'boom', credentialLeak: true});
   if (process.getuid() !== 0) {
     fs.writeFileSync(path.join(dir, 'tmp/locked.txt'), 'x'); fs.chmodSync(path.join(dir, 'tmp/locked.txt'), 0o000);
     const u = leak();
     fs.chmodSync(path.join(dir, 'tmp/locked.txt'), 0o600); fs.rmSync(path.join(dir, 'tmp/locked.txt'));
     assert.deepEqual([u.credentialUnreadable, u.credentialLeak], [['tmp/locked.txt'], true], 'PR #1857 review: an unreadable file is not taken as clean');
+  }
+  {
+    // PR #1857 review M1 (the real functions, on a copy): a probe's copy of the credential in work/x/ made unreadable
+    // (chmod 000) is recorded per directory, the rest of the search goes on, and the removal takes the directory.
+    const pdir = path.join(runs, 'R-probe-9'), pwork = path.join(pdir, 'work');
+    fs.mkdirSync(path.join(pwork, 'x'), {recursive: true}); fs.mkdirSync(path.join(pdir, 'tmp'));
+    fs.writeFileSync(path.join(pwork, 'x/copy.txt'), SECRET); fs.writeFileSync(path.join(pdir, 'tmp/env.txt'), SECRET); fs.writeFileSync(path.join(pwork, 'keep.txt'), 'k');
+    if (process.getuid() !== 0) {
+      fs.chmodSync(path.join(pwork, 'x'), 0o000);
+      const m = credentialCheckOf({dir: pdir, work: pwork, secret: SECRET});
+      assert.deepEqual([m.credentialUnreadable, m.credentialFiles, m.credentialLeak, 'credentialCheckError' in m], [['work/x'], ['tmp/env.txt'], true, false], 'recorded per directory; the search goes on');
+      removeCredentialCopies(m, {dir: pdir, work: pwork, probe: true});
+      assert.deepEqual([fs.existsSync(path.join(pwork, 'x')), fs.existsSync(path.join(pdir, 'tmp/env.txt')), fs.existsSync(path.join(pwork, 'keep.txt')), m.credentialCleanupError], [false, false, true, undefined]);
+    }
+    // A failed search: the probe's whole work/ is removed, also an unreadable directory in it.
+    fs.mkdirSync(path.join(pwork, 'y'), {recursive: true}); fs.writeFileSync(path.join(pwork, 'y/copy.txt'), SECRET); fs.chmodSync(path.join(pwork, 'y'), 0o000);
+    const e = removeCredentialCopies(credentialCheckOf({}, () => { throw new Error('boom'); }), {dir: pdir, work: pwork, probe: true});
+    assert.deepEqual([fs.existsSync(pwork), e.workRemoved, e.credentialCleanupError], [false, 'credential check error', undefined]);
+    fs.rmSync(pdir, {recursive: true, force: true});
   }
   // PR #1857 review: claude is looked up before the trial directory and the reservation.
   assert.ok(src.indexOf("if (!claudeBin) fail(") > 0 && src.indexOf("if (!claudeBin) fail(") < src.indexOf('ledgerOps.reserve(ledger, name, budget)'));
@@ -1650,15 +1676,27 @@ test('PR #1857 review: Bash reads after ||, git -C, a failed cd, an invalid glob
   assert.deepEqual([g.reads, g.dir], [['.worktrees/w1/README.md'], root]);
   assert.deepEqual(bashScan('git -C src blame a.ts', root).reads, ['src/a.ts']);
   assert.deepEqual(bashScan('git show HEAD:README.md', root).reads, ['README.md'], 'without -C as before');
-  // A glob that is no regular expression: not expanded, the call is unbounded, the rest is scanned.
+  // A glob that is no regular expression: as in bash it matches no file (not unbounded, review L5); the rest is scanned.
   const bad = bashScan('cat [z-a]*.md; cat ok.md', root, root, ['a.md']);
-  assert.deepEqual([bad.unbounded, bad.reads], [true, ['ok.md']]);
+  assert.deepEqual([bad.unbounded, bad.reads, bad.possible], [false, ['ok.md'], ['ok.md']]);
+  // review L1: sh -c after || gives possible reads only.
+  const orSh = bashScan("true || sh -c 'cat rules/money.md'", root);
+  assert.deepEqual([orSh.reads, orSh.possible], [[], ['rules/money.md']]);
+  assert.deepEqual(bashScan("sh -c 'cat rules/money.md'", root).reads, ['rules/money.md'], 'without || as before');
+  // review L4: git -C to a variable: <rev>:<path> is a possible read only (matched against the files).
+  const gv = bashScan('git -C "$W" show HEAD:rules/money.md', root, root, ['rules/money.md', '.worktrees/w1/rules/money.md']);
+  assert.deepEqual(gv.reads, []);
+  assert.ok(gv.possible.includes('rules/money.md') && gv.possible.includes('.worktrees/w1/rules/money.md'));
   // A failed call: a lone cd keeps the cwd; a cd with more leaves it unknown; a successful cd is kept as before.
   const trace = (calls) => ({cwd: root, uses: calls.map((c, i) => ({id: `b${i}`, name: 'Bash', input: {command: c[0]}})), results: new Map(calls.map((c, i) => [`b${i}`, {is_error: c[1]}]))});
   assert.deepEqual(bashTraceReads(trace([['cd no-such-dir', true], ['cat README.md', false]]), ['README.md']).reads, ['README.md']);
   assert.deepEqual(bashTraceReads(trace([['cd src && false', true], ['cat a.ts', false]]), ['src/a.ts', 'a.ts']).reads, []);
   assert.ok(bashTraceReads(trace([['cd src && false', true], ['cat a.ts', false]]), ['src/a.ts', 'a.ts']).possible.includes('src/a.ts'), 'unknown cwd: matched against the files');
   assert.deepEqual(bashTraceReads(trace([['cd src', false], ['cat a.ts', false]])).reads, ['src/a.ts']);
+  // review L3: a failed call of more than one cd (`cd src && cd nope`): the first may have run, the cwd is unknown.
+  assert.equal(bashScan('cd src && cd nope', root).cdOnly, false);
+  assert.deepEqual(bashTraceReads(trace([['cd src && cd nope', true], ['cat x', false]]), ['x', 'src/x']).reads, []);
+  assert.deepEqual(bashTraceReads(trace([['cd nope', true], ['cat x', false]]), ['x', 'src/x']).reads, ['x'], 'a lone cd as before');
   // markerBase: a file written in .worktrees/<name>/ takes the base text of <rel> at the fixture's HEAD.
   const asked = [];
   const priorTexts = (rels) => { asked.push(...rels); return rels.map((r) => (r === 'src/a.ts' ? 'old line' : null)); };
