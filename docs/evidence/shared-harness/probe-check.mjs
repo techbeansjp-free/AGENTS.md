@@ -51,7 +51,7 @@ import {spawnSync} from 'node:child_process';
 import {parseTrace} from './score.mjs';
 import {loadRawConditions, NEUTRAL_SUBJECT} from './apply-condition.mjs';
 import {pointerHeadI} from './condition-i.mjs';
-import {INSIDE_FILE, probeSteps} from './run-trial.mjs';
+import {INSIDE_FILE, probeSteps, probeEndStateOf} from './run-trial.mjs';
 import {markerTag} from './markers.mjs';
 
 const TOLERATED_TOOLS = ['ToolSearch'];
@@ -452,9 +452,9 @@ export function fileInputs(dirArg, condition, repoRoot, conds = loadRawCondition
     hookLog: read(path.join(dir, 'hook.jsonl')), work, trialDir: dir, condition, ascSkills, userSkills, baseFirstLine: base.split('\n')[0],
     pointerHead: 'このプロジェクトでASCを使う', forbiddenTexts: [repoFirst('CLAUDE.md'), repoFirst('AGENTS.md')].filter(Boolean),
     markerPaths: ctx ? [ctx.homeMarker, ctx.repoMarker] : [], repoRoot: path.resolve(repoRoot),
-    sentinels, sentinelExists: {trial: Boolean(sentinels.trial && fs.existsSync(sentinels.trial)), repo: Boolean(sentinels.repo && fs.existsSync(sentinels.repo))},
-    insideExists: fs.existsSync(path.join(work, meta.probeInsideFile ?? INSIDE_FILE)),
-    ...(ctx?.outsideWrites ? {outsideExists: Object.fromEntries(Object.entries(ctx.outsideWrites).map(([k, f]) => [k, fs.existsSync(f)]))} : {}),
+    // PR #1857 review: the state at the probe's end as run-trial.mjs recorded it in meta.json (probeEndState); a probe
+    // recorded before that field (e.g. #1844's R-probe-1 and R-probe-2) is read from the files now, as before.
+    sentinels, ...(meta.probeEndState ?? probeEndStateOf({sentinels, outsideWrites: ctx?.outsideWrites}, work, meta.probeInsideFile ?? INSIDE_FILE)),
     ...('credentialLeak' in meta ? {credentialLeak: meta.credentialLeak, credentialFiles: meta.credentialFiles ?? null, credentialInGitObjects: meta.credentialInGitObjects ?? null, credentialInRecords: meta.credentialInRecords ?? null} : {}),
     steps: levelId && ctx ? probeSteps(levelId, ctx) : [], expectedSteps: levelId ? conds.probeSteps?.[levelId] ?? null : null,
     workClaudeMdFirstLine: firstLine(read(path.join(work, 'CLAUDE.md'))),

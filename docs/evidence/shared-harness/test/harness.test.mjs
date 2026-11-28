@@ -1161,13 +1161,15 @@ const C44 = JSON.parse(read('conditions.json', C44DIR));
 const SPEC44 = JSON.parse(read('cases.json', C44DIR));
 const k44 = (id) => SPEC44.cases.find((c) => c.id === id);
 const X44 = C44.toolLevels.X;
-const {confinedSettings, probeContext, bashProbeSteps, probePrompt, trialEnv, TRIAL_RECORD_FILES, PROBE_SIBLING, credentialLeakOf, LINK_FILE} = await import('../run-trial.mjs');
+const {confinedSettings, probeContext, bashProbeSteps, probePrompt, trialEnv, TRIAL_RECORD_FILES, PROBE_SIBLING, credentialLeakOf, LINK_FILE, probeEndStateOf, shq} = await import('../run-trial.mjs');
 const {bashReadsOf, bashReadPaths, bashScan, bashTraceReads, projectFilesOf, globRegExp, okCommands, commandRan, LEVEL_METRICS} = await import('../score.mjs');
 const {unreachedChanges} = await import('../make-fixture.mjs');
 const {collectTrial} = await import('../collect.mjs');
 
 test('#1844 confined settings: no allowRead, work/ and tmp/ under no denied path; level W settings unchanged', (t) => {
-  const d0 = fs.realpathSync(tmp(t)), d = path.join(d0, 'root');
+  // PR #1857 review: one level more, so that d0 (the grandparent of the runs root) is at depth 3 or more also when
+  // os.tmpdir() is /tmp (confinedSettings lists no directory above depth 3).
+  const d1 = fs.realpathSync(tmp(t)), d0 = path.join(d1, 'g'), d = path.join(d0, 'root');
   const runs = path.join(d, 'runs'), work = path.join(runs, 'R-u-bill-1-1', 'work');
   fs.mkdirSync(work, {recursive: true}); fs.mkdirSync(path.join(runs, 'R-probe-1')); fs.writeFileSync(path.join(runs, 'probe-compare.json'), '{}');
   // review L1: the entries beside the runs root and beside its parent (another Issue's directory) are denied too.
@@ -1491,7 +1493,18 @@ test('#1844 review M3: the credential in the trial files, the git objects or the
   fs.writeFileSync(path.join(work, 'env.txt'), SECRET); g(['add', 'env.txt']); g(['commit', '-q', '-m', 'e']); fs.rmSync(path.join(work, 'env.txt'));
   assert.deepEqual([leak().credentialFiles, leak().credentialInGitObjects, leak().credentialLeak], [[], true, true], 'committed and removed: still in the git objects');
   const src = fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8');
-  assert.match(src, /credentialLeakOf\(\{dir, work, secret, records: \[stream, scrub\(r\.stderr\)\]\}\)/);
+  // PR #1857 review: the scrubbed debug.log is a record too, and a failed search is recorded as a leak.
+  assert.match(src, /credentialLeakOf\(\{dir, work, secret, records: \[stream, scrub\(r\.stderr\), debugText\]\}\)/);
+  assert.match(src, /catch \(e\) \{ Object\.assign\(meta, \{credentialCheckError: [^}]*credentialLeak: true\}\); \}/);
+  if (process.getuid() !== 0) {
+    fs.writeFileSync(path.join(dir, 'tmp/locked.txt'), 'x'); fs.chmodSync(path.join(dir, 'tmp/locked.txt'), 0o000);
+    const u = leak();
+    fs.chmodSync(path.join(dir, 'tmp/locked.txt'), 0o600); fs.rmSync(path.join(dir, 'tmp/locked.txt'));
+    assert.deepEqual([u.credentialUnreadable, u.credentialLeak], [['tmp/locked.txt'], true], 'PR #1857 review: an unreadable file is not taken as clean');
+  }
+  // PR #1857 review: claude is looked up before the trial directory and the reservation.
+  assert.ok(src.indexOf("if (!claudeBin) fail(") > 0 && src.indexOf("if (!claudeBin) fail(") < src.indexOf('ledgerOps.reserve(ledger, name, budget)'));
+  assert.ok(src.indexOf("if (!claudeBin) fail(") < src.indexOf('fs.cpSync(fixture, work'));
   assert.doesNotMatch(src, /CLAUDE_CODE_SUBPROCESS_ENV_SCRUB:/, 'not set: it forces the permission mode to default (README)');
   fs.writeFileSync(path.join(dir, 'trace.jsonl'), ev({type: 'result'}) + '\n');
   fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({case: 'u-users', credentialLeak: true, workFiles: {}, workFilesOptions: {base: 'x'}, workRemoved: 'credential leak'}));
@@ -1620,4 +1633,69 @@ test('#1844 probe 1: the per-uid temp directory of a confined trial fits 44 byte
     // review of the fixes L2: a runs root not created yet under the link gives the same layout too.
     assert.equal(confinedSettings({work: path.join(base, 'link/new-runs/R-u-bill-1-1/work'), runsRoot: path.join(base, 'link/new-runs'), fixture: path.join(base, 'fx'), ledger: path.join(base, 'l/l.jsonl')}, sb).sandbox.enabled, true);
   } finally { fs.rmSync(base, {recursive: true, force: true}); }
+});
+
+// PR #1857 (CodeRabbit) fixes of the shared harness: none changes a recorded #1844 result (no measurement ran; the probes
+// keep their recorded checks, below).
+test('PR #1857 review: Bash reads after ||, git -C, a failed cd, an invalid glob; markerBase in a linked worktree', () => {
+  const root = '/r/w';
+  // `true || cat x`: cat may not have run, a possible read only; the part before || is strict.
+  assert.deepEqual(bashScan('true || cat README.md', root).reads, []);
+  assert.ok(bashScan('true || cat README.md', root).possible.includes('README.md'));
+  assert.deepEqual(bashScan('cat a.md || cat b.md; cat c.md', root).reads, ['a.md', 'c.md'], '; ends the conditional list');
+  assert.deepEqual(bashScan('cat a.md || true', root).reads, ['a.md'], 'as before');
+  assert.equal(bashScan('false || cd src', root).dir, null, 'a cd after || leaves the cwd unknown');
+  // git -C <dir>: the path of <rev>:<path> is that of the worktree in <dir>; the session cwd is unchanged.
+  const g = bashScan('git -C .worktrees/w1 show HEAD:README.md', root);
+  assert.deepEqual([g.reads, g.dir], [['.worktrees/w1/README.md'], root]);
+  assert.deepEqual(bashScan('git -C src blame a.ts', root).reads, ['src/a.ts']);
+  assert.deepEqual(bashScan('git show HEAD:README.md', root).reads, ['README.md'], 'without -C as before');
+  // A glob that is no regular expression: not expanded, the call is unbounded, the rest is scanned.
+  const bad = bashScan('cat [z-a]*.md; cat ok.md', root, root, ['a.md']);
+  assert.deepEqual([bad.unbounded, bad.reads], [true, ['ok.md']]);
+  // A failed call: a lone cd keeps the cwd; a cd with more leaves it unknown; a successful cd is kept as before.
+  const trace = (calls) => ({cwd: root, uses: calls.map((c, i) => ({id: `b${i}`, name: 'Bash', input: {command: c[0]}})), results: new Map(calls.map((c, i) => [`b${i}`, {is_error: c[1]}]))});
+  assert.deepEqual(bashTraceReads(trace([['cd no-such-dir', true], ['cat README.md', false]]), ['README.md']).reads, ['README.md']);
+  assert.deepEqual(bashTraceReads(trace([['cd src && false', true], ['cat a.ts', false]]), ['src/a.ts', 'a.ts']).reads, []);
+  assert.ok(bashTraceReads(trace([['cd src && false', true], ['cat a.ts', false]]), ['src/a.ts', 'a.ts']).possible.includes('src/a.ts'), 'unknown cwd: matched against the files');
+  assert.deepEqual(bashTraceReads(trace([['cd src', false], ['cat a.ts', false]])).reads, ['src/a.ts']);
+  // markerBase: a file written in .worktrees/<name>/ takes the base text of <rel> at the fixture's HEAD.
+  const asked = [];
+  const priorTexts = (rels) => { asked.push(...rels); return rels.map((r) => (r === 'src/a.ts' ? 'old line' : null)); };
+  const base = baseLinesFor({markerBase: {pathPattern: '^docs/'}}, ['.worktrees/w1/src/a.ts'], {priorTexts, priorFiles: () => ['src/a.ts']});
+  assert.ok(base.has('old line') && asked.includes('src/a.ts'));
+});
+
+test('PR #1857 review: collect with a .worktrees file; probe end state from meta.json; Bash path arguments quoted', (t) => {
+  const d = fs.realpathSync(tmp(t));
+  // probe-check judges from meta.json probeEndState when recorded, from the files only for an earlier record.
+  const work = path.join(d, 'work'); fs.mkdirSync(work);
+  const ctx = {sentinels: {trial: path.join(d, 's1'), repo: path.join(d, 's2')}, outsideWrites: {a: path.join(d, 'o1')}};
+  fs.writeFileSync(path.join(d, 'o1'), 'x');
+  const end = probeEndStateOf(ctx, work);
+  assert.deepEqual(end, {sentinelExists: {trial: false, repo: false}, insideExists: false, outsideExists: {a: true}});
+  const pc = fs.readFileSync(path.join(H, 'probe-check.mjs'), 'utf8');
+  assert.match(pc, /\.\.\.\(meta\.probeEndState \?\? probeEndStateOf\(/);
+  assert.match(fs.readFileSync(path.join(H, 'run-trial.mjs'), 'utf8'), /probeStepCount: probeSteps\(cell\.tools, ctx\)\.length, probeEndState\}/);
+  // A path of plain characters is unchanged (#1844's probe commands); another is one quoted word.
+  assert.equal(shq('/var/tmp/r1844/x.txt'), '/var/tmp/r1844/x.txt');
+  assert.equal(shq("/a b/it's"), `'/a b/it'\\''s'`);
+  const r = spawnSync('/bin/sh', ['-c', `printf '%s\\n' ${shq("/a b/it's")} | wc -l`], {encoding: 'utf8'});
+  assert.equal(r.stdout.trim(), '1');
+  const spaced = {dir: '/r/runs/R-probe-1', trialDir: '/r/runs/R-probe-1', fixture: '/r/f x', ledgerDir: '/r/l', homeMarker: '/h/m 1', repoMarker: '/repo/m', siblingRecord: '/r/runs/p s/record.txt',
+    deniedRoots: ['/d 1'], sentinels: {trial: '/r/runs/R-probe-1/s', repo: '/repo/s'}, outsideWrites: {userTmp: '/private/tmp/u x/f.txt', runsRoot: '/r/runs/f.txt', varTmp: '/private/var/tmp/f.txt'}, loginKeychain: '/k/login.keychain-db'};
+  const cmds = bashProbeSteps(spaced, 'z').filter((st) => st.tool === 'Bash').map((st) => st.command);
+  for (const c of ["cat '/h/m 1'", "ls '/r/f x'", "ls '/d 1'", "cat '/r/runs/p s/record.txt'", "a='/private/tmp/u x'"]) assert.ok(cmds.some((x) => x.includes(c)), c);
+  // .worktrees as a regular file: no worktree is listed and the trial is still collected.
+  const runs = path.join(d, 'runs'), dir = path.join(runs, 'R-u-users-1'), w = path.join(dir, 'work');
+  fs.mkdirSync(w, {recursive: true});
+  const g = (args) => spawnSync('git', ['-c', 'user.name=x', '-c', 'user.email=x@x', ...args], {cwd: w, encoding: 'utf8'});
+  g(['init', '-q']); fs.writeFileSync(path.join(w, 'a.txt'), 'a'); g(['add', '-A']); g(['commit', '-q', '-m', 'i']);
+  const head = g(['rev-parse', 'HEAD']).stdout.trim();
+  fs.writeFileSync(path.join(w, '.worktrees'), 'not a directory');
+  const opts = {base: head, worktrees: true};
+  fs.writeFileSync(path.join(dir, 'trace.jsonl'), ev({type: 'result'}) + '\n');
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({case: 'u-users', sampleHead: head, endHead: head, workFilesOptions: opts, workFiles: workChanges(w, opts)}));
+  const c = collectTrial(runs, 'R-u-users-1', {conds: C44});
+  assert.deepEqual(c.entry.worktrees, []);
 });

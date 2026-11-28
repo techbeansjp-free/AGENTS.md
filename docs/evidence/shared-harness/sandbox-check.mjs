@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {cellOf, probeContext, isolationSettings, trialEnv, bashProbeSteps, ASC_CLI, INSIDE_FILE} from './run-trial.mjs';
+import {cellOf, probeContext, isolationSettings, trialEnv, bashProbeSteps, ASC_CLI, INSIDE_FILE, shq, sq} from './run-trial.mjs';
 import {loadConditions} from './config.mjs';
 import {markerPaths} from './markers.mjs';
 
@@ -57,14 +57,14 @@ export function sandboxCheck({root, condition, fixture, srt, srtNode, repo}) {
   fs.writeFileSync(denied, 'a denied record\n');
   const half = Math.ceil(denied.length / 2);
   const steps = [...bashProbeSteps(ctx).filter((st) => st.tool === 'Bash').map((st) => ({...st, probe: true})),
-    {id: 'symlinkDeniedCat', command: `ln -s ${denied} link-denied.txt && cat link-denied.txt`, expect: 'refused'},
-    {id: 'hardLinkDeniedCat', command: `ln ${denied} hard-denied.txt && cat hard-denied.txt`, expect: 'refused'},
-    {id: 'nodeReadDenied', command: `node -e 'console.log(require("fs").readFileSync(process.argv[1], "utf8"))' ${denied}`, expect: 'refused'},
-    {id: 'shArgDenied', command: `sh -c 'cat "$0"' ${denied}`, expect: 'refused'},
-    {id: 'varPathDenied', command: `a='${denied.slice(0, half)}'; b='${denied.slice(half)}'; cat "$a$b"`, expect: 'refused'},
-    {id: 'besideRunsRoot', command: `cat ${beside}`, expect: 'refused'},
-    {id: 'existingRealHomeFile', command: `cat ${path.join(os.homedir(), '.zshrc')}`, expect: 'refused'},
-    {id: 'existingRepoFile', command: `cat ${path.join(repo, 'AGENTS.md')}`, expect: 'refused'},
+    {id: 'symlinkDeniedCat', command: `ln -s ${shq(denied)} link-denied.txt && cat link-denied.txt`, expect: 'refused'},
+    {id: 'hardLinkDeniedCat', command: `ln ${shq(denied)} hard-denied.txt && cat hard-denied.txt`, expect: 'refused'},
+    {id: 'nodeReadDenied', command: `node -e 'console.log(require("fs").readFileSync(process.argv[1], "utf8"))' ${shq(denied)}`, expect: 'refused'},
+    {id: 'shArgDenied', command: `sh -c 'cat "$0"' ${shq(denied)}`, expect: 'refused'},
+    {id: 'varPathDenied', command: `a=${sq(denied.slice(0, half))}; b=${sq(denied.slice(half))}; cat "$a$b"`, expect: 'refused'},
+    {id: 'besideRunsRoot', command: `cat ${shq(beside)}`, expect: 'refused'},
+    {id: 'existingRealHomeFile', command: `cat ${shq(path.join(os.homedir(), '.zshrc'))}`, expect: 'refused'},
+    {id: 'existingRepoFile', command: `cat ${shq(path.join(repo, 'AGENTS.md'))}`, expect: 'refused'},
     {id: 'userTmpOfClaudeCode', command: `ls /tmp/claude-${process.getuid()}`, expect: 'refused'},
     {id: 'startInMainCheckout', command: `node ${ASC_CLI} start . --path src/billing/invoice.ts`, expect: 'refused'},
     {id: 'startInWorktreeSelectsRule', command: `node ${ASC_CLI} start ${wt} --path src/billing/invoice.ts | grep -c 'rules/money.md'`, expect: 'ok'},

@@ -76,7 +76,9 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
   // #1844 review M1/L2: the worktrees under .worktrees/ (the possible Bash reads are expanded against their files) and the
   // files of the commits HEAD no longer reaches (meta.json unreached).
   const wtDir = path.join(work, '.worktrees');
-  const worktrees = meta.workFilesOptions ? (fs.existsSync(wtDir) ? fs.readdirSync(wtDir).filter((n) => fs.statSync(path.join(wtDir, n)).isDirectory()).sort() : []) : null;
+  // PR #1857 review: a .worktrees that is a file (not a directory) lists no worktree (the file stays a changed file).
+  const isDir = (d) => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
+  const worktrees = meta.workFilesOptions ? (isDir(wtDir) ? fs.readdirSync(wtDir).filter((n) => isDir(path.join(wtDir, n))).sort() : []) : null;
   return {row, entry: {name, text, failure: null, sizeOf, fileText, priorFiles: head.files, priorTexts: head.texts, ...(changedFiles ? {changedFiles} : {}),
     ...(worktrees ? {worktrees} : {}), ...(meta.unreached?.files?.length ? {unreachedFiles: meta.unreached.files} : {})}, dir};
 }

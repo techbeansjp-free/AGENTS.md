@@ -148,6 +148,19 @@ Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLev
 - L-c（`make-fixture.mjs`の`headReader(work, rev)`、`collect.mjs`）：`workFilesOptions`のある試行は、試行の前のfileを`meta.json`の`sampleHead`で読む（Bashはcommitできるため）。
 - L-d・L-e：設定のREADMEの記述を直し、認証情報の検査の範囲（64MB以上のfile、入れ子のrepositoryの圧縮object）を「限界」に書いた。
 
+### PR #1857のCodeRabbitのレビューの是正（2026-11-28）
+
+#1844の測定は終わっている（未判定。15試行は行っていない）。次の直しは、#1844の記録した結果を変えない：probeの指示の文は同じ（pathに空白等が無いので、引用の直しは文字を変えない）で、`R-probe-2`を作り直した照合（`recheckProbe`）は直す前と一致した。採点（`score.mjs`）は測定の試行が無いので使っていない。#1844の照合は、`results/fixation.json`の`fixedAtCommit`の共通の仕組みで行う（上の#1845と同じ扱い）。
+
+- `score.mjs`：`||`の後の部分（`;`か改行まで）の読込みは広い数え方だけにし、そこの`cd`は作業directoryを不明にする。`git -C <dir>`は、そのcommandの中だけ`<dir>`からpathを解く。失敗した呼出しは、`cd`だけなら前の作業directoryを保ち、`cd`と他のcommandなら不明にする。正規表現にできないglob（`[z-a]`）は展開せず、その呼出しを`unbounded`に数える（採点を止めない）。`markerBase`は、linked worktreeに書いたfile（`.worktrees/<name>/<rel>`）にもfixtureのHEADの`<rel>`の旧版を使う。
+- `collect.mjs`：`.worktrees`が通常のfileなら、worktreeの一覧を空にする。
+- `run-trial.mjs`：`claude`の実行fileを、試行のdirectoryと台帳の予約の前に探す。置き換えた`debug.log`も`<credential>`の検査に渡す。認証情報の検査で読めないfileは`credentialUnreadable`として漏れに数え、検査自体の失敗は`credentialCheckError`として漏れに数える（どちらも従来どおり隔離して精算する）。probeの終わりの目印・`work/`の中のfile・試行の外への書込みの有無を`meta.json`の`probeEndState`に記録し、`probe-check.mjs`はそれで判定する（その記録の無い以前のprobeは、従来どおり判定の時点のfileを見る）。probeのBashのpathの引数は1語として引用する（`shq`。`sandbox-check.mjs`も同じ）。
+- 試験：祖父のdirectoryを列挙する試験は、`os.tmpdir()`が`/tmp`でも深さ3以上になるよう1階層深くした。
+
+#### #1866（この仕組みと設定を使う次の測定）へ引き継ぐこと
+
+- `cases.json`の`expectCommands`・`report.commands`（`commandRan`）は、Bashの呼出し全体の文字列に`pattern`を、結果全体に`resultPattern`を当てる。引用した文（`echo 'asc-v05.mjs start …'`）と、保存した`start`のJSONの表示を1つの呼出しで行うと、`start`を実行しなくても「実行した」に数えられる。#1844では測定の試行が無いので結果に影響しない。#1866で`start`の実行を指標にするなら、測定の前に、command（`node <asc-v05.mjs> start`の部分）と、その出力に結び付けて判定する形を加え、試験を足す（設定の`pattern`は引用したpathも許すので、引用した文を除くだけでは足りない）。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。

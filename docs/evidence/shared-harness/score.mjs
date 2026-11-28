@@ -95,7 +95,9 @@ export function baseLinesFor(spec, written, {priorTexts = null, priorFiles = nul
   if (!spec.markerBase) return null;
   if (!priorTexts || !priorFiles) throw new Error('cases.json markerBase needs the files of the fixture before the trial (priorTexts, priorFiles)');
   const re = new RegExp(spec.markerBase.pathPattern);
-  return baseLinesOf(priorTexts([...new Set([...priorFiles().filter((f) => re.test(f)), ...written])]));
+  // PR #1857 review: a file written in a linked worktree (.worktrees/<name>/<rel>) was at the fixture's HEAD as <rel>.
+  const inMain = written.map((f) => f.replace(/^\.worktrees\/[^/]+\//, ''));
+  return baseLinesOf(priorTexts([...new Set([...priorFiles().filter((f) => re.test(f)), ...written, ...inMain])]));
 }
 // The text the answer markers are matched on: the answer, and with markerText "answer+writes" the written files' texts
 // ({rel, text}) without the base lines. Returns {text, excludedLines}.
@@ -302,7 +304,7 @@ export function bashScan(command, root, start = root, files = []) {
     if (d === null && !path.posix.isAbsolute(p)) { for (const f of files) if (f === p.replace(/^\.\//, '') || f.endsWith(`/${p.replace(/^\.\//, '')}`)) push(possible, f); return; }
     const rel = relOf(resolve(d, p));
     if (rel === null || rel === '') return;
-    if (strict) push(reads, rel);
+    if (strict && !cond) push(reads, rel);
     push(possible, rel);
   };
   // A possible read of an operand: a glob against the files; with deep, a directory as every file under it.
@@ -313,22 +315,33 @@ export function bashScan(command, root, start = root, files = []) {
       if (abs === null) { if (!isGlob(x)) literal(null, x, false); else unbounded = true; continue; }
       const rel = relOf(abs);
       if (rel === null) continue;
-      if (isGlob(rel)) { const re = globRegExp(rel, {prefix: deep}); for (const f of files) if (re.test(f)) push(possible, f); continue; }
+      // PR #1857 review: a glob that is no regular expression (e.g. the range [z-a]) is not expanded; its call is unbounded.
+      if (isGlob(rel)) { let re; try { re = globRegExp(rel, {prefix: deep}); } catch { unbounded = true; continue; } for (const f of files) if (re.test(f)) push(possible, f); continue; }
       if (rel) push(possible, rel);
       if (deep) for (const f of files) if (rel === '' || f.startsWith(`${rel}/`)) { const below = rel ? f.slice(rel.length + 1) : f; if (!skipHidden || !below.split('/').some((s) => s.startsWith('.'))) push(possible, f); }
     }
   };
   const text = stripHeredocs(command);
-  const parts = text.split(/&&|\|\||;|\|&?|\n|(?<![>&<0-9])&(?![>&])/);
-  const all = parts.map((part) => ({part, ...splitRedirects(wordsOf(part))}));
+  // PR #1857 review: a part after || (until ; or a new line) may not have run (`true || cat x`): its reads are possible
+  // reads only, and a cd in it makes the cwd unknown.
+  const tokens = text.split(/(&&|\|\||;|\|&?|\n|(?<![>&<0-9])&(?![>&]))/);
+  const all = [];
+  let afterOr = false;
+  for (let i = 0; i < tokens.length; i += 2) {
+    all.push({part: tokens[i], cond: afterOr, ...splitRedirects(wordsOf(tokens[i]))});
+    const sep = tokens[i + 1];
+    if (sep === '||') afterOr = true; else if (sep === ';' || sep === '\n' || sep === '&') afterOr = false;
+  }
+  let cond = false, cds = 0;
   const head = (args) => { const a = [...args]; while (a.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(a[0]) || WRAPPERS.has(path.posix.basename(a[0])) || a[0] === '!')) a.shift(); return a; };
   const cmdOf = (a) => path.posix.basename(String(a[0] ?? '').replace(/^[({]+/, ''));
   // xargs feeds a list into a reading command: every operand of the whole command is then a possible read.
   const xargsReader = all.some(({args}) => { const a = head(args); if (cmdOf(a) !== 'xargs') return false; const rest = a.slice(1); let i = 0; while (i < rest.length && rest[i].startsWith('-')) i += /^-[IdELnPs]$/.test(rest[i]) ? 2 : 1; const c = path.posix.basename(rest[i] ?? ''); return READ_COMMANDS.has(c) || MORE_READERS.has(c); });
   let outer;
-  for (const {part, args: raw, inputs, outNull} of all) {
+  for (const {part, args: raw, inputs, outNull, cond: c} of all) {
     // A ( … ) subshell: its cd ends with it.
     if (/^\s*\(/.test(part) && outer === undefined) outer = dir;
+    cond = c;
     scanPart(part, raw, inputs, outNull);
     if (/\)\s*$/.test(part) && outer !== undefined) { dir = outer; outer = undefined; }
   }
@@ -341,27 +354,33 @@ export function bashScan(command, root, start = root, files = []) {
     if (cmd === 'cd' || cmd === 'pushd') {
       const target = a[1];
       // cd alone or to ~ leaves the project (reset by the next call); cd - or a computed target: unknown.
-      dir = !target || target.startsWith('~') ? '/' : target === '-' || /[$`*?]/.test(target) ? null : resolve(dir, target);
+      dir = cond ? null : !target || target.startsWith('~') ? '/' : target === '-' || /[$`*?]/.test(target) ? null : resolve(dir, target);
       if (!sub) kept = dir;
+      cds += 1;
       return;
     }
-    if (cmd === 'popd') { dir = null; if (!sub) kept = dir; return; }
+    if (cmd === 'popd') { dir = null; if (!sub) kept = dir; cds += 1; return; }
     if (SHELLS.has(cmd) && a.includes('-c')) { const inner = a[a.indexOf('-c') + 1]; if (inner) { const s = bashScan(inner, root, dir, files); for (const r of s.reads) push(reads, r); for (const r of s.possible) push(possible, r); unbounded ||= s.unbounded; } return; }
     if (cmd === 'xargs') { const rest = a.slice(1); let i = 0; while (i < rest.length && rest[i].startsWith('-')) i += /^-[IdELnPs]$/.test(rest[i]) ? 2 : 1; a = rest.slice(i); cmd = cmdOf(a); if (!a.length) return; }
     if (xargsReader) for (const w of a.slice(1)) if (!w.startsWith('-')) loose(dir, w, {deep: true});
     if (cmd === 'git') {
       let i = 1;
-      while (i < a.length && a[i].startsWith('-')) i += ['-C', '-c', '--git-dir', '--work-tree'].includes(a[i]) ? 2 : 1;
+      // PR #1857 review: git -C <dir> (cumulative) runs the command in <dir>; the cwd of the session is not changed.
+      let gdir = dir;
+      while (i < a.length && a[i].startsWith('-')) {
+        if (a[i] === '-C') gdir = a[i + 1] === undefined || /[$`*?]/.test(a[i + 1]) ? null : resolve(gdir, a[i + 1]);
+        i += ['-C', '-c', '--git-dir', '--work-tree'].includes(a[i]) ? 2 : 1;
+      }
       const subc = a[i], rest = a.slice(i + 1), ops = rest.filter((w) => !w.startsWith('-'));
-      const wtRoot = () => { const r = dir === null ? null : relOf(dir); const m = r === null ? null : /^(\.worktrees\/[^/]+)(\/|$)/.exec(r); return m ? path.posix.join(root, m[1]) : root; };
+      const wtRoot = () => { const r = gdir === null ? null : relOf(gdir); if (gdir !== null && r === null) return gdir; const m = r === null ? null : /^(\.worktrees\/[^/]+)(\/|$)/.exec(r); return m ? path.posix.join(root, m[1]) : root; };
       const noPatch = rest.some((w) => /^(--stat|--name-only|--name-status|-s|--no-patch|--shortstat|--numstat|--summary|--raw)$/.test(w));
       if (subc === 'show' || subc === 'cat-file') {
-        for (const w of ops) { const m = /^[^:]*:(.+)$/.exec(w); if (m) literal(m[1].startsWith('./') || m[1].startsWith('../') ? dir : wtRoot(), m[1], true); else if (!noPatch && !/^(blob|tree|commit|tag)$/.test(w)) unbounded = true; }
+        for (const w of ops) { const m = /^[^:]*:(.+)$/.exec(w); if (m) literal(m[1].startsWith('./') || m[1].startsWith('../') ? gdir : wtRoot(), m[1], true); else if (!noPatch && !/^(blob|tree|commit|tag)$/.test(w)) unbounded = true; }
         if (subc === 'show' && !ops.length && !noPatch) unbounded = true;
       } else if (subc === 'log' && rest.some((w) => /^(-p|-u|--patch|--full-diff|-L.*)$/.test(w)) && !noPatch) unbounded = true;
       else if (subc === 'diff' && !noPatch && ops.some((w) => /\.\.|^(HEAD|@)[~^]|^[0-9a-f]{7,40}$|^(origin\/|main$|master$)/.test(w))) unbounded = true;
-      else if (subc === 'blame') { for (const w of ops) literal(dir, w, true); }
-      else if (subc === 'grep') { const hasE = rest.some((w) => FILE_OPTS.has(w) || w === '-e'); const paths = ops.slice(hasE ? 0 : 1).filter((w) => w !== '--'); if (paths.some((w) => /^(HEAD|@)|^[0-9a-f]{7,40}$/.test(w))) unbounded = true; for (const w of paths.length ? paths : ['.']) loose(dir, w, {deep: true}); }
+      else if (subc === 'blame') { for (const w of ops) literal(gdir, w, true); }
+      else if (subc === 'grep') { const hasE = rest.some((w) => FILE_OPTS.has(w) || w === '-e'); const paths = ops.slice(hasE ? 0 : 1).filter((w) => w !== '--'); if (paths.some((w) => /^(HEAD|@)|^[0-9a-f]{7,40}$/.test(w))) unbounded = true; for (const w of paths.length ? paths : ['.']) loose(gdir, w, {deep: true}); }
       return;
     }
     if (cmd === 'find') {
@@ -401,7 +420,8 @@ export function bashScan(command, root, start = root, files = []) {
     }
     if (recursive && !ops.length) loose(dir, '.', {deep: true, skipHidden});
   }
-  return {reads, possible, unbounded, dir: kept};
+  // cdOnly: every part of the command is a cd/pushd/popd (a failed call left the cwd as it was).
+  return {reads, possible, unbounded, dir: kept, moved: cds > 0, cdOnly: cds > 0 && all.every(({args}) => !head(args).length || ['cd', 'pushd', 'popd'].includes(cmdOf(head(args))))};
 }
 export const bashReadsOf = (command, root, start = root) => bashScan(command, root, start).reads;
 
@@ -421,7 +441,11 @@ export function bashTraceReads(t, files = [], {existing = false} = {}) {
     for (const r of s.possible) if (!possible.includes(r)) possible.push(r);
     if (s.unbounded) unbounded += 1;
     commands.push(c);
-    dir = s.dir === null ? null : projectRelative(`${s.dir}/__x__`, t.cwd) === null ? t.cwd : s.dir;
+    // PR #1857 review: a failed call keeps the cwd when it was only a cd (the cd failed); a failed call with a cd and more
+    // leaves it unknown (whether the cd ran is not known).
+    const failed = t.results.get(u.id).is_error;
+    const next = failed && s.moved ? (s.cdOnly ? dir : null) : s.dir;
+    dir = next === null ? null : projectRelative(`${next}/__x__`, t.cwd) === null ? t.cwd : next;
   }
   return {reads, possible, unbounded, commands};
 }
