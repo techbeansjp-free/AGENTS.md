@@ -214,6 +214,10 @@ Bashを使える水準（水準X：W＋Bash）を、`conditions.json`の`toolLev
 - 各`results/fixation.json`の最後の`fixedAtCommit`の共通の仕組み（#1840は`93b200e8`、#1843は`9d6e55f5`、#1846は`3e358c13`。`git archive`で取り出したもの）で`fixation.mjs check`を行い、3つとも`ok`（差なし）だった。この変更の共通の仕組みで行うと、moduleの差（`collect`・`judge`・`make-fixture`・`order`・`probe-check`・`run-trial`・`score`）を示す。測定の後の変更であり、上の#1845と同じ扱いである。
 - 条件が2つの#1840・#1843は、公開した`runs.json`と`judge.json`の`completion`から、この変更の`judgeScored`で作り直した判定と条件の集計が、公開した`judge.json`と一致した（`test/harness.test.mjs`の試験で再確認できる）。
 
+## #1861で加えたもの（2026-11-28）
+
+- `claude-sandbox-bash.mjs`：モデルを呼ばずに、Claude Code本体のBash toolに、そのsandboxの中で1 commandずつ実行させる。`ANTHROPIC_BASE_URL`を127.0.0.1の代役（各turnにBashのtool_useを1つ返す）へ向け、API keyはダミーにするので、要求はAnthropicへ届かない。結果は各commandのtool_result（`result.json`）。環境は`env -i`から作り、HOMEは試験用のものだけを受け付ける。設定は試験用のHOMEの`.claude/settings.json`か、`--`の後の`--settings`で渡す。測定の固定の記録が持つmoduleではなく、既存のmoduleは変えていない。使い方と記録は[1861-sandbox-worktree-create](../1861-sandbox-worktree-create/README.md)。対話画面のBash mode（`!command`）はsandboxの外で動くので、この目的には使えない（Claude Code 2.1.323）。
+
 ## 変更するとき
 
 - 測定の途中（固定の記録の後）に変えない。固定の記録はmoduleのsha256も持つので、変えるとその測定の`run-trial.mjs`と`judge.mjs`が拒否する。
