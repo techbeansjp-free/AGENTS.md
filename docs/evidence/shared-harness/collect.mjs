@@ -14,11 +14,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 import {loadConditions} from './apply-condition.mjs';
 import {ledgerConsistency, settlements, settledFilesProblem, fileSha256, ledgerProblems, reservedNames} from './ledger.mjs';
 import {scoreTrials} from './score.mjs';
 import {loadSpec} from './config.mjs';
-import {workChanges, headReader} from './make-fixture.mjs';
+import {workChanges, headReader, gitEnv} from './make-fixture.mjs';
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 export const PUBLISHED = ['trials.json', 'runs.json', 'ledger.jsonl'];
@@ -70,14 +71,24 @@ export function collectTrial(runsRoot, name, {conds, settled = null}) {
 
 // #1840 review M2: a trial whose meta.json records workFiles (run-trial.mjs, the changed and created files with their
 // sha256) against its work/ copy now: the same paths and digests, or a problem text. A trial without the field (earlier
-// configs) or without meta.json or work/ gives none (those are reported elsewhere).
+// configs) or without meta.json gives none (reported elsewhere).
+// #1845: a trial that records workFiles (or workFilesError) must still have its work/ copy, and the HEAD of work/ must be
+// the meta.json sampleHead (the fixture the trial started from), checked before anything is collected; a trial with
+// workFiles and no sampleHead is refused.
 export function workFilesProblem(dir) {
   const mf = path.join(dir, 'meta.json');
-  if (!fs.existsSync(mf) || !fs.existsSync(path.join(dir, 'work'))) return null;
+  if (!fs.existsSync(mf)) return null;
   let meta;
   try { meta = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch { return null; }
+  const work = path.join(dir, 'work');
+  if (!meta.workFiles && !meta.workFilesError) return null;
+  if (!fs.existsSync(work)) return `trial ${path.basename(dir)}: work/ is missing although meta.json records the changed files`;
   if (meta.workFilesError) return `trial ${path.basename(dir)}: the changed files were not recorded (${meta.workFilesError})`;
-  if (!meta.workFiles) return null;
+  // #1845 review L5: an empty sampleHead (rev-parse failed at the trial) is refused, not skipped; HEAD is read with the
+  // same git environment as workChanges and headReader (an exported GIT_DIR does not point it at another repository).
+  if (!meta.sampleHead) return `trial ${path.basename(dir)}: meta.json records the changed files but no sampleHead`;
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], {cwd: work, env: gitEnv(work), encoding: 'utf8'});
+  if (head.status !== 0 || head.stdout.trim() !== meta.sampleHead) return `trial ${path.basename(dir)}: the HEAD of work/ (${head.stdout.trim() || 'none'}) is not meta.json sampleHead ${meta.sampleHead}`;
   let now;
   try { now = workChanges(path.join(dir, 'work')); } catch (e) { return `trial ${path.basename(dir)}: ${e.message}`; }
   const keys = [...new Set([...Object.keys(meta.workFiles), ...Object.keys(now)])].sort();
