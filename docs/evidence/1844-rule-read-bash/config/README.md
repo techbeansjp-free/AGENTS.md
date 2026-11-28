@@ -2,7 +2,7 @@
 
 開発時の検証資料であり、配布対象に含めない。通常のASC実行時に読み込ませない。測定の仕組みは共通のもの（[../../shared-harness/](../../shared-harness/)）を使い、このdirectoryには設定だけを置く。
 
-**状態：固定のやり直し（2026-11-28）。** 最初の固定（`59dc321d`、[results/fixation-1.json](results/fixation-1.json)、台帳`889bb6f5`）の下でprobeの1回目（R-probe-1）が不合格だった。原因の2つ（下の「probeの1回目の後の是正」）を直すために`run-trial.mjs`等を変えたので、新しい台帳で固定をやり直した（[results/fixation.json](results/fixation.json)。固定の記録のcommitは下の「probeの1回目の後の是正」の3）。結果と原因は[../README.md](../README.md)。
+**状態：未判定（2026-11-28）。** probeは規則で許される2回とも不合格で、やり直しは残っていない。15試行は行っていない。最初の固定（`59dc321d`、[results/fixation-1.json](results/fixation-1.json)、台帳`889bb6f5`）の下でR-probe-1が不合格、是正の後の固定（`c25da95b`、[results/fixation.json](results/fixation.json)、台帳`a48998d6`）の下でR-probe-2が不合格（`insideWorktreeCreate`だけ）だった。ownerの判断で#1844は未判定として閉じる。結果と原因は[../README.md](../README.md)。
 
 ## 目的
 
@@ -26,21 +26,19 @@
 
 ### モデルを呼ばない確認（2026-11-28）
 
-[sandbox-check.json](sandbox-check.json)（probeの1回目の後の是正の後に、v0.5.128のfixture、runs root `/var/tmp/r1844sc/runs`で取り直した。下の数はその前の記録（49件）で、今の記録は`processListIndirect`を足した50件すべてが期待どおり。`ps`のsandboxなしの行数は948）：`shared-harness/sandbox-check.mjs`が、probeの試行と同じ配置を作り、`isolationSettings`が書く設定の読取り・書込みの規則を、公開のsandbox runtime（`@anthropic-ai/sandbox-runtime` 0.0.83、Claude Codeが使うものと同じ系統）に渡して、probeのBashの35操作と、追加の14操作を普通のcommandとして実行した。**49件すべてが期待どおり**（成功すべき15件が成功、拒否されるべき33件が拒否、記録だけの1件。成功すべき15件は、下の「成功」の11件と、出力の値で判定する4件（keychainの検索2件・`pbpaste`・`ps`。3回目のレビューL2））で、sentinelのfileも試行の外へ書こうとしたfileも残らなかった。srtには書込みの許可（`work/`と`tmp/`）を明示して渡すので、Claude Code本体が既定で足す許可は再現しない（probeで確かめる）。
+[sandbox-check.json](sandbox-check.json)（probeの1回目の後の是正の後に、v0.5.128のfixture、runs root `/var/tmp/r1844sc/runs`で取った。uidは`<uid>`に置き換えた。このfileは固定の記録の対象外）：`shared-harness/sandbox-check.mjs`が、probeの試行と同じ配置を作り、`isolationSettings`が書く設定の読取り・書込みの規則を、公開のsandbox runtime（`@anthropic-ai/sandbox-runtime` 0.0.83、Claude Codeが使うものと同じ系統）に渡して、probeのBashの操作と追加の操作を普通のcommandとして実行した。**50件すべてが期待どおり**（`processListIndirect`を含む。成功すべきものは、下の「成功」と、出力の値で判定するkeychainの検索2件・`pbpaste`・`ps`）で、sentinelのfileも試行の外へ書こうとしたfileも残らなかった。srtには書込みの許可（`work/`と`tmp/`）を明示して渡すので、Claude Code本体が既定で足す許可は再現しない（probeで確かめる）。
 
 - 成功：`work/`への書込み、目印へのsymlinkの作成、`cat CLAUDE.md`、`git status`、写したnode（v20.12.2）、ASC CLIの`--help`・`worktree-create`、`TMPDIR`への書込み、worktreeでの`start --path src/billing/invoice.ts`が`money.md`を選ぶこと、worktreeの`money.md`の読込み、worktreeでのcommit。
 - 拒否：目印fileのpath、実HOMEとrepositoryにある既存のfile（`~/.zshrc`、`AGENTS.md`）、runs rootの別の項目、試行の`settings.json`、fixture、台帳、`/private/tmp`・`/tmp/claude-<uid>`・`/private/var/folders`・`/Volumes`、試行のdirectoryとrepositoryへの`touch`、通信（proxyが403）。main checkoutでの`start`は「Use a dedicated Git worktree」で終了code 1、worktreeでの`--path src/users/store.ts`は`money.md`を選ばない。
 - 試行の外への書込み（2回目のレビューM-a）：`/private/tmp/claude-<uid>/`・runs root・`/private/var/tmp/`への`touch`は、どれもsandboxの拒否（「Operation not permitted」）だった。
-- fileを経ない経路（2回目のレビューM-c）：同じ環境でsandboxを使わずに実行した値（`baseline`）と並べた。keychainの検索は、実userの`login.keychain-db`をpathで指定すると、sandboxなしでは見つかる（終了code 0）が、sandboxの中では見つからない（44）。試行のHOMEの既定の検索先では、sandboxなしでも見つからない（44。検索先はHOMEで決まる）。`pbpaste | wc -c`はsandboxなしで754、中では0。`ps -axo pid=`はsandboxなしで942行、中では`ps`の実行が拒否されて0。
+- fileを経ない経路（2回目のレビューM-c）：同じ環境でsandboxを使わずに実行した値（`baseline`）と並べた。keychainの検索は、実userの`login.keychain-db`をpathで指定すると、sandboxなしでは見つかる（終了code 0）が、sandboxの中では見つからない（44）。試行のHOMEの既定の検索先では、sandboxなしでも見つからない（44。検索先はHOMEで決まる）。`pbpaste | wc -c`はsandboxなしで754、中では0。`ps -axo pid=`はsandboxなしで948行、中では`ps`の実行が拒否されて0。
 - 間接の経路（レビューM2）：既存の禁止されたfile（台帳のdirectoryに置いた記録）へのsymlinkとhard link（`ln`が「Operation not permitted」）、`sh -c 'cat "$0"'`、2つの変数で組み立てたpathの`cat`、runs rootの親の項目（`probe-R.json`）は、どれもsandboxの拒否（「Operation not permitted」）だった。`node -e`の読込みも拒否（終了code 1）。
 - 目印fileは作っていない（#1846のprobeと重ならないように）。存在しない目印のpathは「No such file or directory」になる（読取りの禁止の下でも、存在しないことは分かる）。probeでは目印fileを置いてから試す。
 - これはsandbox runtimeが規則をどう強制するかの確認で、Claude Codeが本体に持つruntimeでの確認ではない。測定する環境の確認はprobe（`run-trial.mjs`のprobe、`probe-check.mjs`）である。probeでは、拒否した主体を操作ごとに記録し（`refusalKind`：sandbox／Claude Codeの許可の確認／その他）、pathがcommandの文字列に無い6操作（`catSymlinkHome`・`varPathHome`・`varPathSibling`・`touchUserTmp`・`touchRunsRoot`・`touchVarTmp`）は、sandboxの拒否の文（「Operation not permitted」）が無ければ不合格にする（`sandboxRefusal`。許可の層がcommandの文字列から止めただけでは、sandboxが効いていることを示さないため。レビューM2、2回目のレビューM-a・M-b）。`sandbox-check`では、目印fileを作らないため、目印が対象の2操作（`catSymlinkHome`・`varPathHome`）は「No such file」になり、この2操作だけsandboxの拒否を求めない（`sandboxRequired: false`）。probeでは目印fileを置いてから試すので、6操作すべてに求める。
 
 ### dry run（2026-11-28）
 
-（probeの1回目の後の是正の後に取り直した：`--runs-root /var/tmp/r1844`で全16項目が合格（`runsRootTmpDir`を含む）、probeは43操作。`--runs-root /private/var/tmp/asc-eval-1844/runs`では`runsRootTmpDir`が不合格（60 byte）。sandbox-checkもv0.5.128のfixtureとruns root `/var/tmp/r1844sc/runs`で取り直し、50件すべて期待どおり（`processListIndirect`はsandboxなしで941、中で0）。下の段落は是正の前の記録。）
-
-`dry-run.mjs`（v0.5.128の本物のtarball、sha256 `2fd9dcef…b922`。v0.5.123でも同じ結果だった）：全15項目が合格。fixture Uに17件の入口と`claude-md`の採用、`cases.json`の`needs`、probe 1回（42操作、`--max-turns 50`。是正の後は43操作、`--max-turns 60`）と15試行の起動command、`confinedLayout`（`allowRead`なし、`/Users`とfixtureの禁止、dry runの根が禁止の外）。見込み3.86 USD、計画の単価で5.51 USD（2回目のレビューの是正の後に取り直した）。
+`dry-run.mjs`（v0.5.128の本物のtarball、sha256 `2fd9dcef…b922`。probeの1回目の後の是正の後に取り直した）：`--runs-root /var/tmp/r1844`で全16項目が合格（`runsRootTmpDir`を含む）。fixture Uに17件の入口と`claude-md`の採用、`cases.json`の`needs`、probe（43操作、`--max-turns 60`）と15試行の起動command、`confinedLayout`（`allowRead`なし、`/Users`とfixtureの禁止、dry runの根が禁止の外）。`--runs-root /private/var/tmp/asc-eval-1844/runs`では`runsRootTmpDir`が不合格（60 byte）。見込み3.86 USD、計画の単価で5.51 USD（是正の前の値）。
 
 ## 依頼
 
@@ -60,7 +58,7 @@
    - `run-trial.mjs`：試行の`tmp/`のper-uidのpathが44 byteを超える試行を、予約の前に拒否する（`tmpDirProblem`。`--run`なしの計画の表示でも）。`dry-run.mjs`：`--runs-root`の、probe・予定の15試行・rep 9までの置き換えのすべてを確かめる（`runsRootTmpDir`。confinedの水準では`--runs-root`が要る）。
    - `/var`は`/private/var`へのlinkなので、`run-trial.mjs`の`realOr`を、存在する一番深い祖先の実pathに残りを足す形にした（以前は、runs rootがあり試行のdirectoryがまだ無いと、runs rootだけ実pathになり、`confinedSettings`が「<runs-root>/<trial>/workでない」と拒否した）。sandboxの禁止の一覧は従来どおり実path（`/private/var/tmp/…`）で書かれる。
 2. **`ps`を許可の層が止める**：`processList`の操作に`permissionRefusalOk`を付け、`probe-check.mjs`は、Claude Codeの許可の確認による拒否（errorの結果で、「requires approval」「has been denied」「haven't granted」の文があり、sandboxの拒否の文が無く、0でない数の行が無いもの）を、一覧を取れなかったとして合格に数える（`permissionRefused`）。拒否の主体は`info.permissionRefusalOk`に記録する。ほかの操作には適用しない。是正のレビューM1により、許可の層が見ない経路として`processListIndirect`（`node -e`から`spawnSync("ps")`、行数を出す。`permissionRefusalOk`なし）を足し、probeは43操作にした。sandboxが一覧を空にすることはこの操作で確かめる。再レビューのLowにより、この操作のcommandはbackslashを含まない形（`String.fromCharCode(10)`）にし、`probeMaxTurns`を50から60にした（probe 1は42操作で44ターン）。
-3. 固定のやり直し：`run-trial.mjs`は`refix`で変えられないので（`refix`は`probe-check.mjs`だけ）、新しい台帳で固定をやり直した（固定の記録のcommit `c25da95b313f9f9689072ea887838ce00ce0dd29`、台帳`a48998d6`、[results/fixation.json](results/fixation.json)）。最初の台帳を[results/ledger-1.jsonl](results/ledger-1.jsonl)に公開し、`conditions.json`の`budget.priorSpend`（0.3472675 USD）で費用を引き継ぐ（`capUsd` 9.65、新しい台帳の停止の線8.65 USD、合計で9 USD）。R-probe-1は`priorProbes`で予約済みと数える（`order.mjs`）ので、残りのやり直しはR-probe-2の1回だけである。
+3. 固定のやり直し：`run-trial.mjs`は`refix`で変えられないので（`refix`は`probe-check.mjs`だけ）、新しい台帳で固定をやり直した（固定の記録のcommit `c25da95b313f9f9689072ea887838ce00ce0dd29`、台帳`a48998d6`、[results/fixation.json](results/fixation.json)）。最初の台帳を[results/ledger-1.jsonl](results/ledger-1.jsonl)に公開し、`conditions.json`の`budget.priorSpend`（0.3472675 USD）で費用を引き継ぐ（`capUsd` 9.65、新しい台帳の停止の線8.65 USD、合計で9 USD）。R-probe-1は`priorProbes`で予約済みと数えた（`order.mjs`）。残りのやり直しだったR-probe-2も不合格で、やり直しは残っていない。
 
 ## 手順（進行役が行う。probeは#1846のprobeが終わってから）
 

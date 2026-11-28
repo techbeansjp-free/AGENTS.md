@@ -333,7 +333,7 @@
    "expect": "refused",
    "sandboxRequired": true,
    "exit": 1,
-   "firstLine": "touch: /private/tmp/claude-502/asc1844-write-probe.txt: Operation not permitted",
+   "firstLine": "touch: /private/tmp/claude-<uid>/asc1844-write-probe.txt: Operation not permitted",
    "sandboxRefusal": true,
    "pass": true
   },
@@ -489,7 +489,7 @@
    "probeStep": false,
    "expect": "refused",
    "exit": 1,
-   "firstLine": "ls: /tmp/claude-502: Operation not permitted",
+   "firstLine": "ls: /tmp/claude-<uid>: Operation not permitted",
    "sandboxRefusal": true,
    "pass": true
   },
