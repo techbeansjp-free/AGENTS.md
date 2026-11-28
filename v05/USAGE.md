@@ -133,16 +133,22 @@ codex -C <repo-root> --sandbox workspace-write -c 'sandbox_workspace_write.writa
 
 ### Claude Codeのsandboxで作業場所を作る（#1861）
 
-Claude CodeのBashをsandboxの中で動かすと、`.git`の直下や`refs`には書けるが、`<git-common-dir>/worktrees`は読み取り専用になる。`git worktree add`は新しいworktreeの記録をここに作るため、sandboxの中では`worktree-create`は成功しない。`worktree-create`は、作成を始める前にこの場所へ確認用のdirectoryを作れるかを確かめる。作れなければ`Git worktree records are not writable: <dir>`と対処を示し、終了コード1で止まる。このとき`.worktrees`もbranchも作らない（この確認より前の版は、branchを作った後にGitのエラーで止まり、branchと空の`.worktrees`が残った）。
+Claude CodeのBashをsandboxの中で動かすと、`.git`の直下に新しいfileを作ることと`refs`への書込みはできるが、`config`と`<git-common-dir>/worktrees`には書けない。`git worktree add`は新しいworktreeの記録をここに作るため、sandboxの中では`worktree-create`は成功しない。`worktree-create`は、作成を始める前にこの場所へ確認用のdirectoryを作れるかを確かめる。作れなければ`Git worktree records are not writable: <dir>`と対処を示し、終了コード1で止まる。このとき`.worktrees`もbranchも作らない（この確認より前の版は、branchを作った後にGitのエラーで止まり、branchと空の`.worktrees`が残った）。
 
 Bashをsandboxの中で動かす場合の手順：
 
-1. 利用者が、Claude Codeの外の自分のterminalで、repository rootから`worktree-create`を実行する（コマンドは`start`の手順と同じ）。
+1. 利用者が、Claude Codeの外の自分のterminalで、repository rootから`worktree-create`を実行する。例：
+
+   ```sh
+   node .agent-skill-chain/bin/asc.mjs worktree-create "$PWD" <issue> <type> <slug> <base>
+   ```
+
+   Agentが利用者にこの手順を頼むときは、`<issue>`等を実際の値にした1行を渡す。
 2. 利用者が、作られたworktreeのdirectoryでClaude Codeを起動する。Agentはそこで`start`・実装・commitを行える。
 
 - repository rootで起動したsessionでは、sandboxの外で作ったworktreeでも`start`はできるが、commitは`<git-common-dir>/worktrees/<name>/index.lock`を作れずに失敗した。worktreeの中で起動する。
 - `sandbox.filesystem.allowWrite`に`.git`や`.git/worktrees`を加えても、書込みは許されなかった（Claude Code自身の保護である）。
-- `sandbox.excludedCommands`と`permissions.allow`に`worktree-create`のコマンドを加えると、そのコマンドだけがsandboxの外で動き、作成できた。ただし、そのコマンドが実行するASCの本体（`.agent-skill-chain/managed-runtime/`）はsandboxの中のAgentが書き換えられる場所にあるため、これはAgentがsandboxの外で任意のコードを実行できる設定と同じである。ASCは支持しない。
+- sandboxの外でコマンドを動かす設定（`excludedCommands`等）は案内しない。そのコマンドが実行するASCの本体を、sandboxの中のAgentが書き換えられるためである。
 - Agentは自分のsandboxや権限を広げない。上の手順の1は利用者が行う。
 - 実測はmacOS・Claude Code 2.1.323、試験用のHOMEで行った（モデルは呼ばず、Bash toolに1 commandずつ実行させた。`docs/evidence/1861-sandbox-worktree-create/README.md`）。LinuxとWindowsは未確認である。
 

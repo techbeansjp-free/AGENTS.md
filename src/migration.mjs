@@ -211,21 +211,28 @@ export function gitWorktreesNotWritableMessage(records,code){
 /**
  * Fail before any side effect when `<git-common-dir>/worktrees` cannot take a new worktree record. The Bash sandbox
  * of Claude Code 2.1.323 lets a command write the common directory itself but not this subdirectory; `git worktree add -b`
- * then creates the branch and fails with exit status 128 (#1861). A missing directory is created and removed again.
+ * then creates the branch and fails with exit status 128 (#1861). A missing directory is created; it is removed again
+ * only when the check stops creation. After a passed check it stays, because `git worktree add` needs it next, and
+ * removing it could race another creation that has just found it (Git ignores an empty one).
  */
 function assertGitWorktreesWritable(common){
  const records=path.join(common,'worktrees'),probe=path.join(records,`asc-write-probe-${process.pid}-${randomUUID()}`);
+ let createdRecords=false;
+ const makeRecords=()=>{try{fs.mkdirSync(records);createdRecords=true;}catch(error){if(error?.code!=='EEXIST')denied(error);}};
+ // A directory that is no longer empty (another worktree was recorded meanwhile) stays.
+ const removeRecords=()=>{if(createdRecords)try{fs.rmdirSync(records);}catch(error){if(!['ENOTEMPTY','EEXIST','ENOENT'].includes(error?.code))throw error;}};
  const denied=error=>{
+  removeRecords();
   if(!['EPERM','EACCES','EROFS'].includes(error?.code))throw error;
   throw Object.assign(Error(gitWorktreesNotWritableMessage(records,error.code)),{cause:error,code:'ASC_GIT_WORKTREES_NOT_WRITABLE'});
  };
- let createdRecords=false;
- try{fs.mkdirSync(records);createdRecords=true;}catch(error){if(error?.code!=='EEXIST')denied(error);}
- // Another worktree may have been recorded meanwhile; a directory that is no longer empty stays.
- const removeRecords=()=>{if(createdRecords)try{fs.rmdirSync(records);}catch(error){if(!['ENOTEMPTY','EEXIST','ENOENT'].includes(error?.code))throw error;}};
- try{fs.mkdirSync(probe);}catch(error){removeRecords();denied(error);}
- try{fs.rmdirSync(probe);}catch(error){throw Object.assign(Error(`Remove the Git worktree records write probe left at ${probe} (${error.code})`),{cause:error});}
- removeRecords();
+ makeRecords();
+ // Another check that created the directory may have removed it between the two steps; make it once more.
+ try{fs.mkdirSync(probe);}catch(error){if(error?.code!=='ENOENT')denied(error);makeRecords();try{fs.mkdirSync(probe);}catch(again){denied(again);}}
+ try{fs.rmdirSync(probe);}catch(error){
+  throw Object.assign(Error(`Remove the Git worktree records write probe left at ${probe} (${error.code}). `+
+   'It holds no worktree record and Git ignores it; delete the empty directory, or run git worktree prune.'),{cause:error});
+ }
 }
 
 /** Create, never repurpose, an owner-requested linked worktree. No checkout filters. */

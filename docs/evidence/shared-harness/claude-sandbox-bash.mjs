@@ -6,7 +6,7 @@
 // A command that should keep a program's error text away from the result writes it to a file under "$TMPDIR" (the
 // trial's tmp/), which the person running this reads afterwards; nothing here reads or prints that file.
 // The environment is built from scratch: HOME is the given test HOME (its .claude/settings.json is the user settings),
-// never the real one. Usage:
+// never the real one: --home and --config-dir are refused when their real path is, or is under, the real HOME. Usage:
 //   node claude-sandbox-bash.mjs --claude <bin> --cwd <dir> --home <test-home> --tmp <dir> --commands <json> --out <new-dir>
 //        [--path <dirs joined by :>] [--config-dir <dir>] [-- <extra claude arguments>]
 import fs from 'node:fs';
@@ -14,6 +14,7 @@ import os from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
 import {spawn, spawnSync} from 'node:child_process';
+import {pathToFileURL} from 'node:url';
 
 export const DUMMY_KEY_SUFFIX = 'ZZZZmodelfree1861ZZZ';
 export const DUMMY_API_KEY = `sk-ant-api03-${'x'.repeat(60)}${DUMMY_KEY_SUFFIX}`;
@@ -58,9 +59,29 @@ export function stepResults(streamText) {
   return results;
 }
 
+/** The real path of `dir`, or of its nearest existing parent with the rest appended (a config directory may not exist yet). */
+export function realish(dir) {
+  const abs = path.resolve(dir), rest = [];
+  for (let at = abs; ; at = path.dirname(at)) {
+    try { return path.join(fs.realpathSync.native(at), ...rest.reverse()); } catch (error) { if (error?.code !== 'ENOENT' || path.dirname(at) === at) throw error; }
+    rest.push(path.basename(at));
+  }
+}
+
+/** Refuse a test HOME or config directory that is, or is under, the real HOME (by real path; the account's HOME, not only $HOME). */
+export function assertNotRealHome(dir, label, realHomes = [os.homedir(), os.userInfo().homedir]) {
+  const target = realish(dir);
+  for (const home of new Set(realHomes.filter(Boolean).map(realish))) {
+    const rel = path.relative(home, target);
+    if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) throw new Error(`refused: ${label} is or is under the real HOME (${home})`);
+  }
+  return target;
+}
+
 export async function runInClaudeSandbox({claude, cwd, home, tmp, commands, out, pathDirs = '/usr/bin:/bin:/usr/sbin:/sbin', configDir = null, extra = []}) {
   if (fs.existsSync(out)) throw new Error(`refused: exists ${out}`);
-  if (path.resolve(home) === os.homedir()) throw new Error('refused: --home is the real HOME');
+  assertNotRealHome(home, '--home');
+  if (configDir) assertNotRealHome(configDir, '--config-dir');
   fs.mkdirSync(out, {recursive: true});
   const reply = fakeMessagesApi(commands);
   const server = http.createServer((req, res) => {
@@ -88,7 +109,7 @@ export async function runInClaudeSandbox({claude, cwd, home, tmp, commands, out,
   return record;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const argv = process.argv.slice(2), dash = argv.indexOf('--');
   const own = dash < 0 ? argv : argv.slice(0, dash), extra = dash < 0 ? [] : argv.slice(dash + 1);
   const opt = (name) => { const i = own.indexOf(`--${name}`); return i < 0 ? null : own[i + 1]; };

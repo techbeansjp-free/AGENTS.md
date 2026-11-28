@@ -1164,3 +1164,19 @@ test('claude-sandbox-bash: each Bash turn gets the next command, other requests 
   assert.deepEqual(stepResults(stream).get('toolu_fake1'), {isError: false, content: 'exit=128'});
   assert.match(DUMMY_API_KEY, /^sk-ant-api03-x+ZZZZmodelfree1861ZZZ$/);
 });
+
+// #1861 review L5: the real-HOME guard compares real paths and covers directories under it and --config-dir.
+test('claude-sandbox-bash: a HOME or config directory at or under the real HOME is refused, also through a link', async () => {
+  const {assertNotRealHome, runInClaudeSandbox} = await import('../claude-sandbox-bash.mjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csb-home-')), real = path.join(root, 'real'), other = path.join(root, 'other'), link = path.join(root, 'link');
+  try {
+    fs.mkdirSync(path.join(real, '.claude'), {recursive: true}); fs.mkdirSync(other); fs.symlinkSync(real, link);
+    for (const dir of [real, link, path.join(real, '.claude'), path.join(link, 'not-yet', 'config')])
+      assert.throws(() => assertNotRealHome(dir, '--home', [real]), /refused: --home is or is under the real HOME/, dir);
+    assert.equal(assertNotRealHome(path.join(other, 'not-yet'), '--config-dir', [real]), path.join(fs.realpathSync.native(other), 'not-yet'));
+    assert.equal(assertNotRealHome(`${real}-sibling`, '--home', [real, null]), `${fs.realpathSync.native(real)}-sibling`, 'a sibling with a shared prefix is accepted');
+    assert.equal(assertNotRealHome(other, '--home', [real]), fs.realpathSync.native(other));
+    await assert.rejects(runInClaudeSandbox({claude: 'unused', cwd: other, home: other, tmp: other, commands: [], out: path.join(root, 'out'), configDir: path.join(os.homedir(), '.claude')}), /refused: --config-dir/);
+    assert.ok(!fs.existsSync(path.join(root, 'out')), 'nothing is written before the guard');
+  } finally { fs.rmSync(root, {recursive: true, force: true}); }
+});

@@ -41,7 +41,7 @@
 | allowWrite | `sandbox.filesystem.allowWrite: ["<repo>/.git/worktrees"]` | `worktree-create`と`git worktree add` | 1、128 | 既定と同じ |
 | allowWrite | `sandbox.filesystem.allowWrite: ["<repo>/.git"]` | 同上 | 1、128 | 既定と同じ |
 | excludedCommands | `sandbox.excludedCommands`に`worktree-create`のcommandを加えただけ | `worktree-create` | — | 「This command requires approval」（`-p`では承認されない） |
-| excludedCommands＋allow | 上に加えて`permissions.allow: ["Bash(node .agent-skill-chain/managed-runtime/bin/asc-v05.mjs worktree-create:*)"]` | `worktree-create`、続けて`start <worktree>` | 0、0 | 作成できた（このcommandはsandboxの外で動く）。続くworktreeの中のcommitは`fatal: Unable to create '<repo>/.git/worktrees/<name>/index.lock': Operation not permitted`（128） |
+| excludedCommands＋allow | 上に加えて、同じcommandを`permissions.allow`で許可（ownerの決定により、この方法は案内しない。設定の文は記録から外した） | `worktree-create`、続けて`start <worktree>` | 0、0 | 作成できた（このcommandはsandboxの外で動く）。続くworktreeの中のcommitは`fatal: Unable to create '<repo>/.git/worktrees/<name>/index.lock': Operation not permitted`（128） |
 | 外で作成、rootで起動 | 利用者が自分のshellで`worktree-create`（0）。既定の設定でrepository rootから起動 | `start <worktree>`、worktreeの中のcommit | 0、128 | `start`は成功。commitは上と同じ`index.lock`の文で失敗 |
 | 外で作成、worktreeで起動 | 同じworktreeのdirectoryで起動 | `start .`、commit、別の`worktree-create` | 0、0、1 | `start`とcommitが成功。別のworktreeの作成は失敗し、branch `test/1861-second`が残った（直す前のCLI） |
 | 直した後・既定 | 既定の設定、このbranchのASC、repository root | `worktree-create . 1861 test probe HEAD` | 1 | `Git worktree records are not writable: <repo>/.git/worktrees (EPERM). …`。branchも`.worktrees`も作られない |
@@ -62,8 +62,8 @@ probe 2そのものの試行のgitの文は記録されていないが、同じ�
 
 ## 直し
 
-- `src/migration.mjs`：`worktree-create`は、共通の管理領域の確認（#1730）に続けて、`<git-common-dir>/worktrees`の中に確認用のdirectoryを作って消す。`worktrees`が無ければ作り、確認の後に消す。作れなければ（EPERM・EACCES・EROFS）`Git worktree records are not writable: <dir> (<code>)`と、利用者が自分のterminalで実行してworktreeでClaude Codeを起動する対処、Agentは権限を広げないことを示して止まる。gitのstderrは含めない（#1734）。
-- `v05/USAGE.md`「Claude Codeのsandboxで作業場所を作る（#1861）」と`skills/asc/references/workspace.md`：手順と、試した設定の結果。`excludedCommands`は、除外したcommandが実行するASCの本体をsandboxの中のAgentが書き換えられるので支持しない。
+- `src/migration.mjs`：`worktree-create`は、共通の管理領域の確認（#1730）に続けて、`<git-common-dir>/worktrees`の中に確認用のdirectoryを作って消す。`worktrees`が無ければ作る。確認で止まるときは作ったものを消し、通ったときは続く`git worktree add`が使うので残す（消すと、同時に動く別の作成と競合し得る。空の`worktrees`はGitが無視する）。作れなければ（EPERM・EACCES・EROFS）`Git worktree records are not writable: <dir> (<code>)`と、利用者が自分のterminalで実行してworktreeでClaude Codeを起動する対処、Agentは権限を広げないことを示して止まる。gitのstderrは含めない（#1734）。
+- `v05/USAGE.md`「Claude Codeのsandboxで作業場所を作る（#1861）」と`skills/asc/references/workspace.md`：手順と、試した設定の結果。`excludedCommands`等でsandboxの外でcommandを動かす方法は、除外したcommandが実行するASCの本体をsandboxの中のAgentが書き換えられるので案内しない（owner、2026-11-28、#1861のコメント）。
 
 ## 再実行の手順
 
