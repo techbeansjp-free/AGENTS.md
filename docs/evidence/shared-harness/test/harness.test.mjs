@@ -1186,6 +1186,18 @@ test('claude-sandbox-bash: a HOME or config directory at or under the real HOME 
     assert.equal(assertNotRealHome(path.join(root, '..outside'), '--home', [real]), path.join(fs.realpathSync.native(root), '..outside'), 'a name starting with .. outside HOME is accepted');
     await assert.rejects(runInClaudeSandbox({claude: 'unused', cwd: other, home: other, tmp: other, commands: [], out: path.join(root, 'out'), configDir: path.join(os.homedir(), '.claude')}), /refused: --config-dir/);
     assert.ok(!fs.existsSync(path.join(root, 'out')), 'nothing is written before the guard');
+    // CodeRabbit: a test HOME whose .claude or .claude.json links into the real HOME is refused, and the checked paths are the ones passed on.
+    for (const own of ['.claude', '.claude.json']) {
+      const linked = path.join(root, `linked-${own}`); fs.mkdirSync(linked); fs.symlinkSync(path.join(os.homedir(), own), path.join(linked, own));
+      await assert.rejects(runInClaudeSandbox({claude: 'unused', cwd: other, home: linked, tmp: other, commands: [], out: path.join(root, 'out')}), new RegExp(`refused: --home/\\${own} is or is under the real HOME`), own);
+    }
+    const broken = path.join(root, 'broken-home'); fs.mkdirSync(broken); fs.symlinkSync(path.join(real, 'not-yet', '.claude'), path.join(broken, '.claude'));
+    assert.throws(() => assertNotRealHome(path.join(broken, '.claude', 'settings.json'), '--home/.claude', [real]), /refused/, 'a broken link into the real HOME is followed');
+    const seen = path.join(root, 'seen.sh'), fresh = path.join(root, 'fresh-home'); fs.mkdirSync(fresh);
+    fs.writeFileSync(seen, `#!/bin/sh\nprintf '%s\\n' "$HOME" "$CLAUDE_CONFIG_DIR" >> ${JSON.stringify(path.join(root, 'seen.txt'))}\n`, {mode: 0o755});
+    const cwd0 = process.cwd();
+    try { process.chdir(root); await runInClaudeSandbox({claude: seen, cwd: other, home: path.relative(root, fresh) || '.', tmp: other, commands: [], out: path.join(root, 'out2'), configDir: 'rel-config'}); } finally { process.chdir(cwd0); }
+    assert.deepEqual(fs.readFileSync(path.join(root, 'seen.txt'), 'utf8').split('\n').slice(0, 2), [fs.realpathSync.native(fresh), path.join(fs.realpathSync.native(root), 'rel-config')]);
   } finally { fs.rmSync(root, {recursive: true, force: true}); }
 });
 

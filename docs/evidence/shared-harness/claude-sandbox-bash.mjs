@@ -59,11 +59,19 @@ export function stepResults(streamText) {
   return results;
 }
 
-/** The real path of `dir`, or of its nearest existing parent with the rest appended (a config directory may not exist yet). */
-export function realish(dir) {
+/**
+ * The real path of `dir`, or of its nearest existing parent with the rest appended (a config directory may not exist yet).
+ * A broken link is followed to where it points, since Claude Code would create its files there.
+ */
+export function realish(dir, hops = 0) {
   const abs = path.resolve(dir), rest = [];
   for (let at = abs; ; at = path.dirname(at)) {
     try { return path.join(fs.realpathSync.native(at), ...rest.reverse()); } catch (error) { if (error?.code !== 'ENOENT' || path.dirname(at) === at) throw error; }
+    let link = null; try { if (fs.lstatSync(at).isSymbolicLink()) link = fs.readlinkSync(at); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
+    if (link !== null) {
+      if (hops >= 40) throw new Error(`refused: too many links at ${at}`);
+      return path.join(realish(path.resolve(path.dirname(at), link), hops + 1), ...rest.reverse());
+    }
     rest.push(path.basename(at));
   }
 }
@@ -80,8 +88,10 @@ export function assertNotRealHome(dir, label, realHomes = [os.homedir(), os.user
 
 export async function runInClaudeSandbox({claude, cwd, home, tmp, commands, out, pathDirs = '/usr/bin:/bin:/usr/sbin:/sbin', configDir = null, extra = []}) {
   if (fs.existsSync(out)) throw new Error(`refused: exists ${out}`);
-  assertNotRealHome(home, '--home');
-  if (configDir) assertNotRealHome(configDir, '--config-dir');
+  // The paths checked are the paths passed on; the default settings under the test HOME are checked too, also through a link.
+  home = assertNotRealHome(home, '--home');
+  if (configDir) configDir = assertNotRealHome(configDir, '--config-dir');
+  for (const own of ['.claude', '.claude.json']) assertNotRealHome(path.join(home, own), `--home/${own}`);
   fs.mkdirSync(out, {recursive: true});
   const reply = fakeMessagesApi(commands);
   const server = http.createServer((req, res) => {
